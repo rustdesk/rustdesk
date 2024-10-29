@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service is running", "Paslauga veikia"),
         ("Service is not running", "Paslauga neveikia"),
         ("not_ready_status", "Neprisijungęs. Patikrinkite ryšį."),
-        ("Control Remote Desktop", "Nuotolinio darbalaukio valdymas"),
+        ("Manage External Devices", "Nuotolinio darbalaukio valdymas"),
         ("Transfer file", "Perkelti failą"),
         ("Connect", "Prisijungti"),
         ("Recent sessions", "Seansų istorija"),

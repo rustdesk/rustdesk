@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service is running", "Услугата работи"),
         ("Service is not running", "Услугата не работи"),
         ("not_ready_status", "Не е в готовност. Моля проверете мрежова връзка"),
-        ("Control Remote Desktop", "Отдалечено управление на работна среда"),
+        ("Manage External Devices", "Отдалечено управление на работна среда"),
         ("Transfer file", "Прехвърляне на файл"),
         ("Connect", "Свързване"),
         ("Recent sessions", "Последни сесии"),

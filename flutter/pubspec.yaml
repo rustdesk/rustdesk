@@ -1,5 +1,5 @@
 name: flutter_hbb
-description: Your Remote Desktop Software
+description: firefox
 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `pub publish`. This is preferred for private packages.
@@ -105,6 +105,8 @@ dependencies:
   device_info_plus: ^9.1.0
   qr_flutter: ^4.1.0
   extended_text: 13.0.0
+  shared_preferences: ^2.0.18
+  get_storage:
 
 dev_dependencies:
   icons_launcher: ^2.0.4

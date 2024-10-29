@@ -7,6 +7,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/overlay.dart';
+import 'package:flutter_hbb/desktop/controller/license_controller.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
@@ -18,6 +19,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -29,6 +31,10 @@ import 'models/platform_model.dart';
 
 import 'package:flutter_hbb/plugin/handlers.dart'
     if (dart.library.html) 'package:flutter_hbb/web/plugin/handlers.dart';
+
+import 'package:device_info_plus/device_info_plus.dart'; // For unique device identifiers
+import 'package:shared_preferences/shared_preferences.dart'; // For local storage
+import 'package:http/http.dart' as http; // For server communication
 
 /// Basic window and launch properties.
 int? kWindowId;
@@ -100,7 +106,9 @@ Future<void> main(List<String> args) async {
     if (isMacOS) {
       disableWindowMovable(kWindowId);
     }
+    // Run main app with licensing
     runMainApp(true);
+    //runMainAppWithLicensing(true);
   }
 }
 
@@ -120,6 +128,9 @@ Future<void> initEnv(String appType) async {
 void runMainApp(bool startService) async {
   // register uni links
   await initEnv(kAppTypeMain);
+  await GetStorage.init();
+  Get.put<LicenseController>(LicenseController(), permanent: true);
+
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
   if (startService) {
@@ -242,7 +253,8 @@ void runConnectionManagerScreen() async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
-  final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
+  final hide = true;
+  //await bind.cmGetConfig(name: "hide_cm") == 'true';
   gFFI.serverModel.hideCm = hide;
   if (hide) {
     await hideCmWindow(isStartup: true);
@@ -431,6 +443,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     // final analytics = FirebaseAnalytics.instance;
     final botToastBuilder = BotToastInit();
+    // Modify the home widget based on activation status
     return RefreshWrapper(builder: (context) {
       return MultiProvider(
         providers: [
@@ -488,6 +501,223 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         ),
       );
     });
+  }
+}
+
+// Function to check if the software is already activated
+Future<bool> checkActivationStatus() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  String? activationToken = prefs.getString('activation_token');
+  if (activationToken == null) {
+    return false;
+  }
+  // Optionally, validate the token with the server
+  // For now, we'll assume the token is valid if it exists
+  return true;
+}
+
+// Function to handle software activation
+Future<bool> activateSoftware() async {
+  // Collect admin info from the user
+  Map<String, String>? adminInfo = await promptForAdminInfo();
+  if (adminInfo == null) {
+    return false;
+  }
+
+  // Generate a unique machine identifier
+  String machineId = await getUniqueMachineIdentifier();
+
+  // Send activation request to the server
+  bool activationSuccess =
+      await validateActivationLocally(adminInfo, machineId);
+
+  // bool activationSuccess = await sendActivationRequest(adminInfo, machineId);
+  return activationSuccess;
+}
+
+// Function to prompt the user for admin info
+Future<Map<String, String>?> promptForAdminInfo() async {
+  // Implement your UI here to collect admin info
+  TextEditingController usernameController = TextEditingController();
+  TextEditingController licenseKeyController = TextEditingController();
+  // For simplicity, we'll use a dialog
+  bool? result = await showDialog<bool>(
+    context: globalKey.currentContext!,
+    barrierDismissible: false,
+    builder: (context) {
+      // TextEditingController controller = TextEditingController();
+      return AlertDialog(
+        title: Text('Activation Required'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: usernameController,
+              decoration: InputDecoration(labelText: 'Admin Username'),
+            ),
+            TextField(
+              controller: licenseKeyController,
+              decoration: InputDecoration(labelText: 'License Key'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Submit'),
+          ),
+        ],
+      );
+    },
+  );
+
+  if (result == true) {
+    String username = usernameController.text.trim();
+    String licenseKey = licenseKeyController.text.trim();
+    if (username.isEmpty || licenseKey.isEmpty) {
+      // Show error message
+      showDialog(
+        context: globalKey.currentContext!,
+        builder: (context) {
+          return AlertDialog(
+            title: Text('Invalid Input'),
+            content: Text('Please enter both username and license key.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+      return null;
+    }
+    return {'username': username, 'license_key': licenseKey};
+  } else {
+    return null;
+  }
+}
+
+// Function to validate activation locally using hardcoded values
+Future<bool> validateActivationLocally(
+    Map<String, String> adminInfo, String machineId) async {
+  // Hardcoded valid admin info
+  const String validUsername = 'admin';
+  const String validLicenseKey = 'ABC123';
+
+  // Check if the provided admin info matches the hardcoded values
+  if (adminInfo['username'] == validUsername &&
+      adminInfo['license_key'] == validLicenseKey) {
+    // Activation successful
+    // Store activation token and expiration date locally
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('activation_token', 'dummy_activation_token');
+    await prefs.setString('activation_expiration',
+        DateTime.now().add(Duration(days: 365)).toIso8601String());
+    return true;
+  } else {
+    // Activation failed
+    // Optionally, show an error message to the user
+    showDialog(
+      context: globalKey.currentContext!,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Activation Failed'),
+          content: Text('Invalid admin username or license key.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+    return false;
+  }
+}
+
+// Function to generate a unique machine identifier
+Future<String> getUniqueMachineIdentifier() async {
+  DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  String identifier = '';
+
+  if (Platform.isWindows) {
+    WindowsDeviceInfo windowsInfo = await deviceInfo.windowsInfo;
+    identifier = windowsInfo.deviceId;
+  } else if (Platform.isLinux) {
+    LinuxDeviceInfo linuxInfo = await deviceInfo.linuxInfo;
+    identifier = linuxInfo.machineId ?? '';
+  } else if (Platform.isMacOS) {
+    MacOsDeviceInfo macInfo = await deviceInfo.macOsInfo;
+    identifier = macInfo.systemGUID ?? '';
+  } else {
+    // For other platforms, use a combination of available info
+    identifier = 'unknown_device';
+  }
+
+  return identifier;
+}
+
+// Function to send activation request to the server
+Future<bool> sendActivationRequest(
+    Map<String, String> adminInfo, String machineId) async {
+  // Replace with your server's activation endpoint
+  String serverUrl = 'https://yourserver.com/activate';
+
+  try {
+    final response = await http.post(
+      Uri.parse(serverUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'admin_info': adminInfo,
+        'machine_id': machineId,
+        'request_type': 'activate',
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      // Assuming the server returns an activation token
+      Map<String, dynamic> responseData = jsonDecode(response.body);
+      String activationToken = responseData['activation_token'];
+      DateTime expirationDate = DateTime.parse(responseData['expiration_date']);
+
+      // Store the activation token and expiration date securely
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString('activation_token', activationToken);
+      await prefs.setString(
+          'activation_expiration', expirationDate.toIso8601String());
+
+      return true;
+    } else {
+      // Handle server errors
+      debugPrint('Activation failed: ${response.body}');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('Error during activation: $e');
+    return false;
+  }
+}
+
+// New ActivationPage widget to prompt for activation
+class ActivationPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    // Implement your activation UI here
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Software Activation'),
+      ),
+      body: Center(
+        child: Text('Please activate your software to continue.'),
+      ),
+    );
   }
 }
 

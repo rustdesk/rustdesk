@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service is running", ""),
         ("Service is not running", ""),
         ("not_ready_status", "Pole valmis. Palun kontrolli oma ühendust"),
-        ("Control Remote Desktop", ""),
+        ("Manage External Devices", ""),
         ("Transfer file", ""),
         ("Connect", ""),
         ("Recent sessions", ""),

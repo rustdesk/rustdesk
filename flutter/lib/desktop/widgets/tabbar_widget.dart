@@ -8,7 +8,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/controller/license_controller.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
+import 'package:flutter_hbb/desktop/widgets/license_validation_widget.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -501,36 +503,65 @@ class _DesktopTabState extends State<DesktopTab>
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      Obx(() {
-        if (stateGlobal.showTabBar.isTrue &&
-            !(kUseCompatibleUiMode && isHideSingleItem())) {
-          final showBottomDivider = _showTabBarBottomDivider(tabType);
-          return SizedBox(
-            height: _kTabBarHeight,
+    final licenseController = Get.find<LicenseController>();
+    return Obx(() {
+      if (licenseController.isCheckingActivation.value) {
+        // Show loading indicator
+        return Scaffold(
+          body: Center(
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                CircularProgressIndicator(),
                 SizedBox(
-                  height:
-                      showBottomDivider ? _kTabBarHeight - 1 : _kTabBarHeight,
-                  child: _buildBar(),
+                    height:
+                        16), // Adds some spacing between the loader and text
+                Text(
+                  'Checking license...',
+                  style: TextStyle(fontSize: 16),
                 ),
-                if (showBottomDivider)
-                  const Divider(
-                    height: 1,
-                  ),
               ],
             ),
-          );
-        } else {
-          return Offstage();
-        }
-      }),
-      Expanded(
-          child: pageViewBuilder != null
-              ? pageViewBuilder!(_buildPageView())
-              : _buildPageView())
-    ]);
+          ),
+        );
+      } else if (licenseController.isLicenseValid.value) {
+        // Show normal UI
+        return Column(children: [
+          Obx(() {
+            if (stateGlobal.showTabBar.isTrue &&
+                !(kUseCompatibleUiMode && isHideSingleItem())) {
+              final showBottomDivider = _showTabBarBottomDivider(tabType);
+              return SizedBox(
+                height: _kTabBarHeight,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: showBottomDivider
+                          ? _kTabBarHeight - 1
+                          : _kTabBarHeight,
+                      child: _buildBar(),
+                    ),
+                    if (showBottomDivider)
+                      const Divider(
+                        height: 1,
+                      ),
+                  ],
+                ),
+              );
+            } else {
+              return Offstage();
+            }
+          }),
+          Expanded(
+              child: pageViewBuilder != null
+                  ? pageViewBuilder!(_buildPageView())
+                  : _buildPageView())
+        ]);
+      } else {
+        // Show license validation UI
+        return LicenseValidationWidget();
+      }
+    });
   }
 
   Widget _buildBlock({required Widget child}) {

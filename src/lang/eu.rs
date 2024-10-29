@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service is running", "Zerbitzua martxan dago"),
         ("Service is not running", "Zerbitzua ez dago martxan"),
         ("not_ready_status", "Ez dago prest. Mesedez, egiaztatu zure konexioa"),
-        ("Control Remote Desktop", "Kontrolatu urruneko mahaigaina"),
+        ("Manage External Devices", "Kontrolatu urruneko mahaigaina"),
         ("Transfer file", "Transferitu fitxategia"),
         ("Connect", "Konektatu"),
         ("Recent sessions", "Azken saioak"),

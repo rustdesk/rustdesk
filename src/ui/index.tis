@@ -583,7 +583,7 @@ class App: Reactor.Component
                 <div .right-pane>
                     <div .right-content>
                         <div .card-connect>
-                            <div .title>{translate('Control Remote Desktop')}</div>
+                            <div .title>{translate('Manage External Devices')}</div>
                             <ID @{this.remote_id} />
                             <div .right-buttons>
                                 <button .button .outline #file-transfer>{translate('Transfer file')}</button>

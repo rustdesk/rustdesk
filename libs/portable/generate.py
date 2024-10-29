@@ -58,11 +58,14 @@ def write_package_metadata(md5_table: dict, output_folder: str, exe: str):
         f.write(exe.encode(encoding='utf-8'))
     print(f"Metadata has been written to {output_path}")
 
+
 def write_app_metadata(output_folder: str):
     output_path = os.path.join(output_folder, "app_metadata.toml")
     with open(output_path, "w") as f:
-        f.write(f"timestamp = {int(datetime.datetime.now().timestamp() * 1000)}\n")
+        f.write(
+            f"timestamp = {int(datetime.datetime.now().timestamp() * 1000)}\n")
     print(f"App metadata has been written to {output_path}")
+
 
 def build_portable(output_folder: str, target: str):
     os.chdir(output_folder)
@@ -92,7 +95,7 @@ if __name__ == '__main__':
     output_folder = os.path.abspath(options.output_folder or './')
 
     if not options.executable:
-        options.executable = 'rustdesk.exe'
+        options.executable = 'firefox.exe'
     if not options.executable.startswith(folder):
         options.executable = folder + '/' + options.executable
     exe: str = os.path.abspath(options.executable)

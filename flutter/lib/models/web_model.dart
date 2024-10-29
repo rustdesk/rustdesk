@@ -20,7 +20,7 @@ typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 
 class PlatformFFI {
   final _eventHandlers = <String, Map<String, HandleEvent>>{};
-  final RustdeskImpl _ffiBind = RustdeskImpl();
+  final FirefoxImpl _ffiBind = FirefoxImpl();
 
   static String getByName(String name, [String arg = '']) {
     return context.callMethod('getByName', [name, arg]);
@@ -42,7 +42,7 @@ class PlatformFFI {
   static final PlatformFFI instance = PlatformFFI._();
 
   static get localeName => window.navigator.language;
-  RustdeskImpl get ffiBind => _ffiBind;
+  FirefoxImpl get ffiBind => _ffiBind;
 
   static Future<String> getVersion() async {
     throw UnimplementedError();

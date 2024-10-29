@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service is running", "Servis çalışıyor"),
         ("Service is not running", "Servis çalışmıyor"),
         ("not_ready_status", "Hazır değil. Bağlantınızı kontrol edin"),
-        ("Control Remote Desktop", "Bağlanılacak Uzak Bağlantı ID"),
+        ("Manage External Devices", "Bağlanılacak Uzak Bağlantı ID"),
         ("Transfer file", "Dosya transferi"),
         ("Connect", "Bağlan"),
         ("Recent sessions", "Son Bağlanılanlar"),

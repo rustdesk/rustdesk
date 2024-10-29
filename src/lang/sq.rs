@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service is running", "Shërbimi është duke funksionuar"),
         ("Service is not running", "Shërbimi nuk është duke funksionuar"),
         ("not_ready_status", "Jo gati.Ju lutem kontolloni lidhjen tuaj."),
-        ("Control Remote Desktop", "Kontrolli i desktopit në distancë"),
+        ("Manage External Devices", "Kontrolli i desktopit në distancë"),
         ("Transfer file", "Transfero dosje"),
         ("Connect", "Lidh"),
         ("Recent sessions", "Sessioni i fundit"),
