@@ -386,8 +386,6 @@ class App extends StatefulWidget {
 }
 
 class _AppState extends State<App> with WidgetsBindingObserver {
-  bool _isActivated = false;
-  bool _isCheckingActivation = true; // To show a loading indicator
   @override
   void initState() {
     super.initState();
@@ -413,28 +411,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     };
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateOrientation());
-  }
-
-  void _checkActivationOnStartup() async {
-    bool isActivated = await checkActivationStatus();
-    if (!isActivated) {
-      // If not activated, prompt for activation
-      bool activationSuccess = await activateSoftware();
-      if (!activationSuccess) {
-        // Exit the app if activation fails
-        exit(0);
-      } else {
-        setState(() {
-          _isActivated = true;
-          _isCheckingActivation = false;
-        });
-      }
-    } else {
-      setState(() {
-        _isActivated = true;
-        _isCheckingActivation = false;
-      });
-    }
   }
 
   @override
@@ -465,14 +441,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (_isCheckingActivation) {
-      // Show a loading indicator while checking activation
-      return MaterialApp(
-        home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
     // final analytics = FirebaseAnalytics.instance;
     final botToastBuilder = BotToastInit();
     // Modify the home widget based on activation status
