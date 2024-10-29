@@ -903,17 +903,9 @@ void showAbout(OverlayDialogManager dialogManager) {
   dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate('About RustDesk')),
-      content: Wrap(
-        direction: Axis.vertical,
-        spacing: 12,
-        children: [
-          Text('Version: $version'),
-          Text('远程定制添加微信：Haisng-8'),
-        ],
-      ),
-    );
-  });
-},
+      content: Wrap(direction: Axis.vertical, spacing: 12, children: [
+        Text('Version: $version'),
+            },
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text('rustdesk.com',
