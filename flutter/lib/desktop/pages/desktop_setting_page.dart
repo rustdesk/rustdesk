@@ -163,14 +163,12 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           settingTabs.add(_TabInfo(
               tab, 'Plugin', Icons.extension_outlined, Icons.extension));
           break;
-        case SettingsTabKey.account:
-          settingTabs.add(
-              _TabInfo(tab, 'Account', Icons.person_outline, Icons.person));
-          break;
         case SettingsTabKey.about:
           settingTabs
               .add(_TabInfo(tab, 'About', Icons.info_outline, Icons.info));
           break;
+        case SettingsTabKey.account:
+        // TODO: Handle this case.
       }
     }
     return settingTabs;
@@ -1907,23 +1905,23 @@ class _AboutState extends State<_About> {
                     SelectionArea(
                         child: Text('${translate('Fingerprint')}: $fingerprint')
                             .marginSymmetric(vertical: 4.0)),
-                  InkWell(
+                  /*InkWell(
                       onTap: () {
                         launchUrlString('https://rustdesk.com/privacy.html');
                       },
                       child: Text(
                         translate('Privacy Statement'),
                         style: linkStyle,
-                      ).marginSymmetric(vertical: 4.0)),
-                  InkWell(
+                      ).marginSymmetric(vertical: 4.0)),*/
+                  /*InkWell(
                       onTap: () {
                         launchUrlString('https://rustdesk.com');
                       },
                       child: Text(
                         translate('Website'),
                         style: linkStyle,
-                      ).marginSymmetric(vertical: 4.0)),
-                  Container(
+                      ).marginSymmetric(vertical: 4.0)),*/
+                  /*Container(
                     decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
                     padding:
                         const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
@@ -1949,7 +1947,7 @@ class _AboutState extends State<_About> {
                         ),
                       ],
                     )),
-                  ).marginSymmetric(vertical: 4.0)
+                  ).marginSymmetric(vertical: 4.0)*/
                 ],
               ).marginOnly(left: _kContentHMargin)
             ]),

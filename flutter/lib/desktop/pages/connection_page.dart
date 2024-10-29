@@ -81,7 +81,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
             offstage: !(!_svcStopped.value &&
                 stateGlobal.svcStatus.value == SvcStatus.ready &&
                 _svcIsUsingPublicServer.value),
-            child: Row(
+            /*child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(', ', style: TextStyle(fontSize: em)),
@@ -103,7 +103,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                   ),
                 )
               ],
-            ),
+            ),*/
           ),
         );
 

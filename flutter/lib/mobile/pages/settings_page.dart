@@ -234,11 +234,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     final customClientSection = CustomSettingsSection(
         child: Column(
       children: [
-        if (bind.isCustomClient())
+        /*if (bind.isCustomClient())
           Align(
             alignment: Alignment.center,
             child: loadPowered(context),
-          ),
+          ),*/
         Align(
           alignment: Alignment.center,
           child: loadLogo(),
