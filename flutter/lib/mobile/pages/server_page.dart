@@ -219,30 +219,25 @@ class ServiceNotRunningNotification extends StatelessWidget {
     final serverModel = Provider.of<ServerModel>(context);
 
     return PaddingCard(
-        title: translate("Service is not running"),
-        titleIcon:
-            const Icon(Icons.warning_amber_sharp, color: Colors.redAccent),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(translate("android_start_service_tip"),
-                    style:
-                        const TextStyle(fontSize: 12, color: MyTheme.darkGray))
-                .marginOnly(bottom: 8),
-            ElevatedButton.icon(
-                icon: const Icon(Icons.play_arrow),
-                onPressed: () {
-                  if (gFFI.userModel.userName.value.isEmpty &&
-                      bind.mainGetLocalOption(key: "show-scam-warning") !=
-                          "N") {
-                    showScamWarning(context, serverModel);
-                  } else {
-                    serverModel.toggleService();
-                  }
-                },
-                label: Text(translate("Start service")))
-          ],
-        ));
+      title: translate("Service is not running"),
+      titleIcon: const Icon(Icons.warning_amber_sharp, color: Colors.redAccent),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(translate("android_start_service_tip"),
+              style: const TextStyle(fontSize: 12, color: MyTheme.darkGray))
+              .marginOnly(bottom: 8),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.play_arrow),
+            onPressed: () {
+              // 直接启动服务，不再检查用户名和显示警告
+              serverModel.toggleService();
+            },
+            label: Text(translate("Start service")),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -577,7 +572,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   translate("Screen Capture"),  // 标题
   serverModel.mediaOk,           // 当前权限状态
   () => serverModel.toggleService()  // 点击时的操作：切换服务状态
-)
+),
           PermissionRow(translate("Input Control"), serverModel.inputOk,
               serverModel.toggleInput),
           PermissionRow(translate("Transfer file"), serverModel.fileOk,
