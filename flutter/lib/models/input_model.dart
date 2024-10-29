@@ -544,7 +544,25 @@ class InputModel {
       handleKeyDownEventModifiers(e);
     }
 
-    if (isMobile || (isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
+    // The physicalKey.usbHidUsage may be not correct for soft keyboard on Android.
+    // iOS does not have this issue.
+    // 1. Open the soft keyboard on Android
+    // 2. Switch to input method like zh/ko/ja
+    // 3. Click Backspace and Enter on the soft keyboard or physical keyboard
+    // 4. The physicalKey.usbHidUsage is not correct.
+    // PhysicalKeyboardKey#8ac83(usbHidUsage: "0x1100000042", debugName: "Key with ID 0x1100000042")
+    // LogicalKeyboardKey#2604c(keyId: "0x10000000d", keyLabel: "Enter", debugName: "Enter")
+    //
+    // The correct PhysicalKeyboardKey should be
+    // PhysicalKeyboardKey#e14a9(usbHidUsage: "0x00070028", debugName: "Enter")
+    // https://github.com/flutter/flutter/issues/157771
+    final isKeyMatch =
+        isIOS || isAndroid && e.logicalKey.debugName == e.physicalKey.debugName;
+    final isMobileAndPeerNotAndroid =
+        isMobile && peerPlatform != kPeerPlatformAndroid;
+    final isDesktopAndMapMode =
+        isDesktop || isWebDesktop && keyboardMode == kKeyMapMode;
+    if (isKeyMatch && (isMobileAndPeerNotAndroid || isDesktopAndMapMode)) {
       // FIXME: e.character is wrong for dead keys, eg: ^ in de
       newKeyboardMode(
           e.character ?? '',
