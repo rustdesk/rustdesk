@@ -156,7 +156,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget appTitle() {
     return Text('赢商动力');  // 返回一个文本控件作为标题
   }
-}
+),
           bottomNavigationBar: BottomNavigationBar(
             key: navigationBarKey,
             items: _pages
