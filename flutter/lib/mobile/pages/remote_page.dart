@@ -57,9 +57,7 @@ class _RemotePageState extends State<RemotePage> {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
-  // This timer is used to check the composing status of the soft keyboard.
-  // It is used for Android, Korean(and other similar) input method.
-  Timer? _composingTimer;
+  bool _lastComposingChangeValid = false;
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -99,6 +97,9 @@ class _RemotePageState extends State<RemotePage> {
         showToast(translate('Automatically record outgoing sessions'));
       }
     });
+    if (isAndroid) {
+      _textController.addListener(textAndroidListener);
+    }
   }
 
   @override
@@ -114,7 +115,6 @@ class _RemotePageState extends State<RemotePage> {
     _physicalFocusNode.dispose();
     await gFFI.close();
     _timer?.cancel();
-    _composingTimer?.cancel();
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -127,6 +127,16 @@ class _RemotePageState extends State<RemotePage> {
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.
     // Only one client is considered here for now.
     gFFI.chatModel.onVoiceCallClosed("End connetion");
+    if (isAndroid) {
+      _textController.removeListener(textAndroidListener);
+    }
+  }
+
+  // This listener is used to handle the composing region changes for Android soft keyboard input.
+  void textAndroidListener() {
+    if (_lastComposingChangeValid) {
+      _handleNonIOSSoftKeyboardInput(_textController.text);
+    }
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.
@@ -150,7 +160,6 @@ class _RemotePageState extends State<RemotePage> {
           gFFI.ffiModel.pi.version.isNotEmpty) {
         gFFI.invokeMethod("enable_soft_keyboard", false);
       }
-      _composingTimer?.cancel();
     } else {
       _timer?.cancel();
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
@@ -214,11 +223,8 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void _handleNonIOSSoftKeyboardInput(String newValue) {
-    _composingTimer?.cancel();
-    if (_textController.value.isComposingRangeValid) {
-      _composingTimer = Timer(Duration(milliseconds: 25), () {
-        _handleNonIOSSoftKeyboardInput(_textController.value.text);
-      });
+    _lastComposingChangeValid = _textController.value.isComposingRangeValid;
+    if (_lastComposingChangeValid) {
       return;
     }
     var oldValue = _value;
