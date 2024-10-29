@@ -27,7 +27,7 @@ body:
     id: os
     attributes:
       label: Operating system(s) on local side and remote side
-      description: What operating system(s) do you see this bug on? local side -> remote side.
+      description: What operating system(s) do you see this bug on? local (controlling) side -> remote (controlled) side.
       placeholder: |
         Windows 10 -> osx
     validations:
