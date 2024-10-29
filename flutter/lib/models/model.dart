@@ -1659,11 +1659,25 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  clear([bool notify = false]) {
+  // For reset canvas to the last view style
+  reset() {
+    _scale = _lastViewStyle.scale;
+    _devicePixelRatio = ui.window.devicePixelRatio;
+    if (kIgnoreDpi && _lastViewStyle.style == kRemoteViewStyleOriginal) {
+      _scale = 1.0 / _devicePixelRatio;
+    }
+    final displayWidth = getDisplayWidth();
+    final displayHeight = getDisplayHeight();
+    _x = (size.width - displayWidth * _scale) / 2;
+    _y = (size.height - displayHeight * _scale) / 2;
+    bind.sessionSetViewStyle(sessionId: sessionId, value: _lastViewStyle.style);
+    notifyListeners();
+  }
+
+  clear() {
     _x = 0;
     _y = 0;
     _scale = 1.0;
-    if (notify) notifyListeners();
   }
 
   updateScrollPercent() {
@@ -1988,7 +2002,7 @@ class CursorModel with ChangeNotifier {
     _x = _displayOriginX;
     _y = _displayOriginY;
     parent.target?.inputModel.moveMouse(_x, _y);
-    parent.target?.canvasModel.clear(true);
+    parent.target?.canvasModel.reset();
     notifyListeners();
   }
 
