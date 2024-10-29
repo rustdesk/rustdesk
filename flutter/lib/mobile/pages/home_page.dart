@@ -73,90 +73,13 @@ class HomePageState extends State<HomePage> {
           }
           return false;
         },
-        import 'package:flutter/material.dart';
-
-// 假设 _pages 和 _selectedIndex 已经定义好
-// 例如：
-// List<PageModel> _pages = [/* 页面模型数组 */];
-// int _selectedIndex = 0;
-
-class PageModel {
-  final Widget body;
-  final List<Widget> appBarActions;
-  final Icon icon;
-  final String title;
-
-  PageModel({required this.body, required this.appBarActions, required this.icon, required this.title});
-}
-
-void main() {
-  runApp(MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: MyHomePage(),
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  @override
-  _MyHomePageState createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _selectedIndex = 0;
-
-  // 假设 _pages 是一个页面模型列表
-  final List<PageModel> _pages = [
-    PageModel(
-      body: Center(child: Text('首页')),
-      appBarActions: [IconButton(icon: Icon(Icons.search), onPressed: () {})],
-      icon: Icon(Icons.home),
-      title: '首页',
-    ),
-    // 其他页面模型...
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[300], // 使用灰色背景
-      appBar: AppBar(
-        centerTitle: true,
-        title: appTitle(),  // 使用 appTitle() 方法动态生成标题
-        actions: _pages.elementAt(_selectedIndex).appBarActions,
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        key: Key('navigationBarKey'),
-        items: _pages
-            .map((page) => BottomNavigationBarItem(icon: page.icon, label: page.title))
-            .toList(),
-        currentIndex: _selectedIndex,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue, // 假设 MyTheme.accent 为蓝色
-        unselectedItemColor: Colors.grey, // 假设 MyTheme.darkGray 为灰色
-        onTap: (index) {
-          setState(() {
-            if (_selectedIndex != index) {
-              _selectedIndex = index;
-              // 如果需要处理特定页面逻辑，可以在这里添加
-            }
-          });
-        },
-      ),
-      body: _pages.elementAt(_selectedIndex).body,
-    );
-  }
-
-  // 定义 appTitle 方法
-  Widget appTitle() {
-    return Text('赢商动力');  // 返回一个文本控件作为标题
-  }
-),
+         child: Scaffold(
+          // backgroundColor: MyTheme.grayBg,
+          appBar: AppBar(
+            centerTitle: true,
+            title: appTitle(),
+            actions: _pages.elementAt(_selectedIndex).appBarActions,
+          ),
           bottomNavigationBar: BottomNavigationBar(
             key: navigationBarKey,
             items: _pages
