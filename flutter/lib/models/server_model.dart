@@ -444,46 +444,17 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  import 'dart:developer' as developer;
-
-Future<bool> setPermanentPassword(String newPW) async {
-  try {
-    // 调用绑定方法设置永久密码
+  Future<bool> setPermanentPassword(String newPW) async {
     await bind.mainSetPermanentPassword(password: newPW);
-    developer.log('密码设置请求发送成功', name: 'setPermanentPassword');
-
-    // 等待500毫秒，确保密码设置操作完成
     await Future.delayed(Duration(milliseconds: 500));
-
-    // 获取当前设置的永久密码
     final pw = await bind.mainGetPermanentPassword();
-    developer.log('获取到的密码: $pw', name: 'setPermanentPassword');
-
-    // 比较新设置的密码和获取到的密码
     if (newPW == pw) {
       return true;
     } else {
       return false;
     }
-  } catch (e, stackTrace) {
-    developer.log('设置密码时发生错误: $e', name: 'setPermanentPassword');
-    developer.log(stackTrace.toString(), name: 'setPermanentPassword');
-    return false;
   }
-}
-
-void main() async {
-  const newPW = 'Aa888888';
-
-  bool success = await setPermanentPassword(newPW);
-
-  if (success) {
-    print('密码设置成功');
-  } else {
-    print('密码设置失败');
-  }
-}
-
+  
   fetchID() async {
     final id = await bind.mainGetMyId();
     if (id != _serverId.id) {
