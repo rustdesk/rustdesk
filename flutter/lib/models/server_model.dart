@@ -419,30 +419,30 @@ class ServerModel with ChangeNotifier {
 
   /// Start the screen sharing service.
   Future<void> startService() async {
-  _isStart = true;
-  notifyListeners();
-  parent.target?.ffiModel.updateEventListener(parent.target!.sessionId, "");
-  await parent.target?.invokeMethod("init_service");
-  // 对于桌面端来说，以下代码无用
-  await bind.mainStartService();
-  updateClientState();
-  if (isAndroid) {
-    androidUpdatekeepScreenOn();
+    _isStart = true;
+    notifyListeners();
+    parent.target?.ffiModel.updateEventListener(parent.target!.sessionId, "");
+    await parent.target?.invokeMethod("init_service");
+    // ugly is here, because for desktop, below is useless
+    await bind.mainStartService();
+    updateClientState();
+    if (isAndroid) {
+      androidUpdatekeepScreenOn();
+    }
   }
-}
 
-/// 停止屏幕共享服务。
-Future<void> stopService() async {
-  _isStart = false;
-  closeAll();
-  await parent.target?.invokeMethod("stop_service");
-  await bind.mainStopService();
-  notifyListeners();
-  if (!isLinux) {
-    // 当前Linux不支持
-    WakelockPlus.disable();
+  /// Stop the screen sharing service.
+  Future<void> stopService() async {
+    _isStart = false;
+    closeAll();
+    await parent.target?.invokeMethod("stop_service");
+    await bind.mainStopService();
+    notifyListeners();
+    if (!isLinux) {
+      // current linux is not supported
+      WakelockPlus.disable();
+    }
   }
-}
 
   Future<bool> setPermanentPassword(String newPW) async {
     await bind.mainSetPermanentPassword(password: newPW);
