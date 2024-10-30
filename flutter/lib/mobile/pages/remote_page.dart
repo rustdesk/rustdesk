@@ -224,7 +224,9 @@ class _RemotePageState extends State<RemotePage> {
 
   void _handleNonIOSSoftKeyboardInput(String newValue) {
     _lastComposingChangeValid = _textController.value.isComposingRangeValid;
-    if (_lastComposingChangeValid) {
+    if (_lastComposingChangeValid && newValue.length > _value.length) {
+      // Only early return if is composing new words.
+      // We need to send `backspace` immediately if is deleting letters.
       return;
     }
     var oldValue = _value;
