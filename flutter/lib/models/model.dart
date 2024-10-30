@@ -1275,13 +1275,6 @@ class ImageModel with ChangeNotifier {
       if (isDesktop || isWebDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
         await parent.target?.canvasModel.updateScrollStyle();
-      } else {
-        final size = MediaQueryData.fromWindow(ui.window).size;
-        final canvasWidth = size.width;
-        final canvasHeight = size.height;
-        final xscale = canvasWidth / image.width;
-        final yscale = canvasHeight / image.height;
-        parent.target?.canvasModel.scale = min(xscale, yscale);
       }
       if (parent.target != null) {
         await initializeCursorAndCanvas(parent.target!);
@@ -1679,6 +1672,7 @@ class CanvasModel with ChangeNotifier {
     _x = 0;
     _y = 0;
     _scale = 1.0;
+    _lastViewStyle = ViewStyle.defaultViewStyle();
   }
 
   updateScrollPercent() {
