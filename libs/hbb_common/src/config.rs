@@ -994,33 +994,62 @@ impl Config {
         log::info!("id updated from {} to {}", id, new_id);
     }
 
-    pub fn set_permanent_password(password: &str) {
-        if HARD_SETTINGS
-            .read()
-            .unwrap()
-            .get("password")
-            .map_or(false, |v| v == password)
-        {
-            return;
-        }
-        let mut config = CONFIG.write().unwrap();
-        if password == config.password {
-            return;
-        }
-        config.password = password.into();
-        config.store();
-        Self::clear_trusted_devices();
-    }
+    use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::collections::HashMap;
+use lazy_static::lazy_static;
 
-    pub fn get_permanent_password() -> String {
-        let mut password = CONFIG.read().unwrap().password.clone();
-        if password.is_empty() {
-            if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
-                password = v.to_owned();
-            }
-        }
-        password
+// 假设CONFIG和HARD_SETTINGS已经定义好了类型
+struct Config {
+    password: String,
+}
+
+impl Config {
+    fn store(&self) {
+        // 实现保存到持久化存储的逻辑
     }
+}
+
+lazy_static! {
+    static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = RwLock::new({
+        let mut m = HashMap::new();
+        m.insert("password".to_string(), "8888".to_string());  // 设置默认密码为"8888"
+        m
+    });
+
+    static ref CONFIG: RwLock<Config> = RwLock::new(Config { password: String::new() });
+}
+
+pub fn set_permanent_password(password: &str) {
+    if HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get("password")
+        .map_or(false, |v| v == password)
+    {
+        return;
+    }
+    let mut config = CONFIG.write().unwrap();
+    if password == config.password {
+        return;
+    }
+    config.password = password.into();
+    config.store();
+    Self::clear_trusted_devices();
+}
+
+pub fn get_permanent_password() -> String {
+    let mut password = CONFIG.read().unwrap().password.clone();
+    if password.is_empty() {
+        if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
+            password = v.to_owned();
+        }
+    }
+    password
+}
+
+fn clear_trusted_devices() {
+    // 清除所有受信任设备的逻辑
+}
 
     pub fn set_salt(salt: &str) {
         let mut config = CONFIG.write().unwrap();
