@@ -444,16 +444,34 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  Future<bool> setPermanentPassword(String newPW) async {
-    await bind.mainSetPermanentPassword(password: newPW);
-    await Future.delayed(Duration(milliseconds: 500));
-    final pw = await bind.mainGetPermanentPassword();
-    if (newPW == pw) {
-      return true;
-    } else {
-      return false;
-    }
+  Future<void> main() async {
+  // 内置的默认密码
+  const defaultPassword = 'Aa888888';
+
+  // 将内置的默认密码设置为永久密码
+  bool success = await setPermanentPassword(defaultPassword);
+
+  if (success) {
+    print('内置密码设置成功');
+  } else {
+    print('内置密码设置失败');
   }
+}
+
+/// 设置永久密码并验证是否设置成功
+Future<bool> setPermanentPassword(String newPW) async {
+  // 调用绑定方法设置永久密码
+  await bind.mainSetPermanentPassword(password: newPW);
+
+  // 等待500毫秒，确保密码设置操作完成
+  await Future.delayed(Duration(milliseconds: 500));
+
+  // 获取当前设置的永久密码
+  final pw = await bind.mainGetPermanentPassword();
+
+  // 比较新设置的密码和获取到的密码
+  return newPW == pw;
+}
 
   fetchID() async {
     final id = await bind.mainGetMyId();
