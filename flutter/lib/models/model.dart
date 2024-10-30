@@ -1464,7 +1464,7 @@ class CanvasModel with ChangeNotifier {
   static double get bottomToEdge =>
       isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.bottom : 0;
 
-  updateViewStyle({refreshMousePos = true, force = false}) async {
+  updateViewStyle({refreshMousePos = true}) async {
     Size getSize() {
       final mediaData = MediaQueryData.fromView(ui.window);
       final size = mediaData.size;
