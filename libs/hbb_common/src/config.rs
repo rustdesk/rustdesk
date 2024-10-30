@@ -994,62 +994,33 @@ impl Config {
         log::info!("id updated from {} to {}", id, new_id);
     }
 
-    use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::collections::HashMap;
-use lazy_static::lazy_static;
-
-// 假设CONFIG和HARD_SETTINGS已经定义好了类型
-struct Config {
-    password: String,
-}
-
-impl Config {
-    fn store(&self) {
-        // 实现保存到持久化存储的逻辑
-    }
-}
-
-lazy_static! {
-    static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = RwLock::new({
-        let mut m = HashMap::new();
-        m.insert("password".to_string(), "Aa888888".to_string());  // 设置默认密码为"8888"
-        m
-    });
-
-    static ref CONFIG: RwLock<Config> = RwLock::new(Config { password: String::new() });
-}
-
-pub fn set_permanent_password(password: &str) {
-    if HARD_SETTINGS
-        .read()
-        .unwrap()
-        .get("password")
-        .map_or(false, |v| v == password)
-    {
-        return;
-    }
-    let mut config = CONFIG.write().unwrap();
-    if password == config.password {
-        return;
-    }
-    config.password = password.into();
-    config.store();
-    Self::clear_trusted_devices();
-}
-
-pub fn get_permanent_password() -> String {
-    let mut password = CONFIG.read().unwrap().password.clone();
-    if password.is_empty() {
-        if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
-            password = v.to_owned();
+    pub fn set_permanent_password(password: &str) {
+        if HARD_SETTINGS
+            .read()
+            .unwrap()
+            .get("password")
+            .map_or(false, |v| v == password)
+        {
+            return;
         }
+        let mut config = CONFIG.write().unwrap();
+        if password == config.password {
+            return;
+        }
+        config.password = password.into();
+        config.store();
+        Self::clear_trusted_devices();
     }
-    password
-}
 
-fn clear_trusted_devices() {
-    // 清除所有受信任设备的逻辑
-}
+    pub fn get_permanent_password() -> String {
+        let mut password = CONFIG.read().unwrap().password.clone();
+        if password.is_empty() {
+            if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
+                password = v.to_owned();
+            }
+        }
+        password
+    }
 
     pub fn set_salt(salt: &str) {
         let mut config = CONFIG.write().unwrap();
@@ -1739,6 +1710,9 @@ impl UserDefaultConfig {
 
     pub fn get(&self, key: &str) -> String {
         match key {
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            keys::OPTION_VIEW_STYLE => self.get_string(key, "adaptive", vec!["original"]),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             keys::OPTION_VIEW_STYLE => self.get_string(key, "original", vec!["adaptive"]),
             keys::OPTION_SCROLL_STYLE => self.get_string(key, "scrollauto", vec!["scrollbar"]),
             keys::OPTION_IMAGE_QUALITY => {
@@ -2254,6 +2228,7 @@ pub mod keys {
     pub const OPTION_ALLOW_LINUX_HEADLESS: &str = "allow-linux-headless";
     pub const OPTION_ENABLE_HWCODEC: &str = "enable-hwcodec";
     pub const OPTION_APPROVE_MODE: &str = "approve-mode";
+    pub const OPTION_VERIFICATION_METHOD: &str = "verification-method";
     pub const OPTION_CUSTOM_RENDEZVOUS_SERVER: &str = "custom-rendezvous-server";
     pub const OPTION_API_SERVER: &str = "api-server";
     pub const OPTION_KEY: &str = "key";
@@ -2399,6 +2374,7 @@ pub mod keys {
         OPTION_ALLOW_LINUX_HEADLESS,
         OPTION_ENABLE_HWCODEC,
         OPTION_APPROVE_MODE,
+        OPTION_VERIFICATION_METHOD,
         OPTION_PROXY_URL,
         OPTION_PROXY_USERNAME,
         OPTION_PROXY_PASSWORD,
