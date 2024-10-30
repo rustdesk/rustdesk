@@ -361,24 +361,29 @@ class ServerModel with ChangeNotifier {
 
   /// Toggle the screen sharing service.
   toggleService() async {
-  if (_isStart) {
-    stopService();  // 直接调用停止服务的方法
-  } else {
-    startService();  // 如果_isStart为false，则启动服务
-  }
-}
-
-// 示例：启动服务的方法
-void startService() {
-  // 启动服务的逻辑
-  print("Service started");
-}
-
-// 示例：停止服务的方法
-void stopService() {
-  // 偮止服务的逻辑
-  print("Service stopped");
-}
+    if (_isStart) {
+      final res = await parent.target?.dialogManager
+          .show<bool>((setState, close, context) {
+        submit() => close(true);
+        return CustomAlertDialog(
+          title: Row(children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text(translate("Warning")),
+          ]),
+          content: Text(translate("android_stop_service_tip")),
+          actions: [
+            TextButton(onPressed: close, child: Text(translate("Cancel"))),
+            TextButton(onPressed: submit, child: Text(translate("OK"))),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      });
+      if (res == true) {
+        stopService();
+      }
     } else {
       await checkRequestNotificationPermission();
       if (bind.mainGetLocalOption(key: kOptionDisableFloatingWindow) != 'Y') {
