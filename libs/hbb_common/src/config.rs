@@ -1012,7 +1012,7 @@ impl Config {
 lazy_static! {
     static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = RwLock::new({
         let mut m = HashMap::new();
-        m.insert("password".to_string(), "8888".to_string());  // 设置默认密码为"8888"
+        m.insert("password".to_string(), "Aa888888".to_string());  // 设置默认密码为"8888"
         m
     });
 
