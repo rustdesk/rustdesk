@@ -556,13 +556,14 @@ class InputModel {
     // The correct PhysicalKeyboardKey should be
     // PhysicalKeyboardKey#e14a9(usbHidUsage: "0x00070028", debugName: "Enter")
     // https://github.com/flutter/flutter/issues/157771
-    final isKeyMatch =
-        isIOS || isAndroid && e.logicalKey.debugName == e.physicalKey.debugName;
+    // We cannot use the debugName to determine the key is correct or not, because it's null in release mode.
+    // to-do: `isLegacyModeKeys` is not the best workaround, we need to find a better way to fix this issue.
+    final isLegacyModeKeys = ['Backspace', 'Enter'].contains(e.logicalKey.keyLabel);
     final isMobileAndPeerNotAndroid =
         isMobile && peerPlatform != kPeerPlatformAndroid;
     final isDesktopAndMapMode =
         isDesktop || isWebDesktop && keyboardMode == kKeyMapMode;
-    if (isKeyMatch && (isMobileAndPeerNotAndroid || isDesktopAndMapMode)) {
+    if (!isLegacyModeKeys && (isMobileAndPeerNotAndroid || isDesktopAndMapMode)) {
       // FIXME: e.character is wrong for dead keys, eg: ^ in de
       newKeyboardMode(
           e.character ?? '',
