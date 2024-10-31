@@ -1,6 +1,5 @@
 [package]
-#name = "qemu-rustdesk"
-name = "ok-cloud"
+name = "qemu-rustdesk"
 version = "0.1.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
