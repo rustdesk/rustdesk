@@ -1286,20 +1286,18 @@ class ImageModel with ChangeNotifier {
   }
 
   // mobile only
-  // for desktop, height should minus tabbar height
   double get maxScale {
     if (_image == null) return 1.5;
-    final size = MediaQueryData.fromWindow(ui.window).size;
+    final size = parent.target!.canvasModel.getSize();
     final xscale = size.width / _image!.width;
     final yscale = size.height / _image!.height;
     return max(1.5, max(xscale, yscale));
   }
 
   // mobile only
-  // for desktop, height should minus tabbar height
   double get minScale {
     if (_image == null) return 1.5;
-    final size = MediaQueryData.fromWindow(ui.window).size;
+    final size = parent.target!.canvasModel.getSize();
     final xscale = size.width / _image!.width;
     final yscale = size.height / _image!.height;
     return min(xscale, yscale) / 1.5;
@@ -1464,19 +1462,27 @@ class CanvasModel with ChangeNotifier {
   static double get bottomToEdge =>
       isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.bottom : 0;
 
-  updateViewStyle({refreshMousePos = true}) async {
-    Size getSize() {
-      final mediaData = MediaQueryData.fromView(ui.window);
-      final size = mediaData.size;
-      // If minimized, w or h may be negative here.
-      double w = size.width - leftToEdge - rightToEdge;
-      double h = size.height - topToEdge - bottomToEdge;
-      if (isMobile) {
-        h -= (mediaData.padding.top + mediaData.viewInsets.bottom);
-      }
-      return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
+  Size getSize() {
+    final mediaData = MediaQueryData.fromView(ui.window);
+    final size = mediaData.size;
+    // If minimized, w or h may be negative here.
+    double w = size.width - leftToEdge - rightToEdge;
+    double h = size.height - topToEdge - bottomToEdge;
+    if (isMobile) {
+      h = h -
+          mediaData.viewInsets.bottom -
+          (parent.target?.cursorModel.keyHelpToolsRect?.bottom ?? 0);
     }
+    return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
+  }
 
+  // mobile only
+  double getAdjustY() {
+    final bottom = parent.target?.cursorModel.keyHelpToolsRect?.bottom ?? 0;
+    return max(bottom - MediaQueryData.fromView(ui.window).padding.top, 0);
+  }
+
+  updateViewStyle({refreshMousePos = true}) async {
     final style = await bind.sessionGetViewStyle(sessionId: sessionId);
     if (style == null) {
       return;
@@ -1636,6 +1642,7 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
+  // mobile only
   updateScale(double v, Offset focalPoint) {
     if (parent.target?.imageModel.image == null) return;
     final s = _scale;
@@ -1647,9 +1654,10 @@ class CanvasModel with ChangeNotifier {
     // (focalPoint.dx - _x_1) / s1 + displayOriginX = (focalPoint.dx - _x_2) / s2 + displayOriginX
     // _x_2 = focalPoint.dx - (focalPoint.dx - _x_1) / s1 * s2
     _x = focalPoint.dx - (focalPoint.dx - _x) / s * _scale;
-    // (focalPoint.dy - _y_1) / s1 + displayOriginY = (focalPoint.dy - _y_2) / s2 + displayOriginY
-    // _y_2 = focalPoint.dy - (focalPoint.dy - _y_1) / s1 * s2
-    _y = focalPoint.dy - (focalPoint.dy - _y) / s * _scale;
+    final adjust = getAdjustY();
+    // (focalPoint.dy - _y_1 - adjust) / s1 + displayOriginY = (focalPoint.dy - _y_2 - adjust) / s2 + displayOriginY
+    // _y_2 = focalPoint.dy - adjust - (focalPoint.dy - _y_1 - adjust) / s1 * s2
+    _y = focalPoint.dy - adjust - (focalPoint.dy - _y - adjust) / s * _scale;
     notifyListeners();
   }
 
@@ -1689,6 +1697,34 @@ class CanvasModel with ChangeNotifier {
                 _vertical.position.extentAfter)
         : 0.0;
     setScrollPercent(percentX, percentY);
+  }
+
+  // mobile only
+  // Move the canvas to make the cursor visible(center) on the screen.
+  void moveToCenterCursor() {
+    Rect? imageRect = parent.target?.ffiModel.rect;
+    if (imageRect == null) {
+      // unreachable
+      return;
+    }
+    final maxX = 0.0;
+    final minX = _size.width + (imageRect.left - imageRect.right) * _scale;
+    final maxY = 0.0;
+    final minY = _size.height + (imageRect.top - imageRect.bottom) * _scale;
+    Offset offsetToCenter =
+        parent.target?.cursorModel.getCanvasOffsetToCenterCursor() ??
+            Offset.zero;
+    if (minX < 0) {
+      _x = min(max(offsetToCenter.dx, minX), maxX);
+    } else {
+      // _size.width > (imageRect.right, imageRect.left) * _scale, we should not change _x
+    }
+    if (minY < 0) {
+      _y = min(max(offsetToCenter.dy, minY), maxY);
+    } else {
+      // _size.height > (imageRect.bottom - imageRect.top) * _scale, , we should not change _y
+    }
+    notifyListeners();
   }
 }
 
@@ -1884,6 +1920,7 @@ class CursorModel with ChangeNotifier {
   // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
   bool _lastIsBlocked = false;
 
+  Rect? get keyHelpToolsRect => _keyHelpToolsRect;
   keyHelpToolsVisibilityChanged(Rect? r) {
     _keyHelpToolsRect = r;
     if (r == null) {
@@ -1893,6 +1930,15 @@ class CursorModel with ChangeNotifier {
       // `lastIsBlocked` is only used in onDoubleTap() to block the touch event from the KeyHelpTools.
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
+    }
+    if (isMobile) {
+      if (r != null || _lastIsBlocked) {
+        () async {
+          await parent.target?.canvasModel
+              .updateViewStyle(refreshMousePos: false);
+          parent.target?.canvasModel.moveToCenterCursor();
+        }();
+      }
     }
   }
 
@@ -1932,8 +1978,10 @@ class CursorModel with ChangeNotifier {
   addKey(String key) => _cacheKeys.add(key);
 
   // remote physical display coordinate
+  // For update pan (mobile), onOneFingerPanStart, onOneFingerPanUpdate, onHoldDragUpdate
   Rect getVisibleRect() {
-    final size = MediaQueryData.fromWindow(ui.window).size;
+    final size = parent.target?.canvasModel.getSize() ??
+        MediaQueryData.fromView(ui.window).size;
     final xoffset = parent.target?.canvasModel.x ?? 0;
     final yoffset = parent.target?.canvasModel.y ?? 0;
     final scale = parent.target?.canvasModel.scale ?? 1;
@@ -1942,7 +1990,20 @@ class CursorModel with ChangeNotifier {
     return Rect.fromLTWH(x0, y0, size.width / scale, size.height / scale);
   }
 
-  get keyboardHeight => MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
+  Offset getCanvasOffsetToCenterCursor() {
+    // cursor should be in the center of the visible rect
+    // _x = rect.left + rect.width / 2
+    // _y = rect.right + rect.height / 2
+    // See `getVisibleRect()`
+    // _x = _displayOriginX - xoffset / scale + size.width / scale * 0.5;
+    // _y = _displayOriginY - yoffset / scale + size.height / scale * 0.5;
+    final size = parent.target?.canvasModel.getSize() ??
+        MediaQueryData.fromView(ui.window).size;
+    final xoffset = (_displayOriginX - _x) * scale + size.width * 0.5;
+    final yoffset = (_displayOriginY - _y) * scale + size.height * 0.5;
+    return Offset(xoffset, yoffset);
+  }
+
   get scale => parent.target?.canvasModel.scale ?? 1.0;
 
   // mobile Soft keyboard, block touch event from the KeyHelpTools
@@ -1965,16 +2026,16 @@ class CursorModel with ChangeNotifier {
       return false;
     }
     _lastIsBlocked = false;
-    moveLocal(x, y);
+    moveLocal(x, y, adjust: parent.target?.canvasModel.getAdjustY() ?? 0);
     parent.target?.inputModel.moveMouse(_x, _y);
     return true;
   }
 
-  moveLocal(double x, double y) {
+  moveLocal(double x, double y, {double adjust = 0}) {
     final xoffset = parent.target?.canvasModel.x ?? 0;
     final yoffset = parent.target?.canvasModel.y ?? 0;
     _x = (x - xoffset) / scale + _displayOriginX;
-    _y = (y - yoffset) / scale + _displayOriginY;
+    _y = (y - yoffset - adjust) / scale + _displayOriginY;
     notifyListeners();
   }
 

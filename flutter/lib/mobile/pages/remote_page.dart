@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -43,6 +44,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   bool _showGestureHelp = false;
   String _value = '';
   Orientation? _currentOrientation;
+  double _viewInsetsBottom = 0;
 
   Timer? _timerDidChangeMetrics;
 
@@ -132,9 +134,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   void didChangeMetrics() {
+    final newBottom = MediaQueryData.fromView(ui.window).viewInsets.bottom;
     _timerDidChangeMetrics?.cancel();
-    _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () {
-      gFFI.canvasModel.updateViewStyle(refreshMousePos: false);
+    _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () async {
+      // We need this comparation because poping up the floating action will also trigger `didChangeMetrics()`.
+      if (newBottom != _viewInsetsBottom) {
+        await gFFI.canvasModel.updateViewStyle(refreshMousePos: false);
+        gFFI.canvasModel.moveToCenterCursor();
+        _viewInsetsBottom = newBottom;
+      }
     });
   }
 
@@ -962,8 +970,10 @@ class ImagePaint extends StatelessWidget {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
     var s = c.scale;
+    final adjust = c.getAdjustY();
     return CustomPaint(
-      painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      painter: ImagePainter(
+          image: m.image, x: c.x / s, y: (c.y + adjust) / s, scale: s),
     );
   }
 }
@@ -1008,11 +1018,12 @@ class CursorPaint extends StatelessWidget {
       factor = s / mins;
     }
     final s2 = s < mins ? mins : s;
+    final adjust = c.getAdjustY();
     return CustomPaint(
       painter: ImagePainter(
           image: image,
           x: (m.x - hotx) * factor + c.x / s2,
-          y: (m.y - hoty) * factor + c.y / s2,
+          y: (m.y - hoty) * factor + (c.y + adjust) / s2,
           scale: s2),
     );
   }
