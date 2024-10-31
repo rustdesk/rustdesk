@@ -59,7 +59,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
-  bool _lastComposingChangeValid = false;
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -99,9 +98,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         showToast(translate('Automatically record outgoing sessions'));
       }
     });
-    if (isAndroid) {
-      _textController.addListener(textAndroidListener);
-    }
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -132,9 +128,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.
     // Only one client is considered here for now.
     gFFI.chatModel.onVoiceCallClosed("End connetion");
-    if (isAndroid) {
-      _textController.removeListener(textAndroidListener);
-    }
   }
 
   @override
@@ -143,13 +136,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () {
       gFFI.canvasModel.updateViewStyle(refreshMousePos: false);
     });
-  }
-
-  // This listener is used to handle the composing region changes for Android soft keyboard input.
-  void textAndroidListener() {
-    if (_lastComposingChangeValid) {
-      _handleNonIOSSoftKeyboardInput(_textController.text);
-    }
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.
@@ -236,12 +222,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void _handleNonIOSSoftKeyboardInput(String newValue) {
-    _lastComposingChangeValid = _textController.value.isComposingRangeValid;
-    if (_lastComposingChangeValid && newValue.length > _value.length) {
-      // Only early return if is composing new words.
-      // We need to send `backspace` immediately if is deleting letters.
-      return;
-    }
     var oldValue = _value;
     _value = newValue;
     if (oldValue.isNotEmpty &&
