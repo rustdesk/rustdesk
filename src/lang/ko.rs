@@ -648,10 +648,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "단방향 파일 전송은 제어되는 쪽에서 활성화됩니다."),
         ("Authentication Required", "인증 필요함"),
         ("Authenticate", "인증"),
-        ("web_id_input_tip", ""),
-        ("Download", ""),
-        ("Upload folder", ""),
-        ("Upload files", ""),
-        ("Clipboard is synchronized", ""),
+        ("web_id_input_tip", "동일한 서버에 있는 ID를 입력할 수 있습니다. 웹 클라이언트에서는 직접 IP 접속이 지원되지 않습니다.\n 다른 서버에 있는 장치에 접속하려면 서버 주소(<id>@<server_address>?key=<key_value>)를 추가하세요. 예:\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\n 공용 서버에 있는 장치에 접속하려면 \"<id>@public\"을 입력하세요. 공용 서버에서는 키가 필요하지 않습니다."),
+        ("Download", "다운로드"),
+        ("Upload folder", "폴더 업로드"),
+        ("Upload files", "파일 업로드"),
+        ("Clipboard is synchronized", "클립보드가 동기화됨"),
     ].iter().cloned().collect();
 }
