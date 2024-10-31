@@ -1466,10 +1466,14 @@ class CanvasModel with ChangeNotifier {
 
   updateViewStyle({refreshMousePos = true}) async {
     Size getSize() {
-      final size = MediaQueryData.fromWindow(ui.window).size;
+      final mediaData = MediaQueryData.fromView(ui.window);
+      final size = mediaData.size;
       // If minimized, w or h may be negative here.
       double w = size.width - leftToEdge - rightToEdge;
       double h = size.height - topToEdge - bottomToEdge;
+      if (isMobile) {
+        h -= (mediaData.padding.top + mediaData.viewInsets.bottom);
+      }
       return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
     }
 
@@ -1643,13 +1647,9 @@ class CanvasModel with ChangeNotifier {
     // (focalPoint.dx - _x_1) / s1 + displayOriginX = (focalPoint.dx - _x_2) / s2 + displayOriginX
     // _x_2 = focalPoint.dx - (focalPoint.dx - _x_1) / s1 * s2
     _x = focalPoint.dx - (focalPoint.dx - _x) / s * _scale;
-    final adjustForKeyboard =
-        parent.target?.cursorModel.adjustForKeyboard() ?? 0.0;
-    // (focalPoint.dy - _y_1 + adjust) / s1 + displayOriginY = (focalPoint.dy - _y_2 + adjust) / s2 + displayOriginY
-    // _y_2 = focalPoint.dy + adjust - (focalPoint.dy - _y_1 + adjust) / s1 * s2
-    _y = focalPoint.dy +
-        adjustForKeyboard -
-        (focalPoint.dy - _y + adjustForKeyboard) / s * _scale;
+    // (focalPoint.dy - _y_1) / s1 + displayOriginY = (focalPoint.dy - _y_2) / s2 + displayOriginY
+    // _y_2 = focalPoint.dy - (focalPoint.dy - _y_1) / s1 * s2
+    _y = focalPoint.dy - (focalPoint.dy - _y) / s * _scale;
     notifyListeners();
   }
 
@@ -1883,7 +1883,6 @@ class CursorModel with ChangeNotifier {
   // `lastIsBlocked` is only used in common/widgets/remote_input.dart -> _RawTouchGestureDetectorRegionState -> onDoubleTap()
   // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
   bool _lastIsBlocked = false;
-  double _yForKeyboardAdjust = 0;
 
   keyHelpToolsVisibilityChanged(Rect? r) {
     _keyHelpToolsRect = r;
@@ -1895,7 +1894,6 @@ class CursorModel with ChangeNotifier {
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
     }
-    _yForKeyboardAdjust = _y;
   }
 
   get lastIsBlocked => _lastIsBlocked;
@@ -1947,19 +1945,6 @@ class CursorModel with ChangeNotifier {
   get keyboardHeight => MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
   get scale => parent.target?.canvasModel.scale ?? 1.0;
 
-  double adjustForKeyboard() {
-    if (keyboardHeight < 100) {
-      return 0.0;
-    }
-
-    final m = MediaQueryData.fromWindow(ui.window);
-    final size = m.size;
-    final thresh = (size.height - keyboardHeight) / 2;
-    final h = (_yForKeyboardAdjust - getVisibleRect().top) *
-        scale; // local physical display height
-    return h - thresh;
-  }
-
   // mobile Soft keyboard, block touch event from the KeyHelpTools
   shouldBlock(double x, double y) {
     if (!(parent.target?.ffiModel.touchMode ?? false)) {
@@ -1980,16 +1965,16 @@ class CursorModel with ChangeNotifier {
       return false;
     }
     _lastIsBlocked = false;
-    moveLocal(x, y, adjust: adjustForKeyboard());
+    moveLocal(x, y);
     parent.target?.inputModel.moveMouse(_x, _y);
     return true;
   }
 
-  moveLocal(double x, double y, {double adjust = 0}) {
+  moveLocal(double x, double y) {
     final xoffset = parent.target?.canvasModel.x ?? 0;
     final yoffset = parent.target?.canvasModel.y ?? 0;
     _x = (x - xoffset) / scale + _displayOriginX;
-    _y = (y - yoffset + adjust) / scale + _displayOriginY;
+    _y = (y - yoffset) / scale + _displayOriginY;
     notifyListeners();
   }
 

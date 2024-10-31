@@ -37,12 +37,14 @@ class RemotePage extends StatefulWidget {
   State<RemotePage> createState() => _RemotePageState(id);
 }
 
-class _RemotePageState extends State<RemotePage> {
+class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Timer? _timer;
   bool _showBar = !isWebDesktop;
   bool _showGestureHelp = false;
   String _value = '';
   Orientation? _currentOrientation;
+
+  Timer? _timerDidChangeMetrics;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -57,7 +59,6 @@ class _RemotePageState extends State<RemotePage> {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
-  bool _lastComposingChangeValid = false;
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -97,13 +98,12 @@ class _RemotePageState extends State<RemotePage> {
         showToast(translate('Automatically record outgoing sessions'));
       }
     });
-    if (isAndroid) {
-      _textController.addListener(textAndroidListener);
-    }
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   Future<void> dispose() async {
+    WidgetsBinding.instance.removeObserver(this);
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -115,6 +115,7 @@ class _RemotePageState extends State<RemotePage> {
     _physicalFocusNode.dispose();
     await gFFI.close();
     _timer?.cancel();
+    _timerDidChangeMetrics?.cancel();
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -127,16 +128,14 @@ class _RemotePageState extends State<RemotePage> {
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.
     // Only one client is considered here for now.
     gFFI.chatModel.onVoiceCallClosed("End connetion");
-    if (isAndroid) {
-      _textController.removeListener(textAndroidListener);
-    }
   }
 
-  // This listener is used to handle the composing region changes for Android soft keyboard input.
-  void textAndroidListener() {
-    if (_lastComposingChangeValid) {
-      _handleNonIOSSoftKeyboardInput(_textController.text);
-    }
+  @override
+  void didChangeMetrics() {
+    _timerDidChangeMetrics?.cancel();
+    _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () {
+      gFFI.canvasModel.updateViewStyle(refreshMousePos: false);
+    });
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.
@@ -223,12 +222,6 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void _handleNonIOSSoftKeyboardInput(String newValue) {
-    _lastComposingChangeValid = _textController.value.isComposingRangeValid;
-    if (_lastComposingChangeValid && newValue.length > _value.length) {
-      // Only early return if is composing new words.
-      // We need to send `backspace` immediately if is deleting letters.
-      return;
-    }
     var oldValue = _value;
     _value = newValue;
     if (oldValue.isNotEmpty &&
@@ -968,11 +961,9 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
-    final adjust = gFFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
-      painter: ImagePainter(
-          image: m.image, x: c.x / s, y: (c.y - adjust) / s, scale: s),
+      painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
     );
   }
 }
@@ -986,7 +977,6 @@ class CursorPaint extends StatelessWidget {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
     final ffiModel = Provider.of<FfiModel>(context);
-    final adjust = gFFI.cursorModel.adjustForKeyboard();
     final s = c.scale;
     double hotx = m.hotx;
     double hoty = m.hoty;
@@ -1022,7 +1012,7 @@ class CursorPaint extends StatelessWidget {
       painter: ImagePainter(
           image: image,
           x: (m.x - hotx) * factor + c.x / s2,
-          y: (m.y - hoty) * factor + (c.y - adjust) / s2,
+          y: (m.y - hoty) * factor + c.y / s2,
           scale: s2),
     );
   }
