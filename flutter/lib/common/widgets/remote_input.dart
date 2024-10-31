@@ -336,7 +336,8 @@ class _RawTouchGestureDetectorRegionState
     } else {
       // mobile
       _scale = 1;
-      bind.sessionSetViewStyle(sessionId: sessionId, value: "");
+      // No idea why we need to set the view style to "" here.
+      // bind.sessionSetViewStyle(sessionId: sessionId, value: "");
     }
     inputModel.sendMouse('up', MouseButtons.left);
   }
