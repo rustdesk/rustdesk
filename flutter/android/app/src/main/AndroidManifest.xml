@@ -84,7 +84,7 @@
 
         <service
             android:name=".FloatingWindowService"
-            android:enabled="true" />
+            android:enabled="false" />
 
         <!--
  Don't delete the meta-data below.
