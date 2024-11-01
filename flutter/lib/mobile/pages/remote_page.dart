@@ -139,8 +139,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () async {
       // We need this comparation because poping up the floating action will also trigger `didChangeMetrics()`.
       if (newBottom != _viewInsetsBottom) {
-        await gFFI.canvasModel.updateViewStyle(refreshMousePos: false);
-        gFFI.canvasModel.moveToCenterCursor();
+        gFFI.canvasModel.mobileFocusCanvasCursor();
         _viewInsetsBottom = newBottom;
       }
     });
