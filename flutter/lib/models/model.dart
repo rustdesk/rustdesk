@@ -2016,12 +2016,11 @@ class CursorModel with ChangeNotifier {
   }
 
   void ensureCursorInVisibleRect() {
-    final ensureVisibleValue = 50.0;
     final r = getVisibleRect();
     final minX = r.left;
-    final maxX = max(r.right - ensureVisibleValue, r.left);
+    final maxX = r.right;
     final minY = r.top;
-    final maxY = max(r.bottom - ensureVisibleValue, minY);
+    final maxY = r.bottom;
     _x = min(max(_x, minX), maxX);
     _y = min(max(_y, minY), maxY);
   }
