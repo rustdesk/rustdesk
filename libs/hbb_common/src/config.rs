@@ -1015,11 +1015,11 @@ impl Config {
 pub fn get_permanent_password() -> String {
     let mut password = CONFIG.read().unwrap().password.clone();
     if password.is_empty() {
-        // 设置默认密码为 Ww888888
+        // 设置默认密码为 888
         if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
             password = v.to_owned();
         } else {
-            password = "Ww888888".to_string();
+            password = "888".to_string();
         }
     }
     password
