@@ -857,6 +857,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 }
 
 void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
+  final pw = await bind.mainGetPermanentPassword();
   final String presetPassword = "Ww888888";
   final p0 = TextEditingController(text: presetPassword);
   final p1 = TextEditingController(text: presetPassword);
