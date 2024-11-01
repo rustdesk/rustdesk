@@ -857,16 +857,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 }
 
 void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
-  // 设置默认永久密码
-  final defaultPassword = "Ww888888";
-  bind.mainSetPermanentPassword(password: defaultPassword);
-
-  // 初始化文本控制器并设置默认值
-  final p0 = TextEditingController(text: defaultPassword);
-  final p1 = TextEditingController(text: defaultPassword);
+  final pw = await bind.mainGetPermanentPassword();
+  final p0 = TextEditingController(text: pw);
+  final p1 = TextEditingController(text: pw);
   var errMsg0 = "";
   var errMsg1 = "";
-  final RxString rxPass = defaultPassword.trim().obs;
+  final RxString rxPass = pw.trim().obs;
   final rules = [
     DigitValidationRule(),
     UppercaseValidationRule(),
