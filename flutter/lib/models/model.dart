@@ -1420,6 +1420,8 @@ class CanvasModel with ChangeNotifier {
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
   ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
+  Timer? _timerMobileFocusCanvasCursor;
+
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
 
@@ -1482,7 +1484,7 @@ class CanvasModel with ChangeNotifier {
     return max(bottom - MediaQueryData.fromView(ui.window).padding.top, 0);
   }
 
-  updateViewStyle({refreshMousePos = true}) async {
+  updateViewStyle({refreshMousePos = true, notify = true}) async {
     final style = await bind.sessionGetViewStyle(sessionId: sessionId);
     if (style == null) {
       return;
@@ -1514,7 +1516,9 @@ class CanvasModel with ChangeNotifier {
     _x = (size.width - displayWidth * _scale) / 2;
     _y = (size.height - displayHeight * _scale) / 2;
     _imageOverflow.value = _x < 0 || y < 0;
-    notifyListeners();
+    if (notify) {
+      notifyListeners();
+    }
     if (refreshMousePos) {
       parent.target?.inputModel.refreshMousePos();
     }
@@ -1681,6 +1685,7 @@ class CanvasModel with ChangeNotifier {
     _y = 0;
     _scale = 1.0;
     _lastViewStyle = ViewStyle.defaultViewStyle();
+    _timerMobileFocusCanvasCursor?.cancel();
   }
 
   updateScrollPercent() {
@@ -1699,9 +1704,20 @@ class CanvasModel with ChangeNotifier {
     setScrollPercent(percentX, percentY);
   }
 
+  void mobileFocusCanvasCursor() {
+    _timerMobileFocusCanvasCursor?.cancel();
+    _timerMobileFocusCanvasCursor =
+        Timer(Duration(milliseconds: 100), () async {
+      await updateViewStyle(refreshMousePos: false, notify: false);
+      _moveToCenterCursor();
+      parent.target?.cursorModel.ensureCursorInVisibleRect();
+      notifyListeners();
+    });
+  }
+
   // mobile only
   // Move the canvas to make the cursor visible(center) on the screen.
-  void moveToCenterCursor() {
+  void _moveToCenterCursor() {
     Rect? imageRect = parent.target?.ffiModel.rect;
     if (imageRect == null) {
       // unreachable
@@ -1724,7 +1740,6 @@ class CanvasModel with ChangeNotifier {
     } else {
       // _size.height > (imageRect.bottom - imageRect.top) * _scale, , we should not change _y
     }
-    notifyListeners();
   }
 }
 
@@ -1933,11 +1948,7 @@ class CursorModel with ChangeNotifier {
     }
     if (isMobile) {
       if (r != null || _lastIsBlocked) {
-        () async {
-          await parent.target?.canvasModel
-              .updateViewStyle(refreshMousePos: false);
-          parent.target?.canvasModel.moveToCenterCursor();
-        }();
+        parent.target?.canvasModel.mobileFocusCanvasCursor();
       }
     }
   }
@@ -1991,7 +2002,7 @@ class CursorModel with ChangeNotifier {
   }
 
   Offset getCanvasOffsetToCenterCursor() {
-    // cursor should be in the center of the visible rect
+    // Cursor should be at the center of the visible rect.
     // _x = rect.left + rect.width / 2
     // _y = rect.right + rect.height / 2
     // See `getVisibleRect()`
@@ -2002,6 +2013,17 @@ class CursorModel with ChangeNotifier {
     final xoffset = (_displayOriginX - _x) * scale + size.width * 0.5;
     final yoffset = (_displayOriginY - _y) * scale + size.height * 0.5;
     return Offset(xoffset, yoffset);
+  }
+
+  void ensureCursorInVisibleRect() {
+    final ensureVisibleValue = 50.0;
+    final r = getVisibleRect();
+    final minX = r.left;
+    final maxX = max(r.right - ensureVisibleValue, r.left);
+    final minY = r.top;
+    final maxY = max(r.bottom - ensureVisibleValue, minY);
+    _x = min(max(_x, minX), maxX);
+    _y = min(max(_y, minY), maxY);
   }
 
   get scale => parent.target?.canvasModel.scale ?? 1.0;
