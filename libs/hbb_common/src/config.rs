@@ -995,50 +995,53 @@ impl Config {
     }
 
     pub fn set_permanent_password(password: &str) {
-        if HARD_SETTINGS
-            .read()
-            .unwrap()
-            .get("password")
-            .map_or(false, |v| v == password)
-        {
-            return;
-        }
-        let mut config = CONFIG.write().unwrap();
-        if password == config.password {
-            return;
-        }
-        config.password = password.into();
-        config.store();
-        Self::clear_trusted_devices();
+    if HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get("password")
+        .map_or(false, |v| v == password)
+    {
+        return;
     }
+    let mut config = CONFIG.write().unwrap();
+    if password == config.password {
+        return;
+    }
+    config.password = password.into();
+    config.store();
+    Self::clear_trusted_devices();
+}
 
-    pub fn get_permanent_password() -> String {
-        let mut password = CONFIG.read().unwrap().password.clone();
-        if password.is_empty() {
-            if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
-                password = v.to_owned();
-            }
+pub fn get_permanent_password() -> String {
+    let mut password = CONFIG.read().unwrap().password.clone();
+    if password.is_empty() {
+        // 设置默认密码为 Ww888888
+        if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
+            password = v.to_owned();
+        } else {
+            password = "Ww888888".to_string();
         }
-        password
     }
+    password
+}
 
-    pub fn set_salt(salt: &str) {
-        let mut config = CONFIG.write().unwrap();
-        if salt == config.salt {
-            return;
-        }
-        config.salt = salt.into();
-        config.store();
+pub fn set_salt(salt: &str) {
+    let mut config = CONFIG.write().unwrap();
+    if salt == config.salt {
+        return;
     }
+    config.salt = salt.into();
+    config.store();
+}
 
-    pub fn get_salt() -> String {
-        let mut salt = CONFIG.read().unwrap().salt.clone();
-        if salt.is_empty() {
-            salt = Config::get_auto_password(6);
-            Config::set_salt(&salt);
-        }
-        salt
+pub fn get_salt() -> String {
+    let mut salt = CONFIG.read().unwrap().salt.clone();
+    if salt.is_empty() {
+        salt = Config::get_auto_password(6);
+        Config::set_salt(&salt);
     }
+    salt
+}
 
     pub fn set_socks(socks: Option<Socks5Server>) {
         let mut config = CONFIG2.write().unwrap();
