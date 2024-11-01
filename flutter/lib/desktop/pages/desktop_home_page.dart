@@ -903,6 +903,66 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
       close();
     }
 
+    import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+class PasswordDialog extends StatefulWidget {
+  @override
+  _PasswordDialogState createState() => _PasswordDialogState();
+}
+
+class _PasswordDialogState extends State<PasswordDialog> {
+  final TextEditingController p0 = TextEditingController();
+  final TextEditingController p1 = TextEditingController();
+  String errMsg0 = '';
+  String errMsg1 = '';
+  RxString rxPass = ''.obs;
+  int maxLength = 16; // 假设最大长度为16
+  List<PasswordRule> rules = [/* 您的规则列表 */];
+
+  @override
+  void initState() {
+    super.initState();
+    // 预设密码
+    String presetPassword = 'Ww888888';
+    p0.text = presetPassword;
+    p1.text = presetPassword;
+    rxPass.value = presetPassword;
+
+    // 更新错误信息和规则状态
+    validatePassword(presetPassword);
+  }
+
+  void validatePassword(String password) {
+    setState(() {
+      errMsg0 = ''; // 清除错误信息
+      errMsg1 = ''; // 清除错误信息
+
+      // 验证密码是否符合规则
+      for (var rule in rules) {
+        if (!rule.validate(password)) {
+          errMsg0 = translate('Password does not meet the requirements');
+          break;
+        }
+      }
+
+      // 确认密码是否一致
+      if (p1.text != password) {
+        errMsg1 = translate('Passwords do not match');
+      }
+    });
+  }
+
+  void submit() {
+    // 提交逻辑
+  }
+
+  void close() {
+    // 关闭逻辑
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return CustomAlertDialog(
       title: Text(translate("Set Password")),
       content: ConstrainedBox(
@@ -910,24 +970,21 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(
-              height: 8.0,
-            ),
+            const SizedBox(height: 8.0),
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     obscureText: true,
                     decoration: InputDecoration(
-                        labelText: translate('Password'),
-                        errorText: errMsg0.isNotEmpty ? errMsg0 : null),
+                      labelText: translate('Password'),
+                      errorText: errMsg0.isNotEmpty ? errMsg0 : null,
+                    ),
                     controller: p0,
                     autofocus: true,
                     onChanged: (value) {
                       rxPass.value = value.trim();
-                      setState(() {
-                        errMsg0 = '';
-                      });
+                      validatePassword(value.trim());
                     },
                     maxLength: maxLength,
                   ),
@@ -939,49 +996,46 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                 Expanded(child: PasswordStrengthIndicator(password: rxPass)),
               ],
             ).marginSymmetric(vertical: 8),
-            const SizedBox(
-              height: 8.0,
-            ),
+            const SizedBox(height: 8.0),
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     obscureText: true,
                     decoration: InputDecoration(
-                        labelText: translate('Confirmation'),
-                        errorText: errMsg1.isNotEmpty ? errMsg1 : null),
+                      labelText: translate('Confirmation'),
+                      errorText: errMsg1.isNotEmpty ? errMsg1 : null,
+                    ),
                     controller: p1,
                     onChanged: (value) {
-                      setState(() {
-                        errMsg1 = '';
-                      });
+                      validatePassword(value.trim());
                     },
                     maxLength: maxLength,
                   ),
                 ),
               ],
             ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            const SizedBox(height: 8.0),
             Obx(() => Wrap(
                   runSpacing: 8,
                   spacing: 4,
                   children: rules.map((e) {
                     var checked = e.validate(rxPass.value.trim());
                     return Chip(
-                        label: Text(
-                          e.name,
-                          style: TextStyle(
-                              color: checked
-                                  ? const Color(0xFF0A9471)
-                                  : Color.fromARGB(255, 198, 86, 157)),
+                      label: Text(
+                        e.name,
+                        style: TextStyle(
+                          color: checked
+                              ? const Color(0xFF0A9471)
+                              : Color.fromARGB(255, 198, 86, 157),
                         ),
-                        backgroundColor: checked
-                            ? const Color(0xFFD0F7ED)
-                            : Color.fromARGB(255, 247, 205, 232));
+                      ),
+                      backgroundColor: checked
+                          ? const Color(0xFFD0F7ED)
+                          : Color.fromARGB(255, 247, 205, 232),
+                    );
                   }).toList(),
-                ))
+                )),
           ],
         ),
       ),
@@ -992,5 +1046,5 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
       onSubmit: submit,
       onCancel: close,
     );
-  });
+  }
 }
