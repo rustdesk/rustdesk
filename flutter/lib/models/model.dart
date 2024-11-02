@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
@@ -1516,10 +1517,13 @@ class CanvasModel with ChangeNotifier {
     _x = (size.width - displayWidth * _scale) / 2;
     _y = (size.height - displayHeight * _scale) / 2;
     _imageOverflow.value = _x < 0 || y < 0;
+    if (isMobile && style == kRemoteViewStyleOriginal) {
+      _moveToCenterCursor();
+    }
     if (notify) {
       notifyListeners();
     }
-    if (refreshMousePos) {
+    if (!isMobile && refreshMousePos) {
       parent.target?.inputModel.refreshMousePos();
     }
     tryUpdateScrollStyle(Duration.zero, style);
@@ -1709,8 +1713,6 @@ class CanvasModel with ChangeNotifier {
     _timerMobileFocusCanvasCursor =
         Timer(Duration(milliseconds: 100), () async {
       await updateViewStyle(refreshMousePos: false, notify: false);
-      _moveToCenterCursor();
-      parent.target?.cursorModel.ensureCursorInVisibleRect();
       notifyListeners();
     });
   }
@@ -2015,17 +2017,6 @@ class CursorModel with ChangeNotifier {
     return Offset(xoffset, yoffset);
   }
 
-  void ensureCursorInVisibleRect() {
-    final ensureVisibleValue = 50.0;
-    final r = getVisibleRect();
-    final minX = r.left;
-    final maxX = max(r.right - ensureVisibleValue, r.left);
-    final minY = r.top;
-    final maxY = max(r.bottom - ensureVisibleValue, minY);
-    _x = min(max(_x, minX), maxX);
-    _y = min(max(_y, minY), maxY);
-  }
-
   get scale => parent.target?.canvasModel.scale ?? 1.0;
 
   // mobile Soft keyboard, block touch event from the KeyHelpTools
@@ -2042,6 +2033,7 @@ class CursorModel with ChangeNotifier {
     return false;
   }
 
+  // For touch mode
   move(double x, double y) {
     if (shouldBlock(x, y)) {
       _lastIsBlocked = true;
@@ -2129,13 +2121,34 @@ class CursorModel with ChangeNotifier {
     }
 
     if (dx == 0 && dy == 0) return;
-    _x += dx;
-    _y += dy;
+
+    Point? newPos;
+    final rect = parent.target?.ffiModel.rect;
+    if (rect == null) {
+      // unreachable
+      return;
+    }
+    newPos = InputModel.getPointInRemoteRect(
+        false,
+        parent.target?.ffiModel.pi.platform,
+        kPointerEventKindMouse,
+        kMouseEventTypeDefault,
+        (_x + dx).toInt(),
+        (_y + dy).toInt(),
+        rect,
+        buttons: kPrimaryButton);
+    if (newPos == null) {
+      return;
+    }
+    dx = newPos.x - _x;
+    dy = newPos.y - _y;
+    _x = newPos.x.toDouble();
+    _y = newPos.y.toDouble();
     if (tryMoveCanvasX && dx != 0) {
-      parent.target?.canvasModel.panX(-dx);
+      parent.target?.canvasModel.panX(-dx * scale);
     }
     if (tryMoveCanvasY && dy != 0) {
-      parent.target?.canvasModel.panY(-dy);
+      parent.target?.canvasModel.panY(-dy * scale);
     }
 
     parent.target?.inputModel.moveMouse(_x, _y);

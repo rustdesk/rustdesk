@@ -856,7 +856,7 @@ class InputModel {
     _stopFling = true;
     if (isViewOnly) return;
     if (peerPlatform == kPeerPlatformAndroid) {
-      handlePointerEvent('touch', 'pan_start', e.position);
+      handlePointerEvent('touch', kMouseEventTypePanStart, e.position);
     }
   }
 
@@ -899,8 +899,8 @@ class InputModel {
     }
     if (x != 0 || y != 0) {
       if (peerPlatform == kPeerPlatformAndroid) {
-        handlePointerEvent(
-            'touch', 'pan_update', Offset(x.toDouble(), y.toDouble()));
+        handlePointerEvent('touch', kMouseEventTypePanUpdate,
+            Offset(x.toDouble(), y.toDouble()));
       } else {
         bind.sessionSendMouse(
             sessionId: sessionId,
@@ -962,7 +962,7 @@ class InputModel {
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
     if (peerPlatform == kPeerPlatformAndroid) {
-      handlePointerEvent('touch', 'pan_end', e.position);
+      handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
       return;
     }
 
@@ -1080,7 +1080,7 @@ class InputModel {
         onExit: true,
       );
 
-  int trySetNearestRange(int v, int min, int max, int n) {
+  static int tryGetNearestRange(int v, int min, int max, int n) {
     if (v < min && v >= min - n) {
       v = min;
     }
@@ -1120,13 +1120,13 @@ class InputModel {
     // to-do: handle mouse events
 
     late final dynamic evtValue;
-    if (type == 'pan_update') {
+    if (type == kMouseEventTypePanUpdate) {
       evtValue = {
         'x': x.toInt(),
         'y': y.toInt(),
       };
     } else {
-      final isMoveTypes = ['pan_start', 'pan_end'];
+      final isMoveTypes = [kMouseEventTypePanStart, kMouseEventTypePanEnd];
       final pos = handlePointerDevicePos(
         kPointerEventKindTouch,
         x,
@@ -1181,14 +1181,14 @@ class InputModel {
       return;
     }
 
-    var type = '';
+    var type = kMouseEventTypeDefault;
     var isMove = false;
     switch (evt['type']) {
       case _kMouseEventDown:
-        type = 'down';
+        type = kMouseEventTypeDown;
         break;
       case _kMouseEventUp:
-        type = 'up';
+        type = kMouseEventTypeUp;
         break;
       case _kMouseEventMove:
         _pointerMovedAfterEnter = true;
@@ -1199,7 +1199,7 @@ class InputModel {
     }
     evt['type'] = type;
 
-    if (type == 'down' && !_pointerMovedAfterEnter) {
+    if (type == kMouseEventTypeDown && !_pointerMovedAfterEnter) {
       // Move mouse to the position of the down event first.
       lastMousePos = ui.Offset(x, y);
       refreshMousePos();
@@ -1372,6 +1372,14 @@ class InputModel {
       return null;
     }
 
+    return InputModel.getPointInRemoteRect(
+        true, peerPlatform, kind, evtType, evtX, evtY, rect,
+        buttons: buttons);
+  }
+
+  static Point? getPointInRemoteRect(bool isLocalDesktop, String? peerPlatform,
+      String kind, String evtType, int evtX, int evtY, Rect rect,
+      {int buttons = kPrimaryMouseButton}) {
     int minX = rect.left.toInt();
     // https://github.com/rustdesk/rustdesk/issues/6678
     // For Windows, [0,maxX], [0,maxY] should be set to enable window snapping.
@@ -1380,14 +1388,33 @@ class InputModel {
     int minY = rect.top.toInt();
     int maxY = (rect.top + rect.height).toInt() -
         (peerPlatform == kPeerPlatformWindows ? 0 : 1);
-    evtX = trySetNearestRange(evtX, minX, maxX, 5);
-    evtY = trySetNearestRange(evtY, minY, maxY, 5);
-    if (kind == kPointerEventKindMouse) {
-      if (evtX < minX || evtY < minY || evtX > maxX || evtY > maxY) {
-        // If left mouse up, no early return.
-        if (!(buttons == kPrimaryMouseButton && evtType == 'up')) {
-          return null;
+    evtX = InputModel.tryGetNearestRange(evtX, minX, maxX, 5);
+    evtY = InputModel.tryGetNearestRange(evtY, minY, maxY, 5);
+    if (isLocalDesktop) {
+      if (kind == kPointerEventKindMouse) {
+        if (evtX < minX || evtY < minY || evtX > maxX || evtY > maxY) {
+          // If left mouse up, no early return.
+          if (!(buttons == kPrimaryMouseButton &&
+              evtType == kMouseEventTypeUp)) {
+            return null;
+          }
         }
+      }
+    } else {
+      bool evtXInRange = evtX >= minX && evtX <= maxX;
+      bool evtYInRange = evtY >= minY && evtY <= maxY;
+      if (!(evtXInRange || evtYInRange)) {
+        return null;
+      }
+      if (evtX < minX) {
+        evtX = minX;
+      } else if (evtX > maxX) {
+        evtX = maxX;
+      }
+      if (evtY < minY) {
+        evtY = minY;
+      } else if (evtY > maxY) {
+        evtY = maxY;
       }
     }
 
