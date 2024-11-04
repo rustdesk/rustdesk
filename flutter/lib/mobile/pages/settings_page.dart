@@ -616,7 +616,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       await launchUrl(Uri.parse(url));
     }
   },
-  title: Text(translate("Version: ") + version),
+  title: Text(translate("版本: ") + version),
   value: Padding(
     padding: EdgeInsets.symmetric(vertical: 8),
     child: Text('远程控制定制联系微信“Haisong-8”',
