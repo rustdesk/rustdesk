@@ -169,6 +169,13 @@ const int kWindowMainId = 0;
 const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
 
+const String kMouseEventTypeDefault = "";
+const String kMouseEventTypePanStart = "pan_start";
+const String kMouseEventTypePanUpdate = "pan_update";
+const String kMouseEventTypePanEnd = "pan_end";
+const String kMouseEventTypeDown = "down";
+const String kMouseEventTypeUp = "up";
+
 const String kKeyFlutterKey = "flutter_key";
 
 const String kKeyShowDisplaysAsIndividualWindows =
