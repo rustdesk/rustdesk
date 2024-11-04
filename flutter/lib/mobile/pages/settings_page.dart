@@ -756,20 +756,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           title: Text(translate("About")),
           tiles: [
             SettingsTile(
-                onPressed: (context) async {
-                  if (await canLaunchUrl(Uri.parse(url))) {
-                    await launchUrl(Uri.parse(url));
-                  }
-                },
-                title: Text(translate("Version: ") + version),
-                value: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('远程控制定制联系微信“Haisong-8”',
-                      style: TextStyle(
-                        decoration: TextDecoration.underline,
-                      )),
-                ),
-                leading: Icon(Icons.info)),
+  onPressed: (context) async {
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    }
+  },
+  title: Text(translate("Version: ") + version),
+  value: Padding(
+    padding: EdgeInsets.symmetric(vertical: 8),
+    child: Text('远程控制定制联系微信“Haisong-8”',
+        style: TextStyle()), // 移除了下划线样式
+  ),
+  leading: Icon(Icons.info),
+),
             SettingsTile(
                 title: Text(translate("Build Date")),
                 value: Padding(
@@ -902,27 +901,32 @@ void showThemeSettings(OverlayDialogManager dialogManager) async {
 void showAbout(OverlayDialogManager dialogManager) {
   dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
-      title: Text(translate('About RustDesk')),
-      content: Wrap(direction: Axis.vertical, spacing: 12, children: [
-        Text('Version: $version'),
-        InkWell(
-            onTap: () async {
-              const url = 'http://www.scysdl.com/';
-              if (await canLaunchUrl(Uri.parse(url))) {
-                await launchUrl(Uri.parse(url));
+      title: Text(translate('About RustDesk')), // 对话框标题
+      content: Wrap( // 对话框内容
+        direction: Axis.vertical,
+        spacing: 12,
+        children: [
+          Text('Version: $version'), // 显示当前应用版本号
+          InkWell( // 可点击的文字
+            onTap: () async { // 当用户点击时触发的动作
+              const url = 'http://www.scysdl.com/'; // 目标URL
+              if (await canLaunchUrl(Uri.parse(url))) { // 检查是否能够打开URL
+                await launchUrl(Uri.parse(url)); // 打开URL
               }
             },
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('远程控制定制联系微信“Haisong-8”',
-                  style: TextStyle(
-                    decoration: TextDecoration.underline,
-                  )),
-            )),
-      ]),
-      actions: [],
+              child: Text(
+                '远程控制定制联系微信“Haisong-8”', // 显示文本
+                style: TextStyle(), // 移除了下划线样式
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [], // 动作按钮列表，这里为空
     );
-  }, clickMaskDismiss: true, backDismiss: true);
+  }, clickMaskDismiss: true, backDismiss: true); // 点击背景或者返回键关闭对话框
 }
 
 class ScanButton extends StatelessWidget {
