@@ -86,6 +86,12 @@ class _RawTouchGestureDetectorRegionState
 
   PointerDeviceKind? lastDeviceKind;
 
+  // For touch mode, onDoubleTap
+  // `onDoubleTap()` does not provide the position of the tap event.
+  Offset _lastPosOfDoubleTapDown = Offset.zero;
+  bool _touchModePanStarted = false;
+  Offset _doubleFinerTapPosition = Offset.zero;
+
   FFI get ffi => widget.ffi;
   FfiModel get ffiModel => widget.ffiModel;
   InputModel get inputModel => widget.inputModel;
@@ -106,6 +112,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
+      _lastPosOfDoubleTapDown = d.localPosition;
       // Desktop or mobile "Touch mode"
       if (ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy)) {
         inputModel.tapDown(MouseButtons.left);
@@ -140,6 +147,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
+      _lastPosOfDoubleTapDown = d.localPosition;
       ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
     }
   }
@@ -149,6 +157,10 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (ffiModel.touchMode && ffi.cursorModel.lastIsBlocked) {
+      return;
+    }
+    if (handleTouch &&
+        !ffi.cursorModel.isInRemoteRect(_lastPosOfDoubleTapDown)) {
       return;
     }
     inputModel.tap(MouseButtons.left);
@@ -161,8 +173,11 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
-      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+      _lastPosOfDoubleTapDown = d.localPosition;
       _cacheLongPressPosition = d.localPosition;
+      if (!ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy)) {
+        return;
+      }
       _cacheLongPressPositionTs = DateTime.now().millisecondsSinceEpoch;
     }
   }
@@ -182,8 +197,10 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
-      ffi.cursorModel
-          .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
+      if (!ffi.cursorModel
+          .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy)) {
+        return;
+      }
     }
     if (!ffi.ffiModel.isPeerMobile) {
       inputModel.tap(MouseButtons.right);
@@ -195,6 +212,7 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
+    _doubleFinerTapPosition = d.localPosition;
     // ignore for desktop and mobile
   }
 
@@ -203,7 +221,13 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
-    if ((isDesktop || isWebDesktop) || !ffiModel.touchMode) {
+
+    // mobile mouse mode or desktop touch screen
+    final isMobileMouseMode = isMobile && !ffiModel.touchMode;
+    // We can't use `d.localPosition` here because it's always (0, 0) on desktop.
+    final isDesktopInRemoteRect = (isDesktop || isWebDesktop) &&
+        ffi.cursorModel.isInRemoteRect(_doubleFinerTapPosition);
+    if (isMobileMouseMode || isDesktopInRemoteRect) {
       inputModel.tap(MouseButtons.right);
     }
   }
@@ -245,9 +269,15 @@ class _RawTouchGestureDetectorRegionState
       if (ffi.cursorModel.shouldBlock(d.localPosition.dx, d.localPosition.dy)) {
         return;
       }
+      if (!ffi.cursorModel.isInRemoteRect(d.localPosition)) {
+        return;
+      }
+
+      _touchModePanStarted = true;
       if (isDesktop || isWebDesktop) {
         ffi.cursorModel.trySetRemoteWindowCoords();
       }
+
       // Workaround for the issue that the first pan event is sent a long time after the start event.
       // If the time interval between the start event and the first pan event is less than 500ms,
       // we consider to use the long press position as the start position.
@@ -280,10 +310,14 @@ class _RawTouchGestureDetectorRegionState
     if (ffi.cursorModel.shouldBlock(d.localPosition.dx, d.localPosition.dy)) {
       return;
     }
+    if (handleTouch && !_touchModePanStarted) {
+      return;
+    }
     ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
   }
 
   onOneFingerPanEnd(DragEndDetails d) {
+    _touchModePanStarted = false;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
