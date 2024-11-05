@@ -830,29 +830,31 @@ impl Config {
     }
 
     fn get_auto_id() -> Option<String> {
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            return Some(
-                rand::thread_rng()
-                    .gen_range(1_000_000_000..2_000_000_000)
-                    .to_string(),
-            );
-        }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        return Some(
+            rand::thread_rng()
+                .gen_range(100_000..1_000_000)  // 生成一个介于100,000到999,999之间的随机数
+                .to_string(),
+        );
+    }
 
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            let mut id = 0u32;
-            if let Ok(Some(ma)) = mac_address::get_mac_address() {
-                for x in &ma.bytes()[2..] {
-                    id = (id << 8) | (*x as u32);
-                }
-                id &= 0x1FFFFFFF;
-                Some(id.to_string())
-            } else {
-                None
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let mut id = 0u32;
+        if let Ok(Some(ma)) = mac_address::get_mac_address() {
+            for x in &ma.bytes()[2..] {
+                id = (id << 8) | (*x as u32);
             }
+            id &= 0x1FFFFFFF;  // 确保ID在0到0x1FFFFFFF之间
+            // 将ID映射到100,000到999,999之间
+            let mapped_id = 100_000 + (id % 900_000);
+            Some(mapped_id.to_string())
+        } else {
+            None
         }
     }
+}
 
     pub fn get_auto_password(length: usize) -> String {
         let mut rng = rand::thread_rng();
@@ -989,7 +991,7 @@ impl Config {
         // to-do: how about if one ip register a lot of ids?
         let id = Self::get_id();
         let mut rng = rand::thread_rng();
-        let new_id = rng.gen_range(1_000_000_000..2_000_000_000).to_string();
+        let new_id = rng.gen_range(100_000..1_000_000).to_string();
         Config::set_id(&new_id);
         log::info!("id updated from {} to {}", id, new_id);
     }
@@ -1037,7 +1039,7 @@ pub fn set_salt(salt: &str) {
 pub fn get_salt() -> String {
     let mut salt = CONFIG.read().unwrap().salt.clone();
     if salt.is_empty() {
-        salt = Config::get_auto_password(6);
+        salt = Config::get_auto_password(4);
         Config::set_salt(&salt);
     }
     salt
