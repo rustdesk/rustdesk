@@ -111,6 +111,8 @@ pub fn new() -> ServerPtr {
                 // wayland does not support multiple displays currently
                 server.add_service(Box::new(input_service::new_window_focus()));
             }
+            #[cfg(not(target_os = "linux"))]
+            server.add_service(Box::new(input_service::new_window_focus()));
         }
     }
     Arc::new(RwLock::new(server))
