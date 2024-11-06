@@ -1515,12 +1515,8 @@ class CanvasModel with ChangeNotifier {
     if (kIgnoreDpi && style == kRemoteViewStyleOriginal) {
       _scale = 1.0 / _devicePixelRatio;
     }
-    _x = (size.width - displayWidth * _scale) / 2;
-    _y = (size.height - displayHeight * _scale) / 2;
+    _resetCanvasOffset(displayWidth, displayHeight);
     _imageOverflow.value = _x < 0 || y < 0;
-    if (isMobile && style == kRemoteViewStyleOriginal) {
-      _moveToCenterCursor();
-    }
     if (notify) {
       notifyListeners();
     }
@@ -1528,6 +1524,14 @@ class CanvasModel with ChangeNotifier {
       parent.target?.inputModel.refreshMousePos();
     }
     tryUpdateScrollStyle(Duration.zero, style);
+  }
+
+  _resetCanvasOffset(int displayWidth, int displayHeight) {
+    _x = (size.width - displayWidth * _scale) / 2;
+    _y = (size.height - displayHeight * _scale) / 2;
+    if (isMobile && _lastViewStyle.style == kRemoteViewStyleOriginal) {
+      _moveToCenterCursor();
+    }
   }
 
   tryUpdateScrollStyle(Duration duration, String? style) async {
@@ -1640,8 +1644,7 @@ class CanvasModel with ChangeNotifier {
     if (isWebDesktop) {
       updateViewStyle();
     } else {
-      _x = (size.width - getDisplayWidth() * _scale) / 2;
-      _y = (size.height - getDisplayHeight() * _scale) / 2;
+      _resetCanvasOffset(getDisplayWidth(), getDisplayHeight());
     }
     notifyListeners();
   }
@@ -1677,10 +1680,7 @@ class CanvasModel with ChangeNotifier {
     if (kIgnoreDpi && _lastViewStyle.style == kRemoteViewStyleOriginal) {
       _scale = 1.0 / _devicePixelRatio;
     }
-    final displayWidth = getDisplayWidth();
-    final displayHeight = getDisplayHeight();
-    _x = (size.width - displayWidth * _scale) / 2;
-    _y = (size.height - displayHeight * _scale) / 2;
+    _resetCanvasOffset(getDisplayWidth(), getDisplayHeight());
     bind.sessionSetViewStyle(sessionId: sessionId, value: _lastViewStyle.style);
     notifyListeners();
   }
@@ -1937,9 +1937,10 @@ class CursorModel with ChangeNotifier {
   // `lastIsBlocked` is only used in common/widgets/remote_input.dart -> _RawTouchGestureDetectorRegionState -> onDoubleTap()
   // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
   bool _lastIsBlocked = false;
+  bool _lastKeyboardIsVisible = false;
 
   Rect? get keyHelpToolsRect => _keyHelpToolsRect;
-  keyHelpToolsVisibilityChanged(Rect? r) {
+  keyHelpToolsVisibilityChanged(Rect? r, bool keyboardIsVisible) {
     _keyHelpToolsRect = r;
     if (r == null) {
       _lastIsBlocked = false;
@@ -1949,11 +1950,10 @@ class CursorModel with ChangeNotifier {
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
     }
-    if (isMobile) {
-      if (r != null || _lastIsBlocked) {
-        parent.target?.canvasModel.mobileFocusCanvasCursor();
-      }
+    if (isMobile && _lastKeyboardIsVisible != keyboardIsVisible) {
+      parent.target?.canvasModel.mobileFocusCanvasCursor();
     }
+    _lastKeyboardIsVisible = keyboardIsVisible;
   }
 
   get lastIsBlocked => _lastIsBlocked;
