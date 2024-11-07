@@ -1374,7 +1374,7 @@ impl PeerConfig {
         D: de::Deserializer<'de>,
     {
         let v: Vec<i32> = de::Deserialize::deserialize(deserializer)?;
-        if v.len() == 1 && v[0] >= 10 && v[0] <= 0xFFF {
+        if v.len() == 1 && v[0] >= 5 && v[0] <= 0xFFF {
             Ok(v)
         } else {
             Ok(Self::default_custom_image_quality())
@@ -1722,7 +1722,7 @@ impl UserDefaultConfig {
                 self.get_string(key, "auto", vec!["vp8", "vp9", "av1", "h264", "h265"])
             }
             keys::OPTION_CUSTOM_IMAGE_QUALITY => {
-                self.get_double_string(key, 50.0, 10.0, 0xFFF as f64)
+                self.get_double_string(key, 50.0, 5.0, 0xFFF as f64)
             }
             keys::OPTION_CUSTOM_FPS => self.get_double_string(key, 30.0, 5.0, 120.0),
             keys::OPTION_ENABLE_FILE_COPY_PASTE => self.get_string(key, "Y", vec!["", "N"]),
