@@ -84,6 +84,9 @@ class _RawTouchGestureDetectorRegionState
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   double _scale = 1;
 
+  // Workaround tap down event when two fingers are used to scale(mobile)
+  TapDownDetails? _lastTapDownDetails;
+
   PointerDeviceKind? lastDeviceKind;
 
   // For touch mode, onDoubleTap
@@ -114,15 +117,13 @@ class _RawTouchGestureDetectorRegionState
     if (handleTouch) {
       _lastPosOfDoubleTapDown = d.localPosition;
       // Desktop or mobile "Touch mode"
-      final isMoved =
-          await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-      if (isMoved) {
-        await inputModel.tapDown(MouseButtons.left);
-      }
+      _lastTapDownDetails = d;
     }
   }
 
   onTapUp(TapUpDetails d) async {
+    final TapDownDetails? lastTapDownDetails = _lastTapDownDetails;
+    _lastTapDownDetails = null;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
@@ -130,7 +131,10 @@ class _RawTouchGestureDetectorRegionState
       final isMoved =
           await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
       if (isMoved) {
-        inputModel.tapUp(MouseButtons.left);
+        if (lastTapDownDetails != null) {
+          await inputModel.tapDown(MouseButtons.left);
+        }
+        await inputModel.tapUp(MouseButtons.left);
       }
     }
   }
@@ -179,9 +183,7 @@ class _RawTouchGestureDetectorRegionState
     if (handleTouch) {
       _lastPosOfDoubleTapDown = d.localPosition;
       _cacheLongPressPosition = d.localPosition;
-      final isMoved =
-          await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-      if (!isMoved) {
+      if (!ffi.cursorModel.isInRemoteRect(d.localPosition)) {
         return;
       }
       _cacheLongPressPositionTs = DateTime.now().millisecondsSinceEpoch;
@@ -268,11 +270,17 @@ class _RawTouchGestureDetectorRegionState
   }
 
   onOneFingerPanStart(BuildContext context, DragStartDetails d) async {
+    final TapDownDetails? lastTapDownDetails = _lastTapDownDetails;
+    _lastTapDownDetails = null;
     lastDeviceKind = d.kind ?? lastDeviceKind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (handleTouch) {
+      if (lastTapDownDetails != null) {
+        await ffi.cursorModel.move(lastTapDownDetails.localPosition.dx,
+            lastTapDownDetails.localPosition.dy);
+      }
       if (ffi.cursorModel.shouldBlock(d.localPosition.dx, d.localPosition.dy)) {
         return;
       }
@@ -336,6 +344,7 @@ class _RawTouchGestureDetectorRegionState
 
   // scale + pan event
   onTwoFingerScaleStart(ScaleStartDetails d) {
+    _lastTapDownDetails = null;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
