@@ -1,0 +1,58 @@
+name: Build Flutter Engine
+
+on: workflow_dispatch
+
+jobs:
+  build-engine:
+    runs-on: windows-latest
+
+    steps:
+      - name: Install Depot Tools
+        uses: newkdev/setup-depot-tools@v1.0.1
+
+      - name: Set environment variables
+        run: |
+          echo "DEPOT_TOOLS_WIN_TOOLCHAIN=0" >> $env:GITHUB_ENV
+          echo "GYP_MSVS_OVERRIDE_PATH=C:\Program Files\Microsoft Visual Studio\2022\Enterprise" >> $env:GITHUB_ENV
+          echo "WINDOWSSDKDIR=C:\Program Files (x86)\Windows Kits\10" >> $env:GITHUB_ENV
+
+      - name: Fetch Flutter
+        run: |
+          mkdir engine
+          cd engine
+          
+          fetch flutter
+          git -C src/flutter checkout db49896cf25ceabc44096d5f088d86414e05a7aa
+
+          $filePath = "src/flutter/shell/platform/windows/flutter_windows_engine.cc"
+          (Get-Content $filePath) -replace 'ClearCurrent', 'MakeCurrent' | Set-Content $filePath
+
+          $filePath = "src/flutter/fml/hex_codec.h"
+          (Get-Content $filePath | ForEach-Object { if ($_ -eq '#include <string_view>') {"#include <string>`n" + $_} else {$_}}) | Set-Content $filePath
+
+          git -C src/flutter status
+          
+          gclient sync -D
+          
+          # Compiling the Flutter engine
+          cd src
+          python .\flutter\tools\gn --runtime-mode=release
+          ninja -C .\out\host_release
+          
+          # Check and compress files
+          $outputPath = "${{ github.workspace }}\windows-x64-release.zip"
+          $filesToCompress = Get-ChildItem -Path .\out\host_release\flutter_windows.dll*
+          if ($filesToCompress) {
+            Compress-Archive -Path $filesToCompress -DestinationPath $outputPath
+          } else {
+            Write-Error "Build output files not found!"
+          }
+
+      - name: Upload files to a GitHub release
+        uses: svenstaro/upload-release-action@2.9.0
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: windows-x64-release.zip
+          tag: ${{ github.ref }}
+          overwrite: true
+          body: "Flutter Engine Release"
