@@ -1475,14 +1475,16 @@ class CanvasModel with ChangeNotifier {
     if (isMobile) {
       h = h -
           mediaData.viewInsets.bottom -
-          (parent.target?.cursorModel.keyHelpToolsRect?.bottom ?? 0);
+          (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
+              0);
     }
     return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
   }
 
   // mobile only
   double getAdjustY() {
-    final bottom = parent.target?.cursorModel.keyHelpToolsRect?.bottom ?? 0;
+    final bottom =
+        parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ?? 0;
     return max(bottom - MediaQueryData.fromView(ui.window).padding.top, 0);
   }
 
@@ -1939,7 +1941,8 @@ class CursorModel with ChangeNotifier {
   bool _lastIsBlocked = false;
   bool _lastKeyboardIsVisible = false;
 
-  Rect? get keyHelpToolsRect => _keyHelpToolsRect;
+  Rect? get keyHelpToolsRectToAdjustCanvas =>
+      _lastKeyboardIsVisible ? _keyHelpToolsRect : null;
   keyHelpToolsVisibilityChanged(Rect? r, bool keyboardIsVisible) {
     _keyHelpToolsRect = r;
     if (r == null) {
