@@ -542,7 +542,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               right: 10,
               child: QualityMonitor(gFFI.qualityMonitorModel),
             ),
-            KeyHelpTools(requestShow: (keyboardIsVisible || _showGestureHelp)),
+            KeyHelpTools(
+                keyboardIsVisible: keyboardIsVisible,
+                showGestureHelp: _showGestureHelp),
             SizedBox(
               width: 0,
               height: 0,
@@ -771,10 +773,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 }
 
 class KeyHelpTools extends StatefulWidget {
-  /// need to show by external request, etc [keyboardIsVisible] or [changeTouchMode]
-  final bool requestShow;
+  final bool keyboardIsVisible;
+  final bool showGestureHelp;
 
-  KeyHelpTools({required this.requestShow});
+  /// need to show by external request, etc [keyboardIsVisible] or [changeTouchMode]
+  bool get requestShow => keyboardIsVisible || showGestureHelp;
+
+  KeyHelpTools(
+      {required this.keyboardIsVisible, required this.showGestureHelp});
 
   @override
   State<KeyHelpTools> createState() => _KeyHelpToolsState();
@@ -819,7 +825,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       final size = renderObject.size;
       Offset pos = renderObject.localToGlobal(Offset.zero);
       gFFI.cursorModel.keyHelpToolsVisibilityChanged(
-          Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height));
+          Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height),
+          widget.keyboardIsVisible);
     }
   }
 
@@ -831,7 +838,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         inputModel.command;
 
     if (!_pin && !hasModifierOn && !widget.requestShow) {
-      gFFI.cursorModel.keyHelpToolsVisibilityChanged(null);
+      gFFI.cursorModel
+          .keyHelpToolsVisibilityChanged(null, widget.keyboardIsVisible);
       return Offstage();
     }
     final size = MediaQuery.of(context).size;
