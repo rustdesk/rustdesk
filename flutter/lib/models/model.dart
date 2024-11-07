@@ -2038,7 +2038,7 @@ class CursorModel with ChangeNotifier {
   }
 
   // For touch mode
-  move(double x, double y) {
+  Future<bool> move(double x, double y) async {
     if (shouldBlock(x, y)) {
       _lastIsBlocked = true;
       return false;
@@ -2047,7 +2047,7 @@ class CursorModel with ChangeNotifier {
     if (!_moveLocalIfInRemoteRect(x, y)) {
       return false;
     }
-    parent.target?.inputModel.moveMouse(_x, _y);
+    await parent.target?.inputModel.moveMouse(_x, _y);
     return true;
   }
 
@@ -2105,9 +2105,9 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updatePan(Offset delta, Offset localPosition, bool touchMode) {
+  updatePan(Offset delta, Offset localPosition, bool touchMode) async {
     if (touchMode) {
-      _handleTouchMode(delta, localPosition);
+      await _handleTouchMode(delta, localPosition);
       return;
     }
     double dx = delta.dx;
@@ -2205,7 +2205,7 @@ class CursorModel with ChangeNotifier {
     return x >= 0 && y >= 0 && x <= w && y <= h;
   }
 
-  _handleTouchMode(Offset delta, Offset localPosition) {
+  _handleTouchMode(Offset delta, Offset localPosition) async {
     bool isMoved = false;
     if (_remoteWindowCoords.isNotEmpty &&
         _windowRect != null &&
@@ -2221,7 +2221,7 @@ class CursorModel with ChangeNotifier {
                 coords.canvas.scale;
         x2 += coords.cursor.offset.dx;
         y2 += coords.cursor.offset.dy;
-        parent.target?.inputModel.moveMouse(x2, y2);
+        await parent.target?.inputModel.moveMouse(x2, y2);
         isMoved = true;
       }
     }
@@ -2264,7 +2264,7 @@ class CursorModel with ChangeNotifier {
 
       _x = movement.dx;
       _y = movement.dy;
-      parent.target?.inputModel.moveMouse(_x, _y);
+      await parent.target?.inputModel.moveMouse(_x, _y);
     }
     notifyListeners();
   }
