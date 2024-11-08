@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.3.2"
+version = "1.3.3"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
