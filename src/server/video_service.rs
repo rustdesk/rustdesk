@@ -971,6 +971,7 @@ fn handle_one_frame(
             }
             match e.to_string().as_str() {
                 scrap::codec::ENCODE_NEED_SWITCH => {
+                    encoder.disable();
                     log::error!("switch due to encoder need switch");
                     bail!("SWITCH");
                 }
