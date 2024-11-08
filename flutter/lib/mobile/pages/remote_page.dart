@@ -269,14 +269,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> handleSoftKeyboardInput(String newValue) async {
+  // handle mobile virtual keyboard
+  void handleSoftKeyboardInput(String newValue) {
     if (isIOS) {
-      // fix: TextFormField onChanged event triggered multiple times when Korean input
-      // https://github.com/rustdesk/rustdesk/pull/9644
-      await Future.delayed(const Duration(milliseconds: 10));
-
-      if (newValue != _textController.text) return;
-      _handleIOSSoftKeyboardInput(_textController.text);
+      _handleIOSSoftKeyboardInput(newValue);
     } else {
       _handleNonIOSSoftKeyboardInput(newValue);
     }
@@ -564,6 +560,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       controller: _textController,
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
+                      // `onChanged` may be called depending on the input method if this widget is wrapped in
+                      // `Focus(onKeyEvent: ..., child: ...)`
+                      // For `Backspace` button in the soft keyboard:
+                      // en/fr input method: 
+                      //      1. The button will not trigger `onKeyEvent` if the text field is not empty.
+                      //      2. The button will trigger `onKeyEvent` if the text field is empty.
+                      // ko/zh/ja input method: the button will trigger `onKeyEvent`
+                      //                     and the event will not popup if `KeyEventResult.handled` is returned.
                       onChanged: handleSoftKeyboardInput,
                     ),
             ),
