@@ -560,6 +560,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       controller: _textController,
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
+                      // `onChanged` may be called depending on the input method if this widget is wrapped in
+                      // `Focus(onKeyEvent: ..., child: ...)`
+                      // For `Backspace` button in the soft keyboard:
+                      // en/fr input method: 
+                      //      1. The button will not trigger `onKeyEvent` if the text field is not empty.
+                      //      2. The button will trigger `onKeyEvent` if the text field is empty.
+                      // ko/zh/ja input method: the button will trigger `onKeyEvent`
+                      //                     and the event will not popup if `KeyEventResult.handled` is returned.
                       onChanged: handleSoftKeyboardInput,
                     ),
             ),
