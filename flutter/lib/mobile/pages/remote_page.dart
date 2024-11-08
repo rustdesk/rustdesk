@@ -134,6 +134,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   void didChangeMetrics() {
+    // If the soft keyboard is visible and the canvas has been changed(panned or scaled)
+    // Don't try reset the view style and focus the cursor.
+    if (gFFI.cursorModel.lastKeyboardIsVisible &&
+        gFFI.canvasModel.isMobileCanvasChanged) {
+      return;
+    }
+
     final newBottom = MediaQueryData.fromView(ui.window).viewInsets.bottom;
     _timerDidChangeMetrics?.cancel();
     _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () async {
@@ -563,7 +570,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       // `onChanged` may be called depending on the input method if this widget is wrapped in
                       // `Focus(onKeyEvent: ..., child: ...)`
                       // For `Backspace` button in the soft keyboard:
-                      // en/fr input method: 
+                      // en/fr input method:
                       //      1. The button will not trigger `onKeyEvent` if the text field is not empty.
                       //      2. The button will trigger `onKeyEvent` if the text field is empty.
                       // ko/zh/ja input method: the button will trigger `onKeyEvent`

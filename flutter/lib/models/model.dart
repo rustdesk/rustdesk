@@ -1424,6 +1424,10 @@ class CanvasModel with ChangeNotifier {
 
   Timer? _timerMobileFocusCanvasCursor;
 
+  // `isMobileCanvasChanged` is used to avoid canvas reset when changing the input method
+  // after showing the soft keyboard.
+  bool isMobileCanvasChanged = false;
+
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
 
@@ -1639,6 +1643,9 @@ class CanvasModel with ChangeNotifier {
 
   panX(double dx) {
     _x += dx;
+    if (isMobile) {
+      isMobileCanvasChanged = true;
+    }
     notifyListeners();
   }
 
@@ -1653,6 +1660,9 @@ class CanvasModel with ChangeNotifier {
 
   panY(double dy) {
     _y += dy;
+    if (isMobile) {
+      isMobileCanvasChanged = true;
+    }
     notifyListeners();
   }
 
@@ -1672,6 +1682,9 @@ class CanvasModel with ChangeNotifier {
     // (focalPoint.dy - _y_1 - adjust) / s1 + displayOriginY = (focalPoint.dy - _y_2 - adjust) / s2 + displayOriginY
     // _y_2 = focalPoint.dy - adjust - (focalPoint.dy - _y_1 - adjust) / s1 * s2
     _y = focalPoint.dy - adjust - (focalPoint.dy - _y - adjust) / s * _scale;
+    if (isMobile) {
+      isMobileCanvasChanged = true;
+    }
     notifyListeners();
   }
 
@@ -1941,6 +1954,8 @@ class CursorModel with ChangeNotifier {
   bool _lastIsBlocked = false;
   bool _lastKeyboardIsVisible = false;
 
+  bool get lastKeyboardIsVisible => _lastKeyboardIsVisible;
+
   Rect? get keyHelpToolsRectToAdjustCanvas =>
       _lastKeyboardIsVisible ? _keyHelpToolsRect : null;
   keyHelpToolsVisibilityChanged(Rect? r, bool keyboardIsVisible) {
@@ -1955,6 +1970,7 @@ class CursorModel with ChangeNotifier {
     }
     if (isMobile && _lastKeyboardIsVisible != keyboardIsVisible) {
       parent.target?.canvasModel.mobileFocusCanvasCursor();
+      parent.target?.canvasModel.isMobileCanvasChanged = false;
     }
     _lastKeyboardIsVisible = keyboardIsVisible;
   }
