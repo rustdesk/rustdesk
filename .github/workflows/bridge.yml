@@ -81,7 +81,11 @@ jobs:
         shell: bash
         run: |
           cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
-          pushd flutter && sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml && flutter pub get && popd
+          pushd flutter
+          sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
+          sed -i -e '/qr_code_scanner/{N;N;N;s/.*\n.*\n.*\n/  qr_code_scanner: 1.0.1\n/;}' pubspec.yaml
+          flutter pub get
+          popd
 
       - name: Run flutter rust bridge
         run: |

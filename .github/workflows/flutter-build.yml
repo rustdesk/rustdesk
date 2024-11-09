@@ -25,7 +25,7 @@ env:
   SCITER_NASM_DEBVERSION: "2.14-1"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.4"
-  ANDROID_FLUTTER_VERSION: "3.13.9" # >= 3.16 is very slow on my android phone, but work well on most of others. We may switch to new flutter after changing to texture rendering (I believe it can solve my problem).
+  ANDROID_FLUTTER_VERSION: "3.24.4"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
@@ -910,7 +910,7 @@ jobs:
                llvm-10-dev \
                nasm \
                ninja-build \
-               openjdk-11-jdk-headless \
+               openjdk-17-jdk-headless \
                pkg-config \
                tree \
                wget
@@ -981,7 +981,7 @@ jobs:
           key: ${{ matrix.job.target }}
 
       - name: fix android for flutter 3.13
-        if: $${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
+        if: ${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
         run: |
           cd flutter
           sed -i 's/uni_links_desktop/#uni_links_desktop/g' pubspec.yaml
@@ -1029,9 +1029,9 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           case ${{ matrix.job.target }} in
@@ -1173,7 +1173,7 @@ jobs:
                llvm-10-dev \
                nasm \
                ninja-build \
-               openjdk-11-jdk-headless \
+               openjdk-17-jdk-headless \
                pkg-config \
                tree \
                wget
@@ -1218,7 +1218,7 @@ jobs:
           path: ./flutter/android/app/src/main/jniLibs/x86
 
       - name: fix android for flutter 3.13
-        if: $${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
+        if: ${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
         run: |
           cd flutter
           sed -i 's/uni_links_desktop/#uni_links_desktop/g' pubspec.yaml
@@ -1230,9 +1230,9 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           mv ./flutter/android/app/src/main/jniLibs/arm64-v8a/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
