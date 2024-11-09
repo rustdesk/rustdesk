@@ -1317,10 +1317,11 @@ packages:
   uni_links:
     dependency: "direct main"
     description:
-      name: uni_links
-      sha256: "051098acfc9e26a9fde03b487bef5d3d228ca8f67693480c6f33fd4fbb8e2b6e"
-      url: "https://pub.dev"
-    source: hosted
+      path: uni_links
+      ref: f416118d843a7e9ed117c7bb7bdc2deda5a9e86f
+      resolved-ref: f416118d843a7e9ed117c7bb7bdc2deda5a9e86f
+      url: "https://github.com/rustdesk-org/uni_links"
+    source: git
     version: "0.5.1"
   uni_links_desktop:
     dependency: "direct main"
