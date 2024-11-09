@@ -203,8 +203,6 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   bool isPeersLoading = false;
   bool isPeersLoaded = false;
-  // https://github.com/flutter/flutter/issues/157244
-  Iterable<Peer> _autocompleteOpts = [];
 
   @override
   void initState() {
@@ -332,7 +330,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                     child: Autocomplete<Peer>(
                   optionsBuilder: (TextEditingValue textEditingValue) {
                     if (textEditingValue.text == '') {
-                      _autocompleteOpts = const Iterable<Peer>.empty();
+                      return const Iterable<Peer>.empty();
                     } else if (peers.isEmpty && !isPeersLoaded) {
                       Peer emptyPeer = Peer(
                         id: '',
@@ -348,7 +346,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                         rdpUsername: '',
                         loginName: '',
                       );
-                      _autocompleteOpts = [emptyPeer];
+                      return [emptyPeer];
                     } else {
                       String textWithoutSpaces =
                           textEditingValue.text.replaceAll(" ", "");
@@ -359,7 +357,8 @@ class _ConnectionPageState extends State<ConnectionPage>
                         );
                       }
                       String textToFind = textEditingValue.text.toLowerCase();
-                      _autocompleteOpts =  peers
+
+                      return peers
                           .where((peer) =>
                               peer.id.toLowerCase().contains(textToFind) ||
                               peer.username
@@ -371,7 +370,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                               peer.alias.toLowerCase().contains(textToFind))
                           .toList();
                     }
-                    return _autocompleteOpts;
                   },
                   fieldViewBuilder: (
                     BuildContext context,
@@ -432,7 +430,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                   optionsViewBuilder: (BuildContext context,
                       AutocompleteOnSelected<Peer> onSelected,
                       Iterable<Peer> options) {
-                    options = _autocompleteOpts;
                     double maxHeight = options.length * 50;
                     if (options.length == 1) {
                       maxHeight = 52;
