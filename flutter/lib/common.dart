@@ -64,6 +64,9 @@ int androidVersion = 0;
 // So we need to use this flag to enable/disable resizable.
 bool _linuxWindowResizable = true;
 
+// Only used on Windows(window manager).
+bool _ignoreDevicePixelRatio = true;
+
 /// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
@@ -1611,12 +1614,6 @@ Widget getPlatformImage(String platform, {double size = 50}) {
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
 }
 
-class OffsetDevicePixelRatio {
-  Offset offset;
-  final double devicePixelRatio;
-  OffsetDevicePixelRatio(this.offset, this.devicePixelRatio);
-}
-
 class LastWindowPosition {
   double? width;
   double? height;
@@ -1699,8 +1696,10 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       if (isFullscreen || isMaximized) {
         setPreFrame();
       } else {
-        position = await windowManager.getPosition();
-        sz = await windowManager.getSize();
+        position = await windowManager.getPosition(
+            ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+        sz = await windowManager.getSize(
+            ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
       }
       break;
     default:
@@ -1818,7 +1817,7 @@ bool isPointInRect(Offset point, Rect rect) {
 }
 
 /// return null means center
-Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
+Future<Offset?> _adjustRestoreMainWindowOffset(
   double? left,
   double? top,
   double? width,
@@ -1832,13 +1831,9 @@ Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
   double? frameTop;
   double? frameRight;
   double? frameBottom;
-  double devicePixelRatio = 1.0;
 
   if (isDesktop || isWebDesktop) {
     for (final screen in await window_size.getScreenList()) {
-      if (isPointInRect(Offset(left, top), screen.visibleFrame)) {
-        devicePixelRatio = screen.scaleFactor;
-      }
       frameLeft = frameLeft == null
           ? screen.visibleFrame.left
           : min(screen.visibleFrame.left, frameLeft);
@@ -1872,7 +1867,7 @@ Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
       top < frameTop!) {
     return null;
   } else {
-    return OffsetDevicePixelRatio(Offset(left, top), devicePixelRatio);
+    return Offset(left, top);
   }
 }
 
@@ -1932,47 +1927,23 @@ Future<bool> restoreWindowPosition(WindowType type,
   }
 
   final size = await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-  final offsetDevicePixelRatio = await _adjustRestoreMainWindowOffset(
+  final offsetLeftTop = await _adjustRestoreMainWindowOffset(
     lpos.offsetWidth,
     lpos.offsetHeight,
     size.width,
     size.height,
   );
   debugPrint(
-      "restore lpos: ${size.width}/${size.height}, offset:${offsetDevicePixelRatio?.offset.dx}/${offsetDevicePixelRatio?.offset.dy}, devicePixelRatio:${offsetDevicePixelRatio?.devicePixelRatio}, isMaximized: ${lpos.isMaximized}, isFullscreen: ${lpos.isFullscreen}");
+      "restore lpos: ${size.width}/${size.height}, offset:${offsetLeftTop?.dx}/${offsetLeftTop?.dy}, isMaximized: ${lpos.isMaximized}, isFullscreen: ${lpos.isFullscreen}");
 
   switch (type) {
     case WindowType.Main:
-      // https://github.com/rustdesk/rustdesk/issues/8038
-      // `setBounds()` in `window_manager` will use the current devicePixelRatio.
-      // So we need to adjust the offset by the scale factor.
-      // https://github.com/rustdesk-org/window_manager/blob/f19acdb008645366339444a359a45c3257c8b32e/windows/window_manager.cpp#L701
-      if (isWindows) {
-        double? curDevicePixelRatio;
-        Offset curPos = await windowManager.getPosition();
-        for (final screen in await window_size.getScreenList()) {
-          if (isPointInRect(curPos, screen.visibleFrame)) {
-            curDevicePixelRatio = screen.scaleFactor;
-          }
-        }
-        if (curDevicePixelRatio != null &&
-            curDevicePixelRatio != 0 &&
-            offsetDevicePixelRatio != null) {
-          if (offsetDevicePixelRatio.devicePixelRatio != 0) {
-            final scale =
-                offsetDevicePixelRatio.devicePixelRatio / curDevicePixelRatio;
-            offsetDevicePixelRatio.offset =
-                offsetDevicePixelRatio.offset.scale(scale, scale);
-            debugPrint(
-                "restore new offset: ${offsetDevicePixelRatio.offset.dx}/${offsetDevicePixelRatio.offset.dy}, scale:$scale");
-          }
-        }
-      }
       restorePos() async {
-        if (offsetDevicePixelRatio == null) {
+        if (offsetLeftTop == null) {
           await windowManager.center();
         } else {
-          await windowManager.setPosition(offsetDevicePixelRatio.offset);
+          await windowManager.setPosition(offsetLeftTop,
+              ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
         }
       }
       if (lpos.isMaximized == true) {
@@ -1981,20 +1952,39 @@ Future<bool> restoreWindowPosition(WindowType type,
           await windowManager.maximize();
         }
       } else {
-        if (!bind.isIncomingOnly() || bind.isOutgoingOnly()) {
-          await windowManager.setSize(size);
+        final storeSize = !bind.isIncomingOnly() || bind.isOutgoingOnly();
+        if (isWindows) {
+          if (storeSize) {
+            // We need to set the window size first to avoid the incorrect size in some special cases.
+            // E.g. There are two monitors, the left one is 100% DPI and the right one is 175% DPI.
+            // The window belongs to the left monitor, but if it is moved a little to the right, it will belong to the right monitor.
+            // After restoring, the size will be incorrect.
+            // See known issue in https://github.com/rustdesk/rustdesk/pull/9840
+            await windowManager.setSize(size,
+                ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+          }
+          await restorePos();
+          if (storeSize) {
+            await windowManager.setSize(size,
+                ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+          }
+        } else {
+          if (storeSize) {
+            await windowManager.setSize(size,
+                ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+          }
+          await restorePos();
         }
-        await restorePos();
       }
       return true;
     default:
       final wc = WindowController.fromWindowId(windowId!);
       restoreFrame() async {
-        if (offsetDevicePixelRatio == null) {
+        if (offsetLeftTop == null) {
           await wc.center();
         } else {
-          final frame = Rect.fromLTWH(offsetDevicePixelRatio.offset.dx,
-              offsetDevicePixelRatio.offset.dy, size.width, size.height);
+          final frame = Rect.fromLTWH(
+              offsetLeftTop.dx, offsetLeftTop.dy, size.width, size.height);
           await wc.setFrame(frame);
         }
       }
