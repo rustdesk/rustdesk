@@ -2498,9 +2498,19 @@ Future<void> onActiveWindowChanged() async {
         // But the app will not close.
         //
         // No idea why we need to delay here, `terminate()` itself is also an async function.
-        Future.delayed(Duration.zero, () {
-          RdPlatformChannel.instance.terminate();
-        });
+        //
+        // A quick workaround, use `Timer.periodic` to avoid the app not closing.
+        // Because `await windowManager.close()` and `RdPlatformChannel.instance.terminate()`
+        // may not work since `Flutter 3.24.4`, see the following logs.
+        // A delay will allow the app to close.
+        //
+        //```
+        // embedder.cc (2725): 'FlutterPlatformMessageCreateResponseHandle' returned 'kInvalidArguments'. Engine handle was invalid.
+        // 2024-11-11 11:41:11.546 RustDesk[90272:2567686] Failed to create a FlutterPlatformMessageResponseHandle (2)
+        // embedder.cc (2672): 'FlutterEngineSendPlatformMessage' returned 'kInvalidArguments'. Invalid engine handle.
+        // 2024-11-11 11:41:11.565 RustDesk[90272:2567686] Failed to send message to Flutter engine on channel 'flutter/lifecycle' (2).
+        // ```
+        periodic_immediate(Duration(milliseconds: 30), RdPlatformChannel.instance.terminate);
       }
     }
   }
