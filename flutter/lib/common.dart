@@ -2510,7 +2510,7 @@ Future<void> onActiveWindowChanged() async {
         // embedder.cc (2672): 'FlutterEngineSendPlatformMessage' returned 'kInvalidArguments'. Invalid engine handle.
         // 2024-11-11 11:41:11.565 RustDesk[90272:2567686] Failed to send message to Flutter engine on channel 'flutter/lifecycle' (2).
         // ```
-        periodic_immediate(Duration(milliseconds: 500), RdPlatformChannel.instance.terminate);
+        periodic_immediate(Duration(milliseconds: 30), RdPlatformChannel.instance.terminate);
       }
     }
   }
