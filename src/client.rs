@@ -1192,16 +1192,16 @@ impl AudioHandler {
                 let mut lock = audio_buffer.lock().unwrap();
                 let mut having = lock.occupied_len();
                 if having < n {
-                    drop(lock);
-
                     let tms = info.timestamp();
                     let how_long = tms.playback.duration_since(&tms.callback).unwrap();
+
                     if how_long > Duration::from_millis(6) {
+                        drop(lock);
                         std::thread::sleep(how_long.div_f32(2.0));
+                        lock = audio_buffer.lock().unwrap();
+                        having = lock.occupied_len();
                     }
 
-                    lock = audio_buffer.lock().unwrap();
-                    having = lock.occupied_len();
                     if having < n {
                         n = having;
                     }
