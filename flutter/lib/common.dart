@@ -2603,7 +2603,7 @@ class ServerConfig {
     config['relay'] = relayServer.trim();
     config['api'] = apiServer.trim();
     config['key'] = key.trim();
-    return base64Encode(Uint8List.fromList(jsonEncode(config).codeUnits))
+    return base64UrlEncode(Uint8List.fromList(jsonEncode(config).codeUnits))
         .split('')
         .reversed
         .join();
