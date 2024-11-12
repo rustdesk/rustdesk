@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Kalite monitörünü göster"),
         ("Disable clipboard", "Hafızadaki kopyalanmışları engelle"),
         ("Lock after session end", "Bağlantıdan sonra kilitle"),
-        ("Insert", "Ekle"),
+        ("Insert Ctrl + Alt + Del", "Ctrl + Alt + Del Ekle"),
         ("Insert Lock", "Kilit Ekle"),
         ("Refresh", "Yenile"),
         ("ID does not exist", "ID bulunamadı"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Kayıt Ediliyor"),
         ("Directory", "Klasör"),
         ("Automatically record incoming sessions", "Gelen oturumları otomatik olarak kayıt et"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Değiştir"),
         ("Start session recording", "Oturum kaydını başlat"),
         ("Stop session recording", "Oturum kaydını sonlandır"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", ""),
         ("Authenticate", ""),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }

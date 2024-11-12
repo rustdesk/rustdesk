@@ -505,7 +505,7 @@ fn child(su_user: Option<String>, args: Vec<String>) -> ResultType<()> {
         command = format!("'{}'", quote_shell_arg(&command, false));
     }
     params.push(command);
-    std::env::set_var("LC_ALL", "C.UTF-8");
+    std::env::set_var("LC_ALL", "C");
 
     if let Some(user) = &su_user {
         let su_subcommand = params

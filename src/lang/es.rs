@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Mostrar calidad del monitor"),
         ("Disable clipboard", "Deshabilitar portapapeles"),
         ("Lock after session end", "Bloquear después del final de la sesión"),
-        ("Insert", "Insertar"),
+        ("Insert Ctrl + Alt + Del", "Insertar Ctrl + Alt + Del"),
         ("Insert Lock", "Insertar bloqueo"),
         ("Refresh", "Actualizar"),
         ("ID does not exist", "La ID no existe"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Grabando"),
         ("Directory", "Directorio"),
         ("Automatically record incoming sessions", "Grabación automática de sesiones entrantes"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Cambiar"),
         ("Start session recording", "Comenzar grabación de sesión"),
         ("Stop session recording", "Detener grabación de sesión"),
@@ -647,6 +648,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "La transferencia en un sentido está habilitada en el lado controlado."),
         ("Authentication Required", "Se requiere autenticación"),
         ("Authenticate", "Autenticar"),
-        ("web_id_input_tip", ""),
+        ("web_id_input_tip", "Puedes introducir una ID en el mismo servidor, el cliente web no soporta acceso vía IP.\nSi quieres acceder a un dispositivo en otro servidor, por favor, agrega la dirección del servidor (<id>@<direccion_servidor>?clave=<clave_valor>), por ejemplo,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSi quieres accedder a un dispositivo en un servidor público, por favor, introduce \"<id>@public\", la clave no es necesaria para el servidor público."),
+        ("Download", "Descarga"),
+        ("Upload folder", "Subir carpeta"),
+        ("Upload files", "Subir archivos"),
+        ("Clipboard is synchronized", "Portapapeles sincronizado"),
     ].iter().cloned().collect();
 }

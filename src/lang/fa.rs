@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "نمایش کیفیت مانیتور"),
         ("Disable clipboard", " غیرفعالسازی کلیپبورد"),
         ("Lock after session end", "قفل کردن حساب کاربری سیستم عامل پس از پایان جلسه"),
-        ("Insert", "افزودن"),
+        ("Insert Ctrl + Alt + Del", "Ctrl + Alt + Del افزودن"),
         ("Insert Lock", "قفل کردن سیستم"),
         ("Refresh", "تازه سازی"),
         ("ID does not exist", "شناسه وجود ندارد"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "در حال ضبط"),
         ("Directory", "مسیر"),
         ("Automatically record incoming sessions", "ضبط خودکار جلسات ورودی"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "تغییر"),
         ("Start session recording", "شروع ضبط جلسه"),
         ("Stop session recording", "توقف ضبط جلسه"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", ""),
         ("Authenticate", ""),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }

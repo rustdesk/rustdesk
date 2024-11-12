@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", ""),
         ("Disable clipboard", "Közös vágólap kikapcsolása"),
         ("Lock after session end", "Távoli fiók zárolása a munkamenet végén"),
-        ("Insert", ""),
+        ("Insert Ctrl + Alt + Del", "Illessze be a Ctrl + Alt + Del"),
         ("Insert Lock", "Távoli fiók zárolása"),
         ("Refresh", "Frissítés"),
         ("ID does not exist", "Az azonosító nem létezik"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Felvétel"),
         ("Directory", "Könyvtár"),
         ("Automatically record incoming sessions", "A bejövő munkamenetek automatikus rögzítése"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Változtatás"),
         ("Start session recording", "Munkamenet rögzítés indítása"),
         ("Stop session recording", "Munkamenet rögzítés leállítása"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", ""),
         ("Authenticate", ""),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }

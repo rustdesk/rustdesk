@@ -3051,7 +3051,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.7.0"
-source = "git+https://github.com/rustdesk-org/hwcodec#f74410edec91435252b8394c38f8eeca87ad2a26"
+source = "git+https://github.com/rustdesk-org/hwcodec#8bbd05bb300ad07cc345356ad85570f9ea99fbfa"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -5205,7 +5205,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/rustdesk-org/rdev#d4c1759926d693ba269e2cb8cf9f87b13e424e4e"
+source = "git+https://github.com/rustdesk-org/rdev#961d25cc00c6b3ef80f444e6a7bed9872e2c35ea"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",

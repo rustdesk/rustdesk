@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Visualizza qualità video"),
         ("Disable clipboard", "Disabilita appunti"),
         ("Lock after session end", "Blocca al termine della sessione"),
-        ("Insert", "Inserisci"),
+        ("Insert Ctrl + Alt + Del", "Inserisci Ctrl + Alt + Del"),
         ("Insert Lock", "Blocco inserimento"),
         ("Refresh", "Aggiorna"),
         ("ID does not exist", "L'ID non esiste"),
@@ -363,7 +363,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Unpin Toolbar", "Sblocca barra strumenti"),
         ("Recording", "Registrazione"),
         ("Directory", "Cartella"),
-        ("Automatically record incoming sessions", "Registra automaticamente le sessioni in entrata"),
+        ("Automatically record incoming sessions", "Registra automaticamente sessioni in entrata"),
+        ("Automatically record outgoing sessions", "Registra automaticamente sessioni in uscita"),
         ("Change", "Modifica"),
         ("Start session recording", "Inizia registrazione sessione"),
         ("Stop session recording", "Ferma registrazione sessione"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "Richiesta autenticazione"),
         ("Authenticate", "Autentica"),
         ("web_id_input_tip", "È possibile inserire un ID nello stesso server, nel client web non è supportato l'accesso con IP diretto.\nSe vuoi accedere ad un dispositivo in un altro server, aggiungi l'indirizzo del server (<id>@<indirizzo_server>?key=<valore_chiave >), ad esempio,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe vuoi accedere ad un dispositivo in un server pubblico, inserisci \"<id>@public\", la chiave non è necessaria per il server pubblico."),
+        ("Download", "Download"),
+        ("Upload folder", "Cartella upload"),
+        ("Upload files", "File upload"),
+        ("Clipboard is synchronized", "Gli appunti sono sincronizzati"),
     ].iter().cloned().collect();
 }

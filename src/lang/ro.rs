@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Afișează detalii despre conexiune"),
         ("Disable clipboard", "Dezactivează clipboard"),
         ("Lock after session end", "Blochează după deconectare"),
-        ("Insert", "Introdu"),
+        ("Insert Ctrl + Alt + Del", "Introdu Ctrl + Alt + Del"),
         ("Insert Lock", "Blochează computer"),
         ("Refresh", "Reîmprospătează"),
         ("ID does not exist", "ID neexistent"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Înregistrare"),
         ("Directory", "Director"),
         ("Automatically record incoming sessions", "Înregistrează automat sesiunile viitoare"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Modifică"),
         ("Start session recording", "Începe înregistrarea"),
         ("Stop session recording", "Oprește înregistrarea"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", ""),
         ("Authenticate", ""),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }

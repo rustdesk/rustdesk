@@ -7,6 +7,8 @@ import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/utils/event_loop.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
+import 'package:flutter_hbb/web/dummy.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/web_unique.dart';
 
 import '../consts.dart';
 import 'model.dart';
@@ -74,7 +76,7 @@ class FileModel {
 
   Future<void> onReady() async {
     await evtLoop.onReady();
-    await localController.onReady();
+    if (!isWeb) await localController.onReady();
     await remoteController.onReady();
   }
 
@@ -86,7 +88,7 @@ class FileModel {
   }
 
   Future<void> refreshAll() async {
-    await localController.refresh();
+    if (!isWeb) await localController.refresh();
     await remoteController.refresh();
   }
 
@@ -227,6 +229,33 @@ class FileModel {
         onCancel: cancel,
       );
     }, useAnimation: false);
+  }
+
+  void onSelectedFiles(dynamic obj) {
+    localController.selectedItems.clear();
+
+    try {
+      int handleIndex = int.parse(obj['handleIndex']);
+      final file = jsonDecode(obj['file']);
+      var entry = Entry.fromJson(file);
+      entry.path = entry.name;
+      final otherSideData = remoteController.directoryData();
+      final toPath = otherSideData.directory.path;
+      final isWindows = otherSideData.options.isWindows;
+      final showHidden = otherSideData.options.showHidden;
+      final jobID = jobController.addTransferJob(entry, false);
+      webSendLocalFiles(
+        handleIndex: handleIndex,
+        actId: jobID,
+        path: entry.path,
+        to: PathUtil.join(toPath, entry.name, isWindows),
+        fileNum: 0,
+        includeHidden: showHidden,
+        isRemote: false,
+      );
+    } catch (e) {
+      debugPrint("Failed to decode onSelectedFiles: $e");
+    }
   }
 }
 
@@ -462,7 +491,8 @@ class FileController {
           to: PathUtil.join(toPath, from.name, isWindows),
           fileNum: 0,
           includeHidden: showHidden,
-          isRemote: isRemoteToLocal);
+          isRemote: isRemoteToLocal,
+          isDir: from.isDirectory);
       debugPrint(
           "path: ${from.path}, toPath: $toPath, to: ${PathUtil.join(toPath, from.name, isWindows)}");
     }
@@ -489,7 +519,7 @@ class FileController {
       } else if (item.isDirectory) {
         title = translate("Not an empty directory");
         dialogManager?.showLoading(translate("Waiting"));
-        final fd = await fileFetcher.fetchDirectoryRecursive(
+        final fd = await fileFetcher.fetchDirectoryRecursiveToRemove(
             jobID, item.path, items.isLocal, true);
         if (fd.path.isEmpty) {
           fd.path = item.path;
@@ -809,7 +839,6 @@ class JobController {
         job.speed = double.parse(evt['speed']);
         job.finishedSize = int.parse(evt['finished_size']);
         job.recvJobRes = true;
-        debugPrint("update job $id with $evt");
         jobTable.refresh();
       }
     } catch (e) {
@@ -1116,11 +1145,11 @@ class FileFetcher {
     }
   }
 
-  Future<FileDirectory> fetchDirectoryRecursive(
+  Future<FileDirectory> fetchDirectoryRecursiveToRemove(
       int actID, String path, bool isLocal, bool showHidden) async {
     // TODO test Recursive is show hidden default?
     try {
-      await bind.sessionReadDirRecursive(
+      await bind.sessionReadDirToRemoveRecursive(
           sessionId: sessionId,
           actId: actID,
           path: path,

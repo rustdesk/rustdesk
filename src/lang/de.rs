@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Qualitätsüberwachung anzeigen"),
         ("Disable clipboard", "Zwischenablage deaktivieren"),
         ("Lock after session end", "Nach Sitzungsende sperren"),
-        ("Insert", "Einfügen"),
+        ("Insert Ctrl + Alt + Del", "Strg + Alt + Entf senden"),
         ("Insert Lock", "Win+L (Sperren) senden"),
         ("Refresh", "Aktualisieren"),
         ("ID does not exist", "Diese ID existiert nicht."),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Aufnahme"),
         ("Directory", "Verzeichnis"),
         ("Automatically record incoming sessions", "Eingehende Sitzungen automatisch aufzeichnen"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Ändern"),
         ("Start session recording", "Sitzungsaufzeichnung starten"),
         ("Stop session recording", "Sitzungsaufzeichnung beenden"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "Authentifizierung erforderlich"),
         ("Authenticate", "Authentifizieren"),
         ("web_id_input_tip", "Sie können eine ID auf demselben Server eingeben, direkter IP-Zugriff wird im Web-Client nicht unterstützt.\nWenn Sie auf ein Gerät auf einem anderen Server zugreifen wollen, fügen Sie bitte die Serveradresse (<id>@<server_address>?key=<key_value>) hinzu, zum Beispiel\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nWenn Sie auf ein Gerät auf einem öffentlichen Server zugreifen wollen, geben Sie bitte \"<id>@public\" ein. Der Schlüssel wird für öffentliche Server nicht benötigt."),
+        ("Download", "Herunterladen"),
+        ("Upload folder", "Ordner hochladen"),
+        ("Upload files", "Dateien hochladen"),
+        ("Clipboard is synchronized", "Zwischenablage ist synchronisiert"),
     ].iter().cloned().collect();
 }

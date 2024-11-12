@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "显示质量监测"),
         ("Disable clipboard", "禁用剪贴板"),
         ("Lock after session end", "会话结束后锁定远程电脑"),
-        ("Insert", "插入"),
+        ("Insert Ctrl + Alt + Del", "插入 Ctrl + Alt + Del"),
         ("Insert Lock", "锁定远程电脑"),
         ("Refresh", "刷新画面"),
         ("ID does not exist", "ID 不存在"),
@@ -363,7 +363,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Unpin Toolbar", "取消固定工具栏"),
         ("Recording", "录屏"),
         ("Directory", "目录"),
-        ("Automatically record incoming sessions", "自动录制来访会话"),
+        ("Automatically record incoming sessions", "自动录制传入会话"),
+        ("Automatically record outgoing sessions", "自动录制传出会话"),
         ("Change", "更改"),
         ("Start session recording", "开始录屏"),
         ("Stop session recording", "结束录屏"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "需要身份验证"),
         ("Authenticate", "认证"),
         ("web_id_input_tip", "可以输入同一个服务器内的 ID，web 客户端不支持直接 IP 访问。\n要访问另一台服务器上的设备，请附加服务器地址（<ID>@<服务器地址>?key=<密钥>）。比如，\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=。\n要访问公共服务器上的设备，请输入 \"<ID>@public\"，无需密钥。"),
+        ("Download", "下载"),
+        ("Upload folder", "上传文件夹"),
+        ("Upload files", "上传文件"),
+        ("Clipboard is synchronized", "剪贴板已同步"),
     ].iter().cloned().collect();
 }

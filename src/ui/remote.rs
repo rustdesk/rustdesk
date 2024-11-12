@@ -335,6 +335,10 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn next_rgba(&self, _display: usize) {}
+
+    fn update_record_status(&self, start: bool) {
+        self.call("updateRecordStatus", &make_args!(start));
+    }
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -478,8 +482,7 @@ impl sciter::EventHandler for SciterSession {
         fn save_image_quality(String);
         fn save_custom_image_quality(i32);
         fn refresh_video(i32);
-        fn record_screen(bool, i32, i32, i32);
-        fn record_status(bool);
+        fn record_screen(bool);
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
         fn toggle_option(String);
@@ -496,13 +499,14 @@ impl sciter::EventHandler for SciterSession {
         fn close_voice_call();
         fn version_cmp(String, String);
         fn set_selected_windows_session_id(String);
+        fn is_recording();
     }
 }
 
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let force_relay = args.contains(&"--relay".to_string());
-        let mut session: Session<SciterHandler> = Session {
+        let session: Session<SciterHandler> = Session {
             password: password.clone(),
             args,
             server_keyboard_enabled: Arc::new(RwLock::new(true)),
@@ -525,7 +529,7 @@ impl SciterSession {
             .lc
             .write()
             .unwrap()
-            .initialize(id, conn_type, None, force_relay, None, None);
+            .initialize(id, conn_type, None, force_relay, None, None, None);
 
         Self(session)
     }

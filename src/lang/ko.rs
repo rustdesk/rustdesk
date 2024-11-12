@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "품질 모니터 보기"),
         ("Disable clipboard", "클립보드 비활성화"),
         ("Lock after session end", "세션 종료 후 화면 잠금"),
-        ("Insert", "입력"),
+        ("Insert Ctrl + Alt + Del", "Ctrl + Alt + Del 입력"),
         ("Insert Lock", "원격 입력 잠금"),
         ("Refresh", "새로고침"),
         ("ID does not exist", "ID가 존재하지 않습니다"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "녹화"),
         ("Directory", "경로"),
         ("Automatically record incoming sessions", "들어오는 세션을 자동으로 녹화"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "변경"),
         ("Start session recording", "세션 녹화 시작"),
         ("Stop session recording", "세션 녹화 중지"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "인증 필요함"),
         ("Authenticate", "인증"),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }

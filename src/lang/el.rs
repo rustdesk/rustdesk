@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Εμφάνιση παρακολούθησης ποιότητας σύνδεσης"),
         ("Disable clipboard", "Απενεργοποίηση προχείρου"),
         ("Lock after session end", "Κλείδωμα μετά το τέλος της συνεδρίας"),
-        ("Insert", "Εισαγωγή"),
+        ("Insert Ctrl + Alt + Del", "Εισαγωγή Ctrl + Alt + Del"),
         ("Insert Lock", "Κλείδωμα απομακρυσμένου σταθμού"),
         ("Refresh", "Ανανέωση"),
         ("ID does not exist", "Το αναγνωριστικό ID δεν υπάρχει"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Εγγραφή"),
         ("Directory", "Φάκελος εγγραφών"),
         ("Automatically record incoming sessions", "Αυτόματη εγγραφή εισερχόμενων συνεδριών"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Αλλαγή"),
         ("Start session recording", "Έναρξη εγγραφής συνεδρίας"),
         ("Stop session recording", "Διακοπή εγγραφής συνεδρίας"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", ""),
         ("Authenticate", ""),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }

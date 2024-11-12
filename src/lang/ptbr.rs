@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Exibir monitor de qualidade"),
         ("Disable clipboard", "Desabilitar área de transferência"),
         ("Lock after session end", "Bloquear após o fim da sessão"),
-        ("Insert", "Inserir"),
+        ("Insert Ctrl + Alt + Del", "Ctrl + Alt + Del Inserir"),
         ("Insert Lock", "Bloquear computador"),
         ("Refresh", "Atualizar"),
         ("ID does not exist", "ID não existe"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Gravando"),
         ("Directory", "Diretório"),
         ("Automatically record incoming sessions", "Gravar automaticamente sessões de entrada"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Alterar"),
         ("Start session recording", "Iniciar gravação da sessão"),
         ("Stop session recording", "Parar gravação da sessão"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", ""),
         ("Authenticate", ""),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }

@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Erakutsi kalitate monitorea"),
         ("Disable clipboard", "Desgaitu arbela"),
         ("Lock after session end", "Blokeatu sesioa amaitu ostean"),
-        ("Insert", "Sartu"),
+        ("Insert Ctrl + Alt + Del", "Sartu Ctrl + Alt + Del"),
         ("Insert Lock", "Sarrera-blokeoa"),
         ("Refresh", "Freskatu"),
         ("ID does not exist", "IDa ez da existitzen"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Grabatzen"),
         ("Directory", "Direktorioa"),
         ("Automatically record incoming sessions", "Automatikoki grabatu sarrerako saioak"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Aldatu"),
         ("Start session recording", "Hasi saioaren grabaketa"),
         ("Stop session recording", "Gelditu saioaren grabaketa"),
@@ -648,5 +649,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", ""),
         ("Authenticate", ""),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }
