@@ -18,39 +18,14 @@ jobs:
       matrix:
         job:
           - {
-              target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04,
-              extra-build-args: "",
-            }
-          - {
-              target: aarch64-apple-darwin,
-              os: macos-latest,
-              arch: aarch64,
+              target: x86_64-apple-darwin,
+              os: macos-13,
+              arch: x86_64,
               extra-build-args: "",
             }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-
-      - name: Install prerequisites
-        if: matrix.job.os == 'ubuntu-20.04'
-        run: |
-          sudo apt-get install ca-certificates -y
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            clang \
-            cmake \
-            curl \
-            gcc \
-            git \
-            g++ \
-            libclang-10-dev \
-            libgtk-3-dev \
-            llvm-10-dev \
-            nasm \
-            ninja-build \
-            pkg-config \
-            wget
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
@@ -85,32 +60,13 @@ jobs:
 
       - name: Run flutter rust bridge
         run: |
-          case ${{ matrix.job.os }} in
-            ubuntu-20.04)
-              ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
-            ;;
-            macos-latest)
-              ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
-              ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/ios/Runner/bridge_generated.h
-            ;;
-          esac
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
 
-      - name: Upload Artifact(ubuntu)
-        if: matrix.job.os == 'ubuntu-20.04'
+      - name: Upload Artifact
         uses: actions/upload-artifact@master
         with:
           name: bridge-artifact
-          path: |
-            ./src/bridge_generated.rs
-            ./src/bridge_generated.io.rs
-            ./flutter/lib/generated_bridge.dart
-            ./flutter/lib/generated_bridge.freezed.dart
-
-      - name: Upload Artifact(macos)
-        if: matrix.job.os == 'macos-latest'
-        uses: actions/upload-artifact@master
-        with:
-          name: bridge-artifact-macos
           path: |
             ./src/bridge_generated.rs
             ./src/bridge_generated.io.rs
