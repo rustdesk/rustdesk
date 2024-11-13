@@ -3,6 +3,27 @@ name: Build the flutter version of the RustDesk
 on:
   workflow_call:
     inputs:
+      web-build:
+        type: boolean
+        default: false
+      windows-build:
+        type: boolean
+        default: true
+      linux-build:
+        type: boolean
+        default: true
+      macos-build:
+        type: boolean
+        default: true
+      android-build:
+        type: boolean
+        default: false
+      ios-build:
+        type: boolean
+        default: false
+      selfhost:
+        type: boolean
+        default: false
       upload-artifact:
         type: boolean
         default: true
