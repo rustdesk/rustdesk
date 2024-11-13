@@ -12,11 +12,11 @@ jobs:
     secrets: inherit
     with:
       web-build: false
-      ios-build: true
-      android-build: true
+      ios-build: false
+      android-build: false
       windows-build: true
-      macos-build: true
-      linux-build: true
+      macos-build: false
+      linux-build: false
       selfhost: false
       upload-artifact: true
       upload-tag: "nightly"

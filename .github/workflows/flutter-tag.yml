@@ -14,5 +14,12 @@ jobs:
     uses: ./.github/workflows/flutter-build.yml
     secrets: inherit
     with:
+      web-build: false
+      ios-build: true
+      android-build: true
+      windows-build: true
+      macos-build: true
+      linux-build: true
+      selfhost: false
       upload-artifact: true
       upload-tag: ${{ github.ref_name }}

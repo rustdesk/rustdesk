@@ -12,10 +12,10 @@ jobs:
     secrets: inherit
     with:
       web-build: false
-      ios-build: true
-      android-build: true
-      windows-build: true
-      macos-build: true
+      ios-build: false
+      android-build: false
+      windows-build: false
+      macos-build: false
       linux-build: true
       selfhost: false
       upload-artifact: true
