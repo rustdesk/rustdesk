@@ -768,22 +768,22 @@ class InputModel {
   }
 
   /// Send a mouse tap event(down and up).
-  void tap(MouseButtons button) {
-    sendMouse('down', button);
-    sendMouse('up', button);
+  Future<void> tap(MouseButtons button) async {
+    await sendMouse('down', button);
+    await sendMouse('up', button);
   }
 
-  void tapDown(MouseButtons button) {
-    sendMouse('down', button);
+  Future<void> tapDown(MouseButtons button) async {
+    await sendMouse('down', button);
   }
 
-  void tapUp(MouseButtons button) {
-    sendMouse('up', button);
+  Future<void> tapUp(MouseButtons button) async {
+    await sendMouse('up', button);
   }
 
   /// Send scroll event with scroll distance [y].
-  void scroll(int y) {
-    bind.sessionSendMouse(
+  Future<void> scroll(int y) async {
+    await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
@@ -804,9 +804,9 @@ class InputModel {
   }
 
   /// Send mouse press event.
-  void sendMouse(String type, MouseButtons button) {
+  Future<void> sendMouse(String type, MouseButtons button) async {
     if (!keyboardPerm) return;
-    bind.sessionSendMouse(
+    await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
@@ -830,11 +830,11 @@ class InputModel {
   }
 
   /// Send mouse movement event with distance in [x] and [y].
-  void moveMouse(double x, double y) {
+  Future<void> moveMouse(double x, double y) async {
     if (!keyboardPerm) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
-    bind.sessionSendMouse(
+    await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
   }

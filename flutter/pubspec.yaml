@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # 1.1.9-1 works for android, but for ios it becomes 1.1.91, need to set it to 1.1.9-a.1 for iOS, will get 1.1.9.1, but iOS store not allow 4 numbers
-version: 1.3.2+51
+version: 1.3.3+52
 
 environment:
   sdk: '^3.1.0'
@@ -62,7 +62,7 @@ dependencies:
     git:
       url: https://github.com/google/flutter-desktop-embedding.git
       path: plugins/window_size
-      ref: a738913c8ce2c9f47515382d40827e794a334274
+      ref: eb3964990cf19629c89ff8cb4a37640c7b3d5601
   get: ^4.6.5
   visibility_detector: ^0.4.0+2
   contextmenu: ^3.0.0
@@ -78,7 +78,11 @@ dependencies:
     # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
     git:
       url: https://github.com/rustdesk-org/flutter_improved_scrolling
-  uni_links: ^0.5.1
+  uni_links:
+    git:
+      url: https://github.com/rustdesk-org/uni_links
+      path: uni_links
+      ref: f416118d843a7e9ed117c7bb7bdc2deda5a9e86f
   uni_links_desktop: ^0.1.6 # use 0.1.6 to make flutter 3.13 works
   path: ^1.8.1
   auto_size_text: ^3.0.0
@@ -104,7 +108,7 @@ dependencies:
   pull_down_button: ^0.9.3
   device_info_plus: ^9.1.0
   qr_flutter: ^4.1.0
-  extended_text: 13.0.0
+  extended_text: 14.0.0
 
 dev_dependencies:
   icons_launcher: ^2.0.4
@@ -186,3 +190,4 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
+
