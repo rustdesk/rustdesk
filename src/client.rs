@@ -957,7 +957,9 @@ impl AudioBuffer {
             tms = dt;
         }
 
+        // the safer water mark to drop
         let mut zero = 0;
+        // the water mark taking most of time
         let mut max = 0;
         for i in 0..30 {
             if self.2[i] == 0 && zero == i {
@@ -971,7 +973,11 @@ impl AudioBuffer {
                 self.2[i] = 0;
             }
         }
+        zero = zero * 2 / 3;
 
+        // how many data can be dropped:
+        // 1. will not drop if buffered data is less than 600ms
+        // 2. choose based on min(zero, max)
         const N: usize = 4;
         self.2[max] = 0;
         if max < 6 {
@@ -986,10 +992,13 @@ impl AudioBuffer {
         let skip = (cap * max / (30 * N) + 1) & (!1);
         if (having > skip * 3) && (skip > 0) {
             lock.skip(skip);
-            log::info!("skip {skip}, info: {max} {zero}");
+            log::info!("skip {skip}, based {max} {zero}");
         }
     }
 
+    /// append pcm to audio buffer, if buffered data
+    /// exceeds AUDIO_BUFFER_MS,  only AUDIO_BUFFER_MS
+    /// will be kept.
     fn append_pcm2(&self, buffer: &[f32]) -> usize {
         let mut lock = self.0.lock().unwrap();
         let cap = lock.capacity();
@@ -1006,6 +1015,9 @@ impl AudioBuffer {
         lock.occupied_len()
     }
 
+    /// append pcm to audio buffer, trying to drop data
+    /// when data is too much (per 12 seconds) based
+    /// statistics.
     pub fn append_pcm(&mut self, buffer: &[f32]) {
         let having = self.append_pcm2(buffer);
         self.try_shrink(having);
@@ -1202,11 +1214,15 @@ impl AudioHandler {
                 let mut having = lock.occupied_len();
                 if having < n {
                     let tms = info.timestamp();
-                    let how_long = tms.playback.duration_since(&tms.callback).unwrap();
+                    let how_long = tms
+                        .playback
+                        .duration_since(&tms.callback)
+                        .unwrap_or(Duration::from_millis(0));
 
+                    // must long enough to fight back scheuler delay
                     if how_long > Duration::from_millis(6) {
                         drop(lock);
-                        std::thread::sleep(how_long.div_f32(2.0));
+                        std::thread::sleep(how_long.div_f32(1.2));
                         lock = audio_buffer.lock().unwrap();
                         having = lock.occupied_len();
                     }
