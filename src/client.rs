@@ -939,6 +939,12 @@ impl AudioBuffer {
         extern crate chrono;
         use chrono::prelude::*;
 
+        let mut i = (having * 10) / self.1;
+        if i > 29 {
+            i = 29;
+        }
+        self.2[i] += 1;
+
         static mut tms: i64 = 0;
         let dt = Local::now().timestamp_millis();
         unsafe {
@@ -951,14 +957,13 @@ impl AudioBuffer {
             tms = dt;
         }
 
-        let mut i = (having * 10) / self.1;
-        if i > 29 {
-            i = 29;
-        }
-        self.2[i] += 1;
-
+        let mut zero = 0;
         let mut max = 0;
-        for i in 1..30 {
+        for i in 0..30 {
+            if self.2[i] == 0 && zero == i {
+                zero += 1;
+            }
+
             if self.2[i] > self.2[max] {
                 self.2[max] = 0;
                 max = i;
@@ -966,18 +971,22 @@ impl AudioBuffer {
                 self.2[i] = 0;
             }
         }
+
+        const N: usize = 4;
         self.2[max] = 0;
         if max < 6 {
             return;
+        } else if max > zero * N {
+            max = zero * N;
         }
 
         let mut lock = self.0.lock().unwrap();
         let cap = lock.capacity();
         let having = lock.occupied_len();
-        let skip = cap * max / (30 * 4);
-        if having > skip * 3 {
+        let skip = (cap * max / (30 * N) + 1) & (!1);
+        if (having > skip * 3) && (skip > 0) {
             lock.skip(skip);
-            println!("skip {skip}");
+            log::info!("skip {skip}, info: {max} {zero}");
         }
     }
 
