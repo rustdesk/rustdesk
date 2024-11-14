@@ -12,6 +12,7 @@ use jni::errors::{Error as JniError, Result as JniResult};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::ops::Not;
+use std::os::raw::c_void;
 use std::sync::atomic::{AtomicPtr, Ordering::SeqCst};
 use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -155,10 +156,24 @@ pub extern "system" fn Java_ffi_FFI_setFrameRawEnable(
 pub extern "system" fn Java_ffi_FFI_init(env: JNIEnv, _class: JClass, ctx: JObject) {
     log::debug!("MainService init from java");
     if let Ok(jvm) = env.get_java_vm() {
+        let java_vm = jvm.get_java_vm_pointer() as *mut c_void;
         *JVM.write().unwrap() = Some(jvm);
         if let Ok(context) = env.new_global_ref(ctx) {
+            let context_jobject = context.as_obj().as_raw() as *mut c_void;
             *MAIN_SERVICE_CTX.write().unwrap() = Some(context);
-            init_ndk_context().ok();
+            init_ndk_context(java_vm, context_jobject);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ffi_FFI_initContext(env: JNIEnv, _class: JClass, ctx: JObject) {
+    log::debug!("MainActivity initContext from java");
+    if let Ok(jvm) = env.get_java_vm() {
+        if let Ok(context) = env.new_global_ref(ctx) {
+            let java_vm = jvm.get_java_vm_pointer() as *mut c_void;
+            let context_jobject = context.as_obj().as_raw() as *mut c_void;
+            init_ndk_context(java_vm, context_jobject);
         }
     }
 }
@@ -332,7 +347,14 @@ pub fn call_main_service_set_by_name(
     }
 }
 
-fn init_ndk_context() -> JniResult<()> {
+// Difference between MainService, MainActivity, JNI_OnLoad:
+//  jvm is the same, ctx is differen and ctx of JNI_OnLoad is null.
+//  cpal: all three works
+//  Service(GetByName, ...): only ctx from MainService works, so use 2 init context functions
+// On app start: JNI_OnLoad or MainActivity init context
+// On service start first time: MainService replace the context
+
+fn init_ndk_context(java_vm: *mut c_void, context_jobject: *mut c_void) {
     let mut lock = NDK_CONTEXT_INITED.lock().unwrap();
     if *lock {
         unsafe {
@@ -340,22 +362,20 @@ fn init_ndk_context() -> JniResult<()> {
         }
         *lock = false;
     }
-    if let (Some(jvm), Some(ctx)) = (
-        JVM.read().unwrap().as_ref(),
-        MAIN_SERVICE_CTX.read().unwrap().as_ref(),
-    ) {
-        unsafe {
-            ndk_context::initialize_android_context(
-                jvm.get_java_vm_pointer() as _,
-                ctx.as_obj().as_raw() as _,
-            );
-            #[cfg(feature = "hwcodec")]
-            hwcodec::android::ffmpeg_set_java_vm(
-                jvm.get_java_vm_pointer() as _,
-            );
-        }
-        *lock = true;
-        return Ok(());
+    unsafe {
+        ndk_context::initialize_android_context(java_vm, context_jobject);
+        #[cfg(feature = "hwcodec")]
+        hwcodec::android::ffmpeg_set_java_vm(java_vm);
     }
-    Err(JniError::ThrowFailed(-1))
+    *lock = true;
 }
+
+// // https://cjycode.com/flutter_rust_bridge/guides/how-to/ndk-init
+// #[no_mangle]
+// pub extern "C" fn JNI_OnLoad(vm: jni::JavaVM, res: *mut std::os::raw::c_void) -> jni::sys::jint {
+//     if let Ok(env) = vm.get_env() {
+//         let vm = vm.get_java_vm_pointer() as *mut std::os::raw::c_void;
+//         init_ndk_context(vm, res);
+//     }
+//     jni::JNIVersion::V6.into()
+// }

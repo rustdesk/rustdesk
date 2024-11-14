@@ -25,10 +25,6 @@
       "platform": "android"
     },
     {
-      "name": "oboe-wrapper",
-      "platform": "android"
-    },
-    {
       "name": "opus",
       "host": true
     },
@@ -87,8 +83,17 @@
     ]
   },
   "overrides": [
-    { "name": "ffnvcodec", "version": "12.1.14.0" },
-    { "name": "amd-amf", "version": "1.4.29" },
-    { "name": "mfx-dispatch", "version": "1.35.1" }
+    {
+      "name": "ffnvcodec",
+      "version": "12.1.14.0"
+    },
+    {
+      "name": "amd-amf",
+      "version": "1.4.29"
+    },
+    {
+      "name": "mfx-dispatch",
+      "version": "1.35.1"
+    }
   ]
 }
