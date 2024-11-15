@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.carriez.flutter_hbb">
+    package="com.kk">
 
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -17,7 +17,7 @@
 
     <application
         android:icon="@mipmap/ic_launcher"
-        android:label="RustDesk"
+        android:label="Kdesk"
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true">
@@ -30,7 +30,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <!--ACTION_BOOT_COMPLETED for debug test on no root device-->
-                <action android:name="com.carriez.flutter_hbb.DEBUG_BOOT_COMPLETED" />
+                <action android:name="com.kk.DEBUG_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 
@@ -38,7 +38,7 @@
             android:name=".InputService"
             android:enabled="true"
             android:exported="false"
-            android:label="RustDesk Input"
+            android:label="Kdesk Input"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -68,7 +68,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="rustdesk" />
+                <data android:scheme="kk" />
             </intent-filter>
         </activity>
 
