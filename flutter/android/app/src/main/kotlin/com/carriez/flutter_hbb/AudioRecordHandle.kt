@@ -1,4 +1,4 @@
-package com.kkyl
+package com.kk.yl
 
 import ffi.FFI
 
