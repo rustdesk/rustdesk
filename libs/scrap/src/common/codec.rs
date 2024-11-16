@@ -264,15 +264,19 @@ impl Encoder {
             .unwrap_or((PreferCodec::Auto.into(), 0));
         let preference = most_frequent.enum_value_or(PreferCodec::Auto);
 
-        // auto: h265 > h264 > vp9/vp8
-        let mut auto_codec = CodecFormat::VP9;
+        // auto: h265 > h264 > av1 > vp9
+        let mut auto_codec = if av1_useable {
+            CodecFormat::AV1
+        } else {
+            CodecFormat::VP9
+        };
         if h264_useable {
             auto_codec = CodecFormat::H264;
         }
         if h265_useable {
             auto_codec = CodecFormat::H265;
         }
-        if auto_codec == CodecFormat::VP9 {
+        if auto_codec == CodecFormat::VP9 || auto_codec == CodecFormat::AV1 {
             let mut system = System::new();
             system.refresh_memory();
             if vp8_useable && system.total_memory() <= 4 * 1024 * 1024 * 1024 {
