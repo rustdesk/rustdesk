@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    ffi::c_void,
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
@@ -264,15 +263,20 @@ impl Encoder {
             .unwrap_or((PreferCodec::Auto.into(), 0));
         let preference = most_frequent.enum_value_or(PreferCodec::Auto);
 
-        // auto: h265 > h264 > vp9/vp8
-        let mut auto_codec = CodecFormat::VP9;
+        // auto: h265 > h264 > av1/vp9/vp8
+        let av1_test = Config::get_option(hbb_common::config::keys::OPTION_AV1_TEST) != "N";
+        let mut auto_codec = if av1_useable && av1_test {
+            CodecFormat::AV1
+        } else {
+            CodecFormat::VP9
+        };
         if h264_useable {
             auto_codec = CodecFormat::H264;
         }
         if h265_useable {
             auto_codec = CodecFormat::H265;
         }
-        if auto_codec == CodecFormat::VP9 {
+        if auto_codec == CodecFormat::VP9 || auto_codec == CodecFormat::AV1 {
             let mut system = System::new();
             system.refresh_memory();
             if vp8_useable && system.total_memory() <= 4 * 1024 * 1024 * 1024 {
@@ -981,4 +985,86 @@ fn disable_av1() -> bool {
     // aom is very slow for x86 sciter version on windows x64
     // disable it for all 32 bit platforms
     std::mem::size_of::<usize>() == 4
+}
+
+#[cfg(not(target_os = "ios"))]
+pub fn test_av1() {
+    use hbb_common::config::keys::OPTION_AV1_TEST;
+    use std::sync::Once;
+    if disable_av1() || !Config::get_option(OPTION_AV1_TEST).is_empty() {
+        log::info!("skip test av1");
+        return;
+    }
+
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let f = || {
+            let (width, height, quality, keyframe_interval, i444) =
+                (1920, 1080, Quality::Balanced, None, false);
+            let Ok(mut av1) = AomEncoder::new(
+                EncoderCfg::AOM(AomEncoderConfig {
+                    width,
+                    height,
+                    quality,
+                    keyframe_interval,
+                }),
+                i444,
+            ) else {
+                return false;
+            };
+            let Ok(mut vp9) = VpxEncoder::new(
+                EncoderCfg::VPX(VpxEncoderConfig {
+                    codec: VpxVideoCodecId::VP9,
+                    width,
+                    height,
+                    quality,
+                    keyframe_interval,
+                }),
+                i444,
+            ) else {
+                return true;
+            };
+            let frame_count = 10;
+            let mut yuv = vec![0u8; (width * height * 3 / 2) as usize];
+            let start = Instant::now();
+            for i in 0..frame_count {
+                for w in 0..width {
+                    yuv[w as usize] = i as u8;
+                }
+                if av1.encode(0, &yuv, super::STRIDE_ALIGN).is_err() {
+                    log::debug!("av1 encode failed");
+                    if i == 0 {
+                        return false;
+                    }
+                }
+            }
+            let av1_time = start.elapsed();
+            log::info!("av1 time: {:?}", av1_time);
+            if av1_time < std::time::Duration::from_millis(250) {
+                return true;
+            }
+            let start = Instant::now();
+            for i in 0..frame_count {
+                for w in 0..width {
+                    yuv[w as usize] = i as u8;
+                }
+                if vp9.encode(0, &yuv, super::STRIDE_ALIGN).is_err() {
+                    log::debug!("vp9 encode failed");
+                    if i == 0 {
+                        return true;
+                    }
+                }
+            }
+            let vp9_time = start.elapsed();
+            log::info!("vp9 time: {:?}", vp9_time);
+            av1_time * 2 / 3 < vp9_time
+        };
+        std::thread::spawn(move || {
+            let v = f();
+            Config::set_option(
+                OPTION_AV1_TEST.to_string(),
+                if v { "Y" } else { "N" }.to_string(),
+            );
+        });
+    });
 }
