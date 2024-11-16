@@ -441,11 +441,12 @@ impl VideoRenderer {
             }
         }
         if let Some(func) = &self.on_rgba_func {
+            let converted_rgba = convert_color_space(rgba);
             unsafe {
                 func(
                     info.texture_rgba_ptr as _,
-                    rgba.raw.as_ptr() as _,
-                    rgba.raw.len() as _,
+                    converted_rgba.as_ptr() as _,
+                    converted_rgba.len() as _,
                     rgba.w as _,
                     rgba.h as _,
                     rgba.align() as _,
@@ -1647,7 +1648,7 @@ pub fn get_global_event_channels() -> Vec<String> {
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
     let app_type_values = app_type.split(",").collect::<Vec<&str>>();
     let mut lock = GLOBAL_EVENT_STREAM.write().unwrap();
-    if !lock.contains_key(app_type_values[0]) {
+    if (!lock.contains_key(app_type_values[0])) {
         lock.insert(app_type_values[0].to_string(), s);
     } else {
         if let Some(_) = lock.insert(app_type.clone(), s) {
@@ -1789,15 +1790,15 @@ pub fn try_sync_peer_option(
 pub(super) fn session_update_virtual_display(session: &FlutterSession, index: i32, on: bool) {
     let virtual_display_key = "virtual-display";
     let displays = session.get_option(virtual_display_key.to_owned());
-    if !on {
-        if index == -1 {
-            if !displays.is_empty() {
+    if (!on) {
+        if (index == -1) {
+            if (!displays.is_empty()) {
                 session.set_option(virtual_display_key.to_owned(), "".to_owned());
             }
         } else {
             let mut vdisplays = displays.split(',').collect::<Vec<_>>();
             let len = vdisplays.len();
-            if index == 0 {
+            if (index == 0) {
                 // 0 means we cann't toggle the virtual display by index.
                 vdisplays.remove(vdisplays.len() - 1);
             } else {
@@ -1805,7 +1806,7 @@ pub(super) fn session_update_virtual_display(session: &FlutterSession, index: i3
                     vdisplays.remove(i);
                 }
             }
-            if vdisplays.len() != len {
+            if (vdisplays.len() != len) {
                 session.set_option(
                     virtual_display_key.to_owned(),
                     vdisplays.join(",").to_owned(),
@@ -1818,14 +1819,14 @@ pub(super) fn session_update_virtual_display(session: &FlutterSession, index: i3
             .map(|x| x.to_string())
             .collect::<Vec<_>>();
         let len = vdisplays.len();
-        if index == 0 {
+        if (index == 0) {
             vdisplays.push(index.to_string());
         } else {
-            if !vdisplays.iter().any(|x| *x == index.to_string()) {
+            if (!vdisplays.iter().any(|x| *x == index.to_string())) {
                 vdisplays.push(index.to_string());
             }
         }
-        if vdisplays.len() != len {
+        if (vdisplays.len() != len) {
             session.set_option(
                 virtual_display_key.to_owned(),
                 vdisplays.join(",").to_owned(),
@@ -2128,4 +2129,10 @@ pub(super) mod async_tasks {
             serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
         );
     }
+}
+
+fn convert_color_space(rgba: &scrap::ImageRgb) -> Vec<u8> {
+    // Implement color space conversion logic here
+    // For now, just return the original rgba data
+    rgba.raw.clone()
 }

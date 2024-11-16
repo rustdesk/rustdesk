@@ -1,7 +1,3 @@
-// https://developer.apple.com/documentation/appkit/nscursor
-// https://github.com/servo/core-foundation-rs
-// https://github.com/rust-windowing/winit
-
 use super::{CursorData, ResultType};
 use cocoa::{
     appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*},
@@ -517,7 +513,7 @@ pub fn start_os_service() {
     log::info!("Username: {}", crate::username());
     let mut sys = System::new();
     let path =
-        std::fs::canonicalize(std::env::current_exe().unwrap_or_default()).unwrap_or_default();
+        std::.fs::canonicalize(std::env::current_exe().unwrap_or_default()).unwrap_or_default();
     let mut server = get_server_start_time(&mut sys, &path);
     if server.is_none() {
         log::error!("Agent not started yet, please restart --server first to make delegate work",);
@@ -669,7 +665,7 @@ fn get_server_start_time_of(p: &Process, path: &PathBuf) -> Option<i64> {
     if &cmd[1] != "--server" {
         return None;
     }
-    let Ok(cur) = std::fs::canonicalize(p.exe()) else {
+    let Ok(cur) = std::.fs::canonicalize(p.exe()) else {
         return None;
     };
     if &cur != path {
@@ -693,7 +689,7 @@ pub fn handle_application_should_open_untitled_file() {
     hbb_common::log::debug!("icon clicked on finder");
     let x = std::env::args().nth(1).unwrap_or_default();
     if x == "--server" || x == "--cm" || x == "--tray" {
-        std::thread::spawn(move || crate::handle_url_scheme("".to_lowercase()));
+        std::.thread::spawn(move || crate::handle_url_scheme("".to_lowercase()));
     }
 }
 
