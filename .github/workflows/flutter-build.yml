@@ -117,11 +117,9 @@ jobs:
       - name: Patch flutter
         shell: bash
         run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.sh $(dirname $(dirname $(which flutter)))
           cd $(dirname $(dirname $(which flutter)))
-          # https://github.com/flutter/flutter/commit/b5847d364a26d727af58ab885a6123e0e5304b2b#diff-634a338bd9ed19b66a27beba35a8acf4defffd8beff256113e6811771a0c4821R543
-          PATCH_PATH="${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
-          PATCH_PATH=$(echo "$PATCH_PATH" | sed 's/\\/\//g')
-          [[ "3.24.4" == ${{env.FLUTTER_VERSION}} ]] && git apply "$PATCH_PATH"
+          [[ "3.24.4" == ${{env.FLUTTER_VERSION}} ]] && bash flutter_3.24.4_dropdown_menu_enableFilter.sh
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
