@@ -26,10 +26,17 @@ extern "C" bool IsCanScreenRecording(bool prompt) {
     if (!res && prompt) {
         CGRequestScreenCaptureAccess();
     }
+    if (!res) {
+        ResetScreenRecordingPermission();
+        res = CGPreflightScreenCaptureAccess();
+    }
     return res;
     #endif
 }
 
+extern "C" void ResetScreenRecordingPermission() {
+    system("tccutil reset ScreenCapture com.carriez.RustDesk");
+}
 
 // https://github.com/codebytere/node-mac-permissions/blob/main/permissions.mm
 

@@ -1,7 +1,3 @@
-// https://developer.apple.com/documentation/appkit/nscursor
-// https://github.com/servo/core-foundation-rs
-// https://github.com/rust-windowing/winit
-
 use super::{CursorData, ResultType};
 use cocoa::{
     appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*},
@@ -54,6 +50,7 @@ extern "C" {
     fn majorVersion() -> u32;
     fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
     fn MacSetMode(display: u32, width: u32, height: u32) -> BOOL;
+    fn ResetScreenRecordingPermission(); // P520c
 }
 
 pub fn major_version() -> u32 {
@@ -97,7 +94,12 @@ fn unsafe_is_can_screen_recording(prompt: bool) -> bool {
     // but also some said it has bug on 10.16, so we just use it on 11.0.
     unsafe {
         if CanUseNewApiForScreenCaptureCheck() == YES {
-            return IsCanScreenRecording(if prompt { YES } else { NO }) == YES;
+            if IsCanScreenRecording(if prompt { YES } else { NO }) == YES {
+                return true;
+            } else {
+                ResetScreenRecordingPermission(); // Pf910
+                return IsCanScreenRecording(if prompt { YES } else { NO }) == YES;
+            }
         }
     }
     let mut can_record_screen: bool = false;
