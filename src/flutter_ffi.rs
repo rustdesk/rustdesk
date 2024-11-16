@@ -2332,7 +2332,6 @@ pub mod server_side {
             }
         }
         std::thread::spawn(move || start_server(true));
-        scrap::codec::test_av1();
     }
 
     #[no_mangle]
