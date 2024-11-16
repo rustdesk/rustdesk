@@ -36,7 +36,7 @@ body:
     id: version
     attributes:
       label: RustDesk Version(s) on local (controlling) side and remote (controlled) side
-      description: What RustDesk version(s) do you see this bug on? local side -> remote side.
+      description: What RustDesk version(s) do you see this bug on? local (controlling) side -> remote (controlled) side.
       placeholder: |
         1.1.9 -> 1.1.8
     validations:
