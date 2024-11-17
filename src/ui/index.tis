@@ -614,19 +614,7 @@ class App: Reactor.Component
     }
 }
 
-class InstallMe: Reactor.Component {
-    function render() {
-        return <div .install-me>
-            <span />
-            <div>{translate('install_tip')}</div>
-            <div><button #install-me .button>{translate('Install')}</button></div>
-        </div>;
-    }
 
-    event click $(#install-me) {
-        handler.goto_install();
-    }
-}
 
 function download(from, to, args..) {
     var rqp = { type:#get, url: from, toFile: to };
