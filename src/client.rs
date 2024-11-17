@@ -71,8 +71,10 @@ use crate::{
     ui_session_interface::{InvokeUiSession, Session},
 };
 
+#[cfg(not(target_os = "ios"))]
+use crate::clipboard::CLIPBOARD_INTERVAL;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::{check_clipboard, ClipboardSide, CLIPBOARD_INTERVAL};
+use crate::clipboard::{check_clipboard, ClipboardSide};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_session_interface::SessionPermissionConfig;
@@ -131,7 +133,7 @@ pub(crate) struct ClientClipboardContext {
 /// Client of the remote desktop.
 pub struct Client;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 struct TextClipboardState {
     is_required: bool,
     running: bool,
@@ -144,6 +146,10 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
+}
+
+#[cfg(not(target_os = "ios"))]
+lazy_static::lazy_static! {
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
@@ -648,12 +654,12 @@ impl Client {
 
     #[inline]
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     pub fn set_is_text_clipboard_required(b: bool) {
         TEXT_CLIPBOARD_STATE.lock().unwrap().is_required = b;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     fn try_stop_clipboard() {
         // There's a bug here.
         // If session is closed by the peer, `has_sessions_running()` will always return true.
@@ -748,9 +754,41 @@ impl Client {
 
         Some(rx_started)
     }
+
+    #[cfg(target_os = "android")]
+    fn try_start_clipboard(_p: Option<()>) -> Option<UnboundedReceiver<()>> {
+        let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
+        if clipboard_lock.running {
+            return None;
+        }
+        clipboard_lock.running = true;
+
+        log::info!("Start text clipboard loop");
+        std::thread::spawn(move || {
+            loop {
+                if !TEXT_CLIPBOARD_STATE.lock().unwrap().running {
+                    break;
+                }
+                if !TEXT_CLIPBOARD_STATE.lock().unwrap().is_required {
+                    std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
+                    continue;
+                }
+
+                if let Some(msg) = crate::clipboard::get_clipboards_msg(true) {
+                    crate::flutter::send_text_clipboard_msg(msg);
+                }
+
+                std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
+            }
+            log::info!("Stop text clipboard loop");
+            TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;
+        });
+
+        None
+    }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 impl TextClipboardState {
     fn new() -> Self {
         Self {
