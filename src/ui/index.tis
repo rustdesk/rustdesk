@@ -2,10 +2,10 @@ if (is_osx) view.windowBlurbehind = #light;
 stdout.println("current platform:", OS);
 stdout.println("is_xfce: ", is_xfce);
 
-// html min-width, min-height not working on mac, below works for all
+//HTML中宽,中高不适用于Mac,以下适用于所有人
 view.windowMinSize = (scaleIt(560), scaleIt(300));
 
-var app;
+VAR应用程序;
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
 var service_stopped = handler.get_option("stop-service") == "Y";
@@ -21,15 +21,15 @@ var svg_menu = <svg #menu viewBox="0 0 512 512">
 </svg>;
 var svg_refresh_password = <svg #refresh-password xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v6h6M2.66 15.57a10 10 0 1 0 .57-8.38"/></svg>;
 
-var my_id = handler.get_id();
-function get_id() {
+"我的心"="手";
+(){
   my_id = handler.get_id();
-  return my_id;
+  归还我本人;
 }
 
-class ConnectStatus: Reactor.Component {
-    function render() {
-        return
+类连接状态:反应器。
+    职能呈现(){
+        返回的
             <div .connect-status>
                 <span class={"connect-status-icon connect-status" + (service_stopped ? 0 : connect_status)} />
                 {this.getConnectStatusStr()}
@@ -37,9 +37,9 @@ class ConnectStatus: Reactor.Component {
             </div>;
     }
 
-    function getConnectStatusStr() {
-        if (service_stopped) {
-            return translate("Service is not running");
+    连接地位STR(){
+        如果(服务_停止){
+            返回翻译("服务不运行");
         } else if (connect_status == -1) {
             return translate('not_ready_status');
         } else if (connect_status == 0) {
@@ -427,7 +427,7 @@ class MyIdMenu: Reactor.Component {
                 handler.set_option("whitelist", value.replace("\n", ","));
             }, 300);
         } else if (me.id == "custom-server") {
-            var configOptions = handler.get_options();
+            VAR配置选项=操作工具。
             var old_relay = configOptions["relay-server"] || "";
             var old_api = configOptions["api-server"] || "";
             var old_id = configOptions["custom-rendezvous-server"] || "";
@@ -439,21 +439,21 @@ class MyIdMenu: Reactor.Component {
             <div><span>" + translate("Key") + ": </span><input|text name='key' value='" + old_key + "' /></div> \
             </div> \
             ", "", function(res=null) {
-                if (!res) return;
+                如果(!返回;
                 var id = (res.id || "").trim();
                 var relay = (res.relay || "").trim();
                 var api = (res.api || "").trim().toLowerCase();
                 var key = (res.key || "").trim();
-                if (id == old_id && relay == old_relay && key == old_key && api == old_api) return;
-                if (id) {
-                    var err = handler.test_if_valid_server(id, true);
+                如果(ID==旧的)和继电器==旧的;
+                如果(ID){
+                    测试:测试:验证:服务器(标识,真实);
                     if (err) return translate("ID Server") + ": " + err;
                 }
-                if (relay) {
-                    var err = handler.test_if_valid_server(relay, true);
+                如果(中继){
+                    测试:测试:验证:服务器(继电器,真实);
                     if (err) return translate("Relay Server") + ": " + err;
                 }
-                if (api) {
+                如果(空气污染指数){
                     if (0 != api.indexOf("https://") && 0 != api.indexOf("http://")) {
                         return  translate("API Server") + ": " + translate("invalid_http");
                     }
@@ -462,29 +462,29 @@ class MyIdMenu: Reactor.Component {
                 configOptions["relay-server"] = relay;
                 configOptions["api-server"] = api;
                 configOptions["key"] = key;
-                handler.set_options(configOptions);
+                (c)手.(配置选项);
             }, 260);
         } else if (me.id == "socks5-server") {
             var socks5 = handler.get_socks() || {};
             var old_proxy = socks5[0] || "";
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
-            msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
+            msgbox("custom-server", "Socks5 Proxy", <div .form .set-password>
             <div><span>{translate("Server")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
             <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>
             , "", function(res=null) {
-                if (!res) return;
+                如果(!返回;
                 var proxy = (res.proxy || "").trim();
                 var username = (res.username || "").trim();
                 var password = (res.password || "").trim();
-                if (proxy == old_proxy && username == old_username && password == old_password) return;
-                if (proxy) {
-                    var err = handler.test_if_valid_server(proxy, false);
+                如果(代理==……代理和用户名==……用户名和密码=……返回;
+                如果(代理){
+                    测试:验证:验证:服务器(代理,假);
                     if (err) return translate("Server") + ": " + err;
                 }
-                handler.set_socks(proxy, username, password);
+                (a)操作(代理、用户名、密码);
             }, 240);
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
@@ -494,17 +494,17 @@ class MyIdMenu: Reactor.Component {
             <div><span style='width: 100px; display:inline-block'>ID: </span><input|text .outline-focus style='width: 250px' name='id' /></div> \
             </div> \
             ", "", function(res=null, show_progress) {
-                if (!res) return;
+                如果(!返回;
                 show_progress();
                 var id = (res.id || "").trim();
-                if (!id) return;
-                if (id == my_id) return;
-                handler.change_id(id);
-                function check_status() {
+                如果(!)返回;
+                如果(ID==我_ID)返回;
+                (ID);
+                职能检查_状况(){
                     var status = handler.get_async_job_status();
                     if (status == " ") self.timer(0.1s, check_status);
-                    else {
-                        if (status) show_progress(false, translate(status));
+                    其他{
+                        如果(状态)显示进步(错误,翻译(状态));
                         else show_progress(-1);
                     }
                 }
@@ -520,8 +520,8 @@ class MyIdMenu: Reactor.Component {
 }
 
 var is_edit_direct_access_port;
-class EditDirectAccessPort: Reactor.Component {
-    function render() {
+类别编辑附属端口:反应器。
+    职能呈现(){
         return <span style="margin-left: 12px; padding: 0 6px; display: inline-block;" .link>{svg_edit}</span>;
     }
 
@@ -533,19 +533,19 @@ class EditDirectAccessPort: Reactor.Component {
     }
 }
 
-function editDirectAccessPort() {
+职能编辑处(){
     var p0 = handler.get_option('direct-access-port');
     var port = p0 ? <input|text name='port' value={p0} /> :
                     <input|text name='port' novalue={21118} />;
     msgbox("custom-direct-access-port", translate('Direct IP Access Settings'), <div .form .set-password>
             <div><span style="width: 60px;">{translate('Port')}:</span>{port}</div>
         </div>, "", function(res=null) {
-        if (!res) return;
+        如果(!返回;
         var p = (res.port || '').trim();
-        if (p) {
+        如果(p){
             p = p.toInteger();
             if (!(p > 0)) {
-                return translate("Invalid port");
+                返回翻译("无效端口");
             }
             p = p + '';
         }
@@ -553,15 +553,15 @@ function editDirectAccessPort() {
       });
 }
 
-class App: Reactor.Component
+类应用:反应器。
 {
-    function this() {
-        app = this;
+    职能(){
+        APP=这个;
     }
 
-    function render() {
+    职能呈现(){
         var is_can_screen_recording = handler.is_can_screen_recording(false);
-        return
+        返回的
             <div .app>
                     <div .left-pane>
                     <div>
@@ -589,7 +589,7 @@ class App: Reactor.Component
                             <div .title>{translate('Control Remote Desktop')}</div>
                             <ID @{this.remote_id} />
                             <div .right-buttons>
-                                <button .button .outline #file-transfer>{translate('Transfer file')}</button>
+                                按钮。按钮。大纲#文件传输&t;{翻译('传输文件')}&l;/按钮&t;
                                 <button .button #connect>{translate('Connect')}</button>
                             </div>
                         </div>
@@ -601,59 +601,47 @@ class App: Reactor.Component
             </div>;
     }
 
-    event click $(button#connect) {
+    事件单击$(按钮#连接){
         this.newRemote("connect");
     }
 
-    event click $(button#file-transfer) {
+    事件单击$(按钮#文件转移){
         this.newRemote("file-transfer");
     }
 
-    function newRemote(type) {
-        createNewConnect(this.remote_id.value, type);
+    新遥控器(类型){
+        连接(这个:移动_ID.值,类型);
     }
 }
 
-class InstallMe: Reactor.Component {
-    function render() {
-        return <div .install-me>
-            <span />
-            <div>{translate('install_tip')}</div>
-            <div><button #install-me .button>{translate('Install')}</button></div>
-        </div>;
-    }
 
-    event click $(#install-me) {
-        handler.goto_install();
-    }
-}
 
-function download(from, to, args..) {
+功能下载(从,到,阿格斯。.)[
     var rqp = { type:#get, url: from, toFile: to };
     var fn = 0;
-    var on = 0;
-    for( var p in args ) {
-        if( p instanceof Function ) {
+    调整=0;
+    对(阿格斯的无价徒刑){
+        如果(P函数实例){
             switch(++fn) {
-                case 1: rqp.success = p; break;
-                case 2: rqp.error = p; break;
-                case 3: rqp.progress = p; break;
+                案例1:RQP成功=P;断裂;
+                案例2:RQP错误=P;断裂;
+                案例3:Rqp.进展=p;断裂;
             }
-        } else if( p instanceof Object ) {
+        }如果(P对象实例){
             switch(++on) {
-                case 1: rqp.params = p; break;
-                case 2: rqp.headers = p; break;
+                案例1:快速定量分析;
+                案例2:RQP头=P;断裂;
             }
         }  
     }
-    view.request(rqp);
+    请求(rqp);
 }
 
-// current running version is higher than installed
-class UpgradeMe: Reactor.Component {
-    function render() {
+//当前运行版本高于已安装版本
+班级升级:反应器。
+    职能呈现(){
         var update_or_download = is_osx ? "download" : "update";
-        return <div .install-me>
+        返回<安装
             <div>{translate('Status')}</div>
             <div>{translate('Your installation is lower version.')}</div>
             <div #install-me.link>{translate('Click to upgrade')}</div>
@@ -665,10 +653,10 @@ class UpgradeMe: Reactor.Component {
     }
 }
 
-class UpdateMe: Reactor.Component {
-    function render() {
+类更新数据名:反应器。
+    职能呈现(){
         var update_or_download = "download"; // !is_win ? "download" : "update";
-        return <div .install-me>
+        返回<安装
             <div>{translate('Status')}</div>
             <div>There is a newer version of {handler.get_app_name()} ({handler.get_new_version()}) available.</div>
             <div #install-me.link>{translate('Click to ' + update_or_download)}</div>
@@ -678,16 +666,16 @@ class UpdateMe: Reactor.Component {
 
     event click $(#install-me) {
         handler.open_url("https://rustdesk.com/download");
-        return;
+        归还;
         if (!is_win) {
             handler.open_url("https://rustdesk.com");
-            return;
+            归还;
         }
         var url = software_update_url + '.' + handler.get_software_ext();
         var path = handler.get_software_store_path();
         var onsuccess = function(md5) {
             $(#download-percent).content(translate("Installing ..."));
-            handler.update_me(path);
+            手.更新-mem(路径);
         };
         var onerror = function(err) {
             msgbox("custom-error", "Download Error", "Failed to download"); 
