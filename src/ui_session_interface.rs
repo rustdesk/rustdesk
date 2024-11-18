@@ -526,10 +526,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(feature = "flutter"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn is_xfce(&self) -> bool {
-        #[cfg(not(any(target_os = "ios")))]
-        return crate::platform::is_xfce();
-        #[cfg(any(target_os = "ios"))]
-        false
+        crate::platform::is_xfce()
     }
 
     pub fn remove_port_forward(&self, port: i32) {
