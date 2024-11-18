@@ -441,7 +441,6 @@ class ServerInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPermanent = model.verificationMethod == kUsePermanentPassword;
     final serverModel = Provider.of<ServerModel>(context);
 
     const Color colorPositive = Colors.green;
@@ -481,6 +480,8 @@ class ServerInfo extends StatelessWidget {
       }
     }
 
+    final showOneTime = serverModel.approveMode != 'click' &&
+        serverModel.verificationMethod != kUsePermanentPassword;
     return PaddingCard(
         title: translate('Your Device'),
         child: Column(
@@ -518,10 +519,10 @@ class ServerInfo extends StatelessWidget {
             ]),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text(
-                isPermanent ? '-' : model.serverPasswd.value.text,
+                !showOneTime ? '-' : model.serverPasswd.value.text,
                 style: textStyleValue,
               ),
-              isPermanent
+              !showOneTime
                   ? SizedBox.shrink()
                   : Row(children: [
                       IconButton(
@@ -587,7 +588,9 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                     translate("android_version_audio_tip"),
                     style: const TextStyle(color: MyTheme.darkGray),
                   ))
-                ])
+                ]),
+          PermissionRow(translate("Enable clipboard"), serverModel.clipboardOk,
+              serverModel.toggleClipboard),
         ]));
   }
 }

@@ -831,11 +831,12 @@ class PasswordEyeArea : Reactor.Component {
     render() {
         var method = handler.get_option('verification-method');
         var mode= handler.get_option('approve-mode');
-        var value = mode == 'click' ||  method == 'use-permanent-password' ? "-" : password_cache[0];
+        var hide_one_time = mode == 'click' ||  method == 'use-permanent-password';
+        var value = hide_one_time ? "-" : password_cache[0];
         return
             <div .eye-area style="width: *">
                 <input|text @{this.input} readonly value={value} />
-                {svg_refresh_password}
+                {hide_one_time ? "" : svg_refresh_password}
             </div>;
     }
 

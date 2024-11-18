@@ -30,6 +30,7 @@ class ServerModel with ChangeNotifier {
   bool _inputOk = false;
   bool _audioOk = false;
   bool _fileOk = false;
+  bool _clipboardOk = false;
   bool _showElevation = false;
   bool hideCm = false;
   int _connectStatus = 0; // Rendezvous Server status
@@ -58,6 +59,8 @@ class ServerModel with ChangeNotifier {
   bool get audioOk => _audioOk;
 
   bool get fileOk => _fileOk;
+
+  bool get clipboardOk => _clipboardOk;
 
   bool get showElevation => _showElevation;
 
@@ -209,6 +212,10 @@ class ServerModel with ChangeNotifier {
       _fileOk = fileOption != 'N';
     }
 
+    // clipboard
+    final clipOption = await bind.mainGetOption(key: kOptionEnableClipboard);
+    _clipboardOk = clipOption != 'N';
+
     notifyListeners();
   }
 
@@ -312,6 +319,14 @@ class ServerModel with ChangeNotifier {
     bind.mainSetOption(
         key: kOptionEnableFileTransfer,
         value: _fileOk ? defaultOptionYes : 'N');
+    notifyListeners();
+  }
+
+  toggleClipboard() async {
+    _clipboardOk = !_clipboardOk;
+    bind.mainSetOption(
+        key: kOptionEnableClipboard,
+        value: _clipboardOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 

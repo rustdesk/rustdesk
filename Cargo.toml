@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.3.2"
+version = "1.3.3"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -77,8 +77,6 @@ fon = "0.6"
 zip = "0.6"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
-
-[target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"
 ringbuf = "0.3"
 

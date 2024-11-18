@@ -432,7 +432,7 @@ function handle_custom_image_quality() {
     var extendedBitrate = bitrate > 100;
     var maxRate = extendedBitrate ? 2000 : 100;
     msgbox("custom-image-quality", "Custom Image Quality", "<div .form> \
-          <div><input #bitrate-slider type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"" + maxRate + "\" min=\"5\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate <button|checkbox #extended-slider .custom-event " + (extendedBitrate ? "checked" : "") + ">More</button></div> \
+          <div><input #bitrate-slider type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"" + maxRate + "\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate <button|checkbox #extended-slider .custom-event " + (extendedBitrate ? "checked" : "") + ">More</button></div> \
       </div>", "", function(res=null) {
         if (!res) return;
         if (res.id === "extended-slider") {

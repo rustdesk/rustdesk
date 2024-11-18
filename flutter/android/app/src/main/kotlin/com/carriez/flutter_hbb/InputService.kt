@@ -280,20 +280,20 @@ class InputService : AccessibilityService() {
 
         var textToCommit: String? = null
 
-        if (keyboardMode == KeyboardMode.Legacy) {
-            if (keyEvent.hasChr() && keyEvent.getDown()) {
+        // [down] indicates the key's state(down or up).
+        // [press] indicates a click event(down and up).
+        // https://github.com/rustdesk/rustdesk/blob/3a7594755341f023f56fa4b6a43b60d6b47df88d/flutter/lib/models/input_model.dart#L688
+        if (keyEvent.hasSeq()) {
+            textToCommit = keyEvent.getSeq()
+        } else if (keyboardMode == KeyboardMode.Legacy) {
+            if (keyEvent.hasChr() && (keyEvent.getDown() || keyEvent.getPress())) {
                 val chr = keyEvent.getChr()
                 if (chr != null) {
                     textToCommit = String(Character.toChars(chr))
                 }
             }
         } else if (keyboardMode == KeyboardMode.Translate) {
-            if (keyEvent.hasSeq() && keyEvent.getDown()) {
-                val seq = keyEvent.getSeq()
-                if (seq != null) {
-                    textToCommit = seq
-                }
-            }
+        } else {
         }
 
         Log.d(logTag, "onKeyEvent $keyEvent textToCommit:$textToCommit")
@@ -320,6 +320,10 @@ class InputService : AccessibilityService() {
                     } else {
                         ke?.let { event ->
                             inputConnection.sendKeyEvent(event)
+                            if (keyEvent.getPress()) {
+                                val actionUpEvent = KeyEventAndroid(KeyEventAndroid.ACTION_UP, event.keyCode)
+                                inputConnection.sendKeyEvent(actionUpEvent)
+                            }
                         }
                     }
                 }
@@ -333,6 +337,10 @@ class InputService : AccessibilityService() {
                     for (item in possibleNodes) {
                         val success = trySendKeyEvent(event, item, textToCommit)
                         if (success) {
+                            if (keyEvent.getPress()) {
+                                val actionUpEvent = KeyEventAndroid(KeyEventAndroid.ACTION_UP, event.keyCode)
+                                trySendKeyEvent(actionUpEvent, item, textToCommit)
+                            }
                             break
                         }
                     }
