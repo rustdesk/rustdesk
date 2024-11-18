@@ -1146,9 +1146,13 @@ impl<T: InvokeUiSession> Remote<T> {
                             .ok();
                     } else {
                         if let Some(video_queue) = video_queue_write.get_mut(&display) {
-                            video_queue.force_push(vf);
+                            if video_queue.force_push(vf).is_some() {
+                                while let Some(_) = video_queue.pop() {}
+                                self.handler.refresh_video(display as _);
+                            } else {
+                                self.video_sender.send(MediaData::VideoQueue(display)).ok();
+                            }
                         }
-                        self.video_sender.send(MediaData::VideoQueue(display)).ok();
                     }
                     self.fps_control
                         .last_active_time
