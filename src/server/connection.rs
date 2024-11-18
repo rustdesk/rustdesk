@@ -2076,7 +2076,7 @@ impl Connection {
                         update_clipboard(vec![cb], ClipboardSide::Host);
                         // ios as the controlled side is actually not supported for now.
                         // The following code is only used to preserve the logic of handling text clipboard on mobile.
-                        #[cfg(all(feature = "flutter", target_os = "ios"))]
+                        #[cfg(target_os = "ios")]
                         {
                             let content = if cb.compress {
                                 hbb_common::compress::decompress(&cb.content)
