@@ -2417,6 +2417,24 @@ where
                                     // to-do: fix the error
                                     log::error!("handle video frame error, {}", e);
                                     session.refresh_video(display as _);
+                                    #[cfg(feature = "hwcodec")]
+                                    if format == CodecFormat::H265 {
+                                        if let Some(&scrap::hwcodec::ERR_HEVC_POC) =
+                                            e.downcast_ref::<i32>()
+                                        {
+                                            for (i, handler_controler) in
+                                                handler_controller_map.iter_mut()
+                                            {
+                                                if *i != display
+                                                    && handler_controler.handler.decoder.format()
+                                                        == CodecFormat::H265
+                                                {
+                                                    log::info!("refresh video {} due to hevc poc not found", i);
+                                                    session.refresh_video(*i as _);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                                 _ => {}
                             }
