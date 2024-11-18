@@ -690,7 +690,7 @@ impl Connection {
                             }
                         }
                         Some(message::Union::MultiClipboards(_multi_clipboards)) => {
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            #[cfg(not(target_os = "ios"))]
                             if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(&conn.lr.version, &conn.lr.my_platform, _multi_clipboards) {
                                 if let Err(err) = conn.stream.send(&msg_out).await {
                                     conn.on_close(&err.to_string(), false).await;
@@ -2074,7 +2074,9 @@ impl Connection {
                     if self.clipboard {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(vec![cb], ClipboardSide::Host);
-                        #[cfg(all(feature = "flutter", target_os = "android"))]
+                        // ios as the controlled side is actually not supported for now.
+                        // The following code is only used to preserve the logic of handling text clipboard on mobile.
+                        #[cfg(target_os = "ios")]
                         {
                             let content = if cb.compress {
                                 hbb_common::compress::decompress(&cb.content)
@@ -2092,14 +2094,17 @@ impl Connection {
                                 }
                             }
                         }
+                        #[cfg(target_os = "android")]
+                        crate::clipboard::handle_msg_clipboard(cb);
                     }
                 }
-                Some(message::Union::MultiClipboards(_mcb)) =>
-                {
+                Some(message::Union::MultiClipboards(_mcb)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard {
                         update_clipboard(_mcb.clipboards, ClipboardSide::Host);
                     }
+                    #[cfg(target_os = "android")]
+                    crate::clipboard::handle_msg_multi_clipboards(_mcb);
                 }
                 Some(message::Union::Cliprdr(_clip)) =>
                 {

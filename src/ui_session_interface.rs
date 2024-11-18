@@ -354,7 +354,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().is_privacy_mode_supported()
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     pub fn is_text_clipboard_required(&self) -> bool {
         *self.server_clipboard_enabled.read().unwrap()
             && *self.server_keyboard_enabled.read().unwrap()
@@ -526,10 +526,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(feature = "flutter"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn is_xfce(&self) -> bool {
-        #[cfg(not(any(target_os = "ios")))]
-        return crate::platform::is_xfce();
-        #[cfg(any(target_os = "ios"))]
-        false
+        crate::platform::is_xfce()
     }
 
     pub fn remove_port_forward(&self, port: i32) {
