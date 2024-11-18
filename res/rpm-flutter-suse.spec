@@ -9,6 +9,9 @@ Requires:   gtk3 libxcb1 xdotool libXfixes3 alsa-utils libXtst6 libvdpau1 libva2
 Recommends: libayatana-appindicator3-1
 Provides:   libdesktop_drop_plugin.so()(64bit), libdesktop_multi_window_plugin.so()(64bit), libfile_selector_linux_plugin.so()(64bit), libflutter_custom_cursor_plugin.so()(64bit), libflutter_linux_gtk.so()(64bit), libscreen_retriever_plugin.so()(64bit), libtray_manager_plugin.so()(64bit), liburl_launcher_linux_plugin.so()(64bit), libwindow_manager_plugin.so()(64bit), libwindow_size_plugin.so()(64bit), libtexture_rgba_renderer_plugin.so()(64bit)
 
+%define _source_payload w19.zstdio
+%define _binary_payload w19.zstdio
+
 %description
 The best open-source remote desktop client software, written in Rust.
 

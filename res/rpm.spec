@@ -8,6 +8,9 @@ Vendor:     rustdesk <info@rustdesk.com>
 Requires:   gtk3 libxcb libxdo libXfixes alsa-lib libvdpau1 libva2 pam gstreamer1-plugins-base
 Recommends: libayatana-appindicator-gtk3
 
+%define _source_payload w19.zstdio
+%define _binary_payload w19.zstdio
+
 %description
 The best open-source remote desktop client software, written in Rust.
 
