@@ -300,9 +300,9 @@ class MainService : Service() {
                 SCREEN_INFO.dpi = dpi
                 if (isStart) {
                     stopCapture()
-                    FFI.refreshScreen()
                     startCapture()
                 }
+                FFI.refreshScreen()
             }
 
         }
