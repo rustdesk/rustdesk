@@ -138,15 +138,19 @@ mod pa_impl {
             }
 
             #[cfg(target_os = "android")]
-            if scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some() {
-                let data = unsafe {
-                    let nb = android_data.len();
-                    let ptr = align_to_32(android_data).as_ptr();
-                    std::slice::from_raw_parts::<f32>(ptr as _, nb / 4)
-                };
-                send_f32(data, &mut encoder, &sp);
-            } else {
-                hbb_common::sleep(0.1).await;
+            {
+                let b =
+                    scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some();
+                if b {
+                    let data = unsafe {
+                        let nb = android_data.len();
+                        let ptr = align_to_32(android_data).as_ptr();
+                        std::slice::from_raw_parts::<f32>(ptr as _, nb / 4)
+                    };
+                    send_f32(data, &mut encoder, &sp);
+                } else {
+                    hbb_common::sleep(0.1).await;
+                }
             }
         }
         Ok(())
