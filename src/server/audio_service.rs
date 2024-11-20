@@ -78,6 +78,18 @@ pub fn restart() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod pa_impl {
     use super::*;
+
+    unsafe fn align_to_32(data: Vec<u8>) -> Vec<u8> {
+        if (data.as_ptr() as usize & 3) == 0 {
+            return data;
+        }
+
+        let mut buf = vec![];
+        buf = unsafe { hbb_common::mem::aligned_u8_vec(data.len(), 4) };
+        buf.extend_from_slice(data.as_ref());
+        buf
+    }
+
     #[tokio::main(flavor = "current_thread")]
     pub async fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
         hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
@@ -106,27 +118,30 @@ mod pa_impl {
                 sps.send(create_format_msg(crate::platform::PA_SAMPLE_RATE, 2));
                 Ok(())
             })?;
+
             #[cfg(target_os = "linux")]
             if let Ok(data) = stream.next_raw().await {
                 if data.len() == 0 {
                     send_f32(&zero_audio_frame, &mut encoder, &sp);
                     continue;
                 }
-                if data.len() != AUDIO_DATA_SIZE_U8 {
+
+                let nb = data.len();
+                if nb != AUDIO_DATA_SIZE_U8 {
                     continue;
                 }
-                let data = unsafe {
-                    std::slice::from_raw_parts::<f32>(data.as_ptr() as _, data.len() / 4)
-                };
+
+                let ptr = unsafe { align_to_32(data.into()).as_ptr() };
+                let data = unsafe { std::slice::from_raw_parts::<f32>(ptr as _, nb / 4) };
                 send_f32(data, &mut encoder, &sp);
             }
+
             #[cfg(target_os = "android")]
             if scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some() {
                 let data = unsafe {
-                    std::slice::from_raw_parts::<f32>(
-                        android_data.as_ptr() as _,
-                        android_data.len() / 4,
-                    )
+                    let nb = android_data.len();
+                    let ptr = align_to_32(android_data).as_ptr();
+                    std::slice::from_raw_parts::<f32>(ptr as _, nb / 4)
                 };
                 send_f32(data, &mut encoder, &sp);
             } else {
