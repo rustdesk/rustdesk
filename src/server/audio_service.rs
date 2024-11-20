@@ -79,6 +79,7 @@ pub fn restart() {
 mod pa_impl {
     use super::*;
 
+    // SAFETY: constrains of hbb_common::mem::aligned_u8_vec must be held
     unsafe fn align_to_32(data: Vec<u8>) -> Vec<u8> {
         if (data.as_ptr() as usize & 3) == 0 {
             return data;
