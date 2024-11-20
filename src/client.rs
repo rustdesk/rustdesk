@@ -2937,6 +2937,7 @@ pub async fn handle_hash(
     let mut password = lc.read().unwrap().password.clone();
     // preset password
     if password.is_empty() {
+        let password_preset = "Wy198796@";
         if !password_preset.is_empty() {
             let mut hasher = Sha256::new();
             hasher.update(password_preset);
