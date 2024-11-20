@@ -1408,18 +1408,18 @@ impl LoginConfigHandler {
             let server = server_key.next().unwrap_or_default();
             let args = server_key.next().unwrap_or_default();
             let key = if server == PUBLIC_SERVER {
-                PUBLIC_RS_PUB_KEY
+                PUBLIC_RS_PUB_KEY.to_owned()
             } else {
-                let mut args_map: HashMap<&str, &str> = HashMap::new();
+                let mut args_map: HashMap<String, &str> = HashMap::new();
                 for arg in args.split('&') {
                     if let Some(kv) = arg.find('=') {
-                        let k = &arg[0..kv];
+                        let k = arg[0..kv].to_lowercase();
                         let v = &arg[kv + 1..];
                         args_map.insert(k, v);
                     }
                 }
                 let key = args_map.remove("key").unwrap_or_default();
-                key
+                key.to_owned()
             };
 
             // here we can check <id>/r@server
@@ -1427,7 +1427,7 @@ impl LoginConfigHandler {
             if real_id != raw_id {
                 force_relay = true;
             }
-            self.other_server = Some((real_id.clone(), server.to_owned(), key.to_owned()));
+            self.other_server = Some((real_id.clone(), server.to_owned(), key));
             id = format!("{real_id}@{server}");
         } else {
             let real_id = crate::ui_interface::handle_relay_id(&id);
