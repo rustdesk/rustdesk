@@ -133,7 +133,7 @@ mod pa_impl {
                 }
 
                 let data = unsafe { align_to_32(data.into()) };
-                let data = unsafe { std::slice::from_raw_parts::<f32>(data.ptr() as _, nb / 4) };
+                let data = unsafe { std::slice::from_raw_parts::<f32>(data.as_ptr() as _, nb / 4) };
                 send_f32(data, &mut encoder, &sp);
             }
 
