@@ -112,8 +112,6 @@ mod pa_impl {
         );
         #[cfg(target_os = "linux")]
         let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
-        #[cfg(target_os = "android")]
-        let mut android_data = vec![];
         while sp.ok() && !RESTARTING.load(Ordering::SeqCst) {
             sp.snapshot(|sps| {
                 sps.send(create_format_msg(crate::platform::PA_SAMPLE_RATE, 2));
@@ -139,9 +137,8 @@ mod pa_impl {
 
             #[cfg(target_os = "android")]
             {
-                let b =
-                    scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some();
-                if b {
+                let mut android_data = vec![];
+                if scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some() {
                     let data = unsafe {
                         let nb = android_data.len();
                         let ptr = align_to_32(android_data).as_ptr();
