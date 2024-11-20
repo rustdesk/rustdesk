@@ -1,5 +1,5 @@
 [package]
-name = "rustdesk"
+name = "trydesk"
 version = "1.1.8"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2018"
@@ -99,7 +99,7 @@ hbb_common = { path = "libs/hbb_common" }
 hound = "3.4"
 
 [package.metadata.bundle]
-name = "RustDesk"
+name = "TryDesk"
 identifier = "com.carriez.rustdesk"
 icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
 deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pulseaudio"]
