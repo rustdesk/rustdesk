@@ -368,6 +368,16 @@ message ReadDir {
   bool include_hidden = 2;
 }
 
+message ReadEmptyDirs {
+  string path = 1;
+  bool include_hidden = 2;
+}
+
+message ReadEmptyDirsResponse {
+  string path = 1;
+  repeated FileDirectory empty_dirs = 2;
+}
+
 message ReadAllFiles {
   int32 id = 1;
   string path = 2;
@@ -392,6 +402,7 @@ message FileAction {
     FileTransferCancel cancel = 8;
     FileTransferSendConfirmRequest send_confirm = 9;
     FileRename rename = 10;
+    ReadEmptyDirs read_empty_dirs = 11;
   }
 }
 
@@ -404,6 +415,7 @@ message FileResponse {
     FileTransferError error = 3;
     FileTransferDone done = 4;
     FileTransferDigest digest = 5;
+    ReadEmptyDirsResponse empty_dirs = 6;
   }
 }
 

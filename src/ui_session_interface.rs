@@ -1555,6 +1555,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     #[cfg(feature = "flutter")]
     fn is_multi_ui_session(&self) -> bool;
     fn update_record_status(&self, start: bool);
+    fn update_empty_dirs(&self, _res: ReadEmptyDirsResponse) {}
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
