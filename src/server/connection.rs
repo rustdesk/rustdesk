@@ -318,11 +318,7 @@ impl Connection {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
         let mut conn = Self {
-            inner: ConnInner {
-                id,
-                tx: Some(tx),
-                tx_video: Some(tx_video),
-            },
+            inner: ConnInner::new(id, Some(tx), Some(tx_video)),
             require_2fa: crate::auth_2fa::get_2fa(None),
             display_idx: *display_service::PRIMARY_DISPLAY_IDX,
             stream,
