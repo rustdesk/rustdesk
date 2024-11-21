@@ -127,13 +127,14 @@ mod pa_impl {
                     continue;
                 }
 
-                let nb = data.len();
-                if nb != AUDIO_DATA_SIZE_U8 {
+                if data.len() != AUDIO_DATA_SIZE_U8 {
                     continue;
                 }
 
                 let data = unsafe { align_to_32(data.into()) };
-                let data = unsafe { std::slice::from_raw_parts::<f32>(data.as_ptr() as _, nb / 4) };
+                let data = unsafe {
+                    std::slice::from_raw_parts::<f32>(data.as_ptr() as _, data.len() / 4)
+                };
                 send_f32(data, &mut encoder, &sp);
             }
 
