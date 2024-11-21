@@ -837,7 +837,7 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
                 let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
             }
         }
-        *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url; 
+        *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
     }
     Ok(())
 }
