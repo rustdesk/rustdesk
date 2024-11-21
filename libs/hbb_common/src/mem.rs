@@ -1,4 +1,4 @@
-/// SAFETY: the returned Vec must not be resized or reserverd
+/// SAFETY: the returned Vec must not be resized or reserver
 pub unsafe fn aligned_u8_vec(cap: usize, align: usize) -> Vec<u8> {
     use std::alloc::*;
 
