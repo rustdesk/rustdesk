@@ -1980,6 +1980,14 @@ impl<T: InvokeUiSession> Remote<T> {
             },
         );
         self.video_threads.insert(display, video_thread);
+        let auto_record = self.handler.lc.read().unwrap().record;
+        if auto_record && self.video_threads.len() == 1 {
+            let mut misc = Misc::new();
+            misc.set_client_record_status(true);
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            self.sender.send(Data::Message(msg)).ok();
+        }
     }
 }
 
