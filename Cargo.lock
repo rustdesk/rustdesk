@@ -6445,7 +6445,7 @@ dependencies = [
 [[package]]
 name = "tfc"
 version = "0.7.0"
-source = "git+https://github.com/rustdesk-org/The-Fat-Controller?branch=history/rebase_upstream_20240722#de9c8ba480f166a9fc90aaa47bb0e84b443ea9c6"
+source = "git+https://github.com/rustdesk-org/The-Fat-Controller?branch=history/rebase_upstream_20240722#78bb80a8e596e4c14ae57c8448f5fca75f91f2b0"
 dependencies = [
  "anyhow",
  "core-graphics 0.23.2",
