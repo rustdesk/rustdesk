@@ -261,10 +261,16 @@ impl<T: InvokeUiSession> Remote<T> {
                                 None => "-",
                             };
                             let chroma = Some(chroma.to_string());
+                            let codec_format = if self.video_format == CodecFormat::Unknown {
+                                None
+                            } else {
+                                Some(self.video_format.clone())
+                            };
                             self.handler.update_quality_status(QualityStatus {
                                 speed: Some(speed),
                                 fps,
                                 chroma,
+                                codec_format,
                                 ..Default::default()
                             });
                         }
@@ -1149,14 +1155,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.send_toggle_virtual_display_msg(peer).await;
                         self.send_toggle_privacy_mode_msg(peer).await;
                     }
-                    let incoming_format = CodecFormat::from(&vf);
-                    if self.video_format != incoming_format {
-                        self.video_format = incoming_format.clone();
-                        self.handler.update_quality_status(QualityStatus {
-                            codec_format: Some(incoming_format),
-                            ..Default::default()
-                        })
-                    };
+                    self.video_format = CodecFormat::from(&vf);
 
                     let display = vf.display as usize;
                     if !self.video_threads.contains_key(&display) {
