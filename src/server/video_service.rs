@@ -728,13 +728,7 @@ fn setup_encoder(
     );
     Encoder::set_fallback(&encoder_cfg);
     let codec_format = Encoder::negotiated_codec();
-    let recorder = get_recorder(
-        c.width,
-        c.height,
-        &codec_format,
-        record_incoming,
-        display_idx,
-    );
+    let recorder = get_recorder(record_incoming, display_idx);
     let use_i444 = Encoder::use_i444(&encoder_cfg);
     let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
     Ok((encoder, encoder_cfg, codec_format, use_i444, recorder))
@@ -816,13 +810,7 @@ fn get_encoder_config(
     }
 }
 
-fn get_recorder(
-    width: usize,
-    height: usize,
-    codec_format: &CodecFormat,
-    record_incoming: bool,
-    display: usize,
-) -> Arc<Mutex<Option<Recorder>>> {
+fn get_recorder(record_incoming: bool, display: usize) -> Arc<Mutex<Option<Recorder>>> {
     #[cfg(windows)]
     let root = crate::platform::is_root();
     #[cfg(not(windows))]
