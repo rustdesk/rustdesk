@@ -224,7 +224,7 @@ checksum = "b3d1d046238990b9cf5bcde22a3fb3584ee5cf65fb2765f454ed428c7a0063da"
 [[package]]
 name = "arboard"
 version = "3.4.0"
-source = "git+https://github.com/rustdesk-org/arboard#a04bdb1b368a99691822c33bf0f7ed497d6a7a35"
+source = "git+https://github.com/rustdesk-org/arboard#747ab2d9b40a5c9c5102051cf3b0bb38b4845e60"
 dependencies = [
  "clipboard-win",
  "core-graphics 0.23.2",
@@ -859,6 +859,12 @@ name = "cfg_aliases"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
+
+[[package]]
+name = "cfg_aliases"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
@@ -1677,7 +1683,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.8.4",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -3045,7 +3051,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.7.0"
-source = "git+https://github.com/rustdesk-org/hwcodec#6abd1898f3a03481ed0c038507b5218d6ea94267"
+source = "git+https://github.com/rustdesk-org/hwcodec#da7dab48df19edb5a7138ff9e01bf9f148b523da"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -3967,9 +3973,21 @@ checksum = "ab2156c4fce2f8df6c499cc1c763e4394b7482525bf2a9701c9d79d215f519e4"
 dependencies = [
  "bitflags 2.6.0",
  "cfg-if 1.0.0",
- "cfg_aliases",
+ "cfg_aliases 0.1.1",
  "libc",
  "memoffset 0.9.1",
+]
+
+[[package]]
+name = "nix"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags 2.6.0",
+ "cfg-if 1.0.0",
+ "cfg_aliases 0.2.1",
+ "libc",
 ]
 
 [[package]]
@@ -5187,7 +5205,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/rustdesk-org/rdev#d4c1759926d693ba269e2cb8cf9f87b13e424e4e"
+source = "git+https://github.com/rustdesk-org/rdev#961d25cc00c6b3ef80f444e6a7bed9872e2c35ea"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
@@ -5462,7 +5480,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.3.1"
+version = "1.3.3"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -5494,6 +5512,7 @@ dependencies = [
  "flutter_rust_bridge",
  "fon",
  "fruitbasket",
+ "gtk",
  "hbb_common",
  "hex",
  "hound",
@@ -5508,6 +5527,7 @@ dependencies = [
  "libpulse-simple-binding",
  "mac_address",
  "magnum-opus",
+ "nix 0.29.0",
  "num_cpus",
  "objc",
  "objc_id",
@@ -5539,6 +5559,7 @@ dependencies = [
  "system_shutdown",
  "tao",
  "tauri-winrt-notification",
+ "termios",
  "totp-rs",
  "tray-icon",
  "url",
@@ -5559,7 +5580,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.3.1"
+version = "1.3.3"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
@@ -6424,7 +6445,7 @@ dependencies = [
 [[package]]
 name = "tfc"
 version = "0.7.0"
-source = "git+https://github.com/rustdesk-org/The-Fat-Controller?branch=history/rebase_upstream_20240722#de9c8ba480f166a9fc90aaa47bb0e84b443ea9c6"
+source = "git+https://github.com/rustdesk-org/The-Fat-Controller?branch=history/rebase_upstream_20240722#78bb80a8e596e4c14ae57c8448f5fca75f91f2b0"
 dependencies = [
  "anyhow",
  "core-graphics 0.23.2",

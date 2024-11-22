@@ -15,7 +15,7 @@ use hbb_common::{
 };
 use hwcodec::{
     common::{
-        DataFormat,
+        DataFormat, HwcodecErrno,
         Quality::{self, *},
         RateControl::{self, *},
     },
@@ -31,6 +31,7 @@ const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_FPS: i32 = 30;
 const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
+pub const ERR_HEVC_POC: i32 = HwcodecErrno::HWCODEC_ERR_HEVC_COULD_NOT_FIND_POC as i32;
 
 crate::generate_call_macro!(call_yuv, false);
 
@@ -498,6 +499,15 @@ pub struct HwCodecConfig {
     pub vram_decode: Vec<hwcodec::vram::DecodeContext>,
 }
 
+// HwCodecConfig2 is used to store the config in json format,
+// confy can't serde HwCodecConfig successfully if the non-first struct Vec is empty due to old toml version.
+// struct T { a: Vec<A>, b: Vec<String>} will fail if b is empty, but struct T { a: Vec<String>, b: Vec<String>} is ok.
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+struct HwCodecConfig2 {
+    #[serde(default)]
+    pub config: String,
+}
+
 // ipc server process start check process once, other process get from ipc server once
 // install: --server start check process, check process send to --server,  ui get from --server
 // portable: ui start check process, check process send to ui
@@ -509,7 +519,12 @@ impl HwCodecConfig {
         log::info!("set hwcodec config");
         log::debug!("{config:?}");
         #[cfg(any(windows, target_os = "macos"))]
-        hbb_common::config::common_store(&config, "_hwcodec");
+        hbb_common::config::common_store(
+            &HwCodecConfig2 {
+                config: serde_json::to_string_pretty(&config).unwrap_or_default(),
+            },
+            "_hwcodec",
+        );
         *CONFIG.lock().unwrap() = Some(config);
         *CONFIG_SET_BY_IPC.lock().unwrap() = true;
     }
@@ -587,7 +602,8 @@ impl HwCodecConfig {
                 Some(c) => c,
                 None => {
                     log::info!("try load cached hwcodec config");
-                    let c = hbb_common::config::common_load::<HwCodecConfig>("_hwcodec");
+                    let c = hbb_common::config::common_load::<HwCodecConfig2>("_hwcodec");
+                    let c: HwCodecConfig = serde_json::from_str(&c.config).unwrap_or_default();
                     let new_signature = hwcodec::common::get_gpu_signature();
                     if c.signature == new_signature {
                         log::debug!("load cached hwcodec config: {c:?}");

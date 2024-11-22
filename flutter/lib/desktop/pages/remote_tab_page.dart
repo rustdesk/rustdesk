@@ -395,7 +395,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       RemoteCountState.find().value = tabController.length;
 
   Future<dynamic> _remoteMethodHandler(call, fromWindowId) async {
-    print(
+    debugPrint(
         "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
     dynamic returnValue;

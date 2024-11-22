@@ -32,6 +32,7 @@ const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
 const String kPeerPlatformMacOS = "Mac OS";
 const String kPeerPlatformAndroid = "Android";
+const String kPeerPlatformWebDesktop = "WebDesktop";
 
 const double kScrollbarThickness = 12.0;
 
@@ -88,6 +89,7 @@ const String kOptionAllowAutoDisconnect = "allow-auto-disconnect";
 const String kOptionAutoDisconnectTimeout = "auto-disconnect-timeout";
 const String kOptionEnableHwcodec = "enable-hwcodec";
 const String kOptionAllowAutoRecordIncoming = "allow-auto-record-incoming";
+const String kOptionAllowAutoRecordOutgoing = "allow-auto-record-outgoing";
 const String kOptionVideoSaveDirectory = "video-save-directory";
 const String kOptionAccessMode = "access-mode";
 const String kOptionEnableKeyboard = "enable-keyboard";
@@ -166,6 +168,13 @@ const int kWindowMainId = 0;
 
 const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
+
+const String kMouseEventTypeDefault = "";
+const String kMouseEventTypePanStart = "pan_start";
+const String kMouseEventTypePanUpdate = "pan_update";
+const String kMouseEventTypePanEnd = "pan_end";
+const String kMouseEventTypeDown = "down";
+const String kMouseEventTypeUp = "up";
 
 const String kKeyFlutterKey = "flutter_key";
 
@@ -569,3 +578,5 @@ enum WindowsTarget {
 extension WindowsTargetExt on int {
   WindowsTarget get windowsVersion => getWindowsTarget(this);
 }
+
+const kCheckSoftwareUpdateFinish = 'check_software_update_finish';

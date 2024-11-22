@@ -115,6 +115,8 @@ class _RemotePageState extends State<RemotePage>
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
+      _ffi.recordingModel
+          .updateStatus(bind.sessionGetIsRecording(sessionId: _ffi.sessionId));
     });
     _ffi.start(
       widget.id,
@@ -245,13 +247,14 @@ class _RemotePageState extends State<RemotePage>
     super.dispose();
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
     _ffi.textureModel.onRemotePageDispose(closeSession);
-    // ensure we leave this session, this is a double check
-    _ffi.inputModel.enterOrLeave(false);
+    if (closeSession) {
+      // ensure we leave this session, this is a double check
+      _ffi.inputModel.enterOrLeave(false);
+    }
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.imageModel.disposeImage();
     _ffi.cursorModel.disposeImages();
-    _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();
     await _ffi.close(closeSession: closeSession);
     _timer?.cancel();

@@ -302,6 +302,7 @@ prebuild)
 
 		sed \
 			-i \
+			-e 's/extended_text: .*/extended_text: 11.1.0/' \
 			-e 's/uni_links_desktop/#uni_links_desktop/g' \
 			flutter/pubspec.yaml
 

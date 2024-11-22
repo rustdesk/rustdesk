@@ -194,10 +194,14 @@ class Peers extends ChangeNotifier {
   }
 
   void _updateOnlineState(Map<String, dynamic> evt) {
+    int changedCount = 0;
     evt['onlines'].split(',').forEach((online) {
       for (var i = 0; i < peers.length; i++) {
         if (peers[i].id == online) {
-          peers[i].online = true;
+          if (!peers[i].online) {
+            changedCount += 1;
+            peers[i].online = true;
+          }
         }
       }
     });
@@ -205,13 +209,18 @@ class Peers extends ChangeNotifier {
     evt['offlines'].split(',').forEach((offline) {
       for (var i = 0; i < peers.length; i++) {
         if (peers[i].id == offline) {
-          peers[i].online = false;
+          if (peers[i].online) {
+            changedCount += 1;
+            peers[i].online = false;
+          }
         }
       }
     });
 
-    event = UpdateEvent.online;
-    notifyListeners();
+    if (changedCount > 0) {
+      event = UpdateEvent.online;
+      notifyListeners();
+    }
   }
 
   void _updatePeers(Map<String, dynamic> evt) {

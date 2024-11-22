@@ -272,10 +272,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   buildPasswordBoard(BuildContext context) {
-    final model = gFFI.serverModel;
+    return ChangeNotifierProvider.value(
+        value: gFFI.serverModel,
+        child: Consumer<ServerModel>(
+          builder: (context, model, child) {
+            return buildPasswordBoard2(context, model);
+          },
+        ));
+  }
+
+  buildPasswordBoard2(BuildContext context, ServerModel model) {
     RxBool refreshHover = false.obs;
     RxBool editHover = false.obs;
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    final showOneTime = model.approveMode != 'click' &&
+        model.verificationMethod != kUsePermanentPassword;
     return Container(
       margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
       child: Row(
@@ -304,8 +315,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       Expanded(
                         child: GestureDetector(
                           onDoubleTap: () {
-                            if (model.verificationMethod !=
-                                kUsePermanentPassword) {
+                            if (showOneTime) {
                               Clipboard.setData(
                                   ClipboardData(text: model.serverPasswd.text));
                               showToast(translate("Copied"));
@@ -323,22 +333,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           ),
                         ),
                       ),
-                      AnimatedRotationWidget(
-                        onPressed: () => bind.mainUpdateTemporaryPassword(),
-                        child: Tooltip(
-                          message: translate('Refresh Password'),
-                          child: Obx(() => RotatedBox(
-                              quarterTurns: 2,
-                              child: Icon(
-                                Icons.refresh,
-                                color: refreshHover.value
-                                    ? textColor
-                                    : Color(0xFFDDDDDD),
-                                size: 22,
-                              ))),
-                        ),
-                        onHover: (value) => refreshHover.value = value,
-                      ).marginOnly(right: 8, top: 4),
+                      if (showOneTime)
+                        AnimatedRotationWidget(
+                          onPressed: () => bind.mainUpdateTemporaryPassword(),
+                          child: Tooltip(
+                            message: translate('Refresh Password'),
+                            child: Obx(() => RotatedBox(
+                                quarterTurns: 2,
+                                child: Icon(
+                                  Icons.refresh,
+                                  color: refreshHover.value
+                                      ? textColor
+                                      : Color(0xFFDDDDDD),
+                                  size: 22,
+                                ))),
+                          ),
+                          onHover: (value) => refreshHover.value = value,
+                        ).marginOnly(right: 8, top: 4),
                       if (!bind.isDisableSettings())
                         InkWell(
                           child: Tooltip(
@@ -664,9 +675,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   void initState() {
     super.initState();
     if (!bind.isCustomClient()) {
+      platformFFI.registerEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+          (Map<String, dynamic> evt) async {
+        if (evt['url'] is String) {
+          setState(() {
+            updateUrl = evt['url'];
+          });
+        }
+      });
       Timer(const Duration(seconds: 1), () async {
-        updateUrl = await bind.mainGetSoftwareUpdateUrl();
-        if (updateUrl.isNotEmpty) setState(() {});
+        bind.mainGetSoftwareUpdateUrl();
       });
     }
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
@@ -766,6 +785,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isRDP: call.arguments['isRDP'],
           password: call.arguments['password'],
           forceRelay: call.arguments['forceRelay'],
+          connToken: call.arguments['connToken'],
         );
       } else if (call.method == kWindowEventMoveTabToNewWindow) {
         final args = call.arguments.split(',');
@@ -824,6 +844,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     _uniLinksSubscription?.cancel();
     Get.delete<RxBool>(tag: 'stop-service');
     _updateTimer?.cancel();
+    if (!bind.isCustomClient()) {
+      platformFFI.unregisterEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish);
+    }
     super.dispose();
   }
 
@@ -857,6 +881,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     // SpecialCharacterValidationRule(),
     MinCharactersValidationRule(8),
   ];
+  final maxLength = bind.mainMaxEncryptLen();
 
   gFFI.dialogManager.show((setState, close, context) {
     submit() {
@@ -915,6 +940,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                         errMsg0 = '';
                       });
                     },
+                    maxLength: maxLength,
                   ),
                 ),
               ],
@@ -941,6 +967,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                         errMsg1 = '';
                       });
                     },
+                    maxLength: maxLength,
                   ),
                 ),
               ],

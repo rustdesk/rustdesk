@@ -1,3 +1,4 @@
+use hbb_common::libc;
 use std::ptr;
 use std::rc::Rc;
 
@@ -99,11 +100,16 @@ unsafe fn check_x11_shm_available(c: *mut xcb_connection_t) -> Result<(), Error>
     if reply.is_null() {
         // TODO: Should seperate SHM disabled from SHM not supported?
         return Err(Error::UnsupportedExtension);
-    } else if e.is_null() {
-        return Ok(());
     } else {
-        // TODO: Does "This request does never generate any errors" in manual means `e` is never set, so we would never reach here?
-        return Err(Error::Generic);
+        // https://github.com/FFmpeg/FFmpeg/blob/6229e4ac425b4566446edefb67d5c225eb397b58/libavdevice/xcbgrab.c#L229
+        libc::free(reply as *mut _);
+        if e.is_null() {
+            return Ok(());
+        } else {
+            libc::free(e as *mut _);
+            // TODO: Does "This request does never generate any errors" in manual means `e` is never set, so we would never reach here?
+            return Err(Error::Generic);
+        }
     }
 }
 

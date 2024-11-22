@@ -86,7 +86,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
       // end
       switch (_currentState) {
         case GestureState.oneFingerPan:
-          debugPrint("TwoFingerState.pan onEnd");
+          debugPrint("OneFingerState.pan onEnd");
           if (onOneFingerPanEnd != null) {
             onOneFingerPanEnd!(_getDragEndDetails(d));
           }
