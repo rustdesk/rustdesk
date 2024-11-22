@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{Arc, Mutex, RwLock, Weak},
+    sync::{atomic::AtomicU64, Arc, Mutex, RwLock, Weak},
     time::Duration,
 };
 
@@ -264,6 +264,25 @@ async fn create_relay_connection_(
     Ok(())
 }
 
+fn blocker_for_svc(name: &str) -> Arc<AtomicU64> {
+    lazy_static::lazy_static! {
+        static ref MUX: Mutex< HashMap<String, Arc<AtomicU64>>> = Mutex::new(HashMap::new());
+    }
+
+    let mut g = MUX.lock().unwrap();
+    let z = match g.get(name) {
+        Some(x) => x.clone(),
+        _ => {
+            let arc = Arc::new(AtomicU64::new(0));
+            g.insert(name.to_string(), arc.clone());
+            arc
+        }
+    };
+
+    println!("blockers = {:p}", z.as_ref());
+    z
+}
+
 impl Server {
     fn is_video_service_name(name: &str) -> bool {
         name.starts_with(video_service::NAME)
@@ -279,27 +298,36 @@ impl Server {
         }
     }
 
-    pub fn add_connection(&mut self, conn: ConnInner, noperms: &Vec<&'static str>) {
+    pub fn add_connection(&mut self, conn: &mut ConnInner, noperms: &Vec<&'static str>) {
         let primary_video_service_name =
             video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
         for s in self.services.values() {
             let name = s.name();
-            if Self::is_video_service_name(&name) && name != primary_video_service_name {
+            let video_svc = Self::is_video_service_name(&name);
+            if video_svc && name != primary_video_service_name {
                 continue;
             }
+
             if !noperms.contains(&(&name as _)) {
+                if video_svc {
+                    conn.link_blockers(blocker_for_svc(&name));
+                }
                 s.on_subscribe(conn.clone());
             }
         }
         #[cfg(target_os = "macos")]
         self.update_enable_retina();
-        self.connections.insert(conn.id(), conn);
+        self.connections.insert(conn.id(), conn.clone());
         *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
-    pub fn remove_connection(&mut self, conn: &ConnInner) {
+    pub fn remove_connection(&mut self, conn: &mut ConnInner) {
         for s in self.services.values() {
             s.on_unsubscribe(conn.id());
+
+            if Self::is_video_service_name(&s.name()) {
+                conn.unblock();
+            }
         }
         self.connections.remove(&conn.id());
         *CONN_COUNT.lock().unwrap() = self.connections.len();
@@ -327,15 +355,23 @@ impl Server {
         self.services.contains_key(name)
     }
 
-    pub fn subscribe(&mut self, name: &str, conn: ConnInner, sub: bool) {
+    pub fn subscribe(&mut self, name: &str, conn: &mut ConnInner, sub: bool) {
         if let Some(s) = self.services.get(name) {
             if s.is_subed(conn.id()) == sub {
                 return;
             }
+
             if sub {
+                if Self::is_video_service_name(name) {
+                    conn.link_blockers(blocker_for_svc(name));
+                }
+
                 s.on_subscribe(conn.clone());
             } else {
                 s.on_unsubscribe(conn.id());
+                if Self::is_video_service_name(name) {
+                    conn.unblock();
+                }
             }
             #[cfg(target_os = "macos")]
             self.update_enable_retina();
@@ -378,7 +414,7 @@ impl Server {
 
     fn capture_displays(
         &mut self,
-        conn: ConnInner,
+        conn: &mut ConnInner,
         displays: &[usize],
         include: bool,
         exclude: bool,
@@ -392,11 +428,11 @@ impl Server {
             if Self::is_video_service_name(&name) {
                 if displays.contains(&name) {
                     if include {
-                        self.subscribe(&name, conn.clone(), true);
+                        self.subscribe(&name, conn, true);
                     }
                 } else {
                     if exclude {
-                        self.subscribe(&name, conn.clone(), false);
+                        self.subscribe(&name, conn, false);
                     }
                 }
             }

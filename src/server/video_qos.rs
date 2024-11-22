@@ -34,7 +34,6 @@ struct UserData {
     custom_fps: Option<u32>,
     quality: Option<(i64, Quality)>, // (time, quality)
     delay: Option<Delay>,
-    response_delayed: bool,
     record: bool,
 }
 
@@ -106,6 +105,7 @@ impl VideoQoS {
 
     pub fn store_bitrate(&mut self, bitrate: u32) {
         self.bitrate_store = bitrate;
+        println!("new bitrate {} in qos", bitrate);
     }
 
     pub fn bitrate(&self) -> u32 {
@@ -148,14 +148,9 @@ impl VideoQoS {
                     DelayState::Broken => fps / 4,
                 }
             }
-            // delay response
-            if u.response_delayed {
-                if fps > MIN_FPS + 2 {
-                    fps = MIN_FPS + 2;
-                }
-            }
             return fps;
         };
+
         let mut fps = self
             .users
             .iter()
@@ -244,6 +239,7 @@ impl VideoQoS {
             }
         }
         self.quality = quality;
+        println!("=============== refresh with {typ:?}, setting quality {quality:?}, fps {fps}");
     }
 
     pub fn user_custom_fps(&mut self, id: i32, fps: u32) {
@@ -261,6 +257,8 @@ impl VideoQoS {
                 },
             );
         }
+
+        println!("user custom fps {fps}");
         self.refresh(None);
     }
 
@@ -276,6 +274,7 @@ impl VideoQoS {
                 },
             );
         }
+        println!("user auto adjust fps {fps}");
         self.refresh(None);
     }
 
@@ -297,6 +296,7 @@ impl VideoQoS {
         };
 
         let quality = Some((hbb_common::get_time(), convert_quality(image_quality)));
+        println!("user quality {:?} from {}", quality, image_quality);
         if let Some(user) = self.users.get_mut(&id) {
             user.quality = quality;
         } else {
@@ -312,69 +312,60 @@ impl VideoQoS {
     }
 
     pub fn user_network_delay(&mut self, id: i32, delay: u32) {
+        let delay = delay.max(1);
         let state = DelayState::from_delay(delay);
-        let debounce = 3;
+
+        fn delay_with(delay: u32, state: DelayState) -> Delay {
+            Delay {
+                state,
+                staging_state: state,
+                delay,
+                counter: 0,
+                slower_than_old_state: None,
+            }
+        }
+
         if let Some(user) = self.users.get_mut(&id) {
             if let Some(d) = &mut user.delay {
-                d.delay = (delay + d.delay) / 2;
+                d.delay = (d.delay + delay) / 2;
                 let new_state = DelayState::from_delay(d.delay);
+
                 let slower_than_old_state = new_state as i32 - d.staging_state as i32;
-                let slower_than_old_state = if slower_than_old_state > 0 {
-                    Some(true)
+                let (slower_than_old_state, amount) = if slower_than_old_state > 0 {
+                    assert!(delay > d.delay);
+                    (Some(true), delay - d.delay)
                 } else if slower_than_old_state < 0 {
-                    Some(false)
+                    assert!(delay < d.delay);
+                    (Some(false), d.delay - delay)
                 } else {
-                    None
+                    (None, 0)
                 };
+
+                d.staging_state = new_state;
                 if d.slower_than_old_state == slower_than_old_state {
-                    let old_counter = d.counter;
-                    d.counter += delay / 1000 + 1;
-                    if old_counter < debounce && d.counter >= debounce {
+                    d.counter += amount / 1000 + 1;
+                    if d.counter >= 3 && d.state != d.staging_state {
                         d.counter = 0;
                         d.state = d.staging_state;
-                        d.staging_state = new_state;
-                    }
-                    if d.counter % debounce == 0 {
                         self.refresh(None);
                     }
                 } else {
                     d.counter = 0;
-                    d.staging_state = new_state;
                     d.slower_than_old_state = slower_than_old_state;
                 }
             } else {
-                user.delay = Some(Delay {
-                    state: DelayState::Normal,
-                    staging_state: state,
-                    delay,
-                    counter: 0,
-                    slower_than_old_state: None,
-                });
+                user.delay = Some(delay_with(delay, state));
+                self.refresh(None);
             }
         } else {
             self.users.insert(
                 id,
                 UserData {
-                    delay: Some(Delay {
-                        state: DelayState::Normal,
-                        staging_state: state,
-                        delay,
-                        counter: 0,
-                        slower_than_old_state: None,
-                    }),
+                    delay: Some(delay_with(delay, state)),
                     ..Default::default()
                 },
             );
-        }
-    }
-
-    pub fn user_delay_response_elapsed(&mut self, id: i32, elapsed: u128) {
-        if let Some(user) = self.users.get_mut(&id) {
-            let old = user.response_delayed;
-            user.response_delayed = elapsed > 3000;
-            if old != user.response_delayed {
-                self.refresh(None);
-            }
+            self.refresh(None);
         }
     }
 
@@ -386,6 +377,7 @@ impl VideoQoS {
 
     pub fn on_connection_close(&mut self, id: i32) {
         self.users.remove(&id);
+        println!("user {id} disconnected");
         self.refresh(None);
     }
 }

@@ -41,6 +41,7 @@ pub struct VpxEncoder {
     id: VpxVideoCodecId,
     i444: bool,
     yuvfmt: EncodeYuvFormat,
+    pts: i64,
 }
 
 pub struct VpxDecoder {
@@ -68,16 +69,16 @@ impl EncoderApi for VpxEncoder {
                 c.g_w = config.width;
                 c.g_h = config.height;
                 c.g_timebase.num = 1;
-                c.g_timebase.den = 1000; // Output timestamp precision
+                c.g_timebase.den = 30; // Output timestamp precision
                 c.rc_undershoot_pct = 95;
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
-                c.rc_dropframe_thresh = 25;
+                c.rc_dropframe_thresh = 0;
                 c.g_threads = codec_thread_num(64) as _;
                 c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
-                c.rc_end_usage = vpx_rc_mode::VPX_CBR;
+                c.rc_end_usage = vpx_rc_mode::VPX_VBR;
                 if let Some(keyframe_interval) = config.keyframe_interval {
                     c.kf_min_dist = 0;
                     c.kf_max_dist = keyframe_interval as _;
@@ -93,6 +94,7 @@ impl EncoderApi for VpxEncoder {
                     c.rc_min_quantizer = DEFAULT_QP_MIN;
                     c.rc_max_quantizer = DEFAULT_QP_MAX;
                 }
+
                 let base_bitrate = base_bitrate(config.width as _, config.height as _);
                 let bitrate = base_bitrate * b / 100;
                 if bitrate > 0 {
@@ -100,6 +102,7 @@ impl EncoderApi for VpxEncoder {
                 } else {
                     c.rc_target_bitrate = base_bitrate;
                 }
+
                 // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp9/common/vp9_enums.h#29
                 // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp8/vp8_cx_iface.c#282
                 c.g_profile = if i444 && config.codec == VpxVideoCodecId::VP9 {
@@ -124,6 +127,11 @@ impl EncoderApi for VpxEncoder {
                     0,
                     VPX_ENCODER_ABI_VERSION as _
                 ));
+
+                println!(
+                    "----------------------- vpx encoder parameters: keyframe interval ({}, {}), kf-disabled mode {}; quant ({}, {}), bitrate {}, profile {}",
+                    c.kf_min_dist, c.kf_max_dist, c.kf_mode == vpx_kf_mode::VPX_KF_DISABLED, c.rc_min_quantizer, c.rc_max_quantizer, c.rc_target_bitrate, c.g_profile
+                );
 
                 if config.codec == VpxVideoCodecId::VP9 {
                     // set encoder internal speed settings
@@ -177,6 +185,7 @@ impl EncoderApi for VpxEncoder {
                     id: config.codec,
                     i444,
                     yuvfmt: Self::get_yuvfmt(config.width, config.height, i444),
+                    pts: 0,
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -184,6 +193,8 @@ impl EncoderApi for VpxEncoder {
     }
 
     fn encode_to_message(&mut self, input: EncodeInput, ms: i64) -> ResultType<VideoFrame> {
+        let ms = self.pts(ms);
+
         let mut frames = Vec::new();
         for ref frame in self
             .encode(ms, input.yuv()?, STRIDE_ALIGN)
@@ -251,6 +262,12 @@ impl EncoderApi for VpxEncoder {
 }
 
 impl VpxEncoder {
+    fn pts(&mut self, ms: i64) -> i64 {
+        let pts = self.pts;
+        self.pts += 1;
+        pts
+    }
+
     pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
         let bpp = if self.i444 { 24 } else { 12 };
         if data.len() < self.width * self.height * bpp / 8 {

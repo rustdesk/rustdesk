@@ -228,6 +228,8 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         }
     }
 
+    pub fn wait_for_video_consumed() {}
+
     pub fn send_video_frame(&self, msg: Message) -> HashSet<i32> {
         self.send_video_frame_shared(Arc::new(msg))
     }

@@ -58,6 +58,10 @@ use scrap::{
 };
 #[cfg(windows)]
 use std::sync::Once;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
@@ -136,7 +140,19 @@ impl VideoFrameController {
 #[derive(Clone)]
 pub struct VideoService {
     sp: GenericService,
+    blockers: Arc<AtomicU64>,
     idx: usize,
+}
+
+impl VideoService {
+    fn wait_for_frame_consumed(&self, timeout_millis: u64) -> bool {
+        if 0 == self.blockers.load(Ordering::Relaxed) {
+            return true;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(timeout_millis));
+        0 == self.blockers.load(Ordering::Relaxed)
+    }
 }
 
 impl Deref for VideoService {
@@ -157,9 +173,12 @@ pub fn get_service_name(idx: usize) -> String {
     format!("{}{}", NAME, idx)
 }
 
-pub fn new(idx: usize) -> GenericService {
+pub fn new(idx: usize) -> impl Service {
+    let name = get_service_name(idx);
+    let blocker = super::blocker_for_svc(&name);
     let vs = VideoService {
-        sp: GenericService::new(get_service_name(idx), true),
+        sp: GenericService::new(name, true),
+        blockers: blocker,
         idx,
     };
     GenericService::run(&vs, run);
@@ -382,6 +401,46 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
     })
 }
 
+fn track(nb: u64) {
+    static mut tick: u64 = 0;
+    static mut frames: i64 = 0;
+    static mut bytes: u64 = 0;
+
+    static mut NB: u64 = 0;
+    static mut NR: u64 = 0;
+    static mut BASE: u64 = 0;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    unsafe {
+        if BASE == 0 {
+            BASE = now - 1;
+        }
+
+        if now != tick && NR != 0 {
+            println!(
+                "frames {frames}, {} kbps, avg {} bytes/frame, {} in {} seconds({} fps)",
+                (bytes * 8) as f32 / ((now - tick) as f32 * 1000.0),
+                NB / NR,
+                NR,
+                (now - BASE),
+                NR / (now - BASE),
+            );
+            frames = 0;
+            bytes = 0;
+            tick = now;
+        }
+        frames += 1;
+        bytes += nb;
+
+        NB += nb;
+        NR += 1;
+    };
+}
+
 fn run(vs: VideoService) -> ResultType<()> {
     let _raii = Raii::new(vs.idx);
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
@@ -405,7 +464,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let last_portable_service_running = false;
 
     let display_idx = vs.idx;
-    let sp = vs.sp;
+    let sp = &vs.sp;
     let mut c = get_capturer(display_idx, last_portable_service_running)?;
     #[cfg(windows)]
     if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
@@ -516,7 +575,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         drop(video_qos);
 
         if sp.is_option_true(OPTION_REFRESH) {
-            let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
+            let _ = try_broadcast_display_changed(sp, display_idx, &c, true);
             log::info!("switch to refresh");
             bail!("SWITCH");
         }
@@ -543,7 +602,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             VRamEncoder::set_fallback_gdi(display_idx, true);
             bail!("SWITCH");
         }
-        check_privacy_mode_changed(&sp, display_idx, &c)?;
+        check_privacy_mode_changed(sp, display_idx, &c)?;
         #[cfg(windows)]
         {
             if crate::platform::windows::desktop_changed()
@@ -557,7 +616,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             last_check_displays = now;
             // This check may be redundant, but it is better to be safe.
             // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-            try_broadcast_display_changed(&sp, display_idx, &c, false)?;
+            try_broadcast_display_changed(sp, display_idx, &c, false)?;
         }
 
         frame_controller.reset();
@@ -571,7 +630,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
                     let send_conn_ids = handle_one_frame(
                         display_idx,
-                        &sp,
+                        sp,
                         frame,
                         ms,
                         &mut encoder,
@@ -629,7 +688,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         repeat_encode_counter += 1;
                         let send_conn_ids = handle_one_frame(
                             display_idx,
-                            &sp,
+                            sp,
                             EncodeInput::YUV(&yuv),
                             ms,
                             &mut encoder,
@@ -646,7 +705,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             Err(err) => {
                 // This check may be redundant, but it is better to be safe.
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-                try_broadcast_display_changed(&sp, display_idx, &c, true)?;
+                try_broadcast_display_changed(sp, display_idx, &c, true)?;
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
@@ -664,16 +723,8 @@ fn run(vs: VideoService) -> ResultType<()> {
             }
         }
 
-        let mut fetched_conn_ids = HashSet::new();
-        let timeout_millis = 3_000u64;
-        let wait_begin = Instant::now();
-        while wait_begin.elapsed().as_millis() < timeout_millis as _ {
-            check_privacy_mode_changed(&sp, display_idx, &c)?;
-            frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
-            // break if all connections have received current frame
-            if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
-                break;
-            }
+        while !vs.wait_for_frame_consumed(300) {
+            check_privacy_mode_changed(sp, display_idx, &c)?;
         }
 
         let elapsed = now.elapsed();
@@ -737,6 +788,7 @@ fn setup_encoder(
     );
     let use_i444 = Encoder::use_i444(&encoder_cfg);
     let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
+    println!("create encoder with {encoder_cfg:?}");
     Ok((encoder, encoder_cfg, codec_format, use_i444, recorder))
 }
 
@@ -946,7 +998,10 @@ fn handle_one_frame(
                 .unwrap()
                 .as_mut()
                 .map(|r| r.write_message(&msg, width, height));
+
+            let nb = msg.compute_size();
             send_conn_ids = sp.send_video_frame(msg);
+            track(nb);
         }
         Err(e) => {
             *encode_fail_counter += 1;
