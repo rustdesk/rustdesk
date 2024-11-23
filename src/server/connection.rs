@@ -3149,8 +3149,6 @@ impl Connection {
     }
 
     fn read_empty_dirs(&mut self, dir: &str, include_hidden: bool) {
-        log::debug!("empty_dirs path is: {}", dir);
-
         let dir = dir.to_string();
         self.send_fs(ipc::FS::ReadEmptyDirs {
             dir,
