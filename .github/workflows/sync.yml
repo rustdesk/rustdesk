@@ -5,7 +5,7 @@ permissions:
 
 on:
     schedule:
-        - cron: "0 3 * * *"
+        - cron: "0 19 * * *"
     workflow_dispatch:
 
 jobs:
@@ -16,10 +16,10 @@ jobs:
 
         steps:
             - name: Checkout target repo
-              uses: actions/checkout@v3
+              uses: actions/checkout@v4.2.0
 
             - name: Sync Upstream
-              uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
+              uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
               with:
                   target_repo_token: ${{ secrets.GITHUB_TOKEN }}
                   upstream_sync_repo: rustdesk/rustdesk
