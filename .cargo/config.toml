@@ -12,5 +12,5 @@ rustflags = [
 #rustflags = [
 #    "-C", "link-args=-Wl,-Bstatic -lc -Wl,-Bdynamic"
 #]
-【net]
+[net]
 git-fetch-with-cli = true
