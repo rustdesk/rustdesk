@@ -20,6 +20,7 @@ on:
 env:
   SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
+  MAC_RUST_VERSION: "1.81" # 1.81 is requred for macos, because of https://github.com/yury/cidre requires 1.81
   CARGO_NDK_VERSION: "3.1.2"
   SCITER_ARMV7_CMAKE_VERSION: "3.29.7"
   SCITER_NASM_DEBVERSION: "2.14-1"
@@ -641,7 +642,7 @@ jobs:
               target: aarch64-apple-darwin,
               os: macos-latest,
               # extra-build-args: "--disable-flutter-texture-render", # disable this for mac, because we see a lot of users reporting flickering both on arm and x64, and we can not confirm if texture rendering has better performance if htere is no vram, https://github.com/rustdesk/rustdesk/issues/6296
-              extra-build-args: "",
+              extra-build-args: "--screencapturekit",
               arch: aarch64,
             }
     steps:
@@ -720,7 +721,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: ${{ env.RUST_VERSION }}
+          toolchain: ${{ env.MAC_RUST_VERSION }}
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
@@ -767,6 +768,13 @@ jobs:
 
       - name: Build rustdesk
         run: |
+          if [ "${{ matrix.job.target }}" = "aarch64-apple-darwin" ]; then
+            MIN_MACOS_VERSION="12.3"
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
+            sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
+            sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
+          fi
           ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg

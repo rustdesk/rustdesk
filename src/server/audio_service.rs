@@ -156,6 +156,14 @@ mod pa_impl {
     }
 }
 
+#[inline]
+#[cfg(feature = "screencapturekit")]
+pub fn is_screen_capture_kit_available() -> bool {
+    cpal::available_hosts()
+        .iter()
+        .any(|host| *host == cpal::HostId::ScreenCaptureKit)
+}
+
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod cpal_impl {
     use self::service::{Reset, ServiceSwap};
@@ -168,6 +176,11 @@ mod cpal_impl {
     lazy_static::lazy_static! {
         static ref HOST: Host = cpal::default_host();
         static ref INPUT_BUFFER: Arc<Mutex<std::collections::VecDeque<f32>>> = Default::default();
+    }
+
+    #[cfg(feature = "screencapturekit")]
+    lazy_static::lazy_static! {
+        static ref HOST_SCREEN_CAPTURE_KIT: Result<Host, cpal::HostUnavailable> = cpal::host_from_id(cpal::HostId::ScreenCaptureKit);
     }
 
     #[derive(Default)]
@@ -246,6 +259,27 @@ mod cpal_impl {
         send_f32(&data, encoder, sp);
     }
 
+    #[cfg(feature = "screencapturekit")]
+    fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
+        let audio_input = super::get_audio_input();
+        if !audio_input.is_empty() {
+            return get_audio_input(&audio_input);
+        }
+        if !is_screen_capture_kit_available() {
+            return get_audio_input("");
+        }
+        let device = HOST_SCREEN_CAPTURE_KIT
+            .as_ref()?
+            .default_input_device()
+            .with_context(|| "Failed to get default input device for loopback")?;
+        let format = device
+            .default_input_config()
+            .map_err(|e| anyhow!(e))
+            .with_context(|| "Failed to get input output format")?;
+        log::info!("Default input format: {:?}", format);
+        Ok((device, format))
+    }
+
     #[cfg(windows)]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
@@ -267,7 +301,7 @@ mod cpal_impl {
         Ok((device, format))
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, feature = "screencapturekit")))]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
         get_audio_input(&audio_input)
@@ -275,7 +309,20 @@ mod cpal_impl {
 
     fn get_audio_input(audio_input: &str) -> ResultType<(Device, SupportedStreamConfig)> {
         let mut device = None;
-        if !audio_input.is_empty() {
+        #[cfg(feature = "screencapturekit")]
+        if !audio_input.is_empty() && is_screen_capture_kit_available() {
+            for d in HOST_SCREEN_CAPTURE_KIT
+                .as_ref()?
+                .devices()
+                .with_context(|| "Failed to get audio devices")?
+            {
+                if d.name().unwrap_or("".to_owned()) == audio_input {
+                    device = Some(d);
+                    break;
+                }
+            }
+        }
+        if device.is_none() && !audio_input.is_empty() {
             for d in HOST
                 .devices()
                 .with_context(|| "Failed to get audio devices")?
