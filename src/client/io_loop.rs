@@ -1299,6 +1299,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::FileResponse(fr)) => {
                     match fr.union {
+                        Some(file_response::Union::EmptyDirs(res)) => {
+                            self.handler.update_empty_dirs(res);
+                        }
                         Some(file_response::Union::Dir(fd)) => {
                             #[cfg(windows)]
                             let entries = fd.entries.to_vec();

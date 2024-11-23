@@ -143,6 +143,12 @@ def make_parser():
         "--package",
         type=str
     )
+    if osx:
+        parser.add_argument(
+            '--screencapturekit',
+            action='store_true',
+            help='Enable feature screencapturekit'
+        )
     return parser
 
 
@@ -274,6 +280,9 @@ def get_features(args):
         features.append('flutter')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if osx:
+        if args.screencapturekit:
+            features.append('screencapturekit')
     print("features:", features)
     return features
 
