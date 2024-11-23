@@ -70,7 +70,7 @@ impl EncoderApi for HwRamEncoder {
                 let b = Self::convert_quality(&config.name, config.quality);
                 let base_bitrate = base_bitrate(config.width as _, config.height as _);
                 let mut bitrate = base_bitrate * b / 100;
-                if base_bitrate <= 0 {
+                if bitrate <= 0 {
                     bitrate = base_bitrate;
                 }
                 bitrate = Self::check_bitrate_range(&config, bitrate);
@@ -180,7 +180,7 @@ impl EncoderApi for HwRamEncoder {
         let b = Self::convert_quality(&self.config.name, quality);
         let mut bitrate = base_bitrate(self.config.width as _, self.config.height as _) * b / 100;
         if bitrate > 0 {
-            bitrate = Self::check_bitrate_range(&self.config, self.bitrate);
+            bitrate = Self::check_bitrate_range(&self.config, bitrate);
             self.encoder.set_bitrate(bitrate as _).ok();
             self.bitrate = bitrate;
         }
