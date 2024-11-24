@@ -73,68 +73,9 @@ pub const NAME: &'static str = "video";
 pub const OPTION_REFRESH: &'static str = "refresh";
 
 lazy_static::lazy_static! {
-    static ref FRAME_FETCHED_NOTIFIER: (UnboundedSender<(i32, Option<Instant>)>, Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>) = {
-        let (tx, rx) = unbounded_channel();
-        (tx, Arc::new(TokioMutex::new(rx)))
-    };
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
-}
-
-#[inline]
-pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
-    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).ok();
-}
-
-struct VideoFrameController {
-    cur: Instant,
-    send_conn_ids: HashSet<i32>,
-}
-
-impl VideoFrameController {
-    fn new() -> Self {
-        Self {
-            cur: Instant::now(),
-            send_conn_ids: HashSet::new(),
-        }
-    }
-
-    fn reset(&mut self) {
-        self.send_conn_ids.clear();
-    }
-
-    fn set_send(&mut self, tm: Instant, conn_ids: HashSet<i32>) {
-        if !conn_ids.is_empty() {
-            self.cur = tm;
-            self.send_conn_ids = conn_ids;
-        }
-    }
-
-    #[tokio::main(flavor = "current_thread")]
-    async fn try_wait_next(&mut self, fetched_conn_ids: &mut HashSet<i32>, timeout_millis: u64) {
-        if self.send_conn_ids.is_empty() {
-            return;
-        }
-
-        let timeout_dur = Duration::from_millis(timeout_millis as u64);
-        match tokio::time::timeout(timeout_dur, FRAME_FETCHED_NOTIFIER.1.lock().await.recv()).await
-        {
-            Err(_) => {
-                // break if timeout
-                // log::error!("blocking wait frame receiving timeout {}", timeout_millis);
-            }
-            Ok(Some((id, instant))) => {
-                if let Some(tm) = instant {
-                    log::trace!("Channel recv latency: {}", tm.elapsed().as_secs_f32());
-                }
-                fetched_conn_ids.insert(id);
-            }
-            Ok(None) => {
-                // this branch would never be reached
-            }
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -527,8 +468,6 @@ fn run(vs: VideoService) -> ResultType<()> {
         sp.set_option_bool(OPTION_REFRESH, false);
     }
 
-    let mut frame_controller = VideoFrameController::new();
-
     let start = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
     #[cfg(windows)]
@@ -619,8 +558,6 @@ fn run(vs: VideoService) -> ResultType<()> {
             try_broadcast_display_changed(sp, display_idx, &c, false)?;
         }
 
-        frame_controller.reset();
-
         let time = now - start;
         let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
         let res = match c.frame(spf) {
@@ -628,7 +565,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 repeat_encode_counter = 0;
                 if frame.valid() {
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
-                    let send_conn_ids = handle_one_frame(
+                    handle_one_frame(
                         display_idx,
                         sp,
                         frame,
@@ -640,7 +577,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_width,
                         capture_height,
                     )?;
-                    frame_controller.set_send(now, send_conn_ids);
                 }
                 #[cfg(windows)]
                 {
@@ -686,7 +622,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     // yun.len() > 0 means the frame is not texture.
                     if repeat_encode_counter < repeat_encode_max {
                         repeat_encode_counter += 1;
-                        let send_conn_ids = handle_one_frame(
+                        handle_one_frame(
                             display_idx,
                             sp,
                             EncodeInput::YUV(&yuv),
@@ -698,7 +634,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_width,
                             capture_height,
                         )?;
-                        frame_controller.set_send(now, send_conn_ids);
                     }
                 }
             }
@@ -974,7 +909,7 @@ fn handle_one_frame(
     first_frame: &mut bool,
     width: usize,
     height: usize,
-) -> ResultType<HashSet<i32>> {
+) -> ResultType<()> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
         if sps.has_subscribes() {
@@ -984,7 +919,6 @@ fn handle_one_frame(
         Ok(())
     })?;
 
-    let mut send_conn_ids: HashSet<i32> = Default::default();
     let first = *first_frame;
     *first_frame = false;
     match encoder.encode_to_message(frame, ms) {
@@ -1000,7 +934,7 @@ fn handle_one_frame(
                 .map(|r| r.write_message(&msg, width, height));
 
             let nb = msg.compute_size();
-            send_conn_ids = sp.send_video_frame(msg);
+            sp.send_video_frame(msg);
             track(nb);
         }
         Err(e) => {
@@ -1034,7 +968,7 @@ fn handle_one_frame(
             }
         }
     }
-    Ok(send_conn_ids)
+    Ok(())
 }
 
 #[inline]

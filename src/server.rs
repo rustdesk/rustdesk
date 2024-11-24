@@ -266,21 +266,23 @@ async fn create_relay_connection_(
 
 fn blocker_for_svc(name: &str) -> Arc<AtomicU64> {
     lazy_static::lazy_static! {
-        static ref MUX: Mutex< HashMap<String, Arc<AtomicU64>>> = Mutex::new(HashMap::new());
+        // Don't need an Arc in fact
+        // While it requires in turn a never realloced buffer for AtomicU64
+        // that means I need reserve a vector with capacity of all displays,
+        // and the name input parameter should be an index of that display.
+        // It is not convenient at the moment.
+        static ref MUX: Mutex<HashMap<String, Arc<AtomicU64>>> = Mutex::new(HashMap::new());
     }
 
     let mut g = MUX.lock().unwrap();
-    let z = match g.get(name) {
+    match g.get(name) {
         Some(x) => x.clone(),
         _ => {
             let arc = Arc::new(AtomicU64::new(0));
             g.insert(name.to_string(), arc.clone());
             arc
         }
-    };
-
-    println!("blockers = {:p}", z.as_ref());
-    z
+    }
 }
 
 impl Server {

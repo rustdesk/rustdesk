@@ -681,7 +681,6 @@ impl Connection {
                     if let Some(message::Union::VideoFrame(ref __)) = msg.union {
                         if !conn.video_ack_required {
                             conn.inner.unblock();
-                            video_service::notify_video_frame_fetched(id, Some(instant.into()));
                         }
                     }
 
@@ -805,7 +804,6 @@ impl Connection {
         );
         conn.inner.unblock();
 
-        video_service::notify_video_frame_fetched(id, None);
         if conn.authorized {
             password::update_temporary_password();
         }
