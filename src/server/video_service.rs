@@ -845,14 +845,15 @@ fn check_change_scale(hardware: bool) -> ResultType<()> {
     use hbb_common::config::keys::OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE as SCALE_SOFT;
 
     // isStart flag is set at the end of startCapture() in Android, wait it to be set.
-    for i in 0..6 {
+    let n = 60; // 3s
+    for i in 0..n {
         if scrap::is_start() == Some(true) {
             log::info!("start flag is set");
             break;
         }
         log::info!("wait for start, {i}");
         std::thread::sleep(Duration::from_millis(50));
-        if i == 5 {
+        if i == n - 1 {
             log::error!("wait for start timeout");
         }
     }
