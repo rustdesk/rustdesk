@@ -50,7 +50,7 @@ enum DelayState {
     Normal = 0,
     LowDelay = 200,
     HighDelay = 500,
-    Broken = 1000,
+    Broken = 3000,
 }
 
 impl Default for DelayState {

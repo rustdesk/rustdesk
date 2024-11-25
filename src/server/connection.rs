@@ -125,7 +125,7 @@ pub struct ConnInner {
     tx: Option<Sender>,
     tx_video: Option<Sender>,
 
-    blockers: Option<Arc<AtomicU64>>,
+    blockers: Option<SyncerForVideo>,
     blocked: Arc<AtomicBool>,
 }
 
@@ -260,15 +260,13 @@ impl ConnInner {
         }
     }
 
-    pub fn link_blockers(&mut self, blockers: Arc<AtomicU64>) {
+    pub fn link_blockers(&mut self, blockers: SyncerForVideo) {
         self.blockers = Some(blockers);
     }
 
     pub fn unblock(&mut self) {
         if self.blocked.load(Ordering::Relaxed) {
-            self.blockers
-                .as_ref()
-                .map(|x| x.fetch_sub(1, Ordering::Relaxed));
+            self.blockers.as_ref().map(|x| x.unblock());
             self.blocked.store(false, Ordering::Relaxed);
         }
     }
@@ -287,9 +285,7 @@ impl Subscriber for ConnInner {
         let tx_by_video = match &msg.union {
             Some(message::Union::VideoFrame(_)) => {
                 self.blocked.store(true, Ordering::Relaxed);
-                self.blockers
-                    .as_ref()
-                    .map(|x| x.fetch_add(1, Ordering::Relaxed));
+                self.blockers.as_ref().map(|x| x.block());
                 blocked = true;
                 true
             }

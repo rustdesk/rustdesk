@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{atomic::AtomicU64, Arc, Mutex, RwLock, Weak},
+    sync::{atomic::AtomicU64, Arc, Condvar, Mutex, RwLock, Weak},
     time::Duration,
 };
 
@@ -264,23 +264,53 @@ async fn create_relay_connection_(
     Ok(())
 }
 
-fn blocker_for_svc(name: &str) -> Arc<AtomicU64> {
-    lazy_static::lazy_static! {
-        // Don't need an Arc in fact
-        // While it requires in turn a never realloced buffer for AtomicU64
-        // that means I need reserve a vector with capacity of all displays,
-        // and the name input parameter should be an index of that display.
-        // It is not convenient at the moment.
-        static ref MUX: Mutex<HashMap<String, Arc<AtomicU64>>> = Mutex::new(HashMap::new());
+#[derive(Clone)]
+struct SyncerForVideo(Arc<(Mutex<u64>, Condvar)>);
+
+impl SyncerForVideo {
+    fn static_syncer_for(name: &str) -> SyncerForVideo {
+        lazy_static::lazy_static! {
+            // Don't need an Arc in fact
+            // While it requires in turn a never realloced buffer for AtomicU64
+            // that means I need reserve a vector with capacity of all displays,
+            // and the name input parameter should be an index of that display.
+            // It is not convenient at the moment.
+            static ref MUX: Mutex<HashMap<String, Arc<(Mutex<u64>, Condvar)>>> = Mutex::new(HashMap::new());
+        }
+
+        let mut g = MUX.lock().unwrap();
+        match g.get(name) {
+            Some(x) => SyncerForVideo(x.clone()),
+            _ => {
+                let arc = Arc::new((Mutex::new(0), Condvar::new()));
+                g.insert(name.to_string(), arc.clone());
+                SyncerForVideo(arc)
+            }
+        }
     }
 
-    let mut g = MUX.lock().unwrap();
-    match g.get(name) {
-        Some(x) => x.clone(),
-        _ => {
-            let arc = Arc::new(AtomicU64::new(0));
-            g.insert(name.to_string(), arc.clone());
-            arc
+    fn block(&self) {
+        let arc = &self.0;
+        let mut g = arc.0.lock().unwrap();
+        *g += 1;
+    }
+
+    fn unblock(&self) {
+        let arc = &self.0;
+        let mut g = arc.0.lock().unwrap();
+        *g -= 1;
+        if *g == 0 {
+            arc.1.notify_one();
+        }
+    }
+
+    fn wait_for_unblock(&self, ms: Duration) -> bool {
+        let arc = &self.0;
+        let g = arc.0.lock().unwrap();
+        if *g != 0 {
+            arc.1.wait_timeout(g, ms).map_or(false, |(g, _)| 0 == *g)
+        } else {
+            true
         }
     }
 }
@@ -312,7 +342,7 @@ impl Server {
 
             if !noperms.contains(&(&name as _)) {
                 if video_svc {
-                    conn.link_blockers(blocker_for_svc(&name));
+                    conn.link_blockers(SyncerForVideo::static_syncer_for(&name));
                 }
                 s.on_subscribe(conn.clone());
             }
@@ -365,7 +395,7 @@ impl Server {
 
             if sub {
                 if Self::is_video_service_name(name) {
-                    conn.link_blockers(blocker_for_svc(name));
+                    conn.link_blockers(SyncerForVideo::static_syncer_for(name));
                 }
 
                 s.on_subscribe(conn.clone());

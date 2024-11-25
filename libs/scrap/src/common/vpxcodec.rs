@@ -69,8 +69,7 @@ impl EncoderApi for VpxEncoder {
                 c.g_w = config.width;
                 c.g_h = config.height;
                 c.g_timebase.num = 1;
-                c.g_timebase.den = 30; // Output timestamp precision
-                c.rc_undershoot_pct = 95;
+                c.g_timebase.den = 30;
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
                 c.rc_dropframe_thresh = 0;
@@ -86,7 +85,13 @@ impl EncoderApi for VpxEncoder {
                     c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
                 }
 
-                let (q_min, q_max, b) = Self::convert_quality(config.quality);
+                let mul = if config.codec == VpxVideoCodecId::VP9 {
+                    1
+                } else {
+                    2
+                };
+
+                let (q_min, q_max) = Self::convert_quality(config.quality, mul);
                 if q_min > 0 && q_min < q_max && q_max < 64 {
                     c.rc_min_quantizer = q_min;
                     c.rc_max_quantizer = q_max;
@@ -95,13 +100,13 @@ impl EncoderApi for VpxEncoder {
                     c.rc_max_quantizer = DEFAULT_QP_MAX;
                 }
 
-                let base_bitrate = base_bitrate(config.width as _, config.height as _);
-                let bitrate = base_bitrate * b / 100;
-                if bitrate > 0 {
-                    c.rc_target_bitrate = bitrate;
-                } else {
-                    c.rc_target_bitrate = base_bitrate;
-                }
+                c.rc_target_bitrate = Self::bitrate(config.width, config.height, config.quality);
+                c.rc_undershoot_pct = 60;
+                c.rc_overshoot_pct = 30;
+
+                c.rc_buf_sz = c.rc_target_bitrate * 4;
+                c.rc_buf_initial_sz = c.rc_target_bitrate;
+                c.rc_buf_optimal_sz = c.rc_target_bitrate * 2;
 
                 // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp9/common/vp9_enums.h#29
                 // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp8/vp8_cx_iface.c#282
@@ -224,17 +229,14 @@ impl EncoderApi for VpxEncoder {
     }
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
-        let mut c = unsafe { *self.ctx.config.enc.to_owned() };
-        let (q_min, q_max, b) = Self::convert_quality(quality);
-        if q_min > 0 && q_min < q_max && q_max < 64 {
-            c.rc_min_quantizer = q_min;
-            c.rc_max_quantizer = q_max;
-        }
-        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
-        if bitrate > 0 {
-            c.rc_target_bitrate = bitrate;
-        }
-        call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
+        // let mut c = unsafe { *self.ctx.config.enc.to_owned() };
+        // let (q_min, q_max) = Self::convert_quality(quality);
+        // if q_min > 0 && q_min < q_max && q_max < 64 {
+        // c.rc_min_quantizer = q_min;
+        // c.rc_max_quantizer = q_max;
+        // }
+        // c.rc_target_bitrate = base_bitrate(self.width as _, self.height as _);
+        // call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
         Ok(())
     }
 
@@ -262,7 +264,7 @@ impl EncoderApi for VpxEncoder {
 }
 
 impl VpxEncoder {
-    fn pts(&mut self, ms: i64) -> i64 {
+    fn pts(&mut self, _: i64) -> i64 {
         let pts = self.pts;
         self.pts += 1;
         pts
@@ -348,28 +350,54 @@ impl VpxEncoder {
         }
     }
 
-    fn convert_quality(quality: Quality) -> (u32, u32, u32) {
+    fn ratio_of_quality(quality: Quality) -> f32 {
         match quality {
-            Quality::Best => (6, 45, 150),
-            Quality::Balanced => (12, 56, 100 * 2 / 3),
-            Quality::Low => (18, 56, 50),
+            Quality::Best => 1.5,
+            Quality::Balanced => 0.67,
+            Quality::Low => 0.5,
             Quality::Custom(b) => {
-                let (q_min, q_max) = Self::calc_q_values(b);
-                (q_min, q_max, b)
+                // maps to [Low, Best]
+                let b = (std::cmp::min(b, 200) + 100) as f32;
+                b / 200.0
             }
         }
     }
 
+    fn bitrate(width: u32, height: u32, quality: Quality) -> u32 {
+        // will get 3686 from base_bitrate for 2560 * 1440
+        // and I got about 1200kbps for 30 fps and seems it is
+        // near the lowest. let's define it as quality low.
+        //
+        // tips: I don't think base_bitrate is a good design because
+        // there isn't a common bitrate for w*h under different codec.
+        // but in the base_bitrate there is some platform relate logic.
+        // It is not good to introduce it here.
+        let ratio = (width * height) as f32 / (2560.0 * 1440.0);
+        let bps = (1200.0 / 3686.0) * base_bitrate(width, height) as f32;
+        (bps * 2.0 * Self::ratio_of_quality(quality)) as u32
+    }
+
+    fn convert_quality(quality: Quality, mul: u32) -> (u32, u32) {
+        match quality {
+            Quality::Best => (6 * mul, 45 * mul),
+            Quality::Balanced => (12 * mul, 56 * mul),
+            Quality::Low => (18 * mul, 56 * mul),
+            Quality::Custom(b) => Self::calc_q_values(b, mul),
+        }
+    }
+
     #[inline]
-    fn calc_q_values(b: u32) -> (u32, u32) {
-        let b = std::cmp::min(b, 200);
-        let q_min1: i32 = 36;
-        let q_min2 = 0;
-        let q_max1 = 56;
-        let q_max2 = 37;
+    fn calc_q_values(b: u32, mul: u32) -> (u32, u32) {
+        let q_min1 = 36 * mul;
+        let q_min2 = 0 * mul;
+        let q_max1 = 56 * mul;
+        let q_max2 = 37 * mul;
 
-        let t = b as f32 / 200.0;
-
+        // well, it is complicated. There is no reason to do this:
+        // It's only math to remap (0, 200) from (0.5, 1.5) to (0.0, 1.0).
+        // I introduce mapping of (0.5, 1.5) to give Custom(quality) a meaning
+        // of (Low, Best). But the quant num here need to keep old mapping.
+        let t = Self::ratio_of_quality(Quality::Custom(b)) - 0.5;
         let q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
         let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
 

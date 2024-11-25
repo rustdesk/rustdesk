@@ -81,19 +81,8 @@ lazy_static::lazy_static! {
 #[derive(Clone)]
 pub struct VideoService {
     sp: GenericService,
-    blockers: Arc<AtomicU64>,
+    blockers: SyncerForVideo,
     idx: usize,
-}
-
-impl VideoService {
-    fn wait_for_frame_consumed(&self, timeout_millis: u64) -> bool {
-        if 0 == self.blockers.load(Ordering::Relaxed) {
-            return true;
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(timeout_millis));
-        0 == self.blockers.load(Ordering::Relaxed)
-    }
 }
 
 impl Deref for VideoService {
@@ -116,7 +105,7 @@ pub fn get_service_name(idx: usize) -> String {
 
 pub fn new(idx: usize) -> impl Service {
     let name = get_service_name(idx);
-    let blocker = super::blocker_for_svc(&name);
+    let blocker = super::SyncerForVideo::static_syncer_for(&name);
     let vs = VideoService {
         sp: GenericService::new(name, true),
         blockers: blocker,
@@ -346,10 +335,8 @@ fn track(nb: u64) {
     static mut tick: u64 = 0;
     static mut frames: i64 = 0;
     static mut bytes: u64 = 0;
-
     static mut NB: u64 = 0;
     static mut NR: u64 = 0;
-    static mut BASE: u64 = 0;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -357,18 +344,11 @@ fn track(nb: u64) {
         .as_secs();
 
     unsafe {
-        if BASE == 0 {
-            BASE = now - 1;
-        }
-
-        if now != tick && NR != 0 {
+        if NR != 0 && now != tick {
             println!(
-                "frames {frames}, {} kbps, avg {} bytes/frame, {} in {} seconds({} fps)",
+                "frames {frames}, {} kbps, codec output: {} kbps",
                 (bytes * 8) as f32 / ((now - tick) as f32 * 1000.0),
-                NB / NR,
-                NR,
-                (now - BASE),
-                NR / (now - BASE),
+                (NB * 8 * 30) / (1000 * NR)
             );
             frames = 0;
             bytes = 0;
@@ -489,6 +469,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let capture_height = c.height;
 
     while sp.ok() {
+        let now = time::Instant::now();
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
@@ -550,7 +531,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 bail!("Desktop changed");
             }
         }
-        let now = time::Instant::now();
+
         if last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
             // This check may be redundant, but it is better to be safe.
@@ -658,12 +639,16 @@ fn run(vs: VideoService) -> ResultType<()> {
             }
         }
 
-        while !vs.wait_for_frame_consumed(300) {
-            check_privacy_mode_changed(sp, display_idx, &c)?;
+        let mut n = 0;
+        while !vs.blockers.wait_for_unblock(Duration::from_millis(30)) {
+            n += 1;
+            if n == 10 {
+                check_privacy_mode_changed(sp, display_idx, &c)?;
+                n = 0;
+            }
         }
 
         let elapsed = now.elapsed();
-        // may need to enable frame(timeout)
         log::trace!("{:?} {:?}", time::Instant::now(), elapsed);
         if elapsed < spf {
             std::thread::sleep(spf - elapsed);
