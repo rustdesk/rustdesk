@@ -229,14 +229,11 @@ impl EncoderApi for VpxEncoder {
     }
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
-        // let mut c = unsafe { *self.ctx.config.enc.to_owned() };
-        // let (q_min, q_max) = Self::convert_quality(quality);
-        // if q_min > 0 && q_min < q_max && q_max < 64 {
-        // c.rc_min_quantizer = q_min;
-        // c.rc_max_quantizer = q_max;
-        // }
-        // c.rc_target_bitrate = base_bitrate(self.width as _, self.height as _);
-        // call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
+        let mut c = unsafe { *self.ctx.config.enc.to_owned() };
+        if let Quality::Custom(x) = quality {
+            c.rc_target_bitrate = x;
+            call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
+        }
         Ok(())
     }
 
@@ -364,14 +361,6 @@ impl VpxEncoder {
     }
 
     fn bitrate(width: u32, height: u32, quality: Quality) -> u32 {
-        // will get 3686 from base_bitrate for 2560 * 1440
-        // and I got about 1200kbps for 30 fps and seems it is
-        // near the lowest. let's define it as quality low.
-        //
-        // tips: I don't think base_bitrate is a good design because
-        // there isn't a common bitrate for w*h under different codec.
-        // but in the base_bitrate there is some platform relate logic.
-        // It is not good to introduce it here.
         let ratio = (width * height) as f32 / (2560.0 * 1440.0);
         let bps = (1200.0 / 3686.0) * base_bitrate(width, height) as f32;
         (bps * 2.0 * Self::ratio_of_quality(quality)) as u32

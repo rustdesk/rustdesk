@@ -358,7 +358,7 @@ impl Server {
             s.on_unsubscribe(conn.id());
 
             if Self::is_video_service_name(&s.name()) {
-                conn.unblock();
+                conn.unblock(-1);
             }
         }
         self.connections.remove(&conn.id());
@@ -402,7 +402,7 @@ impl Server {
             } else {
                 s.on_unsubscribe(conn.id());
                 if Self::is_video_service_name(name) {
-                    conn.unblock();
+                    conn.unblock(-1);
                 }
             }
             #[cfg(target_os = "macos")]

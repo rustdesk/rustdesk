@@ -468,6 +468,11 @@ fn run(vs: VideoService) -> ResultType<()> {
     let capture_width = c.width;
     let capture_height = c.height;
 
+    let bps = encoder.bitrate();
+    let max_bps = bps * 2;
+    let min_bps = bps / 2;
+    let mut next_chbps = 6;
+
     while sp.ok() {
         let now = time::Instant::now();
         #[cfg(windows)]
@@ -475,6 +480,9 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
         spf = video_qos.spf();
+        let target_fps = 10.0; // video_qos.fps_from_user();
+        let current_fps = video_qos.fps();
+
         if quality != video_qos.quality() {
             log::debug!("quality: {:?} -> {:?}", quality, video_qos.quality());
             quality = video_qos.quality();
@@ -494,11 +502,11 @@ fn run(vs: VideoService) -> ResultType<()> {
         }
         drop(video_qos);
 
-        if sp.is_option_true(OPTION_REFRESH) {
-            let _ = try_broadcast_display_changed(sp, display_idx, &c, true);
-            log::info!("switch to refresh");
-            bail!("SWITCH");
-        }
+        // if sp.is_option_true(OPTION_REFRESH) {
+        //     let _ = try_broadcast_display_changed(sp, display_idx, &c, true);
+        //     log::info!("switch to refresh");
+        //     bail!("SWITCH");
+        // }
         if codec_format != Encoder::negotiated_codec() {
             log::info!(
                 "switch due to codec changed, {:?} -> {:?}",
@@ -529,6 +537,30 @@ fn run(vs: VideoService) -> ResultType<()> {
                 && !crate::portable_service::client::running()
             {
                 bail!("Desktop changed");
+            }
+        }
+
+        if start.elapsed().as_secs() > next_chbps {
+            next_chbps = start.elapsed().as_secs() + 6;
+            let old = encoder.bitrate();
+            if current_fps < target_fps {
+                if old > min_bps {
+                    let br = old - (old - min_bps) / 12;
+                    if let Err(e) = encoder.set_quality(Quality::Custom(br)) {
+                        log::warn!("set bitrate to {old} --> {}", encoder.bitrate());
+                    } else {
+                        log::info!("set bitrate to {old} --> {}", encoder.bitrate());
+                    }
+                }
+            } else if current_fps > target_fps {
+                if old < max_bps {
+                    let br = old + (max_bps - old) / 12;
+                    if let Err(e) = encoder.set_quality(Quality::Custom(br)) {
+                        log::warn!("set bitrate to {old} --> {}", encoder.bitrate());
+                    } else {
+                        log::info!("set bitrate to {old} --> {}", encoder.bitrate());
+                    }
+                }
             }
         }
 
@@ -639,13 +671,8 @@ fn run(vs: VideoService) -> ResultType<()> {
             }
         }
 
-        let mut n = 0;
-        while !vs.blockers.wait_for_unblock(Duration::from_millis(30)) {
-            n += 1;
-            if n == 10 {
-                check_privacy_mode_changed(sp, display_idx, &c)?;
-                n = 0;
-            }
+        while !vs.blockers.wait_for_unblock(Duration::from_millis(300)) {
+            check_privacy_mode_changed(sp, display_idx, &c)?;
         }
 
         let elapsed = now.elapsed();

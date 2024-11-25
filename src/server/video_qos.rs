@@ -38,7 +38,7 @@ struct UserData {
 }
 
 pub struct VideoQoS {
-    fps: u32,
+    fps: f32,
     quality: Quality,
     users: HashMap<i32, UserData>,
     bitrate_store: u32,
@@ -76,7 +76,7 @@ impl DelayState {
 impl Default for VideoQoS {
     fn default() -> Self {
         VideoQoS {
-            fps: FPS,
+            fps: FPS as f32,
             quality: Default::default(),
             users: Default::default(),
             bitrate_store: 0,
@@ -92,20 +92,16 @@ pub enum RefreshType {
 
 impl VideoQoS {
     pub fn spf(&self) -> Duration {
-        Duration::from_secs_f32(1. / (self.fps() as f32))
+        Duration::from_secs_f32(1. / self.fps())
     }
 
-    pub fn fps(&self) -> u32 {
-        if self.fps >= MIN_FPS && self.fps <= MAX_FPS {
-            self.fps
-        } else {
-            FPS
-        }
+    pub fn fps(&self) -> f32 {
+        assert!(self.fps > 0.0);
+        self.fps
     }
 
     pub fn store_bitrate(&mut self, bitrate: u32) {
         self.bitrate_store = bitrate;
-        println!("new bitrate {} in qos", bitrate);
     }
 
     pub fn bitrate(&self) -> u32 {
@@ -128,40 +124,55 @@ impl VideoQoS {
         Config::get_option("enable-abr") != "N" && self.support_abr.iter().all(|e| *e.1)
     }
 
-    pub fn refresh(&mut self, typ: Option<RefreshType>) {
-        // fps
-        let user_fps = |u: &UserData| {
-            // custom_fps
-            let mut fps = u.custom_fps.unwrap_or(FPS);
-            // auto adjust fps
-            if let Some(auto_adjust_fps) = u.auto_adjust_fps {
-                if fps == 0 || auto_adjust_fps < fps {
-                    fps = auto_adjust_fps;
-                }
-            }
-            // delay
-            if let Some(delay) = u.delay {
-                fps = match delay.state {
-                    DelayState::Normal => fps,
-                    DelayState::LowDelay => fps * 3 / 4,
-                    DelayState::HighDelay => fps / 2,
-                    DelayState::Broken => fps / 4,
-                }
-            }
-            return fps;
-        };
+    pub fn fps_from_user_honor_server<const B: bool>(u: &UserData) -> f32 {
+        let mut new_fps = 0.0;
+        let mut b = B;
 
-        let mut fps = self
+        if b {
+            if let Some(delay) = u.delay {
+                new_fps = 2000.0 / delay.delay as f32;
+            } else {
+                b = false;
+            }
+        }
+
+        if !b {
+            let mut client_fps = u.custom_fps.unwrap_or(0);
+            if let Some(auto_adjust_fps) = u.auto_adjust_fps {
+                if client_fps == 0 || client_fps > auto_adjust_fps {
+                    client_fps = auto_adjust_fps;
+                }
+                new_fps = client_fps as f32;
+            }
+        }
+        return new_fps;
+    }
+
+    pub fn fps_from_user(&self) -> f32 {
+        self.users
+            .iter()
+            .map(|(_, u)| Self::fps_from_user_honor_server::<false>(u))
+            .reduce(f32::min)
+            .unwrap_or(FPS as f32)
+            .max(MIN_FPS as f32)
+            .min(MAX_FPS as f32)
+    }
+
+    pub fn refresh(&mut self, typ: Option<RefreshType>) {
+        let fps = self
             .users
             .iter()
-            .map(|(_, u)| user_fps(u))
-            .filter(|u| *u >= MIN_FPS)
-            .min()
-            .unwrap_or(FPS);
-        if fps > MAX_FPS {
-            fps = MAX_FPS;
+            .map(|(_, u)| Self::fps_from_user_honor_server::<true>(u))
+            .reduce(f32::min)
+            .unwrap_or(FPS as f32)
+            .min(FPS as f32);
+
+        if self.fps != fps {
+            if self.fps > fps + 1.0 || fps > self.fps + 1.0 {
+                println!("fps {} -----------> {}", self.fps, fps);
+            }
+            self.fps = fps;
         }
-        self.fps = fps;
 
         // quality
         // latest image quality
@@ -239,7 +250,6 @@ impl VideoQoS {
             }
         }
         self.quality = quality;
-        println!("=============== refresh with {typ:?}, setting quality {quality:?}, fps {fps}");
     }
 
     pub fn user_custom_fps(&mut self, id: i32, fps: u32) {
@@ -257,8 +267,6 @@ impl VideoQoS {
                 },
             );
         }
-
-        println!("user custom fps {fps}");
         self.refresh(None);
     }
 
@@ -274,7 +282,6 @@ impl VideoQoS {
                 },
             );
         }
-        println!("user auto adjust fps {fps}");
         self.refresh(None);
     }
 
@@ -296,7 +303,6 @@ impl VideoQoS {
         };
 
         let quality = Some((hbb_common::get_time(), convert_quality(image_quality)));
-        println!("user quality {:?} from {}", quality, image_quality);
         if let Some(user) = self.users.get_mut(&id) {
             user.quality = quality;
         } else {
@@ -328,34 +334,8 @@ impl VideoQoS {
         if let Some(user) = self.users.get_mut(&id) {
             if let Some(d) = &mut user.delay {
                 d.delay = (d.delay + delay) / 2;
-                let new_state = DelayState::from_delay(d.delay);
-
-                let slower_than_old_state = new_state as i32 - d.staging_state as i32;
-                let (slower_than_old_state, amount) = if slower_than_old_state > 0 {
-                    assert!(delay > d.delay);
-                    (Some(true), delay - d.delay)
-                } else if slower_than_old_state < 0 {
-                    assert!(delay < d.delay);
-                    (Some(false), d.delay - delay)
-                } else {
-                    (None, 0)
-                };
-
-                d.staging_state = new_state;
-                if d.slower_than_old_state == slower_than_old_state {
-                    d.counter += amount / 1000 + 1;
-                    if d.counter >= 3 && d.state != d.staging_state {
-                        d.counter = 0;
-                        d.state = d.staging_state;
-                        self.refresh(None);
-                    }
-                } else {
-                    d.counter = 0;
-                    d.slower_than_old_state = slower_than_old_state;
-                }
             } else {
                 user.delay = Some(delay_with(delay, state));
-                self.refresh(None);
             }
         } else {
             self.users.insert(
@@ -365,8 +345,8 @@ impl VideoQoS {
                     ..Default::default()
                 },
             );
-            self.refresh(None);
         }
+        self.refresh(None);
     }
 
     pub fn user_record(&mut self, id: i32, v: bool) {
@@ -377,7 +357,6 @@ impl VideoQoS {
 
     pub fn on_connection_close(&mut self, id: i32) {
         self.users.remove(&id);
-        println!("user {id} disconnected");
         self.refresh(None);
     }
 }

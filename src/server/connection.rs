@@ -52,7 +52,7 @@ use std::{
     num::NonZeroI64,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicI64, AtomicU64},
+        atomic::{AtomicI64, AtomicU64},
         mpsc as std_mpsc,
     },
 };
@@ -126,7 +126,7 @@ pub struct ConnInner {
     tx_video: Option<Sender>,
 
     blockers: Option<SyncerForVideo>,
-    blocked: Arc<AtomicBool>,
+    blocked: Arc<AtomicU64>,
 }
 
 enum MessageInput {
@@ -256,7 +256,7 @@ impl ConnInner {
             tx,
             tx_video,
             blockers: None,
-            blocked: Arc::new(AtomicBool::new(false)),
+            blocked: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -264,10 +264,16 @@ impl ConnInner {
         self.blockers = Some(blockers);
     }
 
-    pub fn unblock(&mut self) {
-        if self.blocked.load(Ordering::Relaxed) {
+    pub fn unblock(&mut self, nr: i32) {
+        let nr = if nr == -1 {
+            self.blocked.load(Ordering::Relaxed)
+        } else {
+            nr as u64
+        };
+
+        if nr != 0 {
             self.blockers.as_ref().map(|x| x.unblock());
-            self.blocked.store(false, Ordering::Relaxed);
+            self.blocked.fetch_sub(nr, Ordering::Relaxed);
         }
     }
 }
@@ -284,7 +290,7 @@ impl Subscriber for ConnInner {
         let mut blocked = false;
         let tx_by_video = match &msg.union {
             Some(message::Union::VideoFrame(_)) => {
-                self.blocked.store(true, Ordering::Relaxed);
+                self.blocked.fetch_add(1, Ordering::Relaxed);
                 self.blockers.as_ref().map(|x| x.block());
                 blocked = true;
                 true
@@ -306,7 +312,7 @@ impl Subscriber for ConnInner {
 
         if let Some(Err(_)) = tx.map(|tx| tx.send((Instant::now(), msg))) {
             if blocked {
-                self.unblock();
+                self.unblock(1);
             }
         }
     }
@@ -475,7 +481,42 @@ impl Connection {
 
         loop {
             tokio::select! {
-                // biased; // video has higher priority // causing test_delay_timer failed while transferring big file
+                biased; // video has higher priority // causing test_delay_timer failed while transferring big file
+                _ = test_delay_timer.tick() => {
+                    // if last_recv_time.elapsed() >= SEC30 {
+                        // println!("connection closed becuase of recv timtout");
+                        // conn.on_close("Timeout", true).await;
+                        // break;
+                    // }
+
+                    // The control end will jump out of the loop after receiving LoginResponse and will not reply to the TestDelay
+                    if conn.last_test_delay.is_none() && !(conn.port_forward_socket.is_some() && conn.authorized) {
+                        conn.last_test_delay = Some(Instant::now());
+                        let mut msg_out = Message::new();
+                        msg_out.set_test_delay(TestDelay{
+                            last_delay: conn.network_delay,
+                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate(),
+                            ..Default::default()
+                        });
+                        conn.send(msg_out.into()).await;
+                    }
+                }
+                _ = second_timer.tick() => {
+                    #[cfg(windows)]
+                    conn.portable_check();
+                    if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
+                        if instant.elapsed().as_secs() > minute * 60 {
+                            conn.send_close_reason_no_retry("Connection failed due to inactivity").await;
+                            println!("connection closed becuase of auto dis connect timer");
+                            conn.on_close("auto disconnect", true).await;
+                            break;
+                        }
+                    }
+                    conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
+                    #[cfg(feature = "hwcodec")]
+                    conn.update_supported_encoding();
+                }
+
 
                 Some(data) = rx_from_cm.recv() => {
                     match data {
@@ -675,9 +716,7 @@ impl Connection {
                 Some((instant, value)) = rx_video.recv() => {
                     let mut msg = &value as &Message;
                     if let Some(message::Union::VideoFrame(ref __)) = msg.union {
-                        if !conn.video_ack_required {
-                            conn.inner.unblock();
-                        }
+                        conn.inner.unblock(1);
                     }
 
                     if let Err(err) = conn.stream.send(msg).await {
@@ -750,40 +789,6 @@ impl Connection {
                         break;
                     }
                 },
-                _ = second_timer.tick() => {
-                    #[cfg(windows)]
-                    conn.portable_check();
-                    if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
-                        if instant.elapsed().as_secs() > minute * 60 {
-                            conn.send_close_reason_no_retry("Connection failed due to inactivity").await;
-                            println!("connection closed becuase of auto dis connect timer");
-                            conn.on_close("auto disconnect", true).await;
-                            break;
-                        }
-                    }
-                    conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
-                    #[cfg(feature = "hwcodec")]
-                    conn.update_supported_encoding();
-                }
-                _ = test_delay_timer.tick() => {
-                    // if last_recv_time.elapsed() >= SEC30 {
-                        // println!("connection closed becuase of recv timtout");
-                        // conn.on_close("Timeout", true).await;
-                        // break;
-                    // }
-
-                    // The control end will jump out of the loop after receiving LoginResponse and will not reply to the TestDelay
-                    if conn.last_test_delay.is_none() && !(conn.port_forward_socket.is_some() && conn.authorized) {
-                        conn.last_test_delay = Some(Instant::now());
-                        let mut msg_out = Message::new();
-                        msg_out.set_test_delay(TestDelay{
-                            last_delay: conn.network_delay,
-                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate(),
-                            ..Default::default()
-                        });
-                        conn.send(msg_out.into()).await;
-                    }
-                }
             }
         }
 
@@ -798,7 +803,7 @@ impl Connection {
             crate::plugin::EVENT_ON_CONN_CLOSE_SERVER.to_owned(),
             conn.lr.my_id.clone(),
         );
-        conn.inner.unblock();
+        conn.inner.unblock(-1);
 
         if conn.authorized {
             password::update_temporary_password();
@@ -2850,6 +2855,7 @@ impl Connection {
     }
 
     async fn update_options(&mut self, o: &OptionMessage) {
+        return;
         log::info!("Option update: {:?}", o);
         if let Ok(q) = o.image_quality.enum_value() {
             let image_quality;
