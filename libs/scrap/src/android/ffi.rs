@@ -206,18 +206,6 @@ pub extern "system" fn Java_ffi_FFI_init(env: JNIEnv, _class: JClass, ctx: JObje
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ffi_FFI_initContext(env: JNIEnv, _class: JClass, ctx: JObject) {
-    log::debug!("MainActivity initContext from java");
-    if let Ok(jvm) = env.get_java_vm() {
-        if let Ok(context) = env.new_global_ref(ctx) {
-            let java_vm = jvm.get_java_vm_pointer() as *mut c_void;
-            let context_jobject = context.as_obj().as_raw() as *mut c_void;
-            init_ndk_context(java_vm, context_jobject);
-        }
-    }
-}
-
-#[no_mangle]
 pub extern "system" fn Java_ffi_FFI_setClipboardManager(
     env: JNIEnv,
     _class: JClass,
@@ -482,12 +470,12 @@ fn init_ndk_context(java_vm: *mut c_void, context_jobject: *mut c_void) {
     *lock = true;
 }
 
-// // https://cjycode.com/flutter_rust_bridge/guides/how-to/ndk-init
-// #[no_mangle]
-// pub extern "C" fn JNI_OnLoad(vm: jni::JavaVM, res: *mut std::os::raw::c_void) -> jni::sys::jint {
-//     if let Ok(env) = vm.get_env() {
-//         let vm = vm.get_java_vm_pointer() as *mut std::os::raw::c_void;
-//         init_ndk_context(vm, res);
-//     }
-//     jni::JNIVersion::V6.into()
-// }
+// https://cjycode.com/flutter_rust_bridge/guides/how-to/ndk-init
+#[no_mangle]
+pub extern "C" fn JNI_OnLoad(vm: jni::JavaVM, res: *mut std::os::raw::c_void) -> jni::sys::jint {
+    if let Ok(env) = vm.get_env() {
+        let vm = vm.get_java_vm_pointer() as *mut std::os::raw::c_void;
+        init_ndk_context(vm, res);
+    }
+    jni::JNIVersion::V6.into()
+}
