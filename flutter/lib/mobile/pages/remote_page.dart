@@ -99,6 +99,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       if (gFFI.recordingModel.start) {
         showToast(translate('Automatically record outgoing sessions'));
       }
+      if (isAndroid && !keyboardVisibilityController.isVisible) {
+        // When connecting a physical keyboard, `KeyEvent.physicalKey.usbHidUsage` are wrong is using Microsoft SwiftKey keyboard.
+        // `window.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)` is a workaround for this issue.
+        // https://github.com/flutter/flutter/issues/159384
+        // https://github.com/flutter/flutter/issues/159383
+        gFFI.invokeMethod("enable_soft_keyboard", false);
+      }
     });
     WidgetsBinding.instance.addObserver(this);
   }
