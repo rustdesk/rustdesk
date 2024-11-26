@@ -2859,6 +2859,7 @@ class FFI {
           canvasModel.scale,
           ffiModel.pi.currentDisplay);
     }
+    imageModel.callbacksOnFirstImage.clear();
     await imageModel.update(null);
     cursorModel.clear();
     ffiModel.clear();

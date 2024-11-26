@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -532,15 +533,22 @@ class AddressBookPeersView extends BasePeersView {
     if (selectedTags.isEmpty) {
       return true;
     }
+    // The result of a no-tag union with normal tags, still allows normal tags to perform union or intersection operations.
+    final selectedNormalTags =
+        selectedTags.where((tag) => tag != kUntagged).toList();
+    if (selectedTags.contains(kUntagged)) {
+      if (idents.isEmpty) return true;
+      if (selectedNormalTags.isEmpty) return false;
+    }
     if (gFFI.abModel.filterByIntersection.value) {
-      for (final tag in selectedTags) {
+      for (final tag in selectedNormalTags) {
         if (!idents.contains(tag)) {
           return false;
         }
       }
       return true;
     } else {
-      for (final tag in selectedTags) {
+      for (final tag in selectedNormalTags) {
         if (idents.contains(tag)) {
           return true;
         }
