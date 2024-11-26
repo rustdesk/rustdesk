@@ -1019,7 +1019,7 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
 // - Remove argument "contentPadding", no need for it, all should look the same.
 // - Remove "required" for argument "content". See simple confirm dialog "delete peer", only title and actions are used. No need to "content: SizedBox.shrink()".
 // - Make dead code alive, transform arguments "onSubmit" and "onCancel" into correspondenting buttons "ConfirmOkButton", "CancelButton".
-class CustomAlertDialog extends StatefulWidget {
+class CustomAlertDialog extends StatelessWidget {
   const CustomAlertDialog(
       {Key? key,
       this.title,
@@ -1042,66 +1042,6 @@ class CustomAlertDialog extends StatefulWidget {
   final Function()? onCancel;
 
   @override
-  CustomAlertDialogState createState() => CustomAlertDialogState(
-      title,
-      titlePadding,
-      content,
-      actions,
-      contentPadding,
-      contentBoxConstraints,
-      onSubmit,
-      onCancel);
-}
-
-class CustomAlertDialogState extends State<CustomAlertDialog> {
-  CustomAlertDialogState(
-      this.title,
-      this.titlePadding,
-      this.content,
-      this.actions,
-      this.contentPadding,
-      this.contentBoxConstraints,
-      this.onSubmit,
-      this.onCancel);
-
-  final Widget? title;
-  final EdgeInsetsGeometry? titlePadding;
-  final Widget content;
-  final List<Widget>? actions;
-  final double? contentPadding;
-  final BoxConstraints contentBoxConstraints;
-  final Function()? onSubmit;
-  final Function()? onCancel;
-  // Android only, enable soft keyboard when dialog is shown
-  bool? enableSoftKeyboard;
-
-  @override
-  void initState() {
-    super.initState();
-    if (isAndroid) {
-      gFFI.invokeMethod("enable_soft_keyboard", true);
-    }
-  }
-
-  @override
-  void dispose() {
-    if (isAndroid) {
-      // It's Ok to set `enable_soft_keyboard` to false when disposing the dialog, because no soft keyboard is shown right now.
-      // There's also a guarrantee in `RemotePage.dispose()`, `await gFFI.invokeMethod("enable_soft_keyboard", true);` is always called.
-      // So it Ok to switch back to the other UI.
-      //
-      // When connecting a physical keyboard, `KeyEvent.physicalKey.usbHidUsage` are wrong is using Microsoft SwiftKey keyboard.
-      // `window.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)` is a workaround for this issue.
-      // https://github.com/flutter/flutter/issues/159384
-      // https://github.com/flutter/flutter/issues/159383
-      if (!gFFI.closed) {
-        gFFI.invokeMethod("enable_soft_keyboard", false);
-      }
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     // request focus
     FocusScopeNode scopeNode = FocusScopeNode();
@@ -1109,6 +1049,7 @@ class CustomAlertDialogState extends State<CustomAlertDialog> {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
     bool tabTapped = false;
+    if (isAndroid) gFFI.invokeMethod("enable_soft_keyboard", true);
 
     return FocusScope(
       node: scopeNode,
