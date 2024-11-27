@@ -1,6 +1,6 @@
 use super::*;
 use scrap::codec::Quality;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 pub const FPS: u32 = 30;
 pub const MIN_FPS: u32 = 1;
 pub const MAX_FPS: u32 = 120;
@@ -19,75 +19,55 @@ impl Percent for ImageQuality {
     }
 }
 
-#[derive(Default, Debug, Copy, Clone)]
-struct Delay {
-    state: DelayState,
-    staging_state: DelayState,
-    delay: u32,
-    counter: u32,
-    slower_than_old_state: Option<bool>,
-}
+const MIN: f32 = 0.5;
+const MAX: f32 = 1.5;
 
 #[derive(Default, Debug, Copy, Clone)]
 struct UserData {
     auto_adjust_fps: Option<u32>, // reserve for compatibility
     custom_fps: Option<u32>,
     quality: Option<(i64, Quality)>, // (time, quality)
-    delay: Option<Delay>,
+    delay: Option<u32>,
     record: bool,
 }
 
 pub struct VideoQoS {
+    adjust_bps: bool,
+    adjust_fps: bool,
+
     fps: f32,
+    ratio: f32,
     quality: Quality,
     users: HashMap<i32, UserData>,
     bitrate_store: u32,
-    support_abr: HashMap<usize, bool>,
-}
 
-#[derive(PartialEq, Debug, Clone, Copy)]
-enum DelayState {
-    Normal = 0,
-    LowDelay = 200,
-    HighDelay = 500,
-    Broken = 3000,
-}
-
-impl Default for DelayState {
-    fn default() -> Self {
-        DelayState::Normal
-    }
-}
-
-impl DelayState {
-    fn from_delay(delay: u32) -> Self {
-        if delay > DelayState::Broken as u32 {
-            DelayState::Broken
-        } else if delay > DelayState::HighDelay as u32 {
-            DelayState::HighDelay
-        } else if delay > DelayState::LowDelay as u32 {
-            DelayState::LowDelay
-        } else {
-            DelayState::Normal
-        }
-    }
+    timer: Instant,
+    sched: u64,
 }
 
 impl Default for VideoQoS {
     fn default() -> Self {
-        VideoQoS {
+        let mut qos = VideoQoS {
+            adjust_bps: true,
+            adjust_fps: true,
             fps: FPS as f32,
+            ratio: VideoQoS::default_ratio(&Quality::Balanced),
             quality: Default::default(),
             users: Default::default(),
             bitrate_store: 0,
-            support_abr: Default::default(),
-        }
-    }
-}
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum RefreshType {
-    SetImageQuality,
+            timer: Instant::now(),
+            sched: 0,
+        };
+
+        assert!(!matches!(qos.quality, Quality::Custom(_)));
+        if qos.quality == Quality::Best {
+            qos.adjust_fps = false;
+        } else if qos.quality == Quality::Low {
+            qos.adjust_bps = false;
+        }
+        qos
+    }
 }
 
 impl VideoQoS {
@@ -100,52 +80,43 @@ impl VideoQoS {
         self.fps
     }
 
-    pub fn store_bitrate(&mut self, bitrate: u32) {
-        self.bitrate_store = bitrate;
-    }
-
-    pub fn bitrate(&self) -> u32 {
-        self.bitrate_store
-    }
-
     pub fn quality(&self) -> Quality {
-        self.quality
+        // self.ratio
+        // HACK
+        Quality::Balanced
     }
 
     pub fn record(&self) -> bool {
         self.users.iter().any(|u| u.1.record)
     }
 
-    pub fn set_support_abr(&mut self, display_idx: usize, support: bool) {
-        self.support_abr.insert(display_idx, support);
-    }
-
-    pub fn in_vbr_state(&self) -> bool {
-        Config::get_option("enable-abr") != "N" && self.support_abr.iter().all(|e| *e.1)
-    }
-
     pub fn fps_from_user_honor_server<const B: bool>(u: &UserData) -> f32 {
-        let mut new_fps = 0.0;
-        let mut b = B;
-
-        if b {
+        let mut net_fps = FPS as f32;
+        if B {
             if let Some(delay) = u.delay {
-                new_fps = 2000.0 / delay.delay as f32;
-            } else {
-                b = false;
+                net_fps = f32::min(2000.0 / delay as f32, net_fps);
             }
         }
 
-        if !b {
-            let mut client_fps = u.custom_fps.unwrap_or(0);
-            if let Some(auto_adjust_fps) = u.auto_adjust_fps {
-                if client_fps == 0 || client_fps > auto_adjust_fps {
-                    client_fps = auto_adjust_fps;
-                }
-                new_fps = client_fps as f32;
+        let mut user_fps = u.custom_fps.unwrap_or(0);
+        if let Some(auto_adjust_fps) = u.auto_adjust_fps {
+            if user_fps == 0 || user_fps > auto_adjust_fps {
+                user_fps = auto_adjust_fps;
             }
         }
-        return new_fps;
+
+        // HACK
+        user_fps = 25;
+
+        if user_fps == 0 {
+            user_fps = FPS;
+        }
+
+        if B {
+            f32::min(net_fps, user_fps as f32)
+        } else {
+            user_fps as f32
+        }
     }
 
     pub fn fps_from_user(&self) -> f32 {
@@ -158,7 +129,60 @@ impl VideoQoS {
             .min(MAX_FPS as f32)
     }
 
-    pub fn refresh(&mut self, typ: Option<RefreshType>) {
+    const BALANCE: f32 = 0.67;
+    pub fn default_ratio(q: &Quality) -> f32 {
+        match q {
+            Quality::Best => MAX,
+            Quality::Balanced => Self::BALANCE,
+            Quality::Low => MIN,
+            Quality::Custom(v) => (v + 100) as f32 / 200.0,
+        }
+    }
+
+    pub fn bitrate_ratio_from_quality(&mut self, q: &Quality) -> f32 {
+        if self.quality == *q {
+            return self.ratio;
+        }
+
+        match q {
+            Quality::Best => MAX,
+            Quality::Balanced => {
+                if self.ratio == MIN || self.ratio == MAX {
+                    Self::BALANCE
+                } else {
+                    self.ratio
+                }
+            }
+            Quality::Low => MIN,
+            Quality::Custom(v) => (v + 100) as f32 / 200.0,
+        }
+    }
+
+    fn allow_adjust_from_quality(&mut self, q: &Quality) {
+        match q {
+            Quality::Best => {
+                self.adjust_bps = false;
+                self.adjust_fps = true;
+            }
+
+            Quality::Balanced => {
+                self.adjust_bps = true;
+                self.adjust_fps = true;
+            }
+
+            Quality::Low => {
+                self.adjust_bps = true;
+                self.adjust_fps = false;
+            }
+
+            Quality::Custom(v) => {
+                self.adjust_bps = false;
+                self.adjust_fps = false;
+            }
+        }
+    }
+
+    pub fn refresh(&mut self) {
         let fps = self
             .users
             .iter()
@@ -166,7 +190,6 @@ impl VideoQoS {
             .reduce(f32::min)
             .unwrap_or(FPS as f32)
             .min(FPS as f32);
-
         if self.fps != fps {
             if self.fps > fps + 1.0 || fps > self.fps + 1.0 {
                 println!("fps {} -----------> {}", self.fps, fps);
@@ -174,9 +197,7 @@ impl VideoQoS {
             self.fps = fps;
         }
 
-        // quality
-        // latest image quality
-        let latest_quality = self
+        let q = self
             .users
             .iter()
             .map(|(_, u)| u.quality)
@@ -185,71 +206,9 @@ impl VideoQoS {
             .unwrap_or_default()
             .unwrap_or_default()
             .1;
-        let mut quality = latest_quality;
 
-        // network delay
-        let abr_enabled = self.in_vbr_state();
-        if abr_enabled && typ != Some(RefreshType::SetImageQuality) {
-            // max delay
-            let delay = self
-                .users
-                .iter()
-                .map(|u| u.1.delay)
-                .filter(|d| d.is_some())
-                .max_by(|a, b| {
-                    (a.unwrap_or_default().state as u32).cmp(&(b.unwrap_or_default().state as u32))
-                });
-            let delay = delay.unwrap_or_default().unwrap_or_default().state;
-            if delay != DelayState::Normal {
-                match self.quality {
-                    Quality::Best => {
-                        quality = if delay == DelayState::Broken {
-                            Quality::Low
-                        } else {
-                            Quality::Balanced
-                        };
-                    }
-                    Quality::Balanced => {
-                        quality = Quality::Low;
-                    }
-                    Quality::Low => {
-                        quality = Quality::Low;
-                    }
-                    Quality::Custom(b) => match delay {
-                        DelayState::LowDelay => {
-                            quality =
-                                Quality::Custom(if b >= 150 { 100 } else { std::cmp::min(50, b) });
-                        }
-                        DelayState::HighDelay => {
-                            quality =
-                                Quality::Custom(if b >= 100 { 50 } else { std::cmp::min(25, b) });
-                        }
-                        DelayState::Broken => {
-                            quality =
-                                Quality::Custom(if b >= 50 { 25 } else { std::cmp::min(10, b) });
-                        }
-                        DelayState::Normal => {}
-                    },
-                }
-            } else {
-                match self.quality {
-                    Quality::Low => {
-                        if latest_quality == Quality::Best {
-                            quality = Quality::Balanced;
-                        }
-                    }
-                    Quality::Custom(current_b) => {
-                        if let Quality::Custom(latest_b) = latest_quality {
-                            if current_b < latest_b / 2 {
-                                quality = Quality::Custom(latest_b / 2);
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        self.quality = quality;
+        self.allow_adjust_from_quality(&q);
+        self.ratio = self.bitrate_ratio_from_quality(&q);
     }
 
     pub fn user_custom_fps(&mut self, id: i32, fps: u32) {
@@ -267,7 +226,7 @@ impl VideoQoS {
                 },
             );
         }
-        self.refresh(None);
+        self.refresh();
     }
 
     pub fn user_auto_adjust_fps(&mut self, id: i32, fps: u32) {
@@ -282,7 +241,7 @@ impl VideoQoS {
                 },
             );
         }
-        self.refresh(None);
+        self.refresh();
     }
 
     pub fn user_image_quality(&mut self, id: i32, image_quality: i32) {
@@ -314,39 +273,29 @@ impl VideoQoS {
                 },
             );
         }
-        self.refresh(Some(RefreshType::SetImageQuality));
+        self.refresh();
     }
 
     pub fn user_network_delay(&mut self, id: i32, delay: u32) {
+        println!("g::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::get delay {delay}");
         let delay = delay.max(1);
-        let state = DelayState::from_delay(delay);
-
-        fn delay_with(delay: u32, state: DelayState) -> Delay {
-            Delay {
-                state,
-                staging_state: state,
-                delay,
-                counter: 0,
-                slower_than_old_state: None,
-            }
-        }
 
         if let Some(user) = self.users.get_mut(&id) {
-            if let Some(d) = &mut user.delay {
-                d.delay = (d.delay + delay) / 2;
+            user.delay = if let Some(d) = user.delay {
+                Some((d + delay) / 2)
             } else {
-                user.delay = Some(delay_with(delay, state));
+                Some(delay)
             }
         } else {
             self.users.insert(
                 id,
                 UserData {
-                    delay: Some(delay_with(delay, state)),
+                    delay: Some(delay),
                     ..Default::default()
                 },
             );
         }
-        self.refresh(None);
+        self.refresh();
     }
 
     pub fn user_record(&mut self, id: i32, v: bool) {
@@ -357,6 +306,33 @@ impl VideoQoS {
 
     pub fn on_connection_close(&mut self, id: i32) {
         self.users.remove(&id);
-        self.refresh(None);
+        self.refresh();
+    }
+
+    pub fn prefered_quality(&mut self) -> Option<Quality> {
+        let target_fps = self.fps_from_user();
+        let current_fps = self.fps();
+        let target = self.timer.elapsed().as_secs() + 12;
+
+        if self.sched > target {
+            self.sched = target;
+
+            if current_fps < target_fps {
+                if self.ratio > MIN {
+                    self.ratio -= (self.ratio - MIN) / 12.0;
+                    // HACK
+                    return Some(Quality::Custom(self.ratio as u32));
+                }
+            } else if current_fps > target_fps {
+                if self.ratio < MAX {
+                    self.ratio += (MAX - self.ratio) / 12.0;
+                    // HACK
+                    return Some(Quality::Custom(self.ratio as u32));
+                }
+            }
+        } else if self.sched == 0 {
+            self.sched = target;
+        }
+        return None;
     }
 }

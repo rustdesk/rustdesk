@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{atomic::AtomicU64, Arc, Condvar, Mutex, RwLock, Weak},
+    sync::{atomic::AtomicU64, Arc, Condvar, Mutex, MutexGuard, RwLock, Weak},
     time::Duration,
 };
 
@@ -27,6 +27,7 @@ use hbb_common::{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
 use service::{EmptyExtraFieldService, GenericService, Service, Subscriber};
+use video_qos::VideoQoS;
 
 use crate::ipc::Data;
 
@@ -265,7 +266,7 @@ async fn create_relay_connection_(
 }
 
 #[derive(Clone)]
-struct SyncerForVideo(Arc<(Mutex<u64>, Condvar)>);
+struct SyncerForVideo(Arc<(Mutex<u64>, Condvar, Mutex<VideoQoS>)>);
 
 impl SyncerForVideo {
     fn static_syncer_for(name: &str) -> SyncerForVideo {
@@ -275,14 +276,18 @@ impl SyncerForVideo {
             // that means I need reserve a vector with capacity of all displays,
             // and the name input parameter should be an index of that display.
             // It is not convenient at the moment.
-            static ref MUX: Mutex<HashMap<String, Arc<(Mutex<u64>, Condvar)>>> = Mutex::new(HashMap::new());
+            static ref MUX: Mutex<HashMap<String, Arc<(Mutex<u64>, Condvar, Mutex<VideoQoS>)>>> = Mutex::new(HashMap::new());
         }
 
         let mut g = MUX.lock().unwrap();
         match g.get(name) {
             Some(x) => SyncerForVideo(x.clone()),
             _ => {
-                let arc = Arc::new((Mutex::new(0), Condvar::new()));
+                let arc = Arc::new((
+                    Mutex::new(0),
+                    Condvar::new(),
+                    Mutex::new(VideoQoS::default()),
+                ));
                 g.insert(name.to_string(), arc.clone());
                 SyncerForVideo(arc)
             }
@@ -312,6 +317,11 @@ impl SyncerForVideo {
         } else {
             true
         }
+    }
+
+    fn qos(&self) -> MutexGuard<VideoQoS> {
+        let arc = &self.0;
+        arc.2.lock().unwrap()
     }
 }
 

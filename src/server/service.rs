@@ -228,8 +228,6 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         }
     }
 
-    pub fn wait_for_video_consumed() {}
-
     pub fn send_video_frame(&self, msg: Message) {
         let msg = Arc::new(msg);
         let mut lock = self.0.write().unwrap();

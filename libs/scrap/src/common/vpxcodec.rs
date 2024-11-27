@@ -78,12 +78,12 @@ impl EncoderApi for VpxEncoder {
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
                 c.rc_end_usage = vpx_rc_mode::VPX_VBR;
-                if let Some(keyframe_interval) = config.keyframe_interval {
-                    c.kf_min_dist = 0;
-                    c.kf_max_dist = keyframe_interval as _;
-                } else {
-                    c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
-                }
+                // if let Some(keyframe_interval) = config.keyframe_interval {
+                c.kf_min_dist = 0;
+                c.kf_max_dist = 80; // keyframe_interval as _;
+                                    // } else {
+                                    // c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
+                                    // }
 
                 let mul = if config.codec == VpxVideoCodecId::VP9 {
                     1
@@ -207,9 +207,10 @@ impl EncoderApi for VpxEncoder {
         {
             frames.push(VpxEncoder::create_frame(frame));
         }
-        for ref frame in self.flush().with_context(|| "Failed to flush")? {
-            frames.push(VpxEncoder::create_frame(frame));
-        }
+
+        // for ref frame in self.flush().with_context(|| "Failed to flush")? {
+        //     frames.push(VpxEncoder::create_frame(frame));
+        // }
 
         // to-do: flush periodically, e.g. 1 second
         if frames.len() > 0 {
@@ -361,6 +362,7 @@ impl VpxEncoder {
     }
 
     fn bitrate(width: u32, height: u32, quality: Quality) -> u32 {
+        return 2144;
         let ratio = (width * height) as f32 / (2560.0 * 1440.0);
         let bps = (1200.0 / 3686.0) * base_bitrate(width, height) as f32;
         (bps * 2.0 * Self::ratio_of_quality(quality)) as u32

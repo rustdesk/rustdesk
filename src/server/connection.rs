@@ -53,7 +53,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicI64, AtomicU64},
-        mpsc as std_mpsc,
+        mpsc as std_mpsc, MutexGuard,
     },
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -276,6 +276,10 @@ impl ConnInner {
             self.blocked.fetch_sub(nr, Ordering::Relaxed);
         }
     }
+
+    pub fn qos(&self) -> Option<MutexGuard<VideoQoS>> {
+        self.blockers.as_ref().map(|x| x.qos())
+    }
 }
 
 impl Subscriber for ConnInner {
@@ -333,7 +337,6 @@ impl Connection {
         id: i32,
         server: super::ServerPtrWeak,
     ) {
-        let _raii_id = raii::ConnectionID::new(id);
         let hash = Hash {
             salt: Config::get_salt(),
             challenge: Config::get_auto_password(6),
@@ -428,6 +431,8 @@ impl Connection {
             #[cfg(target_os = "macos")]
             retina: Retina::default(),
         };
+        ALIVE_CONNS.lock().unwrap().push(id);
+
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
             conn.closed = true;
@@ -495,7 +500,8 @@ impl Connection {
                         let mut msg_out = Message::new();
                         msg_out.set_test_delay(TestDelay{
                             last_delay: conn.network_delay,
-                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate(),
+                            // HACK, no need to sent bps to client
+                            target_bitrate: 600,
                             ..Default::default()
                         });
                         conn.send(msg_out.into()).await;
@@ -1918,10 +1924,9 @@ impl Connection {
                 if let Some(tm) = self.last_test_delay {
                     self.last_test_delay = None;
                     let new_delay = tm.elapsed().as_millis() as u32;
-                    video_service::VIDEO_QOS
-                        .lock()
-                        .unwrap()
-                        .user_network_delay(self.inner.id(), new_delay);
+                    if let Some(mut g) = self.inner.qos() {
+                        g.user_network_delay(self.inner.id(), new_delay);
+                    }
                     self.network_delay = new_delay;
                 }
             }
@@ -2492,14 +2497,20 @@ impl Connection {
                             crate::plugin::handle_client_event(&p.id, &self.lr.my_id, &p.content);
                         self.send(msg).await;
                     }
-                    Some(misc::Union::AutoAdjustFps(fps)) => video_service::VIDEO_QOS
-                        .lock()
-                        .unwrap()
-                        .user_auto_adjust_fps(self.inner.id(), fps),
-                    Some(misc::Union::ClientRecordStatus(status)) => video_service::VIDEO_QOS
-                        .lock()
-                        .unwrap()
-                        .user_record(self.inner.id(), status),
+                    Some(misc::Union::AutoAdjustFps(fps)) => {
+                        if let Some(mut g) = self.inner.qos() {
+                            g.user_auto_adjust_fps(self.inner.id(), fps);
+                        } else {
+                            assert!(false, "send fps config before subscribe to video svc");
+                        }
+                    }
+                    Some(misc::Union::ClientRecordStatus(status)) => {
+                        if let Some(mut g) = self.inner.qos() {
+                            g.user_record(self.inner.id(), status);
+                        } else {
+                            assert!(false, "send fps config before subscribe to video svc");
+                        }
+                    }
                     #[cfg(windows)]
                     Some(misc::Union::SelectedSid(sid)) => {
                         if let Some(current_process_sid) =
@@ -2869,17 +2880,15 @@ impl Connection {
                 image_quality = q.value();
             }
             if image_quality > 0 {
-                video_service::VIDEO_QOS
-                    .lock()
-                    .unwrap()
-                    .user_image_quality(self.inner.id(), image_quality);
+                if let Some(mut g) = self.inner.qos() {
+                    g.user_image_quality(self.inner.id(), image_quality);
+                }
             }
         }
         if o.custom_fps > 0 {
-            video_service::VIDEO_QOS
-                .lock()
-                .unwrap()
-                .user_custom_fps(self.inner.id(), o.custom_fps as _);
+            if let Some(mut g) = self.inner.qos() {
+                g.user_custom_fps(self.inner.id(), o.custom_fps as _);
+            }
         }
         if let Some(q) = o.supported_decoding.clone().take() {
             scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Update(self.inner.id(), q));
@@ -3698,6 +3707,14 @@ impl Default for PortableState {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        let id = self.inner.id();
+        let mut active_conns_lock = ALIVE_CONNS.lock().unwrap();
+        active_conns_lock.retain(|&c| c != id);
+
+        if let Some(mut g) = self.inner.qos() {
+            g.on_connection_close(id);
+        }
+
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.release_pressed_modifiers();
     }
@@ -3815,26 +3832,6 @@ mod raii {
     // AUTHED_CONNS: all authorized connections
 
     use super::*;
-    pub struct ConnectionID(i32);
-
-    impl ConnectionID {
-        pub fn new(id: i32) -> Self {
-            ALIVE_CONNS.lock().unwrap().push(id);
-            Self(id)
-        }
-    }
-
-    impl Drop for ConnectionID {
-        fn drop(&mut self) {
-            let mut active_conns_lock = ALIVE_CONNS.lock().unwrap();
-            active_conns_lock.retain(|&c| c != self.0);
-            video_service::VIDEO_QOS
-                .lock()
-                .unwrap()
-                .on_connection_close(self.0);
-        }
-    }
-
     pub struct AuthedConnID(i32, AuthConnType);
 
     impl AuthedConnID {

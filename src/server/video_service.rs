@@ -60,7 +60,7 @@ use scrap::{
 use std::sync::Once;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Arc,
+    Arc, MutexGuard,
 };
 use std::{
     collections::HashSet,
@@ -73,7 +73,6 @@ pub const NAME: &'static str = "video";
 pub const OPTION_REFRESH: &'static str = "refresh";
 
 lazy_static::lazy_static! {
-    pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
 }
@@ -83,6 +82,12 @@ pub struct VideoService {
     sp: GenericService,
     blockers: SyncerForVideo,
     idx: usize,
+}
+
+impl VideoService {
+    fn qos(&self) -> MutexGuard<VideoQoS> {
+        self.blockers.qos()
+    }
 }
 
 impl Deref for VideoService {
@@ -392,16 +397,17 @@ fn run(vs: VideoService) -> ResultType<()> {
         log::info!("disable dxgi with option, fall back to gdi");
         c.set_gdi();
     }
-    let mut video_qos = VIDEO_QOS.lock().unwrap();
-    video_qos.refresh(None);
-    let mut spf;
-    let mut quality = video_qos.quality();
+
+    let g = vs.qos();
+    let mut quality = g.quality();
+    let client_record = g.record();
+    drop(g);
+
     let record_incoming = config::option2bool(
         "allow-auto-record-incoming",
         &Config::get_option("allow-auto-record-incoming"),
     );
-    let client_record = video_qos.record();
-    drop(video_qos);
+
     let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
         &c,
         display_idx,
@@ -437,12 +443,6 @@ fn run(vs: VideoService) -> ResultType<()> {
         try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
         bail!(e);
     }
-    VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
-    VIDEO_QOS
-        .lock()
-        .unwrap()
-        .set_support_abr(display_idx, encoder.support_abr());
-    log::info!("initial quality: {quality:?}");
 
     if sp.is_option_true(OPTION_REFRESH) {
         sp.set_option_bool(OPTION_REFRESH, false);
@@ -468,39 +468,22 @@ fn run(vs: VideoService) -> ResultType<()> {
     let capture_width = c.width;
     let capture_height = c.height;
 
-    let bps = encoder.bitrate();
-    let max_bps = bps * 2;
-    let min_bps = bps / 2;
-    let mut next_chbps = 6;
-
     while sp.ok() {
         let now = time::Instant::now();
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
-        let mut video_qos = VIDEO_QOS.lock().unwrap();
-        spf = video_qos.spf();
-        let target_fps = 10.0; // video_qos.fps_from_user();
-        let current_fps = video_qos.fps();
-
-        if quality != video_qos.quality() {
-            log::debug!("quality: {:?} -> {:?}", quality, video_qos.quality());
-            quality = video_qos.quality();
-            if encoder.support_changing_quality() {
-                allow_err!(encoder.set_quality(quality));
-                video_qos.store_bitrate(encoder.bitrate());
-            } else {
-                if !video_qos.in_vbr_state() && !quality.is_custom() {
-                    log::info!("switch to change quality");
-                    bail!("SWITCH");
-                }
-            }
+        let mut qos = vs.qos();
+        if let Some(q) = qos.prefered_quality() {
+            _ = encoder.set_quality(q);
         }
-        if client_record != video_qos.record() {
+
+        if client_record != qos.record() {
             log::info!("switch due to record changed");
             bail!("SWITCH");
         }
-        drop(video_qos);
+        let mut spf = qos.spf();
+        drop(qos);
 
         // if sp.is_option_true(OPTION_REFRESH) {
         //     let _ = try_broadcast_display_changed(sp, display_idx, &c, true);
@@ -537,30 +520,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                 && !crate::portable_service::client::running()
             {
                 bail!("Desktop changed");
-            }
-        }
-
-        if start.elapsed().as_secs() > next_chbps {
-            next_chbps = start.elapsed().as_secs() + 6;
-            let old = encoder.bitrate();
-            if current_fps < target_fps {
-                if old > min_bps {
-                    let br = old - (old - min_bps) / 12;
-                    if let Err(e) = encoder.set_quality(Quality::Custom(br)) {
-                        log::warn!("set bitrate to {old} --> {}", encoder.bitrate());
-                    } else {
-                        log::info!("set bitrate to {old} --> {}", encoder.bitrate());
-                    }
-                }
-            } else if current_fps > target_fps {
-                if old < max_bps {
-                    let br = old + (max_bps - old) / 12;
-                    if let Err(e) = encoder.set_quality(Quality::Custom(br)) {
-                        log::warn!("set bitrate to {old} --> {}", encoder.bitrate());
-                    } else {
-                        log::info!("set bitrate to {old} --> {}", encoder.bitrate());
-                    }
-                }
             }
         }
 
@@ -699,7 +658,6 @@ impl Drop for Raii {
         VRamEncoder::set_not_use(self.0, false);
         #[cfg(feature = "vram")]
         Encoder::update(scrap::codec::EncodingUpdate::Check);
-        VIDEO_QOS.lock().unwrap().set_support_abr(self.0, true);
     }
 }
 
