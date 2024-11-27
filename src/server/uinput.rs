@@ -239,7 +239,7 @@ pub mod service {
             (enigo::Key::Select, evdev::Key::KEY_SELECT),
             (enigo::Key::Print, evdev::Key::KEY_PRINT),
             // (enigo::Key::Execute, evdev::Key::KEY_EXECUTE),
-            // (enigo::Key::Snapshot, evdev::Key::KEY_SNAPSHOT),
+            (enigo::Key::Snapshot, evdev::Key::KEY_SYSRQ),
             (enigo::Key::Insert, evdev::Key::KEY_INSERT),
             (enigo::Key::Help, evdev::Key::KEY_HELP),
             (enigo::Key::Sleep, evdev::Key::KEY_SLEEP),

@@ -872,6 +872,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
     final pi = gFFI.ffiModel.pi;
     final isMac = pi.platform == kPeerPlatformMacOS;
+    final isWin = pi.platform == kPeerPlatformWindows;
+    final isLinux = pi.platform == kPeerPlatformLinux;
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
         setState(() => inputModel.ctrl = !inputModel.ctrl);
@@ -952,6 +954,15 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       wrap('PgDn', () {
         inputModel.inputKey('VK_NEXT');
       }),
+      // to-do: support PrtScr on Mac
+      if (isWin || isLinux)
+        wrap('PrtScr', () {
+          inputModel.inputKey('VK_SNAPSHOT');
+        }),
+      if (isWin)
+        wrap('ScrollLock', () {
+          inputModel.inputKey('VK_SCROLL');
+        }),
       wrap('Enter', () {
         inputModel.inputKey('VK_ENTER');
       }),
