@@ -32,10 +32,6 @@ import com.hjq.permissions.XXPermissions
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import io.flutter.embedding.engine.plugins.FlutterPlugin
-import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-import io.flutter.plugin.common.MethodChannel.Result
 import kotlin.concurrent.thread
 
 
@@ -66,7 +62,6 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
-        flutterEngine.plugins.add(ContextPlugin())
         thread { setCodecInfo() }
     }
 
@@ -415,18 +410,5 @@ class MainActivity : FlutterActivity() {
         if (hasFocus) {
             rdClipboardManager?.syncClipboard(true)
         }
-    }
-}
-
-// https://cjycode.com/flutter_rust_bridge/guides/how-to/ndk-init
-class ContextPlugin : FlutterPlugin, MethodCallHandler {
-    override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        FFI.initContext(flutterPluginBinding.applicationContext)
-    }
-    override fun onMethodCall(call: MethodCall, result: Result) {
-        result.notImplemented()
-    }
-
-    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     }
 }

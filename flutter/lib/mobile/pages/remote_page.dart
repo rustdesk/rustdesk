@@ -26,6 +26,19 @@ import '../widgets/dialog.dart';
 
 final initText = '1' * 1024;
 
+// Workaround for Android (default input method, Microsoft SwiftKey keyboard) when using physical keyboard.
+// When connecting a physical keyboard, `KeyEvent.physicalKey.usbHidUsage` are wrong is using Microsoft SwiftKey keyboard.
+// https://github.com/flutter/flutter/issues/159384
+// https://github.com/flutter/flutter/issues/159383
+void _disableAndroidSoftKeyboard({bool? isKeyboardVisible}) {
+  if (isAndroid) {
+    if (isKeyboardVisible != true) {
+      // `enable_soft_keyboard` will be set to `true` when clicking the keyboard icon, in `openKeyboard()`.
+      gFFI.invokeMethod("enable_soft_keyboard", false);
+    }
+  }
+}
+
 class RemotePage extends StatefulWidget {
   RemotePage({Key? key, required this.id, this.password, this.isSharedPassword})
       : super(key: key);
@@ -99,6 +112,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       if (gFFI.recordingModel.start) {
         showToast(translate('Automatically record outgoing sessions'));
       }
+      _disableAndroidSoftKeyboard(
+          isKeyboardVisible: keyboardVisibilityController.isVisible);
     });
     WidgetsBinding.instance.addObserver(this);
   }
@@ -1244,7 +1259,9 @@ void showOptions(
               toggles +
               [privacyModeWidget]),
     );
-  }, clickMaskDismiss: true, backDismiss: true);
+  }, clickMaskDismiss: true, backDismiss: true).then((value) {
+    _disableAndroidSoftKeyboard();
+  });
 }
 
 TTextMenu? getVirtualDisplayMenu(FFI ffi, String id) {
@@ -1263,7 +1280,9 @@ TTextMenu? getVirtualDisplayMenu(FFI ffi, String id) {
             children: children,
           ),
         );
-      }, clickMaskDismiss: true, backDismiss: true);
+      }, clickMaskDismiss: true, backDismiss: true).then((value) {
+        _disableAndroidSoftKeyboard();
+      });
     },
   );
 }
@@ -1305,7 +1324,9 @@ TTextMenu? getResolutionMenu(FFI ffi, String id) {
             children: children,
           ),
         );
-      }, clickMaskDismiss: true, backDismiss: true);
+      }, clickMaskDismiss: true, backDismiss: true).then((value) {
+        _disableAndroidSoftKeyboard();
+      });
     },
   );
 }
