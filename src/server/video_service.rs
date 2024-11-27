@@ -368,29 +368,29 @@ fn track(nb: u64) {
 }
 
 fn run(vs: VideoService) -> ResultType<()> {
-    let _raii = Raii::new(vs.idx);
+    let display_idx = vs.idx;
+    let sp = &vs.sp;
+    let _raii = Raii::new(display_idx);
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
     // ensure_inited() is needed because clear() may be called.
     // to-do: wayland ensure_inited should pass current display index.
     // But for now, we do not support multi-screen capture on wayland.
     #[cfg(target_os = "linux")]
-    super::wayland::ensure_inited()?;
-    #[cfg(target_os = "linux")]
-    let _wayland_call_on_ret = SimpleCallOnReturn {
-        b: true,
-        f: Box::new(|| {
-            super::wayland::clear();
-        }),
+    let _wayland_call_on_ret = {
+        super::wayland::ensure_inited()?;
+        SimpleCallOnReturn {
+            b: true,
+            f: Box::new(|| {
+                super::wayland::clear();
+            }),
+        }
     };
 
+    let last_portable_service_running = false;
     #[cfg(windows)]
     let last_portable_service_running = crate::portable_service::client::running();
-    #[cfg(not(windows))]
-    let last_portable_service_running = false;
 
-    let display_idx = vs.idx;
-    let sp = &vs.sp;
     let mut c = get_capturer(display_idx, last_portable_service_running)?;
     #[cfg(windows)]
     if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
@@ -399,7 +399,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     }
 
     let g = vs.qos();
-    let mut quality = g.quality();
+    let quality = g.quality();
     let client_record = g.record();
     drop(g);
 
