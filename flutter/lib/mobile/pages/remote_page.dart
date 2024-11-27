@@ -952,6 +952,9 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       wrap('PgDn', () {
         inputModel.inputKey('VK_NEXT');
       }),
+      wrap('Enter', () {
+        inputModel.inputKey('VK_ENTER');
+      }),
       SizedBox(width: 9999),
       wrap('', () {
         inputModel.inputKey('VK_LEFT');
