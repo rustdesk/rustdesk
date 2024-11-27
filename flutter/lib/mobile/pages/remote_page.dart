@@ -963,17 +963,13 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         wrap('ScrollLock', () {
           inputModel.inputKey('VK_SCROLL');
         }),
-      if (isWin || (isLinux && pi.isWayland))
+      if (isWin || isLinux)
         wrap('Pause', () {
           inputModel.inputKey('VK_PAUSE');
         }),
-      if (isWin || (isLinux && !pi.isWayland))
+      if (isWin || isLinux)
         // Maybe it's better to call it "Menu"
         // https://en.wikipedia.org/wiki/Menu_key
-        //
-        // Wayland uses evdev(https://github.com/rustdesk-org/evdev), which does not handle the Menu key properly.
-        // `Menu` results `keycode 147 (keysym 0x1008ff65, XF86MenuKB)`
-        // The actual key code is `keycode 135 (keysym 0xff67, Menu)`
         wrap('Menu', () {
           inputModel.inputKey('Apps');
         }),
