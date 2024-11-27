@@ -959,9 +959,23 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         wrap('PrtScr', () {
           inputModel.inputKey('VK_SNAPSHOT');
         }),
-      if (isWin)
+      if (isWin || isLinux)
         wrap('ScrollLock', () {
           inputModel.inputKey('VK_SCROLL');
+        }),
+      if (isWin || (isLinux && pi.isWayland))
+        wrap('Pause', () {
+          inputModel.inputKey('VK_PAUSE');
+        }),
+      if (isWin || (isLinux && !pi.isWayland))
+        // Maybe it's better to call it "Menu"
+        // https://en.wikipedia.org/wiki/Menu_key
+        //
+        // Wayland uses evdev(https://github.com/rustdesk-org/evdev), which does not handle the Menu key properly.
+        // `Menu` results `keycode 147 (keysym 0x1008ff65, XF86MenuKB)`
+        // The actual key code is `keycode 135 (keysym 0xff67, Menu)`
+        wrap('Menu', () {
+          inputModel.inputKey('Apps');
         }),
       wrap('Enter', () {
         inputModel.inputKey('VK_ENTER');
