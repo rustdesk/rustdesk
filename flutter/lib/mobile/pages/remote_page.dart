@@ -872,6 +872,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
     final pi = gFFI.ffiModel.pi;
     final isMac = pi.platform == kPeerPlatformMacOS;
+    final isWin = pi.platform == kPeerPlatformWindows;
+    final isLinux = pi.platform == kPeerPlatformLinux;
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
         setState(() => inputModel.ctrl = !inputModel.ctrl);
@@ -951,6 +953,28 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }),
       wrap('PgDn', () {
         inputModel.inputKey('VK_NEXT');
+      }),
+      // to-do: support PrtScr on Mac
+      if (isWin || isLinux)
+        wrap('PrtScr', () {
+          inputModel.inputKey('VK_SNAPSHOT');
+        }),
+      if (isWin || isLinux)
+        wrap('ScrollLock', () {
+          inputModel.inputKey('VK_SCROLL');
+        }),
+      if (isWin || isLinux)
+        wrap('Pause', () {
+          inputModel.inputKey('VK_PAUSE');
+        }),
+      if (isWin || isLinux)
+        // Maybe it's better to call it "Menu"
+        // https://en.wikipedia.org/wiki/Menu_key
+        wrap('Menu', () {
+          inputModel.inputKey('Apps');
+        }),
+      wrap('Enter', () {
+        inputModel.inputKey('VK_ENTER');
       }),
       SizedBox(width: 9999),
       wrap('', () {
