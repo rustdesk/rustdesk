@@ -47,12 +47,12 @@ class HttpService {
     //   //创建一个HttpClient
     //   ioClient = HttpClient(context: sc);
     // }
-    //   // var ioClient = HttpClient()
-    //   // ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-    
-    // http.Client _client = IOClient(ioClient);
-    return new HttpClient()
+     var ioClient =   new HttpClient()
     ..badCertificateCallback =(X509Certificate cert, String host, int port) => true;
+    
+    http.Client _client =new http.IOClient(ioClient);
+    return _client;
+
   }
 
 
