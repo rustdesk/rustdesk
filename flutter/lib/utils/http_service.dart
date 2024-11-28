@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/platform_model.dart';
@@ -34,6 +35,27 @@ class HttpService {
     return _parseHttpResponse(resJson);
   }
 
+  http.Client sslClient()  {  
+    // HttpClient ioClient = HttpClient();
+    // SecurityContext sc = SecurityContext();
+    // File crt=File('./cert.pem');
+    // bool dir_bool=crt.exists() as bool; //返回真假
+    
+    // if(dir_bool){
+    //   //file为证书路径
+    //   sc.setTrustedCertificates("./cert.pem");
+    //   //创建一个HttpClient
+    //   ioClient = HttpClient(context: sc);
+    // }
+    //   // var ioClient = HttpClient()
+    //   // ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+    
+    // http.Client _client = IOClient(ioClient);
+    return new HttpClient()
+    ..badCertificateCallback =(X509Certificate cert, String host, int port) => true;
+  }
+
+
   Future<http.Response> _pollFultterHttp(
     Uri url,
     HttpMethod method, {
@@ -44,16 +66,16 @@ class HttpService {
 
     switch (method) {
       case HttpMethod.get:
-        response = await http.get(url, headers: headers);
+        response = await sslClient().get(url, headers: headers);
         break;
       case HttpMethod.post:
-        response = await http.post(url, headers: headers, body: body);
+        response = await sslClient().post(url, headers: headers, body: body);
         break;
       case HttpMethod.put:
-        response = await http.put(url, headers: headers, body: body);
+        response = await sslClient().put(url, headers: headers, body: body);
         break;
       case HttpMethod.delete:
-        response = await http.delete(url, headers: headers, body: body);
+        response = await sslClient().delete(url, headers: headers, body: body);
         break;
       default:
         throw Exception('Unsupported HTTP method');
