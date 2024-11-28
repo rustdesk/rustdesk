@@ -277,8 +277,12 @@ impl ConnInner {
         }
     }
 
-    pub fn qos(&self) -> Option<MutexGuard<VideoQoS>> {
-        self.blockers.as_ref().map(|x| x.qos())
+    fn call_qos<const b: bool, FN: FnOnce(&mut VideoQoS)>(&self, f: FN) {
+        if let Some(mut g) = self.blockers.as_ref().map(|x| x.qos()) {
+            f(&mut g)
+        } else if b {
+            assert!(false, "send qos before subscribe to video svc");
+        }
     }
 }
 
@@ -494,8 +498,12 @@ impl Connection {
                         // break;
                     // }
 
+
                     // The control end will jump out of the loop after receiving LoginResponse and will not reply to the TestDelay
-                    if conn.last_test_delay.is_none() && !(conn.port_forward_socket.is_some() && conn.authorized) {
+                    if let Some(tm) = conn.last_test_delay {
+                        let new_delay = tm.elapsed().as_millis() as u32;
+                        conn.inner.call_qos::<false, _>(|qos| qos.user_network_delay(conn.inner.id(), new_delay, false));
+                    } else if !(conn.port_forward_socket.is_some() && conn.authorized) {
                         conn.last_test_delay = Some(Instant::now());
                         let mut msg_out = Message::new();
                         msg_out.set_test_delay(TestDelay{
@@ -1440,8 +1448,9 @@ impl Connection {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let _h = try_start_record_cursor_pos();
                 self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
+
                 s.try_add_primay_video_service();
-                s.add_connection(&mut self.inner, &noperms);
+                s.add_connection(&mut self.inner, &noperms, self.network_delay);
             }
         }
     }
@@ -1924,9 +1933,9 @@ impl Connection {
                 if let Some(tm) = self.last_test_delay {
                     self.last_test_delay = None;
                     let new_delay = tm.elapsed().as_millis() as u32;
-                    if let Some(mut g) = self.inner.qos() {
-                        g.user_network_delay(self.inner.id(), new_delay);
-                    }
+                    self.inner.call_qos::<false, _>(|qos| {
+                        qos.user_network_delay(self.inner.id(), new_delay, true)
+                    });
                     self.network_delay = new_delay;
                 }
             }
@@ -2498,18 +2507,12 @@ impl Connection {
                         self.send(msg).await;
                     }
                     Some(misc::Union::AutoAdjustFps(fps)) => {
-                        if let Some(mut g) = self.inner.qos() {
-                            g.user_auto_adjust_fps(self.inner.id(), fps);
-                        } else {
-                            assert!(false, "send fps config before subscribe to video svc");
-                        }
+                        self.inner
+                            .call_qos::<true, _>(|qos| qos.user_custom_fps(self.inner.id(), fps));
                     }
                     Some(misc::Union::ClientRecordStatus(status)) => {
-                        if let Some(mut g) = self.inner.qos() {
-                            g.user_record(self.inner.id(), status);
-                        } else {
-                            assert!(false, "send fps config before subscribe to video svc");
-                        }
+                        self.inner
+                            .call_qos::<true, _>(|qos| qos.user_record(self.inner.id(), status));
                     }
                     #[cfg(windows)]
                     Some(misc::Union::SelectedSid(sid)) => {
@@ -2880,15 +2883,14 @@ impl Connection {
                 image_quality = q.value();
             }
             if image_quality > 0 {
-                if let Some(mut g) = self.inner.qos() {
-                    g.user_image_quality(self.inner.id(), image_quality);
-                }
+                self.inner.call_qos::<true, _>(|qos| {
+                    qos.user_image_quality(self.inner.id(), image_quality)
+                });
             }
         }
         if o.custom_fps > 0 {
-            if let Some(mut g) = self.inner.qos() {
-                g.user_custom_fps(self.inner.id(), o.custom_fps as _);
-            }
+            self.inner
+                .call_qos::<true, _>(|qos| qos.user_custom_fps(self.inner.id(), o.custom_fps as _));
         }
         if let Some(q) = o.supported_decoding.clone().take() {
             scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Update(self.inner.id(), q));
@@ -3710,10 +3712,8 @@ impl Drop for Connection {
         let id = self.inner.id();
         let mut active_conns_lock = ALIVE_CONNS.lock().unwrap();
         active_conns_lock.retain(|&c| c != id);
-
-        if let Some(mut g) = self.inner.qos() {
-            g.on_connection_close(id);
-        }
+        self.inner
+            .call_qos::<false, _>(|qos| qos.on_connection_close(id));
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.release_pressed_modifiers();

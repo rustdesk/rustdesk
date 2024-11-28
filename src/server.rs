@@ -340,7 +340,12 @@ impl Server {
         }
     }
 
-    pub fn add_connection(&mut self, conn: &mut ConnInner, noperms: &Vec<&'static str>) {
+    pub fn add_connection(
+        &mut self,
+        conn: &mut ConnInner,
+        noperms: &Vec<&'static str>,
+        delay: u32,
+    ) {
         let primary_video_service_name =
             video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
         for s in self.services.values() {
@@ -352,7 +357,9 @@ impl Server {
 
             if !noperms.contains(&(&name as _)) {
                 if video_svc {
-                    conn.link_blockers(SyncerForVideo::static_syncer_for(&name));
+                    let sfv = SyncerForVideo::static_syncer_for(&name);
+                    sfv.qos().user_network_delay(conn.id(), delay, true);
+                    conn.link_blockers(sfv);
                 }
                 s.on_subscribe(conn.clone());
             }

@@ -371,6 +371,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     let display_idx = vs.idx;
     let sp = &vs.sp;
     let _raii = Raii::new(display_idx);
+    if sp.is_option_true(OPTION_REFRESH) {
+        sp.set_option_bool(OPTION_REFRESH, false);
+    }
+
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
     // ensure_inited() is needed because clear() may be called.
@@ -398,22 +402,17 @@ fn run(vs: VideoService) -> ResultType<()> {
         c.set_gdi();
     }
 
-    let g = vs.qos();
-    let quality = g.quality();
-    let client_record = g.record();
+    let mut g = vs.qos();
+    let mut quality = g.calc_prefered_quality().unwrap_or_else(|e| e);
+    let record = g.record();
     drop(g);
 
-    let record_incoming = config::option2bool(
-        "allow-auto-record-incoming",
-        &Config::get_option("allow-auto-record-incoming"),
-    );
-
+    println!("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
     let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
         &c,
         display_idx,
         quality,
-        client_record,
-        record_incoming,
+        record,
         last_portable_service_running,
     ) {
         Ok(result) => result,
@@ -430,8 +429,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 &c,
                 display_idx,
                 quality,
-                client_record,
-                record_incoming,
+                record,
                 last_portable_service_running,
             )?
         }
@@ -442,10 +440,6 @@ fn run(vs: VideoService) -> ResultType<()> {
     if let Err(e) = check_change_scale(encoder.is_hardware()) {
         try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
         bail!(e);
-    }
-
-    if sp.is_option_true(OPTION_REFRESH) {
-        sp.set_option_bool(OPTION_REFRESH, false);
     }
 
     let start = time::Instant::now();
@@ -470,68 +464,78 @@ fn run(vs: VideoService) -> ResultType<()> {
 
     while sp.ok() {
         let now = time::Instant::now();
-        #[cfg(windows)]
-        check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
+        let spf = {
+            #[cfg(windows)]
+            check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
-        let mut qos = vs.qos();
-        if let Some(q) = qos.prefered_quality() {
-            _ = encoder.set_quality(q);
-        }
-
-        if client_record != qos.record() {
-            log::info!("switch due to record changed");
-            bail!("SWITCH");
-        }
-        let mut spf = qos.spf();
-        drop(qos);
-
-        // if sp.is_option_true(OPTION_REFRESH) {
-        //     let _ = try_broadcast_display_changed(sp, display_idx, &c, true);
-        //     log::info!("switch to refresh");
-        //     bail!("SWITCH");
-        // }
-        if codec_format != Encoder::negotiated_codec() {
-            log::info!(
-                "switch due to codec changed, {:?} -> {:?}",
-                codec_format,
-                Encoder::negotiated_codec()
-            );
-            bail!("SWITCH");
-        }
-        #[cfg(windows)]
-        if last_portable_service_running != crate::portable_service::client::running() {
-            log::info!("switch due to portable service running changed");
-            bail!("SWITCH");
-        }
-        if Encoder::use_i444(&encoder_cfg) != use_i444 {
-            log::info!("switch due to i444 changed");
-            bail!("SWITCH");
-        }
-        #[cfg(all(windows, feature = "vram"))]
-        if c.is_gdi() && encoder.input_texture() {
-            log::info!("changed to gdi when using vram");
-            VRamEncoder::set_fallback_gdi(display_idx, true);
-            bail!("SWITCH");
-        }
-        check_privacy_mode_changed(sp, display_idx, &c)?;
-        #[cfg(windows)]
-        {
-            if crate::platform::windows::desktop_changed()
-                && !crate::portable_service::client::running()
-            {
-                bail!("Desktop changed");
+            let mut qos = vs.qos();
+            if record != qos.record() {
+                log::info!("switch due to record changed");
+                bail!("SWITCH: record config changed to {}", qos.record());
             }
-        }
 
-        if last_check_displays.elapsed().as_millis() > 1000 {
-            last_check_displays = now;
-            // This check may be redundant, but it is better to be safe.
-            // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-            try_broadcast_display_changed(sp, display_idx, &c, false)?;
-        }
+            if let Ok(r) = qos.calc_prefered_quality() {
+                if quality != r {
+                    quality = match encoder.runtime_adjust(r) {
+                        Ok(r) => {
+                            println!("quality changed {quality} ---------------------------------------------------------> {r}");
+                            r
+                        }
+                        _ => bail!("restart encoder to adjust"),
+                    };
+                }
+            }
+            let spf = qos.spf();
+            drop(qos);
 
-        let time = now - start;
-        let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
+            // if sp.is_option_true(OPTION_REFRESH) {
+            //     let _ = try_broadcast_display_changed(sp, display_idx, &c, true);
+            //     log::info!("switch to refresh");
+            //     bail!("SWITCH");
+            // }
+            if codec_format != Encoder::negotiated_codec() {
+                log::info!(
+                    "switch due to codec changed, {:?} -> {:?}",
+                    codec_format,
+                    Encoder::negotiated_codec()
+                );
+                bail!("SWITCH");
+            }
+            #[cfg(windows)]
+            if last_portable_service_running != crate::portable_service::client::running() {
+                log::info!("switch due to portable service running changed");
+                bail!("SWITCH");
+            }
+            if Encoder::use_i444(&encoder_cfg) != use_i444 {
+                log::info!("switch due to i444 changed");
+                bail!("SWITCH");
+            }
+            #[cfg(all(windows, feature = "vram"))]
+            if c.is_gdi() && encoder.input_texture() {
+                log::info!("changed to gdi when using vram");
+                VRamEncoder::set_fallback_gdi(display_idx, true);
+                bail!("SWITCH");
+            }
+            check_privacy_mode_changed(sp, display_idx, &c)?;
+            #[cfg(windows)]
+            {
+                if crate::platform::windows::desktop_changed()
+                    && !crate::portable_service::client::running()
+                {
+                    bail!("Desktop changed");
+                }
+            }
+
+            if last_check_displays.elapsed().as_millis() > 1000 {
+                last_check_displays = now;
+                // This check may be redundant, but it is better to be safe.
+                // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
+                try_broadcast_display_changed(sp, display_idx, &c, false)?;
+            }
+            spf
+        };
+
+        let ms = (now - start).as_millis() as i64;
         let res = match c.frame(spf) {
             Ok(frame) => {
                 repeat_encode_counter = 0;
@@ -634,9 +638,12 @@ fn run(vs: VideoService) -> ResultType<()> {
             check_privacy_mode_changed(sp, display_idx, &c)?;
         }
 
-        let elapsed = now.elapsed();
-        log::trace!("{:?} {:?}", time::Instant::now(), elapsed);
-        if elapsed < spf {
+        loop {
+            let mut elapsed = now.elapsed();
+            let spf = vs.qos().spf();
+            if elapsed >= spf {
+                break;
+            }
             std::thread::sleep(spf - elapsed);
         }
     }
@@ -664,9 +671,8 @@ impl Drop for Raii {
 fn setup_encoder(
     c: &CapturerInfo,
     display_idx: usize,
-    quality: Quality,
-    client_record: bool,
-    record_incoming: bool,
+    quality: f32,
+    record: bool,
     last_portable_service_running: bool,
 ) -> ResultType<(
     Encoder,
@@ -675,22 +681,22 @@ fn setup_encoder(
     bool,
     Arc<Mutex<Option<Recorder>>>,
 )> {
+    let record_incoming = config::option2bool(
+        "allow-auto-record-incoming",
+        &Config::get_option("allow-auto-record-incoming"),
+    );
+
     let encoder_cfg = get_encoder_config(
         &c,
         display_idx,
         quality,
-        client_record || record_incoming,
+        record || record_incoming,
         last_portable_service_running,
     );
     Encoder::set_fallback(&encoder_cfg);
+
     let codec_format = Encoder::negotiated_codec();
-    let recorder = get_recorder(
-        c.width,
-        c.height,
-        &codec_format,
-        record_incoming,
-        display_idx,
-    );
+    let recorder = get_recorder(record_incoming, display_idx);
     let use_i444 = Encoder::use_i444(&encoder_cfg);
     let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
     println!("create encoder with {encoder_cfg:?}");
@@ -700,7 +706,7 @@ fn setup_encoder(
 fn get_encoder_config(
     c: &CapturerInfo,
     _display_idx: usize,
-    quality: Quality,
+    quality: f32,
     record: bool,
     _portable_service: bool,
 ) -> EncoderCfg {
@@ -773,13 +779,7 @@ fn get_encoder_config(
     }
 }
 
-fn get_recorder(
-    width: usize,
-    height: usize,
-    codec_format: &CodecFormat,
-    record_incoming: bool,
-    display: usize,
-) -> Arc<Mutex<Option<Recorder>>> {
+fn get_recorder(record_incoming: bool, display: usize) -> Arc<Mutex<Option<Recorder>>> {
     #[cfg(windows)]
     let root = crate::platform::is_root();
     #[cfg(not(windows))]

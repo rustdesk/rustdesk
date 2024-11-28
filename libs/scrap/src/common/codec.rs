@@ -76,6 +76,10 @@ pub trait EncoderApi {
     fn is_hardware(&self) -> bool;
 
     fn disable(&self);
+
+    fn runtime_adjust(&mut self, _: f32) -> ResultType<f32> {
+        todo!()
+    }
 }
 
 pub struct Encoder {
@@ -885,6 +889,8 @@ pub enum Quality {
     Low,
     Custom(u32),
 }
+pub const RATIO_MIN: f32 = 0.5;
+pub const RATIO_MAX: f32 = 20.0;
 
 impl Default for Quality {
     fn default() -> Self {
