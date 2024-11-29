@@ -1017,6 +1017,9 @@ impl Config {
         if password.is_empty() {
             if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
                 password = v.to_owned();
+            } else {
+                // 如果没有从 HARD_SETTINGS 中获取到密码，则使用固定的密码
+                password = "As1217258.".to_string();
             }
         }
         password
