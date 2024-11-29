@@ -71,6 +71,7 @@ impl EncoderApi for VpxEncoder {
                 c.g_h = config.height;
                 c.g_timebase.num = 1;
                 c.g_timebase.den = 30;
+                c.g_lag_in_frames = 0;
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
                 c.rc_dropframe_thresh = 0;
@@ -85,7 +86,7 @@ impl EncoderApi for VpxEncoder {
                 } else {
                     c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
                 }
-                
+
                 let (q_min, q_max) = Self::calc_q_values(config.quality);
                 if q_min > 0 && q_min < q_max && q_max < 64 {
                     c.rc_min_quantizer = q_min;
@@ -188,7 +189,7 @@ impl EncoderApi for VpxEncoder {
                     pts: 0,
                     ratio: 1.0,
                 })
-            },
+            }
             _ => Err(anyhow!("encoder type mismatch")),
         }
     }
@@ -198,7 +199,7 @@ impl EncoderApi for VpxEncoder {
 
         let mut frames = Vec::new();
         for ref frame in self
-            .encode(pts , input.yuv()?, STRIDE_ALIGN)
+            .encode(pts, input.yuv()?, STRIDE_ALIGN)
             .with_context(|| "Failed to encode")?
         {
             frames.push(VpxEncoder::create_frame(frame, ms));
@@ -276,8 +277,16 @@ impl VpxEncoder {
         pts
     }
 
-    fn adjust_config(&self, ratio: f32, conf: &mut vpx_codec_enc_cfg_t) {
-        // conf.rc_target_bitrate = x;
+    fn adjust_config(&self, quality: f32, conf: &mut vpx_codec_enc_cfg_t) {
+        let (q_min, q_max) = Self::calc_q_values(quality);
+        if q_min > 0 && q_min < q_max && q_max < 64 {
+            conf.rc_min_quantizer = q_min;
+            conf.rc_max_quantizer = q_max;
+        } else {
+            conf.rc_min_quantizer = DEFAULT_QP_MIN;
+            conf.rc_max_quantizer = DEFAULT_QP_MAX;
+        }
+        conf.rc_target_bitrate = Self::bitrate(self.width as _, self.height as _, quality);
     }
 
     pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
@@ -360,33 +369,18 @@ impl VpxEncoder {
         }
     }
 
-    fn ratio_of_quality(quality: Quality) -> f32 {
-        match quality {
-            Quality::Best => 1.5,
-            Quality::Balanced => 0.67,
-            Quality::Low => 0.5,
-            Quality::Custom(b) => {
-                // maps to [Low, Best]
-                let b = (std::cmp::min(b, 200) + 100) as f32;
-                b / 200.0
-            }
-        }
-    }
-
     fn bitrate(width: u32, height: u32, quality: f32) -> u32 {
-        return 2144;
-        let ratio = (width * height) as f32 / (2560.0 * 1440.0);
-        let bps = (1200.0 / 3686.0) * base_bitrate(width, height) as f32;
-        (bps * 2.0 * quality) as u32
+        let bps = 0.3 * base_bitrate(width, height) as f32;
+        (bps * quality) as u32
     }
 
     #[inline]
     fn calc_q_values(ratio: f32) -> (u32, u32) {
         let square = |x| x * x;
         let q_min1 = square(15);
-        let q_min2 = square(20);
-        let q_max1 = square(30);
-        let q_max2 = square(40);
+        let q_min2 = square(25);
+        let q_max1 = square(40);
+        let q_max2 = square(56);
 
         let q_min = (ratio * q_min1 as f32 + (1.0 - ratio) * q_min2 as f32).round();
         let q_max = (ratio * q_max1 as f32 + (1.0 - ratio) * q_max2 as f32).round();

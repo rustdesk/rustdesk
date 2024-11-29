@@ -1,4 +1,5 @@
 use super::*;
+use nix::libc::SYS_userfaultfd;
 use scrap::codec::Quality;
 use std::time::{Duration, Instant};
 pub const FPS: u32 = 30;
@@ -21,36 +22,83 @@ impl Percent for ImageQuality {
 
 const MIN: f32 = 0.5;
 const MAX: f32 = 1.0;
+const DELAY_LEVEL: (u32, u32, u32) = (280, 600, 4000);
 
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Default, Debug)]
 struct UserData {
     custom_fps: Option<u32>,
     quality: Option<(i64, Quality)>, // (time, quality)
     delay: Option<u32>,
+    long: SampleSmoother<24>,
+    short: SampleSmoother<8>,
     record: bool,
+}
+
+#[derive(Debug)]
+struct SampleSmoother<const N: usize>([u32; N], usize);
+impl<const N: usize> Default for SampleSmoother<N> {
+    fn default() -> Self {
+        Self([0; N], 0)
+    }
+}
+
+impl<const N: usize> SampleSmoother<N> {
+    fn add_sample(&mut self, n: u32) {
+        let idx = self.1 % N;
+        self.1 += 1;
+        self.0[idx] = n;
+    }
+
+    fn average(&self) -> f32 {
+        let nr = if self.1 >= N { N } else { self.1 };
+        if nr == 0 {
+            0.0
+        } else {
+            let n = self.0[0..N].iter().sum::<u32>() as f32;
+            n / nr as f32
+        }
+    }
 }
 
 impl UserData {
     fn fps_from_delay(&self, fps: f32, delay: u32) -> f32 {
+        let avg_short = self.short.average();
+        let avg_long = self.long.average();
         let minfps = 3000.0 / (2.0 * delay as f32);
-        println!("minfps {minfps}, delay: {delay}, fps: {fps}");
 
-        let fps = if delay > 800 {
-            (fps - minfps).max(minfps)
-        } else if delay > 600 {
+        let fps = if delay >= DELAY_LEVEL.2 || fps < minfps {
+            log::info!(
+                "3 ----------------------------------delay {delay}, fps: {fps}, long {avg_long}, short {avg_short}"
+            );
+            minfps
+        } else if delay > DELAY_LEVEL.1 {
+            log::info!(
+                "2 ----------------------------------delay {delay}, fps: {fps}, long {avg_long}, short {avg_short}"
+            );
+            minfps + (fps - minfps) * (DELAY_LEVEL.2 - delay) as f32 / DELAY_LEVEL.2 as f32
+        } else if delay > DELAY_LEVEL.0 {
+            log::info!(
+                "1 ----------------------------------delay {delay}, fps: {fps}, long {avg_long}, short {avg_short}"
+            );
             fps
         } else {
+            log::info!(
+                "0 ----------------------------------delay {delay}, fps: {fps}, long {avg_long}, short {avg_short}"
+            );
             fps + minfps
         };
         fps.min(MAX_FPS as f32).max(MIN_FPS as f32)
     }
+
+    fn add_sample(&mut self, n: u32) {
+        self.short.add_sample(n);
+        self.long.add_sample(n);
+    }
 }
 
 pub struct VideoQoS {
-    adjust_bps: bool,
-    adjust_fps: bool,
-
     fps: f32,
+    netfps: f32,
     ratio: f32,
     quality: Quality,
     users: HashMap<i32, UserData>,
@@ -61,24 +109,23 @@ pub struct VideoQoS {
 
 impl Default for VideoQoS {
     fn default() -> Self {
-        let mut qos = VideoQoS {
-            adjust_bps: true,
-            adjust_fps: true,
-            fps: FPS as f32 / 2.0,
-            ratio: VideoQoS::default_ratio(&Quality::Balanced),
-            quality: Default::default(),
-            users: Default::default(),
+        let quality: Quality = Default::default();
+        assert!(!matches!(quality, Quality::Custom(_)));
 
+        let mut qos = VideoQoS {
+            fps: 0.0,
+            netfps: 0.0,
+
+            ratio: VideoQoS::default_ratio(&quality),
+            quality: quality,
+            users: Default::default(),
             timer: Instant::now(),
             sched: 0,
         };
 
-        assert!(!matches!(qos.quality, Quality::Custom(_)));
-        if qos.quality == Quality::Best {
-            qos.adjust_fps = false;
-        } else if qos.quality == Quality::Low {
-            qos.adjust_bps = false;
-        }
+        let (fps, _) = qos.fps_range_from_quality();
+        qos.fps = fps;
+        qos.netfps = fps;
         qos
     }
 }
@@ -97,18 +144,20 @@ impl VideoQoS {
         self.users.iter().any(|u| u.1.record)
     }
 
-    pub fn target_fps(fps: f32, u: &UserData) -> f32 {
-        let mut net_fps = fps;
-        if let Some(delay) = u.delay {
-            net_fps = u.fps_from_delay(net_fps, delay);
-        }
+    fn target_fps(&self, u: &UserData) -> (f32, f32) {
+        let mut user_fps = u.custom_fps.unwrap_or_else(|| {
+            let (fps, _) = self.fps_range_from_quality();
+            fps as u32
+        });
 
-        let mut user_fps = u.custom_fps.unwrap_or(0);
-        if user_fps > 0 {
-            f32::min(net_fps, user_fps as f32)
-        } else {
-            net_fps
+        // assure will be user_fps if no delay information
+        // why is not self.fps: self.fps is calcated in same way
+        // as user_fps and user_fps is newer
+        let mut net_fps = user_fps as f32;
+        if let Some(delay) = u.delay {
+            net_fps = u.fps_from_delay(self.fps, delay);
         }
+        (net_fps, f32::min(net_fps, user_fps as f32))
     }
 
     fn fps_range_from_quality(&self) -> (f32, f32) {
@@ -141,7 +190,7 @@ impl VideoQoS {
     }
 
     const BALANCE: f32 = 0.67;
-    pub fn default_ratio(q: &Quality) -> f32 {
+    fn default_ratio(q: &Quality) -> f32 {
         match q {
             Quality::Best => MAX,
             Quality::Balanced => Self::BALANCE,
@@ -150,7 +199,7 @@ impl VideoQoS {
         }
     }
 
-    pub fn bitrate_ratio_from_quality(&self, q: &Quality) -> f32 {
+    fn bitrate_ratio_from_quality(&self, q: &Quality) -> f32 {
         if self.quality == *q {
             return self.ratio;
         }
@@ -169,44 +218,42 @@ impl VideoQoS {
         }
     }
 
-    fn allow_adjust_from_quality(&mut self, q: &Quality) {
-        match q {
+    fn allow_change_bps(&self, ratio: f32, inc: bool) -> Option<f32> {
+        let bound = match self.quality {
             Quality::Best => {
-                self.adjust_bps = false;
-                self.adjust_fps = true;
+                if inc {
+                    MAX * 1.5
+                } else {
+                    MAX
+                }
             }
-
             Quality::Balanced => {
-                self.adjust_bps = true;
-                self.adjust_fps = true;
+                if inc {
+                    MAX
+                } else {
+                    MIN
+                }
             }
-
             Quality::Low => {
-                self.adjust_bps = true;
-                self.adjust_fps = false;
+                if inc {
+                    Self::BALANCE
+                } else {
+                    MIN
+                }
             }
+            Quality::Custom(_) => return None,
+        };
 
-            Quality::Custom(v) => {
-                self.adjust_bps = false;
-                self.adjust_fps = false;
-            }
+        if inc && bound > ratio || !inc && bound < ratio {
+            Some(bound)
+        } else {
+            None
         }
     }
 
     pub fn refresh(&mut self) {
-        let fps = self
-            .users
-            .iter()
-            .map(|(_, u)| Self::target_fps(self.fps, &u))
-            .reduce(f32::min)
-            .unwrap_or(MIN_FPS as f32);
-        if self.fps != fps {
-            // if self.fps > fps + 1.0 || fps > self.fps + 1.0 {
-            println!("fps {} -----------> {}", self.fps, fps);
-            // }
-            self.fps = fps;
-        }
-
+        // will use self.quality in target_fps
+        // so updates first
         let q = self
             .users
             .iter()
@@ -216,10 +263,29 @@ impl VideoQoS {
             .unwrap_or_default()
             .unwrap_or_default()
             .1;
-
-        self.allow_adjust_from_quality(&q);
         self.ratio = self.bitrate_ratio_from_quality(&q);
         self.quality = q;
+
+        let (mut a, mut b) = (MIN_FPS as f32, MIN_FPS as f32);
+        self.users
+            .iter()
+            .enumerate()
+            .map(|(i, (_, u))| {
+                let (x, y) = Self::target_fps(self, &u);
+                if i == 0 {
+                    (a, b) = (x, y);
+                } else {
+                    a = a.min(x);
+                    b = b.min(y);
+                }
+            })
+            .for_each(|_| {});
+
+        if self.fps != b {
+            println!("fps {} -----------> {}", self.fps, b);
+            self.fps = b;
+        }
+        self.netfps = a;
     }
 
     pub fn user_custom_fps(&mut self, id: i32, fps: u32) {
@@ -285,8 +351,12 @@ impl VideoQoS {
         if let Some(user) = self.users.get_mut(&id) {
             user.delay = if let Some(d) = user.delay {
                 if complete || delay > d {
+                    user.add_sample(delay);
                     Some((d + delay) / 2)
                 } else {
+                    if delay > DELAY_LEVEL.1 {
+                        self.refresh();
+                    }
                     return;
                 }
             } else {
@@ -325,18 +395,21 @@ impl VideoQoS {
         }
 
         let (fps1, fps2) = self.fps_from_user();
-        let current_fps = self.fps();
+        let maxfps = self.netfps;
         let now = self.timer.elapsed().as_secs();
+        if now >= self.sched {
+            self.sched = now + 4;
 
-        if now >= self.sched && self.adjust_bps {
-            self.sched = now + 12;
-
-            if current_fps < fps1 && self.ratio > MIN {
-                self.ratio -= (self.ratio - MIN) / 12.0;
-                return Ok(self.ratio);
-            } else if current_fps > fps2 && self.ratio < MAX {
-                self.ratio += (MAX - self.ratio) / 12.0;
-                return Ok(self.ratio);
+            if maxfps < fps1 {
+                if let Some(r) = self.allow_change_bps(self.ratio, false) {
+                    self.ratio -= (self.ratio - r) / 6.0;
+                    return Ok(self.ratio);
+                }
+            } else if maxfps > fps2 {
+                if let Some(r) = self.allow_change_bps(self.ratio, true) {
+                    self.ratio += (r - self.ratio) / 6.0;
+                    return Ok(self.ratio);
+                }
             }
         }
         return Err(self.ratio);

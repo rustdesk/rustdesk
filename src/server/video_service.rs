@@ -405,6 +405,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut g = vs.qos();
     let mut quality = g.calc_prefered_quality().unwrap_or_else(|e| e);
     let record = g.record();
+    let mut spf = g.spf();
     drop(g);
 
     println!("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
@@ -464,7 +465,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
     while sp.ok() {
         let now = time::Instant::now();
-        let spf = {
+        {
             #[cfg(windows)]
             check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
@@ -485,7 +486,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                     };
                 }
             }
-            let spf = qos.spf();
             drop(qos);
 
             // if sp.is_option_true(OPTION_REFRESH) {
@@ -532,8 +532,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
                 try_broadcast_display_changed(sp, display_idx, &c, false)?;
             }
-            spf
-        };
+        }
 
         let ms = (now - start).as_millis() as i64;
         let res = match c.frame(spf) {
@@ -640,7 +639,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         loop {
             let mut elapsed = now.elapsed();
-            let spf = vs.qos().spf();
+            spf = vs.qos().spf();
             if elapsed >= spf {
                 break;
             }
