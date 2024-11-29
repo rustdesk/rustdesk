@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import '../models/platform_model.dart';
 export 'package:http/http.dart' show Response;
 
@@ -50,7 +51,7 @@ class HttpService {
      var ioClient =   new HttpClient()
     ..badCertificateCallback =(X509Certificate cert, String host, int port) => true;
     
-    http.Client _client =http.IOClient(ioClient);
+    http.Client _client =IOClient(ioClient);
     return _client;
 
   }
