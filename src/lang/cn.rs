@@ -653,5 +653,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "上传文件夹"),
         ("Upload files", "上传文件"),
         ("Clipboard is synchronized", "剪贴板已同步"),
+        ("Update client clipboard", "更新客户端的粘贴板"),
+        ("Untagged", "无标签"),
     ].iter().cloned().collect();
 }

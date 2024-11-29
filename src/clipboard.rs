@@ -1,4 +1,6 @@
+#[cfg(not(target_os = "android"))]
 use arboard::{ClipboardData, ClipboardFormat};
+#[cfg(not(target_os = "android"))]
 use clipboard_master::{ClipboardHandler, Master, Shutdown};
 use hbb_common::{bail, log, message_proto::*, ResultType};
 use std::{
@@ -16,6 +18,7 @@ const RUSTDESK_CLIPBOARD_OWNER_FORMAT: &'static str = "dyn.com.rustdesk.owner";
 // Add special format for Excel XML Spreadsheet
 const CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET: &'static str = "XML Spreadsheet";
 
+#[cfg(not(target_os = "android"))]
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
     // cache the clipboard msg
@@ -27,9 +30,12 @@ lazy_static::lazy_static! {
     static ref CLIPBOARD_CTX: Arc<Mutex<Option<ClipboardContext>>> = Arc::new(Mutex::new(None));
 }
 
+#[cfg(not(target_os = "android"))]
 const CLIPBOARD_GET_MAX_RETRY: usize = 3;
+#[cfg(not(target_os = "android"))]
 const CLIPBOARD_GET_RETRY_INTERVAL_DUR: Duration = Duration::from_millis(33);
 
+#[cfg(not(target_os = "android"))]
 const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     ClipboardFormat::Text,
     ClipboardFormat::Html,
@@ -146,6 +152,7 @@ impl ClipboardContext {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 pub fn check_clipboard(
     ctx: &mut Option<ClipboardContext>,
     side: ClipboardSide,
@@ -194,6 +201,7 @@ pub fn check_clipboard_cm() -> ResultType<MultiClipboards> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     let mut to_update_data = proto::from_multi_clipbards(multi_clipboards);
     if to_update_data.is_empty() {
@@ -224,17 +232,20 @@ fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 pub fn update_clipboard(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     std::thread::spawn(move || {
         update_clipboard_(multi_clipboards, side);
     });
 }
 
+#[cfg(not(target_os = "android"))]
 #[cfg(not(any(all(target_os = "linux", feature = "unix-file-copy-paste"))))]
 pub struct ClipboardContext {
     inner: arboard::Clipboard,
 }
 
+#[cfg(not(target_os = "android"))]
 #[cfg(not(any(all(target_os = "linux", feature = "unix-file-copy-paste"))))]
 #[allow(unreachable_code)]
 impl ClipboardContext {
@@ -337,10 +348,20 @@ impl ClipboardContext {
 
 pub fn is_support_multi_clipboard(peer_version: &str, peer_platform: &str) -> bool {
     use hbb_common::get_version_number;
-    get_version_number(peer_version) >= get_version_number("1.3.0")
-        && !["", "Android", &whoami::Platform::Ios.to_string()].contains(&peer_platform)
+    if get_version_number(peer_version) < get_version_number("1.3.0") {
+        return false;
+    }
+    if ["", &whoami::Platform::Ios.to_string()].contains(&peer_platform) {
+        return false;
+    }
+    if "Android" == peer_platform && get_version_number(peer_version) < get_version_number("1.3.3")
+    {
+        return false;
+    }
+    true
 }
 
+#[cfg(not(target_os = "android"))]
 pub fn get_current_clipboard_msg(
     peer_version: &str,
     peer_platform: &str,
@@ -406,6 +427,7 @@ impl std::fmt::Display for ClipboardSide {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 pub fn start_clipbard_master_thread(
     handler: impl ClipboardHandler + Send + 'static,
     tx_start_res: Sender<(Option<Shutdown>, String)>,
@@ -437,6 +459,7 @@ pub fn start_clipbard_master_thread(
 
 pub use proto::get_msg_if_not_support_multi_clip;
 mod proto {
+    #[cfg(not(target_os = "android"))]
     use arboard::ClipboardData;
     use hbb_common::{
         compress::{compress as compress_func, decompress},
@@ -459,6 +482,7 @@ mod proto {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     fn image_to_proto(a: arboard::ImageData) -> Clipboard {
         match &a {
             arboard::ImageData::Rgba(rgba) => {
@@ -519,6 +543,7 @@ mod proto {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     fn clipboard_data_to_proto(data: ClipboardData) -> Option<Clipboard> {
         let d = match data {
             ClipboardData::Text(s) => plain_to_proto(s, ClipboardFormat::Text),
@@ -531,6 +556,7 @@ mod proto {
         Some(d)
     }
 
+    #[cfg(not(target_os = "android"))]
     pub fn create_multi_clipboards(vec_data: Vec<ClipboardData>) -> MultiClipboards {
         MultiClipboards {
             clipboards: vec_data
@@ -541,6 +567,7 @@ mod proto {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     fn from_clipboard(clipboard: Clipboard) -> Option<ClipboardData> {
         let data = if clipboard.compress {
             decompress(&clipboard.content)
@@ -569,6 +596,7 @@ mod proto {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     pub fn from_multi_clipbards(multi_clipboards: Vec<Clipboard>) -> Vec<ClipboardData> {
         multi_clipboards
             .into_iter()
@@ -596,4 +624,50 @@ mod proto {
                 msg
             })
     }
+}
+
+#[cfg(target_os = "android")]
+pub fn handle_msg_clipboard(mut cb: Clipboard) {
+    use hbb_common::protobuf::Message;
+
+    if cb.compress {
+        cb.content = bytes::Bytes::from(hbb_common::compress::decompress(&cb.content));
+    }
+    let multi_clips = MultiClipboards {
+        clipboards: vec![cb],
+        ..Default::default()
+    };
+    if let Ok(bytes) = multi_clips.write_to_bytes() {
+        let _ = scrap::android::ffi::call_clipboard_manager_update_clipboard(&bytes);
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn handle_msg_multi_clipboards(mut mcb: MultiClipboards) {
+    use hbb_common::protobuf::Message;
+
+    for cb in mcb.clipboards.iter_mut() {
+        if cb.compress {
+            cb.content = bytes::Bytes::from(hbb_common::compress::decompress(&cb.content));
+        }
+    }
+    if let Ok(bytes) = mcb.write_to_bytes() {
+        let _ = scrap::android::ffi::call_clipboard_manager_update_clipboard(&bytes);
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn get_clipboards_msg(client: bool) -> Option<Message> {
+    let mut clipboards = scrap::android::ffi::get_clipboards(client)?;
+    let mut msg = Message::new();
+    for c in &mut clipboards.clipboards {
+        let compressed = hbb_common::compress::compress(&c.content);
+        let compress = compressed.len() < c.content.len();
+        if compress {
+            c.content = compressed.into();
+        }
+        c.compress = compress;
+    }
+    msg.set_multi_clipboards(clipboards);
+    Some(msg)
 }

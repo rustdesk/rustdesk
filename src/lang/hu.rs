@@ -653,5 +653,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "Mappa feltöltése"),
         ("Upload files", "Fájlok feltöltése"),
         ("Clipboard is synchronized", "A vágólap szinkronizálva van"),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }

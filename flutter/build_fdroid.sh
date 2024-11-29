@@ -82,6 +82,21 @@ export PATH="${PATH}:${HOME}/flutter/bin:${HOME}/depot_tools"
 
 export VCPKG_ROOT="${HOME}/vcpkg"
 
+prepare_Flutter() {
+	version="${1}"
+
+	pushd "${HOME}"
+	if [ ! -f "${HOME}/flutter/bin/flutter" ]; then
+		git clone https://github.com/flutter/flutter
+	fi
+	pushd flutter
+	git restore .
+	git checkout "${version}"
+	flutter config --no-analytics
+	popd # flutter
+	popd # ${HOME}
+}
+
 # Now act depending on build step
 
 # NOTE: F-Droid maintainers require explicit declaration of dependencies
@@ -110,9 +125,13 @@ prebuild)
 			.github/workflows/flutter-build.yml)"
 	fi
 
+	FLUTTER_BRIDGE_VERSION="$(yq -r \
+		.env.FLUTTER_VERSION \
+		.github/workflows/bridge.yml)"
+
 	FLUTTER_RUST_BRIDGE_VERSION="$(yq -r \
 		.env.FLUTTER_RUST_BRIDGE_VERSION \
-		.github/workflows/flutter-build.yml)"
+		.github/workflows/bridge.yml)"
 
 	NDK_VERSION="$(yq -r \
 		.env.NDK_VERSION \
@@ -127,6 +146,7 @@ prebuild)
 		.github/workflows/flutter-build.yml)"
 
 	if [ -z "${CARGO_NDK_VERSION}" ] || [ -z "${FLUTTER_VERSION}" ] ||
+		[ -z "${FLUTTER_BRIDGE_VERSION}" ] ||
 		[ -z "${FLUTTER_RUST_BRIDGE_VERSION}" ] ||
 		[ -z "${NDK_VERSION}" ] || [ -z "${RUST_VERSION}" ] ||
 		[ -z "${VCPKG_COMMIT_ID}" ]; then
@@ -161,24 +181,6 @@ prebuild)
 
 	if [ ! -d "${ANDROID_NDK_ROOT}" ]; then
 		sdkmanager --install "ndk;${NDK_VERSION}"
-	fi
-
-	# Install Flutter
-
-	if [ ! -f "${HOME}/flutter/bin/flutter" ]; then
-		pushd "${HOME}"
-
-		git clone https://github.com/flutter/flutter
-
-		pushd flutter
-
-		git reset --hard "${FLUTTER_VERSION}"
-
-		flutter config --no-analytics
-
-		popd # flutter
-
-		popd # ${HOME}
 	fi
 
 	# Install Rust
@@ -275,12 +277,46 @@ prebuild)
 
 	git apply res/fdroid/patches/*.patch
 
+	# Backup .gclient file, for later restore
+
+	cp flutter-sdk/.gclient flutter-sdk/.gclient.bak
+
+	# For FLUTTER_BRIDGE_VERSION
+	sed \
+		-i \
+		-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
+		flutter/pubspec.yaml
+
+	# Install Flutter bridge version
+	prepare_Flutter "${FLUTTER_BRIDGE_VERSION}"
+	cp flutter-sdk/.gclient.bak flutter-sdk/.gclient
+	sed -i "s/FLUTTER_VERSION_PLACEHOLDER/${FLUTTER_BRIDGE_VERSION}/" flutter-sdk/.gclient
+
+	# Download Flutter dependencies
+	pushd flutter
+	flutter clean && flutter packages pub get
+	popd # flutter
+
+	# Generate FFI bindings
+	flutter_rust_bridge_codegen \
+		--rust-input ./src/flutter_ffi.rs \
+		--dart-output ./flutter/lib/generated_bridge.dart
+
+	git restore flutter/pubspec.*
+
+	# Install Flutter
+	prepare_Flutter "${FLUTTER_VERSION}"
+	cp flutter-sdk/.gclient.bak flutter-sdk/.gclient
+	sed -i "s/FLUTTER_VERSION_PLACEHOLDER/${FLUTTER_VERSION}/" flutter-sdk/.gclient
+
+	# gms is not in thoes files now, but we still keep the following line for future reference(maybe).
 	sed \
 		-i \
 		-e '/gms/d' \
 		flutter/android/build.gradle \
 		flutter/android/app/build.gradle
 
+	# `firebase_analytics`` is not in thoes files now, but we still keep the following lines.
 	sed \
 		-i \
 		-e '/firebase_analytics/d' \
@@ -295,34 +331,6 @@ prebuild)
 		-i \
 		-e '/firebase/Id' \
 		flutter/lib/main.dart
-
-	if [ "${FLUTTER_VERSION}" = "3.13.9" ]; then
-		# Fix for android 3.13.9
-		# https://github.com/rustdesk/rustdesk/blob/285e974d1a52c891d5fcc28e963d724e085558bc/.github/workflows/flutter-build.yml#L862
-
-		sed \
-			-i \
-			-e 's/extended_text: .*/extended_text: 11.1.0/' \
-			-e 's/uni_links_desktop/#uni_links_desktop/g' \
-			flutter/pubspec.yaml
-
-		set --
-
-		while read -r _1; do
-			set -- "$@" "${_1}"
-		done 0<<.a
-$(find flutter/lib/ -type f -name "*dart*")
-.a
-
-		sed \
-			-i \
-			-e 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g' \
-			"$@"
-
-		set --
-	fi
-
-	sed -i "s/FLUTTER_VERSION_PLACEHOLDER/${FLUTTER_VERSION}/" flutter-sdk/.gclient
 
 	;;
 build)
@@ -373,15 +381,9 @@ build)
 
 	pushd flutter
 
-	flutter packages pub get
+	flutter clean && flutter packages pub get
 
 	popd # flutter
-
-	# Generate FFI bindings
-
-	flutter_rust_bridge_codegen \
-		--rust-input ./src/flutter_ffi.rs \
-		--dart-output ./flutter/lib/generated_bridge.dart
 
 	# Build host android deps
 

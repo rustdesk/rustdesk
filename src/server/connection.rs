@@ -783,7 +783,7 @@ impl Connection {
                             }
                         }
                         Some(message::Union::MultiClipboards(_multi_clipboards)) => {
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            #[cfg(not(target_os = "ios"))]
                             if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(&conn.lr.version, &conn.lr.my_platform, _multi_clipboards) {
                                 if let Err(err) = conn.stream.send(&msg_out).await {
                                     println!("connection closed becuase of sending to remote failed: {}", err);
@@ -2137,7 +2137,9 @@ impl Connection {
                     if self.clipboard {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(vec![cb], ClipboardSide::Host);
-                        #[cfg(all(feature = "flutter", target_os = "android"))]
+                        // ios as the controlled side is actually not supported for now.
+                        // The following code is only used to preserve the logic of handling text clipboard on mobile.
+                        #[cfg(target_os = "ios")]
                         {
                             let content = if cb.compress {
                                 hbb_common::compress::decompress(&cb.content)
@@ -2155,14 +2157,17 @@ impl Connection {
                                 }
                             }
                         }
+                        #[cfg(target_os = "android")]
+                        crate::clipboard::handle_msg_clipboard(cb);
                     }
                 }
-                Some(message::Union::MultiClipboards(_mcb)) =>
-                {
+                Some(message::Union::MultiClipboards(_mcb)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard {
                         update_clipboard(_mcb.clipboards, ClipboardSide::Host);
                     }
+                    #[cfg(target_os = "android")]
+                    crate::clipboard::handle_msg_multi_clipboards(_mcb);
                 }
                 Some(message::Union::Cliprdr(_clip)) =>
                 {
@@ -2207,6 +2212,9 @@ impl Connection {
                             }
                         }
                         match fa.union {
+                            Some(file_action::Union::ReadEmptyDirs(rd)) => {
+                                self.read_empty_dirs(&rd.path, rd.include_hidden);
+                            }
                             Some(file_action::Union::ReadDir(rd)) => {
                                 self.read_dir(&rd.path, rd.include_hidden);
                             }
@@ -3190,6 +3198,14 @@ impl Connection {
         msg_out.set_misc(misc);
         self.send(msg_out).await;
         raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
+    }
+
+    fn read_empty_dirs(&mut self, dir: &str, include_hidden: bool) {
+        let dir = dir.to_string();
+        self.send_fs(ipc::FS::ReadEmptyDirs {
+            dir,
+            include_hidden,
+        });
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {

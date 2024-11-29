@@ -66,7 +66,7 @@ mod webrtc {
     const kMaxQindex: u32 = 205; // Max qindex threshold for QP scaling.
     const kBitDepth: u32 = 8;
     const kLagInFrames: u32 = 0; // No look ahead.
-    const kRtpTicksPerSecond: i32 = 90000;
+    pub(super) const kTimeBaseDen: i64 = 1000;
     const kMinimumFrameRate: f64 = 1.0;
 
     pub const DEFAULT_Q_MAX: u32 = 56; // no more than 63
@@ -108,7 +108,7 @@ mod webrtc {
         c.g_h = cfg.height;
         c.g_threads = codec_thread_num(64) as _;
         c.g_timebase.num = 1;
-        c.g_timebase.den = kRtpTicksPerSecond;
+        c.g_timebase.den = kTimeBaseDen as _;
         c.g_input_bit_depth = kBitDepth;
         if let Some(keyframe_interval) = cfg.keyframe_interval {
             c.kf_min_dist = 0;
@@ -313,7 +313,7 @@ impl EncoderApi for AomEncoder {
 }
 
 impl AomEncoder {
-    pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
+    pub fn encode(&mut self, ms: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
         let bpp = if self.i444 { 24 } else { 12 };
         if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
@@ -333,13 +333,14 @@ impl AomEncoder {
             stride_align as _,
             data.as_ptr() as _,
         ));
-
+        let pts = webrtc::kTimeBaseDen / 1000 * ms;
+        let duration = webrtc::kTimeBaseDen / 1000;
         call_aom!(aom_codec_encode(
             &mut self.ctx,
             &image,
             pts as _,
-            1, // Duration
-            0, // Flags
+            duration as _, // Duration
+            0,             // Flags
         ));
 
         Ok(EncodeFrames {

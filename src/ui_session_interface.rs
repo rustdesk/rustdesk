@@ -35,8 +35,8 @@ use hbb_common::{
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
-    input_os_password, send_mouse, send_pointer_device_event, start_video_audio_threads,
-    FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
+    input_os_password, send_mouse, send_pointer_device_event, FileManager, Key, LoginConfigHandler,
+    QualityStatus, KEY_MAP,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::GrabState;
@@ -354,7 +354,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().is_privacy_mode_supported()
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     pub fn is_text_clipboard_required(&self) -> bool {
         *self.server_clipboard_enabled.read().unwrap()
             && *self.server_keyboard_enabled.read().unwrap()
@@ -526,10 +526,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(feature = "flutter"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn is_xfce(&self) -> bool {
-        #[cfg(not(any(target_os = "ios")))]
-        return crate::platform::is_xfce();
-        #[cfg(any(target_os = "ios"))]
-        false
+        crate::platform::is_xfce()
     }
 
     pub fn remove_port_forward(&self, port: i32) {
@@ -1558,6 +1555,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     #[cfg(feature = "flutter")]
     fn is_multi_ui_session(&self) -> bool;
     fn update_record_status(&self, start: bool);
+    fn update_empty_dirs(&self, _res: ReadEmptyDirsResponse) {}
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -1851,40 +1849,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
         }
         return;
     }
-    let frame_count_map: Arc<RwLock<HashMap<usize, usize>>> = Default::default();
-    let frame_count_map_cl = frame_count_map.clone();
-    let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender, video_queue_map, decode_fps, chroma) =
-        start_video_audio_threads(
-            handler.clone(),
-            move |display: usize,
-                  data: &mut scrap::ImageRgb,
-                  _texture: *mut c_void,
-                  pixelbuffer: bool| {
-                let mut write_lock = frame_count_map_cl.write().unwrap();
-                let count = write_lock.get(&display).unwrap_or(&0) + 1;
-                write_lock.insert(display, count);
-                drop(write_lock);
-                if pixelbuffer {
-                    ui_handler.on_rgba(display, data);
-                } else {
-                    #[cfg(all(feature = "vram", feature = "flutter"))]
-                    ui_handler.on_texture(display, _texture);
-                }
-            },
-        );
-
-    let mut remote = Remote::new(
-        handler,
-        video_queue_map,
-        video_sender,
-        audio_sender,
-        receiver,
-        sender,
-        frame_count_map,
-        decode_fps,
-        chroma,
-    );
+    let mut remote = Remote::new(handler, receiver, sender);
     remote.io_loop(&key, &token, round).await;
     remote.sync_jobs_status_to_local().await;
 }
