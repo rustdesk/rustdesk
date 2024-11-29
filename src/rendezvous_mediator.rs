@@ -504,8 +504,7 @@ impl RendezvousMediator {
             version: crate::VERSION.to_owned(),
             ..Default::default()
         });
-        let bytes = msg_out.write_to_bytes()?;
-        socket.send_raw(bytes).await?;
+        socket.send(&msg_out).await?;
         crate::accept_connection(server.clone(), socket, peer_addr, true).await;
         Ok(())
     }
@@ -549,8 +548,7 @@ impl RendezvousMediator {
             version: crate::VERSION.to_owned(),
             ..Default::default()
         });
-        let bytes = msg_out.write_to_bytes()?;
-        socket.send_raw(bytes).await?;
+        socket.send(&msg_out).await?;
         crate::accept_connection(server.clone(), socket, peer_addr, true).await;
         Ok(())
     }

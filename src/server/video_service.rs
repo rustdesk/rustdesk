@@ -58,6 +58,10 @@ use scrap::{
 };
 #[cfg(windows)]
 use std::sync::Once;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, MutexGuard,
+};
 use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
@@ -69,74 +73,21 @@ pub const NAME: &'static str = "video";
 pub const OPTION_REFRESH: &'static str = "refresh";
 
 lazy_static::lazy_static! {
-    static ref FRAME_FETCHED_NOTIFIER: (UnboundedSender<(i32, Option<Instant>)>, Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>) = {
-        let (tx, rx) = unbounded_channel();
-        (tx, Arc::new(TokioMutex::new(rx)))
-    };
-    pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
-}
-
-#[inline]
-pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
-    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).ok();
-}
-
-struct VideoFrameController {
-    cur: Instant,
-    send_conn_ids: HashSet<i32>,
-}
-
-impl VideoFrameController {
-    fn new() -> Self {
-        Self {
-            cur: Instant::now(),
-            send_conn_ids: HashSet::new(),
-        }
-    }
-
-    fn reset(&mut self) {
-        self.send_conn_ids.clear();
-    }
-
-    fn set_send(&mut self, tm: Instant, conn_ids: HashSet<i32>) {
-        if !conn_ids.is_empty() {
-            self.cur = tm;
-            self.send_conn_ids = conn_ids;
-        }
-    }
-
-    #[tokio::main(flavor = "current_thread")]
-    async fn try_wait_next(&mut self, fetched_conn_ids: &mut HashSet<i32>, timeout_millis: u64) {
-        if self.send_conn_ids.is_empty() {
-            return;
-        }
-
-        let timeout_dur = Duration::from_millis(timeout_millis as u64);
-        match tokio::time::timeout(timeout_dur, FRAME_FETCHED_NOTIFIER.1.lock().await.recv()).await
-        {
-            Err(_) => {
-                // break if timeout
-                // log::error!("blocking wait frame receiving timeout {}", timeout_millis);
-            }
-            Ok(Some((id, instant))) => {
-                if let Some(tm) = instant {
-                    log::trace!("Channel recv latency: {}", tm.elapsed().as_secs_f32());
-                }
-                fetched_conn_ids.insert(id);
-            }
-            Ok(None) => {
-                // this branch would never be reached
-            }
-        }
-    }
 }
 
 #[derive(Clone)]
 pub struct VideoService {
     sp: GenericService,
+    blockers: SyncerForVideo,
     idx: usize,
+}
+
+impl VideoService {
+    fn qos(&self) -> MutexGuard<VideoQoS> {
+        self.blockers.qos()
+    }
 }
 
 impl Deref for VideoService {
@@ -157,9 +108,12 @@ pub fn get_service_name(idx: usize) -> String {
     format!("{}{}", NAME, idx)
 }
 
-pub fn new(idx: usize) -> GenericService {
+pub fn new(idx: usize) -> impl Service {
+    let name = get_service_name(idx);
+    let blocker = super::SyncerForVideo::static_syncer_for(&name);
     let vs = VideoService {
-        sp: GenericService::new(get_service_name(idx), true),
+        sp: GenericService::new(name, true),
+        blockers: blocker,
         idx,
     };
     GenericService::run(&vs, run);
@@ -382,52 +336,84 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
     })
 }
 
+fn track(nb: u64) {
+    static mut tick: u64 = 0;
+    static mut frames: i64 = 0;
+    static mut bytes: u64 = 0;
+    static mut NB: u64 = 0;
+    static mut NR: u64 = 0;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    unsafe {
+        if NR != 0 && now != tick {
+            println!(
+                "frames {frames}, {} kbps, codec output: {} kbps",
+                (bytes * 8) as f32 / ((now - tick) as f32 * 1000.0),
+                (NB * 8 * 30) / (1000 * NR)
+            );
+            frames = 0;
+            bytes = 0;
+            tick = now;
+        }
+        frames += 1;
+        bytes += nb;
+
+        NB += nb;
+        NR += 1;
+    };
+}
+
 fn run(vs: VideoService) -> ResultType<()> {
-    let _raii = Raii::new(vs.idx);
+    let display_idx = vs.idx;
+    let sp = &vs.sp;
+    let _raii = Raii::new(display_idx);
+    if sp.is_option_true(OPTION_REFRESH) {
+        sp.set_option_bool(OPTION_REFRESH, false);
+    }
+
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
     // ensure_inited() is needed because clear() may be called.
     // to-do: wayland ensure_inited should pass current display index.
     // But for now, we do not support multi-screen capture on wayland.
     #[cfg(target_os = "linux")]
-    super::wayland::ensure_inited()?;
-    #[cfg(target_os = "linux")]
-    let _wayland_call_on_ret = SimpleCallOnReturn {
-        b: true,
-        f: Box::new(|| {
-            super::wayland::clear();
-        }),
+    let _wayland_call_on_ret = {
+        super::wayland::ensure_inited()?;
+        SimpleCallOnReturn {
+            b: true,
+            f: Box::new(|| {
+                super::wayland::clear();
+            }),
+        }
     };
 
+    let last_portable_service_running = false;
     #[cfg(windows)]
     let last_portable_service_running = crate::portable_service::client::running();
-    #[cfg(not(windows))]
-    let last_portable_service_running = false;
 
-    let display_idx = vs.idx;
-    let sp = vs.sp;
     let mut c = get_capturer(display_idx, last_portable_service_running)?;
     #[cfg(windows)]
     if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
         log::info!("disable dxgi with option, fall back to gdi");
         c.set_gdi();
     }
-    let mut video_qos = VIDEO_QOS.lock().unwrap();
-    video_qos.refresh(None);
-    let mut spf;
-    let mut quality = video_qos.quality();
-    let record_incoming = config::option2bool(
-        "allow-auto-record-incoming",
-        &Config::get_option("allow-auto-record-incoming"),
-    );
-    let client_record = video_qos.record();
-    drop(video_qos);
+
+    let mut g = vs.qos();
+    let mut quality = g.calc_prefered_quality().unwrap_or_else(|e| e);
+    let record = g.record();
+    let mut spf = g.spf();
+    drop(g);
+
+    println!("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
     let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
         &c,
         display_idx,
         quality,
-        client_record,
-        record_incoming,
+        record,
         last_portable_service_running,
     ) {
         Ok(result) => result,
@@ -444,8 +430,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 &c,
                 display_idx,
                 quality,
-                client_record,
-                record_incoming,
+                record,
                 last_portable_service_running,
             )?
         }
@@ -457,18 +442,6 @@ fn run(vs: VideoService) -> ResultType<()> {
         try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
         bail!(e);
     }
-    VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
-    VIDEO_QOS
-        .lock()
-        .unwrap()
-        .set_support_abr(display_idx, encoder.support_abr());
-    log::info!("initial quality: {quality:?}");
-
-    if sp.is_option_true(OPTION_REFRESH) {
-        sp.set_option_bool(OPTION_REFRESH, false);
-    }
-
-    let mut frame_controller = VideoFrameController::new();
 
     let start = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
@@ -491,87 +464,85 @@ fn run(vs: VideoService) -> ResultType<()> {
     let capture_height = c.height;
 
     while sp.ok() {
-        #[cfg(windows)]
-        check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
+        let now = time::Instant::now();
+        {
+            #[cfg(windows)]
+            check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
-        let mut video_qos = VIDEO_QOS.lock().unwrap();
-        spf = video_qos.spf();
-        if quality != video_qos.quality() {
-            log::debug!("quality: {:?} -> {:?}", quality, video_qos.quality());
-            quality = video_qos.quality();
-            if encoder.support_changing_quality() {
-                allow_err!(encoder.set_quality(quality));
-                video_qos.store_bitrate(encoder.bitrate());
-            } else {
-                if !video_qos.in_vbr_state() && !quality.is_custom() {
-                    log::info!("switch to change quality");
-                    bail!("SWITCH");
+            let mut qos = vs.qos();
+            if record != qos.record() {
+                log::info!("switch due to record changed");
+                bail!("SWITCH: record config changed to {}", qos.record());
+            }
+
+            if let Ok(r) = qos.calc_prefered_quality() {
+                if quality != r {
+                    quality = match encoder.runtime_adjust(r) {
+                        Ok(r) => {
+                            println!("quality changed {quality} ---------------------------------------------------------> {r}");
+                            r
+                        }
+                        _ => bail!("restart encoder to adjust"),
+                    };
                 }
             }
-        }
-        if client_record != video_qos.record() {
-            log::info!("switch due to record changed");
-            bail!("SWITCH");
-        }
-        drop(video_qos);
+            drop(qos);
 
-        if sp.is_option_true(OPTION_REFRESH) {
-            let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
-            log::info!("switch to refresh");
-            bail!("SWITCH");
-        }
-        if codec_format != Encoder::negotiated_codec() {
-            log::info!(
-                "switch due to codec changed, {:?} -> {:?}",
-                codec_format,
-                Encoder::negotiated_codec()
-            );
-            bail!("SWITCH");
-        }
-        #[cfg(windows)]
-        if last_portable_service_running != crate::portable_service::client::running() {
-            log::info!("switch due to portable service running changed");
-            bail!("SWITCH");
-        }
-        if Encoder::use_i444(&encoder_cfg) != use_i444 {
-            log::info!("switch due to i444 changed");
-            bail!("SWITCH");
-        }
-        #[cfg(all(windows, feature = "vram"))]
-        if c.is_gdi() && encoder.input_texture() {
-            log::info!("changed to gdi when using vram");
-            VRamEncoder::set_fallback_gdi(display_idx, true);
-            bail!("SWITCH");
-        }
-        check_privacy_mode_changed(&sp, display_idx, &c)?;
-        #[cfg(windows)]
-        {
-            if crate::platform::windows::desktop_changed()
-                && !crate::portable_service::client::running()
+            // if sp.is_option_true(OPTION_REFRESH) {
+            //     let _ = try_broadcast_display_changed(sp, display_idx, &c, true);
+            //     log::info!("switch to refresh");
+            //     bail!("SWITCH");
+            // }
+            if codec_format != Encoder::negotiated_codec() {
+                log::info!(
+                    "switch due to codec changed, {:?} -> {:?}",
+                    codec_format,
+                    Encoder::negotiated_codec()
+                );
+                bail!("SWITCH");
+            }
+            #[cfg(windows)]
+            if last_portable_service_running != crate::portable_service::client::running() {
+                log::info!("switch due to portable service running changed");
+                bail!("SWITCH");
+            }
+            if Encoder::use_i444(&encoder_cfg) != use_i444 {
+                log::info!("switch due to i444 changed");
+                bail!("SWITCH");
+            }
+            #[cfg(all(windows, feature = "vram"))]
+            if c.is_gdi() && encoder.input_texture() {
+                log::info!("changed to gdi when using vram");
+                VRamEncoder::set_fallback_gdi(display_idx, true);
+                bail!("SWITCH");
+            }
+            check_privacy_mode_changed(sp, display_idx, &c)?;
+            #[cfg(windows)]
             {
-                bail!("Desktop changed");
+                if crate::platform::windows::desktop_changed()
+                    && !crate::portable_service::client::running()
+                {
+                    bail!("Desktop changed");
+                }
+            }
+
+            if last_check_displays.elapsed().as_millis() > 1000 {
+                last_check_displays = now;
+                // This check may be redundant, but it is better to be safe.
+                // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
+                try_broadcast_display_changed(sp, display_idx, &c, false)?;
             }
         }
-        let now = time::Instant::now();
-        if last_check_displays.elapsed().as_millis() > 1000 {
-            last_check_displays = now;
-            // This check may be redundant, but it is better to be safe.
-            // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-            try_broadcast_display_changed(&sp, display_idx, &c, false)?;
-        }
 
-        frame_controller.reset();
-
-        let time = now - start;
-        let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
+        let ms = (now - start).as_millis() as i64;
         let res = match c.frame(spf) {
             Ok(frame) => {
                 repeat_encode_counter = 0;
                 if frame.valid() {
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
-                    let send_conn_ids = handle_one_frame(
+                    handle_one_frame(
                         display_idx,
-                        &sp,
+                        sp,
                         frame,
                         ms,
                         &mut encoder,
@@ -581,7 +552,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_width,
                         capture_height,
                     )?;
-                    frame_controller.set_send(now, send_conn_ids);
                 }
                 #[cfg(windows)]
                 {
@@ -627,9 +597,9 @@ fn run(vs: VideoService) -> ResultType<()> {
                     // yun.len() > 0 means the frame is not texture.
                     if repeat_encode_counter < repeat_encode_max {
                         repeat_encode_counter += 1;
-                        let send_conn_ids = handle_one_frame(
+                        handle_one_frame(
                             display_idx,
-                            &sp,
+                            sp,
                             EncodeInput::YUV(&yuv),
                             ms,
                             &mut encoder,
@@ -639,14 +609,13 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_width,
                             capture_height,
                         )?;
-                        frame_controller.set_send(now, send_conn_ids);
                     }
                 }
             }
             Err(err) => {
                 // This check may be redundant, but it is better to be safe.
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-                try_broadcast_display_changed(&sp, display_idx, &c, true)?;
+                try_broadcast_display_changed(sp, display_idx, &c, true)?;
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
@@ -664,22 +633,16 @@ fn run(vs: VideoService) -> ResultType<()> {
             }
         }
 
-        let mut fetched_conn_ids = HashSet::new();
-        let timeout_millis = 3_000u64;
-        let wait_begin = Instant::now();
-        while wait_begin.elapsed().as_millis() < timeout_millis as _ {
-            check_privacy_mode_changed(&sp, display_idx, &c)?;
-            frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
-            // break if all connections have received current frame
-            if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
-                break;
-            }
+        while !vs.blockers.wait_for_unblock(Duration::from_millis(300)) {
+            check_privacy_mode_changed(sp, display_idx, &c)?;
         }
 
-        let elapsed = now.elapsed();
-        // may need to enable frame(timeout)
-        log::trace!("{:?} {:?}", time::Instant::now(), elapsed);
-        if elapsed < spf {
+        loop {
+            let mut elapsed = now.elapsed();
+            spf = vs.qos().spf();
+            if elapsed >= spf {
+                break;
+            }
             std::thread::sleep(spf - elapsed);
         }
     }
@@ -701,16 +664,14 @@ impl Drop for Raii {
         VRamEncoder::set_not_use(self.0, false);
         #[cfg(feature = "vram")]
         Encoder::update(scrap::codec::EncodingUpdate::Check);
-        VIDEO_QOS.lock().unwrap().set_support_abr(self.0, true);
     }
 }
 
 fn setup_encoder(
     c: &CapturerInfo,
     display_idx: usize,
-    quality: Quality,
-    client_record: bool,
-    record_incoming: bool,
+    quality: f32,
+    record: bool,
     last_portable_service_running: bool,
 ) -> ResultType<(
     Encoder,
@@ -719,25 +680,32 @@ fn setup_encoder(
     bool,
     Arc<Mutex<Option<Recorder>>>,
 )> {
+    let record_incoming = config::option2bool(
+        "allow-auto-record-incoming",
+        &Config::get_option("allow-auto-record-incoming"),
+    );
+
     let encoder_cfg = get_encoder_config(
         &c,
         display_idx,
         quality,
-        client_record || record_incoming,
+        record || record_incoming,
         last_portable_service_running,
     );
     Encoder::set_fallback(&encoder_cfg);
+
     let codec_format = Encoder::negotiated_codec();
     let recorder = get_recorder(record_incoming, display_idx);
     let use_i444 = Encoder::use_i444(&encoder_cfg);
     let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
+    println!("create encoder with {encoder_cfg:?}");
     Ok((encoder, encoder_cfg, codec_format, use_i444, recorder))
 }
 
 fn get_encoder_config(
     c: &CapturerInfo,
     _display_idx: usize,
-    quality: Quality,
+    quality: f32,
     record: bool,
     _portable_service: bool,
 ) -> EncoderCfg {
@@ -911,7 +879,7 @@ fn handle_one_frame(
     first_frame: &mut bool,
     width: usize,
     height: usize,
-) -> ResultType<HashSet<i32>> {
+) -> ResultType<()> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
         if sps.has_subscribes() {
@@ -921,7 +889,6 @@ fn handle_one_frame(
         Ok(())
     })?;
 
-    let mut send_conn_ids: HashSet<i32> = Default::default();
     let first = *first_frame;
     *first_frame = false;
     match encoder.encode_to_message(frame, ms) {
@@ -935,7 +902,10 @@ fn handle_one_frame(
                 .unwrap()
                 .as_mut()
                 .map(|r| r.write_message(&msg, width, height));
-            send_conn_ids = sp.send_video_frame(msg);
+
+            let nb = msg.compute_size();
+            sp.send_video_frame(msg);
+            track(nb);
         }
         Err(e) => {
             *encode_fail_counter += 1;
@@ -968,7 +938,7 @@ fn handle_one_frame(
             }
         }
     }
-    Ok(send_conn_ids)
+    Ok(())
 }
 
 #[inline]

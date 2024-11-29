@@ -51,7 +51,10 @@ use std::sync::atomic::Ordering;
 use std::{
     num::NonZeroI64,
     path::PathBuf,
-    sync::{atomic::AtomicI64, mpsc as std_mpsc},
+    sync::{
+        atomic::{AtomicI64, AtomicU64},
+        mpsc as std_mpsc, MutexGuard,
+    },
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
@@ -121,6 +124,9 @@ pub struct ConnInner {
     id: i32,
     tx: Option<Sender>,
     tx_video: Option<Sender>,
+
+    blockers: Option<SyncerForVideo>,
+    blocked: Arc<AtomicU64>,
 }
 
 enum MessageInput {
@@ -228,7 +234,6 @@ pub struct Connection {
     #[cfg(target_os = "linux")]
     linux_headless_handle: LinuxHeadlessHandle,
     closed: bool,
-    delay_response_instant: Instant,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     start_cm_ipc_para: Option<StartCmIpcPara>,
     auto_disconnect_timer: Option<(Instant, u64)>,
@@ -246,7 +251,38 @@ pub struct Connection {
 
 impl ConnInner {
     pub fn new(id: i32, tx: Option<Sender>, tx_video: Option<Sender>) -> Self {
-        Self { id, tx, tx_video }
+        Self {
+            id,
+            tx,
+            tx_video,
+            blockers: None,
+            blocked: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    pub fn link_blockers(&mut self, blockers: SyncerForVideo) {
+        self.blockers = Some(blockers);
+    }
+
+    pub fn unblock(&mut self, nr: i32) {
+        let nr = if nr == -1 {
+            self.blocked.load(Ordering::Relaxed)
+        } else {
+            nr as u64
+        };
+
+        if nr != 0 {
+            self.blockers.as_ref().map(|x| x.unblock());
+            self.blocked.fetch_sub(nr, Ordering::Relaxed);
+        }
+    }
+
+    fn call_qos<const b: bool, FN: FnOnce(&mut VideoQoS)>(&self, f: FN) {
+        if let Some(mut g) = self.blockers.as_ref().map(|x| x.qos()) {
+            f(&mut g)
+        } else if b {
+            assert!(false, "send qos before subscribe to video svc");
+        }
     }
 }
 
@@ -259,22 +295,34 @@ impl Subscriber for ConnInner {
     #[inline]
     fn send(&mut self, msg: Arc<Message>) {
         // Send SwitchDisplay on the same channel as VideoFrame to avoid send order problems.
+        let mut blocked = false;
         let tx_by_video = match &msg.union {
-            Some(message::Union::VideoFrame(_)) => true,
+            Some(message::Union::VideoFrame(_)) => {
+                self.blocked.fetch_add(1, Ordering::Relaxed);
+                self.blockers.as_ref().map(|x| x.block());
+                blocked = true;
+                true
+            }
+
             Some(message::Union::Misc(misc)) => match &misc.union {
                 Some(misc::Union::SwitchDisplay(_)) => true,
                 _ => false,
             },
+
             _ => false,
         };
+
         let tx = if tx_by_video {
             self.tx_video.as_mut()
         } else {
             self.tx.as_mut()
         };
-        tx.map(|tx| {
-            allow_err!(tx.send((Instant::now(), msg)));
-        });
+
+        if let Some(Err(_)) = tx.map(|tx| tx.send((Instant::now(), msg))) {
+            if blocked {
+                self.unblock(1);
+            }
+        }
     }
 }
 
@@ -293,7 +341,6 @@ impl Connection {
         id: i32,
         server: super::ServerPtrWeak,
     ) {
-        let _raii_id = raii::ConnectionID::new(id);
         let hash = Hash {
             salt: Config::get_salt(),
             challenge: Config::get_auto_password(6),
@@ -318,11 +365,7 @@ impl Connection {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
         let mut conn = Self {
-            inner: ConnInner {
-                id,
-                tx: Some(tx),
-                tx_video: Some(tx_video),
-            },
+            inner: ConnInner::new(id, Some(tx), Some(tx_video)),
             require_2fa: crate::auth_2fa::get_2fa(None),
             display_idx: *display_service::PRIMARY_DISPLAY_IDX,
             stream,
@@ -376,7 +419,6 @@ impl Connection {
             #[cfg(target_os = "linux")]
             linux_headless_handle,
             closed: false,
-            delay_response_instant: Instant::now(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             start_cm_ipc_para: Some(StartCmIpcPara {
                 rx_to_cm,
@@ -393,6 +435,8 @@ impl Connection {
             #[cfg(target_os = "macos")]
             retina: Retina::default(),
         };
+        ALIVE_CONNS.lock().unwrap().push(id);
+
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
             conn.closed = true;
@@ -400,6 +444,7 @@ impl Connection {
             sleep(1.).await;
             return;
         }
+
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
         #[cfg(target_os = "android")]
@@ -431,13 +476,13 @@ impl Connection {
             crate::rustdesk_interval(time::interval_at(Instant::now(), TEST_DELAY_TIMEOUT));
         let mut last_recv_time = Instant::now();
 
-        conn.stream.set_send_timeout(
-            if conn.file_transfer.is_some() || conn.port_forward_socket.is_some() {
-                SEND_TIMEOUT_OTHER
-            } else {
-                SEND_TIMEOUT_VIDEO
-            },
-        );
+        // conn.stream.set_send_timeout(
+        //     if conn.file_transfer.is_some() || conn.port_forward_socket.is_some() {
+        //         SEND_TIMEOUT_OTHER
+        //     } else {
+        //         SEND_TIMEOUT_VIDEO
+        //     },
+        // );
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
@@ -445,7 +490,47 @@ impl Connection {
 
         loop {
             tokio::select! {
-                // biased; // video has higher priority // causing test_delay_timer failed while transferring big file
+                biased; // video has higher priority // causing test_delay_timer failed while transferring big file
+                _ = test_delay_timer.tick() => {
+                    // if last_recv_time.elapsed() >= SEC30 {
+                        // println!("connection closed becuase of recv timtout");
+                        // conn.on_close("Timeout", true).await;
+                        // break;
+                    // }
+
+
+                    // The control end will jump out of the loop after receiving LoginResponse and will not reply to the TestDelay
+                    if let Some(tm) = conn.last_test_delay {
+                        let new_delay = tm.elapsed().as_millis() as u32;
+                        conn.inner.call_qos::<false, _>(|qos| qos.user_network_delay(conn.inner.id(), new_delay, false));
+                    } else if !(conn.port_forward_socket.is_some() && conn.authorized) {
+                        conn.last_test_delay = Some(Instant::now());
+                        let mut msg_out = Message::new();
+                        msg_out.set_test_delay(TestDelay{
+                            last_delay: conn.network_delay,
+                            // HACK, no need to sent bps to client
+                            target_bitrate: 600,
+                            ..Default::default()
+                        });
+                        conn.send(msg_out.into()).await;
+                    }
+                }
+                _ = second_timer.tick() => {
+                    #[cfg(windows)]
+                    conn.portable_check();
+                    if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
+                        if instant.elapsed().as_secs() > minute * 60 {
+                            conn.send_close_reason_no_retry("Connection failed due to inactivity").await;
+                            println!("connection closed becuase of auto dis connect timer");
+                            conn.on_close("auto disconnect", true).await;
+                            break;
+                        }
+                    }
+                    conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
+                    #[cfg(feature = "hwcodec")]
+                    conn.update_supported_encoding();
+                }
+
 
                 Some(data) = rx_from_cm.recv() => {
                     match data {
@@ -460,6 +545,7 @@ impl Connection {
                             conn.chat_unanswered = false; // seen
                             conn.file_transferred = false; //seen
                             conn.send_close_reason_no_retry("").await;
+                            println!("connection closed becuase cm closed");
                             conn.on_close("connection manager", true).await;
                             break;
                         }
@@ -471,6 +557,7 @@ impl Connection {
                         ipc::Data::CmErr(e) => {
                             if e != "expected" {
                                 // cm closed before connection
+                                println!("connection closed becuase cm closed {e}");
                                 conn.on_close(&format!("connection manager error: {}", e), false).await;
                                 break;
                             }
@@ -494,24 +581,22 @@ impl Connection {
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
                                         NAME_CURSOR,
-                                        conn.inner.clone(), enabled || conn.show_remote_cursor);
+                                        &mut conn.inner, enabled || conn.show_remote_cursor);
                                 }
                             } else if &name == "clipboard" {
                                 conn.clipboard = enabled;
                                 conn.send_permission(Permission::Clipboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
-                                    s.write().unwrap().subscribe(
-                                        super::clipboard_service::NAME,
-                                        conn.inner.clone(), conn.clipboard_enabled() && conn.peer_keyboard_enabled());
+                                    let sub = conn.clipboard_enabled() && conn.peer_keyboard_enabled();
+                                    s.write().unwrap().subscribe(super::clipboard_service::NAME, &mut conn.inner, sub);
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
                                 conn.send_permission(Permission::Audio, enabled).await;
                                 if conn.authorized {
                                     if let Some(s) = conn.server.upgrade() {
-                                        s.write().unwrap().subscribe(
-                                            super::audio_service::NAME,
-                                            conn.inner.clone(), conn.audio_enabled());
+                                        let sub = conn.audio_enabled();
+                                        s.write().unwrap().subscribe(super::audio_service::NAME, &mut conn.inner, sub);
                                     }
                                 }
                             } else if &name == "file" {
@@ -588,6 +673,7 @@ impl Connection {
                     if let Some(res) = res {
                         match res {
                             Err(err) => {
+                                println!("connection closed becuase read err: {err}");
                                 conn.on_close(&err.to_string(), true).await;
                                 break;
                             },
@@ -609,6 +695,7 @@ impl Connection {
                             }
                         }
                     } else {
+                        println!("connection closed becuase the read half closed");
                         conn.on_close("Reset by the peer", true).await;
                         break;
                     }
@@ -623,6 +710,7 @@ impl Connection {
                                 }
                             }
                             Err(err) =>  {
+                                println!("connection closed becuase of file transfer failed: {err}");
                                 conn.on_close(&err.to_string(), false).await;
                                 break;
                             }
@@ -634,15 +722,19 @@ impl Connection {
                 Ok(conns) = hbbs_rx.recv() => {
                     if conns.contains(&id) {
                         conn.send_close_reason_no_retry("Closed manually by web console").await;
+                        println!("connection closed becuase of user request in web");
                         conn.on_close("web console", true).await;
                         break;
                     }
                 }
                 Some((instant, value)) = rx_video.recv() => {
-                    if !conn.video_ack_required {
-                        video_service::notify_video_frame_fetched(id, Some(instant.into()));
+                    let mut msg = &value as &Message;
+                    if let Some(message::Union::VideoFrame(ref __)) = msg.union {
+                        conn.inner.unblock(1);
                     }
-                    if let Err(err) = conn.stream.send(&value as &Message).await {
+
+                    if let Err(err) = conn.stream.send(msg).await {
+                        println!("connection closed becuase of sending to remote failed: {}", err);
                         conn.on_close(&err.to_string(), false).await;
                         break;
                     }
@@ -666,6 +758,7 @@ impl Connection {
                             match &m.union {
                                 Some(misc::Union::StopService(_)) => {
                                     conn.send_close_reason_no_retry("").await;
+                                    println!("connection closed becuase of user request");
                                     conn.on_close("stop service", false).await;
                                     break;
                                 }
@@ -693,6 +786,7 @@ impl Connection {
                             #[cfg(not(target_os = "ios"))]
                             if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(&conn.lr.version, &conn.lr.my_platform, _multi_clipboards) {
                                 if let Err(err) = conn.stream.send(&msg_out).await {
+                                    println!("connection closed becuase of sending to remote failed: {}", err);
                                     conn.on_close(&err.to_string(), false).await;
                                     break;
                                 }
@@ -704,42 +798,11 @@ impl Connection {
 
                     let msg: &Message = &msg;
                     if let Err(err) = conn.stream.send(msg).await {
+                        println!("connection closed becuase of sending to remote failed: {}", err);
                         conn.on_close(&err.to_string(), false).await;
                         break;
                     }
                 },
-                _ = second_timer.tick() => {
-                    #[cfg(windows)]
-                    conn.portable_check();
-                    if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
-                        if instant.elapsed().as_secs() > minute * 60 {
-                            conn.send_close_reason_no_retry("Connection failed due to inactivity").await;
-                            conn.on_close("auto disconnect", true).await;
-                            break;
-                        }
-                    }
-                    conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
-                    #[cfg(feature = "hwcodec")]
-                    conn.update_supported_encoding();
-                }
-                _ = test_delay_timer.tick() => {
-                    if last_recv_time.elapsed() >= SEC30 {
-                        conn.on_close("Timeout", true).await;
-                        break;
-                    }
-                    // The control end will jump out of the loop after receiving LoginResponse and will not reply to the TestDelay
-                    if conn.last_test_delay.is_none() && !(conn.port_forward_socket.is_some() && conn.authorized) {
-                        conn.last_test_delay = Some(Instant::now());
-                        let mut msg_out = Message::new();
-                        msg_out.set_test_delay(TestDelay{
-                            last_delay: conn.network_delay,
-                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate(),
-                            ..Default::default()
-                        });
-                        conn.send(msg_out.into()).await;
-                    }
-                    video_service::VIDEO_QOS.lock().unwrap().user_delay_response_elapsed(conn.inner.id(), conn.delay_response_instant.elapsed().as_millis());
-                }
             }
         }
 
@@ -754,7 +817,8 @@ impl Connection {
             crate::plugin::EVENT_ON_CONN_CLOSE_SERVER.to_owned(),
             conn.lr.my_id.clone(),
         );
-        video_service::notify_video_frame_fetched(id, None);
+        conn.inner.unblock(-1);
+
         if conn.authorized {
             password::update_temporary_password();
         }
@@ -768,7 +832,7 @@ impl Connection {
         }));
         if let Some(s) = conn.server.upgrade() {
             let mut s = s.write().unwrap();
-            s.remove_connection(&conn.inner);
+            s.remove_connection(&mut conn.inner);
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             try_stop_record_cursor_pos();
         }
@@ -1384,8 +1448,9 @@ impl Connection {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let _h = try_start_record_cursor_pos();
                 self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
+
                 s.try_add_primay_video_service();
-                s.add_connection(self.inner.clone(), &noperms);
+                s.add_connection(&mut self.inner, &noperms, self.network_delay);
             }
         }
     }
@@ -1868,13 +1933,11 @@ impl Connection {
                 if let Some(tm) = self.last_test_delay {
                     self.last_test_delay = None;
                     let new_delay = tm.elapsed().as_millis() as u32;
-                    video_service::VIDEO_QOS
-                        .lock()
-                        .unwrap()
-                        .user_network_delay(self.inner.id(), new_delay);
+                    self.inner.call_qos::<false, _>(|qos| {
+                        qos.user_network_delay(self.inner.id(), new_delay, true)
+                    });
                     self.network_delay = new_delay;
                 }
-                self.delay_response_instant = Instant::now();
             }
         } else if let Some(message::Union::SwitchSidesResponse(_s)) = msg.union {
             #[cfg(feature = "flutter")]
@@ -2374,12 +2437,7 @@ impl Connection {
                         self.refresh_video_display(Some(display as usize));
                         self.update_auto_disconnect_timer();
                     }
-                    Some(misc::Union::VideoReceived(_)) => {
-                        video_service::notify_video_frame_fetched(
-                            self.inner.id,
-                            Some(Instant::now().into()),
-                        );
-                    }
+                    Some(misc::Union::VideoReceived(_)) => {}
                     Some(misc::Union::CloseReason(_)) => {
                         self.on_close("Peer close", true).await;
                         raii::AuthedConnID::check_remove_session(
@@ -2456,14 +2514,14 @@ impl Connection {
                             crate::plugin::handle_client_event(&p.id, &self.lr.my_id, &p.content);
                         self.send(msg).await;
                     }
-                    Some(misc::Union::AutoAdjustFps(fps)) => video_service::VIDEO_QOS
-                        .lock()
-                        .unwrap()
-                        .user_auto_adjust_fps(self.inner.id(), fps),
-                    Some(misc::Union::ClientRecordStatus(status)) => video_service::VIDEO_QOS
-                        .lock()
-                        .unwrap()
-                        .user_record(self.inner.id(), status),
+                    Some(misc::Union::AutoAdjustFps(fps)) => {
+                        self.inner
+                            .call_qos::<true, _>(|qos| qos.user_custom_fps(self.inner.id(), fps));
+                    }
+                    Some(misc::Union::ClientRecordStatus(status)) => {
+                        self.inner
+                            .call_qos::<true, _>(|qos| qos.user_record(self.inner.id(), status));
+                    }
                     #[cfg(windows)]
                     Some(misc::Union::SelectedSid(sid)) => {
                         if let Some(current_process_sid) =
@@ -2641,9 +2699,9 @@ impl Connection {
         // For versions greater than 1.2.4, a `CaptureDisplays` message will be sent immediately.
         // Unnecessary capturers will be removed then.
         if !crate::common::is_support_multi_ui_session(&self.lr.version) {
-            lock.subscribe(&old_service_name, self.inner.clone(), false);
+            lock.subscribe(&old_service_name, &mut self.inner, false);
         }
-        lock.subscribe(&new_service_name, self.inner.clone(), true);
+        lock.subscribe(&new_service_name, &mut self.inner, true);
         self.display_idx = display_idx;
     }
 
@@ -2685,19 +2743,15 @@ impl Connection {
                 }
             }
             if !add.is_empty() {
-                lock.capture_displays(self.inner.clone(), add, true, false);
+                lock.capture_displays(&mut self.inner, add, true, false);
             } else if !sub.is_empty() {
-                lock.capture_displays(self.inner.clone(), sub, false, true);
+                lock.capture_displays(&mut self.inner, sub, false, true);
             } else {
-                lock.capture_displays(self.inner.clone(), set, true, true);
+                lock.capture_displays(&mut self.inner, set, true, true);
             }
             self.multi_ui_session = lock.get_subbed_displays_count(self.inner.id()) > 1;
             if self.follow_remote_window {
-                lock.subscribe(
-                    NAME_WINDOW_FOCUS,
-                    self.inner.clone(),
-                    !self.multi_ui_session,
-                );
+                lock.subscribe(NAME_WINDOW_FOCUS, &mut self.inner, !self.multi_ui_session);
             }
             drop(lock);
         }
@@ -2823,6 +2877,7 @@ impl Connection {
     }
 
     async fn update_options(&mut self, o: &OptionMessage) {
+        return;
         log::info!("Option update: {:?}", o);
         if let Ok(q) = o.image_quality.enum_value() {
             let image_quality;
@@ -2836,17 +2891,14 @@ impl Connection {
                 image_quality = q.value();
             }
             if image_quality > 0 {
-                video_service::VIDEO_QOS
-                    .lock()
-                    .unwrap()
-                    .user_image_quality(self.inner.id(), image_quality);
+                self.inner.call_qos::<true, _>(|qos| {
+                    qos.user_image_quality(self.inner.id(), image_quality)
+                });
             }
         }
         if o.custom_fps > 0 {
-            video_service::VIDEO_QOS
-                .lock()
-                .unwrap()
-                .user_custom_fps(self.inner.id(), o.custom_fps as _);
+            self.inner
+                .call_qos::<true, _>(|qos| qos.user_custom_fps(self.inner.id(), o.custom_fps as _));
         }
         if let Some(q) = o.supported_decoding.clone().take() {
             scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Update(self.inner.id(), q));
@@ -2861,14 +2913,13 @@ impl Connection {
             if q != BoolOption::NotSet {
                 self.show_remote_cursor = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
-                    s.write().unwrap().subscribe(
-                        NAME_CURSOR,
-                        self.inner.clone(),
-                        self.peer_keyboard_enabled() || self.show_remote_cursor,
-                    );
+                    let sub = self.peer_keyboard_enabled() || self.show_remote_cursor;
+                    s.write()
+                        .unwrap()
+                        .subscribe(NAME_CURSOR, &mut self.inner, sub);
                     s.write().unwrap().subscribe(
                         NAME_POS,
-                        self.inner.clone(),
+                        &mut self.inner,
                         self.show_remote_cursor,
                     );
                 }
@@ -2886,7 +2937,7 @@ impl Connection {
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
                         NAME_WINDOW_FOCUS,
-                        self.inner.clone(),
+                        &mut self.inner,
                         self.follow_remote_window,
                     );
                 }
@@ -2896,11 +2947,10 @@ impl Connection {
             if q != BoolOption::NotSet {
                 self.disable_audio = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
-                    s.write().unwrap().subscribe(
-                        super::audio_service::NAME,
-                        self.inner.clone(),
-                        self.audio_enabled(),
-                    );
+                    let sub = self.audio_enabled();
+                    s.write()
+                        .unwrap()
+                        .subscribe(super::audio_service::NAME, &mut self.inner, sub);
                 }
             }
         }
@@ -2917,10 +2967,11 @@ impl Connection {
             if q != BoolOption::NotSet {
                 self.disable_clipboard = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
+                    let sub = self.clipboard_enabled() && self.peer_keyboard_enabled();
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
-                        self.inner.clone(),
-                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                        &mut self.inner,
+                        sub,
                     );
                 }
             }
@@ -2929,16 +2980,17 @@ impl Connection {
             if q != BoolOption::NotSet {
                 self.disable_keyboard = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
+                    let sub = self.clipboard_enabled() && self.peer_keyboard_enabled();
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
-                        self.inner.clone(),
-                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                        &mut self.inner,
+                        sub,
                     );
-                    s.write().unwrap().subscribe(
-                        NAME_CURSOR,
-                        self.inner.clone(),
-                        self.peer_keyboard_enabled() || self.show_remote_cursor,
-                    );
+
+                    let sub = self.peer_keyboard_enabled() || self.show_remote_cursor;
+                    s.write()
+                        .unwrap()
+                        .subscribe(NAME_CURSOR, &mut self.inner, sub);
                 }
             }
         }
@@ -3673,6 +3725,12 @@ impl Default for PortableState {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        let id = self.inner.id();
+        let mut active_conns_lock = ALIVE_CONNS.lock().unwrap();
+        active_conns_lock.retain(|&c| c != id);
+        self.inner
+            .call_qos::<false, _>(|qos| qos.on_connection_close(id));
+
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.release_pressed_modifiers();
     }
@@ -3790,26 +3848,6 @@ mod raii {
     // AUTHED_CONNS: all authorized connections
 
     use super::*;
-    pub struct ConnectionID(i32);
-
-    impl ConnectionID {
-        pub fn new(id: i32) -> Self {
-            ALIVE_CONNS.lock().unwrap().push(id);
-            Self(id)
-        }
-    }
-
-    impl Drop for ConnectionID {
-        fn drop(&mut self) {
-            let mut active_conns_lock = ALIVE_CONNS.lock().unwrap();
-            active_conns_lock.retain(|&c| c != self.0);
-            video_service::VIDEO_QOS
-                .lock()
-                .unwrap()
-                .on_connection_close(self.0);
-        }
-    }
-
     pub struct AuthedConnID(i32, AuthConnType);
 
     impl AuthedConnID {

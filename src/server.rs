@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{Arc, Mutex, RwLock, Weak},
+    sync::{atomic::AtomicU64, Arc, Condvar, Mutex, MutexGuard, RwLock, Weak},
     time::Duration,
 };
 
@@ -27,6 +27,7 @@ use hbb_common::{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
 use service::{EmptyExtraFieldService, GenericService, Service, Subscriber};
+use video_qos::VideoQoS;
 
 use crate::ipc::Data;
 
@@ -269,6 +270,66 @@ async fn create_relay_connection_(
     Ok(())
 }
 
+#[derive(Clone)]
+struct SyncerForVideo(Arc<(Mutex<u64>, Condvar, Mutex<VideoQoS>)>);
+
+impl SyncerForVideo {
+    fn static_syncer_for(name: &str) -> SyncerForVideo {
+        lazy_static::lazy_static! {
+            // Don't need an Arc in fact
+            // While it requires in turn a never realloced buffer for AtomicU64
+            // that means I need reserve a vector with capacity of all displays,
+            // and the name input parameter should be an index of that display.
+            // It is not convenient at the moment.
+            static ref MUX: Mutex<HashMap<String, Arc<(Mutex<u64>, Condvar, Mutex<VideoQoS>)>>> = Mutex::new(HashMap::new());
+        }
+
+        let mut g = MUX.lock().unwrap();
+        match g.get(name) {
+            Some(x) => SyncerForVideo(x.clone()),
+            _ => {
+                let arc = Arc::new((
+                    Mutex::new(0),
+                    Condvar::new(),
+                    Mutex::new(VideoQoS::default()),
+                ));
+                g.insert(name.to_string(), arc.clone());
+                SyncerForVideo(arc)
+            }
+        }
+    }
+
+    fn block(&self) {
+        let arc = &self.0;
+        let mut g = arc.0.lock().unwrap();
+        *g += 1;
+    }
+
+    fn unblock(&self) {
+        let arc = &self.0;
+        let mut g = arc.0.lock().unwrap();
+        *g -= 1;
+        if *g == 0 {
+            arc.1.notify_one();
+        }
+    }
+
+    fn wait_for_unblock(&self, ms: Duration) -> bool {
+        let arc = &self.0;
+        let g = arc.0.lock().unwrap();
+        if *g != 0 {
+            arc.1.wait_timeout(g, ms).map_or(false, |(g, _)| 0 == *g)
+        } else {
+            true
+        }
+    }
+
+    fn qos(&self) -> MutexGuard<VideoQoS> {
+        let arc = &self.0;
+        arc.2.lock().unwrap()
+    }
+}
+
 impl Server {
     fn is_video_service_name(name: &str) -> bool {
         name.starts_with(video_service::NAME)
@@ -284,27 +345,43 @@ impl Server {
         }
     }
 
-    pub fn add_connection(&mut self, conn: ConnInner, noperms: &Vec<&'static str>) {
+    pub fn add_connection(
+        &mut self,
+        conn: &mut ConnInner,
+        noperms: &Vec<&'static str>,
+        delay: u32,
+    ) {
         let primary_video_service_name =
             video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
         for s in self.services.values() {
             let name = s.name();
-            if Self::is_video_service_name(&name) && name != primary_video_service_name {
+            let video_svc = Self::is_video_service_name(&name);
+            if video_svc && name != primary_video_service_name {
                 continue;
             }
+
             if !noperms.contains(&(&name as _)) {
+                if video_svc {
+                    let sfv = SyncerForVideo::static_syncer_for(&name);
+                    sfv.qos().user_network_delay(conn.id(), delay, true);
+                    conn.link_blockers(sfv);
+                }
                 s.on_subscribe(conn.clone());
             }
         }
         #[cfg(target_os = "macos")]
         self.update_enable_retina();
-        self.connections.insert(conn.id(), conn);
+        self.connections.insert(conn.id(), conn.clone());
         *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
-    pub fn remove_connection(&mut self, conn: &ConnInner) {
+    pub fn remove_connection(&mut self, conn: &mut ConnInner) {
         for s in self.services.values() {
             s.on_unsubscribe(conn.id());
+
+            if Self::is_video_service_name(&s.name()) {
+                conn.unblock(-1);
+            }
         }
         self.connections.remove(&conn.id());
         *CONN_COUNT.lock().unwrap() = self.connections.len();
@@ -332,15 +409,23 @@ impl Server {
         self.services.contains_key(name)
     }
 
-    pub fn subscribe(&mut self, name: &str, conn: ConnInner, sub: bool) {
+    pub fn subscribe(&mut self, name: &str, conn: &mut ConnInner, sub: bool) {
         if let Some(s) = self.services.get(name) {
             if s.is_subed(conn.id()) == sub {
                 return;
             }
+
             if sub {
+                if Self::is_video_service_name(name) {
+                    conn.link_blockers(SyncerForVideo::static_syncer_for(name));
+                }
+
                 s.on_subscribe(conn.clone());
             } else {
                 s.on_unsubscribe(conn.id());
+                if Self::is_video_service_name(name) {
+                    conn.unblock(-1);
+                }
             }
             #[cfg(target_os = "macos")]
             self.update_enable_retina();
@@ -383,7 +468,7 @@ impl Server {
 
     fn capture_displays(
         &mut self,
-        conn: ConnInner,
+        conn: &mut ConnInner,
         displays: &[usize],
         include: bool,
         exclude: bool,
@@ -397,11 +482,11 @@ impl Server {
             if Self::is_video_service_name(&name) {
                 if displays.contains(&name) {
                     if include {
-                        self.subscribe(&name, conn.clone(), true);
+                        self.subscribe(&name, conn, true);
                     }
                 } else {
                     if exclude {
-                        self.subscribe(&name, conn.clone(), false);
+                        self.subscribe(&name, conn, false);
                     }
                 }
             }

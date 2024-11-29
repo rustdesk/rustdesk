@@ -41,6 +41,8 @@ pub struct VpxEncoder {
     id: VpxVideoCodecId,
     i444: bool,
     yuvfmt: EncodeYuvFormat,
+    pts: i64,
+    ratio: f32,
 }
 
 pub struct VpxDecoder {
@@ -68,24 +70,24 @@ impl EncoderApi for VpxEncoder {
                 c.g_w = config.width;
                 c.g_h = config.height;
                 c.g_timebase.num = 1;
-                c.g_timebase.den = 1000; // Output timestamp precision
-                c.rc_undershoot_pct = 95;
+                c.g_timebase.den = 30;
+                c.g_lag_in_frames = 0;
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
-                c.rc_dropframe_thresh = 25;
+                c.rc_dropframe_thresh = 0;
                 c.g_threads = codec_thread_num(64) as _;
                 c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
-                c.rc_end_usage = vpx_rc_mode::VPX_CBR;
+                c.rc_end_usage = vpx_rc_mode::VPX_VBR;
                 if let Some(keyframe_interval) = config.keyframe_interval {
-                    c.kf_min_dist = 0;
+                    c.kf_min_dist = 10;
                     c.kf_max_dist = keyframe_interval as _;
                 } else {
                     c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
                 }
 
-                let (q_min, q_max, b) = Self::convert_quality(config.quality);
+                let (q_min, q_max) = Self::calc_q_values(config.quality);
                 if q_min > 0 && q_min < q_max && q_max < 64 {
                     c.rc_min_quantizer = q_min;
                     c.rc_max_quantizer = q_max;
@@ -93,13 +95,15 @@ impl EncoderApi for VpxEncoder {
                     c.rc_min_quantizer = DEFAULT_QP_MIN;
                     c.rc_max_quantizer = DEFAULT_QP_MAX;
                 }
-                let base_bitrate = base_bitrate(config.width as _, config.height as _);
-                let bitrate = base_bitrate * b / 100;
-                if bitrate > 0 {
-                    c.rc_target_bitrate = bitrate;
-                } else {
-                    c.rc_target_bitrate = base_bitrate;
-                }
+
+                c.rc_target_bitrate = Self::bitrate(config.width, config.height, config.quality);
+                c.rc_undershoot_pct = 60;
+                c.rc_overshoot_pct = 30;
+
+                c.rc_buf_sz = c.rc_target_bitrate * 4;
+                c.rc_buf_initial_sz = c.rc_target_bitrate;
+                c.rc_buf_optimal_sz = c.rc_target_bitrate * 2;
+
                 // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp9/common/vp9_enums.h#29
                 // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp8/vp8_cx_iface.c#282
                 c.g_profile = if i444 && config.codec == VpxVideoCodecId::VP9 {
@@ -124,6 +128,11 @@ impl EncoderApi for VpxEncoder {
                     0,
                     VPX_ENCODER_ABI_VERSION as _
                 ));
+
+                println!(
+                    "----------------------- vpx encoder parameters: keyframe interval ({}, {}), kf-disabled mode {}; quant ({}, {}), bitrate {}, profile {}",
+                    c.kf_min_dist, c.kf_max_dist, c.kf_mode == vpx_kf_mode::VPX_KF_DISABLED, c.rc_min_quantizer, c.rc_max_quantizer, c.rc_target_bitrate, c.g_profile
+                );
 
                 if config.codec == VpxVideoCodecId::VP9 {
                     // set encoder internal speed settings
@@ -177,6 +186,8 @@ impl EncoderApi for VpxEncoder {
                     id: config.codec,
                     i444,
                     yuvfmt: Self::get_yuvfmt(config.width, config.height, i444),
+                    pts: 0,
+                    ratio: 1.0,
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -184,16 +195,19 @@ impl EncoderApi for VpxEncoder {
     }
 
     fn encode_to_message(&mut self, input: EncodeInput, ms: i64) -> ResultType<VideoFrame> {
+        let pts = self.pts(ms);
+
         let mut frames = Vec::new();
         for ref frame in self
-            .encode(ms, input.yuv()?, STRIDE_ALIGN)
+            .encode(pts, input.yuv()?, STRIDE_ALIGN)
             .with_context(|| "Failed to encode")?
         {
-            frames.push(VpxEncoder::create_frame(frame));
+            frames.push(VpxEncoder::create_frame(frame, ms));
         }
-        for ref frame in self.flush().with_context(|| "Failed to flush")? {
-            frames.push(VpxEncoder::create_frame(frame));
-        }
+
+        // for ref frame in self.flush().with_context(|| "Failed to flush")? {
+        //     frames.push(VpxEncoder::create_frame(frame));
+        // }
 
         // to-do: flush periodically, e.g. 1 second
         if frames.len() > 0 {
@@ -214,16 +228,10 @@ impl EncoderApi for VpxEncoder {
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
         let mut c = unsafe { *self.ctx.config.enc.to_owned() };
-        let (q_min, q_max, b) = Self::convert_quality(quality);
-        if q_min > 0 && q_min < q_max && q_max < 64 {
-            c.rc_min_quantizer = q_min;
-            c.rc_max_quantizer = q_max;
+        if let Quality::Custom(x) = quality {
+            c.rc_target_bitrate = x;
+            call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
         }
-        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
-        if bitrate > 0 {
-            c.rc_target_bitrate = bitrate;
-        }
-        call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
         Ok(())
     }
 
@@ -248,9 +256,39 @@ impl EncoderApi for VpxEncoder {
     }
 
     fn disable(&self) {}
+
+    fn runtime_adjust(&mut self, ratio: f32) -> ResultType<f32> {
+        if self.ratio != ratio {
+            let mut c = unsafe { *self.ctx.config.enc.to_owned() };
+            self.adjust_config(ratio, &mut c);
+            let code = unsafe { vpx_codec_enc_config_set(&mut self.ctx, &c) };
+            if vpx_codec_err_t::VPX_CODEC_OK == code {
+                self.ratio = ratio;
+            }
+        }
+        Ok(self.ratio)
+    }
 }
 
 impl VpxEncoder {
+    fn pts(&mut self, _: i64) -> i64 {
+        let pts = self.pts;
+        self.pts += 1;
+        pts
+    }
+
+    fn adjust_config(&self, quality: f32, conf: &mut vpx_codec_enc_cfg_t) {
+        let (q_min, q_max) = Self::calc_q_values(quality);
+        if q_min > 0 && q_min < q_max && q_max < 64 {
+            conf.rc_min_quantizer = q_min;
+            conf.rc_max_quantizer = q_max;
+        } else {
+            conf.rc_min_quantizer = DEFAULT_QP_MIN;
+            conf.rc_max_quantizer = DEFAULT_QP_MAX;
+        }
+        conf.rc_target_bitrate = Self::bitrate(self.width as _, self.height as _, quality);
+    }
+
     pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
         let bpp = if self.i444 { 24 } else { 12 };
         if data.len() < self.width * self.height * bpp / 8 {
@@ -322,41 +360,31 @@ impl VpxEncoder {
     }
 
     #[inline]
-    fn create_frame(frame: &EncodeFrame) -> EncodedVideoFrame {
+    fn create_frame(frame: &EncodeFrame, pts: i64) -> EncodedVideoFrame {
         EncodedVideoFrame {
             data: Bytes::from(frame.data.to_vec()),
             key: frame.key,
-            pts: frame.pts,
+            pts: pts,
             ..Default::default()
         }
     }
 
-    fn convert_quality(quality: Quality) -> (u32, u32, u32) {
-        match quality {
-            Quality::Best => (6, 45, 150),
-            Quality::Balanced => (12, 56, 100 * 2 / 3),
-            Quality::Low => (18, 56, 50),
-            Quality::Custom(b) => {
-                let (q_min, q_max) = Self::calc_q_values(b);
-                (q_min, q_max, b)
-            }
-        }
+    fn bitrate(width: u32, height: u32, quality: f32) -> u32 {
+        let bps = 0.3 * base_bitrate(width, height) as f32;
+        (bps * quality) as u32
     }
 
     #[inline]
-    fn calc_q_values(b: u32) -> (u32, u32) {
-        let b = std::cmp::min(b, 200);
-        let q_min1: i32 = 36;
-        let q_min2 = 0;
-        let q_max1 = 56;
-        let q_max2 = 37;
+    fn calc_q_values(ratio: f32) -> (u32, u32) {
+        let square = |x| x * x;
+        let q_min1 = square(15);
+        let q_min2 = square(25);
+        let q_max1 = square(40);
+        let q_max2 = square(56);
 
-        let t = b as f32 / 200.0;
-
-        let q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
-        let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
-
-        (q_min, q_max)
+        let q_min = (ratio * q_min1 as f32 + (1.0 - ratio) * q_min2 as f32).round();
+        let q_max = (ratio * q_max1 as f32 + (1.0 - ratio) * q_max2 as f32).round();
+        (q_min.sqrt() as u32, q_max.sqrt() as u32)
     }
 
     fn get_yuvfmt(width: u32, height: u32, i444: bool) -> EncodeYuvFormat {
@@ -416,7 +444,7 @@ pub struct VpxEncoderConfig {
     /// The height (in pixels).
     pub height: c_uint,
     /// The image quality
-    pub quality: Quality,
+    pub quality: f32,
     /// The codec
     pub codec: VpxVideoCodecId,
     /// keyframe interval

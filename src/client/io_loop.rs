@@ -413,11 +413,11 @@ impl<T: InvokeUiSession> Remote<T> {
                 hbb_common::tokio::sync::mpsc::unbounded_channel();
             // Create a stand-alone inner, add subscribe to audio service
             let conn_id = CLIENT_SERVER.write().unwrap().get_new_id();
-            let client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
+            let mut client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
             // now we subscribe
             CLIENT_SERVER.write().unwrap().subscribe(
                 audio_service::NAME,
-                client_conn_inner.clone(),
+                &mut client_conn_inner,
                 true,
             );
             let tx_audio = self.sender.clone();
@@ -430,7 +430,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             // unsubscribe
                             CLIENT_SERVER.write().unwrap().subscribe(
                                 audio_service::NAME,
-                                client_conn_inner,
+                                &mut client_conn_inner,
                                 false,
                             );
                             crate::audio_service::set_voice_call_input_device(None, true);
