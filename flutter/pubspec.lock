@@ -530,15 +530,6 @@ packages:
       url: "https://github.com/rustdesk-org/flutter_gpu_texture_renderer"
     source: git
     version: "0.0.1"
-  flutter_improved_scrolling:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "62f09545149f320616467c306c8c5f71714a18e6"
-      url: "https://github.com/rustdesk-org/flutter_improved_scrolling"
-    source: git
-    version: "0.0.3"
   flutter_keyboard_visibility:
     dependency: "direct main"
     description:
