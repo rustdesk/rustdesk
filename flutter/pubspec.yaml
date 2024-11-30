@@ -71,13 +71,6 @@ dependencies:
   debounce_throttle: ^2.0.0
   file_picker: ^5.1.0
   flutter_svg: ^2.0.5
-  flutter_improved_scrolling:
-    # currently, we use flutter 3.10.0+.
-    #
-    # for flutter 3.0.5, please use official version(just comment code below).
-    # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
-    git:
-      url: https://github.com/rustdesk-org/flutter_improved_scrolling
   uni_links:
     git:
       url: https://github.com/rustdesk-org/uni_links
