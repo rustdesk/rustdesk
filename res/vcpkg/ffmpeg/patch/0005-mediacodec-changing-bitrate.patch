@@ -1,17 +1,17 @@
-From fb5cc7909a9b288f6bd13c75992b66ed257ab019 Mon Sep 17 00:00:00 2001
+From 51ac90d8084f7b153eac5133765fa9d0365aa239 Mon Sep 17 00:00:00 2001
 From: 21pages <sunboeasy@gmail.com>
 Date: Sun, 24 Nov 2024 14:17:39 +0800
-Subject: [PATCH 2/2] mediacodec changing bitrate
+Subject: [PATCH 1/4] mediacodec changing bitrate
 
 Signed-off-by: 21pages <sunboeasy@gmail.com>
 ---
- libavcodec/mediacodec_wrapper.c | 96 +++++++++++++++++++++++++++++++++
- libavcodec/mediacodec_wrapper.h |  7 +++
- libavcodec/mediacodecenc.c      | 18 +++++++
- 3 files changed, 121 insertions(+)
+ libavcodec/mediacodec_wrapper.c | 101 ++++++++++++++++++++++++++++++++
+ libavcodec/mediacodec_wrapper.h |   7 +++
+ libavcodec/mediacodecenc.c      |  18 ++++++
+ 3 files changed, 126 insertions(+)
 
 diff --git a/libavcodec/mediacodec_wrapper.c b/libavcodec/mediacodec_wrapper.c
-index 306359071e..44fdd71869 100644
+index 306359071e..1ab4e673f6 100644
 --- a/libavcodec/mediacodec_wrapper.c
 +++ b/libavcodec/mediacodec_wrapper.c
 @@ -35,6 +35,8 @@
@@ -66,7 +66,7 @@ index 306359071e..44fdd71869 100644
  #define JNI_GET_ENV_OR_RETURN(env, log_ctx, ret) do {              \
      (env) = ff_jni_get_env(log_ctx);                               \
      if (!(env)) {                                                  \
-@@ -1761,6 +1785,64 @@ static int mediacodec_jni_signalEndOfInputStream(FFAMediaCodec *ctx)
+@@ -1761,6 +1785,69 @@ static int mediacodec_jni_signalEndOfInputStream(FFAMediaCodec *ctx)
      return 0;
  }
  
@@ -104,6 +104,11 @@ index 306359071e..44fdd71869 100644
 +        goto fail;
 +    }
 +
++    if (!codec->jfields.set_parameters_id) {
++        av_log(log_ctx, AV_LOG_ERROR, "System doesn't support setParameters\n");
++        goto fail;
++    }
++
 +    (*env)->CallVoidMethod(env, codec->object, codec->jfields.set_parameters_id, object);
 +    if (ff_jni_exception_check(env, 1, log_ctx) < 0) {
 +        goto fail;
@@ -131,7 +136,7 @@ index 306359071e..44fdd71869 100644
  static const FFAMediaFormat media_format_jni = {
      .class = &amediaformat_class,
  
-@@ -1820,6 +1902,8 @@ static const FFAMediaCodec media_codec_jni = {
+@@ -1820,6 +1907,8 @@ static const FFAMediaCodec media_codec_jni = {
      .getConfigureFlagEncode = mediacodec_jni_getConfigureFlagEncode,
      .cleanOutputBuffers = mediacodec_jni_cleanOutputBuffers,
      .signalEndOfInputStream = mediacodec_jni_signalEndOfInputStream,
@@ -140,7 +145,7 @@ index 306359071e..44fdd71869 100644
  };
  
  typedef struct FFAMediaFormatNdk {
-@@ -1893,6 +1977,8 @@ typedef struct FFAMediaCodecNdk {
+@@ -1893,6 +1982,8 @@ typedef struct FFAMediaCodecNdk {
      // Available since API level 26.
      media_status_t (*setInputSurface)(AMediaCodec*, ANativeWindow *);
      media_status_t (*signalEndOfInputStream)(AMediaCodec *);
@@ -149,7 +154,7 @@ index 306359071e..44fdd71869 100644
  } FFAMediaCodecNdk;
  
  static const FFAMediaFormat media_format_ndk;
-@@ -2154,6 +2240,8 @@ static inline FFAMediaCodec *ndk_codec_create(int method, const char *arg) {
+@@ -2154,6 +2245,8 @@ static inline FFAMediaCodec *ndk_codec_create(int method, const char *arg) {
      GET_SYMBOL(setInputSurface, 0)
      GET_SYMBOL(signalEndOfInputStream, 0)
  
@@ -158,7 +163,7 @@ index 306359071e..44fdd71869 100644
  #undef GET_SYMBOL
  
      switch (method) {
-@@ -2428,6 +2516,12 @@ static int mediacodec_ndk_signalEndOfInputStream(FFAMediaCodec *ctx)
+@@ -2428,6 +2521,12 @@ static int mediacodec_ndk_signalEndOfInputStream(FFAMediaCodec *ctx)
      return 0;
  }
  
@@ -171,7 +176,7 @@ index 306359071e..44fdd71869 100644
  static const FFAMediaFormat media_format_ndk = {
      .class = &amediaformat_ndk_class,
  
-@@ -2489,6 +2583,8 @@ static const FFAMediaCodec media_codec_ndk = {
+@@ -2489,6 +2588,8 @@ static const FFAMediaCodec media_codec_ndk = {
      .getConfigureFlagEncode = mediacodec_ndk_getConfigureFlagEncode,
      .cleanOutputBuffers = mediacodec_ndk_cleanOutputBuffers,
      .signalEndOfInputStream = mediacodec_ndk_signalEndOfInputStream,
