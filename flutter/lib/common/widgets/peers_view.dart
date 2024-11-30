@@ -5,7 +5,7 @@ import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -270,33 +270,24 @@ class _PeersViewState extends State<_PeersView>
                     },
                   )
                 : peerCardUiType.value == PeerUiType.list
-                    ? DesktopScrollWrapper(
-                        scrollController: _scrollController,
-                        child: ListView.builder(
-                            controller: _scrollController,
-                            physics: DraggableNeverScrollableScrollPhysics(),
-                            itemCount: peers.length,
-                            itemBuilder: (BuildContext context, int index) {
-                              return buildOnePeer(peers[index], false)
-                                  .marginOnly(
-                                      right: space,
-                                      top: index == 0 ? 0 : space / 2,
-                                      bottom: space / 2);
-                            }),
+                    ? ListView.builder(
+                        controller: _scrollController,
+                        itemCount: peers.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          return buildOnePeer(peers[index], false).marginOnly(
+                              right: space,
+                              top: index == 0 ? 0 : space / 2,
+                              bottom: space / 2);
+                        },
                       )
-                    : DesktopScrollWrapper(
-                        scrollController: _scrollController,
-                        child: DynamicGridView.builder(
-                            controller: _scrollController,
-                            physics: DraggableNeverScrollableScrollPhysics(),
-                            gridDelegate: SliverGridDelegateWithWrapping(
-                                mainAxisSpacing: space / 2,
-                                crossAxisSpacing: space),
-                            itemCount: peers.length,
-                            itemBuilder: (BuildContext context, int index) {
-                              return buildOnePeer(peers[index], false);
-                            }),
-                      ));
+                    : DynamicGridView.builder(
+                        gridDelegate: SliverGridDelegateWithWrapping(
+                            mainAxisSpacing: space / 2,
+                            crossAxisSpacing: space),
+                        itemCount: peers.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          return buildOnePeer(peers[index], false);
+                        }));
 
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
@@ -532,15 +523,22 @@ class AddressBookPeersView extends BasePeersView {
     if (selectedTags.isEmpty) {
       return true;
     }
+    // The result of a no-tag union with normal tags, still allows normal tags to perform union or intersection operations.
+    final selectedNormalTags =
+        selectedTags.where((tag) => tag != kUntagged).toList();
+    if (selectedTags.contains(kUntagged)) {
+      if (idents.isEmpty) return true;
+      if (selectedNormalTags.isEmpty) return false;
+    }
     if (gFFI.abModel.filterByIntersection.value) {
-      for (final tag in selectedTags) {
+      for (final tag in selectedNormalTags) {
         if (!idents.contains(tag)) {
           return false;
         }
       }
       return true;
     } else {
-      for (final tag in selectedTags) {
+      for (final tag in selectedNormalTags) {
         if (idents.contains(tag)) {
           return true;
         }
