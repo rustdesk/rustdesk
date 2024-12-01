@@ -193,15 +193,11 @@ impl EncoderApi for HwRamEncoder {
     }
 
     fn support_abr(&self) -> bool {
-        ["qsv", "vaapi", "mediacodec", "videotoolbox"]
-            .iter()
-            .all(|&x| !self.config.name.contains(x))
+        ["qsv", "vaapi"].iter().all(|&x| !self.config.name.contains(x))
     }
 
     fn support_changing_quality(&self) -> bool {
-        ["vaapi", "mediacodec", "videotoolbox"]
-            .iter()
-            .all(|&x| !self.config.name.contains(x))
+        ["vaapi"].iter().all(|&x| !self.config.name.contains(x))
     }
 
     fn latency_free(&self) -> bool {
