@@ -1,0 +1,38 @@
+diff --git a/packages/flutter/lib/src/material/dropdown_menu.dart b/packages/flutter/lib/src/material/dropdown_menu.dart
+index 7e634cd2aa..c1e9acc295 100644
+--- a/packages/flutter/lib/src/material/dropdown_menu.dart
++++ b/packages/flutter/lib/src/material/dropdown_menu.dart
+@@ -287,7 +28,7 @@ class _DropdownMenuState<T> extends State<DropdownMenu<T>> {
+   late List<GlobalKey> buttonItemKeys;
+   final MenuController _controller = MenuController();
+   late final TextEditingController _textEditingController;
+-  late bool _enableFilter;
++  bool _enableFilter = false;
+   late List<DropdownMenuEntry<T>> filteredEntries;
+   List<Widget>? _initialMenu;
+   int? currentHighlight;
+@@ -317,4 +317,9 @@ class _DropdownMenuState<T> extends State<DropdownMenu<T>> {
+     super.didUpdateWidget(oldWidget);
++    if (oldWidget.enableFilter != widget.enableFilter) {
++      if (!widget.enableFilter) {
++        _enableFilter = false;
++      }
++    }
+     if (oldWidget.enableSearch != widget.enableSearch) {
+       if (!widget.enableSearch) {
+         currentHighlight = null;
+@@ -447,5 +451,6 @@ class _DropdownMenuState<T> extends State<DropdownMenu<T>> {
+               currentHighlight = widget.enableSearch ? i : null;
+               widget.onSelected?.call(entry.value);
++              _enableFilter = false;
+             }
+           : null,
+         requestFocusOnHover: false,
+@@ -517,5 +521,7 @@ class _DropdownMenuState<T> extends State<DropdownMenu<T>> {
+     if (_enableFilter) {
+       filteredEntries = filter(widget.dropdownMenuEntries, _textEditingController);
++    } else {
++      filteredEntries = widget.dropdownMenuEntries;
+     }
+ 
+     if (widget.enableSearch) {
