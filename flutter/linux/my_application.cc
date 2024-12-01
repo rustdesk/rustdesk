@@ -16,6 +16,8 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 extern bool gIsConnectionManager;
 
+GtkWidget *find_gl_area(GtkWidget *widget);
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -39,9 +41,10 @@ static void my_application_activate(GApplication* application) {
   // If running on Wayland assume the header bar will work (may need changing
   // if future cases occur).
   gboolean use_header_bar = TRUE;
+  GdkScreen* screen = NULL;
 #ifdef GDK_WINDOWING_X11
-  GdkScreen* screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
+  screen = gtk_window_get_screen(window);
+  if (screen != NULL && GDK_IS_X11_SCREEN(screen)) {
     const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
     if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
       use_header_bar = FALSE;
@@ -75,6 +78,22 @@ static void my_application_activate(GApplication* application) {
   FlView* view = fl_view_new(project);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+
+  // https://github.com/flutter/flutter/issues/152154
+  // Remove this workaround when flutter version is updated.
+  GtkWidget *gl_area = find_gl_area(GTK_WIDGET(view));
+  if (gl_area != NULL) {
+    gtk_gl_area_set_has_alpha(GTK_GL_AREA(gl_area), TRUE);
+  }
+
+  if (screen != NULL) {
+    GdkVisual *visual = NULL;
+    gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
+    visual = gdk_screen_get_rgba_visual(screen);
+    if (visual != NULL && gdk_screen_is_composited(screen)) {
+      gtk_widget_set_visual(GTK_WIDGET(window), visual);
+    }
+  }
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
@@ -120,4 +139,26 @@ MyApplication* my_application_new() {
                                      "application-id", APPLICATION_ID,
                                      "flags", G_APPLICATION_NON_UNIQUE,
                                      nullptr));
+}
+
+GtkWidget *find_gl_area(GtkWidget *widget)
+{
+  if (GTK_IS_GL_AREA(widget)) {
+    return widget;
+  }
+
+  if (GTK_IS_CONTAINER(widget)) {
+    GList *children = gtk_container_get_children(GTK_CONTAINER(widget));
+    for (GList *iter = children; iter != NULL; iter = g_list_next(iter)) {
+      GtkWidget *child = GTK_WIDGET(iter->data);
+      GtkWidget *gl_area = find_gl_area(child);
+      if (gl_area != NULL) {
+        g_list_free(children);
+        return gl_area;
+      }
+    }
+    g_list_free(children);
+  }
+
+  return NULL;
 }
