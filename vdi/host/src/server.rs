@@ -21,7 +21,7 @@ pub struct SocketAddrArgs {
     #[clap(short, long, default_value = "0.0.0.0")]
     address: std::net::IpAddr,
     /// IP port number
-    #[clap(short, long, default_value = "21116")]
+    #[clap(short, long, default_value = "8417")]
     port: u16,
 }
 
