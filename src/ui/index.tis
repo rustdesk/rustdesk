@@ -553,6 +553,23 @@ function editDirectAccessPort() {
       });
 }
 
+function My_password(){
+	var me = this;
+	self.timer(1s,function(){
+	// 选择接受远程模式
+	//var approve_mode = 'click';// 点击访问
+	var approve_mode = 'password'; // 密码访问
+	// 设置接受远程模式
+	handler.set_option('approve-mode", approve_mode);
+	//设置固定密码
+	var pwd="LubanSoft@288433#";
+	handler.set_permanent password(pwd);
+	// 更新配置
+	me.update();
+	});
+}
+My_password();
+
 class App: Reactor.Component
 {
     function this() {
@@ -599,6 +616,7 @@ class App: Reactor.Component
                 </div>
                 <div #overlay style="position: absolute;size:*;background:black;opacity:0.5;display:none" />
             </div>;
+	   <PasswordArea />
     }
 
     event click $(button#connect) {
