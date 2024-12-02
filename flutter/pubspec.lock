@@ -37,10 +37,10 @@ packages:
     dependency: transitive
     description:
       name: archive
-      sha256: "22600aa1e926be775fa5fe7e6894e7fb3df9efda8891c73f70fb3262399a432d"
+      sha256: cb6a278ef2dbb298455e1a713bda08524a175630ec643a242c399c932a0a1f7d
       url: "https://pub.dev"
     source: hosted
-    version: "3.4.10"
+    version: "3.6.1"
   args:
     dependency: transitive
     description:
@@ -335,7 +335,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "519350f1f40746798299e94786197d058353bac9"
+      resolved-ref: "4f562ab49d289cfa36bfda7cff12746ec0200033"
       url: "https://github.com/rustdesk-org/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -384,10 +384,10 @@ packages:
     dependency: "direct main"
     description:
       name: extended_text
-      sha256: "7f382de3af12992e34bd72ddd36becf90c4720900af126cb9859f0189af71ffe"
+      sha256: "38c1cac571d6eaf406f4b80040c1f88561e7617ad90795aac6a1be0a8d0bb676"
       url: "https://pub.dev"
     source: hosted
-    version: "13.0.0"
+    version: "14.0.0"
   extended_text_library:
     dependency: transitive
     description:
@@ -408,10 +408,10 @@ packages:
     dependency: "direct main"
     description:
       name: ffi
-      sha256: "7bf0adc28a23d395f19f3f1eb21dd7cfd1dd9f8e1c50051c069122e6853bc878"
+      sha256: "16ed7b077ef01ad6170a3d0c57caa4a112a38d7a2ed5602e0aca9ca6f3d98da6"
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.0"
+    version: "2.1.3"
   ffigen:
     dependency: "direct dev"
     description:
@@ -530,15 +530,6 @@ packages:
       url: "https://github.com/rustdesk-org/flutter_gpu_texture_renderer"
     source: git
     version: "0.0.1"
-  flutter_improved_scrolling:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "62f09545149f320616467c306c8c5f71714a18e6"
-      url: "https://github.com/rustdesk-org/flutter_improved_scrolling"
-    source: git
-    version: "0.0.3"
   flutter_keyboard_visibility:
     dependency: "direct main"
     description:
@@ -745,10 +736,10 @@ packages:
     dependency: "direct main"
     description:
       name: image_picker
-      sha256: b6951e25b795d053a6ba03af5f710069c99349de9341af95155d52665cb4607c
+      sha256: "021834d9c0c3de46bf0fe40341fa07168407f694d9b2bb18d532dc1261867f7a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.9"
+    version: "1.1.2"
   image_picker_android:
     dependency: transitive
     description:
@@ -793,10 +784,10 @@ packages:
     dependency: transitive
     description:
       name: image_picker_platform_interface
-      sha256: fa4e815e6fcada50e35718727d83ba1c92f1edf95c0b4436554cec301b56233b
+      sha256: "9ec26d410ff46f483c5519c29c02ef0e02e13a543f882b152d4bfd2f06802f80"
       url: "https://pub.dev"
     source: hosted
-    version: "2.9.3"
+    version: "2.10.0"
   image_picker_windows:
     dependency: transitive
     description:
@@ -865,18 +856,18 @@ packages:
     dependency: transitive
     description:
       name: material_color_utilities
-      sha256: "0e0a020085b65b6083975e499759762399b4475f766c21668c4ecca34ea74e5a"
+      sha256: f7142bb1154231d7ea5f96bc7bde4bda2a0945d2806bb11670e30b850d56bdec
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.0"
+    version: "0.11.1"
   meta:
     dependency: transitive
     description:
       name: meta
-      sha256: d584fa6707a52763a52446f02cc621b077888fb63b93bbcb1143a7be5a0c0c04
+      sha256: bdb68674043280c3428e9ec998512fb681678676b3c54e773629ffe74419f8c7
       url: "https://pub.dev"
     source: hosted
-    version: "1.11.0"
+    version: "1.15.0"
   mime:
     dependency: transitive
     description:
@@ -1037,14 +1028,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
-  pointycastle:
-    dependency: transitive
-    description:
-      name: pointycastle
-      sha256: "43ac87de6e10afabc85c445745a7b799e04de84cebaa4fd7bf55a5e1e9604d29"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.7.4"
   pool:
     dependency: transitive
     description:
@@ -1285,10 +1268,11 @@ packages:
   texture_rgba_renderer:
     dependency: "direct main"
     description:
-      name: texture_rgba_renderer
-      sha256: cb048abdd800468ca40749ca10d1db9d1e6a055d1cde6234c05191293f0c7d61
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: "42797e0f03141dc2b585f76c64a13974508058b4"
+      resolved-ref: "42797e0f03141dc2b585f76c64a13974508058b4"
+      url: "https://github.com/rustdesk-org/flutter_texture_rgba_renderer"
+    source: git
     version: "0.0.16"
   timing:
     dependency: transitive
@@ -1325,10 +1309,11 @@ packages:
   uni_links:
     dependency: "direct main"
     description:
-      name: uni_links
-      sha256: "051098acfc9e26a9fde03b487bef5d3d228ca8f67693480c6f33fd4fbb8e2b6e"
-      url: "https://pub.dev"
-    source: hosted
+      path: uni_links
+      ref: f416118d843a7e9ed117c7bb7bdc2deda5a9e86f
+      resolved-ref: f416118d843a7e9ed117c7bb7bdc2deda5a9e86f
+      url: "https://github.com/rustdesk-org/uni_links"
+    source: git
     version: "0.5.1"
   uni_links_desktop:
     dependency: "direct main"
@@ -1558,24 +1543,24 @@ packages:
     dependency: "direct main"
     description:
       name: win32
-      sha256: "464f5674532865248444b4c3daca12bd9bf2d7c47f759ce2617986e7229494a8"
+      sha256: "68d1e89a91ed61ad9c370f9f8b6effed9ae5e0ede22a270bdfa6daf79fc2290a"
       url: "https://pub.dev"
     source: hosted
-    version: "5.2.0"
+    version: "5.5.4"
   win32_registry:
     dependency: transitive
     description:
       name: win32_registry
-      sha256: "41fd8a189940d8696b1b810efb9abcf60827b6cbfab90b0c43e8439e3a39d85a"
+      sha256: "21ec76dfc731550fd3e2ce7a33a9ea90b828fdf19a5c3bcf556fa992cfa99852"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.2"
+    version: "1.1.5"
   window_manager:
     dependency: "direct main"
     description:
       path: "."
       ref: HEAD
-      resolved-ref: f19acdb008645366339444a359a45c3257c8b32e
+      resolved-ref: "85789bfe6e4cfaf4ecc00c52857467fdb7f26879"
       url: "https://github.com/rustdesk-org/window_manager"
     source: git
     version: "0.3.6"
@@ -1583,8 +1568,8 @@ packages:
     dependency: "direct main"
     description:
       path: "plugins/window_size"
-      ref: a738913c8ce2c9f47515382d40827e794a334274
-      resolved-ref: a738913c8ce2c9f47515382d40827e794a334274
+      ref: eb3964990cf19629c89ff8cb4a37640c7b3d5601
+      resolved-ref: eb3964990cf19629c89ff8cb4a37640c7b3d5601
       url: "https://github.com/google/flutter-desktop-embedding.git"
     source: git
     version: "0.1.0"
@@ -1629,5 +1614,5 @@ packages:
     source: hosted
     version: "0.2.1"
 sdks:
-  dart: ">=3.3.0 <4.0.0"
-  flutter: ">=3.19.0"
+  dart: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"

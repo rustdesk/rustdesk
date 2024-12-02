@@ -2,14 +2,12 @@ use async_trait::async_trait;
 use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use clipboard_master::{CallbackResult, ClipboardHandler};
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
 };
 use crossbeam_queue::ArrayQueue;
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
 use ringbuf::{ring_buffer::RbBase, Rb};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -73,8 +71,10 @@ use crate::{
     ui_session_interface::{InvokeUiSession, Session},
 };
 
+#[cfg(not(target_os = "ios"))]
+use crate::clipboard::CLIPBOARD_INTERVAL;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::{check_clipboard, ClipboardSide, CLIPBOARD_INTERVAL};
+use crate::clipboard::{check_clipboard, ClipboardSide};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_session_interface::SessionPermissionConfig;
@@ -117,8 +117,7 @@ pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
 pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
 pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
-pub const AUDIO_BUFFER_MS: usize = 150;
+pub const AUDIO_BUFFER_MS: usize = 3000;
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -134,13 +133,12 @@ pub(crate) struct ClientClipboardContext {
 /// Client of the remote desktop.
 pub struct Client;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 struct TextClipboardState {
     is_required: bool,
     running: bool,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
 lazy_static::lazy_static! {
     static ref AUDIO_HOST: Host = cpal::default_host();
 }
@@ -148,6 +146,10 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
+}
+
+#[cfg(not(target_os = "ios"))]
+lazy_static::lazy_static! {
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
@@ -161,66 +163,6 @@ pub fn get_key_state(key: enigo::Key) -> bool {
         return true;
     }
     ENIGO.lock().unwrap().get_key_state(key)
-}
-
-cfg_if::cfg_if! {
-    if #[cfg(target_os = "android")] {
-
-use hbb_common::libc::{c_float, c_int};
-type Oboe = *mut c_void;
-extern "C" {
-    fn create_oboe_player(channels: c_int, sample_rate: c_int) -> Oboe;
-    fn push_oboe_data(oboe: Oboe, d: *const c_float, n: c_int);
-    fn destroy_oboe_player(oboe: Oboe);
-}
-
-struct OboePlayer {
-    raw: Oboe,
-}
-
-impl Default for OboePlayer {
-    fn default() -> Self {
-        Self {
-            raw: std::ptr::null_mut(),
-        }
-    }
-}
-
-impl OboePlayer {
-    fn new(channels: i32, sample_rate: i32) -> Self {
-        unsafe {
-            Self {
-                raw: create_oboe_player(channels, sample_rate),
-            }
-        }
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn is_null(&self) -> bool {
-        self.raw.is_null()
-    }
-
-    fn push(&mut self, d: &[f32]) {
-        if self.raw.is_null() {
-            return;
-        }
-        unsafe {
-            push_oboe_data(self.raw, d.as_ptr(), d.len() as _);
-        }
-    }
-}
-
-impl Drop for OboePlayer {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.raw.is_null() {
-                destroy_oboe_player(self.raw);
-            }
-        }
-    }
-}
-
-}
 }
 
 impl Client {
@@ -712,12 +654,12 @@ impl Client {
 
     #[inline]
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     pub fn set_is_text_clipboard_required(b: bool) {
         TEXT_CLIPBOARD_STATE.lock().unwrap().is_required = b;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     fn try_stop_clipboard() {
         // There's a bug here.
         // If session is closed by the peer, `has_sessions_running()` will always return true.
@@ -812,9 +754,41 @@ impl Client {
 
         Some(rx_started)
     }
+
+    #[cfg(target_os = "android")]
+    fn try_start_clipboard(_p: Option<()>) -> Option<UnboundedReceiver<()>> {
+        let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
+        if clipboard_lock.running {
+            return None;
+        }
+        clipboard_lock.running = true;
+
+        log::info!("Start text clipboard loop");
+        std::thread::spawn(move || {
+            loop {
+                if !TEXT_CLIPBOARD_STATE.lock().unwrap().running {
+                    break;
+                }
+                if !TEXT_CLIPBOARD_STATE.lock().unwrap().is_required {
+                    std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
+                    continue;
+                }
+
+                if let Some(msg) = crate::clipboard::get_clipboards_msg(true) {
+                    crate::flutter::send_text_clipboard_msg(msg);
+                }
+
+                std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
+            }
+            log::info!("Stop text clipboard loop");
+            TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;
+        });
+
+        None
+    }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 impl TextClipboardState {
     fn new() -> Self {
         Self {
@@ -887,100 +861,135 @@ impl ClipboardHandler for ClientClipboardHandler {
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
-    #[cfg(target_os = "android")]
-    oboe: Option<OboePlayer>,
-    #[cfg(target_os = "linux")]
-    simple: Option<psimple::Simple>,
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     audio_buffer: AudioBuffer,
     sample_rate: (u32, u32),
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     device_channel: u16,
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     ready: Arc<std::sync::Mutex<bool>>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
-struct AudioBuffer(pub Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>);
+struct AudioBuffer(
+    pub Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
+    usize,
+    [usize; 30],
+);
 
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
 impl Default for AudioBuffer {
     fn default() -> Self {
-        Self(Arc::new(std::sync::Mutex::new(
-            ringbuf::HeapRb::<f32>::new(48000 * 2 * AUDIO_BUFFER_MS / 1000), // 48000hz, 2 channel
-        )))
+        Self(
+            Arc::new(std::sync::Mutex::new(
+                ringbuf::HeapRb::<f32>::new(48000 * 2 * AUDIO_BUFFER_MS / 1000), // 48000hz, 2 channel
+            )),
+            48000 * 2,
+            [0; 30],
+        )
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
 impl AudioBuffer {
-    pub fn resize(&self, sample_rate: usize, channels: usize) {
+    pub fn resize(&mut self, sample_rate: usize, channels: usize) {
         let capacity = sample_rate * channels * AUDIO_BUFFER_MS / 1000;
         let old_capacity = self.0.lock().unwrap().capacity();
         if capacity != old_capacity {
             *self.0.lock().unwrap() = ringbuf::HeapRb::<f32>::new(capacity);
+            self.1 = sample_rate * channels;
             log::info!("Audio buffer resized from {old_capacity} to {capacity}");
         }
     }
 
-    // clear when full to avoid long time noise
-    #[inline]
-    pub fn clear_if_full(&self) {
-        let full = self.0.lock().unwrap().is_full();
-        if full {
-            self.0.lock().unwrap().clear();
-            log::trace!("Audio buffer cleared");
+    fn try_shrink(&mut self, having: usize) {
+        extern crate chrono;
+        use chrono::prelude::*;
+
+        let mut i = (having * 10) / self.1;
+        if i > 29 {
+            i = 29;
         }
+        self.2[i] += 1;
+
+        #[allow(non_upper_case_globals)]
+        static mut tms: i64 = 0;
+        let dt = Local::now().timestamp_millis();
+        unsafe {
+            if tms == 0 {
+                tms = dt;
+                return;
+            } else if dt < tms + 12000 {
+                return;
+            }
+            tms = dt;
+        }
+
+        // the safer water mark to drop
+        let mut zero = 0;
+        // the water mark taking most of time
+        let mut max = 0;
+        for i in 0..30 {
+            if self.2[i] == 0 && zero == i {
+                zero += 1;
+            }
+
+            if self.2[i] > self.2[max] {
+                self.2[max] = 0;
+                max = i;
+            } else {
+                self.2[i] = 0;
+            }
+        }
+        zero = zero * 2 / 3;
+
+        // how many data can be dropped:
+        // 1. will not drop if buffered data is less than 600ms
+        // 2. choose based on min(zero, max)
+        const N: usize = 4;
+        self.2[max] = 0;
+        if max < 6 {
+            return;
+        } else if max > zero * N {
+            max = zero * N;
+        }
+
+        let mut lock = self.0.lock().unwrap();
+        let cap = lock.capacity();
+        let having = lock.occupied_len();
+        let skip = (cap * max / (30 * N) + 1) & (!1);
+        if (having > skip * 3) && (skip > 0) {
+            lock.skip(skip);
+            log::info!("skip {skip}, based {max} {zero}");
+        }
+    }
+
+    /// append pcm to audio buffer, if buffered data
+    /// exceeds AUDIO_BUFFER_MS,  only AUDIO_BUFFER_MS
+    /// will be kept.
+    fn append_pcm2(&self, buffer: &[f32]) -> usize {
+        let mut lock = self.0.lock().unwrap();
+        let cap = lock.capacity();
+        if buffer.len() > cap {
+            lock.push_slice_overwrite(buffer);
+            return cap;
+        }
+
+        let having = lock.occupied_len() + buffer.len();
+        if having > cap {
+            lock.skip(having - cap);
+        }
+        lock.push_slice_overwrite(buffer);
+        lock.occupied_len()
+    }
+
+    /// append pcm to audio buffer, trying to drop data
+    /// when data is too much (per 12 seconds) based
+    /// statistics.
+    pub fn append_pcm(&mut self, buffer: &[f32]) {
+        let having = self.append_pcm2(buffer);
+        self.try_shrink(having);
     }
 }
 
 impl AudioHandler {
     /// Start the audio playback.
-    #[cfg(target_os = "linux")]
-    fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
-        use psimple::Simple;
-        use pulse::sample::{Format, Spec};
-        use pulse::stream::Direction;
-
-        let spec = Spec {
-            format: Format::F32le,
-            channels: format0.channels as _,
-            rate: format0.sample_rate as _,
-        };
-        if !spec.is_valid() {
-            bail!("Invalid audio format");
-        }
-
-        self.simple = Some(Simple::new(
-            None,                   // Use the default server
-            &crate::get_app_name(), // Our application’s name
-            Direction::Playback,    // We want a playback stream
-            None,                   // Use the default device
-            "playback",             // Description of our stream
-            &spec,                  // Our sample format
-            None,                   // Use default channel map
-            None,                   // Use default buffering attributes
-        )?);
-        self.sample_rate = (format0.sample_rate, format0.sample_rate);
-        Ok(())
-    }
-
-    /// Start the audio playback.
-    #[cfg(target_os = "android")]
-    fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
-        self.oboe = Some(OboePlayer::new(
-            format0.channels as _,
-            format0.sample_rate as _,
-        ));
-        self.sample_rate = (format0.sample_rate, format0.sample_rate);
-        Ok(())
-    }
-
-    /// Start the audio playback.
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         let device = AUDIO_HOST
             .default_output_device()
@@ -993,7 +1002,9 @@ impl AudioHandler {
         let sample_format = config.sample_format();
         log::info!("Default output format: {:?}", config);
         log::info!("Remote input format: {:?}", format0);
-        let config: StreamConfig = config.into();
+        let mut config: StreamConfig = config.into();
+        config.buffer_size = cpal::BufferSize::Fixed(64);
+
         self.sample_rate = (format0.sample_rate, config.sample_rate.0);
         let mut build_output_stream = |config: StreamConfig| match sample_format {
             cpal::SampleFormat::I8 => self.build_output_stream::<i8>(&config, &device),
@@ -1041,28 +1052,16 @@ impl AudioHandler {
     /// Handle audio frame and play it.
     #[inline]
     pub fn handle_frame(&mut self, frame: AudioFrame) {
-        #[cfg(not(any(target_os = "android", target_os = "linux")))]
         if self.audio_stream.is_none() || !self.ready.lock().unwrap().clone() {
-            return;
-        }
-        #[cfg(target_os = "linux")]
-        if self.simple.is_none() {
-            log::debug!("PulseAudio simple binding does not exists");
-            return;
-        }
-        #[cfg(target_os = "android")]
-        if self.oboe.is_none() {
             return;
         }
         self.audio_decoder.as_mut().map(|(d, buffer)| {
             if let Ok(n) = d.decode_float(&frame.data, buffer, false) {
                 let channels = self.channels;
                 let n = n * (channels as usize);
-                #[cfg(not(any(target_os = "android", target_os = "linux")))]
                 {
                     let sample_rate0 = self.sample_rate.0;
                     let sample_rate = self.sample_rate.1;
-                    let audio_buffer = self.audio_buffer.0.clone();
                     let mut buffer = buffer[0..n].to_owned();
                     if sample_rate != sample_rate0 {
                         buffer = crate::audio_resample(
@@ -1081,25 +1080,13 @@ impl AudioHandler {
                             self.device_channel,
                         );
                     }
-                    self.audio_buffer.clear_if_full();
-                    audio_buffer.lock().unwrap().push_slice_overwrite(&buffer);
-                }
-                #[cfg(target_os = "android")]
-                {
-                    self.oboe.as_mut().map(|x| x.push(&buffer[0..n]));
-                }
-                #[cfg(target_os = "linux")]
-                {
-                    let data_u8 =
-                        unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
-                    self.simple.as_mut().map(|x| x.write(data_u8));
+                    self.audio_buffer.append_pcm(&buffer);
                 }
             }
         });
     }
 
     /// Build audio output stream for current device.
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     fn build_output_stream<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
         &mut self,
         config: &StreamConfig,
@@ -1117,18 +1104,46 @@ impl AudioHandler {
         let timeout = None;
         let stream = device.build_output_stream(
             config,
-            move |data: &mut [T], _: &_| {
+            move |data: &mut [T], info: &cpal::OutputCallbackInfo| {
                 if !*ready.lock().unwrap() {
                     *ready.lock().unwrap() = true;
                 }
-                let mut lock = audio_buffer.lock().unwrap();
+
                 let mut n = data.len();
-                if lock.occupied_len() < n {
-                    n = lock.occupied_len();
+                let mut lock = audio_buffer.lock().unwrap();
+                let mut having = lock.occupied_len();
+                // android two timestamps, one from zero, another not
+                #[cfg(not(target_os = "android"))]
+                if having < n {
+                    let tms = info.timestamp();
+                    let how_long = tms
+                        .playback
+                        .duration_since(&tms.callback)
+                        .unwrap_or(Duration::from_millis(0));
+
+                    // must long enough to fight back scheuler delay
+                    if how_long > Duration::from_millis(6) && how_long < Duration::from_millis(3000)
+                    {
+                        drop(lock);
+                        std::thread::sleep(how_long.div_f32(1.2));
+                        lock = audio_buffer.lock().unwrap();
+                        having = lock.occupied_len();
+                    }
+
+                    if having < n {
+                        n = having;
+                    }
+                }
+                #[cfg(target_os = "android")]
+                if having < n {
+                    n = having;
                 }
                 let mut elems = vec![0.0f32; n];
-                lock.pop_slice(&mut elems);
+                if n > 0 {
+                    lock.pop_slice(&mut elems);
+                }
                 drop(lock);
+
                 let mut input = elems.into_iter();
                 for sample in data.iter_mut() {
                     *sample = match input.next() {
@@ -1173,9 +1188,15 @@ impl VideoHandler {
     pub fn new(format: CodecFormat, _display: usize) -> Self {
         let luid = Self::get_adapter_luid();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
+        let rgba_format =
+            if cfg!(feature = "flutter") && (cfg!(windows) || cfg!(target_os = "linux")) {
+                ImageFormat::ABGR
+            } else {
+                ImageFormat::ARGB
+            };
         VideoHandler {
             decoder: Decoder::new(format, luid),
-            rgb: ImageRgb::new(ImageFormat::ARGB, crate::get_dst_align_rgba()),
+            rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),
             texture: Default::default(),
             recorder: Default::default(),
             record: false,
@@ -1394,18 +1415,18 @@ impl LoginConfigHandler {
             let server = server_key.next().unwrap_or_default();
             let args = server_key.next().unwrap_or_default();
             let key = if server == PUBLIC_SERVER {
-                PUBLIC_RS_PUB_KEY
+                PUBLIC_RS_PUB_KEY.to_owned()
             } else {
-                let mut args_map: HashMap<&str, &str> = HashMap::new();
+                let mut args_map: HashMap<String, &str> = HashMap::new();
                 for arg in args.split('&') {
                     if let Some(kv) = arg.find('=') {
-                        let k = &arg[0..kv];
+                        let k = arg[0..kv].to_lowercase();
                         let v = &arg[kv + 1..];
                         args_map.insert(k, v);
                     }
                 }
                 let key = args_map.remove("key").unwrap_or_default();
-                key
+                key.to_owned()
             };
 
             // here we can check <id>/r@server
@@ -1413,7 +1434,7 @@ impl LoginConfigHandler {
             if real_id != raw_id {
                 force_relay = true;
             }
-            self.other_server = Some((real_id.clone(), server.to_owned(), key.to_owned()));
+            self.other_server = Some((real_id.clone(), server.to_owned(), key));
             id = format!("{real_id}@{server}");
         } else {
             let real_id = crate::ui_interface::handle_relay_id(&id);
@@ -2260,74 +2281,60 @@ impl LoginConfigHandler {
 
 /// Media data.
 pub enum MediaData {
-    VideoQueue(usize),
+    VideoQueue,
     VideoFrame(Box<VideoFrame>),
     AudioFrame(Box<AudioFrame>),
     AudioFormat(AudioFormat),
-    Reset(Option<usize>),
+    Reset,
     RecordScreen(bool),
 }
 
 pub type MediaSender = mpsc::Sender<MediaData>;
 
-struct VideoHandlerController {
-    handler: VideoHandler,
-    skip_beginning: u32,
-}
-
-/// Start video and audio thread.
-/// Return two [`MediaSender`], they should be given to the media producer.
+/// Start video thread.
 ///
 /// # Arguments
 ///
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
-pub fn start_video_audio_threads<F, T>(
+pub fn start_video_thread<F, T>(
     session: Session<T>,
+    display: usize,
+    video_receiver: mpsc::Receiver<MediaData>,
+    video_queue: Arc<RwLock<ArrayQueue<VideoFrame>>>,
+    fps: Arc<RwLock<Option<usize>>>,
+    chroma: Arc<RwLock<Option<Chroma>>>,
+    discard_queue: Arc<RwLock<bool>>,
     video_callback: F,
-) -> (
-    MediaSender,
-    MediaSender,
-    Arc<RwLock<HashMap<usize, ArrayQueue<VideoFrame>>>>,
-    Arc<RwLock<Option<usize>>>,
-    Arc<RwLock<Option<Chroma>>>,
-)
-where
+) where
     F: 'static + FnMut(usize, &mut scrap::ImageRgb, *mut c_void, bool) + Send,
     T: InvokeUiSession,
 {
-    let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
-    let video_queue_map: Arc<RwLock<HashMap<usize, ArrayQueue<VideoFrame>>>> = Default::default();
-    let video_queue_map_cloned = video_queue_map.clone();
     let mut video_callback = video_callback;
-
-    let fps = Arc::new(RwLock::new(None));
-    let decode_fps_map = fps.clone();
-    let chroma = Arc::new(RwLock::new(None));
-    let chroma_cloned = chroma.clone();
     let mut last_chroma = None;
 
     std::thread::spawn(move || {
         #[cfg(windows)]
         sync_cpu_usage();
         get_hwcodec_config();
-        let mut handler_controller_map = HashMap::new();
+        let mut video_handler = None;
         let mut count = 0;
         let mut duration = std::time::Duration::ZERO;
+        let mut skip_beginning = 0;
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
-                    MediaData::VideoFrame(_) | MediaData::VideoQueue(_) => {
+                    MediaData::VideoFrame(_) | MediaData::VideoQueue => {
                         let vf = match data {
-                            MediaData::VideoFrame(vf) => *vf,
-                            MediaData::VideoQueue(display) => {
-                                if let Some(video_queue) =
-                                    video_queue_map.read().unwrap().get(&display)
-                                {
-                                    if let Some(vf) = video_queue.pop() {
-                                        vf
-                                    } else {
+                            MediaData::VideoFrame(vf) => {
+                                *discard_queue.write().unwrap() = false;
+                                *vf
+                            }
+                            MediaData::VideoQueue => {
+                                if let Some(vf) = video_queue.read().unwrap().pop() {
+                                    if discard_queue.read().unwrap().clone() {
                                         continue;
                                     }
+                                    vf
                                 } else {
                                     continue;
                                 }
@@ -2340,36 +2347,25 @@ where
                         let display = vf.display as usize;
                         let start = std::time::Instant::now();
                         let format = CodecFormat::from(&vf);
-                        if !handler_controller_map.contains_key(&display) {
+                        if video_handler.is_none() {
                             let mut handler = VideoHandler::new(format, display);
                             let record = session.lc.read().unwrap().record;
                             let id = session.lc.read().unwrap().id.clone();
                             if record {
                                 handler.record_screen(record, id, display);
                             }
-                            handler_controller_map.insert(
-                                display,
-                                VideoHandlerController {
-                                    handler,
-                                    skip_beginning: 0,
-                                },
-                            );
+                            video_handler = Some(handler);
                         }
-                        if let Some(handler_controller) = handler_controller_map.get_mut(&display) {
+                        if let Some(handler) = video_handler.as_mut() {
                             let mut pixelbuffer = true;
                             let mut tmp_chroma = None;
-                            let format_changed =
-                                handler_controller.handler.decoder.format() != format;
-                            match handler_controller.handler.handle_frame(
-                                vf,
-                                &mut pixelbuffer,
-                                &mut tmp_chroma,
-                            ) {
+                            let format_changed = handler.decoder.format() != format;
+                            match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
                                 Ok(true) => {
                                     video_callback(
                                         display,
-                                        &mut handler_controller.handler.rgb,
-                                        handler_controller.handler.texture.texture,
+                                        &mut handler.rgb,
+                                        handler.texture.texture,
                                         pixelbuffer,
                                     );
 
@@ -2381,7 +2377,7 @@ where
 
                                     // fps calculation
                                     fps_calculate(
-                                        handler_controller,
+                                        &mut skip_beginning,
                                         &fps,
                                         format_changed,
                                         start.elapsed(),
@@ -2410,53 +2406,36 @@ where
 
                         // check invalid decoders
                         let mut should_update_supported = false;
-                        handler_controller_map
-                            .iter()
-                            .map(|(_, h)| {
-                                if !h.handler.decoder.valid() || h.handler.fail_counter >= MAX_DECODE_FAIL_COUNTER {
-                                    let mut lc = session.lc.write().unwrap();
-                                    let format = h.handler.decoder.format();
-                                    if !lc.mark_unsupported.contains(&format) {
-                                        lc.mark_unsupported.push(format);
-                                        should_update_supported = true;
-                                        log::info!("mark {format:?} decoder as unsupported, valid:{}, fail_counter:{}, all unsupported:{:?}", h.handler.decoder.valid(), h.handler.fail_counter, lc.mark_unsupported);
-                                    }
+                        if let Some(handler) = video_handler.as_mut() {
+                            if !handler.decoder.valid()
+                                || handler.fail_counter >= MAX_DECODE_FAIL_COUNTER
+                            {
+                                let mut lc = session.lc.write().unwrap();
+                                let format = handler.decoder.format();
+                                if !lc.mark_unsupported.contains(&format) {
+                                    lc.mark_unsupported.push(format);
+                                    should_update_supported = true;
+                                    log::info!("mark {format:?} decoder as unsupported, valid:{}, fail_counter:{}, all unsupported:{:?}", handler.decoder.valid(), handler.fail_counter, lc.mark_unsupported);
                                 }
-                            })
-                            .count();
+                            }
+                        }
                         if should_update_supported {
                             session.send(Data::Message(
                                 session.lc.read().unwrap().update_supported_decodings(),
                             ));
                         }
                     }
-                    MediaData::Reset(display) => {
-                        if let Some(display) = display {
-                            if let Some(handler_controler) =
-                                handler_controller_map.get_mut(&display)
-                            {
-                                handler_controler.handler.reset(None);
-                            }
-                        } else {
-                            for (_, handler_controler) in handler_controller_map.iter_mut() {
-                                handler_controler.handler.reset(None);
-                            }
+                    MediaData::Reset => {
+                        if let Some(handler) = video_handler.as_mut() {
+                            handler.reset(None);
                         }
                     }
                     MediaData::RecordScreen(start) => {
                         log::info!("record screen command: start: {start}");
-                        let record = session.lc.read().unwrap().record;
                         session.update_record_status(start);
-                        if record != start {
-                            session.lc.write().unwrap().record = start;
-                            let id = session.lc.read().unwrap().id.clone();
-                            for (display, handler_controler) in handler_controller_map.iter_mut() {
-                                handler_controler.handler.record_screen(
-                                    start,
-                                    id.clone(),
-                                    *display,
-                                );
-                            }
+                        let id = session.lc.read().unwrap().id.clone();
+                        if let Some(handler) = video_handler.as_mut() {
+                            handler.record_screen(start, id, display);
                         }
                     }
                     _ => {}
@@ -2467,14 +2446,6 @@ where
         }
         log::info!("Video decoder loop exits");
     });
-    let audio_sender = start_audio_thread();
-    return (
-        video_sender,
-        audio_sender,
-        video_queue_map_cloned,
-        decode_fps_map,
-        chroma_cloned,
-    );
 }
 
 /// Start an audio thread
@@ -2506,7 +2477,7 @@ pub fn start_audio_thread() -> MediaSender {
 
 #[inline]
 fn fps_calculate(
-    handler_controller: &mut VideoHandlerController,
+    skip_beginning: &mut usize,
     fps: &Arc<RwLock<Option<usize>>>,
     format_changed: bool,
     elapsed: std::time::Duration,
@@ -2516,11 +2487,11 @@ fn fps_calculate(
     if format_changed {
         *count = 0;
         *duration = std::time::Duration::ZERO;
-        handler_controller.skip_beginning = 0;
+        *skip_beginning = 0;
     }
     // // The first frame will be very slow
-    if handler_controller.skip_beginning < 3 {
-        handler_controller.skip_beginning += 1;
+    if *skip_beginning < 3 {
+        *skip_beginning += 1;
         return;
     }
     *duration += elapsed;
@@ -3328,6 +3299,7 @@ lazy_static::lazy_static! {
         ("VK_PRINT", Key::ControlKey(ControlKey::Print)),
         ("VK_EXECUTE", Key::ControlKey(ControlKey::Execute)),
         ("VK_SNAPSHOT", Key::ControlKey(ControlKey::Snapshot)),
+        ("VK_SCROLL", Key::ControlKey(ControlKey::Scroll)),
         ("VK_INSERT", Key::ControlKey(ControlKey::Insert)),
         ("VK_DELETE", Key::ControlKey(ControlKey::Delete)),
         ("VK_HELP", Key::ControlKey(ControlKey::Help)),

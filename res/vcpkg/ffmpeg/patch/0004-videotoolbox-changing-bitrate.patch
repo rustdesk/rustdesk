@@ -1,0 +1,84 @@
+From 7f12898fe8fd12c1042c98b34825ab2eda89e54d Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Sun, 24 Nov 2024 12:58:39 +0800
+Subject: [PATCH 1/2] videotoolbox changing bitrate
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/videotoolboxenc.c | 39 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/libavcodec/videotoolboxenc.c b/libavcodec/videotoolboxenc.c
+index 5ea9afee22..89c927cdcc 100644
+--- a/libavcodec/videotoolboxenc.c
++++ b/libavcodec/videotoolboxenc.c
+@@ -278,6 +278,8 @@ typedef struct VTEncContext {
+     int max_slice_bytes;
+     int power_efficient;
+     int max_ref_frames;
++
++    int last_bit_rate;
+ } VTEncContext;
+ 
+ static int vt_dump_encoder(AVCodecContext *avctx)
+@@ -1174,6 +1176,7 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
+     int64_t      one_second_value = 0;
+     void         *nums[2];
+ 
++    vtctx->last_bit_rate = bit_rate;
+     int status = VTCompressionSessionCreate(kCFAllocatorDefault,
+                                             avctx->width,
+                                             avctx->height,
+@@ -2618,6 +2621,41 @@ static int vtenc_send_frame(AVCodecContext *avctx,
+     return 0;
+ }
+ 
++static void update_config(AVCodecContext *avctx)
++{
++    VTEncContext *vtctx = avctx->priv_data;
++    
++    if (avctx->codec_id != AV_CODEC_ID_PRORES) {
++        if (avctx->bit_rate != vtctx->last_bit_rate) {
++            av_log(avctx, AV_LOG_INFO, "Setting bit rate to %d\n", avctx->bit_rate);
++            vtctx->last_bit_rate = avctx->bit_rate;
++            SInt32 bit_rate = avctx->bit_rate;
++            CFNumberRef bit_rate_num = CFNumberCreate(kCFAllocatorDefault,
++                                      kCFNumberSInt32Type,
++                                      &bit_rate);
++            if (!bit_rate_num) return;
++
++            if (vtctx->constant_bit_rate) {
++                int status = VTSessionSetProperty(vtctx->session,
++                                            compat_keys.kVTCompressionPropertyKey_ConstantBitRate,
++                                            bit_rate_num);
++                if (status == kVTPropertyNotSupportedErr) {
++                    av_log(avctx, AV_LOG_ERROR, "Error: -constant_bit_rate true is not supported by the encoder.\n");
++                }
++            } else {
++                int status = VTSessionSetProperty(vtctx->session,
++                                            kVTCompressionPropertyKey_AverageBitRate,
++                                            bit_rate_num);
++                if (!status) {
++                    av_log(avctx, AV_LOG_ERROR, "Error: cannot set average bit rate: %d\n", status);
++                }
++            }
++
++            CFRelease(bit_rate_num);
++        }
++    }
++}
++
+ static av_cold int vtenc_frame(
+     AVCodecContext *avctx,
+     AVPacket       *pkt,
+@@ -2630,6 +2668,7 @@ static av_cold int vtenc_frame(
+     CMSampleBufferRef buf = NULL;
+     ExtraSEI *sei = NULL;
+ 
++    update_config(avctx);
+     if (frame) {
+         status = vtenc_send_frame(avctx, vtctx, frame);
+ 
+-- 
+2.43.0.windows.1
+

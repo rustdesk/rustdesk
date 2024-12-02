@@ -690,7 +690,7 @@ impl Connection {
                             }
                         }
                         Some(message::Union::MultiClipboards(_multi_clipboards)) => {
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            #[cfg(not(target_os = "ios"))]
                             if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(&conn.lr.version, &conn.lr.my_platform, _multi_clipboards) {
                                 if let Err(err) = conn.stream.send(&msg_out).await {
                                     conn.on_close(&err.to_string(), false).await;
@@ -760,10 +760,7 @@ impl Connection {
         }
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false).await;
-            raii::AuthedConnID::remove_session_if_last_duplication(
-                conn.inner.id(),
-                conn.session_key(),
-            );
+            raii::AuthedConnID::check_remove_session(conn.inner.id(), conn.session_key());
         }
 
         conn.post_conn_audit(json!({
@@ -2077,7 +2074,9 @@ impl Connection {
                     if self.clipboard {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(vec![cb], ClipboardSide::Host);
-                        #[cfg(all(feature = "flutter", target_os = "android"))]
+                        // ios as the controlled side is actually not supported for now.
+                        // The following code is only used to preserve the logic of handling text clipboard on mobile.
+                        #[cfg(target_os = "ios")]
                         {
                             let content = if cb.compress {
                                 hbb_common::compress::decompress(&cb.content)
@@ -2095,14 +2094,17 @@ impl Connection {
                                 }
                             }
                         }
+                        #[cfg(target_os = "android")]
+                        crate::clipboard::handle_msg_clipboard(cb);
                     }
                 }
-                Some(message::Union::MultiClipboards(_mcb)) =>
-                {
+                Some(message::Union::MultiClipboards(_mcb)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard {
                         update_clipboard(_mcb.clipboards, ClipboardSide::Host);
                     }
+                    #[cfg(target_os = "android")]
+                    crate::clipboard::handle_msg_multi_clipboards(_mcb);
                 }
                 Some(message::Union::Cliprdr(_clip)) =>
                 {
@@ -2147,6 +2149,9 @@ impl Connection {
                             }
                         }
                         match fa.union {
+                            Some(file_action::Union::ReadEmptyDirs(rd)) => {
+                                self.read_empty_dirs(&rd.path, rd.include_hidden);
+                            }
                             Some(file_action::Union::ReadDir(rd)) => {
                                 self.read_dir(&rd.path, rd.include_hidden);
                             }
@@ -2377,7 +2382,7 @@ impl Connection {
                     }
                     Some(misc::Union::CloseReason(_)) => {
                         self.on_close("Peer close", true).await;
-                        raii::AuthedConnID::remove_session_if_last_duplication(
+                        raii::AuthedConnID::check_remove_session(
                             self.inner.id(),
                             self.session_key(),
                         );
@@ -3140,7 +3145,15 @@ impl Connection {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(msg_out).await;
-        raii::AuthedConnID::remove_session_if_last_duplication(self.inner.id(), self.session_key());
+        raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
+    }
+
+    fn read_empty_dirs(&mut self, dir: &str, include_hidden: bool) {
+        let dir = dir.to_string();
+        self.send_fs(ipc::FS::ReadEmptyDirs {
+            dir,
+            include_hidden,
+        });
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {
@@ -3292,17 +3305,6 @@ impl Connection {
                 msg_out.set_misc(misc);
                 self.send(msg_out).await;
             }
-        }
-    }
-
-    #[inline]
-    fn conn_type(&self) -> AuthConnType {
-        if self.file_transfer.is_some() {
-            AuthConnType::FileTransfer
-        } else if self.port_forward_socket.is_some() {
-            AuthConnType::PortForward
-        } else {
-            AuthConnType::Remote
         }
     }
 
@@ -3848,20 +3850,30 @@ mod raii {
                 .count()
         }
 
-        pub fn remove_session_if_last_duplication(conn_id: i32, key: SessionKey) {
+        pub fn check_remove_session(conn_id: i32, key: SessionKey) {
             let mut lock = SESSIONS.lock().unwrap();
             let contains = lock.contains_key(&key);
             if contains {
-                let another = AUTHED_CONNS
+                // No two remote connections with the same session key, just for ensure.
+                let is_remote = AUTHED_CONNS
                     .lock()
                     .unwrap()
                     .iter()
-                    .any(|c| c.0 != conn_id && c.2 == key);
-                if !another {
-                    // Keep the session if there is another connection with same peer_id and session_id.
+                    .any(|c| c.0 == conn_id && c.1 == AuthConnType::Remote);
+                // If there are 2 connections with the same peer_id and session_id, a remote connection and a file transfer or port forward connection,
+                // If any of the connections is closed allowing retry, this will not be called;
+                // If the file transfer/port forward connection is closed with no retry, the session should be kept for remote control menu action;
+                // If the remote connection is closed with no retry, keep the session is not reasonable in case there is a retry button in the remote side, and ignore network fluctuations.
+                let another_remote = AUTHED_CONNS
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|c| c.0 != conn_id && c.2 == key && c.1 == AuthConnType::Remote);
+                if is_remote || !another_remote {
                     lock.remove(&key);
                     log::info!("remove session");
                 } else {
+                    // Keep the session if there is another remote connection with same peer_id and session_id.
                     log::info!("skip remove session");
                 }
             }

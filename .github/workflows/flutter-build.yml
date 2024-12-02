@@ -20,21 +20,21 @@ on:
 env:
   SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
+  MAC_RUST_VERSION: "1.81" # 1.81 is requred for macos, because of https://github.com/yury/cidre requires 1.81
   CARGO_NDK_VERSION: "3.1.2"
   SCITER_ARMV7_CMAKE_VERSION: "3.29.7"
   SCITER_NASM_DEBVERSION: "2.14-1"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.19.6"
-  ANDROID_FLUTTER_VERSION: "3.13.9" # >= 3.16 is very slow on my android phone, but work well on most of others. We may switch to new flutter after changing to texture rendering (I believe it can solve my problem).
-  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  FLUTTER_VERSION: "3.24.5"
+  ANDROID_FLUTTER_VERSION: "3.24.5"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # vcpkg version: 2024.07.12
   VCPKG_COMMIT_ID: "1de2026f28ead93ff1773e6e680387643e914ea1"
-  VERSION: "1.3.2"
-  NDK_VERSION: "r27b"
+  VERSION: "1.3.4"
+  NDK_VERSION: "r27c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
@@ -46,6 +46,9 @@ env:
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
 
 jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
   build-RustDeskTempTopMostWindow:
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
@@ -59,7 +62,7 @@ jobs:
 
   build-for-windows-flutter:
     name: ${{ matrix.job.target }}
-    needs: [build-RustDeskTempTopMostWindow]
+    needs: [build-RustDeskTempTopMostWindow, generate-bridge]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -85,6 +88,12 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
+
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
         with:
@@ -95,7 +104,22 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
+
+      # https://github.com/flutter/flutter/issues/155685
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
@@ -107,13 +131,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: ${{ matrix.job.os }}
-
-      - name: Install flutter rust bridge deps
-        run: |
-          git config --global core.longpaths true
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
-          Push-Location flutter ; flutter pub get ; Pop-Location
-          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@v11
@@ -374,6 +391,7 @@ jobs:
     # use build-for-macOS instead
     if: false
     runs-on: [self-hosted, macOS, ARM64]
+    needs: [generate-bridge]
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
@@ -385,12 +403,11 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Install flutter rust bridge deps
-        shell: bash
-        run: |
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
-          pushd flutter && flutter pub get && popd
-          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
 
       - name: Build rustdesk
         run: |
@@ -446,6 +463,7 @@ jobs:
     if: ${{ inputs.upload-artifact }}
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
+    needs: [generate-bridge]
     strategy:
       fail-fast: false
       matrix:
@@ -474,6 +492,11 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Patch flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@v11
@@ -510,12 +533,11 @@ jobs:
           prefix-key: rustdesk-lib-cache-ios
           key: ${{ matrix.job.target }}
 
-      - name: Install flutter rust bridge deps
-        shell: bash
-        run: |
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
-          pushd flutter && flutter pub get && popd
-          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/ios/Runner/bridge_generated.h
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
 
       - name: Build rustdesk lib
         run: |
@@ -550,6 +572,7 @@ jobs:
     #if: ${{ inputs.upload-artifact }}
     if: false
     runs-on: [self-hosted, macOS, ARM64]
+    needs: [generate-bridge]
     strategy:
       fail-fast: false
     steps:
@@ -565,12 +588,11 @@ jobs:
 
       # $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
 
-      - name: Install flutter rust bridge deps
-        shell: bash
-        run: |
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
-          pushd flutter && flutter pub get && popd
-          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/ios/Runner/bridge_generated.h
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
 
       - name: Build rustdesk lib
         run: |
@@ -605,6 +627,7 @@ jobs:
   build-for-macOS:
     name: ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
+    needs: [generate-bridge]
     strategy:
       fail-fast: false
       matrix:
@@ -619,7 +642,7 @@ jobs:
               target: aarch64-apple-darwin,
               os: macos-latest,
               # extra-build-args: "--disable-flutter-texture-render", # disable this for mac, because we see a lot of users reporting flickering both on arm and x64, and we can not confirm if texture rendering has better performance if htere is no vram, https://github.com/rustdesk/rustdesk/issues/6296
-              extra-build-args: "",
+              extra-build-args: "--screencapturekit",
               arch: aarch64,
             }
     steps:
@@ -668,7 +691,13 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg nasm cmake gcc wget ninja pkg-config
+          brew install llvm create-dmg nasm cmake gcc wget ninja
+          # pkg-config is handled in a separate step, because it may be already installed by `macos-latest`(14.7.1) runner
+          if command -v pkg-config &>/dev/null; then
+              echo "pkg-config is already installed"
+          else
+              brew install pkg-config
+          fi
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -676,18 +705,23 @@ jobs:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
+      - name: Patch flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+
       - name: Workaround for flutter issue
         shell: bash
         run: |
           cd "$(dirname "$(which flutter)")"
-          # https://github.com/flutter/flutter/issues/133533
+          # https://github.com/flutter/flutter/issues/1.3.43
           sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart
           grep -n '_setFramesEnabledState(false);' ../packages/flutter/lib/src/scheduler/binding.dart
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: ${{ env.RUST_VERSION }}
+          toolchain: ${{ env.MAC_RUST_VERSION }}
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
@@ -695,12 +729,11 @@ jobs:
         with:
           prefix-key: ${{ matrix.job.os }}
 
-      - name: Install flutter rust bridge deps
-        shell: bash
-        run: |
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
-          pushd flutter && flutter pub get && popd
-          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@v11
@@ -735,6 +768,13 @@ jobs:
 
       - name: Build rustdesk
         run: |
+          if [ "${{ matrix.job.target }}" = "aarch64-apple-darwin" ]; then
+            MIN_MACOS_VERSION="12.3"
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
+            sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
+            sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
+          fi
           ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg
@@ -822,11 +862,8 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: rustdesk-${{ env.VERSION }}-unsigned.tar.gz
 
-  generate-bridge-linux:
-    uses: ./.github/workflows/bridge.yml
-
   build-rustdesk-android:
-    needs: [generate-bridge-linux]
+    needs: [generate-bridge]
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -903,7 +940,7 @@ jobs:
                llvm-10-dev \
                nasm \
                ninja-build \
-               openjdk-11-jdk-headless \
+               openjdk-17-jdk-headless \
                pkg-config \
                tree \
                wget
@@ -915,6 +952,12 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
+
+      - name: Patch flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+
       - uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
@@ -974,7 +1017,7 @@ jobs:
           key: ${{ matrix.job.target }}
 
       - name: fix android for flutter 3.13
-        if: $${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
+        if: ${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
         run: |
           cd flutter
           sed -i 's/uni_links_desktop/#uni_links_desktop/g' pubspec.yaml
@@ -989,7 +1032,7 @@ jobs:
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           rustup target add ${{ matrix.job.target }}
-          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }}
+          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
               ./flutter/ndk_arm64.sh
@@ -1022,9 +1065,9 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           case ${{ matrix.job.target }} in
@@ -1069,6 +1112,14 @@ jobs:
           mkdir -p signed-apk; pushd signed-apk
           mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.apk .
 
+      # https://github.com/r0adkll/sign-android-release/issues/84#issuecomment-1889636075
+      - name: Setup sign tool version variable
+        shell: bash
+        run: |
+          BUILD_TOOL_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | tail -n 1)
+          echo "ANDROID_SIGN_TOOL_VERSION=$BUILD_TOOL_VERSION" >> $GITHUB_ENV
+          echo Last build tool version is: $BUILD_TOOL_VERSION
+
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
         if: env.ANDROID_SIGNING_KEY != null
@@ -1080,8 +1131,8 @@ jobs:
           keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
         env:
-          # override default build-tools version (29.0.3) -- optional
-          BUILD_TOOLS_VERSION: "30.0.2"
+          # env.ANDROID_SIGN_TOOL_VERSION is set by Step "Setup sign tool version variable"
+          BUILD_TOOLS_VERSION: ${{ env.ANDROID_SIGN_TOOL_VERSION }}
 
       - name: Upload Artifacts
         if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
@@ -1166,7 +1217,7 @@ jobs:
                llvm-10-dev \
                nasm \
                ninja-build \
-               openjdk-11-jdk-headless \
+               openjdk-17-jdk-headless \
                pkg-config \
                tree \
                wget
@@ -1178,6 +1229,11 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
+
+      - name: Patch flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -1211,7 +1267,7 @@ jobs:
           path: ./flutter/android/app/src/main/jniLibs/x86
 
       - name: fix android for flutter 3.13
-        if: $${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
+        if: ${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
         run: |
           cd flutter
           sed -i 's/uni_links_desktop/#uni_links_desktop/g' pubspec.yaml
@@ -1223,9 +1279,9 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           mv ./flutter/android/app/src/main/jniLibs/arm64-v8a/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
@@ -1245,6 +1301,14 @@ jobs:
           mkdir -p signed-apk
           mv ./flutter/build/app/outputs/flutter-apk/app-${{ env.reltype }}.apk signed-apk/rustdesk-${{ env.VERSION }}-universal${{ env.suffix }}.apk
 
+      # https://github.com/r0adkll/sign-android-release/issues/84#issuecomment-1889636075
+      - name: Setup sign tool version variable
+        shell: bash
+        run: |
+          BUILD_TOOL_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | tail -n 1)
+          echo "ANDROID_SIGN_TOOL_VERSION=$BUILD_TOOL_VERSION" >> $GITHUB_ENV
+          echo Last build tool version is: $BUILD_TOOL_VERSION
+
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
         if: env.ANDROID_SIGNING_KEY != null
@@ -1256,8 +1320,8 @@ jobs:
           keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
         env:
-          # override default build-tools version (29.0.3) -- optional
-          BUILD_TOOLS_VERSION: "30.0.2"
+          # env.ANDROID_SIGN_TOOL_VERSION is set by Step "Setup sign tool version variable"
+          BUILD_TOOLS_VERSION: ${{ env.ANDROID_SIGN_TOOL_VERSION }}
 
       - name: Upload Artifacts
         if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
@@ -1285,7 +1349,7 @@ jobs:
             signed-apk/rustdesk-${{ env.VERSION }}-universal${{ env.suffix }}.apk
 
   build-rustdesk-linux:
-    needs: [generate-bridge-linux]
+    needs: [generate-bridge]
     name: build rustdesk linux ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.on }}
     strategy:
@@ -1376,6 +1440,7 @@ jobs:
       - name: Install vcpkg dependencies
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         run: |
+          sudo apt install -y libva-dev libvdpau-dev
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet ${{ matrix.job.vcpkg-triplet }} \
@@ -1519,6 +1584,19 @@ jobs:
                 flutter doctor -v
               ;;
             esac
+
+            if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
+              case ${{ matrix.job.arch }} in
+                aarch64)
+                  pushd /opt/flutter-elinux/flutter
+                ;;
+                x86_64)
+                  pushd /opt/flutter
+                ;;
+              esac
+              git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+              popd
+            fi
 
             # build flutter
             pushd /workspace
@@ -1989,7 +2067,12 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       # https://rustdesk.com/docs/en/dev/build/web/
       - name: Build web

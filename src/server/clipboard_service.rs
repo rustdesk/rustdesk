@@ -1,11 +1,15 @@
 use super::*;
-pub use crate::clipboard::{
-    check_clipboard, ClipboardContext, ClipboardSide, CLIPBOARD_INTERVAL as INTERVAL,
-    CLIPBOARD_NAME as NAME,
-};
+#[cfg(not(target_os = "android"))]
+pub use crate::clipboard::{check_clipboard, ClipboardContext, ClipboardSide};
+pub use crate::clipboard::{CLIPBOARD_INTERVAL as INTERVAL, CLIPBOARD_NAME as NAME};
 #[cfg(windows)]
 use crate::ipc::{self, ClipboardFile, ClipboardNonFile, Data};
+#[cfg(not(target_os = "android"))]
 use clipboard_master::{CallbackResult, ClipboardHandler};
+#[cfg(target_os = "android")]
+use hbb_common::config::{keys, option2bool};
+#[cfg(target_os = "android")]
+use scrap::android::ffi::call_clipboard_manager_enable_service_clipboard;
 use std::{
     io,
     sync::mpsc::{channel, RecvTimeoutError, Sender},
@@ -14,6 +18,7 @@ use std::{
 #[cfg(windows)]
 use tokio::runtime::Runtime;
 
+#[cfg(not(target_os = "android"))]
 struct Handler {
     sp: EmptyExtraFieldService,
     ctx: Option<ClipboardContext>,
@@ -25,11 +30,12 @@ struct Handler {
 }
 
 pub fn new() -> GenericService {
-    let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
+    let svc = EmptyExtraFieldService::new(NAME.to_owned(), false);
     GenericService::run(&svc.clone(), run);
     svc.sp
 }
 
+#[cfg(not(target_os = "android"))]
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     let (tx_cb_result, rx_cb_result) = channel();
     let handler = Handler {
@@ -73,9 +79,9 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 impl ClipboardHandler for Handler {
     fn on_clipboard_change(&mut self) -> CallbackResult {
-        self.sp.snapshot(|_sps| Ok(())).ok();
         if self.sp.ok() {
             if let Some(msg) = self.get_clipboard_msg() {
                 self.sp.send(msg);
@@ -92,6 +98,7 @@ impl ClipboardHandler for Handler {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 impl Handler {
     fn get_clipboard_msg(&mut self) -> Option<Message> {
         #[cfg(target_os = "windows")]
@@ -215,4 +222,26 @@ impl Handler {
         // unreachable!
         bail!("failed to get clipboard data from cm");
     }
+}
+
+#[cfg(target_os = "android")]
+fn is_clipboard_enabled() -> bool {
+    let keyboard_enabled = crate::ui_interface::get_option(keys::OPTION_ENABLE_KEYBOARD);
+    let keyboard_enabled = option2bool(keys::OPTION_ENABLE_KEYBOARD, &keyboard_enabled);
+    let clip_enabled = crate::ui_interface::get_option(keys::OPTION_ENABLE_CLIPBOARD);
+    let clip_enabled = option2bool(keys::OPTION_ENABLE_CLIPBOARD, &clip_enabled);
+    keyboard_enabled && clip_enabled
+}
+
+#[cfg(target_os = "android")]
+fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
+    let _res = call_clipboard_manager_enable_service_clipboard(is_clipboard_enabled());
+    while sp.ok() {
+        if let Some(msg) = crate::clipboard::get_clipboards_msg(false) {
+            sp.send(msg);
+        }
+        std::thread::sleep(Duration::from_millis(INTERVAL));
+    }
+    let _res = call_clipboard_manager_enable_service_clipboard(false);
+    Ok(())
 }

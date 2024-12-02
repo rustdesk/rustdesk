@@ -84,7 +84,16 @@ class _RawTouchGestureDetectorRegionState
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   double _scale = 1;
 
+  // Workaround tap down event when two fingers are used to scale(mobile)
+  TapDownDetails? _lastTapDownDetails;
+
   PointerDeviceKind? lastDeviceKind;
+
+  // For touch mode, onDoubleTap
+  // `onDoubleTap()` does not provide the position of the tap event.
+  Offset _lastPosOfDoubleTapDown = Offset.zero;
+  bool _touchModePanStarted = false;
+  Offset _doubleFinerTapPosition = Offset.zero;
 
   FFI get ffi => widget.ffi;
   FfiModel get ffiModel => widget.ffiModel;
@@ -100,152 +109,190 @@ class _RawTouchGestureDetectorRegionState
     );
   }
 
-  onTapDown(TapDownDetails d) {
+  onTapDown(TapDownDetails d) async {
     lastDeviceKind = d.kind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (handleTouch) {
+      _lastPosOfDoubleTapDown = d.localPosition;
       // Desktop or mobile "Touch mode"
-      if (ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy)) {
-        inputModel.tapDown(MouseButtons.left);
-      }
+      _lastTapDownDetails = d;
     }
   }
 
-  onTapUp(TapUpDetails d) {
+  onTapUp(TapUpDetails d) async {
+    final TapDownDetails? lastTapDownDetails = _lastTapDownDetails;
+    _lastTapDownDetails = null;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (handleTouch) {
-      if (ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy)) {
-        inputModel.tapUp(MouseButtons.left);
+      final isMoved =
+          await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+      if (isMoved) {
+        if (lastTapDownDetails != null) {
+          await inputModel.tapDown(MouseButtons.left);
+        }
+        await inputModel.tapUp(MouseButtons.left);
       }
     }
   }
 
-  onTap() {
+  onTap() async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (!handleTouch) {
       // Mobile, "Mouse mode"
-      inputModel.tap(MouseButtons.left);
+      await inputModel.tap(MouseButtons.left);
     }
   }
 
-  onDoubleTapDown(TapDownDetails d) {
+  onDoubleTapDown(TapDownDetails d) async {
     lastDeviceKind = d.kind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (handleTouch) {
-      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+      _lastPosOfDoubleTapDown = d.localPosition;
+      await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
     }
   }
 
-  onDoubleTap() {
+  onDoubleTap() async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (ffiModel.touchMode && ffi.cursorModel.lastIsBlocked) {
       return;
     }
-    inputModel.tap(MouseButtons.left);
-    inputModel.tap(MouseButtons.left);
+    if (handleTouch &&
+        !ffi.cursorModel.isInRemoteRect(_lastPosOfDoubleTapDown)) {
+      return;
+    }
+    await inputModel.tap(MouseButtons.left);
+    await inputModel.tap(MouseButtons.left);
   }
 
-  onLongPressDown(LongPressDownDetails d) {
+  onLongPressDown(LongPressDownDetails d) async {
     lastDeviceKind = d.kind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (handleTouch) {
-      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+      _lastPosOfDoubleTapDown = d.localPosition;
       _cacheLongPressPosition = d.localPosition;
+      if (!ffi.cursorModel.isInRemoteRect(d.localPosition)) {
+        return;
+      }
       _cacheLongPressPositionTs = DateTime.now().millisecondsSinceEpoch;
     }
   }
 
-  onLongPressUp() {
+  onLongPressUp() async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (handleTouch) {
-      inputModel.tapUp(MouseButtons.left);
+      await inputModel.tapUp(MouseButtons.left);
     }
   }
 
   // for mobiles
-  onLongPress() {
+  onLongPress() async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (handleTouch) {
-      ffi.cursorModel
+      final isMoved = await ffi.cursorModel
           .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
+      if (!isMoved) {
+        return;
+      }
     }
-    inputModel.tap(MouseButtons.right);
+    if (!ffi.ffiModel.isPeerMobile) {
+      await inputModel.tap(MouseButtons.right);
+    }
   }
 
-  onDoubleFinerTapDown(TapDownDetails d) {
+  onDoubleFinerTapDown(TapDownDetails d) async {
     lastDeviceKind = d.kind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
+    _doubleFinerTapPosition = d.localPosition;
     // ignore for desktop and mobile
   }
 
-  onDoubleFinerTap(TapDownDetails d) {
+  onDoubleFinerTap(TapDownDetails d) async {
     lastDeviceKind = d.kind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
-    if ((isDesktop || isWebDesktop) || !ffiModel.touchMode) {
-      inputModel.tap(MouseButtons.right);
+
+    // mobile mouse mode or desktop touch screen
+    final isMobileMouseMode = isMobile && !ffiModel.touchMode;
+    // We can't use `d.localPosition` here because it's always (0, 0) on desktop.
+    final isDesktopInRemoteRect = (isDesktop || isWebDesktop) &&
+        ffi.cursorModel.isInRemoteRect(_doubleFinerTapPosition);
+    if (isMobileMouseMode || isDesktopInRemoteRect) {
+      await inputModel.tap(MouseButtons.right);
     }
   }
 
-  onHoldDragStart(DragStartDetails d) {
+  onHoldDragStart(DragStartDetails d) async {
     lastDeviceKind = d.kind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (!handleTouch) {
-      inputModel.sendMouse('down', MouseButtons.left);
+      await inputModel.sendMouse('down', MouseButtons.left);
     }
   }
 
-  onHoldDragUpdate(DragUpdateDetails d) {
+  onHoldDragUpdate(DragUpdateDetails d) async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (!handleTouch) {
-      ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
+      await ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
     }
   }
 
-  onHoldDragEnd(DragEndDetails d) {
+  onHoldDragEnd(DragEndDetails d) async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (!handleTouch) {
-      inputModel.sendMouse('up', MouseButtons.left);
+      await inputModel.sendMouse('up', MouseButtons.left);
     }
   }
 
-  onOneFingerPanStart(BuildContext context, DragStartDetails d) {
+  onOneFingerPanStart(BuildContext context, DragStartDetails d) async {
+    final TapDownDetails? lastTapDownDetails = _lastTapDownDetails;
+    _lastTapDownDetails = null;
     lastDeviceKind = d.kind ?? lastDeviceKind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (handleTouch) {
+      if (lastTapDownDetails != null) {
+        await ffi.cursorModel.move(lastTapDownDetails.localPosition.dx,
+            lastTapDownDetails.localPosition.dy);
+      }
       if (ffi.cursorModel.shouldBlock(d.localPosition.dx, d.localPosition.dy)) {
         return;
       }
+      if (!ffi.cursorModel.isInRemoteRect(d.localPosition)) {
+        return;
+      }
+
+      _touchModePanStarted = true;
       if (isDesktop || isWebDesktop) {
         ffi.cursorModel.trySetRemoteWindowCoords();
       }
+
       // Workaround for the issue that the first pan event is sent a long time after the start event.
       // If the time interval between the start event and the first pan event is less than 500ms,
       // we consider to use the long press position as the start position.
@@ -253,11 +300,11 @@ class _RawTouchGestureDetectorRegionState
       // TODO: We should find a better way to send the first pan event as soon as possible.
       if (DateTime.now().millisecondsSinceEpoch - _cacheLongPressPositionTs <
           500) {
-        ffi.cursorModel
+        await ffi.cursorModel
             .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
       }
-      inputModel.sendMouse('down', MouseButtons.left);
-      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+      await inputModel.sendMouse('down', MouseButtons.left);
+      await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
     } else {
       final offset = ffi.cursorModel.offset;
       final cursorX = offset.dx;
@@ -266,39 +313,44 @@ class _RawTouchGestureDetectorRegionState
           ffi.cursorModel.getVisibleRect().inflate(1); // extend edges
       final size = MediaQueryData.fromView(View.of(context)).size;
       if (!visible.contains(Offset(cursorX, cursorY))) {
-        ffi.cursorModel.move(size.width / 2, size.height / 2);
+        await ffi.cursorModel.move(size.width / 2, size.height / 2);
       }
     }
   }
 
-  onOneFingerPanUpdate(DragUpdateDetails d) {
+  onOneFingerPanUpdate(DragUpdateDetails d) async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (ffi.cursorModel.shouldBlock(d.localPosition.dx, d.localPosition.dy)) {
       return;
     }
-    ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
+    if (handleTouch && !_touchModePanStarted) {
+      return;
+    }
+    await ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
   }
 
-  onOneFingerPanEnd(DragEndDetails d) {
+  onOneFingerPanEnd(DragEndDetails d) async {
+    _touchModePanStarted = false;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if (isDesktop || isWebDesktop) {
       ffi.cursorModel.clearRemoteWindowCoords();
     }
-    inputModel.sendMouse('up', MouseButtons.left);
+    await inputModel.sendMouse('up', MouseButtons.left);
   }
 
   // scale + pan event
   onTwoFingerScaleStart(ScaleStartDetails d) {
+    _lastTapDownDetails = null;
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
   }
 
-  onTwoFingerScaleUpdate(ScaleUpdateDetails d) {
+  onTwoFingerScaleUpdate(ScaleUpdateDetails d) async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
@@ -307,7 +359,7 @@ class _RawTouchGestureDetectorRegionState
       _scale = d.scale;
 
       if (scale != 0) {
-        bind.sessionSendPointer(
+        await bind.sessionSendPointer(
             sessionId: sessionId,
             msg: json.encode(
                 PointerEventToRust(kPointerEventKindTouch, 'scale', scale)
@@ -322,21 +374,22 @@ class _RawTouchGestureDetectorRegionState
     }
   }
 
-  onTwoFingerScaleEnd(ScaleEndDetails d) {
+  onTwoFingerScaleEnd(ScaleEndDetails d) async {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
     if ((isDesktop || isWebDesktop)) {
-      bind.sessionSendPointer(
+      await bind.sessionSendPointer(
           sessionId: sessionId,
           msg: json.encode(
               PointerEventToRust(kPointerEventKindTouch, 'scale', 0).toJson()));
     } else {
       // mobile
       _scale = 1;
-      bind.sessionSetViewStyle(sessionId: sessionId, value: "");
+      // No idea why we need to set the view style to "" here.
+      // bind.sessionSetViewStyle(sessionId: sessionId, value: "");
     }
-    inputModel.sendMouse('up', MouseButtons.left);
+    await inputModel.sendMouse('up', MouseButtons.left);
   }
 
   get onHoldDragCancel => null;

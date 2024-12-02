@@ -44,7 +44,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_change_tip", "只可以使用字母 a-z, A-Z, 0-9, _ (下划线)。首字母必须是 a-z, A-Z。长度在 6 与 16 之间。"),
         ("Website", "网站"),
         ("About", "关于"),
-        ("Slogan_tip", ""),
+        ("Slogan_tip", "在这个混乱的世界中，用心制作！"),
         ("Privacy Statement", "隐私声明"),
         ("Mute", "静音"),
         ("Build Date", "构建日期"),
@@ -653,5 +653,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "上传文件夹"),
         ("Upload files", "上传文件"),
         ("Clipboard is synchronized", "剪贴板已同步"),
+        ("Update client clipboard", "更新客户端的粘贴板"),
+        ("Untagged", "无标签"),
     ].iter().cloned().collect();
 }

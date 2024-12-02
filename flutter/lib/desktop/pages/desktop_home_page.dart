@@ -12,7 +12,6 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
-import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/ui_manager.dart';
@@ -125,47 +124,43 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       child: Container(
         width: isIncomingOnly ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
-        child: DesktopScrollWrapper(
-          scrollController: _leftPaneScrollController,
-          child: Stack(
-            children: [
-              SingleChildScrollView(
-                controller: _leftPaneScrollController,
-                physics: DraggableNeverScrollableScrollPhysics(),
-                child: Column(
-                  key: _childKey,
-                  children: children,
-                ),
+        child: Stack(
+          children: [
+            SingleChildScrollView(
+              controller: _leftPaneScrollController,
+              child: Column(
+                key: _childKey,
+                children: children,
               ),
-              if (isOutgoingOnly)
-                Positioned(
-                  bottom: 6,
-                  left: 12,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: InkWell(
-                      child: Obx(
-                        () => Icon(
-                          Icons.settings,
-                          color: _editHover.value
-                              ? textColor
-                              : Colors.grey.withOpacity(0.5),
-                          size: 22,
-                        ),
+            ),
+            if (isOutgoingOnly)
+              Positioned(
+                bottom: 6,
+                left: 12,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InkWell(
+                    child: Obx(
+                      () => Icon(
+                        Icons.settings,
+                        color: _editHover.value
+                            ? textColor
+                            : Colors.grey.withOpacity(0.5),
+                        size: 22,
                       ),
-                      onTap: () => {
-                        if (DesktopSettingPage.tabKeys.isNotEmpty)
-                          {
-                            DesktopSettingPage.switch2page(
-                                DesktopSettingPage.tabKeys[0])
-                          }
-                      },
-                      onHover: (value) => _editHover.value = value,
                     ),
+                    onTap: () => {
+                      if (DesktopSettingPage.tabKeys.isNotEmpty)
+                        {
+                          DesktopSettingPage.switch2page(
+                              DesktopSettingPage.tabKeys[0])
+                        }
+                    },
+                    onHover: (value) => _editHover.value = value,
                   ),
-                )
-            ],
-          ),
+                ),
+              )
+          ],
         ),
       ),
     );
@@ -272,10 +267,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   buildPasswordBoard(BuildContext context) {
-    final model = gFFI.serverModel;
+    return ChangeNotifierProvider.value(
+        value: gFFI.serverModel,
+        child: Consumer<ServerModel>(
+          builder: (context, model, child) {
+            return buildPasswordBoard2(context, model);
+          },
+        ));
+  }
+
+  buildPasswordBoard2(BuildContext context, ServerModel model) {
     RxBool refreshHover = false.obs;
     RxBool editHover = false.obs;
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    final showOneTime = model.approveMode != 'click' &&
+        model.verificationMethod != kUsePermanentPassword;
     return Container(
       margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
       child: Row(
@@ -304,8 +310,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       Expanded(
                         child: GestureDetector(
                           onDoubleTap: () {
-                            if (model.verificationMethod !=
-                                kUsePermanentPassword) {
+                            if (showOneTime) {
                               Clipboard.setData(
                                   ClipboardData(text: model.serverPasswd.text));
                               showToast(translate("Copied"));
@@ -323,22 +328,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           ),
                         ),
                       ),
-                      AnimatedRotationWidget(
-                        onPressed: () => bind.mainUpdateTemporaryPassword(),
-                        child: Tooltip(
-                          message: translate('Refresh Password'),
-                          child: Obx(() => RotatedBox(
-                              quarterTurns: 2,
-                              child: Icon(
-                                Icons.refresh,
-                                color: refreshHover.value
-                                    ? textColor
-                                    : Color(0xFFDDDDDD),
-                                size: 22,
-                              ))),
-                        ),
-                        onHover: (value) => refreshHover.value = value,
-                      ).marginOnly(right: 8, top: 4),
+                      if (showOneTime)
+                        AnimatedRotationWidget(
+                          onPressed: () => bind.mainUpdateTemporaryPassword(),
+                          child: Tooltip(
+                            message: translate('Refresh Password'),
+                            child: Obx(() => RotatedBox(
+                                quarterTurns: 2,
+                                child: Icon(
+                                  Icons.refresh,
+                                  color: refreshHover.value
+                                      ? textColor
+                                      : Color(0xFFDDDDDD),
+                                  size: 22,
+                                ))),
+                          ),
+                          onHover: (value) => refreshHover.value = value,
+                        ).marginOnly(right: 8, top: 4),
                       if (!bind.isDisableSettings())
                         InkWell(
                           child: Tooltip(
