@@ -174,16 +174,15 @@ bool is_desktop_mate()
   const char* desktop = NULL;
   desktop = getenv("XDG_CURRENT_DESKTOP");
   printf("Linux desktop, XDG_CURRENT_DESKTOP: %s\n", desktop == NULL ? "" : desktop);
-  if (desktop != NULL && g_strcmp0(desktop, "MATE") == 0) {
-    return true;
+  if (desktop == NULL) {
+    desktop = getenv("XDG_SESSION_DESKTOP");
+    printf("Linux desktop, XDG_SESSION_DESKTOP: %s\n", desktop == NULL ? "" : desktop);
   }
-  desktop = getenv("XDG_SESSION_DESKTOP");
-  printf("Linux desktop, XDG_SESSION_DESKTOP: %s\n", desktop == NULL ? "" : desktop);
   if (desktop == NULL) {
       desktop = getenv("DESKTOP_SESSION");
       printf("Linux desktop, DESKTOP_SESSION: %s\n", desktop == NULL ? "" : desktop);
   }
-  if (desktop != NULL && g_strcmp0(desktop, "mate") == 0) {
+  if (desktop != NULL && strcasecmp(desktop, "mate") == 0) {
     return true;
   }
   return false;

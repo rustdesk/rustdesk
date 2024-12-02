@@ -3462,9 +3462,9 @@ Widget buildPresetPasswordWarning() {
 
 bool get isLinuxMateDesktop =>
     isLinux &&
-    (Platform.environment['XDG_CURRENT_DESKTOP'] == 'MATE' ||
-        Platform.environment['XDG_SESSION_DESKTOP'] == 'mate' ||
-        Platform.environment['DESKTOP_SESSION'] == 'mate');
+    (Platform.environment['XDG_CURRENT_DESKTOP']?.toLowerCase() == 'mate' ||
+        Platform.environment['XDG_SESSION_DESKTOP']?.toLowerCase() == 'mate' ||
+        Platform.environment['DESKTOP_SESSION']?.toLowerCase() == 'mate');
 
 Map<String, dynamic>? _linuxOsDistro;
 
