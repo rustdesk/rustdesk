@@ -12,7 +12,6 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
-import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/ui_manager.dart';
@@ -125,47 +124,43 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       child: Container(
         width: isIncomingOnly ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
-        child: DesktopScrollWrapper(
-          scrollController: _leftPaneScrollController,
-          child: Stack(
-            children: [
-              SingleChildScrollView(
-                controller: _leftPaneScrollController,
-                physics: DraggableNeverScrollableScrollPhysics(),
-                child: Column(
-                  key: _childKey,
-                  children: children,
-                ),
+        child: Stack(
+          children: [
+            SingleChildScrollView(
+              controller: _leftPaneScrollController,
+              child: Column(
+                key: _childKey,
+                children: children,
               ),
-              if (isOutgoingOnly)
-                Positioned(
-                  bottom: 6,
-                  left: 12,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: InkWell(
-                      child: Obx(
-                        () => Icon(
-                          Icons.settings,
-                          color: _editHover.value
-                              ? textColor
-                              : Colors.grey.withOpacity(0.5),
-                          size: 22,
-                        ),
+            ),
+            if (isOutgoingOnly)
+              Positioned(
+                bottom: 6,
+                left: 12,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InkWell(
+                    child: Obx(
+                      () => Icon(
+                        Icons.settings,
+                        color: _editHover.value
+                            ? textColor
+                            : Colors.grey.withOpacity(0.5),
+                        size: 22,
                       ),
-                      onTap: () => {
-                        if (DesktopSettingPage.tabKeys.isNotEmpty)
-                          {
-                            DesktopSettingPage.switch2page(
-                                DesktopSettingPage.tabKeys[0])
-                          }
-                      },
-                      onHover: (value) => _editHover.value = value,
                     ),
+                    onTap: () => {
+                      if (DesktopSettingPage.tabKeys.isNotEmpty)
+                        {
+                          DesktopSettingPage.switch2page(
+                              DesktopSettingPage.tabKeys[0])
+                        }
+                    },
+                    onHover: (value) => _editHover.value = value,
                   ),
-                )
-            ],
-          ),
+                ),
+              )
+          ],
         ),
       ),
     );

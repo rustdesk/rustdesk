@@ -32,7 +32,7 @@ use crate::ipc::Data;
 
 pub mod audio_service;
 cfg_if::cfg_if! {
-if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
+if #[cfg(not(target_os = "ios"))] {
 mod clipboard_service;
 #[cfg(target_os = "linux")]
 pub(crate) mod wayland;
@@ -42,17 +42,20 @@ pub mod uinput;
 pub mod rdp_input;
 #[cfg(target_os = "linux")]
 pub mod dbus;
+#[cfg(not(target_os = "android"))]
 pub mod input_service;
 } else {
 mod clipboard_service {
 pub const NAME: &'static str = "";
 }
+}
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub mod input_service {
-pub const NAME_CURSOR: &'static str = "";
-pub const NAME_POS: &'static str = "";
-pub const NAME_WINDOW_FOCUS: &'static str = "";
-}
-}
+    pub const NAME_CURSOR: &'static str = "";
+    pub const NAME_POS: &'static str = "";
+    pub const NAME_WINDOW_FOCUS: &'static str = "";
 }
 
 mod connection;
@@ -99,10 +102,12 @@ pub fn new() -> ServerPtr {
     };
     server.add_service(Box::new(audio_service::new()));
     #[cfg(not(target_os = "ios"))]
-    server.add_service(Box::new(display_service::new()));
+    {
+        server.add_service(Box::new(display_service::new()));
+        server.add_service(Box::new(clipboard_service::new()));
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        server.add_service(Box::new(clipboard_service::new()));
         if !display_service::capture_cursor_embedded() {
             server.add_service(Box::new(input_service::new_cursor()));
             server.add_service(Box::new(input_service::new_pos()));
@@ -500,7 +505,6 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
         #[cfg(feature = "hwcodec")]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         scrap::hwcodec::start_check_process();
         crate::RendezvousMediator::start_all().await;
     } else {

@@ -309,6 +309,8 @@ class FfiModel with ChangeNotifier {
             .receive(int.parse(evt['id'] as String), evt['text'] ?? '');
       } else if (name == 'file_dir') {
         parent.target?.fileModel.receiveFileDir(evt);
+      } else if (name == 'empty_dirs') {
+        parent.target?.fileModel.receiveEmptyDirs(evt);
       } else if (name == 'job_progress') {
         parent.target?.fileModel.jobController.tryUpdateJobProgress(evt);
       } else if (name == 'job_done') {
@@ -1266,7 +1268,9 @@ class ImageModel with ChangeNotifier {
       rgba,
       rect?.width.toInt() ?? 0,
       rect?.height.toInt() ?? 0,
-      isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888,
+      isWeb | isWindows | isLinux
+          ? ui.PixelFormat.rgba8888
+          : ui.PixelFormat.bgra8888,
     );
     if (parent.target?.id != pid) return;
     await update(image);
@@ -1423,6 +1427,10 @@ class CanvasModel with ChangeNotifier {
   ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
   Timer? _timerMobileFocusCanvasCursor;
+
+  // `isMobileCanvasChanged` is used to avoid canvas reset when changing the input method
+  // after showing the soft keyboard.
+  bool isMobileCanvasChanged = false;
 
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
@@ -1639,6 +1647,9 @@ class CanvasModel with ChangeNotifier {
 
   panX(double dx) {
     _x += dx;
+    if (isMobile) {
+      isMobileCanvasChanged = true;
+    }
     notifyListeners();
   }
 
@@ -1653,6 +1664,9 @@ class CanvasModel with ChangeNotifier {
 
   panY(double dy) {
     _y += dy;
+    if (isMobile) {
+      isMobileCanvasChanged = true;
+    }
     notifyListeners();
   }
 
@@ -1672,6 +1686,9 @@ class CanvasModel with ChangeNotifier {
     // (focalPoint.dy - _y_1 - adjust) / s1 + displayOriginY = (focalPoint.dy - _y_2 - adjust) / s2 + displayOriginY
     // _y_2 = focalPoint.dy - adjust - (focalPoint.dy - _y_1 - adjust) / s1 * s2
     _y = focalPoint.dy - adjust - (focalPoint.dy - _y - adjust) / s * _scale;
+    if (isMobile) {
+      isMobileCanvasChanged = true;
+    }
     notifyListeners();
   }
 
@@ -1941,6 +1958,8 @@ class CursorModel with ChangeNotifier {
   bool _lastIsBlocked = false;
   bool _lastKeyboardIsVisible = false;
 
+  bool get lastKeyboardIsVisible => _lastKeyboardIsVisible;
+
   Rect? get keyHelpToolsRectToAdjustCanvas =>
       _lastKeyboardIsVisible ? _keyHelpToolsRect : null;
   keyHelpToolsVisibilityChanged(Rect? r, bool keyboardIsVisible) {
@@ -1955,6 +1974,7 @@ class CursorModel with ChangeNotifier {
     }
     if (isMobile && _lastKeyboardIsVisible != keyboardIsVisible) {
       parent.target?.canvasModel.mobileFocusCanvasCursor();
+      parent.target?.canvasModel.isMobileCanvasChanged = false;
     }
     _lastKeyboardIsVisible = keyboardIsVisible;
   }
@@ -2166,7 +2186,7 @@ class CursorModel with ChangeNotifier {
 
     if (dx == 0 && dy == 0) return;
 
-    Point? newPos;
+    Point<double>? newPos;
     final rect = parent.target?.ffiModel.rect;
     if (rect == null) {
       // unreachable
@@ -2177,8 +2197,8 @@ class CursorModel with ChangeNotifier {
         parent.target?.ffiModel.pi.platform,
         kPointerEventKindMouse,
         kMouseEventTypeDefault,
-        (_x + dx).toInt(),
-        (_y + dy).toInt(),
+        _x + dx,
+        _y + dy,
         rect,
         buttons: kPrimaryButton);
     if (newPos == null) {
@@ -2186,8 +2206,8 @@ class CursorModel with ChangeNotifier {
     }
     dx = newPos.x - _x;
     dy = newPos.y - _y;
-    _x = newPos.x.toDouble();
-    _y = newPos.y.toDouble();
+    _x = newPos.x;
+    _y = newPos.y;
     if (tryMoveCanvasX && dx != 0) {
       parent.target?.canvasModel.panX(-dx * scale);
     }
@@ -2841,6 +2861,7 @@ class FFI {
           canvasModel.scale,
           ffiModel.pi.currentDisplay);
     }
+    imageModel.callbacksOnFirstImage.clear();
     await imageModel.update(null);
     cursorModel.clear();
     ffiModel.clear();

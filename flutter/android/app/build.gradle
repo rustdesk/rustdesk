@@ -1,6 +1,9 @@
 import com.google.protobuf.gradle.*
 plugins {
     id "com.google.protobuf" version "0.9.4"
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
 }
 
 def keystoreProperties = new Properties()
@@ -17,11 +20,6 @@ if (localPropertiesFile.exists()) {
     }
 }
 
-def flutterRoot = localProperties.getProperty('flutter.sdk')
-if (flutterRoot == null) {
-    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
-}
-
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
 if (flutterVersionCode == null) {
     flutterVersionCode = '1'
@@ -31,10 +29,6 @@ def flutterVersionName = localProperties.getProperty('flutter.versionName')
 if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
-
-apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android'
-apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 dependencies {
     implementation 'com.google.protobuf:protobuf-javalite:3.20.1'
@@ -57,7 +51,7 @@ protobuf {
 }
 
 android {
-    compileSdkVersion 33
+    compileSdkVersion 34
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
 
@@ -105,7 +99,6 @@ flutter {
 dependencies {
     implementation "androidx.media:media:1.6.0"
     implementation 'com.github.getActivity:XXPermissions:18.5'
-    implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("$kotlin_version") } }
+    implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("1.9.10") } }
     implementation 'com.caverock:androidsvg-aar:1.4'
 }
-

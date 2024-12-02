@@ -45,6 +45,10 @@ pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum FS {
+    ReadEmptyDirs {
+        dir: String,
+        include_hidden: bool,
+    },
     ReadDir {
         dir: String,
         include_hidden: bool,

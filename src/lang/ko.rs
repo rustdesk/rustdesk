@@ -364,7 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "녹화"),
         ("Directory", "경로"),
         ("Automatically record incoming sessions", "들어오는 세션을 자동으로 녹화"),
-        ("Automatically record outgoing sessions", ""),
+        ("Automatically record outgoing sessions", "나가는 세션을 자동으로 녹화"),
         ("Change", "변경"),
         ("Start session recording", "세션 녹화 시작"),
         ("Stop session recording", "세션 녹화 중지"),
@@ -653,5 +653,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "폴더 업로드"),
         ("Upload files", "파일 업로드"),
         ("Clipboard is synchronized", "클립보드가 동기화됨"),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }
