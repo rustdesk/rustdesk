@@ -616,7 +616,7 @@ class App: Reactor.Component
                 </div>
                 <div #overlay style="position: absolute;size:*;background:black;opacity:0.5;display:none" />
             </div>;
-	   <PasswordArea />
+	  // <PasswordArea />
     }
 
     event click $(button#connect) {
