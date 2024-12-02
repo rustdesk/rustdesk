@@ -1362,11 +1362,30 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   bool get wantKeepAlive => true;
   bool locked = !isWeb && bind.mainIsInstalled();
 
+  final scrollController = ScrollController();
+  late final TextEditingController idController;
+  late final TextEditingController relayController;
+  late final TextEditingController apiController;
+  late final TextEditingController keyController;
+
+  @override
+  void initState() {
+    super.initState();
+    Map<String, dynamic> oldOptions = jsonDecode(bind.mainGetOptionsSync());
+    old(String key) {
+      return (oldOptions[key] ?? '').trim();
+    }
+
+    idController = TextEditingController(text: old('custom-rendezvous-server'));
+    relayController = TextEditingController(text: old('relay-server'));
+    apiController = TextEditingController(text: old('api-server'));
+    keyController = TextEditingController(text: old('key'));
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     bool enabled = !locked;
-    final scrollController = ScrollController();
     final hideServer =
         bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
     // TODO: support web proxy
@@ -1395,19 +1414,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     // Simple temp wrapper for PR check
     tmpWrapper() {
       // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
-      Map<String, dynamic> oldOptions = jsonDecode(bind.mainGetOptionsSync());
-      old(String key) {
-        return (oldOptions[key] ?? '').trim();
-      }
 
       RxString idErrMsg = ''.obs;
       RxString relayErrMsg = ''.obs;
       RxString apiErrMsg = ''.obs;
-      var idController =
-          TextEditingController(text: old('custom-rendezvous-server'));
-      var relayController = TextEditingController(text: old('relay-server'));
-      var apiController = TextEditingController(text: old('api-server'));
-      var keyController = TextEditingController(text: old('key'));
       final controllers = [
         idController,
         relayController,
@@ -2251,26 +2261,39 @@ _LabeledTextField(
     String errorText,
     bool enabled,
     bool secure) {
-  return Row(
+  return Table(
+    columnWidths: const {
+      0: FixedColumnWidth(150),
+      1: FlexColumnWidth(),
+    },
+    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
     children: [
-      ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 140),
-          child: Text(
-            '${translate(label)}:',
-            textAlign: TextAlign.right,
-            style: TextStyle(
-                fontSize: 16, color: disabledTextColor(context, enabled)),
-          ).marginOnly(right: 10)),
-      Expanded(
-        child: TextField(
+      TableRow(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: Text(
+              '${translate(label)}:',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 16,
+                color: disabledTextColor(context, enabled),
+              ),
+            ),
+          ),
+          TextField(
             controller: controller,
             enabled: enabled,
             obscureText: secure,
+            autocorrect: false,
             decoration: InputDecoration(
-                errorText: errorText.isNotEmpty ? errorText : null),
+              errorText: errorText.isNotEmpty ? errorText : null,
+            ),
             style: TextStyle(
               color: disabledTextColor(context, enabled),
-            )),
+            ),
+          ),
+        ],
       ),
     ],
   ).marginOnly(bottom: 8);
