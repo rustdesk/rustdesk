@@ -726,6 +726,20 @@ impl InvokeUiSession for FlutterHandler {
         }
     }
 
+    fn update_empty_dirs(&self, res: ReadEmptyDirsResponse) {
+        self.push_event(
+            "empty_dirs",
+            &[
+                ("is_local", "false"),
+                (
+                    "value",
+                    &crate::common::make_empty_dirs_response_to_json(&res),
+                ),
+            ],
+            &[],
+        );
+    }
+
     // unused in flutter
     fn update_transfer_list(&self) {}
 

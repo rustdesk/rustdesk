@@ -61,7 +61,11 @@ fn install_android_deps() {
     let target = format!("{}-android", target_arch);
     let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
     let mut path: std::path::PathBuf = vcpkg_root.into();
-    path.push("installed");
+    if let Ok(vcpkg_root) = std::env::var("VCPKG_INSTALLED_ROOT") {
+        path = vcpkg_root.into();
+    } else {
+        path.push("installed");
+    }
     path.push(target);
     println!(
         "{}",

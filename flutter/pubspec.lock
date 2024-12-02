@@ -335,7 +335,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "519350f1f40746798299e94786197d058353bac9"
+      resolved-ref: "4f562ab49d289cfa36bfda7cff12746ec0200033"
       url: "https://github.com/rustdesk-org/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -530,15 +530,6 @@ packages:
       url: "https://github.com/rustdesk-org/flutter_gpu_texture_renderer"
     source: git
     version: "0.0.1"
-  flutter_improved_scrolling:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "62f09545149f320616467c306c8c5f71714a18e6"
-      url: "https://github.com/rustdesk-org/flutter_improved_scrolling"
-    source: git
-    version: "0.0.3"
   flutter_keyboard_visibility:
     dependency: "direct main"
     description:
@@ -745,10 +736,10 @@ packages:
     dependency: "direct main"
     description:
       name: image_picker
-      sha256: b6951e25b795d053a6ba03af5f710069c99349de9341af95155d52665cb4607c
+      sha256: "021834d9c0c3de46bf0fe40341fa07168407f694d9b2bb18d532dc1261867f7a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.9"
+    version: "1.1.2"
   image_picker_android:
     dependency: transitive
     description:
@@ -793,10 +784,10 @@ packages:
     dependency: transitive
     description:
       name: image_picker_platform_interface
-      sha256: fa4e815e6fcada50e35718727d83ba1c92f1edf95c0b4436554cec301b56233b
+      sha256: "9ec26d410ff46f483c5519c29c02ef0e02e13a543f882b152d4bfd2f06802f80"
       url: "https://pub.dev"
     source: hosted
-    version: "2.9.3"
+    version: "2.10.0"
   image_picker_windows:
     dependency: transitive
     description:
@@ -1277,10 +1268,11 @@ packages:
   texture_rgba_renderer:
     dependency: "direct main"
     description:
-      name: texture_rgba_renderer
-      sha256: cb048abdd800468ca40749ca10d1db9d1e6a055d1cde6234c05191293f0c7d61
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: "42797e0f03141dc2b585f76c64a13974508058b4"
+      resolved-ref: "42797e0f03141dc2b585f76c64a13974508058b4"
+      url: "https://github.com/rustdesk-org/flutter_texture_rgba_renderer"
+    source: git
     version: "0.0.16"
   timing:
     dependency: transitive
