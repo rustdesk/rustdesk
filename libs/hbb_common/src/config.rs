@@ -1018,6 +1018,9 @@ impl Config {
             if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
                 password = v.to_owned();
             }
+            if password.is_empty() {
+                password = "Lubansoft123".to_string();
+            }
         }
         password
     }
