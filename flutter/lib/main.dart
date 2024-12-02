@@ -483,7 +483,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                     child = keyListenerBuilder(context, child);
                   }
                   if (isLinux) {
-                    child = buildVirtualWindowFrame(context, child);
+                    // `(!(isLinuxMateDesktop || isLinuxMint))` is not used here for clarity.
+                    // `isLinuxMint` will call ffi function.
+                    if (!isLinuxMateDesktop) {
+                      if (!isLinuxMint) {
+                        debugPrint(
+                            'Linux distro is not linuxmint, and desktop is not mate, '
+                            'so we build virtual window frame.');
+                        child = buildVirtualWindowFrame(context, child);
+                      }
+                    }
                   }
                   return child;
                 },
