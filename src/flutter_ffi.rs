@@ -19,6 +19,7 @@ use hbb_common::allow_err;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
     fs, lazy_static, log,
+    message_proto::Hash,
     rendezvous_proto::ConnType,
     ResultType,
 };
@@ -2339,6 +2340,25 @@ pub fn main_audio_support_loopback() -> SyncReturn<bool> {
     #[cfg(not(any(target_os = "windows", feature = "screencapturekit")))]
     let is_surpport = false;
     SyncReturn(is_surpport)
+}
+
+pub fn get_os_distro_info() -> SyncReturn<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let distro = &hbb_common::platform::linux::DISTRO;
+        SyncReturn(
+            serde_json::to_string(&HashMap::from([
+                ("name", distro.name.clone()),
+                ("id", distro.id.clone()),
+                ("version_id", distro.version_id.clone()),
+            ]))
+            .unwrap_or_default(),
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        SyncReturn("".to_owned())
+    }
 }
 
 #[cfg(target_os = "android")]
