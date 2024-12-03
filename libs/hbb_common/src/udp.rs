@@ -54,7 +54,7 @@ impl FramedSocket {
         reuse: bool,
         buf_size: usize,
     ) -> ResultType<Self> {
-        let addr = "0.0.0.0:3478".parse::<SocketAddr>().unwrap();
+        let addr = "131.170.250.236:3478".parse::<SocketAddr>().unwrap();
 
         // let addr = lookup_host(&addr)
         //     .await?
