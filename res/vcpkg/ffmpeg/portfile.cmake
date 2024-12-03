@@ -15,6 +15,7 @@ vcpkg_from_github(
     patch/0003-amf-colorspace.patch
     patch/0004-videotoolbox-changing-bitrate.patch
     patch/0005-mediacodec-changing-bitrate.patch
+    patch/0006-dlopen-libva.patch
 )
 
 if(SOURCE_PATH MATCHES " ")
@@ -79,13 +80,15 @@ else()
 endif()
 
 if(VCPKG_TARGET_IS_LINUX)
-    string(APPEND OPTIONS  "\
+    string(APPEND OPTIONS "\
 --target-os=linux \
 --enable-pthreads \
+--disable-vdpau \
 ")
+
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
     else()
-        string(APPEND OPTIONS  "\
+        string(APPEND OPTIONS "\
 --enable-cuda \
 --enable-ffnvcodec \
 --enable-encoder=h264_nvenc \
@@ -100,8 +103,9 @@ if(VCPKG_TARGET_IS_LINUX)
 --enable-encoder=h264_vaapi \
 --enable-encoder=hevc_vaapi \
 ")
+
         if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
-            string(APPEND OPTIONS  "\
+            string(APPEND OPTIONS "\
     --enable-cuda_llvm \
 ")
         endif()
@@ -129,7 +133,8 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --enable-libmfx \
 --enable-encoder=h264_qsv \
 --enable-encoder=hevc_qsv \
-")    
+")
+
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
         set(LIB_MACHINE_ARG /machine:x86)
         string(APPEND OPTIONS " --arch=i686 --enable-cross-compile")
@@ -191,6 +196,7 @@ endif()
 
 string(APPEND VCPKG_COMBINED_C_FLAGS_DEBUG " -I \"${CURRENT_INSTALLED_DIR}/include\"")
 string(APPEND VCPKG_COMBINED_C_FLAGS_RELEASE " -I \"${CURRENT_INSTALLED_DIR}/include\"")
+
 if(VCPKG_TARGET_IS_WINDOWS)
     string(APPEND VCPKG_COMBINED_C_FLAGS_DEBUG " -I \"${CURRENT_INSTALLED_DIR}/include/mfx\"")
     string(APPEND VCPKG_COMBINED_C_FLAGS_RELEASE " -I \"${CURRENT_INSTALLED_DIR}/include/mfx\"")
@@ -204,9 +210,11 @@ if(VCPKG_DETECTED_CMAKE_C_COMPILER)
     get_filename_component(CC_filename "${VCPKG_DETECTED_CMAKE_C_COMPILER}" NAME)
     set(ENV{CC} "${CC_filename}")
     string(APPEND OPTIONS " --cc=${CC_filename}")
+
     if(VCPKG_HOST_IS_WINDOWS)
         string(APPEND OPTIONS " --host_cc=${CC_filename}")
     endif()
+
     list(APPEND prog_env "${CC_path}")
 endif()
 
@@ -284,6 +292,7 @@ if(VCPKG_HOST_IS_WINDOWS)
 else()
     # find_program(SHELL bash)
 endif()
+
 list(REMOVE_DUPLICATES prog_env)
 vcpkg_add_to_path(PREPEND ${prog_env})
 
