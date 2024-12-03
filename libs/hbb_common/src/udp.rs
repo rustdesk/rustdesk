@@ -15,6 +15,10 @@ pub enum FramedSocket {
 }
 
 fn new_socket(addr: SocketAddr, reuse: bool, buf_size: usize) -> Result<Socket, std::io::Error> {
+    let ip = addr.ip();
+    let port = addr.port();
+    log::debug!("IP Address: {} | Port: {}", ip, port);
+
     let socket = match addr {
         SocketAddr::V4(..) => Socket::new(Domain::ipv4(), Type::dgram(), None),
         SocketAddr::V6(..) => Socket::new(Domain::ipv6(), Type::dgram(), None),
@@ -54,12 +58,13 @@ impl FramedSocket {
         reuse: bool,
         buf_size: usize,
     ) -> ResultType<Self> {
-        let addr = "0.0.0.0:3478".parse::<SocketAddr>().unwrap();
+        // let addr = "0.0.0.0:3478".parse::<SocketAddr>().unwrap();
 
-        // let addr = lookup_host(&addr)
-        //     .await?
-        //     .next()
-        //     .context("could not resolve to any address")?;
+        let addr = lookup_host(&addr)
+            .await?
+            .next()
+            .context("could not resolve to any address")?;
+
         Ok(Self::Direct(UdpFramed::new(
             UdpSocket::from_std(new_socket(addr, reuse, buf_size)?.into_udp_socket())?,
             BytesCodec::new(),
