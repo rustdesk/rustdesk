@@ -100,7 +100,7 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &["https://All-FastData.myasustor.com"];
+pub const RENDEZVOUS_SERVERS: &[&str] = &["All-FastData.myasustor.com"];
 pub const PUBLIC_RS_PUB_KEY: &str = "NzWSDq9ZG870EqwhSgWkATjaEstICOqXfSr2F5yJ8Y8=";
 
 pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
