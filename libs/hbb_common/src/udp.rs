@@ -54,10 +54,12 @@ impl FramedSocket {
         reuse: bool,
         buf_size: usize,
     ) -> ResultType<Self> {
-        let addr = lookup_host(&addr)
-            .await?
-            .next()
-            .context("could not resolve to any address")?;
+        let addr = "0.0.0.0:3478".parse::<SocketAddr>().unwrap();
+
+        // let addr = lookup_host(&addr)
+        //     .await?
+        //     .next()
+        //     .context("could not resolve to any address")?;
         Ok(Self::Direct(UdpFramed::new(
             UdpSocket::from_std(new_socket(addr, reuse, buf_size)?.into_udp_socket())?,
             BytesCodec::new(),
