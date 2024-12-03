@@ -11,6 +11,7 @@ import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
@@ -1363,34 +1364,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   bool locked = !isWeb && bind.mainIsInstalled();
 
   final scrollController = ScrollController();
-  late final TextEditingController idController;
-  late final TextEditingController relayController;
-  late final TextEditingController apiController;
-  late final TextEditingController keyController;
-
-  @override
-  void initState() {
-    super.initState();
-    Map<String, dynamic> oldOptions = jsonDecode(bind.mainGetOptionsSync());
-    old(String key) {
-      return (oldOptions[key] ?? '').trim();
-    }
-
-    idController = TextEditingController(text: old('custom-rendezvous-server'));
-    relayController = TextEditingController(text: old('relay-server'));
-    apiController = TextEditingController(text: old('api-server'));
-    keyController = TextEditingController(text: old('key'));
-  }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    bool enabled = !locked;
-    final hideServer =
-        bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
-    // TODO: support web proxy
-    final hideProxy =
-        isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
     return ListView(controller: scrollController, children: [
       _lock(locked, 'Unlock Network Settings', () {
         locked = false;
@@ -1399,80 +1376,69 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       AbsorbPointer(
         absorbing: locked,
         child: Column(children: [
-          if (!hideServer) server(enabled),
-          if (!hideProxy)
-            _Card(title: 'Proxy', children: [
-              _Button('Socks5/Http(s) Proxy', changeSocks5Proxy,
-                  enabled: enabled),
-            ]),
+          network(context),
         ]),
       ),
     ]).marginOnly(bottom: _kListViewBottomMargin);
   }
 
-  server(bool enabled) {
-    // Simple temp wrapper for PR check
-    tmpWrapper() {
-      // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
+  Widget network(BuildContext context) {
+    final hideServer =
+        bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
+    final hideProxy =
+        isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
 
-      RxString idErrMsg = ''.obs;
-      RxString relayErrMsg = ''.obs;
-      RxString apiErrMsg = ''.obs;
-      final controllers = [
-        idController,
-        relayController,
-        apiController,
-        keyController,
-      ];
-      final errMsgs = [
-        idErrMsg,
-        relayErrMsg,
-        apiErrMsg,
-      ];
-
-      submit() async {
-        bool result = await setServerConfig(
-            null,
-            errMsgs,
-            ServerConfig(
-                idServer: idController.text,
-                relayServer: relayController.text,
-                apiServer: apiController.text,
-                key: keyController.text));
-        if (result) {
-          setState(() {});
-          showToast(translate('Successful'));
-        } else {
-          showToast(translate('Failed'));
-        }
-      }
-
-      bool secure = !enabled;
-      return _Card(
-          title: 'ID/Relay Server',
-          title_suffix: ServerConfigImportExportWidgets(controllers, errMsgs),
-          children: [
-            Column(
-              children: [
-                Obx(() => _LabeledTextField(context, 'ID Server', idController,
-                    idErrMsg.value, enabled, secure)),
-                if (!isWeb)
-                  Obx(() => _LabeledTextField(context, 'Relay Server',
-                      relayController, relayErrMsg.value, enabled, secure)),
-                Obx(() => _LabeledTextField(context, 'API Server',
-                    apiController, apiErrMsg.value, enabled, secure)),
-                _LabeledTextField(
-                    context, 'Key', keyController, '', enabled, secure),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [_Button('Apply', submit, enabled: enabled)],
-                ).marginOnly(top: 10),
-              ],
-            )
-          ]);
+    if (hideServer && hideProxy) {
+      return Offstage();
     }
 
-    return tmpWrapper();
+    return _Card(
+      title: 'Network',
+      children: [
+        Container(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!hideServer)
+                ListTile(
+                  leading: Icon(Icons.dns_outlined, color: _accentColor),
+                  title: Text(
+                    translate('ID/Relay Server'),
+                    style: TextStyle(fontSize: _kContentFontSize),
+                  ),
+                  enabled: !locked,
+                  onTap: () => showServerSettings(gFFI.dialogManager),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                  minLeadingWidth: 0,
+                  horizontalTitleGap: 10,
+                ),
+              if (!hideServer && !hideProxy)
+                Divider(height: 1, indent: 16, endIndent: 16),
+              if (!hideProxy)
+                ListTile(
+                  leading:
+                      Icon(Icons.network_ping_outlined, color: _accentColor),
+                  title: Text(
+                    translate('Socks5/Http(s) Proxy'),
+                    style: TextStyle(fontSize: _kContentFontSize),
+                  ),
+                  enabled: !locked,
+                  onTap: changeSocks5Proxy,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                  minLeadingWidth: 0,
+                  horizontalTitleGap: 10,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
