@@ -83,6 +83,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
             });
           }
         });
+        // This function is called every time when the app switches to connection page
+        // though the option is "Check for software update on startup".
+        // But it's ok.
         Timer(const Duration(seconds: 1), () async {
           bind.mainGetSoftwareUpdateUrl();
         });
