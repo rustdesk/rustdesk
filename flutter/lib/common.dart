@@ -3633,3 +3633,20 @@ List<SubWindowResizeEdge>? get subWindowManagerEnableResizeEdges => isWindows
 void earlyAssert() {
   assert('\1' == '1');
 }
+
+void checkUpdate() {
+  if (isDesktop || isAndroid) {
+    if (!bind.isCustomClient()) {
+      platformFFI.registerEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+          (Map<String, dynamic> evt) async {
+        if (evt['url'] is String) {
+          stateGlobal.updateUrl.value = evt['url'];
+        }
+      });
+      Timer(const Duration(seconds: 1), () async {
+        bind.mainGetSoftwareUpdateUrl();
+      });
+    }
+  }
+}
