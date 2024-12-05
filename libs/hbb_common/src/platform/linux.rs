@@ -13,21 +13,12 @@ pub const XDG_CURRENT_DESKTOP: &str = "XDG_CURRENT_DESKTOP";
 
 pub struct Distro {
     pub name: String,
-    pub id: String,
     pub version_id: String,
 }
 
 impl Distro {
     fn new() -> Self {
-        // to-do:
-        // 1. Remove `run_cmds`, read file once
-        // 2. Add more distro infos
         let name = run_cmds("awk -F'=' '/^NAME=/ {print $2}' /etc/os-release")
-            .unwrap_or_default()
-            .trim()
-            .trim_matches('"')
-            .to_string();
-        let id = run_cmds("awk -F'=' '/^ID=/ {print $2}' /etc/os-release")
             .unwrap_or_default()
             .trim()
             .trim_matches('"')
@@ -37,11 +28,7 @@ impl Distro {
             .trim()
             .trim_matches('"')
             .to_string();
-        Self {
-            name,
-            id,
-            version_id,
-        }
+        Self { name, version_id }
     }
 }
 
