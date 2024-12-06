@@ -2748,6 +2748,7 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
         return;
     }
     let mut key_event = KeyEvent::new();
+    key_event.mode = KeyboardMode::Legacy.into();
     key_event.press = true;
     let mut msg_out = Message::new();
     key_event.set_seq(p);
