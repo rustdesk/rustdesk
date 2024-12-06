@@ -597,6 +597,10 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                     style: const TextStyle(color: MyTheme.darkGray),
                   ))
                 ]),
+          // This options controls the clipboard sharing for both client and host. Clipboard sharing:
+          // 1. On the client side, is controlled in the remote page.(flutter -> remote_page.dart)
+          // 2. On the host side, front app is not RustDesk, is controlled in the floating ball.(kotlin -> FloatingWindowService.kt)
+          // 3. On the host side, front app is RustDesk, is controlled in the clipboard listener.(kotlin -> RdClipboardManager.kt)
           PermissionRow(translate("Enable clipboard"), serverModel.clipboardOk,
               serverModel.toggleClipboard),
         ]));

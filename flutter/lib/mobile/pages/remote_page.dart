@@ -84,6 +84,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    gFFI.serverModel.initOptionClipboard();
     gFFI.ffiModel.updateEventListener(sessionId, widget.id);
     gFFI.start(
       widget.id,
@@ -145,6 +146,23 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.
     // Only one client is considered here for now.
     gFFI.chatModel.onVoiceCallClosed("End connetion");
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      trySyncClipboard();
+    }
+  }
+
+  // For client side
+  // When swithing from other app to this app, try to sync clipboard.
+  void trySyncClipboard() {
+    // We also check if clipboard is enabled in the "Share screen" page.
+    // Though there's one option "Disable clipboard" in the Remote page.
+    if (gFFI.serverModel.clipboardOk) {
+      gFFI.invokeMethod("try_sync_clipboard", false);
+    }
   }
 
   @override

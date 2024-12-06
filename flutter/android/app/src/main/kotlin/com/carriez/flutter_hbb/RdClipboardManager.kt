@@ -37,10 +37,13 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     private var lastUpdatedClipData: ClipData? = null
     private var isClientEnabled = true;
     private var _isListening = false;
+    private var isServiceEnabled = false;
+    private var isServiceStarted = false;
+
     val isListening: Boolean
         get() = _isListening
 
-    fun checkPrimaryClip(isClient: Boolean, isSync: Boolean) {
+    fun checkPrimaryClip(isClient: Boolean, isSync: Boolean, force: Boolean = false) {
         val clipData = clipboardManager.primaryClip
         if (clipData != null && clipData.itemCount > 0) {
             // Only handle the first item in the clipboard for now.
@@ -48,7 +51,7 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
             val isHostSync = !isClient && isSync
             // Ignore the `isClipboardDataEqual()` check if it's a host sync operation.
             // Because it's a action manually triggered by the user.
-            if (!isHostSync) {
+            if (!isHostSync && !force) {
                 if (lastUpdatedClipData != null && isClipboardDataEqual(clipData, lastUpdatedClipData!!)) {
                     Log.d(logTag, "Clipboard data is the same as last update, ignore")
                     return
@@ -95,10 +98,14 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         }
     }
 
-    private val clipboardListener = object : ClipboardManager.OnPrimaryClipChangedListener {
+    private val serviceClipboardListener = object : ClipboardManager.OnPrimaryClipChangedListener {
+        // to-do: serviceClipboardListener is only added once
+        // But `onPrimaryClipChanged()` is called two times when copying text in RustDesk.
+        // Though we've added a check to avoid sending the same clipboard data to the client,
+        // we should still investigate why `onPrimaryClipChanged()` is called two times.
         override fun onPrimaryClipChanged() {
             Log.d(logTag, "onPrimaryClipChanged")
-            checkPrimaryClip(true, false)
+            checkPrimaryClip(false, false)
         }
     }
 
@@ -138,15 +145,27 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
 
     @Keep
     fun rustEnableServiceClipboard(enable: Boolean) {
-        Log.d(logTag, "rustEnableServiceClipboard: enable: $enable, _isListening: $_isListening")
-        if (enable) {
+        isServiceEnabled = enable
+        updateListening()
+    }
+
+    fun setServiceStarted(started: Boolean) {
+        isServiceStarted = started
+        updateListening()
+    }
+
+    fun updateListening() {
+        Log.d(logTag, "updateListening: isServiceStarted: $isServiceStarted, isServiceEnabled: $isServiceEnabled, _isListening: $_isListening")
+        if (isServiceStarted && isServiceEnabled) {
             if (!_isListening) {
-                clipboardManager.addPrimaryClipChangedListener(clipboardListener)
+                // to-do: serviceClipboardListener is only added once,
+                // but `onPrimaryClipChanged()` is called two times when copying text in RustDesk.
+                clipboardManager.addPrimaryClipChangedListener(serviceClipboardListener)
                 _isListening = true
             }
         } else {
             if (_isListening) {
-                clipboardManager.removePrimaryClipChangedListener(clipboardListener)
+                clipboardManager.removePrimaryClipChangedListener(serviceClipboardListener)
                 _isListening = false
                 lastUpdatedClipData = null
             }
@@ -157,22 +176,18 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     fun rustEnableClientClipboard(enable: Boolean) {
         Log.d(logTag, "rustEnableClientClipboard: enable: $enable")
         isClientEnabled = enable
-        if (enable) {
-            lastUpdatedClipData = clipboardManager.primaryClip
-        } else {
-            lastUpdatedClipData = null
-        }
+        lastUpdatedClipData = null
     }
 
-    fun syncClipboard(isClient: Boolean) {
-        Log.d(logTag, "syncClipboard: isClient: $isClient, isClientEnabled: $isClientEnabled, _isListening: $_isListening")
+    fun syncClipboard(isClient: Boolean, force: Boolean = false) {
+        Log.d(logTag, "syncClipboard: isClient: $isClient, isClientEnabled: $isClientEnabled, force: $force, _isListening: $_isListening")
         if (isClient && !isClientEnabled) {
             return
         }
         if (!isClient && !_isListening) {
             return
         }
-        checkPrimaryClip(isClient, true)
+        checkPrimaryClip(isClient, true, force)
     }
 
     @Keep

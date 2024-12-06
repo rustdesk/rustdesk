@@ -221,6 +221,11 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
 
                 }
+                "try_sync_clipboard" -> {
+                    val force = call.arguments as Boolean
+                    rdClipboardManager?.syncClipboard(true, force)
+                    result.success(true)
+                }
                 GET_START_ON_BOOT_OPT -> {
                     val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
                     result.success(prefs.getBoolean(KEY_START_ON_BOOT_OPT, false))
@@ -401,14 +406,5 @@ class MainActivity : FlutterActivity() {
     override fun onStart() {
         super.onStart()
         stopService(Intent(this, FloatingWindowService::class.java))
-    }
-
-    // For client side
-    // When swithing from other app to this app, try to sync clipboard.
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) {
-            rdClipboardManager?.syncClipboard(true)
-        }
     }
 }

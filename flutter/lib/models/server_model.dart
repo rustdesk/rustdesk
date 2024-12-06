@@ -30,7 +30,7 @@ class ServerModel with ChangeNotifier {
   bool _inputOk = false;
   bool _audioOk = false;
   bool _fileOk = false;
-  bool _clipboardOk = false;
+  bool? _clipboardOk;
   bool _showElevation = false;
   bool hideCm = false;
   int _connectStatus = 0; // Rendezvous Server status
@@ -60,7 +60,7 @@ class ServerModel with ChangeNotifier {
 
   bool get fileOk => _fileOk;
 
-  bool get clipboardOk => _clipboardOk;
+  bool get clipboardOk => _clipboardOk ?? false;
 
   bool get showElevation => _showElevation;
 
@@ -213,10 +213,17 @@ class ServerModel with ChangeNotifier {
     }
 
     // clipboard
-    final clipOption = await bind.mainGetOption(key: kOptionEnableClipboard);
-    _clipboardOk = clipOption != 'N';
+    await initOptionClipboard();
 
     notifyListeners();
+  }
+
+  Future<bool> initOptionClipboard() async {
+    if (_clipboardOk == null) {
+      final clipOption = await bind.mainGetOption(key: kOptionEnableClipboard);
+      _clipboardOk = clipOption != 'N';
+    }
+    return _clipboardOk ?? false;
   }
 
   updatePasswordModel() async {
@@ -323,10 +330,13 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleClipboard() async {
-    _clipboardOk = !_clipboardOk;
+    if (_clipboardOk == null) {
+      await initOptionClipboard();
+    }
+    _clipboardOk = !clipboardOk;
     bind.mainSetOption(
         key: kOptionEnableClipboard,
-        value: _clipboardOk ? defaultOptionYes : 'N');
+        value: clipboardOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 
