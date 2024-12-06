@@ -45,6 +45,10 @@ pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum FS {
+    ReadEmptyDirs {
+        dir: String,
+        include_hidden: bool,
+    },
     ReadDir {
         dir: String,
         include_hidden: bool,
@@ -890,7 +894,7 @@ pub async fn set_data(data: &Data) -> ResultType<()> {
     set_data_async(data).await
 }
 
-pub async fn set_data_async(data: &Data) -> ResultType<()> {
+async fn set_data_async(data: &Data) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(data).await?;
     Ok(())

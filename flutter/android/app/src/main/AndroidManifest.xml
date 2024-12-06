@@ -15,6 +15,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <queries>
+        <intent>
+            <!-- https://developer.android.com/training/package-visibility/use-cases#open-urls-custom-tabs -->
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+    </queries>
+
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="RustDesk"

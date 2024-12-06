@@ -11,15 +11,16 @@ import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desktop_settings.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
@@ -226,13 +227,11 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           Expanded(
             child: Container(
               color: Theme.of(context).scaffoldBackgroundColor,
-              child: DesktopScrollWrapper(
-                  scrollController: controller,
-                  child: PageView(
-                    controller: controller,
-                    physics: NeverScrollableScrollPhysics(),
-                    children: _children(),
-                  )),
+              child: PageView(
+                controller: controller,
+                physics: NeverScrollableScrollPhysics(),
+                children: _children(),
+              ),
             ),
           )
         ],
@@ -281,13 +280,10 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
 
   Widget _listView({required List<_TabInfo> tabs}) {
     final scrollController = ScrollController();
-    return DesktopScrollWrapper(
-        scrollController: scrollController,
-        child: ListView(
-          physics: DraggableNeverScrollableScrollPhysics(),
-          controller: scrollController,
-          children: tabs.map((tab) => _listItem(tab: tab)).toList(),
-        ));
+    return ListView(
+      controller: scrollController,
+      children: tabs.map((tab) => _listItem(tab: tab)).toList(),
+    );
   }
 
   Widget _listItem({required _TabInfo tab}) {
@@ -349,22 +345,19 @@ class _GeneralState extends State<_General> {
   @override
   Widget build(BuildContext context) {
     final scrollController = ScrollController();
-    return DesktopScrollWrapper(
-        scrollController: scrollController,
-        child: ListView(
-          physics: DraggableNeverScrollableScrollPhysics(),
-          controller: scrollController,
-          children: [
-            if (!isWeb) service(),
-            theme(),
-            _Card(title: 'Language', children: [language()]),
-            if (!isWeb) hwcodec(),
-            if (!isWeb) audio(context),
-            if (!isWeb) record(context),
-            if (!isWeb) WaylandCard(),
-            other()
-          ],
-        ).marginOnly(bottom: _kListViewBottomMargin));
+    return ListView(
+      controller: scrollController,
+      children: [
+        if (!isWeb) service(),
+        theme(),
+        _Card(title: 'Language', children: [language()]),
+        if (!isWeb) hwcodec(),
+        if (!isWeb) audio(context),
+        if (!isWeb) record(context),
+        if (!isWeb) WaylandCard(),
+        other()
+      ],
+    ).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget theme() {
@@ -575,12 +568,18 @@ class _GeneralState extends State<_General> {
       bool root_dir_exists = map['root_dir_exists']!;
       bool user_dir_exists = map['user_dir_exists']!;
       return _Card(title: 'Recording', children: [
-        _OptionCheckBox(context, 'Automatically record incoming sessions',
-            kOptionAllowAutoRecordIncoming),
-        if (showRootDir)
+        if (!bind.isOutgoingOnly())
+          _OptionCheckBox(context, 'Automatically record incoming sessions',
+              kOptionAllowAutoRecordIncoming),
+        if (!bind.isIncomingOnly())
+          _OptionCheckBox(context, 'Automatically record outgoing sessions',
+              kOptionAllowAutoRecordOutgoing,
+              isServer: false),
+        if (showRootDir && !bind.isOutgoingOnly())
           Row(
             children: [
-              Text('${translate("Incoming")}:'),
+              Text(
+                  '${translate(bind.isIncomingOnly() ? "Directory" : "Incoming")}:'),
               Expanded(
                 child: GestureDetector(
                     onTap: root_dir_exists
@@ -597,45 +596,49 @@ class _GeneralState extends State<_General> {
               ),
             ],
           ).marginOnly(left: _kContentHMargin),
-        Row(
-          children: [
-            Text('${translate(showRootDir ? "Outgoing" : "Directory")}:'),
-            Expanded(
-              child: GestureDetector(
-                  onTap: user_dir_exists
-                      ? () => launchUrl(Uri.file(user_dir))
-                      : null,
-                  child: Text(
-                    user_dir,
-                    softWrap: true,
-                    style: user_dir_exists
-                        ? const TextStyle(decoration: TextDecoration.underline)
+        if (!(showRootDir && bind.isIncomingOnly()))
+          Row(
+            children: [
+              Text(
+                  '${translate((showRootDir && !bind.isOutgoingOnly()) ? "Outgoing" : "Directory")}:'),
+              Expanded(
+                child: GestureDetector(
+                    onTap: user_dir_exists
+                        ? () => launchUrl(Uri.file(user_dir))
                         : null,
-                  )).marginOnly(left: 10),
-            ),
-            ElevatedButton(
-                    onPressed: isOptionFixed(kOptionVideoSaveDirectory)
-                        ? null
-                        : () async {
-                            String? initialDirectory;
-                            if (await Directory.fromUri(Uri.directory(user_dir))
-                                .exists()) {
-                              initialDirectory = user_dir;
-                            }
-                            String? selectedDirectory =
-                                await FilePicker.platform.getDirectoryPath(
-                                    initialDirectory: initialDirectory);
-                            if (selectedDirectory != null) {
-                              await bind.mainSetOption(
-                                  key: kOptionVideoSaveDirectory,
-                                  value: selectedDirectory);
-                              setState(() {});
-                            }
-                          },
-                    child: Text(translate('Change')))
-                .marginOnly(left: 5),
-          ],
-        ).marginOnly(left: _kContentHMargin),
+                    child: Text(
+                      user_dir,
+                      softWrap: true,
+                      style: user_dir_exists
+                          ? const TextStyle(
+                              decoration: TextDecoration.underline)
+                          : null,
+                    )).marginOnly(left: 10),
+              ),
+              ElevatedButton(
+                      onPressed: isOptionFixed(kOptionVideoSaveDirectory)
+                          ? null
+                          : () async {
+                              String? initialDirectory;
+                              if (await Directory.fromUri(
+                                      Uri.directory(user_dir))
+                                  .exists()) {
+                                initialDirectory = user_dir;
+                              }
+                              String? selectedDirectory =
+                                  await FilePicker.platform.getDirectoryPath(
+                                      initialDirectory: initialDirectory);
+                              if (selectedDirectory != null) {
+                                await bind.mainSetLocalOption(
+                                    key: kOptionVideoSaveDirectory,
+                                    value: selectedDirectory);
+                                setState(() {});
+                              }
+                            },
+                      child: Text(translate('Change')))
+                  .marginOnly(left: 5),
+            ],
+          ).marginOnly(left: _kContentHMargin),
       ]);
     });
   }
@@ -695,29 +698,26 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return DesktopScrollWrapper(
-        scrollController: scrollController,
-        child: SingleChildScrollView(
-            physics: DraggableNeverScrollableScrollPhysics(),
-            controller: scrollController,
-            child: Column(
-              children: [
-                _lock(locked, 'Unlock Security Settings', () {
-                  locked = false;
-                  setState(() => {});
-                }),
-                AbsorbPointer(
-                  absorbing: locked,
-                  child: Column(children: [
-                    permissions(context),
-                    password(context),
-                    _Card(title: '2FA', children: [tfa()]),
-                    _Card(title: 'ID', children: [changeId()]),
-                    more(context),
-                  ]),
-                ),
-              ],
-            )).marginOnly(bottom: _kListViewBottomMargin));
+    return SingleChildScrollView(
+        controller: scrollController,
+        child: Column(
+          children: [
+            _lock(locked, 'Unlock Security Settings', () {
+              locked = false;
+              setState(() => {});
+            }),
+            AbsorbPointer(
+              absorbing: locked,
+              child: Column(children: [
+                permissions(context),
+                password(context),
+                _Card(title: '2FA', children: [tfa()]),
+                _Card(title: 'ID', children: [changeId()]),
+                more(context),
+              ]),
+            ),
+          ],
+        )).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget tfa() {
@@ -1019,7 +1019,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             translate('Accept sessions via both'),
           ];
           var modeInitialKey = model.approveMode;
-          if (!modeKeys.contains(modeInitialKey)) modeInitialKey = '';
+          if (!modeKeys.contains(modeInitialKey)) {
+            modeInitialKey = defaultOptionApproveMode;
+          }
           final usePassword = model.approveMode != 'click';
 
           final isApproveModeFixed = isOptionFixed(kOptionApproveMode);
@@ -1362,112 +1364,82 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   bool get wantKeepAlive => true;
   bool locked = !isWeb && bind.mainIsInstalled();
 
+  final scrollController = ScrollController();
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    bool enabled = !locked;
-    final scrollController = ScrollController();
-    final hideServer =
-        bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
-    // TODO: support web proxy
-    final hideProxy =
-        isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
-    return DesktopScrollWrapper(
-        scrollController: scrollController,
-        child: ListView(
-            controller: scrollController,
-            physics: DraggableNeverScrollableScrollPhysics(),
-            children: [
-              _lock(locked, 'Unlock Network Settings', () {
-                locked = false;
-                setState(() => {});
-              }),
-              AbsorbPointer(
-                absorbing: locked,
-                child: Column(children: [
-                  if (!hideServer) server(enabled),
-                  if (!hideProxy)
-                    _Card(title: 'Proxy', children: [
-                      _Button('Socks5/Http(s) Proxy', changeSocks5Proxy,
-                          enabled: enabled),
-                    ]),
-                ]),
-              ),
-            ]).marginOnly(bottom: _kListViewBottomMargin));
+    return ListView(controller: scrollController, children: [
+      _lock(locked, 'Unlock Network Settings', () {
+        locked = false;
+        setState(() => {});
+      }),
+      AbsorbPointer(
+        absorbing: locked,
+        child: Column(children: [
+          network(context),
+        ]),
+      ),
+    ]).marginOnly(bottom: _kListViewBottomMargin);
   }
 
-  server(bool enabled) {
-    // Simple temp wrapper for PR check
-    tmpWrapper() {
-      // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
-      Map<String, dynamic> oldOptions = jsonDecode(bind.mainGetOptionsSync());
-      old(String key) {
-        return (oldOptions[key] ?? '').trim();
-      }
+  Widget network(BuildContext context) {
+    final hideServer =
+        bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
+    final hideProxy =
+        isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
 
-      RxString idErrMsg = ''.obs;
-      RxString relayErrMsg = ''.obs;
-      RxString apiErrMsg = ''.obs;
-      var idController =
-          TextEditingController(text: old('custom-rendezvous-server'));
-      var relayController = TextEditingController(text: old('relay-server'));
-      var apiController = TextEditingController(text: old('api-server'));
-      var keyController = TextEditingController(text: old('key'));
-      final controllers = [
-        idController,
-        relayController,
-        apiController,
-        keyController,
-      ];
-      final errMsgs = [
-        idErrMsg,
-        relayErrMsg,
-        apiErrMsg,
-      ];
-
-      submit() async {
-        bool result = await setServerConfig(
-            null,
-            errMsgs,
-            ServerConfig(
-                idServer: idController.text,
-                relayServer: relayController.text,
-                apiServer: apiController.text,
-                key: keyController.text));
-        if (result) {
-          setState(() {});
-          showToast(translate('Successful'));
-        } else {
-          showToast(translate('Failed'));
-        }
-      }
-
-      bool secure = !enabled;
-      return _Card(
-          title: 'ID/Relay Server',
-          title_suffix: ServerConfigImportExportWidgets(controllers, errMsgs),
-          children: [
-            Column(
-              children: [
-                Obx(() => _LabeledTextField(context, 'ID Server', idController,
-                    idErrMsg.value, enabled, secure)),
-                if (!isWeb)
-                  Obx(() => _LabeledTextField(context, 'Relay Server',
-                      relayController, relayErrMsg.value, enabled, secure)),
-                Obx(() => _LabeledTextField(context, 'API Server',
-                    apiController, apiErrMsg.value, enabled, secure)),
-                _LabeledTextField(
-                    context, 'Key', keyController, '', enabled, secure),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [_Button('Apply', submit, enabled: enabled)],
-                ).marginOnly(top: 10),
-              ],
-            )
-          ]);
+    if (hideServer && hideProxy) {
+      return Offstage();
     }
 
-    return tmpWrapper();
+    return _Card(
+      title: 'Network',
+      children: [
+        Container(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!hideServer)
+                ListTile(
+                  leading: Icon(Icons.dns_outlined, color: _accentColor),
+                  title: Text(
+                    translate('ID/Relay Server'),
+                    style: TextStyle(fontSize: _kContentFontSize),
+                  ),
+                  enabled: !locked,
+                  onTap: () => showServerSettings(gFFI.dialogManager),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                  minLeadingWidth: 0,
+                  horizontalTitleGap: 10,
+                ),
+              if (!hideServer && !hideProxy)
+                Divider(height: 1, indent: 16, endIndent: 16),
+              if (!hideProxy)
+                ListTile(
+                  leading:
+                      Icon(Icons.network_ping_outlined, color: _accentColor),
+                  title: Text(
+                    translate('Socks5/Http(s) Proxy'),
+                    style: TextStyle(fontSize: _kContentFontSize),
+                  ),
+                  enabled: !locked,
+                  onTap: changeSocks5Proxy,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                  minLeadingWidth: 0,
+                  horizontalTitleGap: 10,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1482,19 +1454,14 @@ class _DisplayState extends State<_Display> {
   @override
   Widget build(BuildContext context) {
     final scrollController = ScrollController();
-    return DesktopScrollWrapper(
-        scrollController: scrollController,
-        child: ListView(
-            controller: scrollController,
-            physics: DraggableNeverScrollableScrollPhysics(),
-            children: [
-              viewStyle(context),
-              scrollStyle(context),
-              imageQuality(context),
-              codec(context),
-              if (!isWeb) privacyModeImpl(context),
-              other(context),
-            ]).marginOnly(bottom: _kListViewBottomMargin));
+    return ListView(controller: scrollController, children: [
+      viewStyle(context),
+      scrollStyle(context),
+      imageQuality(context),
+      codec(context),
+      if (!isWeb) privacyModeImpl(context),
+      other(context),
+    ]).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget viewStyle(BuildContext context) {
@@ -1717,15 +1684,12 @@ class _AccountState extends State<_Account> {
   @override
   Widget build(BuildContext context) {
     final scrollController = ScrollController();
-    return DesktopScrollWrapper(
-        scrollController: scrollController,
-        child: ListView(
-          physics: DraggableNeverScrollableScrollPhysics(),
-          controller: scrollController,
-          children: [
-            _Card(title: 'Account', children: [accountAction(), useInfo()]),
-          ],
-        ).marginOnly(bottom: _kListViewBottomMargin));
+    return ListView(
+      controller: scrollController,
+      children: [
+        _Card(title: 'Account', children: [accountAction(), useInfo()]),
+      ],
+    ).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget accountAction() {
@@ -1822,18 +1786,14 @@ class _PluginState extends State<_Plugin> {
   Widget build(BuildContext context) {
     bind.pluginListReload();
     final scrollController = ScrollController();
-    return DesktopScrollWrapper(
-      scrollController: scrollController,
-      child: ChangeNotifierProvider.value(
-        value: pluginManager,
-        child: Consumer<PluginManager>(builder: (context, model, child) {
-          return ListView(
-            physics: DraggableNeverScrollableScrollPhysics(),
-            controller: scrollController,
-            children: model.plugins.map((entry) => pluginCard(entry)).toList(),
-          ).marginOnly(bottom: _kListViewBottomMargin);
-        }),
-      ),
+    return ChangeNotifierProvider.value(
+      value: pluginManager,
+      child: Consumer<PluginManager>(builder: (context, model, child) {
+        return ListView(
+          controller: scrollController,
+          children: model.plugins.map((entry) => pluginCard(entry)).toList(),
+        ).marginOnly(bottom: _kListViewBottomMargin);
+      }),
     );
   }
 
@@ -1885,75 +1845,72 @@ class _AboutState extends State<_About> {
       final fingerprint = data['fingerprint'].toString();
       const linkStyle = TextStyle(decoration: TextDecoration.underline);
       final scrollController = ScrollController();
-      return DesktopScrollWrapper(
-          scrollController: scrollController,
-          child: SingleChildScrollView(
-            controller: scrollController,
-            physics: DraggableNeverScrollableScrollPhysics(),
-            child: _Card(title: translate('About RustDesk'), children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(
-                    height: 8.0,
-                  ),
-                  SelectionArea(
-                      child: Text('${translate('Version')}: $version')
-                          .marginSymmetric(vertical: 4.0)),
-                  SelectionArea(
-                      child: Text('${translate('Build Date')}: $buildDate')
-                          .marginSymmetric(vertical: 4.0)),
-                  if (!isWeb)
-                    SelectionArea(
-                        child: Text('${translate('Fingerprint')}: $fingerprint')
-                            .marginSymmetric(vertical: 4.0)),
-                  InkWell(
-                      onTap: () {
-                        launchUrlString('https://rustdesk.com/privacy.html');
-                      },
-                      child: Text(
-                        translate('Privacy Statement'),
-                        style: linkStyle,
-                      ).marginSymmetric(vertical: 4.0)),
-                  InkWell(
-                      onTap: () {
-                        launchUrlString('https://rustdesk.com');
-                      },
-                      child: Text(
-                        translate('Website'),
-                        style: linkStyle,
-                      ).marginSymmetric(vertical: 4.0)),
-                  Container(
-                    decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-                    child: SelectionArea(
-                        child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Ltd.\n$license',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                              Text(
-                                translate('Slogan_tip'),
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white),
-                              )
-                            ],
+      return SingleChildScrollView(
+        controller: scrollController,
+        child: _Card(title: translate('About RustDesk'), children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(
+                height: 8.0,
+              ),
+              SelectionArea(
+                  child: Text('${translate('Version')}: $version')
+                      .marginSymmetric(vertical: 4.0)),
+              SelectionArea(
+                  child: Text('${translate('Build Date')}: $buildDate')
+                      .marginSymmetric(vertical: 4.0)),
+              if (!isWeb)
+                SelectionArea(
+                    child: Text('${translate('Fingerprint')}: $fingerprint')
+                        .marginSymmetric(vertical: 4.0)),
+              InkWell(
+                  onTap: () {
+                    launchUrlString('https://rustdesk.com/privacy.html');
+                  },
+                  child: Text(
+                    translate('Privacy Statement'),
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
+              InkWell(
+                  onTap: () {
+                    launchUrlString('https://rustdesk.com');
+                  },
+                  child: Text(
+                    translate('Website'),
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
+              Container(
+                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                child: SelectionArea(
+                    child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Ltd.\n$license',
+                            style: const TextStyle(color: Colors.white),
                           ),
-                        ),
-                      ],
-                    )),
-                  ).marginSymmetric(vertical: 4.0)
-                ],
-              ).marginOnly(left: _kContentHMargin)
-            ]),
-          ));
+                          Text(
+                            translate('Slogan_tip'),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white),
+                          )
+                        ],
+                      ),
+                    ),
+                  ],
+                )),
+              ).marginSymmetric(vertical: 4.0)
+            ],
+          ).marginOnly(left: _kContentHMargin)
+        ]),
+      );
     });
   }
 }
@@ -2271,26 +2228,39 @@ _LabeledTextField(
     String errorText,
     bool enabled,
     bool secure) {
-  return Row(
+  return Table(
+    columnWidths: const {
+      0: FixedColumnWidth(150),
+      1: FlexColumnWidth(),
+    },
+    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
     children: [
-      ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 140),
-          child: Text(
-            '${translate(label)}:',
-            textAlign: TextAlign.right,
-            style: TextStyle(
-                fontSize: 16, color: disabledTextColor(context, enabled)),
-          ).marginOnly(right: 10)),
-      Expanded(
-        child: TextField(
+      TableRow(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: Text(
+              '${translate(label)}:',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 16,
+                color: disabledTextColor(context, enabled),
+              ),
+            ),
+          ),
+          TextField(
             controller: controller,
             enabled: enabled,
             obscureText: secure,
+            autocorrect: false,
             decoration: InputDecoration(
-                errorText: errorText.isNotEmpty ? errorText : null),
+              errorText: errorText.isNotEmpty ? errorText : null,
+            ),
             style: TextStyle(
               color: disabledTextColor(context, enabled),
-            )),
+            ),
+          ),
+        ],
       ),
     ],
   ).marginOnly(bottom: 8);

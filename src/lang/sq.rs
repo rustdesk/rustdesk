@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Shaq cilësinë e monitorit"),
         ("Disable clipboard", "Ç'aktivizo clipboard"),
         ("Lock after session end", "Kyç pasi sesioni të përfundoj"),
-        ("Insert", "Fut"),
+        ("Insert Ctrl + Alt + Del", "Fut Ctrl + Alt + Del"),
         ("Insert Lock", "Fut bllokimin"),
         ("Refresh", "Rifresko"),
         ("ID does not exist", "ID nuk ekziston"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Regjistrimi"),
         ("Directory", "Direktoria"),
         ("Automatically record incoming sessions", "Regjistro automatikisht seancat hyrëse"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Ndrysho"),
         ("Start session recording", "Fillo regjistrimin e sesionit"),
         ("Stop session recording", "Ndalo regjistrimin e sesionit"),
@@ -651,5 +652,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", ""),
         ("Upload folder", ""),
         ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }

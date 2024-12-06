@@ -135,8 +135,8 @@ docker build -t "rustdesk-builder" . # 构建容器
       ```
       在Dockerfile的RUN apt update之前插入两行：
    
-      RUN sed -i "s/deb.debian.org/mirrors.163.com/g" /etc/apt/sources.list
-      RUN sed -i "s/security.debian.org/mirrors.163.com/g" /etc/apt/sources.list
+      RUN sed -i "s|deb.debian.org|mirrors.aliyun.com|g" /etc/apt/sources.list && \
+          sed -i "s|security.debian.org|mirrors.aliyun.com|g" /etc/apt/sources.list
       ```
 
    2. 修改容器系统中的 cargo 源，在`RUN ./rustup.sh -y`后插入下面代码：

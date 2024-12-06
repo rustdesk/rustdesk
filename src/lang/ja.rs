@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "品質モニターを表示"),
         ("Disable clipboard", "クリップボードを無効化"),
         ("Lock after session end", "セッション終了後にロックする"),
-        ("Insert", "送信"),
+        ("Insert Ctrl + Alt + Del", "Ctrl + Alt + Del 送信"),
         ("Insert Lock", "ロック命令を送信"),
         ("Refresh", "更新"),
         ("ID does not exist", "IDが存在しません"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "録画"),
         ("Directory", "ディレクトリ"),
         ("Automatically record incoming sessions", "受信したセッションを自動で記録する"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "変更"),
         ("Start session recording", "セッションの録画を開始"),
         ("Stop session recording", "セッションの録画を停止"),
@@ -651,5 +652,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", ""),
         ("Upload folder", ""),
         ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }

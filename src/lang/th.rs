@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "แสดงคุณภาพหน้าจอ"),
         ("Disable clipboard", "ปิดการใช้งานคลิปบอร์ด"),
         ("Lock after session end", "ล็อคหลังจากจบเซสชัน"),
-        ("Insert", "แทรก"),
+        ("Insert Ctrl + Alt + Del", "แทรก Ctrl + Alt + Del"),
         ("Insert Lock", "แทรกล็อค"),
         ("Refresh", "รีเฟรช"),
         ("ID does not exist", "ไม่พอข้อมูล ID"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "การบันทึก"),
         ("Directory", "ไดเรกทอรี่"),
         ("Automatically record incoming sessions", "บันทึกเซสชันขาเข้าโดยอัตโนมัติ"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "เปลี่ยน"),
         ("Start session recording", "เริ่มต้นการบันทึกเซสชัน"),
         ("Stop session recording", "หยุดการบันทึกเซสซัน"),
@@ -651,5 +652,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", ""),
         ("Upload folder", ""),
         ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }

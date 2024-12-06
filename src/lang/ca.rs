@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Mostra la informació de flux"),
         ("Disable clipboard", "Inhabilita el porta-retalls"),
         ("Lock after session end", "Bloca en finalitzar la sessió"),
-        ("Insert", "Insereix"),
+        ("Insert Ctrl + Alt + Del", "Insereix Ctrl + Alt + Del"),
         ("Insert Lock", "Bloca"),
         ("Refresh", "Actualitza"),
         ("ID does not exist", "Aquesta ID no existeix"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Gravació"),
         ("Directory", "Contactes"),
         ("Automatically record incoming sessions", "Enregistrament automàtic de sessions entrants"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Canvia"),
         ("Start session recording", "Inicia la gravació de la sessió"),
         ("Stop session recording", "Atura la gravació de la sessió"),
@@ -651,5 +652,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", ""),
         ("Upload folder", ""),
         ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }

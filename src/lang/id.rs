@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Tampilkan kualitas monitor"),
         ("Disable clipboard", "Matikan papan klip"),
         ("Lock after session end", "Kunci setelah sesi berakhir"),
-        ("Insert", "Menyisipkan"),
+        ("Insert Ctrl + Alt + Del", "Menyisipkan Ctrl + Alt + Del"),
         ("Insert Lock", "Masukkan Kunci"),
         ("Refresh", "Segarkan"),
         ("ID does not exist", "ID tidak ada"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Perekaman"),
         ("Directory", "Direktori"),
         ("Automatically record incoming sessions", "Otomatis merekam sesi masuk"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Ubah"),
         ("Start session recording", "Mulai sesi perekaman"),
         ("Stop session recording", "Hentikan sesi perekaman"),
@@ -651,5 +652,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", ""),
         ("Upload folder", ""),
         ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }

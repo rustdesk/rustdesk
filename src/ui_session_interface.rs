@@ -35,8 +35,8 @@ use hbb_common::{
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
-    input_os_password, send_mouse, send_pointer_device_event, start_video_audio_threads,
-    FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
+    input_os_password, send_mouse, send_pointer_device_event, FileManager, Key, LoginConfigHandler,
+    QualityStatus, KEY_MAP,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::GrabState;
@@ -354,7 +354,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().is_privacy_mode_supported()
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     pub fn is_text_clipboard_required(&self) -> bool {
         *self.server_clipboard_enabled.read().unwrap()
             && *self.server_keyboard_enabled.read().unwrap()
@@ -389,22 +389,17 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
-    pub fn record_screen(&self, start: bool, display: i32, w: i32, h: i32) {
-        self.send(Data::RecordScreen(
-            start,
-            display as usize,
-            w,
-            h,
-            self.get_id(),
-        ));
-    }
-
-    pub fn record_status(&self, status: bool) {
+    pub fn record_screen(&self, start: bool) {
         let mut misc = Misc::new();
-        misc.set_client_record_status(status);
+        misc.set_client_record_status(start);
         let mut msg = Message::new();
         msg.set_misc(misc);
         self.send(Data::Message(msg));
+        self.send(Data::RecordScreen(start));
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.lc.read().unwrap().record
     }
 
     pub fn save_custom_image_quality(&self, custom_image_quality: i32) {
@@ -531,10 +526,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(feature = "flutter"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn is_xfce(&self) -> bool {
-        #[cfg(not(any(target_os = "ios")))]
-        return crate::platform::is_xfce();
-        #[cfg(any(target_os = "ios"))]
-        false
+        crate::platform::is_xfce()
     }
 
     pub fn remove_port_forward(&self, port: i32) {
@@ -866,24 +858,13 @@ impl<T: InvokeUiSession> Session<T> {
             platform_code,
             position_code: position_code as _,
             event_type,
+            usb_hid: 0,
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
-        keyboard::client::process_event(keyboard_mode, &event, Some(lock_modes));
+        keyboard::client::process_event_with_session(keyboard_mode, &event, Some(lock_modes), self);
     }
 
-    #[cfg(any(target_os = "ios"))]
-    pub fn handle_flutter_key_event(
-        &self,
-        _keyboard_mode: &str,
-        _character: &str,
-        _usb_hid: i32,
-        _lock_modes: i32,
-        _down_or_up: bool,
-    ) {
-    }
-
-    #[cfg(not(any(target_os = "ios")))]
     pub fn handle_flutter_key_event(
         &self,
         keyboard_mode: &str,
@@ -905,7 +886,6 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    #[cfg(not(any(target_os = "ios")))]
     fn _handle_key_flutter_simulation(
         &self,
         _keyboard_mode: &str,
@@ -930,7 +910,6 @@ impl<T: InvokeUiSession> Session<T> {
         self.send_key_event(&key_event);
     }
 
-    #[cfg(not(any(target_os = "ios")))]
     fn _handle_key_non_flutter_simulation(
         &self,
         keyboard_mode: &str,
@@ -941,14 +920,24 @@ impl<T: InvokeUiSession> Session<T> {
     ) {
         let key = rdev::usb_hid_key_from_code(usb_hid as _);
 
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let position_code: KeyCode = 0;
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let platform_code: KeyCode = 0;
+
         #[cfg(target_os = "windows")]
         let platform_code: u32 = rdev::win_code_from_key(key).unwrap_or(0);
         #[cfg(target_os = "windows")]
         let position_code: KeyCode = rdev::win_scancode_from_key(key).unwrap_or(0) as _;
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))]
         let position_code: KeyCode = rdev::code_from_key(key).unwrap_or(0) as _;
-        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        #[cfg(not(any(
+            target_os = "windows",
+            target_os = "android",
+            target_os = "ios",
+            target_os = "linux"
+        )))]
         let platform_code: u32 = position_code as _;
         // For translate mode.
         // We need to set the platform code (keysym) if is AltGr.
@@ -977,10 +966,14 @@ impl<T: InvokeUiSession> Session<T> {
             platform_code,
             position_code: position_code as _,
             event_type,
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            usb_hid: usb_hid as _,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            usb_hid: 0,
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
-        keyboard::client::process_event(keyboard_mode, &event, Some(lock_modes));
+        keyboard::client::process_event_with_session(keyboard_mode, &event, Some(lock_modes), self);
     }
 
     // flutter only TODO new input
@@ -1494,6 +1487,10 @@ impl<T: InvokeUiSession> Session<T> {
         msg.set_misc(misc);
         self.send(Data::Message(msg));
     }
+
+    pub fn get_conn_token(&self) -> Option<String> {
+        self.lc.read().unwrap().get_conn_token()
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
@@ -1557,6 +1554,8 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_current_display(&self, disp_idx: i32);
     #[cfg(feature = "flutter")]
     fn is_multi_ui_session(&self) -> bool;
+    fn update_record_status(&self, start: bool);
+    fn update_empty_dirs(&self, _res: ReadEmptyDirsResponse) {}
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -1850,40 +1849,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
         }
         return;
     }
-    let frame_count_map: Arc<RwLock<HashMap<usize, usize>>> = Default::default();
-    let frame_count_map_cl = frame_count_map.clone();
-    let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender, video_queue_map, decode_fps, chroma) =
-        start_video_audio_threads(
-            handler.clone(),
-            move |display: usize,
-                  data: &mut scrap::ImageRgb,
-                  _texture: *mut c_void,
-                  pixelbuffer: bool| {
-                let mut write_lock = frame_count_map_cl.write().unwrap();
-                let count = write_lock.get(&display).unwrap_or(&0) + 1;
-                write_lock.insert(display, count);
-                drop(write_lock);
-                if pixelbuffer {
-                    ui_handler.on_rgba(display, data);
-                } else {
-                    #[cfg(all(feature = "vram", feature = "flutter"))]
-                    ui_handler.on_texture(display, _texture);
-                }
-            },
-        );
-
-    let mut remote = Remote::new(
-        handler,
-        video_queue_map,
-        video_sender,
-        audio_sender,
-        receiver,
-        sender,
-        frame_count_map,
-        decode_fps,
-        chroma,
-    );
+    let mut remote = Remote::new(handler, receiver, sender);
     remote.io_loop(&key, &token, round).await;
     remote.sync_jobs_status_to_local().await;
 }

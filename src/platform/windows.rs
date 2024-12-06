@@ -479,6 +479,7 @@ extern "C" {
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
     fn is_windows_server() -> BOOL;
+    fn is_windows_10_or_greater() -> BOOL;
     fn handleMask(
         out: *mut u8,
         mask: *const u8,
@@ -1557,6 +1558,11 @@ pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
 #[inline]
 pub fn is_win_server() -> bool {
     unsafe { is_windows_server() > 0 }
+}
+
+#[inline]
+pub fn is_win_10_or_greater() -> bool {
+    unsafe { is_windows_10_or_greater() > 0 }
 }
 
 pub fn bootstrap() {

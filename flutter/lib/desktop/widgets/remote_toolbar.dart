@@ -305,7 +305,7 @@ class RemoteMenuEntry {
   }) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        '${translate("Insert")} Ctrl + Alt + Del',
+        translate("Insert Ctrl + Alt + Del"),
         style: style,
       ),
       proc: () {
@@ -1924,8 +1924,7 @@ class _RecordMenu extends StatelessWidget {
     var ffi = Provider.of<FfiModel>(context);
     var recordingModel = Provider.of<RecordingModel>(context);
     final visible =
-        (recordingModel.start || ffi.permissions['recording'] != false) &&
-            ffi.pi.currentDisplay != kAllDisplayValue;
+        (recordingModel.start || ffi.permissions['recording'] != false);
     if (!visible) return Offstage();
     return _IconMenuButton(
       assetName: 'assets/rec.svg',

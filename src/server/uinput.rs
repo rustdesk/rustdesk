@@ -239,7 +239,7 @@ pub mod service {
             (enigo::Key::Select, evdev::Key::KEY_SELECT),
             (enigo::Key::Print, evdev::Key::KEY_PRINT),
             // (enigo::Key::Execute, evdev::Key::KEY_EXECUTE),
-            // (enigo::Key::Snapshot, evdev::Key::KEY_SNAPSHOT),
+            (enigo::Key::Snapshot, evdev::Key::KEY_SYSRQ),
             (enigo::Key::Insert, evdev::Key::KEY_INSERT),
             (enigo::Key::Help, evdev::Key::KEY_HELP),
             (enigo::Key::Sleep, evdev::Key::KEY_SLEEP),
@@ -247,7 +247,7 @@ pub mod service {
             (enigo::Key::Scroll, evdev::Key::KEY_SCROLLLOCK),
             (enigo::Key::NumLock, evdev::Key::KEY_NUMLOCK),
             (enigo::Key::RWin, evdev::Key::KEY_RIGHTMETA),
-            (enigo::Key::Apps, evdev::Key::KEY_CONTEXT_MENU),
+            (enigo::Key::Apps, evdev::Key::KEY_COMPOSE),    // it's a little strange that the key is mapped to KEY_COMPOSE, not KEY_MENU
             (enigo::Key::Multiply, evdev::Key::KEY_KPASTERISK),
             (enigo::Key::Add, evdev::Key::KEY_KPPLUS),
             (enigo::Key::Subtract, evdev::Key::KEY_KPMINUS),

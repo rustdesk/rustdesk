@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Zobraziť monitor kvality"),
         ("Disable clipboard", "Vypnúť schránku"),
         ("Lock after session end", "Po skončení uzamknúť plochu"),
-        ("Insert", "Vložiť"),
+        ("Insert Ctrl + Alt + Del", "Vložiť Ctrl + Alt + Del"),
         ("Insert Lock", "Uzamknúť"),
         ("Refresh", "Aktualizovať"),
         ("ID does not exist", "ID neexistuje"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Nahrávanie"),
         ("Directory", "Adresár"),
         ("Automatically record incoming sessions", "Automaticky nahrávať prichádzajúce relácie"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Zmeniť"),
         ("Start session recording", "Spustiť záznam relácie"),
         ("Stop session recording", "Zastaviť záznam relácie"),
@@ -651,5 +652,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", ""),
         ("Upload folder", ""),
         ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }

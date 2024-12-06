@@ -100,6 +100,10 @@ class FileModel {
     fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
   }
 
+  void receiveEmptyDirs(Map<String, dynamic> evt) {
+    fileFetcher.tryCompleteEmptyDirsTask(evt['value'], evt['is_local']);
+  }
+
   Future<void> postOverrideFileConfirm(Map<String, dynamic> evt) async {
     evtLoop.pushEvent(
         _FileDialogEvent(WeakReference(this), FileDialogType.overwrite, evt));
@@ -255,6 +259,27 @@ class FileModel {
       );
     } catch (e) {
       debugPrint("Failed to decode onSelectedFiles: $e");
+    }
+  }
+
+  void sendEmptyDirs(dynamic obj) {
+    late final List<dynamic> emptyDirs;
+    try {
+      emptyDirs = jsonDecode(obj['dirs'] as String);
+    } catch (e) {
+      debugPrint("Failed to decode sendEmptyDirs: $e");
+    }
+    final otherSideData = remoteController.directoryData();
+    final toPath = otherSideData.directory.path;
+    final isPeerWindows = otherSideData.options.isWindows;
+
+    final isLocalWindows = isWindows || isWebOnWindows;
+    for (var dir in emptyDirs) {
+      if (isLocalWindows != isPeerWindows) {
+        dir = PathUtil.convert(dir, isLocalWindows, isPeerWindows);
+      }
+      var peerPath = PathUtil.join(toPath, dir, isPeerWindows);
+      remoteController.createDirWithRemote(peerPath, true);
     }
   }
 }
@@ -470,7 +495,8 @@ class FileController {
   }
 
   /// sendFiles from current side (FileController.isLocal) to other side (SelectedItems).
-  void sendFiles(SelectedItems items, DirectoryData otherSideData) {
+  Future<void> sendFiles(
+      SelectedItems items, DirectoryData otherSideData) async {
     /// ignore wrong items side status
     if (items.isLocal != isLocal) {
       return;
@@ -496,6 +522,43 @@ class FileController {
       debugPrint(
           "path: ${from.path}, toPath: $toPath, to: ${PathUtil.join(toPath, from.name, isWindows)}");
     }
+
+    if (isWeb ||
+        (!isLocal &&
+            versionCmp(rootState.target!.ffiModel.pi.version, '1.3.3') < 0)) {
+      return;
+    }
+
+    final List<Entry> entrys = items.items.toList();
+    var isRemote = isLocal == true ? true : false;
+
+    await Future.forEach(entrys, (Entry item) async {
+      if (!item.isDirectory) {
+        return;
+      }
+
+      final List<String> paths = [];
+
+      final emptyDirs =
+          await fileFetcher.readEmptyDirs(item.path, isLocal, showHidden);
+
+      if (emptyDirs.isEmpty) {
+        return;
+      } else {
+        for (var dir in emptyDirs) {
+          paths.add(dir.path);
+        }
+      }
+
+      final dirs = paths.map((path) {
+        return PathUtil.getOtherSidePath(directory.value.path, path,
+            options.value.isWindows, toPath, isWindows);
+      });
+
+      for (var dir in dirs) {
+        createDirWithRemote(dir, isRemote);
+      }
+    });
   }
 
   bool _removeCheckboxRemember = false;
@@ -689,12 +752,16 @@ class FileController {
         sessionId: sessionId, actId: actId, path: path, isRemote: !isLocal);
   }
 
-  Future<void> createDir(String path) async {
+  Future<void> createDirWithRemote(String path, bool isRemote) async {
     bind.sessionCreateDir(
         sessionId: sessionId,
         actId: JobController.jobID.next(),
         path: path,
-        isRemote: !isLocal);
+        isRemote: isRemote);
+  }
+
+  Future<void> createDir(String path) async {
+    await createDirWithRemote(path, !isLocal);
   }
 
   Future<void> renameAction(Entry item, bool isLocal) async {
@@ -1064,12 +1131,31 @@ class JobResultListener<T> {
 class FileFetcher {
   // Map<String,Completer<FileDirectory>> localTasks = {}; // now we only use read local dir sync
   Map<String, Completer<FileDirectory>> remoteTasks = {};
+  Map<String, Completer<List<FileDirectory>>> remoteEmptyDirsTasks = {};
   Map<int, Completer<FileDirectory>> readRecursiveTasks = {};
 
   final GetSessionID getSessionID;
   SessionID get sessionId => getSessionID();
 
   FileFetcher(this.getSessionID);
+
+  Future<List<FileDirectory>> registerReadEmptyDirsTask(
+      bool isLocal, String path) {
+    // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
+    final tasks = remoteEmptyDirsTasks; // bypass now
+    if (tasks.containsKey(path)) {
+      throw "Failed to registerReadEmptyDirsTask, already have same read job";
+    }
+    final c = Completer<List<FileDirectory>>();
+    tasks[path] = c;
+
+    Timer(Duration(seconds: 2), () {
+      tasks.remove(path);
+      if (c.isCompleted) return;
+      c.completeError("Failed to read empty dirs, timeout");
+    });
+    return c.future;
+  }
 
   Future<FileDirectory> registerReadTask(bool isLocal, String path) {
     // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
@@ -1104,6 +1190,25 @@ class FileFetcher {
     return c.future;
   }
 
+  tryCompleteEmptyDirsTask(String? msg, String? isLocalStr) {
+    if (msg == null || isLocalStr == null) return;
+    late final Map<String, Completer<List<FileDirectory>>> tasks;
+    try {
+      final map = jsonDecode(msg);
+      final String path = map["path"];
+      final List<dynamic> fdJsons = map["empty_dirs"];
+      final List<FileDirectory> fds =
+          fdJsons.map((fdJson) => FileDirectory.fromJson(fdJson)).toList();
+
+      tasks = remoteEmptyDirsTasks;
+      final completer = tasks.remove(path);
+
+      completer?.complete(fds);
+    } catch (e) {
+      debugPrint("tryCompleteJob err: $e");
+    }
+  }
+
   tryCompleteTask(String? msg, String? isLocalStr) {
     if (msg == null || isLocalStr == null) return;
     late final Map<Object, Completer<FileDirectory>> tasks;
@@ -1124,6 +1229,28 @@ class FileFetcher {
       }
     } catch (e) {
       debugPrint("tryCompleteJob err: $e");
+    }
+  }
+
+  Future<List<FileDirectory>> readEmptyDirs(
+      String path, bool isLocal, bool showHidden) async {
+    try {
+      if (isLocal) {
+        final res = await bind.sessionReadLocalEmptyDirsRecursiveSync(
+            sessionId: sessionId, path: path, includeHidden: showHidden);
+
+        final List<dynamic> fdJsons = jsonDecode(res);
+
+        final List<FileDirectory> fds =
+            fdJsons.map((fdJson) => FileDirectory.fromJson(fdJson)).toList();
+        return fds;
+      } else {
+        await bind.sessionReadRemoteEmptyDirsRecursiveSync(
+            sessionId: sessionId, path: path, includeHidden: showHidden);
+        return registerReadEmptyDirsTask(isLocal, path);
+      }
+    } catch (e) {
+      return Future.error(e);
     }
   }
 
@@ -1373,6 +1500,24 @@ class PathUtil {
   static final windowsContext = path.Context(style: path.Style.windows);
   static final posixContext = path.Context(style: path.Style.posix);
 
+  static String getOtherSidePath(String mainRootPath, String mainPath,
+      bool isMainWindows, String otherRootPath, bool isOtherWindows) {
+    final mainPathUtil = isMainWindows ? windowsContext : posixContext;
+    final relativePath = mainPathUtil.relative(mainPath, from: mainRootPath);
+
+    final names = mainPathUtil.split(relativePath);
+
+    final otherPathUtil = isOtherWindows ? windowsContext : posixContext;
+
+    String path = otherRootPath;
+
+    for (var name in names) {
+      path = otherPathUtil.join(path, name);
+    }
+
+    return path;
+  }
+
   static String join(String path1, String path2, bool isWindows) {
     final pathUtil = isWindows ? windowsContext : posixContext;
     return pathUtil.join(path1, path2);
@@ -1381,6 +1526,12 @@ class PathUtil {
   static List<String> split(String path, bool isWindows) {
     final pathUtil = isWindows ? windowsContext : posixContext;
     return pathUtil.split(path);
+  }
+
+  static String convert(String path, bool isMainWindows, bool isOtherWindows) {
+    final mainPathUtil = isMainWindows ? windowsContext : posixContext;
+    final otherPathUtil = isOtherWindows ? windowsContext : posixContext;
+    return otherPathUtil.joinAll(mainPathUtil.split(path));
   }
 
   static String dirname(String path, bool isWindows) {

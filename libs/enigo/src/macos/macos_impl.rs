@@ -111,11 +111,17 @@ pub struct Enigo {
     double_click_interval: u32,
     last_click_time: Option<std::time::Instant>,
     multiple_click: i64,
+    ignore_flags: bool,
     flags: CGEventFlags,
     char_to_vkey_map: Map<String, Map<char, CGKeyCode>>,
 }
 
 impl Enigo {
+    /// Set if ignore flags when posting events.
+    pub fn set_ignore_flags(&mut self, ignore: bool) {
+        self.ignore_flags = ignore;
+    }
+
     ///
     pub fn reset_flag(&mut self) {
         self.flags = CGEventFlags::CGEventFlagNull;
@@ -136,7 +142,9 @@ impl Enigo {
     }
 
     fn post(&self, event: CGEvent) {
-        event.set_flags(self.flags);
+        if !self.ignore_flags {
+            event.set_flags(self.flags);
+        }
         event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, ENIGO_INPUT_EXTRA_VALUE);
         event.post(CGEventTapLocation::HID);
     }
@@ -164,6 +172,7 @@ impl Default for Enigo {
             double_click_interval,
             multiple_click: 1,
             last_click_time: None,
+            ignore_flags: false,
             flags: CGEventFlags::CGEventFlagNull,
             char_to_vkey_map: Default::default(),
         }

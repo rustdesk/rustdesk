@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "عرض مراقب الجودة"),
         ("Disable clipboard", "تعطيل الحافظة"),
         ("Lock after session end", "القفل بعد نهاية هذه الجلسة"),
-        ("Insert", "ادخال"),
+        ("Insert Ctrl + Alt + Del", "Ctrl + Alt + Del دخال"),
         ("Insert Lock", "قفل الادخال"),
         ("Refresh", "تحديث"),
         ("ID does not exist", "المعرف غير موجود"),
@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "التسجيل"),
         ("Directory", "المسار"),
         ("Automatically record incoming sessions", "تسجيل الجلسات القادمة تلقائيا"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "تغيير"),
         ("Start session recording", "بدء تسجيل الجلسة"),
         ("Stop session recording", "ايقاف تسجيل الجلسة"),
@@ -651,5 +652,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", ""),
         ("Upload folder", ""),
         ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
     ].iter().cloned().collect();
 }

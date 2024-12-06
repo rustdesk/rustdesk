@@ -56,8 +56,8 @@ pub fn get_custom_server_from_string(s: &str) -> ResultType<CustomServer> {
      *
      * This allows using a ',' (comma) symbol as a final delimiter.
      */
-    if s.contains("host=") {
-        let stripped = &s[s.find("host=").unwrap_or(0)..s.len()];
+    if s.to_lowercase().contains("host=") {
+        let stripped = &s[s.to_lowercase().find("host=").unwrap_or(0)..s.len()];
         let strs: Vec<&str> = stripped.split(",").collect();
         let mut host = String::default();
         let mut key = String::default();
@@ -65,16 +65,17 @@ pub fn get_custom_server_from_string(s: &str) -> ResultType<CustomServer> {
         let mut relay = String::default();
         let strs_iter = strs.iter();
         for el in strs_iter {
-            if el.starts_with("host=") {
+            let el_lower = el.to_lowercase();
+            if el_lower.starts_with("host=") {
                 host = el.chars().skip(5).collect();
             }
-            if el.starts_with("key=") {
+            if el_lower.starts_with("key=") {
                 key = el.chars().skip(4).collect();
             }
-            if el.starts_with("api=") {
+            if el_lower.starts_with("api=") {
                 api = el.chars().skip(4).collect();
             }
-            if el.starts_with("relay=") {
+            if el_lower.starts_with("relay=") {
                 relay = el.chars().skip(6).collect();
             }
         }
@@ -160,6 +161,18 @@ mod test {
         assert_eq!(
             get_custom_server_from_string(
                 "rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,relay=server.example.net.exe"
+            )
+            .unwrap(),
+            CustomServer {
+                host: "server.example.net".to_owned(),
+                key: "Zm9vYmFyLiwyCg==".to_owned(),
+                api: "".to_owned(),
+                relay: "server.example.net".to_owned(),
+            }
+        );
+        assert_eq!(
+            get_custom_server_from_string(
+                "rustdesk-Host=server.example.net,Key=Zm9vYmFyLiwyCg==,RELAY=server.example.net.exe"
             )
             .unwrap(),
             CustomServer {
