@@ -1696,19 +1696,8 @@ pub fn main_set_unlock_pin(pin: String) -> SyncReturn<String> {
     SyncReturn(set_unlock_pin(pin))
 }
 
-pub fn main_check_mouse_time() {
-    check_mouse_time();
-}
-
-pub fn main_get_mouse_time() -> f64 {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        get_mouse_time()
-    }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        0.0
-    }
+pub fn main_get_video_conn_count() -> usize {
+    video_conn_count()
 }
 
 pub fn main_wol(id: String) {

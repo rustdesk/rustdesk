@@ -2784,16 +2784,7 @@ Future<void> shouldBeBlocked(RxBool block, WhetherUseRemoteBlock? use) async {
     block.value = false;
     return;
   }
-  var time0 = DateTime.now().millisecondsSinceEpoch;
-  await bind.mainCheckMouseTime();
-  Timer(const Duration(milliseconds: 120), () async {
-    var d = time0 - await bind.mainGetMouseTime();
-    if (d < 120) {
-      block.value = true;
-    } else {
-      block.value = false;
-    }
-  });
+  block.value = await bind.mainGetVideoConnCount() > 0;
 }
 
 typedef WhetherUseRemoteBlock = Future<bool> Function();

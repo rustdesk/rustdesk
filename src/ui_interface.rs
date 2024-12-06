@@ -43,8 +43,6 @@ pub struct UiStatus {
     pub status_num: i32,
     #[cfg(not(feature = "flutter"))]
     pub key_confirmed: bool,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub mouse_time: i64,
     #[cfg(not(feature = "flutter"))]
     pub id: String,
 }
@@ -61,8 +59,6 @@ lazy_static::lazy_static! {
         status_num: 0,
         #[cfg(not(feature = "flutter"))]
         key_confirmed: false,
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        mouse_time: 0,
         #[cfg(not(feature = "flutter"))]
         id: "".to_owned(),
     }));
@@ -536,18 +532,8 @@ pub fn is_installed_lower_version() -> bool {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_mouse_time() -> f64 {
-    UI_STATUS.lock().unwrap().mouse_time as f64
-}
-
-#[inline]
-pub fn check_mouse_time() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let sender = SENDER.lock().unwrap();
-        allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));
-    }
+pub fn video_conn_count() -> usize {
+    VIDEO_CONN_COUNT.load(Ordering::Relaxed)
 }
 
 #[inline]
@@ -1143,7 +1129,6 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     #[cfg(not(feature = "flutter"))]
     let mut key_confirmed = false;
     let mut rx = rx;
-    let mut mouse_time = 0;
     #[cfg(not(feature = "flutter"))]
     let mut id = "".to_owned();
     #[cfg(any(
@@ -1169,11 +1154,6 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                     crate::ui_cm_interface::quit_cm();
                                 }
                                 break;
-                            }
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Ok(Some(ipc::Data::MouseMoveTime(v))) => {
-                                mouse_time = v;
-                                UI_STATUS.lock().unwrap().mouse_time = v;
                             }
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
                                 *OPTIONS.lock().unwrap() = v;
@@ -1219,8 +1199,6 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                     status_num: x as _,
                                     #[cfg(not(feature = "flutter"))]
                                     key_confirmed: _c,
-                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                                    mouse_time,
                                     #[cfg(not(feature = "flutter"))]
                                     id: id.clone(),
                                 };
@@ -1252,8 +1230,6 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
             status_num: -1,
             #[cfg(not(feature = "flutter"))]
             key_confirmed,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            mouse_time,
             #[cfg(not(feature = "flutter"))]
             id: id.clone(),
         };

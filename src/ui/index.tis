@@ -6,6 +6,7 @@ stdout.println("is_xfce: ", is_xfce);
 view.windowMinSize = (scaleIt(560), scaleIt(300));
 
 var app;
+handler.start_option_status_sync();
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
 var service_stopped = handler.get_option("stop-service") == "Y";
@@ -1151,7 +1152,6 @@ function showSettings() {
 }
 
 function checkConnectStatus() {
-    handler.check_mouse_time(); // trigger connection status updater
     self.timer(1s, function() {
         var tmp = handler.get_option("stop-service") == "Y";
         if (tmp != service_stopped) {
@@ -1213,13 +1213,8 @@ function self.onMouse(evt) {
 
 function check_if_overlay() {
     if (handler.get_option('allow-remote-config-modification') != 'Y') {
-        var time0 = getTime();
-        handler.check_mouse_time();
-        self.timer(120ms, function() {
-            if (!enter) return;
-            var d = time0 - handler.get_mouse_time();
-            if (d < 120) $(#overlay).style#display = 'block';
-        });
+        if (!enter) return;
+        if (handler.video_conn_count() > 0) $(#overlay).style#display = 'block';
     }
 }
 

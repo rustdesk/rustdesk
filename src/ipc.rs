@@ -213,8 +213,6 @@ pub enum Data {
     },
     SystemInfo(Option<String>),
     ClickTime(i64),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    MouseMoveTime(i64),
     Authorize,
     Close,
     #[cfg(target_os = "android")]
@@ -385,11 +383,6 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::ClickTime(_) => {
             let t = crate::server::CLICK_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::ClickTime(t)).await);
-        }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        Data::MouseMoveTime(_) => {
-            let t = crate::server::MOUSE_MOVE_TIME.load(Ordering::SeqCst);
-            allow_err!(stream.send(&Data::MouseMoveTime(t)).await);
         }
         Data::Close => {
             log::info!("Receive close message");

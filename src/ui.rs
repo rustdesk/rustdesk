@@ -366,12 +366,12 @@ impl UI {
         Value::from_iter(v)
     }
 
-    fn get_mouse_time(&self) -> f64 {
-        get_mouse_time()
+    fn start_option_status_sync(&self) {
+        start_option_status_sync();
     }
 
-    fn check_mouse_time(&self) {
-        check_mouse_time()
+    fn video_conn_count(&self) -> i32 {
+        video_conn_count() as i32
     }
 
     fn get_connect_status(&mut self) -> Value {
@@ -669,8 +669,8 @@ impl sciter::EventHandler for UI {
         fn remove_peer(String);
         fn remove_discovered(String);
         fn get_connect_status();
-        fn get_mouse_time();
-        fn check_mouse_time();
+        fn start_option_status_sync();
+        fn video_conn_count();
         fn get_recent_sessions();
         fn get_peer(String);
         fn get_fav();

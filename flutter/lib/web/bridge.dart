@@ -1329,12 +1329,8 @@ class RustdeskImpl {
     throw UnimplementedError("mainCheckSuperUserPermission");
   }
 
-  Future<void> mainCheckMouseTime({dynamic hint}) {
-    throw UnimplementedError("mainCheckMouseTime");
-  }
-
-  Future<double> mainGetMouseTime({dynamic hint}) {
-    throw UnimplementedError("mainGetMouseTime");
+  Future<int> mainGetVideoConnCount({dynamic hint}) {
+    throw UnimplementedError("mainGetVideoConnCount");
   }
 
   Future<void> mainWol({required String id, dynamic hint}) {
