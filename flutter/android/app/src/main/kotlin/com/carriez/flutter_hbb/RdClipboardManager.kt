@@ -96,6 +96,10 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     }
 
     private val serviceClipboardListener = object : ClipboardManager.OnPrimaryClipChangedListener {
+        // One machine triggers `onPrimaryClipChanged()` twice on clipboard update in RustDesk.
+        // Another machine triggers `onPrimaryClipChanged()` once on clipboard update in RustDesk.
+        // But we only added the listener once.
+        // We've added the check for the same clipboard data in `checkPrimaryClip()`.
         override fun onPrimaryClipChanged() {
             Log.d(logTag, "onPrimaryClipChanged")
             checkPrimaryClip(false, false)
@@ -179,7 +183,7 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
             return
         }
         // Ignore the `isClipboardDataEqual()` check if it's a host sync operation.
-        // Because it's a action manually triggered by the user.
+        // Because it's an action manually triggered by the user.
         val skipSameCheck = !isClient || force
         checkPrimaryClip(isClient, skipSameCheck)
     }
