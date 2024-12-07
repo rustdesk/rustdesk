@@ -43,15 +43,12 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     val isListening: Boolean
         get() = _isListening
 
-    fun checkPrimaryClip(isClient: Boolean, isSync: Boolean, force: Boolean = false) {
+    fun checkPrimaryClip(isClient: Boolean, skipSameCheck: Boolean) {
         val clipData = clipboardManager.primaryClip
         if (clipData != null && clipData.itemCount > 0) {
             // Only handle the first item in the clipboard for now.
             val clip = clipData.getItemAt(0)
-            val isHostSync = !isClient && isSync
-            // Ignore the `isClipboardDataEqual()` check if it's a host sync operation.
-            // Because it's a action manually triggered by the user.
-            if (!isHostSync && !force) {
+            if (!skipSameCheck) {
                 if (lastUpdatedClipData != null && isClipboardDataEqual(clipData, lastUpdatedClipData!!)) {
                     Log.d(logTag, "Clipboard data is the same as last update, ignore")
                     return
@@ -99,10 +96,6 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     }
 
     private val serviceClipboardListener = object : ClipboardManager.OnPrimaryClipChangedListener {
-        // to-do: serviceClipboardListener is only added once
-        // But `onPrimaryClipChanged()` is called two times when copying text in RustDesk.
-        // Though we've added a check to avoid sending the same clipboard data to the client,
-        // we should still investigate why `onPrimaryClipChanged()` is called two times.
         override fun onPrimaryClipChanged() {
             Log.d(logTag, "onPrimaryClipChanged")
             checkPrimaryClip(false, false)
@@ -158,8 +151,6 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         Log.d(logTag, "updateListening: isServiceStarted: $isServiceStarted, isServiceEnabled: $isServiceEnabled, _isListening: $_isListening")
         if (isServiceStarted && isServiceEnabled) {
             if (!_isListening) {
-                // to-do: serviceClipboardListener is only added once,
-                // but `onPrimaryClipChanged()` is called two times when copying text in RustDesk.
                 clipboardManager.addPrimaryClipChangedListener(serviceClipboardListener)
                 _isListening = true
             }
@@ -187,7 +178,10 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         if (!isClient && !_isListening) {
             return
         }
-        checkPrimaryClip(isClient, true, force)
+        // Ignore the `isClipboardDataEqual()` check if it's a host sync operation.
+        // Because it's a action manually triggered by the user.
+        val skipSameCheck = !isClient || force
+        checkPrimaryClip(isClient, skipSameCheck)
     }
 
     @Keep
