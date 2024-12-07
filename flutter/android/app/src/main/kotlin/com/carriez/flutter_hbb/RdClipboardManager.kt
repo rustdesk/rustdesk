@@ -36,10 +36,11 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     // though the `lastUpdatedClipData` will be set to null once.
     private var lastUpdatedClipData: ClipData? = null
     private var isClientEnabled = true;
-    private var _isCaptureStarted = false;
+    private var isCaptureStarted = false;
+    private var isServiceEnabled = false;
 
-    val isCaptureStarted: Boolean
-        get() = _isCaptureStarted
+    val isServiceSyncEnabled: Boolean
+        get() = isServiceEnabled && isCaptureStarted
 
     fun checkPrimaryClip(isClient: Boolean) {
         val clipData = clipboardManager.primaryClip
@@ -130,7 +131,12 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     }
 
     fun setCaptureStarted(started: Boolean) {
-        _isCaptureStarted = started
+        isCaptureStarted = started
+    }
+
+    @Keep
+    fun rustEnableServiceClipboard(enable: Boolean) {
+        isServiceEnabled = enable
     }
 
     @Keep
