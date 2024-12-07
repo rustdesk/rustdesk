@@ -834,11 +834,19 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
 pub fn main_set_option(key: String, value: String) {
     #[cfg(target_os = "android")]
     if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
-        crate::ui_cm_interface::notify_input_control(config::option2bool(
-            config::keys::OPTION_ENABLE_KEYBOARD,
-            &value,
-        ));
+        crate::ui_cm_interface::switch_permission_all(
+            "keyboard".to_owned(),
+            config::option2bool(&key, &value),
+        );
     }
+    #[cfg(target_os = "android")]
+    if key.eq(config::keys::OPTION_ENABLE_CLIPBOARD) {
+        crate::ui_cm_interface::switch_permission_all(
+            "clipboard".to_owned(),
+            config::option2bool(&key, &value),
+        );
+    }
+
     if key.eq("custom-rendezvous-server") {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
@@ -2332,7 +2340,7 @@ pub mod server_side {
     use jni::{
         errors::{Error as JniError, Result as JniResult},
         objects::{JClass, JObject, JString},
-        sys::jstring,
+        sys::{jboolean, jstring},
         JNIEnv,
     };
 
@@ -2404,5 +2412,13 @@ pub mod server_side {
             "".into()
         };
         return env.new_string(res).unwrap_or_default().into_raw();
+    }
+
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_ffi_FFI_isServiceClipboardEnabled(
+        env: JNIEnv,
+        _class: JClass,
+    ) -> jboolean {
+        jboolean::from(crate::server::is_clipboard_service_ok())
     }
 }
