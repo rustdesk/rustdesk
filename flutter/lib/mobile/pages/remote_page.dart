@@ -148,6 +148,19 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      trySyncClipboard();
+    }
+  }
+
+  // For client side
+  // When swithing from other app to this app, try to sync clipboard.
+  void trySyncClipboard() {
+    gFFI.invokeMethod("try_sync_clipboard");
+  }
+
+  @override
   void didChangeMetrics() {
     // If the soft keyboard is visible and the canvas has been changed(panned or scaled)
     // Don't try reset the view style and focus the cursor.

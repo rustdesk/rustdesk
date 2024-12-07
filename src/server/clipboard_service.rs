@@ -8,8 +8,6 @@ use crate::ipc::{self, ClipboardFile, ClipboardNonFile, Data};
 use clipboard_master::{CallbackResult, ClipboardHandler};
 #[cfg(target_os = "android")]
 use hbb_common::config::{keys, option2bool};
-#[cfg(target_os = "android")]
-use scrap::android::ffi::call_clipboard_manager_enable_service_clipboard;
 use std::{
     io,
     sync::mpsc::{channel, RecvTimeoutError, Sender},
@@ -225,23 +223,12 @@ impl Handler {
 }
 
 #[cfg(target_os = "android")]
-fn is_clipboard_enabled() -> bool {
-    let keyboard_enabled = crate::ui_interface::get_option(keys::OPTION_ENABLE_KEYBOARD);
-    let keyboard_enabled = option2bool(keys::OPTION_ENABLE_KEYBOARD, &keyboard_enabled);
-    let clip_enabled = crate::ui_interface::get_option(keys::OPTION_ENABLE_CLIPBOARD);
-    let clip_enabled = option2bool(keys::OPTION_ENABLE_CLIPBOARD, &clip_enabled);
-    keyboard_enabled && clip_enabled
-}
-
-#[cfg(target_os = "android")]
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
-    let _res = call_clipboard_manager_enable_service_clipboard(is_clipboard_enabled());
     while sp.ok() {
         if let Some(msg) = crate::clipboard::get_clipboards_msg(false) {
             sp.send(msg);
         }
         std::thread::sleep(Duration::from_millis(INTERVAL));
     }
-    let _res = call_clipboard_manager_enable_service_clipboard(false);
     Ok(())
 }
