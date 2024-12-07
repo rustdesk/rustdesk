@@ -103,7 +103,6 @@ class MainActivity : FlutterActivity() {
         mainService?.let {
             unbindService(serviceConnection)
         }
-        rdClipboardManager?.rustEnableServiceClipboard(false)
         super.onDestroy()
     }
 
@@ -222,8 +221,7 @@ class MainActivity : FlutterActivity() {
 
                 }
                 "try_sync_clipboard" -> {
-                    val force = call.arguments as Boolean
-                    rdClipboardManager?.syncClipboard(true, force)
+                    rdClipboardManager?.syncClipboard(true)
                     result.success(true)
                 }
                 GET_START_ON_BOOT_OPT -> {

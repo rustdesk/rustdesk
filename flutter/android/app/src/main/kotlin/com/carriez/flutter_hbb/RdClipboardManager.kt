@@ -36,19 +36,19 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     // though the `lastUpdatedClipData` will be set to null once.
     private var lastUpdatedClipData: ClipData? = null
     private var isClientEnabled = true;
-    private var _isListening = false;
-    private var isServiceEnabled = false;
-    private var isServiceStarted = false;
+    private var _isCaptureStarted = false;
 
-    val isListening: Boolean
-        get() = _isListening
+    val isCaptureStarted: Boolean
+        get() = _isCaptureStarted
 
-    fun checkPrimaryClip(isClient: Boolean, skipSameCheck: Boolean) {
+    fun checkPrimaryClip(isClient: Boolean) {
         val clipData = clipboardManager.primaryClip
         if (clipData != null && clipData.itemCount > 0) {
             // Only handle the first item in the clipboard for now.
             val clip = clipData.getItemAt(0)
-            if (!skipSameCheck) {
+            // Ignore the `isClipboardDataEqual()` check if it's a host operation.
+            // Because it's an action manually triggered by the user.
+            if (isClient) {
                 if (lastUpdatedClipData != null && isClipboardDataEqual(clipData, lastUpdatedClipData!!)) {
                     Log.d(logTag, "Clipboard data is the same as last update, ignore")
                     return
@@ -95,16 +95,6 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         }
     }
 
-    private val serviceClipboardListener = object : ClipboardManager.OnPrimaryClipChangedListener {
-        // to-do: `onPrimaryClipChanged()` is called twice on clipboard update in RustDesk.
-        // But we only added the listener once.
-        // Though we've added the check for the same clipboard data in `checkPrimaryClip()`.
-        override fun onPrimaryClipChanged() {
-            Log.d(logTag, "onPrimaryClipChanged")
-            checkPrimaryClip(false, false)
-        }
-    }
-
     private fun isSupportedMimeType(mimeType: String): Boolean {
         return supportedMimeTypes.contains(mimeType)
     }
@@ -139,34 +129,8 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         return true
     }
 
-    @Keep
-    fun rustEnableServiceClipboard(enable: Boolean) {
-        isServiceEnabled = enable
-        updateListening()
-    }
-
-    fun setServiceStarted(started: Boolean) {
-        isServiceStarted = started
-        updateListening()
-    }
-
-    fun updateListening() {
-        Log.d(logTag, "updateListening: isServiceStarted: $isServiceStarted, isServiceEnabled: $isServiceEnabled, _isListening: $_isListening")
-        if (isServiceStarted && isServiceEnabled) {
-            if (!_isListening) {
-                // to-do: `onPrimaryClipChanged()` is called twice on clipboard update in RustDesk.
-                // But we only added the listener once.
-                // Though we've added the check for the same clipboard data in `checkPrimaryClip()`.
-                clipboardManager.addPrimaryClipChangedListener(serviceClipboardListener)
-                _isListening = true
-            }
-        } else {
-            if (_isListening) {
-                clipboardManager.removePrimaryClipChangedListener(serviceClipboardListener)
-                _isListening = false
-                lastUpdatedClipData = null
-            }
-        }
+    fun setCaptureStarted(started: Boolean) {
+        _isCaptureStarted = started
     }
 
     @Keep
@@ -176,18 +140,12 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         lastUpdatedClipData = null
     }
 
-    fun syncClipboard(isClient: Boolean, force: Boolean = false) {
-        Log.d(logTag, "syncClipboard: isClient: $isClient, isClientEnabled: $isClientEnabled, force: $force, _isListening: $_isListening")
+    fun syncClipboard(isClient: Boolean) {
+        Log.d(logTag, "syncClipboard: isClient: $isClient, isClientEnabled: $isClientEnabled")
         if (isClient && !isClientEnabled) {
             return
         }
-        if (!isClient && !_isListening) {
-            return
-        }
-        // Ignore the `isClipboardDataEqual()` check if it's a host sync operation.
-        // Because it's an action manually triggered by the user.
-        val skipSameCheck = !isClient || force
-        checkPrimaryClip(isClient, skipSameCheck)
+        checkPrimaryClip(isClient)
     }
 
     @Keep

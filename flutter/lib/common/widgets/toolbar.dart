@@ -583,14 +583,9 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
     v.add(TToggleMenu(
         value: value,
         onChanged: enabled
-            ? (value) async {
+            ? (value) {
                 if (value == null) return;
-                await bind.sessionToggleOption(sessionId: sessionId, value: option);
-                if (isAndroid) {
-                  if (!value && gFFI.serverModel.clipboardOk) {
-                    gFFI.invokeMethod("try_sync_clipboard", true);
-                  }
-                }
+                bind.sessionToggleOption(sessionId: sessionId, value: option);
               }
             : null,
         child: Text(translate('Disable clipboard'))));
