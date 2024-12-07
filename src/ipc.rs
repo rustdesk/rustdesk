@@ -268,6 +268,7 @@ pub enum Data {
     ControlledSessionCount(usize),
     CmErr(String),
     CheckHwcodec,
+    #[cfg(feature = "flutter")]
     VideoConnCount(Option<usize>),
     // Although the key is not neccessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
@@ -457,6 +458,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 log::info!("socks updated");
             }
         },
+        #[cfg(feature = "flutter")]
         Data::VideoConnCount(None) => {
             let n = crate::server::AUTHED_CONNS
                 .lock()
