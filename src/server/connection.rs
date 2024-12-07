@@ -1372,8 +1372,14 @@ impl Connection {
                 if !self.follow_remote_window {
                     noperms.push(NAME_WINDOW_FOCUS);
                 }
-                if !self.clipboard_enabled()
-                    || !self.peer_keyboard_enabled()
+                // Do not consider the clipboard and keyboard permissions on Android.
+                // Because syncing the clipboard on Android is manually triggered by the user in the floating ball.
+                #[cfg(target_os = "android")]
+                let keyboard_clip_noperm = self.disable_keyboard || self.disable_clipboard;
+                #[cfg(not(target_os = "android"))]
+                let keyboard_clip_noperm =
+                    !self.clipboard_enabled() || !self.peer_keyboard_enabled();
+                if keyboard_clip_noperm
                     || crate::get_builtin_option(keys::OPTION_ONE_WAY_CLIPBOARD_REDIRECTION) == "Y"
                 {
                     noperms.push(super::clipboard_service::NAME);

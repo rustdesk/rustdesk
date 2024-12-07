@@ -371,14 +371,6 @@ pub fn call_clipboard_manager_update_clipboard(data: &[u8]) -> JniResult<()> {
     }
 }
 
-pub fn call_clipboard_manager_enable_service_clipboard(enable: bool) -> JniResult<()> {
-    _call_clipboard_manager(
-        "rustEnableServiceClipboard",
-        "(Z)V",
-        &[JValue::Bool(jboolean::from(enable))],
-    )
-}
-
 pub fn call_clipboard_manager_enable_client_clipboard(enable: bool) -> JniResult<()> {
     _call_clipboard_manager(
         "rustEnableClientClipboard",
