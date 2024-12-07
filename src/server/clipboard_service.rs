@@ -8,6 +8,8 @@ use crate::ipc::{self, ClipboardFile, ClipboardNonFile, Data};
 use clipboard_master::{CallbackResult, ClipboardHandler};
 #[cfg(target_os = "android")]
 use hbb_common::config::{keys, option2bool};
+#[cfg(target_os = "android")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     io,
     sync::mpsc::{channel, RecvTimeoutError, Sender},
@@ -15,6 +17,9 @@ use std::{
 };
 #[cfg(windows)]
 use tokio::runtime::Runtime;
+
+#[cfg(target_os = "android")]
+static CLIPBOARD_SERVICE_OK: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(target_os = "android"))]
 struct Handler {
@@ -25,6 +30,11 @@ struct Handler {
     stream: Option<ipc::ConnectionTmpl<parity_tokio_ipc::ConnectionClient>>,
     #[cfg(target_os = "windows")]
     rt: Option<Runtime>,
+}
+
+#[cfg(target_os = "android")]
+pub fn is_clipboard_service_ok() -> bool {
+    CLIPBOARD_SERVICE_OK.load(Ordering::SeqCst)
 }
 
 pub fn new() -> GenericService {
@@ -224,11 +234,13 @@ impl Handler {
 
 #[cfg(target_os = "android")]
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
+    CLIPBOARD_SERVICE_OK.store(sp.ok(), Ordering::SeqCst);
     while sp.ok() {
         if let Some(msg) = crate::clipboard::get_clipboards_msg(false) {
             sp.send(msg);
         }
         std::thread::sleep(Duration::from_millis(INTERVAL));
     }
+    CLIPBOARD_SERVICE_OK.store(false, Ordering::SeqCst);
     Ok(())
 }
