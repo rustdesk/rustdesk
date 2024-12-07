@@ -25,6 +25,8 @@ class StateGlobal {
 
   final isPortrait = false.obs;
 
+  final updateUrl = ''.obs;
+
   String _inputSource = '';
 
   // Use for desktop -> remote toolbar -> resolution

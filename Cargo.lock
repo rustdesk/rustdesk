@@ -1290,7 +1290,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#4d318ff778063ce14669fd4bd67a1673653fc6e5"
+source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#7cb4ed0bd5546bf209edde0d0e9da5194753f2c0"
 dependencies = [
  "alsa",
  "cidre",
@@ -3064,8 +3064,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.7.0"
-source = "git+https://github.com/rustdesk-org/hwcodec#da7dab48df19edb5a7138ff9e01bf9f148b523da"
+version = "0.7.1"
+source = "git+https://github.com/rustdesk-org/hwcodec#835e599ed229e4e01b6fa3566e02ea45c73e2e9c"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -3519,7 +3519,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if 1.0.0",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.5",
 ]
 
 [[package]]
@@ -5494,7 +5494,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.3.4"
+version = "1.3.5"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -5594,7 +5594,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.3.4"
+version = "1.3.5"
 dependencies = [
  "brotli",
  "dirs 5.0.1",

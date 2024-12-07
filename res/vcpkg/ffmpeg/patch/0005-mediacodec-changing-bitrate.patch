@@ -1,17 +1,17 @@
-From 51ac90d8084f7b153eac5133765fa9d0365aa239 Mon Sep 17 00:00:00 2001
+From ed73f8f6494d74ae47218f9503c7e3de385d9253 Mon Sep 17 00:00:00 2001
 From: 21pages <sunboeasy@gmail.com>
 Date: Sun, 24 Nov 2024 14:17:39 +0800
-Subject: [PATCH 1/4] mediacodec changing bitrate
+Subject: [PATCH 1/2] mediacodec changing bitrate
 
 Signed-off-by: 21pages <sunboeasy@gmail.com>
 ---
- libavcodec/mediacodec_wrapper.c | 101 ++++++++++++++++++++++++++++++++
- libavcodec/mediacodec_wrapper.h |   7 +++
- libavcodec/mediacodecenc.c      |  18 ++++++
- 3 files changed, 126 insertions(+)
+ libavcodec/mediacodec_wrapper.c | 97 +++++++++++++++++++++++++++++++++
+ libavcodec/mediacodec_wrapper.h |  7 +++
+ libavcodec/mediacodecenc.c      | 18 ++++++
+ 3 files changed, 122 insertions(+)
 
 diff --git a/libavcodec/mediacodec_wrapper.c b/libavcodec/mediacodec_wrapper.c
-index 306359071e..1ab4e673f6 100644
+index 306359071e..7edb38a7d7 100644
 --- a/libavcodec/mediacodec_wrapper.c
 +++ b/libavcodec/mediacodec_wrapper.c
 @@ -35,6 +35,8 @@
@@ -145,25 +145,7 @@ index 306359071e..1ab4e673f6 100644
  };
  
  typedef struct FFAMediaFormatNdk {
-@@ -1893,6 +1982,8 @@ typedef struct FFAMediaCodecNdk {
-     // Available since API level 26.
-     media_status_t (*setInputSurface)(AMediaCodec*, ANativeWindow *);
-     media_status_t (*signalEndOfInputStream)(AMediaCodec *);
-+
-+    media_status_t (*setParameters)(AMediaCodec *, const AMediaFormat *format);
- } FFAMediaCodecNdk;
- 
- static const FFAMediaFormat media_format_ndk;
-@@ -2154,6 +2245,8 @@ static inline FFAMediaCodec *ndk_codec_create(int method, const char *arg) {
-     GET_SYMBOL(setInputSurface, 0)
-     GET_SYMBOL(signalEndOfInputStream, 0)
- 
-+    GET_SYMBOL(setParameters, 0)
-+
- #undef GET_SYMBOL
- 
-     switch (method) {
-@@ -2428,6 +2521,12 @@ static int mediacodec_ndk_signalEndOfInputStream(FFAMediaCodec *ctx)
+@@ -2428,6 +2517,12 @@ static int mediacodec_ndk_signalEndOfInputStream(FFAMediaCodec *ctx)
      return 0;
  }
  
@@ -176,7 +158,7 @@ index 306359071e..1ab4e673f6 100644
  static const FFAMediaFormat media_format_ndk = {
      .class = &amediaformat_ndk_class,
  
-@@ -2489,6 +2588,8 @@ static const FFAMediaCodec media_codec_ndk = {
+@@ -2489,6 +2584,8 @@ static const FFAMediaCodec media_codec_ndk = {
      .getConfigureFlagEncode = mediacodec_ndk_getConfigureFlagEncode,
      .cleanOutputBuffers = mediacodec_ndk_cleanOutputBuffers,
      .signalEndOfInputStream = mediacodec_ndk_signalEndOfInputStream,
@@ -260,5 +242,5 @@ index d3bf27cb7f..621529d686 100644
      // 1. Serious error
      // 2. Got a packet success
 -- 
-2.43.0.windows.1
+2.34.1
 

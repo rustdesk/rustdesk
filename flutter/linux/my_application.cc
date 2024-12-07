@@ -14,6 +14,9 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+GtkWidget *find_gl_area(GtkWidget *widget);
+void try_set_transparent(GtkWindow* window, GdkScreen* screen, FlView* view);
+
 extern bool gIsConnectionManager;
 
 GtkWidget *find_gl_area(GtkWidget *widget);
@@ -69,31 +72,18 @@ static void my_application_activate(GApplication* application) {
     height = 490;
   }
   gtk_window_set_default_size(window, width, height);   // <-- comment this line
-  gtk_widget_show(GTK_WIDGET(window));
+  // gtk_widget_show(GTK_WIDGET(window));
   gtk_widget_set_opacity(GTK_WIDGET(window), 0);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
-  gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
-  // https://github.com/flutter/flutter/issues/152154
-  // Remove this workaround when flutter version is updated.
-  GtkWidget *gl_area = find_gl_area(GTK_WIDGET(view));
-  if (gl_area != NULL) {
-    gtk_gl_area_set_has_alpha(GTK_GL_AREA(gl_area), TRUE);
-  }
-
-  if (screen != NULL) {
-    GdkVisual *visual = NULL;
-    gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
-    visual = gdk_screen_get_rgba_visual(screen);
-    if (visual != NULL && gdk_screen_is_composited(screen)) {
-      gtk_widget_set_visual(GTK_WIDGET(window), visual);
-    }
-  }
+  try_set_transparent(window, gtk_window_get_screen(window), view);
+  gtk_widget_show(GTK_WIDGET(window));
+  gtk_widget_show(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
@@ -161,4 +151,27 @@ GtkWidget *find_gl_area(GtkWidget *widget)
   }
 
   return NULL;
+}
+
+// https://github.com/flutter/flutter/issues/152154
+// Remove this workaround when flutter version is updated.
+void try_set_transparent(GtkWindow* window, GdkScreen* screen, FlView* view)
+{
+  GtkWidget *gl_area = NULL;
+
+  printf("Try setting transparent\n");
+  
+  gl_area = find_gl_area(GTK_WIDGET(view));
+  if (gl_area != NULL) {
+    gtk_gl_area_set_has_alpha(GTK_GL_AREA(gl_area), TRUE);
+  }
+
+  if (screen != NULL) {
+    GdkVisual *visual = NULL;
+    gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
+    visual = gdk_screen_get_rgba_visual(screen);
+    if (visual != NULL && gdk_screen_is_composited(screen)) {
+      gtk_widget_set_visual(GTK_WIDGET(window), visual);
+    }
+  }
 }

@@ -18,7 +18,7 @@ AppDir:
     id: rustdesk
     name: rustdesk
     icon: rustdesk
-    version: 1.3.4
+    version: 1.3.5
     exec: usr/lib/rustdesk/rustdesk
     exec_args: $@
   apt:
@@ -50,9 +50,9 @@ AppDir:
     - libasound2
     - libsystemd0
     - curl
+    - libva2
     - libva-drm2
     - libva-x11-2
-    - libvdpau1
     - libgstreamer-plugins-base1.0-0
     - gstreamer1.0-pipewire
     - libwayland-client0

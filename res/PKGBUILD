@@ -1,5 +1,5 @@
 pkgname=rustdesk
-pkgver=1.3.4
+pkgver=1.3.5
 pkgrel=0
 epoch=
 pkgdesc=""
@@ -7,7 +7,7 @@ arch=('x86_64')
 url=""
 license=('AGPL-3.0')
 groups=()
-depends=('gtk3' 'xdotool' 'libxcb' 'libxfixes' 'alsa-lib' 'libva' 'libvdpau' 'libappindicator-gtk3' 'pam' 'gst-plugins-base' 'gst-plugin-pipewire')
+depends=('gtk3' 'xdotool' 'libxcb' 'libxfixes' 'alsa-lib' 'libva' 'libappindicator-gtk3' 'pam' 'gst-plugins-base' 'gst-plugin-pipewire')
 makedepends=()
 checkdepends=()
 optdepends=()
