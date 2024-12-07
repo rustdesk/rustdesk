@@ -96,10 +96,9 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     }
 
     private val serviceClipboardListener = object : ClipboardManager.OnPrimaryClipChangedListener {
-        // One machine triggers `onPrimaryClipChanged()` twice on clipboard update in RustDesk.
-        // Another machine triggers `onPrimaryClipChanged()` once on clipboard update in RustDesk.
+        // to-do: `onPrimaryClipChanged()` is called twice on clipboard update in RustDesk.
         // But we only added the listener once.
-        // We've added the check for the same clipboard data in `checkPrimaryClip()`.
+        // Though we've added the check for the same clipboard data in `checkPrimaryClip()`.
         override fun onPrimaryClipChanged() {
             Log.d(logTag, "onPrimaryClipChanged")
             checkPrimaryClip(false, false)
@@ -155,6 +154,9 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         Log.d(logTag, "updateListening: isServiceStarted: $isServiceStarted, isServiceEnabled: $isServiceEnabled, _isListening: $_isListening")
         if (isServiceStarted && isServiceEnabled) {
             if (!_isListening) {
+                // to-do: `onPrimaryClipChanged()` is called twice on clipboard update in RustDesk.
+                // But we only added the listener once.
+                // Though we've added the check for the same clipboard data in `checkPrimaryClip()`.
                 clipboardManager.addPrimaryClipChangedListener(serviceClipboardListener)
                 _isListening = true
             }
