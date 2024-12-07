@@ -281,15 +281,6 @@ pub fn close(id: i32) {
 }
 
 #[inline]
-#[cfg(target_os = "android")]
-pub fn notify_input_control(v: bool) {
-    for (_, mut client) in CLIENTS.write().unwrap().iter_mut() {
-        client.keyboard = v;
-        allow_err!(client.tx.send(Data::InputControl(v)));
-    }
-}
-
-#[inline]
 pub fn remove(id: i32) {
     CLIENTS.write().unwrap().remove(&id);
 }
@@ -310,6 +301,17 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
     };
+}
+
+#[inline]
+#[cfg(target_os = "android")]
+pub fn switch_permission_all(name: String, enabled: bool) {
+    for (_, client) in CLIENTS.read().unwrap().iter() {
+        allow_err!(client.tx.send(Data::SwitchPermission {
+            name: name.clone(),
+            enabled
+        }));
+    }
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
