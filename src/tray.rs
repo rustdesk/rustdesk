@@ -12,7 +12,6 @@ pub fn start_tray() {
     if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
         #[cfg(target_os = "macos")]
         {
-            crate::platform::macos::hide_dock();
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
@@ -99,12 +98,11 @@ fn make_tray() -> hbb_common::ResultType<()> {
             crate::run_me::<&str>(vec![]).ok();
         }
         #[cfg(target_os = "linux")]
-        if !std::process::Command::new("xdg-open")
-            .arg(&crate::get_uri_prefix())
-            .spawn()
-            .is_ok()
         {
-            crate::run_me::<&str>(vec![]).ok();
+            // Do not use "xdg-open", it won't read config
+            if crate::dbus::invoke_new_connection(crate::get_uri_prefix()).is_err() {
+                crate::run_me::<&str>(vec![]).ok();
+            }
         }
     };
 

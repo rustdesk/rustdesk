@@ -55,7 +55,11 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
         target = target.replace("x64", "x86");
     }
     println!("cargo:info={}", target);
-    path.push("installed");
+    if let Ok(vcpkg_root) = std::env::var("VCPKG_INSTALLED_ROOT") {
+        path = vcpkg_root.into();
+    } else {
+        path.push("installed");
+    }
     path.push(target);
     println!(
         "{}",

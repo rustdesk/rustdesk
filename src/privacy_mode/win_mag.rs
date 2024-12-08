@@ -4,7 +4,7 @@ use std::time::Instant;
 
 pub use super::win_topmost_window::PrivacyModeImpl;
 
-pub(super) const PRIVACY_MODE_IMPL: &str = "privacy_mode_impl_mag";
+pub(super) const PRIVACY_MODE_IMPL: &str = super::PRIVACY_MODE_IMPL_WIN_MAG;
 
 pub fn create_capturer(
     privacy_mode_id: i32,

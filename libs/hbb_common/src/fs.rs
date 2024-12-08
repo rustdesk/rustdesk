@@ -185,6 +185,51 @@ pub fn get_recursive_files(path: &str, include_hidden: bool) -> ResultType<Vec<F
     read_dir_recursive(&get_path(path), &get_path(""), include_hidden)
 }
 
+fn read_empty_dirs_recursive(
+    path: &PathBuf,
+    prefix: &Path,
+    include_hidden: bool,
+) -> ResultType<Vec<FileDirectory>> {
+    let mut dirs = Vec::new();
+    if path.is_dir() {
+        // to-do: symbol link handling, cp the link rather than the content
+        // to-do: file mode, for unix
+        let fd = read_dir(path, include_hidden)?;
+        if fd.entries.is_empty() {
+            dirs.push(fd);
+        } else {
+            for entry in fd.entries.iter() {
+                match entry.entry_type.enum_value() {
+                    Ok(FileType::Dir) => {
+                        if let Ok(mut tmp) = read_empty_dirs_recursive(
+                            &path.join(&entry.name),
+                            &prefix.join(&entry.name),
+                            include_hidden,
+                        ) {
+                            for entry in tmp.drain(0..) {
+                                dirs.push(entry);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(dirs)
+    } else if path.is_file() {
+        Ok(dirs)
+    } else {
+        bail!("Not exists");
+    }
+}
+
+pub fn get_empty_dirs_recursive(
+    path: &str,
+    include_hidden: bool,
+) -> ResultType<Vec<FileDirectory>> {
+    read_empty_dirs_recursive(&get_path(path), &get_path(""), include_hidden)
+}
+
 #[inline]
 pub fn is_file_exists(file_path: &str) -> bool {
     return Path::new(file_path).exists();
@@ -836,6 +881,21 @@ pub fn remove_file(file: &str) -> ResultType<()> {
 pub fn create_dir(dir: &str) -> ResultType<()> {
     std::fs::create_dir_all(get_path(dir))?;
     Ok(())
+}
+
+#[inline]
+pub fn rename_file(path: &str, new_name: &str) -> ResultType<()> {
+    let path = std::path::Path::new(&path);
+    if path.exists() {
+        let dir = path
+            .parent()
+            .ok_or(anyhow!("Parent directoy of {path:?} not exists"))?;
+        let new_path = dir.join(&new_name);
+        std::fs::rename(&path, &new_path)?;
+        Ok(())
+    } else {
+        bail!("{path:?} not exists");
+    }
 }
 
 #[inline]

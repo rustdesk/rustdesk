@@ -33,6 +33,8 @@ class CmFileModel {
       _onFileRemove(evt['remove']);
     } else if (evt['create_dir'] != null) {
       _onDirCreate(evt['create_dir']);
+    } else if (evt['rename'] != null) {
+      _onRename(evt['rename']);
     }
   }
 
@@ -59,8 +61,6 @@ class CmFileModel {
 
   _dealOneJob(dynamic l, bool calcSpeed) {
     final data = TransferJobSerdeData.fromJson(l);
-    Client? client =
-        gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == data.connId);
     var jobTable = _jobTables[data.connId];
     if (jobTable == null) {
       debugPrint("jobTable should not be null");
@@ -70,12 +70,7 @@ class CmFileModel {
     if (job == null) {
       job = CmFileLog();
       jobTable.add(job);
-      final currentSelectedTab =
-          gFFI.serverModel.tabController.state.value.selectedTabInfo;
-      if (!(gFFI.chatModel.isShowCMSidePage &&
-          currentSelectedTab.key == data.connId.toString())) {
-        client?.unreadChatMessageCount.value += 1;
-      }
+      _addUnread(data.connId);
     }
     job.id = data.id;
     job.action =
@@ -167,8 +162,6 @@ class CmFileModel {
     try {
       dynamic d = jsonDecode(log);
       FileActionLog data = FileActionLog.fromJson(d);
-      Client? client =
-          gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == data.connId);
       var jobTable = _jobTables[data.connId];
       if (jobTable == null) {
         debugPrint("jobTable should not be null");
@@ -179,15 +172,43 @@ class CmFileModel {
         ..fileName = data.path
         ..action = CmFileAction.createDir
         ..state = JobState.done);
-      final currentSelectedTab =
-          gFFI.serverModel.tabController.state.value.selectedTabInfo;
-      if (!(gFFI.chatModel.isShowCMSidePage &&
-          currentSelectedTab.key == data.connId.toString())) {
-        client?.unreadChatMessageCount.value += 1;
-      }
+      _addUnread(data.connId);
       jobTable.refresh();
     } catch (e) {
       debugPrint('$e');
+    }
+  }
+
+  _onRename(dynamic log) {
+    try {
+      dynamic d = jsonDecode(log);
+      FileRenamenLog data = FileRenamenLog.fromJson(d);
+      var jobTable = _jobTables[data.connId];
+      if (jobTable == null) {
+        debugPrint("jobTable should not be null");
+        return;
+      }
+      final fileName = '${data.path} -> ${data.newName}';
+      jobTable.add(CmFileLog()
+        ..id = 0
+        ..fileName = fileName
+        ..action = CmFileAction.rename
+        ..state = JobState.done);
+      _addUnread(data.connId);
+      jobTable.refresh();
+    } catch (e) {
+      debugPrint('$e');
+    }
+  }
+
+  _addUnread(int connId) {
+    Client? client =
+        gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == connId);
+    final currentSelectedTab =
+        gFFI.serverModel.tabController.state.value.selectedTabInfo;
+    if (!(gFFI.chatModel.isShowCMSidePage &&
+        currentSelectedTab.key == connId.toString())) {
+      client?.unreadChatMessageCount.value += 1;
     }
   }
 }
@@ -198,6 +219,7 @@ enum CmFileAction {
   localToRemote,
   remove,
   createDir,
+  rename,
 }
 
 class CmFileLog {
@@ -283,5 +305,24 @@ class FileActionLog {
           id: d['id'] ?? 0,
           path: d['path'] ?? '',
           dir: d['dir'] ?? false,
+        );
+}
+
+class FileRenamenLog {
+  int connId = 0;
+  String path = '';
+  String newName = '';
+
+  FileRenamenLog({
+    required this.connId,
+    required this.path,
+    required this.newName,
+  });
+
+  FileRenamenLog.fromJson(dynamic d)
+      : this(
+          connId: d['connId'] ?? 0,
+          path: d['path'] ?? '',
+          newName: d['newName'] ?? '',
         );
 }

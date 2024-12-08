@@ -33,6 +33,8 @@ bool filterAbTagByIntersection() {
 const _personalAddressBookName = "My address book";
 const _legacyAddressBookName = "Legacy address book";
 
+const kUntagged = "Untagged";
+
 enum ForcePullAb {
   listAndCurrent,
   current,
@@ -66,10 +68,16 @@ class AbModel {
   var listInitialized = false;
   var _maxPeerOneAb = 0;
 
+  late final Peers peersModel;
+
   WeakReference<FFI> parent;
 
   AbModel(this.parent) {
     addressbooks.clear();
+    peersModel = Peers(
+        name: PeersModelName.addressBook,
+        getInitPeers: () => currentAbPeers,
+        loadEvent: LoadEvent.addressBook);
     if (desktopType == DesktopType.main) {
       Timer.periodic(Duration(milliseconds: 500), (timer) async {
         if (_timerCounter++ % 6 == 0) {
@@ -418,6 +426,7 @@ class AbModel {
 
 // #region tags
   Future<bool> addTags(List<String> tagList) async {
+    tagList.removeWhere((e) => e == kUntagged);
     final ret = await current.addTags(tagList, {});
     await pullNonLegacyAfterChange();
     _saveCache();
@@ -639,6 +648,9 @@ class AbModel {
   }
 
   Color getCurrentAbTagColor(String tag) {
+    if (tag == kUntagged) {
+      return MyTheme.accent;
+    }
     int? colorValue = current.tagColors[tag];
     if (colorValue != null) {
       return Color(colorValue);

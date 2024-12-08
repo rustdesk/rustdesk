@@ -111,7 +111,7 @@ def make_parser():
         '--hwcodec',
         action='store_true',
         help='Enable feature hwcodec' + (
-            '' if windows or osx else ', need libva-dev, libvdpau-dev.')
+            '' if windows or osx else ', need libva-dev.')
     )
     parser.add_argument(
         '--vram',
@@ -143,6 +143,12 @@ def make_parser():
         "--package",
         type=str
     )
+    if osx:
+        parser.add_argument(
+            '--screencapturekit',
+            action='store_true',
+            help='Enable feature screencapturekit'
+        )
     return parser
 
 
@@ -274,6 +280,9 @@ def get_features(args):
         features.append('flutter')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if osx:
+        if args.screencapturekit:
+            features.append('screencapturekit')
     print("features:", features)
     return features
 
@@ -283,11 +292,14 @@ def generate_control_file(version):
     system2('/bin/rm -rf %s' % control_file_path)
 
     content = """Package: rustdesk
+Section: net
+Priority: optional
 Version: %s
 Architecture: %s
 Maintainer: rustdesk <info@rustdesk.com>
 Homepage: https://rustdesk.com
-Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g, libappindicator3-1, gstreamer1.0-pipewire%s
+Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva2, libva-drm2, libva-x11-2, libgstreamer-plugins-base1.0-0, libpam0g, gstreamer1.0-pipewire%s
+Recommends: libayatana-appindicator3-1
 Description: A remote control software.
 
 """ % (version, get_deb_arch(), get_deb_extra_depends())
@@ -331,8 +343,6 @@ def build_flutter_deb(version, features):
     system2(
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
-        'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
-    system2(
         'cp ../res/startwm.sh tmpdeb/etc/rustdesk/')
     system2(
         'cp ../res/xorg.conf tmpdeb/etc/rustdesk/')
@@ -375,8 +385,6 @@ def build_deb_from_folder(version, binary_folder):
         'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
     system2(
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
-    system2(
-        'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
 

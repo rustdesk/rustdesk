@@ -83,7 +83,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
       child: Consumer<ServerModel>(
         builder: (context, serverModel, child) {
           final body = Scaffold(
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            backgroundColor: Theme.of(context).colorScheme.background,
             body: ConnectionManager(),
           );
           return isLinux
@@ -110,7 +110,8 @@ class ConnectionManager extends StatefulWidget {
 
 class ConnectionManagerState extends State<ConnectionManager>
     with WidgetsBindingObserver {
-  final RxBool _block = false.obs;
+  final RxBool _controlPageBlock = false.obs;
+  final RxBool _sidePageBlock = false.obs;
 
   ConnectionManagerState() {
     gFFI.serverModel.tabController.onSelected = (client_id_str) {
@@ -139,7 +140,8 @@ class ConnectionManagerState extends State<ConnectionManager>
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       if (!allowRemoteCMModification()) {
-        shouldBeBlocked(_block, null);
+        shouldBeBlocked(_controlPageBlock, null);
+        shouldBeBlocked(_sidePageBlock, null);
       }
     }
   }
@@ -192,9 +194,6 @@ class ConnectionManagerState extends State<ConnectionManager>
               selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
               tail: null, //buildScrollJumper(),
-              blockTab: allowRemoteCMModification() ? null : _block,
-              selectedTabBackgroundColor:
-                  Theme.of(context).hintColor.withOpacity(0),
               tabBuilder: (key, icon, label, themeConf) {
                 final client = serverModel.clients
                     .firstWhereOrNull((client) => client.id.toString() == key);
@@ -229,7 +228,7 @@ class ConnectionManagerState extends State<ConnectionManager>
                           borderWidth;
                   final realChatPageWidth =
                       constrains.maxWidth - realClosedWidth;
-                  return Row(children: [
+                  final row = Row(children: [
                     if (constrains.maxWidth >
                         kConnectionManagerWindowSizeClosedChat.width)
                       Consumer<ChatModel>(
@@ -239,14 +238,25 @@ class ConnectionManagerState extends State<ConnectionManager>
                                     ? buildSidePage()
                                     : buildRemoteBlock(
                                         child: buildSidePage(),
-                                        block: _block,
+                                        block: _sidePageBlock,
                                         mask: true),
                               )),
                     SizedBox(
                         width: realClosedWidth,
-                        child:
-                            SizedBox(width: realClosedWidth, child: pageView)),
+                        child: SizedBox(
+                            width: realClosedWidth,
+                            child: allowRemoteCMModification()
+                                ? pageView
+                                : buildRemoteBlock(
+                                    child: _buildKeyEventBlock(pageView),
+                                    block: _controlPageBlock,
+                                    mask: false,
+                                  ))),
                   ]);
+                  return Container(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    child: row,
+                  );
                 },
               ),
             ),
@@ -264,6 +274,10 @@ class ConnectionManagerState extends State<ConnectionManager>
     } else {
       return ChatPage(type: ChatPageType.desktopCM);
     }
+  }
+
+  Widget _buildKeyEventBlock(Widget child) {
+    return ExcludeFocus(child: child, excluding: true);
   }
 
   Widget buildTitleBar() {
@@ -1153,6 +1167,16 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
               color: Theme.of(context).tabBarTheme.labelColor,
             ),
             Text(translate('Create Folder'))
+          ],
+        );
+      case CmFileAction.rename:
+        return Column(
+          children: [
+            Icon(
+              Icons.drive_file_move_outlined,
+              color: Theme.of(context).tabBarTheme.labelColor,
+            ),
+            Text(translate('Rename'))
           ],
         );
     }

@@ -224,7 +224,7 @@ checksum = "b3d1d046238990b9cf5bcde22a3fb3584ee5cf65fb2765f454ed428c7a0063da"
 [[package]]
 name = "arboard"
 version = "3.4.0"
-source = "git+https://github.com/rustdesk-org/arboard#a04bdb1b368a99691822c33bf0f7ed497d6a7a35"
+source = "git+https://github.com/rustdesk-org/arboard#747ab2d9b40a5c9c5102051cf3b0bb38b4845e60"
 dependencies = [
  "clipboard-win",
  "core-graphics 0.23.2",
@@ -861,6 +861,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
+name = "cfg_aliases"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+
+[[package]]
 name = "chrono"
 version = "0.4.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -886,6 +892,20 @@ dependencies = [
  "once_cell",
  "regex",
 ]
+
+[[package]]
+name = "cidre"
+version = "0.4.0"
+source = "git+https://github.com/yury/cidre.git?rev=f05c428#f05c4288f9870c9fab53272ddafd6ec01c7b2dbf"
+dependencies = [
+ "cidre-macros",
+ "parking_lot",
+]
+
+[[package]]
+name = "cidre-macros"
+version = "0.1.0"
+source = "git+https://github.com/yury/cidre.git?rev=f05c428#f05c4288f9870c9fab53272ddafd6ec01c7b2dbf"
 
 [[package]]
 name = "cipher"
@@ -1270,10 +1290,10 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "873dab07c8f743075e57f524c583985fbaf745602acbe916a01539364369a779"
+source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#7cb4ed0bd5546bf209edde0d0e9da5194753f2c0"
 dependencies = [
  "alsa",
+ "cidre",
  "core-foundation-sys 0.8.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "coreaudio-rs",
  "dasp_sample",
@@ -1677,7 +1697,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.8.4",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -3044,8 +3064,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.7.0"
-source = "git+https://github.com/rustdesk-org/hwcodec#6abd1898f3a03481ed0c038507b5218d6ea94267"
+version = "0.7.1"
+source = "git+https://github.com/rustdesk-org/hwcodec#835e599ed229e4e01b6fa3566e02ea45c73e2e9c"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -3967,9 +3987,21 @@ checksum = "ab2156c4fce2f8df6c499cc1c763e4394b7482525bf2a9701c9d79d215f519e4"
 dependencies = [
  "bitflags 2.6.0",
  "cfg-if 1.0.0",
- "cfg_aliases",
+ "cfg_aliases 0.1.1",
  "libc",
  "memoffset 0.9.1",
+]
+
+[[package]]
+name = "nix"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags 2.6.0",
+ "cfg-if 1.0.0",
+ "cfg_aliases 0.2.1",
+ "libc",
 ]
 
 [[package]]
@@ -4131,7 +4163,7 @@ version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "681030a937600a36906c185595136d26abfebb4aa9c65701cefcaf8578bb982b"
 dependencies = [
- "proc-macro-crate 2.0.2",
+ "proc-macro-crate 1.3.1",
  "proc-macro2 1.0.86",
  "quote 1.0.36",
  "syn 2.0.68",
@@ -5187,7 +5219,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/rustdesk-org/rdev#b3434caee84c92412b45a2f655a15ac5dad33488"
+source = "git+https://github.com/rustdesk-org/rdev#01ac3ec8009f04f7615842b9152338844b806184"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
@@ -5462,7 +5494,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.3.0"
+version = "1.3.5"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -5494,6 +5526,7 @@ dependencies = [
  "flutter_rust_bridge",
  "fon",
  "fruitbasket",
+ "gtk",
  "hbb_common",
  "hex",
  "hound",
@@ -5508,6 +5541,7 @@ dependencies = [
  "libpulse-simple-binding",
  "mac_address",
  "magnum-opus",
+ "nix 0.29.0",
  "num_cpus",
  "objc",
  "objc_id",
@@ -5539,6 +5573,7 @@ dependencies = [
  "system_shutdown",
  "tao",
  "tauri-winrt-notification",
+ "termios",
  "totp-rs",
  "tray-icon",
  "url",
@@ -5559,7 +5594,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.3.0"
+version = "1.3.5"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
@@ -6424,7 +6459,7 @@ dependencies = [
 [[package]]
 name = "tfc"
 version = "0.7.0"
-source = "git+https://github.com/rustdesk-org/The-Fat-Controller?branch=history/rebase_upstream_20240722#de9c8ba480f166a9fc90aaa47bb0e84b443ea9c6"
+source = "git+https://github.com/rustdesk-org/The-Fat-Controller?branch=history/rebase_upstream_20240722#78bb80a8e596e4c14ae57c8448f5fca75f91f2b0"
 dependencies = [
  "anyhow",
  "core-graphics 0.23.2",

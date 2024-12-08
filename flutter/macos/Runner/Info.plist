@@ -45,5 +45,7 @@
 	<string>Record the sound from microphone for the purpose of the remote desktop.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+    <key>LSUIElement</key>
+    <string>1</string>
 </dict>
 </plist>

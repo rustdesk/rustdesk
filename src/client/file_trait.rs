@@ -1,4 +1,4 @@
-use hbb_common::{fs, message_proto::*, log};
+use hbb_common::{fs, log, message_proto::*};
 
 use super::{Data, Interface};
 
@@ -7,7 +7,12 @@ pub trait FileManager: Interface {
         fs::get_home_as_string()
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli", feature = "flutter")))]
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    )))]
     fn read_dir(&self, path: String, include_hidden: bool) -> sciter::Value {
         match fs::read_dir(&fs::get_path(&path), include_hidden) {
             Err(_) => sciter::Value::null(),
@@ -20,7 +25,12 @@ pub trait FileManager: Interface {
         }
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli", feature = "flutter"))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    ))]
     fn read_dir(&self, path: &str, include_hidden: bool) -> String {
         use crate::common::make_fd_to_json;
         match fs::read_dir(&fs::get_path(path), include_hidden) {
@@ -31,6 +41,18 @@ pub trait FileManager: Interface {
 
     fn cancel_job(&self, id: i32) {
         self.send(Data::CancelJob(id));
+    }
+
+    fn read_empty_dirs(&self, path: String, include_hidden: bool) {
+        let mut msg_out = Message::new();
+        let mut file_action = FileAction::new();
+        file_action.set_read_empty_dirs(ReadEmptyDirs {
+            path,
+            include_hidden,
+            ..Default::default()
+        });
+        msg_out.set_file_action(file_action);
+        self.send(Data::Message(msg_out));
     }
 
     fn read_remote_dir(&self, path: String, include_hidden: bool) {
@@ -135,5 +157,9 @@ pub trait FileManager: Interface {
             remember,
             is_upload,
         )));
+    }
+
+    fn rename_file(&self, act_id: i32, path: String, new_name: String, is_remote: bool) {
+        self.send(Data::RenameFile((act_id, path, new_name, is_remote)));
     }
 }
