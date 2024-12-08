@@ -2809,7 +2809,7 @@ Widget buildRemoteBlock(
         onExit: (event) => block.value = false,
         child: Stack(children: [
           // scope block tab
-          FocusScope(child: child, canRequestFocus: !block.value),
+          preventMouseKeyBuilder(child: child, block: block.value),
           // mask block click, cm not block click and still use check_click_time to avoid block local click
           if (mask)
             Offstage(
@@ -2819,6 +2819,11 @@ Widget buildRemoteBlock(
                 )),
         ]),
       ));
+}
+
+Widget preventMouseKeyBuilder({required Widget child, required bool block}) {
+  return ExcludeFocus(
+      excluding: block, child: AbsorbPointer(child: child, absorbing: block));
 }
 
 Widget unreadMessageCountBuilder(RxInt? count,
