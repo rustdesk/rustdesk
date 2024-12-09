@@ -1382,6 +1382,10 @@ pub fn load_custom_client() {
     }
 }
 
+pub fn enable_customer_mode(){
+    config::HARD_SETTINGS.write().unwrap().insert("conn-type".to_owned(), "incoming".to_owned());
+}
+
 fn read_custom_client_advanced_settings(
     settings: serde_json::Value,
     map_display_settings: &HashMap<String, &&str>,
