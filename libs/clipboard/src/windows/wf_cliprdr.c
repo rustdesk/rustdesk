@@ -719,7 +719,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 	if (!clipboard)
 		return E_INVALIDARG;
 
-	// If Ctrl+C is not pressed yet, do not handle the file paste.
+	// If `Ctrl+C` is not pressed yet, do not handle the file paste.
 	if (!clipboard->copied) {
 		return E_UNEXPECTED;
 	}
@@ -2288,7 +2288,9 @@ static UINT wf_cliprdr_monitor_ready(CliprdrClientContext *context,
 	if (rc != CHANNEL_RC_OK)
 		return rc;
 
-	return cliprdr_send_format_list(clipboard, monitorReady->connID);
+	return rc;
+	// Don't send format list here, because we don't want to paste files copied before the connection.
+	// return cliprdr_send_format_list(clipboard, monitorReady->connID);
 }
 
 /**
