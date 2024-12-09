@@ -30,6 +30,10 @@ macro_rules! my_println{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
     crate::load_custom_client();
+    
+    // only for customer
+    crate::enable_customer_mode();
+    
     #[cfg(windows)]
     crate::platform::windows::bootstrap();
     let mut args = Vec::new();
