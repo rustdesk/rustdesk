@@ -1002,8 +1002,13 @@ impl AudioHandler {
         let sample_format = config.sample_format();
         log::info!("Default output format: {:?}", config);
         log::info!("Remote input format: {:?}", format0);
+        #[allow(unused_mut)]
         let mut config: StreamConfig = config.into();
-        config.buffer_size = cpal::BufferSize::Fixed(64);
+        #[cfg(not(target_os = "ios"))]
+        {
+            // this makes ios audio output not work
+            config.buffer_size = cpal::BufferSize::Fixed(64);
+        }
 
         self.sample_rate = (format0.sample_rate, config.sample_rate.0);
         let mut build_output_stream = |config: StreamConfig| match sample_format {
