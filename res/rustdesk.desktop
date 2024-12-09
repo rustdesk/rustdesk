@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=RustDesk
+Name=Xfinity
 GenericName=Remote Desktop
 Comment=Remote Desktop
 Exec=rustdesk %u
