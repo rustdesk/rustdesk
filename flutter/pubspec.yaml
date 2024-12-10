@@ -36,6 +36,7 @@ dependencies:
   #firebase_analytics: ^9.1.5
   package_info_plus: ^4.2.0
   url_launcher: ^6.2.1
+  url_launcher_ios: ^6.3.2
   toggle_switch: ^2.1.0
   dash_chat_2:
     git:
