@@ -719,8 +719,12 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 	if (!clipboard)
 		return E_INVALIDARG;
 
-	// If `Ctrl+C` is not pressed yet, do not handle the file paste.
+	// If `Ctrl+C` is not pressed yet, do not handle the file paste, and empty the clipboard.
 	if (!clipboard->copied) {
+		if (try_open_clipboard(clipboard->hwnd)) {
+			EmptyClipboard();
+			CloseClipboard();
+		}
 		return E_UNEXPECTED;
 	}
 
