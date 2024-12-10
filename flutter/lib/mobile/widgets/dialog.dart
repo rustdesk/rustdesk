@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
@@ -146,6 +147,16 @@ void setTemporaryPasswordLengthDialog(
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
+void showServerSettings(OverlayDialogManager dialogManager) async {
+  Map<String, dynamic> options = {};
+  try {
+    options = jsonDecode(await bind.mainGetOptions());
+  } catch (e) {
+    print("Invalid server config: $e");
+  }
+  showServerSettingsWithValue(ServerConfig.fromOptions(options), dialogManager);
+}
+
 void showServerSettingsWithValue(
     ServerConfig serverConfig, OverlayDialogManager dialogManager) async {
   var isInProgress = false;
@@ -184,6 +195,43 @@ void showServerSettingsWithValue(
       return ret;
     }
 
+    Widget buildField(
+        String label, TextEditingController controller, String errorMsg,
+        {String? Function(String?)? validator, bool autofocus = false}) {
+      if (isDesktop || isWeb) {
+        return Row(
+          children: [
+            SizedBox(
+              width: 120,
+              child: Text(label),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                controller: controller,
+                decoration: InputDecoration(
+                  errorText: errorMsg.isEmpty ? null : errorMsg,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                ),
+                validator: validator,
+                autofocus: autofocus,
+              ),
+            ),
+          ],
+        );
+      }
+
+      return TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          errorText: errorMsg.isEmpty ? null : errorMsg,
+        ),
+        validator: validator,
+      );
+    }
+
     return CustomAlertDialog(
       title: Row(
         children: [
@@ -191,56 +239,45 @@ void showServerSettingsWithValue(
           ...ServerConfigImportExportWidgets(controllers, errMsgs),
         ],
       ),
-      content: Form(
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 500),
+        child: Form(
           child: Obx(() => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                    TextFormField(
-                      controller: idCtrl,
-                      decoration: InputDecoration(
-                          labelText: translate('ID Server'),
-                          errorText: idServerMsg.value.isEmpty
-                              ? null
-                              : idServerMsg.value),
-                    )
-                  ] +
-                  [
-                    if (isAndroid)
-                      TextFormField(
-                        controller: relayCtrl,
-                        decoration: InputDecoration(
-                            labelText: translate('Relay Server'),
-                            errorText: relayServerMsg.value.isEmpty
-                                ? null
-                                : relayServerMsg.value),
-                      )
-                  ] +
-                  [
-                    TextFormField(
-                      controller: apiCtrl,
-                      decoration: InputDecoration(
-                        labelText: translate('API Server'),
-                      ),
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
-                      validator: (v) {
-                        if (v != null && v.isNotEmpty) {
-                          if (!(v.startsWith('http://') ||
-                              v.startsWith("https://"))) {
-                            return translate("invalid_http");
-                          }
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  buildField(translate('ID Server'), idCtrl, idServerMsg.value,
+                      autofocus: true),
+                  SizedBox(height: 8),
+                  if (!isIOS && !isWeb) ...[
+                    buildField(translate('Relay Server'), relayCtrl,
+                        relayServerMsg.value),
+                    SizedBox(height: 8),
+                  ],
+                  buildField(
+                    translate('API Server'),
+                    apiCtrl,
+                    apiServerMsg.value,
+                    validator: (v) {
+                      if (v != null && v.isNotEmpty) {
+                        if (!(v.startsWith('http://') ||
+                            v.startsWith("https://"))) {
+                          return translate("invalid_http");
                         }
-                        return null;
-                      },
+                      }
+                      return null;
+                    },
+                  ),
+                  SizedBox(height: 8),
+                  buildField('Key', keyCtrl, ''),
+                  if (isInProgress)
+                    Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: LinearProgressIndicator(),
                     ),
-                    TextFormField(
-                      controller: keyCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Key',
-                      ),
-                    ),
-                    // NOT use Offstage to wrap LinearProgressIndicator
-                    if (isInProgress) const LinearProgressIndicator(),
-                  ]))),
+                ],
+              )),
+        ),
+      ),
       actions: [
         dialogButton('Cancel', onPressed: () {
           close();
