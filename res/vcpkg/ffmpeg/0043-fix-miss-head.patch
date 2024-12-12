@@ -1,0 +1,12 @@
+diff --git a/libavfilter/textutils.c b/libavfilter/textutils.c
+index ef658d0..c61b0ad 100644
+--- a/libavfilter/textutils.c
++++ b/libavfilter/textutils.c
+@@ -31,6 +31,7 @@
+ #include "libavutil/file.h"
+ #include "libavutil/mem.h"
+ #include "libavutil/time.h"
++#include "libavutil/time_internal.h"
+ 
+ static int ff_expand_text_function_internal(FFExpandTextContext *expand_text, AVBPrint *bp,
+                                             char *name, unsigned argc, char **argv)
