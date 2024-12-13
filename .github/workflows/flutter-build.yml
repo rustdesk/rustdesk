@@ -31,8 +31,8 @@ env:
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2024.07.12
-  VCPKG_COMMIT_ID: "1de2026f28ead93ff1773e6e680387643e914ea1"
+  # vcpkg version: 2024.11.16
+  VCPKG_COMMIT_ID: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
   VERSION: "1.3.5"
   NDK_VERSION: "r27c"
   #signing keys env variable checks
@@ -1852,6 +1852,8 @@ jobs:
             cat ~/.cargo/config
             # install dependencies from vcpkg
             export VCPKG_ROOT=/opt/artifacts/vcpkg
+            # remove this when support higher version
+            export USE_AOM_391=1
             if ! $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"; then
               find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
                 echo "$_1:"
