@@ -43,21 +43,6 @@ impl Cameras {
     }
 }
 
-
-pub struct CameraCapturer {
-    pub camera: Camera,
-    data: Vec<u8>,
-}
-impl CameraCapturer {
-    fn new(current_display: usize) -> Self {
-        let index = CameraIndex::Index(current_display.try_into().unwrap());
-        let format: RequestedFormat<'_> = RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution);
-        CameraCapturer { 
-            camera: Camera::new(index,format).unwrap(),
-            data: Vec::<u8>::new(),
-        }
-    }
-}
 use image::{Rgba, RgbaImage};
 fn rgba_to_bgra(rgba_image: &RgbaImage) -> RgbaImage {
     let (width, height) = rgba_image.dimensions();
@@ -70,6 +55,20 @@ fn rgba_to_bgra(rgba_image: &RgbaImage) -> RgbaImage {
     bgra_image
 }
 
+pub struct CameraCapturer {
+    camera: Camera,
+    data: Vec<u8>,
+}
+impl CameraCapturer {
+    fn new(current_display: usize) -> Self {
+        let index = CameraIndex::Index(current_display.try_into().unwrap());
+        let format: RequestedFormat<'_> = RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution);
+        CameraCapturer { 
+            camera: Camera::new(index,format).unwrap(),
+            data: Vec::<u8>::new(),
+        }
+    }
+}
 impl TraitCapturer for CameraCapturer {
     fn frame<'a>(&'a mut self, _timeout: std::time::Duration) -> std::io::Result<scrap::Frame<'a>> {
         match self.camera.frame() {
@@ -77,11 +76,10 @@ impl TraitCapturer for CameraCapturer {
                 match buffer.decode_image::<RgbAFormat>() {
                     Ok(decoded) => {
                         self.data = rgba_to_bgra(&decoded).as_raw().to_vec();
-                        let resolution = buffer.resolution();
                         Ok(scrap::Frame::PixelBuffer(scrap::PixelBuffer::new(
                             &self.data,
-                            resolution.width_x as _,
-                            resolution.height_y as _,
+                            decoded.width() as _,
+                            decoded.height() as _,
                         )))
                     },
                     Err(err) => {
