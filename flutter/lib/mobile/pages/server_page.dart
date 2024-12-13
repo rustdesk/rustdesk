@@ -217,7 +217,8 @@ class ServiceNotRunningNotification extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-
+    //2024/12/13,Added By Salem .Disabled scam-warning
+    bind.mainSetLocalOption(key: "show-scam-warning", value: "N");
     return PaddingCard(
         title: translate("Service is not running"),
         titleIcon:
@@ -232,13 +233,13 @@ class ServiceNotRunningNotification extends StatelessWidget {
             ElevatedButton.icon(
                 icon: const Icon(Icons.play_arrow),
                 onPressed: () {
-                  //if (gFFI.userModel.userName.value.isEmpty &&
-                  //    bind.mainGetLocalOption(key: "show-scam-warning") !=
-                  //        "N") {
-                  //  showScamWarning(context, serverModel);
-                  //} else {
+                  if (gFFI.userModel.userName.value.isEmpty &&
+                      bind.mainGetLocalOption(key: "show-scam-warning") !=
+                          "N") {
+                    showScamWarning(context, serverModel);
+                  } else {
                     serverModel.toggleService();
-                  //}
+                  }
                 },
                 label: Text(translate("Start service")))
           ],
@@ -561,6 +562,8 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     final hasAudioPermission = androidVersion >= 30;
+    //2024/12/13,Added By Salem .Disabled scam-warning
+    bind.mainSetLocalOption(key: "show-scam-warning", value: "N");
     return PaddingCard(
         title: translate("Permissions"),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
