@@ -303,11 +303,24 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
     let mut displays = Display::all()?;
     let ndisplay = displays.len();
     if ndisplay <= current {
-        bail!(
-            "Failed to get display {}, displays len: {}",
+        // bail!(
+        //     "Failed to get display {}, displays len: {}",
+        //     current,
+        //     ndisplay
+        // );
+        let first_display = displays.first().unwrap();
+        let capturer = camera_display::Cameras::get_capturer(current-ndisplay)?;
+        let privacy_mode_id = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
+        return Ok(CapturerInfo {
+            origin:(0, 0),
+            width:first_display.width(),
+            height:first_display.height(),
+            ndisplay,
             current,
-            ndisplay
-        );
+            privacy_mode_id,
+            _capturer_privacy_mode_id: privacy_mode_id,
+            capturer,
+        });
     }
     let display = displays.remove(current);
 

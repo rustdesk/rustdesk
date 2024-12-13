@@ -67,6 +67,7 @@ pub mod portable_service;
 mod service;
 mod video_qos;
 pub mod video_service;
+pub mod camera_display;
 
 pub type Childs = Arc<Mutex<Vec<std::process::Child>>>;
 type ConnMap = HashMap<i32, ConnInner>;
