@@ -58,13 +58,25 @@ impl CameraCapturer {
         }
     }
 }
+use image::{Rgba, RgbaImage};
+fn rgba_to_bgra(rgba_image: &RgbaImage) -> RgbaImage {
+    let (width, height) = rgba_image.dimensions();
+    let mut bgra_image = RgbaImage::new(width, height);
+    for (x, y, pixel) in rgba_image.enumerate_pixels() {
+        let rgba = pixel.0; 
+        let bgra = Rgba([rgba[2], rgba[1], rgba[0], rgba[3]]);
+        bgra_image.put_pixel(x, y, bgra);
+    }
+    bgra_image
+}
+
 impl TraitCapturer for CameraCapturer {
     fn frame<'a>(&'a mut self, _timeout: std::time::Duration) -> std::io::Result<scrap::Frame<'a>> {
         match self.camera.frame() {
             Ok(buffer) => {
                 match buffer.decode_image::<RgbAFormat>() {
                     Ok(decoded) => {
-                        self.data = decoded.as_raw().to_vec();
+                        self.data = rgba_to_bgra(&decoded).as_raw().to_vec();
                         let resolution = buffer.resolution();
                         Ok(scrap::Frame::PixelBuffer(scrap::PixelBuffer::new(
                             &self.data,
