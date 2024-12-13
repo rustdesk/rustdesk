@@ -629,7 +629,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-bot-desc", "1. 开启与 @BotFather 的对话。\n2. 发送命令 \"/newbot\"。 您将在完成此步骤后收到权杖 (Token)。\n3. 开始与您刚创建的机器人的对话。发送一则以正斜杠 (\"/\") 开头的消息来启用它，例如 \"/hello\"。"),
         ("cancel-2fa-confirm-tip", "确定要取消双重认证吗？"),
         ("cancel-bot-confirm-tip", "确定要取消 Telegram 机器人吗？"),
-        ("About RustDesk", "关于 RustDesk"),
+        ("About RustDesk", "亿芯电子"),
         ("Send clipboard keystrokes", "发送剪贴板按键"),
         ("network_error_tip", "请检查网络连接，然后点击再试"),
         ("Unlock with PIN", "使用 PIN 码解锁设置"),
