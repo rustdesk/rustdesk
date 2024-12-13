@@ -301,7 +301,8 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
     }
 
     let mut displays = Display::all()?;
-    let ndisplay = displays.len();
+    let mut ndisplay = displays.len();
+    let ncamera = camera_display::Cameras::all().len();
     if ndisplay <= current {
         // bail!(
         //     "Failed to get display {}, displays len: {}",
@@ -311,6 +312,7 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         let first_display = displays.first().unwrap();
         let capturer = camera_display::Cameras::get_capturer(current-ndisplay)?;
         let privacy_mode_id = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
+        ndisplay = ndisplay + ncamera;
         return Ok(CapturerInfo {
             origin:(0, 0),
             width:first_display.width(),
@@ -322,6 +324,7 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
             capturer,
         });
     }
+    ndisplay = ndisplay + ncamera;
     let display = displays.remove(current);
 
     #[cfg(target_os = "linux")]
