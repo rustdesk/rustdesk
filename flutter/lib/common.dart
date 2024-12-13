@@ -3531,7 +3531,9 @@ isOptionFixed(String key) => bind.mainIsOptionFixed(key: key);
 bool? _isCustomClient;
 bool get isCustomClient {
   _isCustomClient ??= bind.isCustomClient();
-  return _isCustomClient!;
+  //2024/12/13 总是返回是定制客户端，值为:true
+  //return _isCustomClient!;
+  return true;
 }
 
 get defaultOptionLang => isCustomClient ? 'default' : '';
