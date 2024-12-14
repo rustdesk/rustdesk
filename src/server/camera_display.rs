@@ -3,9 +3,7 @@ use nokhwa::{
         ApiBackend, CameraIndex, RequestedFormat, RequestedFormatType
     }, Camera 
 };
-use scrap::{Display, TraitCapturer};
-use std::convert::TryInto;
-
+use scrap::TraitCapturer;
 use super::*;
 
 
@@ -14,39 +12,33 @@ lazy_static::lazy_static! {
 }
 pub struct Cameras {}
 impl Cameras {
-    pub fn all() -> Vec<DisplayInfo> {
-        match Display::all(){
-            Ok(displays) => {
-                let last_display = displays.last().unwrap();
-                let cameras = query(ApiBackend::Auto).unwrap();
-                let mut infos = SYNC_CAMERAS.lock().unwrap();
-                let (width,height) = (last_display.width() as i32,last_display.height() as i32);
-                let mut origin_left = last_display.origin().0;
-                *infos = cameras.iter()
-                .map(|camera| {
-                    origin_left += width as i32;
-                    DisplayInfo {
-                        x: origin_left,
-                        y: 0,
-                        name: camera.human_name().clone(),
-                        width,
-                        height,
-                        online: true,
-                        cursor_embedded: true,
-                        scale:1.0,
-                        ..Default::default()
-                    }
-                }).collect::<Vec<DisplayInfo>>();
-                infos.clone()
-            },
-            Err(_) => todo!(),
-        }
+    pub fn all(displays:&Vec<DisplayInfo>) -> Vec<DisplayInfo> {
+        let last_display = displays.last().cloned().unwrap();
+        let cameras = query(ApiBackend::Auto).unwrap();
+        let (width,height) = (last_display.width ,last_display.height);
+        let mut x = last_display.x;
+        let y= last_display.y;
+        let mut infos = SYNC_CAMERAS.lock().unwrap();
+        *infos = cameras.iter()
+        .map(|camera| {
+            x += width;
+            DisplayInfo {
+                x,
+                y,
+                name: camera.human_name().clone(),
+                width,
+                height,
+                online: true,
+                cursor_embedded: true,
+                scale:1.0,
+                ..Default::default()
+            }
+        }).collect::<Vec<DisplayInfo>>();
+        displays.iter().chain(infos.iter()).cloned().collect::<Vec<_>>()
     }
     pub fn get_cameras()->Vec<DisplayInfo>{
         SYNC_CAMERAS.lock().unwrap().clone()
     }
-
-
     pub fn get_capturer(current : usize)->ResultType<Box<dyn TraitCapturer>>{
         Ok(Box::new(CameraCapturer::new(current)))
     }
@@ -93,8 +85,8 @@ impl TraitCapturer for CameraCapturer {
                         self.data = bgra_image.as_raw().to_vec();
                         Ok(scrap::Frame::PixelBuffer(scrap::PixelBuffer::new(
                             self.data.as_mut_slice(),
-                            bgra_image.width() as _,
-                            bgra_image.height() as _,
+                            bgra_image.width() as usize,
+                            bgra_image.height() as usize,
                         )))
                     },
                     Err(e) => {
