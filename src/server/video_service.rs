@@ -302,21 +302,36 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
 
     let mut displays = Display::all()?;
     let mut ndisplay = displays.len();
-    let ncamera = camera_display::Cameras::all().len();
+    let cameras = camera_display::Cameras::get_cameras();
+    let ncamera = cameras.len();
     if ndisplay <= current {
         // bail!(
         //     "Failed to get display {}, displays len: {}",
         //     current,
         //     ndisplay
         // );
-        let first_display = displays.first().unwrap();
+        let camera = &cameras[current-ndisplay];
         let capturer = camera_display::Cameras::get_capturer(current-ndisplay)?;
+        let (width,height) = (camera.width as usize,camera.height as usize);
+        let origin = (camera.x as i32,camera.y as i32);
+        let name = &camera.name;
         let privacy_mode_id = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
         ndisplay = ndisplay + ncamera;
+        log::debug!(
+            "#displays={}, current={}, origin: {:?}, width={}, height={}, cpus={}/{}, name:{}",
+            ndisplay,
+            current,
+            &origin,
+            width,
+            height,
+            num_cpus::get_physical(),
+            num_cpus::get(),
+            name,
+        );
         return Ok(CapturerInfo {
-            origin:(0, 0),
-            width:first_display.width(),
-            height:first_display.height(),
+            origin,
+            width,
+            height,
             ndisplay,
             current,
             privacy_mode_id,
