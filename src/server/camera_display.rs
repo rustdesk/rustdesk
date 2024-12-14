@@ -1,10 +1,12 @@
+use std::{io, sync::{Arc, Mutex}};
 use nokhwa::{
     pixel_format::RgbAFormat, query, utils::{
         ApiBackend, CameraIndex, RequestedFormat, RequestedFormatType
     }, Camera 
 };
-use scrap::TraitCapturer;
+use scrap::{Frame, PixelBuffer, TraitCapturer};
 use super::*;
+
 
 
 lazy_static::lazy_static! {
@@ -12,67 +14,67 @@ lazy_static::lazy_static! {
 }
 pub struct Cameras {}
 impl Cameras {
-    pub fn all(displays:&Vec<DisplayInfo>) -> Vec<DisplayInfo> {
-        let last_display = displays.last().cloned().unwrap();
-        let cameras = query(ApiBackend::Auto).unwrap();
-        let (width,height) = (last_display.width ,last_display.height);
-        let mut x = last_display.x;
-        let y= last_display.y;
-        let mut camera_displays = SYNC_CAMERA_DISPLAYS.lock().unwrap();
-        *camera_displays = cameras.iter()
-        .map(|camera| {
-            x += width;
-            DisplayInfo {
-                x,
-                y,
-                name: camera.human_name().clone(),
-                width,
-                height,
-                online: true,
-                cursor_embedded: true,
-                scale:1.0,
-                ..Default::default()
-            }
-        }).collect::<Vec<DisplayInfo>>();
-        displays.iter().chain(camera_displays.iter()).cloned().collect::<Vec<_>>()
+    pub fn all(displays:&[DisplayInfo]) -> ResultType<Vec<DisplayInfo>> {        
+        match query(ApiBackend::Auto) {
+            Ok(cameras) => {
+                let Some(last_display) = displays.last().cloned()
+                else{
+                    bail!("No display found")
+                };
+                let mut x = last_display.x;
+                let y= last_display.y;
+                let mut camera_displays = SYNC_CAMERA_DISPLAYS.lock().unwrap();
+                camera_displays.clear();
+                for info in &cameras {
+                    let camera = Self::create_camera(info.index())?;
+                    let resolution = camera.resolution();
+                    let (width, height) = (resolution.width() as i32, resolution.height() as i32);
+                    x += width;
+                    camera_displays.push(DisplayInfo {
+                        x,
+                        y,
+                        name: info.human_name().clone(),
+                        width,
+                        height,
+                        online: true,
+                        cursor_embedded: false,
+                        scale:1.0,
+                        ..Default::default()
+                    });
+                }
+                Ok(displays.iter().chain(camera_displays.iter()).cloned().collect::<Vec<_>>())
+            },
+            Err(e) =>bail!("Query cameras error: {}", e)
+        }
     }
-    pub fn get_cameras()->Vec<DisplayInfo>{
+    fn create_camera(index: &CameraIndex) -> ResultType<Camera> {
+        let result = Camera::new(index.clone(), RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution));
+        match result {
+            Ok(camera)=> Ok(camera),
+            Err(e) =>  bail!("create camera error:  {}", e),
+        }
+    }
+    pub fn get_sync_cameras()->Vec<DisplayInfo>{
         SYNC_CAMERA_DISPLAYS.lock().unwrap().clone()
     }
     pub fn get_capturer(current : usize)->ResultType<Box<dyn TraitCapturer>>{
-        Ok(Box::new(CameraCapturer::new(current)))
+        Ok(Box::new(CameraCapturer::new(current)?))
     }
 }
 
-
-
-use image::{RgbaImage, ImageBuffer};
-trait ConvertToBgra {
-    fn to_bgra(&self) -> RgbaImage;
-}
-impl ConvertToBgra for RgbaImage{
-    fn to_bgra(&self) -> RgbaImage {
-        let mut bgra_data = self.clone().into_raw();
-        for chunk in bgra_data.chunks_mut(4) {
-            chunk.swap(0, 2);
-        }
-        ImageBuffer::from_raw(self.width(), self.height(), bgra_data).unwrap()
-    }
-}
 
 pub struct CameraCapturer {
     camera: Camera,
     data: Vec<u8>,
 }
 impl CameraCapturer {
-    fn new(current_display: usize) -> Self  {
-        let index = CameraIndex::Index(current_display.try_into().unwrap());
-        let format: RequestedFormat<'_> = RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution);
-        let camera = Camera::new(index, format).unwrap();
-        CameraCapturer {
+    fn new(current: usize) -> ResultType<Self>  {
+        let index = CameraIndex::Index(current as u32);
+        let camera = Cameras::create_camera(&index)?;
+        Ok(CameraCapturer {
             camera,
             data: Vec::new(),
-        }
+        })
     }
 }
 impl TraitCapturer for CameraCapturer {
@@ -80,21 +82,21 @@ impl TraitCapturer for CameraCapturer {
         match self.camera.frame() {
             Ok(buffer) => {
                 match buffer.decode_image::<RgbAFormat>() {
-                    Ok(decoded) => {
-                        let bgra_image = decoded.to_bgra();
-                        self.data = bgra_image.as_raw().to_vec();
-                        Ok(scrap::Frame::PixelBuffer(scrap::PixelBuffer::new(
-                            self.data.as_mut_slice(),
-                            bgra_image.width() as usize,
-                            bgra_image.height() as usize,
+                    Ok(mut decoded) => {
+                        for chunk in decoded.chunks_mut(4) {
+                            chunk.swap(0, 2);
+                        }
+                        self.data = decoded.as_raw().to_vec();
+                        Ok(Frame::PixelBuffer(PixelBuffer::new(
+                            &self.data,
+                            decoded.width() as usize,
+                            decoded.height() as usize,
                         )))
                     },
-                    Err(e) => {
-                        Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Camera frame decode error: {}", e))) 
-                    },
+                    Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("Camera frame decode error: {}", e))),
                 }
             }
-            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Camera frame error: {}", e))),
+            Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("Camera frame error: {}", e))),
         }
 
     }
