@@ -21,7 +21,7 @@ impl Cameras {
                 else{
                     bail!("No display found")
                 };
-                let mut x = last_display.x;
+                let mut x = last_display.x+last_display.width;
                 let y= last_display.y;
                 let mut camera_displays = SYNC_CAMERA_DISPLAYS.lock().unwrap();
                 camera_displays.clear();
@@ -29,7 +29,6 @@ impl Cameras {
                     let camera = Self::create_camera(info.index())?;
                     let resolution = camera.resolution();
                     let (width, height) = (resolution.width() as i32, resolution.height() as i32);
-                    x += width;
                     camera_displays.push(DisplayInfo {
                         x,
                         y,
@@ -41,6 +40,7 @@ impl Cameras {
                         scale:1.0,
                         ..Default::default()
                     });
+                    x += width;
                 }
                 Ok(displays.iter().chain(camera_displays.iter()).cloned().collect::<Vec<_>>())
             },
