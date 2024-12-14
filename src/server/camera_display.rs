@@ -8,7 +8,7 @@ use super::*;
 
 
 lazy_static::lazy_static! {
-    pub static ref SYNC_CAMERAS: Arc<Mutex<Vec<DisplayInfo>>> = Arc::new(Mutex::new(Vec::new()));
+    pub static ref SYNC_CAMERA_DISPLAYS: Arc<Mutex<Vec<DisplayInfo>>> = Arc::new(Mutex::new(Vec::new()));
 }
 pub struct Cameras {}
 impl Cameras {
@@ -18,8 +18,8 @@ impl Cameras {
         let (width,height) = (last_display.width ,last_display.height);
         let mut x = last_display.x;
         let y= last_display.y;
-        let mut infos = SYNC_CAMERAS.lock().unwrap();
-        *infos = cameras.iter()
+        let mut camera_displays = SYNC_CAMERA_DISPLAYS.lock().unwrap();
+        *camera_displays = cameras.iter()
         .map(|camera| {
             x += width;
             DisplayInfo {
@@ -34,10 +34,10 @@ impl Cameras {
                 ..Default::default()
             }
         }).collect::<Vec<DisplayInfo>>();
-        displays.iter().chain(infos.iter()).cloned().collect::<Vec<_>>()
+        displays.iter().chain(camera_displays.iter()).cloned().collect::<Vec<_>>()
     }
     pub fn get_cameras()->Vec<DisplayInfo>{
-        SYNC_CAMERAS.lock().unwrap().clone()
+        SYNC_CAMERA_DISPLAYS.lock().unwrap().clone()
     }
     pub fn get_capturer(current : usize)->ResultType<Box<dyn TraitCapturer>>{
         Ok(Box::new(CameraCapturer::new(current)))
