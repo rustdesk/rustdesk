@@ -2198,7 +2198,7 @@ pub mod keys {
     pub const OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS: &str =
         "enable-open-new-connections-in-tabs";
     pub const OPTION_TEXTURE_RENDER: &str = "use-texture-render";
-    pub const OPTION_ENABLE_CHECK_UPDATE: &str = "enable-check-update";
+    pub const OPTION_ENABLE_CHECK_UPDATE: &str = "disable-check-update";
     pub const OPTION_SYNC_AB_WITH_RECENT_SESSIONS: &str = "sync-ab-with-recent-sessions";
     pub const OPTION_SYNC_AB_TAGS: &str = "sync-ab-tags";
     pub const OPTION_FILTER_AB_BY_INTERSECTION: &str = "filter-ab-by-intersection";
