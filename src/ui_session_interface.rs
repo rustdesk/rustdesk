@@ -390,16 +390,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn record_screen(&self, start: bool) {
-        let mut misc = Misc::new();
-        misc.set_client_record_status(start);
-        let mut msg = Message::new();
-        msg.set_misc(misc);
-        self.send(Data::Message(msg));
         self.send(Data::RecordScreen(start));
     }
 
     pub fn is_recording(&self) -> bool {
-        self.lc.read().unwrap().record
+        self.lc.read().unwrap().record_state
     }
 
     pub fn save_custom_image_quality(&self, custom_image_quality: i32) {
