@@ -1384,7 +1384,8 @@ pub struct LoginConfigHandler {
     password_source: PasswordSource, // where the sent password comes from
     shared_password: Option<String>, // Store the shared password
     pub enable_trusted_devices: bool,
-    pub record: bool,
+    pub record_state: bool,
+    pub record_permission: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1489,7 +1490,8 @@ impl LoginConfigHandler {
         self.adapter_luid = adapter_luid;
         self.selected_windows_session_id = None;
         self.shared_password = shared_password;
-        self.record = LocalConfig::get_bool_option(OPTION_ALLOW_AUTO_RECORD_OUTGOING);
+        self.record_state = false;
+        self.record_permission = true;
     }
 
     /// Check if the client should auto login.
@@ -2354,10 +2356,11 @@ pub fn start_video_thread<F, T>(
                         let format = CodecFormat::from(&vf);
                         if video_handler.is_none() {
                             let mut handler = VideoHandler::new(format, display);
-                            let record = session.lc.read().unwrap().record;
+                            let record_state = session.lc.read().unwrap().record_state;
+                            let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();
-                            if record {
-                                handler.record_screen(record, id, display);
+                            if record_state && record_permission {
+                                handler.record_screen(true, id, display);
                             }
                             video_handler = Some(handler);
                         }
@@ -2436,8 +2439,6 @@ pub fn start_video_thread<F, T>(
                         }
                     }
                     MediaData::RecordScreen(start) => {
-                        log::info!("record screen command: start: {start}");
-                        session.update_record_status(start);
                         let id = session.lc.read().unwrap().id.clone();
                         if let Some(handler) = video_handler.as_mut() {
                             handler.record_screen(start, id, display);

@@ -25,9 +25,12 @@ RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIB
 
 [**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
 
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
+[<img src="https://f-droid.org/badge/get-it-on.png"
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
+[<img src="https://flathub.org/api/badge?svg&locale=en"
+    alt="Get it on Flathub"
+    height="80">](https://flathub.org/apps/com.rustdesk.RustDesk)
 
 ## Dependencies
 
