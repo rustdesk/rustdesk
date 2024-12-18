@@ -145,7 +145,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to make direct connection to remote desktop", "Impossible d'établir une connexion directe"),
         ("Set Password", "Définir le mot de passe"),
         ("OS Password", "Mot de passe du système d'exploitation"),
-        ("install_tip", "Vous utilisez une version non installée. En raison des restrictions UAC, en tant que terminal contrôlé, dans certains cas, il ne sera pas en mesure de contrôler la souris et le clavier ou d'enregistrer l'écran. Veuillez cliquer sur le bouton ci-dessous pour installer RustDesk au système pour éviter la question ci-dessus."),
+        ("install_tip", "RustDesk n'est pas installé, ce qui peut limiter son utilisation à cause de l'UAC. Cliquez ci-dessous pour l'installer."),
         ("Click to upgrade", "Cliquer pour mettre à niveau"),
         ("Click to download", "Cliquer pour télécharger"),
         ("Click to update", "Cliquer pour mettre à jour"),
@@ -653,5 +653,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", ""),
         ("Upload files", ""),
         ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
+        ("new-version-of-{}-tip", ""),
     ].iter().cloned().collect();
 }

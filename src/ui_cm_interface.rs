@@ -281,15 +281,6 @@ pub fn close(id: i32) {
 }
 
 #[inline]
-#[cfg(target_os = "android")]
-pub fn notify_input_control(v: bool) {
-    for (_, mut client) in CLIENTS.write().unwrap().iter_mut() {
-        client.keyboard = v;
-        allow_err!(client.tx.send(Data::InputControl(v)));
-    }
-}
-
-#[inline]
 pub fn remove(id: i32) {
     CLIENTS.write().unwrap().remove(&id);
 }
@@ -310,6 +301,17 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
     };
+}
+
+#[inline]
+#[cfg(target_os = "android")]
+pub fn switch_permission_all(name: String, enabled: bool) {
+    for (_, client) in CLIENTS.read().unwrap().iter() {
+        allow_err!(client.tx.send(Data::SwitchPermission {
+            name: name.clone(),
+            enabled
+        }));
+    }
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
@@ -740,6 +742,12 @@ async fn handle_fs(
     use hbb_common::fs::serialize_transfer_job;
 
     match fs {
+        ipc::FS::ReadEmptyDirs {
+            dir,
+            include_hidden,
+        } => {
+            read_empty_dirs(&dir, include_hidden, tx).await;
+        }
         ipc::FS::ReadDir {
             dir,
             include_hidden,
@@ -893,6 +901,26 @@ async fn handle_fs(
             rename_file(path, new_name, id, tx).await;
         }
         _ => {}
+    }
+}
+
+#[cfg(not(any(target_os = "ios")))]
+async fn read_empty_dirs(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
+    let path = dir.to_owned();
+    let path_clone = dir.to_owned();
+
+    if let Ok(Ok(fds)) =
+        spawn_blocking(move || fs::get_empty_dirs_recursive(&path, include_hidden)).await
+    {
+        let mut msg_out = Message::new();
+        let mut file_response = FileResponse::new();
+        file_response.set_empty_dirs(ReadEmptyDirsResponse {
+            path: path_clone,
+            empty_dirs: fds,
+            ..Default::default()
+        });
+        msg_out.set_file_response(file_response);
+        send_raw(msg_out, tx);
     }
 }
 

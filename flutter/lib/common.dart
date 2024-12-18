@@ -2245,7 +2245,10 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     }
   }
 
-  var key = uri.queryParameters["key"];
+  var queryParameters =
+      uri.queryParameters.map((k, v) => MapEntry(k.toLowerCase(), v));
+
+  var key = queryParameters["key"];
   if (id != null) {
     if (key != null) {
       id = "$id?key=$key";
@@ -2254,7 +2257,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
 
   if (isMobile) {
     if (id != null) {
-      final forceRelay = uri.queryParameters["relay"] != null;
+      final forceRelay = queryParameters["relay"] != null;
       connect(Get.context!, id, forceRelay: forceRelay);
       return null;
     }
@@ -2264,7 +2267,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   if (command != null && id != null) {
     args.add(command);
     args.add(id);
-    var param = uri.queryParameters;
+    var param = queryParameters;
     String? password = param["password"];
     if (password != null) args.addAll(['--password', password]);
     String? switch_uuid = param["switch_uuid"];
@@ -2510,7 +2513,8 @@ Future<void> onActiveWindowChanged() async {
         // embedder.cc (2672): 'FlutterEngineSendPlatformMessage' returned 'kInvalidArguments'. Invalid engine handle.
         // 2024-11-11 11:41:11.565 RustDesk[90272:2567686] Failed to send message to Flutter engine on channel 'flutter/lifecycle' (2).
         // ```
-        periodic_immediate(Duration(milliseconds: 30), RdPlatformChannel.instance.terminate);
+        periodic_immediate(
+            Duration(milliseconds: 30), RdPlatformChannel.instance.terminate);
       }
     }
   }
@@ -2726,30 +2730,6 @@ Future<bool> osxRequestAudio() async {
   return await kMacOSPermChannel.invokeMethod("requestRecordAudio");
 }
 
-class DraggableNeverScrollableScrollPhysics extends ScrollPhysics {
-  /// Creates scroll physics that does not let the user scroll.
-  const DraggableNeverScrollableScrollPhysics({super.parent});
-
-  @override
-  DraggableNeverScrollableScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return DraggableNeverScrollableScrollPhysics(parent: buildParent(ancestor));
-  }
-
-  @override
-  bool shouldAcceptUserOffset(ScrollMetrics position) {
-    // TODO: find a better solution to check if the offset change is caused by the scrollbar.
-    // Workaround: when dragging with the scrollbar, it always triggers an [IdleScrollActivity].
-    if (position is ScrollPositionWithSingleContext) {
-      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
-      return position.activity is IdleScrollActivity;
-    }
-    return false;
-  }
-
-  @override
-  bool get allowImplicitScrolling => false;
-}
-
 Widget futureBuilder(
     {required Future? future, required Widget Function(dynamic data) hasData}) {
   return FutureBuilder(
@@ -2829,7 +2809,7 @@ Widget buildRemoteBlock(
         onExit: (event) => block.value = false,
         child: Stack(children: [
           // scope block tab
-          FocusScope(child: child, canRequestFocus: !block.value),
+          preventMouseKeyBuilder(child: child, block: block.value),
           // mask block click, cm not block click and still use check_click_time to avoid block local click
           if (mask)
             Offstage(
@@ -2839,6 +2819,11 @@ Widget buildRemoteBlock(
                 )),
         ]),
       ));
+}
+
+Widget preventMouseKeyBuilder({required Widget child, required bool block}) {
+  return ExcludeFocus(
+      excluding: block, child: AbsorbPointer(child: child, absorbing: block));
 }
 
 Widget unreadMessageCountBuilder(RxInt? count,
@@ -3622,4 +3607,21 @@ List<SubWindowResizeEdge>? get subWindowManagerEnableResizeEdges => isWindows
 
 void earlyAssert() {
   assert('\1' == '1');
+}
+
+void checkUpdate() {
+  if (isDesktop || isAndroid) {
+    if (!bind.isCustomClient()) {
+      platformFFI.registerEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+          (Map<String, dynamic> evt) async {
+        if (evt['url'] is String) {
+          stateGlobal.updateUrl.value = evt['url'];
+        }
+      });
+      Timer(const Duration(seconds: 1), () async {
+        bind.mainGetSoftwareUpdateUrl();
+      });
+    }
+  }
 }

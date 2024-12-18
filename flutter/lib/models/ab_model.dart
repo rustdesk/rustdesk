@@ -33,6 +33,8 @@ bool filterAbTagByIntersection() {
 const _personalAddressBookName = "My address book";
 const _legacyAddressBookName = "Legacy address book";
 
+const kUntagged = "Untagged";
+
 enum ForcePullAb {
   listAndCurrent,
   current,
@@ -424,6 +426,7 @@ class AbModel {
 
 // #region tags
   Future<bool> addTags(List<String> tagList) async {
+    tagList.removeWhere((e) => e == kUntagged);
     final ret = await current.addTags(tagList, {});
     await pullNonLegacyAfterChange();
     _saveCache();
@@ -645,6 +648,9 @@ class AbModel {
   }
 
   Color getCurrentAbTagColor(String tag) {
+    if (tag == kUntagged) {
+      return MyTheme.accent;
+    }
     int? colorValue = current.tagColors[tag];
     if (colorValue != null) {
       return Color(colorValue);

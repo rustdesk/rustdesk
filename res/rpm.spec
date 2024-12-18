@@ -1,9 +1,11 @@
 Name:       rustdesk
-Version:    1.3.3
+Version:    1.3.5
 Release:    0
 Summary:    RPM package
 License:    GPL-3.0
-Requires:   gtk3 libxcb libxdo libXfixes alsa-lib libvdpau1 libva2 pam gstreamer1-plugins-base
+URL:        https://rustdesk.com
+Vendor:     rustdesk <info@rustdesk.com>
+Requires:   gtk3 libxcb libxdo libXfixes alsa-lib libva2 pam gstreamer1-plugins-base
 Recommends: libayatana-appindicator-gtk3
 
 %description
@@ -61,6 +63,15 @@ esac
 cp /usr/share/rustdesk/files/rustdesk.service /etc/systemd/system/rustdesk.service
 cp /usr/share/rustdesk/files/rustdesk.desktop /usr/share/applications/
 cp /usr/share/rustdesk/files/rustdesk-link.desktop /usr/share/applications/
+# Change the security context of /usr/lib/rustdesk/rustdesk from `lib_t` to `bin_t`.
+if command -v getenforce >/dev/null 2>&1; then
+  if [ "$(getenforce)" == "Enforcing" ]; then
+    file_security_context=$(ls -lZ /usr/lib/rustdesk/rustdesk 2>/dev/null | awk -F':' '{print $3}')
+    if [ "${file_security_context}" == "lib_t" ]; then
+      chcon -t bin_t /usr/lib/rustdesk/rustdesk || true
+    fi
+  fi
+fi
 systemctl daemon-reload
 systemctl enable rustdesk
 systemctl start rustdesk

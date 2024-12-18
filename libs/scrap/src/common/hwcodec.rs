@@ -15,7 +15,7 @@ use hbb_common::{
 };
 use hwcodec::{
     common::{
-        DataFormat,
+        DataFormat, HwcodecErrno,
         Quality::{self, *},
         RateControl::{self, *},
     },
@@ -31,6 +31,7 @@ const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_FPS: i32 = 30;
 const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
+pub const ERR_HEVC_POC: i32 = HwcodecErrno::HWCODEC_ERR_HEVC_COULD_NOT_FIND_POC as i32;
 
 crate::generate_call_macro!(call_yuv, false);
 
@@ -69,7 +70,7 @@ impl EncoderApi for HwRamEncoder {
                 let b = Self::convert_quality(&config.name, config.quality);
                 let base_bitrate = base_bitrate(config.width as _, config.height as _);
                 let mut bitrate = base_bitrate * b / 100;
-                if base_bitrate <= 0 {
+                if bitrate <= 0 {
                     bitrate = base_bitrate;
                 }
                 bitrate = Self::check_bitrate_range(&config, bitrate);
@@ -179,7 +180,7 @@ impl EncoderApi for HwRamEncoder {
         let b = Self::convert_quality(&self.config.name, quality);
         let mut bitrate = base_bitrate(self.config.width as _, self.config.height as _) * b / 100;
         if bitrate > 0 {
-            bitrate = Self::check_bitrate_range(&self.config, self.bitrate);
+            bitrate = Self::check_bitrate_range(&self.config, bitrate);
             self.encoder.set_bitrate(bitrate as _).ok();
             self.bitrate = bitrate;
         }
@@ -192,15 +193,11 @@ impl EncoderApi for HwRamEncoder {
     }
 
     fn support_abr(&self) -> bool {
-        ["qsv", "vaapi", "mediacodec", "videotoolbox"]
-            .iter()
-            .all(|&x| !self.config.name.contains(x))
+        ["qsv", "vaapi"].iter().all(|&x| !self.config.name.contains(x))
     }
 
     fn support_changing_quality(&self) -> bool {
-        ["vaapi", "mediacodec", "videotoolbox"]
-            .iter()
-            .all(|&x| !self.config.name.contains(x))
+        ["vaapi"].iter().all(|&x| !self.config.name.contains(x))
     }
 
     fn latency_free(&self) -> bool {
@@ -695,8 +692,8 @@ pub fn check_available_hwcodec() -> String {
     #[cfg(not(feature = "vram"))]
     let vram_string = "".to_owned();
     let c = HwCodecConfig {
-        ram_encode: Encoder::available_encoders(ctx, Some(vram_string.clone())),
-        ram_decode: Decoder::available_decoders(Some(vram_string)),
+        ram_encode: Encoder::available_encoders(ctx, Some(vram_string)),
+        ram_decode: Decoder::available_decoders(),
         #[cfg(feature = "vram")]
         vram_encode: vram.0,
         #[cfg(feature = "vram")]

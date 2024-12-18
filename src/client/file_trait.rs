@@ -43,6 +43,18 @@ pub trait FileManager: Interface {
         self.send(Data::CancelJob(id));
     }
 
+    fn read_empty_dirs(&self, path: String, include_hidden: bool) {
+        let mut msg_out = Message::new();
+        let mut file_action = FileAction::new();
+        file_action.set_read_empty_dirs(ReadEmptyDirs {
+            path,
+            include_hidden,
+            ..Default::default()
+        });
+        msg_out.set_file_action(file_action);
+        self.send(Data::Message(msg_out));
+    }
+
     fn read_remote_dir(&self, path: String, include_hidden: bool) {
         let mut msg_out = Message::new();
         let mut file_action = FileAction::new();

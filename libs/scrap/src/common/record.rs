@@ -158,6 +158,7 @@ impl Recorder {
                 #[cfg(not(feature = "hwcodec"))]
                 _ => bail!("unsupported codec type"),
             };
+            // pts is None when new inner is created
             self.pts = None;
             self.send_state(RecordState::NewFile(ctx2.filename.clone()));
         }
@@ -194,33 +195,33 @@ impl Recorder {
         match frame {
             video_frame::Union::Vp8s(vp8s) => {
                 for f in vp8s.frames.iter() {
-                    self.check_pts(f.pts, w, h, format)?;
+                    self.check_pts(f.pts, f.key, w, h, format)?;
                     self.as_mut().map(|x| x.write_video(f));
                 }
             }
             video_frame::Union::Vp9s(vp9s) => {
                 for f in vp9s.frames.iter() {
-                    self.check_pts(f.pts, w, h, format)?;
+                    self.check_pts(f.pts, f.key, w, h, format)?;
                     self.as_mut().map(|x| x.write_video(f));
                 }
             }
             video_frame::Union::Av1s(av1s) => {
                 for f in av1s.frames.iter() {
-                    self.check_pts(f.pts, w, h, format)?;
+                    self.check_pts(f.pts, f.key, w, h, format)?;
                     self.as_mut().map(|x| x.write_video(f));
                 }
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
                 for f in h264s.frames.iter() {
-                    self.check_pts(f.pts, w, h, format)?;
+                    self.check_pts(f.pts, f.key, w, h, format)?;
                     self.as_mut().map(|x| x.write_video(f));
                 }
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H265s(h265s) => {
                 for f in h265s.frames.iter() {
-                    self.check_pts(f.pts, w, h, format)?;
+                    self.check_pts(f.pts, f.key, w, h, format)?;
                     self.as_mut().map(|x| x.write_video(f));
                 }
             }
@@ -230,8 +231,18 @@ impl Recorder {
         Ok(())
     }
 
-    fn check_pts(&mut self, pts: i64, w: usize, h: usize, format: CodecFormat) -> ResultType<()> {
+    fn check_pts(
+        &mut self,
+        pts: i64,
+        key: bool,
+        w: usize,
+        h: usize,
+        format: CodecFormat,
+    ) -> ResultType<()> {
         // https://stackoverflow.com/questions/76379101/how-to-create-one-playable-webm-file-from-two-different-video-tracks-with-same-c
+        if self.pts.is_none() && !key {
+            bail!("first frame is not key frame");
+        }
         let old_pts = self.pts;
         self.pts = Some(pts);
         if old_pts.clone().unwrap_or_default() > pts {
@@ -342,7 +353,7 @@ impl Drop for WebmRecorder {
 
 #[cfg(feature = "hwcodec")]
 struct HwRecorder {
-    muxer: Muxer,
+    muxer: Option<Muxer>,
     ctx: RecorderContext,
     ctx2: RecorderContext2,
     written: bool,
@@ -362,7 +373,7 @@ impl RecorderApi for HwRecorder {
         })
         .map_err(|_| anyhow!("Failed to create hardware muxer"))?;
         Ok(HwRecorder {
-            muxer,
+            muxer: Some(muxer),
             ctx,
             ctx2,
             written: false,
@@ -376,7 +387,11 @@ impl RecorderApi for HwRecorder {
             self.key = true;
         }
         if self.key {
-            let ok = self.muxer.write_video(&frame.data, frame.key).is_ok();
+            let ok = self
+                .muxer
+                .as_mut()
+                .map(|m| m.write_video(&frame.data, frame.key).is_ok())
+                .unwrap_or_default();
             if ok {
                 self.written = true;
             }
@@ -390,9 +405,11 @@ impl RecorderApi for HwRecorder {
 #[cfg(feature = "hwcodec")]
 impl Drop for HwRecorder {
     fn drop(&mut self) {
-        self.muxer.write_tail().ok();
+        self.muxer.as_mut().map(|m| m.write_tail().ok());
         let mut state = RecordState::WriteTail;
         if !self.written || self.start.elapsed().as_secs() < MIN_SECS {
+            // The process cannot access the file because it is being used by another process
+            self.muxer = None;
             std::fs::remove_file(&self.ctx2.filename).ok();
             state = RecordState::RemoveFile;
         }

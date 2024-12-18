@@ -171,8 +171,9 @@ impl PrivacyModeImpl {
         }
     }
 
-    fn set_primary_display(&mut self) -> ResultType<()> {
+    fn set_primary_display(&mut self) -> ResultType<String> {
         let display = &self.virtual_displays[0];
+        let display_name = std::string::String::from_utf16(&display.name)?;
 
         #[allow(invalid_value)]
         let mut new_primary_dm: DEVMODEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
@@ -230,8 +231,6 @@ impl PrivacyModeImpl {
                 dm.u1.s2_mut().dmPosition.x -= new_primary_dm.u1.s2().dmPosition.x;
                 dm.u1.s2_mut().dmPosition.y -= new_primary_dm.u1.s2().dmPosition.y;
                 dm.dmFields |= DM_POSITION;
-                dm.dmPelsWidth = 1920;
-                dm.dmPelsHeight = 1080;
                 let rc = ChangeDisplaySettingsExW(
                     dd.DeviceName.as_ptr(),
                     &mut dm,
@@ -261,7 +260,7 @@ impl PrivacyModeImpl {
             }
         }
 
-        Ok(())
+        Ok(display_name)
     }
 
     fn disable_physical_displays(&self) -> ResultType<()> {
@@ -431,9 +430,11 @@ impl PrivacyMode for PrivacyModeImpl {
         }
 
         let reg_connectivity_1 = reg_display_settings::read_reg_connectivity()?;
-        guard.set_primary_display()?;
+        let primary_display_name = guard.set_primary_display()?;
         guard.disable_physical_displays()?;
         Self::commit_change_display(CDS_RESET)?;
+        // Explicitly set the resolution(virtual display) to 1920x1080.
+        allow_err!(crate::platform::change_resolution(&primary_display_name, 1920, 1080));
         let reg_connectivity_2 = reg_display_settings::read_reg_connectivity()?;
 
         if let Some(reg_recovery) =

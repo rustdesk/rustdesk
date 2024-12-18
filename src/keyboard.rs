@@ -418,6 +418,17 @@ pub fn is_modifier(key: &rdev::Key) -> bool {
 }
 
 #[inline]
+pub fn is_modifier_code(evt: &KeyEvent) -> bool {
+    match evt.union {
+        Some(key_event::Union::Chr(code)) => {
+            let key = rdev::linux_key_from_code(code);
+            is_modifier(&key)
+        }
+        _ => false,
+    }
+}
+
+#[inline]
 pub fn is_numpad_rdev_key(key: &rdev::Key) -> bool {
     matches!(
         key,
@@ -869,24 +880,11 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
     events
 }
 
+#[inline]
 pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
-    match _map_keyboard_mode(_peer, event, key_event) {
-        Some(key_event) => {
-            if _peer == OS_LOWER_LINUX {
-                if let EventType::KeyPress(k) = &event.event_type {
-                    #[cfg(target_os = "ios")]
-                    let try_workaround = true;
-                    #[cfg(not(target_os = "ios"))]
-                    let try_workaround = !is_modifier(k);
-                    if try_workaround {
-                        return try_workaround_linux_long_press(key_event);
-                    }
-                }
-            }
-            vec![key_event]
-        }
-        None => Vec::new(),
-    }
+    _map_keyboard_mode(_peer, event, key_event)
+        .map(|e| vec![e])
+        .unwrap_or_default()
 }
 
 fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
@@ -956,14 +954,6 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
     };
     key_event.set_chr(keycode as _);
     Some(key_event)
-}
-
-// https://github.com/rustdesk/rustdesk/issues/6793
-#[inline]
-fn try_workaround_linux_long_press(key_event: KeyEvent) -> Vec<KeyEvent> {
-    let mut key_event_up = key_event.clone();
-    key_event_up.down = false;
-    vec![key_event, key_event_up]
 }
 
 #[cfg(not(any(target_os = "ios")))]

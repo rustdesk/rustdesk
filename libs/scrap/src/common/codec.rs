@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
-    ffi::c_void,
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 #[cfg(feature = "hwcodec")]
@@ -28,7 +28,6 @@ use hbb_common::{
         SupportedDecoding, SupportedEncoding, VideoFrame,
     },
     sysinfo::System,
-    tokio::time::Instant,
     ResultType,
 };
 
@@ -264,15 +263,20 @@ impl Encoder {
             .unwrap_or((PreferCodec::Auto.into(), 0));
         let preference = most_frequent.enum_value_or(PreferCodec::Auto);
 
-        // auto: h265 > h264 > vp9/vp8
-        let mut auto_codec = CodecFormat::VP9;
+        // auto: h265 > h264 > av1/vp9/vp8
+        let av1_test = Config::get_option(hbb_common::config::keys::OPTION_AV1_TEST) != "N";
+        let mut auto_codec = if av1_useable && av1_test {
+            CodecFormat::AV1
+        } else {
+            CodecFormat::VP9
+        };
         if h264_useable {
             auto_codec = CodecFormat::H264;
         }
         if h265_useable {
             auto_codec = CodecFormat::H265;
         }
-        if auto_codec == CodecFormat::VP9 {
+        if auto_codec == CodecFormat::VP9 || auto_codec == CodecFormat::AV1 {
             let mut system = System::new();
             system.refresh_memory();
             if vp8_useable && system.total_memory() <= 4 * 1024 * 1024 * 1024 {
@@ -981,4 +985,125 @@ fn disable_av1() -> bool {
     // aom is very slow for x86 sciter version on windows x64
     // disable it for all 32 bit platforms
     std::mem::size_of::<usize>() == 4
+}
+
+#[cfg(not(target_os = "ios"))]
+pub fn test_av1() {
+    use hbb_common::config::keys::OPTION_AV1_TEST;
+    use hbb_common::rand::Rng;
+    use std::{sync::Once, time::Duration};
+
+    if disable_av1() || !Config::get_option(OPTION_AV1_TEST).is_empty() {
+        log::info!("skip test av1");
+        return;
+    }
+
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let f = || {
+            let (width, height, quality, keyframe_interval, i444) =
+                (1920, 1080, Quality::Balanced, None, false);
+            let frame_count = 10;
+            let block_size = 300;
+            let move_step = 50;
+            let generate_fake_data =
+                |frame_index: u32, dst_fmt: EncodeYuvFormat| -> ResultType<Vec<u8>> {
+                    let mut rng = hbb_common::rand::thread_rng();
+                    let mut bgra = vec![0u8; (width * height * 4) as usize];
+                    let gradient = frame_index as f32 / frame_count as f32;
+                    // floating block
+                    let x0 = (frame_index * move_step) % (width - block_size);
+                    let y0 = (frame_index * move_step) % (height - block_size);
+                    // Fill the block with random colors
+                    for y in 0..block_size {
+                        for x in 0..block_size {
+                            let index = (((y0 + y) * width + x0 + x) * 4) as usize;
+                            if index + 3 < bgra.len() {
+                                let noise = rng.gen_range(0..255) as f32 / 255.0;
+                                let value = (255.0 * gradient + noise * 50.0) as u8;
+                                bgra[index] = value;
+                                bgra[index + 1] = value;
+                                bgra[index + 2] = value;
+                                bgra[index + 3] = 255;
+                            }
+                        }
+                    }
+                    let dst_stride_y = dst_fmt.stride[0];
+                    let dst_stride_uv = dst_fmt.stride[1];
+                    let mut dst = vec![0u8; (dst_fmt.h * dst_stride_y * 2) as usize];
+                    let dst_y = dst.as_mut_ptr();
+                    let dst_u = dst[dst_fmt.u..].as_mut_ptr();
+                    let dst_v = dst[dst_fmt.v..].as_mut_ptr();
+                    let res = unsafe {
+                        crate::ARGBToI420(
+                            bgra.as_ptr(),
+                            (width * 4) as _,
+                            dst_y,
+                            dst_stride_y as _,
+                            dst_u,
+                            dst_stride_uv as _,
+                            dst_v,
+                            dst_stride_uv as _,
+                            width as _,
+                            height as _,
+                        )
+                    };
+                    if res != 0 {
+                        bail!("ARGBToI420 failed: {}", res);
+                    }
+                    Ok(dst)
+                };
+            let Ok(mut av1) = AomEncoder::new(
+                EncoderCfg::AOM(AomEncoderConfig {
+                    width,
+                    height,
+                    quality,
+                    keyframe_interval,
+                }),
+                i444,
+            ) else {
+                return false;
+            };
+            let mut key_frame_time = Duration::ZERO;
+            let mut non_key_frame_time_sum = Duration::ZERO;
+            let pts = Instant::now();
+            let yuvfmt = av1.yuvfmt();
+            for i in 0..frame_count {
+                let Ok(yuv) = generate_fake_data(i, yuvfmt.clone()) else {
+                    return false;
+                };
+                let start = Instant::now();
+                if av1
+                    .encode(pts.elapsed().as_millis() as _, &yuv, super::STRIDE_ALIGN)
+                    .is_err()
+                {
+                    log::debug!("av1 encode failed");
+                    if i == 0 {
+                        return false;
+                    }
+                }
+                if i == 0 {
+                    key_frame_time = start.elapsed();
+                } else {
+                    non_key_frame_time_sum += start.elapsed();
+                }
+            }
+            let non_key_frame_time = non_key_frame_time_sum / (frame_count - 1);
+            log::info!(
+                "av1 time: key: {:?}, non-key: {:?}, consume: {:?}",
+                key_frame_time,
+                non_key_frame_time,
+                pts.elapsed()
+            );
+            key_frame_time < Duration::from_millis(90)
+                && non_key_frame_time < Duration::from_millis(30)
+        };
+        std::thread::spawn(move || {
+            let v = f();
+            Config::set_option(
+                OPTION_AV1_TEST.to_string(),
+                if v { "Y" } else { "N" }.to_string(),
+            );
+        });
+    });
 }
