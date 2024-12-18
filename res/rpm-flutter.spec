@@ -22,7 +22,7 @@ The best open-source remote desktop client software, written in Rust.
 
 %install
 
-mkdir -p "%{buildroot}/usr/lib/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "%{buildroot}/usr/lib/rustdesk"
+mkdir -p "%{buildroot}/usr/local/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "%{buildroot}/usr/local/rustdesk"
 mkdir -p "%{buildroot}/usr/bin"
 install -Dm 644 $HBB/res/rustdesk.service -t "%{buildroot}/usr/share/rustdesk/files"
 install -Dm 644 $HBB/res/rustdesk.desktop -t "%{buildroot}/usr/share/rustdesk/files"
@@ -31,7 +31,7 @@ install -Dm 644 $HBB/res/128x128@2x.png "%{buildroot}/usr/share/icons/hicolor/25
 install -Dm 644 $HBB/res/scalable.svg "%{buildroot}/usr/share/icons/hicolor/scalable/apps/rustdesk.svg"
 
 %files
-/usr/lib/rustdesk/*
+/usr/local/rustdesk/*
 /usr/share/rustdesk/files/rustdesk.service
 /usr/share/icons/hicolor/256x256/apps/rustdesk.png
 /usr/share/icons/hicolor/scalable/apps/rustdesk.svg
@@ -58,16 +58,7 @@ esac
 cp /usr/share/rustdesk/files/rustdesk.service /etc/systemd/system/rustdesk.service
 cp /usr/share/rustdesk/files/rustdesk.desktop /usr/share/applications/
 cp /usr/share/rustdesk/files/rustdesk-link.desktop /usr/share/applications/
-ln -s /usr/lib/rustdesk/rustdesk /usr/bin/rustdesk
-# Change the security context of /usr/lib/rustdesk/rustdesk from `lib_t` to `bin_t`.
-if command -v getenforce >/dev/null 2>&1; then
-  if [ "$(getenforce)" == "Enforcing" ]; then
-    file_security_context=$(ls -lZ /usr/lib/rustdesk/rustdesk 2>/dev/null | awk -F':' '{print $3}')
-    if [ "${file_security_context}" == "lib_t" ]; then
-      chcon -t bin_t /usr/lib/rustdesk/rustdesk || true
-    fi
-  fi
-fi
+ln -sf /usr/local/rustdesk/rustdesk /usr/bin/rustdesk
 systemctl daemon-reload
 systemctl enable rustdesk
 systemctl start rustdesk
@@ -90,9 +81,11 @@ esac
 case "$1" in
   0)
     # for uninstall
+    rm /usr/bin/rustdesk || true
+    rmdir /usr/lib/rustdesk || true
+    rmdir /usr/local/rustdesk || true
     rm /usr/share/applications/rustdesk.desktop || true
     rm /usr/share/applications/rustdesk-link.desktop || true
-    rm /usr/bin/rustdesk || true
     update-desktop-database
   ;;
   1)
