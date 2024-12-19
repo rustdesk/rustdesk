@@ -1495,7 +1495,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     );
   }
 
-  TextField _resolutionInput(TextEditingController controller) {
+  Widget _resolutionInput(TextEditingController controller) {
     return TextField(
       decoration: InputDecoration(
         border: InputBorder.none,
@@ -1509,7 +1509,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
       ],
       controller: controller,
-    );
+    ).workaroundFreezeLinuxMint();
   }
 
   List<Widget> _supportedResolutionMenuButtons() => resolutions
