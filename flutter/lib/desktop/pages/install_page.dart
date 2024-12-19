@@ -147,7 +147,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                       decoration: InputDecoration(
                         contentPadding: EdgeInsets.all(0.75 * em),
                       ),
-                    ).marginOnly(right: 10),
+                    ).workaroundFreezeLinuxMint().marginOnly(right: 10),
                   ),
                   Obx(
                     () => OutlinedButton.icon(

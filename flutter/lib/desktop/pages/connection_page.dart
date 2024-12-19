@@ -424,7 +424,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                           onSubmitted: (_) {
                             onConnect();
                           },
-                        ));
+                        ).workaroundFreezeLinuxMint());
                   },
                   onSelected: (option) {
                     setState(() {

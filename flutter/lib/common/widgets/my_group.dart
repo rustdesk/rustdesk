@@ -145,7 +145,7 @@ class _MyGroupState extends State<MyGroup> {
             border: InputBorder.none,
             isDense: true,
           ),
-        )),
+        ).workaroundFreezeLinuxMint()),
       ],
     );
   }

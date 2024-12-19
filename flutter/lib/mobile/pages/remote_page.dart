@@ -604,7 +604,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       // ko/zh/ja input method: the button will trigger `onKeyEvent`
                       //                     and the event will not popup if `KeyEventResult.handled` is returned.
                       onChanged: handleSoftKeyboardInput,
-                    ),
+                    ).workaroundFreezeLinuxMint(),
             ),
           ];
           if (showCursorPaint) {

@@ -286,7 +286,7 @@ class _AddressBookState extends State<AddressBook> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-          ),
+          ).workaroundFreezeLinuxMint(),
         ),
         searchMatchFn: (item, searchValue) {
           return item.value
@@ -556,7 +556,7 @@ class _AddressBookState extends State<AddressBook> {
                                   : translate('ID'),
                               errorText: errorMsg,
                               errorMaxLines: 5),
-                        ))),
+                        ).workaroundFreezeLinuxMint())),
                 row(
                   lable: Text(
                     translate('Alias'),
@@ -569,7 +569,7 @@ class _AddressBookState extends State<AddressBook> {
                               ? null
                               : translate('Alias'),
                         ),
-                      )),
+                      ).workaroundFreezeLinuxMint()),
                 ),
                 if (isCurrentAbShared)
                   row(
@@ -598,7 +598,7 @@ class _AddressBookState extends State<AddressBook> {
                               },
                             ),
                           ),
-                        ),
+                        ).workaroundFreezeLinuxMint(),
                       )),
                 if (gFFI.abModel.currentAbTags.isNotEmpty)
                   Align(
@@ -704,7 +704,7 @@ class _AddressBookState extends State<AddressBook> {
                     ),
                     controller: controller,
                     autofocus: true,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ),

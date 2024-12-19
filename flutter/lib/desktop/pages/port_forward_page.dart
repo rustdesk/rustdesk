@@ -238,7 +238,7 @@ class _PortForwardPageState extends State<PortForwardPage>
               inputFormatters: inputFormatters,
               decoration: InputDecoration(
                 hintText: hint,
-              ))),
+              )).workaroundFreezeLinuxMint()),
     );
   }
 
