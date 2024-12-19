@@ -1,0 +1,34 @@
+name: Upstream Sync
+
+permissions:
+    contents: write
+
+on:
+    schedule:
+        - cron: "0 7 * * *"
+    workflow_dispatch:
+
+jobs:
+    sync_with_upstream:
+        name: Sync with Upstream
+        runs-on: ubuntu-latest
+        if: ${{ github.event.repository.fork }}
+
+        steps:
+            - name: Checkout target repo
+              uses: actions/checkout@v3
+
+            - name: Sync Upstream
+              uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
+              with:
+                  target_repo_token: ${{ secrets.GITHUB_TOKEN }}
+                  upstream_sync_repo: rustdesk/rustdesk
+                  upstream_sync_branch: master
+                  target_sync_branch: master
+                  test_mode: false
+
+            - name: Check for Failure
+              if: failure()
+              run: |
+                  echo "[Error] Due to a change in the workflow file of the upstream repository, GitHub has automatically suspended the scheduled automatic update. You need to manually sync your fork."
+                  exit 1
