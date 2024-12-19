@@ -433,6 +433,7 @@ class MainService : Service() {
         checkMediaPermission()
         _isStart = true
         FFI.setFrameRawEnable("video",true)
+        MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
         return true
     }
 
@@ -441,6 +442,7 @@ class MainService : Service() {
         Log.d(logTag, "Stop Capture")
         FFI.setFrameRawEnable("video",false)
         _isStart = false
+        MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
         // release video
         if (reuseVirtualDisplay) {
             // The virtual display video projection can be paused by calling `setSurface(null)`.

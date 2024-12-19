@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:flutter_improved_scrolling/flutter_improved_scrolling.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 
 import '../../consts.dart';
@@ -742,12 +741,6 @@ class _ImagePaintState extends State<ImagePaint> {
     ScrollController horizontal,
     ScrollController vertical,
   ) {
-    final scrollConfig = CustomMouseWheelScrollConfig(
-        scrollDuration: kDefaultScrollDuration,
-        scrollCurve: Curves.linearToEaseOut,
-        mouseWheelTurnsThrottleTimeMs:
-            kDefaultMouseWheelThrottleDuration.inMilliseconds,
-        scrollAmountMultiplier: kDefaultScrollAmountMultiplier);
     var widget = child;
     if (layoutSize.width < size.width) {
       widget = ScrollConfiguration(
@@ -793,36 +786,26 @@ class _ImagePaintState extends State<ImagePaint> {
       );
     }
     if (layoutSize.width < size.width) {
-      widget = ImprovedScrolling(
-        scrollController: horizontal,
-        enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
-        customMouseWheelScrollConfig: scrollConfig,
-        child: RawScrollbar(
-          thickness: kScrollbarThickness,
-          thumbColor: Colors.grey,
-          controller: horizontal,
-          thumbVisibility: false,
-          trackVisibility: false,
-          notificationPredicate: layoutSize.height < size.height
-              ? (notification) => notification.depth == 1
-              : defaultScrollNotificationPredicate,
-          child: widget,
-        ),
+      widget = RawScrollbar(
+        thickness: kScrollbarThickness,
+        thumbColor: Colors.grey,
+        controller: horizontal,
+        thumbVisibility: false,
+        trackVisibility: false,
+        notificationPredicate: layoutSize.height < size.height
+            ? (notification) => notification.depth == 1
+            : defaultScrollNotificationPredicate,
+        child: widget,
       );
     }
     if (layoutSize.height < size.height) {
-      widget = ImprovedScrolling(
-        scrollController: vertical,
-        enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
-        customMouseWheelScrollConfig: scrollConfig,
-        child: RawScrollbar(
-          thickness: kScrollbarThickness,
-          thumbColor: Colors.grey,
-          controller: vertical,
-          thumbVisibility: false,
-          trackVisibility: false,
-          child: widget,
-        ),
+      widget = RawScrollbar(
+        thickness: kScrollbarThickness,
+        thumbColor: Colors.grey,
+        controller: vertical,
+        thumbVisibility: false,
+        trackVisibility: false,
+        child: widget,
       );
     }
 

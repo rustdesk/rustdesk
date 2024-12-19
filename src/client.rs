@@ -1002,8 +1002,13 @@ impl AudioHandler {
         let sample_format = config.sample_format();
         log::info!("Default output format: {:?}", config);
         log::info!("Remote input format: {:?}", format0);
+        #[allow(unused_mut)]
         let mut config: StreamConfig = config.into();
-        config.buffer_size = cpal::BufferSize::Fixed(64);
+        #[cfg(not(target_os = "ios"))]
+        {
+            // this makes ios audio output not work
+            config.buffer_size = cpal::BufferSize::Fixed(64);
+        }
 
         self.sample_rate = (format0.sample_rate, config.sample_rate.0);
         let mut build_output_stream = |config: StreamConfig| match sample_format {
@@ -1188,9 +1193,15 @@ impl VideoHandler {
     pub fn new(format: CodecFormat, _display: usize) -> Self {
         let luid = Self::get_adapter_luid();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
+        let rgba_format =
+            if cfg!(feature = "flutter") && (cfg!(windows) || cfg!(target_os = "linux")) {
+                ImageFormat::ABGR
+            } else {
+                ImageFormat::ARGB
+            };
         VideoHandler {
             decoder: Decoder::new(format, luid),
-            rgb: ImageRgb::new(ImageFormat::ARGB, crate::get_dst_align_rgba()),
+            rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),
             texture: Default::default(),
             recorder: Default::default(),
             record: false,
@@ -1373,7 +1384,8 @@ pub struct LoginConfigHandler {
     password_source: PasswordSource, // where the sent password comes from
     shared_password: Option<String>, // Store the shared password
     pub enable_trusted_devices: bool,
-    pub record: bool,
+    pub record_state: bool,
+    pub record_permission: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1478,7 +1490,8 @@ impl LoginConfigHandler {
         self.adapter_luid = adapter_luid;
         self.selected_windows_session_id = None;
         self.shared_password = shared_password;
-        self.record = LocalConfig::get_bool_option(OPTION_ALLOW_AUTO_RECORD_OUTGOING);
+        self.record_state = false;
+        self.record_permission = true;
     }
 
     /// Check if the client should auto login.
@@ -2343,10 +2356,11 @@ pub fn start_video_thread<F, T>(
                         let format = CodecFormat::from(&vf);
                         if video_handler.is_none() {
                             let mut handler = VideoHandler::new(format, display);
-                            let record = session.lc.read().unwrap().record;
+                            let record_state = session.lc.read().unwrap().record_state;
+                            let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();
-                            if record {
-                                handler.record_screen(record, id, display);
+                            if record_state && record_permission {
+                                handler.record_screen(true, id, display);
                             }
                             video_handler = Some(handler);
                         }
@@ -2425,8 +2439,6 @@ pub fn start_video_thread<F, T>(
                         }
                     }
                     MediaData::RecordScreen(start) => {
-                        log::info!("record screen command: start: {start}");
-                        session.update_record_status(start);
                         let id = session.lc.read().unwrap().id.clone();
                         if let Some(handler) = video_handler.as_mut() {
                             handler.record_screen(start, id, display);
@@ -2742,6 +2754,7 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
         return;
     }
     let mut key_event = KeyEvent::new();
+    key_event.mode = KeyboardMode::Legacy.into();
     key_event.press = true;
     let mut msg_out = Message::new();
     key_event.set_seq(p);
@@ -3293,6 +3306,7 @@ lazy_static::lazy_static! {
         ("VK_PRINT", Key::ControlKey(ControlKey::Print)),
         ("VK_EXECUTE", Key::ControlKey(ControlKey::Execute)),
         ("VK_SNAPSHOT", Key::ControlKey(ControlKey::Snapshot)),
+        ("VK_SCROLL", Key::ControlKey(ControlKey::Scroll)),
         ("VK_INSERT", Key::ControlKey(ControlKey::Insert)),
         ("VK_DELETE", Key::ControlKey(ControlKey::Delete)),
         ("VK_HELP", Key::ControlKey(ControlKey::Help)),

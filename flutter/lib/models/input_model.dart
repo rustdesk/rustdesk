@@ -1080,7 +1080,7 @@ class InputModel {
         onExit: true,
       );
 
-  static int tryGetNearestRange(int v, int min, int max, int n) {
+  static double tryGetNearestRange(double v, double min, double max, double n) {
     if (v < min && v >= min - n) {
       v = min;
     }
@@ -1138,8 +1138,8 @@ class InputModel {
         return;
       }
       evtValue = {
-        'x': pos.x,
-        'y': pos.y,
+        'x': pos.x.toInt(),
+        'y': pos.y.toInt(),
       };
     }
 
@@ -1221,8 +1221,8 @@ class InputModel {
       evt['x'] = '0';
       evt['y'] = '0';
     } else {
-      evt['x'] = '${pos.x}';
-      evt['y'] = '${pos.y}';
+      evt['x'] = '${pos.x.toInt()}';
+      evt['y'] = '${pos.y.toInt()}';
     }
 
     Map<int, String> mapButtons = {
@@ -1362,31 +1362,27 @@ class InputModel {
       y = pos.dy;
     }
 
-    var evtX = 0;
-    var evtY = 0;
-    try {
-      evtX = x.round();
-      evtY = y.round();
-    } catch (e) {
-      debugPrintStack(label: 'canvas.scale value ${canvas.scale}, $e');
-      return null;
-    }
-
     return InputModel.getPointInRemoteRect(
-        true, peerPlatform, kind, evtType, evtX, evtY, rect,
+        true, peerPlatform, kind, evtType, x, y, rect,
         buttons: buttons);
   }
 
-  static Point? getPointInRemoteRect(bool isLocalDesktop, String? peerPlatform,
-      String kind, String evtType, int evtX, int evtY, Rect rect,
+  static Point<double>? getPointInRemoteRect(
+      bool isLocalDesktop,
+      String? peerPlatform,
+      String kind,
+      String evtType,
+      double evtX,
+      double evtY,
+      Rect rect,
       {int buttons = kPrimaryMouseButton}) {
-    int minX = rect.left.toInt();
+    double minX = rect.left;
     // https://github.com/rustdesk/rustdesk/issues/6678
     // For Windows, [0,maxX], [0,maxY] should be set to enable window snapping.
-    int maxX = (rect.left + rect.width).toInt() -
+    double maxX = (rect.left + rect.width) -
         (peerPlatform == kPeerPlatformWindows ? 0 : 1);
-    int minY = rect.top.toInt();
-    int maxY = (rect.top + rect.height).toInt() -
+    double minY = rect.top;
+    double maxY = (rect.top + rect.height) -
         (peerPlatform == kPeerPlatformWindows ? 0 : 1);
     evtX = InputModel.tryGetNearestRange(evtX, minX, maxX, 5);
     evtY = InputModel.tryGetNearestRange(evtY, minY, maxY, 5);

@@ -2,17 +2,28 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO ffmpeg/ffmpeg
     REF "n${VERSION}"
-    SHA512 3ba02e8b979c80bf61d55f414bdac2c756578bb36498ed7486151755c6ccf8bd8ff2b8c7afa3c5d1acd862ce48314886a86a105613c05e36601984c334f8f6bf
+    SHA512 3b273769ef1a1b63aed0691eef317a760f8c83b1d0e1c232b67bbee26db60b4864aafbc88df0e86d6bebf07185bbd057f33e2d5258fde6d97763b9994cd48b6f
     HEAD_REF master
     PATCHES
-    0002-fix-msvc-link.patch # upstreamed in future version
+    0001-create-lib-libraries.patch
+    0002-fix-msvc-link.patch
     0003-fix-windowsinclude.patch
-    0005-fix-nasm.patch # upstreamed in future version
-    0012-Fix-ssl-110-detection.patch
+    0004-dependencies.patch
+    0005-fix-nasm.patch
+    0007-fix-lib-naming.patch
     0013-define-WINVER.patch
+    0020-fix-aarch64-libswscale.patch
+    0024-fix-osx-host-c11.patch
+    0040-ffmpeg-add-av_stream_get_first_dts-for-chromium.patch # Do not remove this patch. It is required by chromium
+    0041-add-const-for-opengl-definition.patch
+    0043-fix-miss-head.patch
     patch/0001-avcodec-amfenc-add-query_timeout-option-for-h264-hev.patch
     patch/0002-libavcodec-amfenc-reconfig-when-bitrate-change.patch
-    patch/0003-amf-colorspace.patch
+    patch/0004-videotoolbox-changing-bitrate.patch
+    patch/0005-mediacodec-changing-bitrate.patch
+    patch/0006-dlopen-libva.patch
+    patch/0007-fix-linux-configure.patch
+    patch/0008-remove-amf-loop-query.patch
 )
 
 if(SOURCE_PATH MATCHES " ")
@@ -48,6 +59,7 @@ set(OPTIONS "\
 --disable-debug \
 --disable-valgrind-backtrace \
 --disable-large-tests \
+--disable-bzlib \
 --disable-avdevice \
 --enable-avcodec \
 --enable-avformat \
@@ -77,13 +89,15 @@ else()
 endif()
 
 if(VCPKG_TARGET_IS_LINUX)
-    string(APPEND OPTIONS  "\
+    string(APPEND OPTIONS "\
 --target-os=linux \
 --enable-pthreads \
+--disable-vdpau \
 ")
+
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
     else()
-        string(APPEND OPTIONS  "\
+        string(APPEND OPTIONS "\
 --enable-cuda \
 --enable-ffnvcodec \
 --enable-encoder=h264_nvenc \
@@ -98,8 +112,9 @@ if(VCPKG_TARGET_IS_LINUX)
 --enable-encoder=h264_vaapi \
 --enable-encoder=hevc_vaapi \
 ")
+
         if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
-            string(APPEND OPTIONS  "\
+            string(APPEND OPTIONS "\
     --enable-cuda_llvm \
 ")
         endif()
@@ -127,7 +142,8 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --enable-libmfx \
 --enable-encoder=h264_qsv \
 --enable-encoder=hevc_qsv \
-")    
+")
+
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
         set(LIB_MACHINE_ARG /machine:x86)
         string(APPEND OPTIONS " --arch=i686 --enable-cross-compile")
@@ -189,6 +205,7 @@ endif()
 
 string(APPEND VCPKG_COMBINED_C_FLAGS_DEBUG " -I \"${CURRENT_INSTALLED_DIR}/include\"")
 string(APPEND VCPKG_COMBINED_C_FLAGS_RELEASE " -I \"${CURRENT_INSTALLED_DIR}/include\"")
+
 if(VCPKG_TARGET_IS_WINDOWS)
     string(APPEND VCPKG_COMBINED_C_FLAGS_DEBUG " -I \"${CURRENT_INSTALLED_DIR}/include/mfx\"")
     string(APPEND VCPKG_COMBINED_C_FLAGS_RELEASE " -I \"${CURRENT_INSTALLED_DIR}/include/mfx\"")
@@ -202,9 +219,11 @@ if(VCPKG_DETECTED_CMAKE_C_COMPILER)
     get_filename_component(CC_filename "${VCPKG_DETECTED_CMAKE_C_COMPILER}" NAME)
     set(ENV{CC} "${CC_filename}")
     string(APPEND OPTIONS " --cc=${CC_filename}")
+
     if(VCPKG_HOST_IS_WINDOWS)
         string(APPEND OPTIONS " --host_cc=${CC_filename}")
     endif()
+
     list(APPEND prog_env "${CC_path}")
 endif()
 
@@ -282,6 +301,7 @@ if(VCPKG_HOST_IS_WINDOWS)
 else()
     # find_program(SHELL bash)
 endif()
+
 list(REMOVE_DUPLICATES prog_env)
 vcpkg_add_to_path(PREPEND ${prog_env})
 

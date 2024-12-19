@@ -27,7 +27,7 @@ use crossbeam_queue::ArrayQueue;
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
-    config::{self, PeerConfig, TransferSerde},
+    config::{self, LocalConfig, PeerConfig, TransferSerde},
     fs::{
         self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
         DigestCheckResult, RemoveJobMeta,
@@ -71,6 +71,7 @@ pub struct Remote<T: InvokeUiSession> {
     peer_info: ParsedPeerInfo,
     video_threads: HashMap<usize, VideoThread>,
     chroma: Arc<RwLock<Option<Chroma>>>,
+    last_record_state: bool,
 }
 
 #[derive(Default)]
@@ -116,6 +117,7 @@ impl<T: InvokeUiSession> Remote<T> {
             peer_info: Default::default(),
             video_threads: Default::default(),
             chroma: Default::default(),
+            last_record_state: false,
         }
     }
 
@@ -846,10 +848,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
             }
             Data::RecordScreen(start) => {
-                self.handler.lc.write().unwrap().record = start;
-                for (_, v) in self.video_threads.iter_mut() {
-                    v.video_sender.send(MediaData::RecordScreen(start)).ok();
-                }
+                self.handler.lc.write().unwrap().record_state = start;
+                self.update_record_state();
             }
             Data::ElevateDirect => {
                 let mut request = ElevationRequest::new();
@@ -1484,6 +1484,8 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.set_permission("restart", p.enabled);
                             }
                             Ok(Permission::Recording) => {
+                                self.handler.lc.write().unwrap().record_permission = p.enabled;
+                                self.update_record_state();
                                 self.handler.set_permission("recording", p.enabled);
                             }
                             Ok(Permission::BlockInput) => {
@@ -1983,14 +1985,38 @@ impl<T: InvokeUiSession> Remote<T> {
             },
         );
         self.video_threads.insert(display, video_thread);
-        let auto_record = self.handler.lc.read().unwrap().record;
-        if auto_record && self.video_threads.len() == 1 {
-            let mut misc = Misc::new();
-            misc.set_client_record_status(true);
-            let mut msg = Message::new();
-            msg.set_misc(misc);
-            self.sender.send(Data::Message(msg)).ok();
+        if self.video_threads.len() == 1 {
+            let auto_record =
+                LocalConfig::get_bool_option(config::keys::OPTION_ALLOW_AUTO_RECORD_OUTGOING);
+            self.handler.lc.write().unwrap().record_state = auto_record;
+            self.update_record_state();
         }
+    }
+
+    fn update_record_state(&mut self) {
+        // state
+        let permission = self.handler.lc.read().unwrap().record_permission;
+        if !permission {
+            self.handler.lc.write().unwrap().record_state = false;
+        }
+        let state = self.handler.lc.read().unwrap().record_state;
+        let start = state && permission;
+        if self.last_record_state == start {
+            return;
+        }
+        self.last_record_state = start;
+        log::info!("record screen start: {start}");
+        // update local
+        for (_, v) in self.video_threads.iter_mut() {
+            v.video_sender.send(MediaData::RecordScreen(start)).ok();
+        }
+        self.handler.update_record_status(start);
+        // update remote
+        let mut misc = Misc::new();
+        misc.set_client_record_status(start);
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.sender.send(Data::Message(msg)).ok();
     }
 }
 
@@ -2039,4 +2065,11 @@ struct VideoThread {
     frame_count: Arc<RwLock<usize>>,
     discard_queue: Arc<RwLock<bool>>,
     fps_control: FpsControl,
+}
+
+impl Drop for VideoThread {
+    fn drop(&mut self) {
+        // since channels are buffered, messages sent before the disconnect will still be properly received.
+        *self.discard_queue.write().unwrap() = true;
+    }
 }

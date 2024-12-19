@@ -463,11 +463,6 @@ impl Connection {
                             conn.on_close("connection manager", true).await;
                             break;
                         }
-                        #[cfg(target_os = "android")]
-                        ipc::Data::InputControl(v) => {
-                            conn.keyboard = v;
-                            conn.send_permission(Permission::Keyboard, v).await;
-                        }
                         ipc::Data::CmErr(e) => {
                             if e != "expected" {
                                 // cm closed before connection
@@ -493,6 +488,9 @@ impl Connection {
                                 conn.send_permission(Permission::Keyboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
+                                        super::clipboard_service::NAME,
+                                        conn.inner.clone(), conn.can_sub_clipboard_service());
+                                    s.write().unwrap().subscribe(
                                         NAME_CURSOR,
                                         conn.inner.clone(), enabled || conn.show_remote_cursor);
                                 }
@@ -502,7 +500,7 @@ impl Connection {
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
-                                        conn.inner.clone(), conn.clipboard_enabled() && conn.peer_keyboard_enabled());
+                                        conn.inner.clone(), conn.can_sub_clipboard_service());
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
@@ -793,12 +791,13 @@ impl Connection {
                         handle_mouse(&msg, id);
                     }
                     MessageInput::Key((mut msg, press)) => {
-                        // todo: press and down have similar meanings.
-                        if press && msg.mode.enum_value() == Ok(KeyboardMode::Legacy) {
+                        // Set the press state to false, use `down` only in `handle_key()`.
+                        msg.press = false;
+                        if press {
                             msg.down = true;
                         }
                         handle_key(&msg);
-                        if press && msg.mode.enum_value() == Ok(KeyboardMode::Legacy) {
+                        if press {
                             msg.down = false;
                             handle_key(&msg);
                         }
@@ -1371,10 +1370,7 @@ impl Connection {
                 if !self.follow_remote_window {
                     noperms.push(NAME_WINDOW_FOCUS);
                 }
-                if !self.clipboard_enabled()
-                    || !self.peer_keyboard_enabled()
-                    || crate::get_builtin_option(keys::OPTION_ONE_WAY_CLIPBOARD_REDIRECTION) == "Y"
-                {
+                if !self.can_sub_clipboard_service() {
                     noperms.push(super::clipboard_service::NAME);
                 }
                 if !self.audio_enabled() {
@@ -1444,6 +1440,13 @@ impl Connection {
 
     fn clipboard_enabled(&self) -> bool {
         self.clipboard && !self.disable_clipboard
+    }
+
+    #[inline]
+    fn can_sub_clipboard_service(&self) -> bool {
+        self.clipboard_enabled()
+            && self.peer_keyboard_enabled()
+            && crate::get_builtin_option(keys::OPTION_ONE_WAY_CLIPBOARD_REDIRECTION) != "Y"
     }
 
     fn audio_enabled(&self) -> bool {
@@ -1965,8 +1968,6 @@ impl Connection {
                 Some(message::Union::KeyEvent(..)) => {}
                 #[cfg(any(target_os = "android"))]
                 Some(message::Union::KeyEvent(mut me)) => {
-                    let is_press = (me.press || me.down) && !crate::is_modifier(&me);
-
                     let key = match me.mode.enum_value() {
                         Ok(KeyboardMode::Map) => {
                             Some(crate::keyboard::keycode_to_rdev_key(me.chr()))
@@ -1981,6 +1982,9 @@ impl Connection {
                         _ => None,
                     }
                     .filter(crate::keyboard::is_modifier);
+
+                    let is_press =
+                        (me.press || me.down) && !(crate::is_modifier(&me) || key.is_some());
 
                     if let Some(key) = key {
                         if is_press {
@@ -2022,14 +2026,6 @@ impl Connection {
                         }
                         // https://github.com/rustdesk/rustdesk/issues/8633
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
-                        // handle all down as press
-                        // fix unexpected repeating key on remote linux, seems also fix abnormal alt/shift, which
-                        // make sure all key are released
-                        let is_press = if cfg!(target_os = "linux") {
-                            (me.press || me.down) && !crate::is_modifier(&me)
-                        } else {
-                            me.press
-                        };
 
                         let key = match me.mode.enum_value() {
                             Ok(KeyboardMode::Map) => {
@@ -2045,6 +2041,16 @@ impl Connection {
                             _ => None,
                         }
                         .filter(crate::keyboard::is_modifier);
+
+                        // handle all down as press
+                        // fix unexpected repeating key on remote linux, seems also fix abnormal alt/shift, which
+                        // make sure all key are released
+                        // https://github.com/rustdesk/rustdesk/issues/6793
+                        let is_press = if cfg!(target_os = "linux") {
+                            (me.press || me.down) && !(crate::is_modifier(&me) || key.is_some())
+                        } else {
+                            me.press
+                        };
 
                         if let Some(key) = key {
                             if is_press {
@@ -2920,7 +2926,7 @@ impl Connection {
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
                         self.inner.clone(),
-                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                        self.can_sub_clipboard_service(),
                     );
                 }
             }
@@ -2932,7 +2938,7 @@ impl Connection {
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
                         self.inner.clone(),
-                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                        self.can_sub_clipboard_service(),
                     );
                     s.write().unwrap().subscribe(
                         NAME_CURSOR,

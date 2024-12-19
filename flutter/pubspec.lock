@@ -335,7 +335,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "519350f1f40746798299e94786197d058353bac9"
+      resolved-ref: "4f562ab49d289cfa36bfda7cff12746ec0200033"
       url: "https://github.com/rustdesk-org/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -530,15 +530,6 @@ packages:
       url: "https://github.com/rustdesk-org/flutter_gpu_texture_renderer"
     source: git
     version: "0.0.1"
-  flutter_improved_scrolling:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "62f09545149f320616467c306c8c5f71714a18e6"
-      url: "https://github.com/rustdesk-org/flutter_improved_scrolling"
-    source: git
-    version: "0.0.3"
   flutter_keyboard_visibility:
     dependency: "direct main"
     description:
@@ -1277,10 +1268,11 @@ packages:
   texture_rgba_renderer:
     dependency: "direct main"
     description:
-      name: texture_rgba_renderer
-      sha256: cb048abdd800468ca40749ca10d1db9d1e6a055d1cde6234c05191293f0c7d61
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: "42797e0f03141dc2b585f76c64a13974508058b4"
+      resolved-ref: "42797e0f03141dc2b585f76c64a13974508058b4"
+      url: "https://github.com/rustdesk-org/flutter_texture_rgba_renderer"
+    source: git
     version: "0.0.16"
   timing:
     dependency: transitive
@@ -1372,13 +1364,13 @@ packages:
     source: hosted
     version: "6.2.2"
   url_launcher_ios:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: url_launcher_ios
-      sha256: "75bb6fe3f60070407704282a2d295630cab232991eb52542b18347a8a941df03"
+      sha256: "16a513b6c12bb419304e72ea0ae2ab4fed569920d1c7cb850263fe3acc824626"
       url: "https://pub.dev"
     source: hosted
-    version: "6.2.4"
+    version: "6.3.2"
   url_launcher_linux:
     dependency: transitive
     description:

@@ -323,10 +323,10 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleClipboard() async {
-    _clipboardOk = !_clipboardOk;
+    _clipboardOk = !clipboardOk;
     bind.mainSetOption(
         key: kOptionEnableClipboard,
-        value: _clipboardOk ? defaultOptionYes : 'N');
+        value: clipboardOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 
