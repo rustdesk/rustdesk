@@ -81,6 +81,10 @@ totp-rs = { version = "5.4", default-features = false, features = ["gen_secret",
 cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit" }
 ringbuf = "0.3"
 
+[dependencies.nokhwa]
+version = "0.10"
+features = ["input-native"]
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
