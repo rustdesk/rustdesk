@@ -66,7 +66,7 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
                     ? null
                     : translate('Too short, at least 6 characters.');
               },
-            ),
+            ).workaroundFreezeLinuxMint(),
             TextFormField(
               obscureText: true,
               keyboardType: TextInputType.visiblePassword,
@@ -85,7 +85,7 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
                     ? null
                     : translate('The confirmation is not identical.');
               },
-            ),
+            ).workaroundFreezeLinuxMint(),
           ])),
       onCancel: close,
       onSubmit: (validateLength && validateSame) ? submit : null,
@@ -216,7 +216,7 @@ void showServerSettingsWithValue(
                 ),
                 validator: validator,
                 autofocus: autofocus,
-              ),
+              ).workaroundFreezeLinuxMint(),
             ),
           ],
         );
@@ -229,7 +229,7 @@ void showServerSettingsWithValue(
           errorText: errorMsg.isEmpty ? null : errorMsg,
         ),
         validator: validator,
-      );
+      ).workaroundFreezeLinuxMint();
     }
 
     return CustomAlertDialog(
