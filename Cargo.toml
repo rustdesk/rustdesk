@@ -83,7 +83,7 @@ ringbuf = "0.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
-sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
+sciter-rs = { git = "https://github.com/rustdesk-org/rust-sciter", branch = "dyn" }
 sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
@@ -149,7 +149,7 @@ reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocki
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
-rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
+rust-pulsectl = { git = "https://github.com/rustdesk-org/pulsectl" }
 async-process = "1.7"
 evdev = { git="https://github.com/rustdesk-org/evdev" }
 dbus = "0.9"
