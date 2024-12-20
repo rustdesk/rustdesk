@@ -92,5 +92,7 @@ case "$1" in
   ;;
   1)
     # for upgrade
+    rmdir /usr/lib/rustdesk || true
+    rmdir /usr/local/rustdesk || true
   ;;
 esac
