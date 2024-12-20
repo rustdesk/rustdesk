@@ -167,7 +167,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                         );
                       },
                     ),
-                  );
+                  ).workaroundFreezeLinuxMint();
                   return SelectionArea(child: chat);
                 }),
               ],
