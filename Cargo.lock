@@ -5466,7 +5466,7 @@ dependencies = [
 [[package]]
 name = "rust-pulsectl"
 version = "0.2.12"
-source = "git+https://github.com/open-trade/pulsectl#5e68f4c2b7c644fa321984688602d71e8ad0bba3"
+source = "git+https://github.com/rustdesk-org/pulsectl#aa34dde499aa912a3abc5289cc0b547bd07dd6e2"
 dependencies = [
  "libpulse-binding",
 ]
@@ -5813,7 +5813,7 @@ dependencies = [
 [[package]]
 name = "sciter-rs"
 version = "0.5.57"
-source = "git+https://github.com/open-trade/rust-sciter?branch=dyn#5322f3a755a0e6bf999fbc60d1efc35246c0f821"
+source = "git+https://github.com/rustdesk-org/rust-sciter?branch=dyn#5322f3a755a0e6bf999fbc60d1efc35246c0f821"
 dependencies = [
  "lazy_static",
  "libc",
