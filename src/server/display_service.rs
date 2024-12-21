@@ -333,7 +333,10 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
             }
         })
         .collect::<Vec<DisplayInfo>>();
-    SYNC_DISPLAYS.lock().unwrap().check_changed(displays);
+    match camera_display::Cameras::all(&displays){
+        Ok(all_displays) => SYNC_DISPLAYS.lock().unwrap().check_changed(all_displays),
+        Err(_) => SYNC_DISPLAYS.lock().unwrap().check_changed(displays),
+    }
 }
 
 pub fn is_inited_msg() -> Option<Message> {
