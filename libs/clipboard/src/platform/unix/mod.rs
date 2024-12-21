@@ -1,5 +1,5 @@
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{mpsc::Sender, Arc},
     time::Duration,
 };
@@ -74,7 +74,7 @@ trait SysClipboard: Send + Sync {
 }
 
 #[cfg(target_os = "linux")]
-fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
+fn get_sys_clipboard(ignore_path: &Path) -> Result<Box<dyn SysClipboard>, CliprdrError> {
     #[cfg(feature = "wayland")]
     {
         unimplemented!()
@@ -88,7 +88,7 @@ fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, Cli
 }
 
 #[cfg(target_os = "macos")]
-fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
+fn get_sys_clipboard(ignore_path: &Path) -> Result<Box<dyn SysClipboard>, CliprdrError> {
     use ns_clipboard::*;
     let ns_pb = NsPasteboard::new(ignore_path)?;
     Ok(Box::new(ns_pb) as Box<_>)

@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, path::PathBuf};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+};
 
 use hbb_common::log;
 use once_cell::sync::OnceCell;
@@ -26,7 +29,7 @@ pub struct X11Clipboard {
 }
 
 impl X11Clipboard {
-    pub fn new(ignore_path: &PathBuf) -> Result<Self, CliprdrError> {
+    pub fn new(ignore_path: &Path) -> Result<Self, CliprdrError> {
         let clipboard = get_clip()?;
         let text_uri_list = clipboard
             .setter

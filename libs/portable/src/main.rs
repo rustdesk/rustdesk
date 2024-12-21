@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -22,7 +22,7 @@ const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 #[cfg(windows)]
 const SET_FOREGROUND_WINDOW_ENV_KEY: &str = "SET_FOREGROUND_WINDOW";
 
-fn is_timestamp_matches(dir: &PathBuf, ts: &mut u64) -> bool {
+fn is_timestamp_matches(dir: &Path, ts: &mut u64) -> bool {
     let Ok(app_metadata) = std::str::from_utf8(APP_METADATA) else {
         return true;
     };
@@ -50,7 +50,7 @@ fn is_timestamp_matches(dir: &PathBuf, ts: &mut u64) -> bool {
     false
 }
 
-fn write_meta(dir: &PathBuf, ts: u64) {
+fn write_meta(dir: &Path, ts: u64) {
     let meta_file = dir.join(APP_METADATA_CONFIG);
     if ts != 0 {
         let content = format!("{}{}", META_LINE_PREFIX_TIMESTAMP, ts);
@@ -169,13 +169,13 @@ fn main() {
 
 #[cfg(windows)]
 mod windows {
-    use std::{fs, os::windows::process::CommandExt, path::PathBuf, process::Command};
+    use std::{fs, os::windows::process::CommandExt, path::Path, process::Command};
 
     // Used for privacy mode(magnifier impl).
     pub const RUNTIME_BROKER_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
     pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
 
-    pub(super) fn copy_runtime_broker(dir: &PathBuf) {
+    pub(super) fn copy_runtime_broker(dir: &Path) {
         let src = RUNTIME_BROKER_EXE;
         let tgt = WIN_TOPMOST_INJECTED_PROCESS_EXE;
         let target_file = dir.join(tgt);
