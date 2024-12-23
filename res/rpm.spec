@@ -1,5 +1,5 @@
 Name:       rustdesk
-Version:    1.3.5
+Version:    1.3.6
 Release:    0
 Summary:    RPM package
 License:    GPL-3.0
@@ -7,6 +7,8 @@ URL:        https://rustdesk.com
 Vendor:     rustdesk <info@rustdesk.com>
 Requires:   gtk3 libxcb libxdo libXfixes alsa-lib libva2 pam gstreamer1-plugins-base
 Recommends: libayatana-appindicator-gtk3
+
+# https://docs.fedoraproject.org/en-US/packaging-guidelines/Scriptlets/
 
 %description
 The best open-source remote desktop client software, written in Rust.
@@ -21,12 +23,12 @@ The best open-source remote desktop client software, written in Rust.
 
 %install
 mkdir -p %{buildroot}/usr/bin/
-mkdir -p %{buildroot}/usr/lib/rustdesk/
+mkdir -p %{buildroot}/usr/share/rustdesk/
 mkdir -p %{buildroot}/usr/share/rustdesk/files/
 mkdir -p %{buildroot}/usr/share/icons/hicolor/256x256/apps/
 mkdir -p %{buildroot}/usr/share/icons/hicolor/scalable/apps/
 install -m 755 $HBB/target/release/rustdesk %{buildroot}/usr/bin/rustdesk
-install $HBB/libsciter-gtk.so %{buildroot}/usr/lib/rustdesk/libsciter-gtk.so
+install $HBB/libsciter-gtk.so %{buildroot}/usr/share/rustdesk/libsciter-gtk.so
 install $HBB/res/rustdesk.service %{buildroot}/usr/share/rustdesk/files/
 install $HBB/res/128x128@2x.png %{buildroot}/usr/share/icons/hicolor/256x256/apps/rustdesk.png
 install $HBB/res/scalable.svg %{buildroot}/usr/share/icons/hicolor/scalable/apps/rustdesk.svg
@@ -35,7 +37,7 @@ install $HBB/res/rustdesk-link.desktop %{buildroot}/usr/share/rustdesk/files/
 
 %files
 /usr/bin/rustdesk
-/usr/lib/rustdesk/libsciter-gtk.so
+/usr/share/rustdesk/libsciter-gtk.so
 /usr/share/rustdesk/files/rustdesk.service
 /usr/share/icons/hicolor/256x256/apps/rustdesk.png
 /usr/share/icons/hicolor/scalable/apps/rustdesk.svg
@@ -46,7 +48,6 @@ install $HBB/res/rustdesk-link.desktop %{buildroot}/usr/share/rustdesk/files/
 %changelog
 # let's skip this for now
 
-# https://www.cnblogs.com/xingmuxin/p/8990255.html
 %pre
 # can do something for centos7
 case "$1" in
