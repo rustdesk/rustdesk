@@ -1460,15 +1460,13 @@ fn to_le(v: &mut [u16]) -> &[u8] {
     unsafe { v.align_to().1 }
 }
 
-fn get_undone_file(tmp: &PathBuf) -> ResultType<PathBuf> {
-    let mut tmp1 = tmp.clone();
-    tmp1.set_file_name(format!(
+fn get_undone_file(tmp: &Path) -> ResultType<PathBuf> {
+    Ok(tmp.with_file_name(format!(
         "{}.undone",
         tmp.file_name()
             .ok_or(anyhow!("Failed to get filename of {:?}", tmp))?
             .to_string_lossy()
-    ));
-    Ok(tmp1)
+    )))
 }
 
 fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
@@ -1933,7 +1931,7 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
     return Ok(());
 }
 
-pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
+pub fn set_path_permission(dir: &Path, permission: &str) -> ResultType<()> {
     std::process::Command::new("icacls")
         .arg(dir.as_os_str())
         .arg("/grant")
