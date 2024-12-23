@@ -26,6 +26,19 @@ import '../widgets/dialog.dart';
 
 final initText = '1' * 1024;
 
+// Workaround for Android (default input method, Microsoft SwiftKey keyboard) when using physical keyboard.
+// When connecting a physical keyboard, `KeyEvent.physicalKey.usbHidUsage` are wrong is using Microsoft SwiftKey keyboard.
+// https://github.com/flutter/flutter/issues/159384
+// https://github.com/flutter/flutter/issues/159383
+void _disableAndroidSoftKeyboard({bool? isKeyboardVisible}) {
+  if (isAndroid) {
+    if (isKeyboardVisible != true) {
+      // `enable_soft_keyboard` will be set to `true` when clicking the keyboard icon, in `openKeyboard()`.
+      gFFI.invokeMethod("enable_soft_keyboard", false);
+    }
+  }
+}
+
 class RemotePage extends StatefulWidget {
   RemotePage({Key? key, required this.id, this.password, this.isSharedPassword})
       : super(key: key);
@@ -99,6 +112,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       if (gFFI.recordingModel.start) {
         showToast(translate('Automatically record outgoing sessions'));
       }
+      _disableAndroidSoftKeyboard(
+          isKeyboardVisible: keyboardVisibilityController.isVisible);
     });
     WidgetsBinding.instance.addObserver(this);
   }
@@ -130,6 +145,19 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.
     // Only one client is considered here for now.
     gFFI.chatModel.onVoiceCallClosed("End connetion");
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      trySyncClipboard();
+    }
+  }
+
+  // For client side
+  // When swithing from other app to this app, try to sync clipboard.
+  void trySyncClipboard() {
+    gFFI.invokeMethod("try_sync_clipboard");
   }
 
   @override
@@ -576,7 +604,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       // ko/zh/ja input method: the button will trigger `onKeyEvent`
                       //                     and the event will not popup if `KeyEventResult.handled` is returned.
                       onChanged: handleSoftKeyboardInput,
-                    ),
+                    ).workaroundFreezeLinuxMint(),
             ),
           ];
           if (showCursorPaint) {
@@ -857,6 +885,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
     final pi = gFFI.ffiModel.pi;
     final isMac = pi.platform == kPeerPlatformMacOS;
+    final isWin = pi.platform == kPeerPlatformWindows;
+    final isLinux = pi.platform == kPeerPlatformLinux;
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
         setState(() => inputModel.ctrl = !inputModel.ctrl);
@@ -936,6 +966,28 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }),
       wrap('PgDn', () {
         inputModel.inputKey('VK_NEXT');
+      }),
+      // to-do: support PrtScr on Mac
+      if (isWin || isLinux)
+        wrap('PrtScr', () {
+          inputModel.inputKey('VK_SNAPSHOT');
+        }),
+      if (isWin || isLinux)
+        wrap('ScrollLock', () {
+          inputModel.inputKey('VK_SCROLL');
+        }),
+      if (isWin || isLinux)
+        wrap('Pause', () {
+          inputModel.inputKey('VK_PAUSE');
+        }),
+      if (isWin || isLinux)
+        // Maybe it's better to call it "Menu"
+        // https://en.wikipedia.org/wiki/Menu_key
+        wrap('Menu', () {
+          inputModel.inputKey('Apps');
+        }),
+      wrap('Enter', () {
+        inputModel.inputKey('VK_ENTER');
       }),
       SizedBox(width: 9999),
       wrap('', () {
@@ -1244,7 +1296,9 @@ void showOptions(
               toggles +
               [privacyModeWidget]),
     );
-  }, clickMaskDismiss: true, backDismiss: true);
+  }, clickMaskDismiss: true, backDismiss: true).then((value) {
+    _disableAndroidSoftKeyboard();
+  });
 }
 
 TTextMenu? getVirtualDisplayMenu(FFI ffi, String id) {
@@ -1263,7 +1317,9 @@ TTextMenu? getVirtualDisplayMenu(FFI ffi, String id) {
             children: children,
           ),
         );
-      }, clickMaskDismiss: true, backDismiss: true);
+      }, clickMaskDismiss: true, backDismiss: true).then((value) {
+        _disableAndroidSoftKeyboard();
+      });
     },
   );
 }
@@ -1305,7 +1361,9 @@ TTextMenu? getResolutionMenu(FFI ffi, String id) {
             children: children,
           ),
         );
-      }, clickMaskDismiss: true, backDismiss: true);
+      }, clickMaskDismiss: true, backDismiss: true).then((value) {
+        _disableAndroidSoftKeyboard();
+      });
     },
   );
 }

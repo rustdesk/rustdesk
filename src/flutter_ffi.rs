@@ -1,3 +1,5 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
 use crate::{
     client::file_trait::FileManager,
     common::{make_fd_to_json, make_vec_fd_to_json},
@@ -6,11 +8,6 @@ use crate::{
     },
     input::*,
     ui_interface::{self, *},
-};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::{
-    common::get_default_sound_input,
-    keyboard::input_source::{change_input_source, get_cur_session_input_source},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(feature = "plugin_framework")]
@@ -831,30 +828,22 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
     SyncReturn(false)
 }
 
-#[inline]
-#[cfg(target_os = "android")]
-fn enable_server_clipboard(keyboard_enabled: &str, clip_enabled: &str) {
-    use scrap::android::ffi::call_clipboard_manager_enable_service_clipboard;
-    let keyboard_enabled =
-        config::option2bool(config::keys::OPTION_ENABLE_KEYBOARD, &keyboard_enabled);
-    let clip_enabled = config::option2bool(config::keys::OPTION_ENABLE_CLIPBOARD, &clip_enabled);
-    crate::ui_cm_interface::switch_permission_all("clipboard".to_owned(), clip_enabled);
-    let _ = call_clipboard_manager_enable_service_clipboard(keyboard_enabled && clip_enabled);
-}
-
 pub fn main_set_option(key: String, value: String) {
     #[cfg(target_os = "android")]
     if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
-        crate::ui_cm_interface::notify_input_control(config::option2bool(
-            config::keys::OPTION_ENABLE_KEYBOARD,
-            &value,
-        ));
-        enable_server_clipboard(&value, &get_option(config::keys::OPTION_ENABLE_CLIPBOARD));
+        crate::ui_cm_interface::switch_permission_all(
+            "keyboard".to_owned(),
+            config::option2bool(&key, &value),
+        );
     }
     #[cfg(target_os = "android")]
     if key.eq(config::keys::OPTION_ENABLE_CLIPBOARD) {
-        enable_server_clipboard(&get_option(config::keys::OPTION_ENABLE_KEYBOARD), &value);
+        crate::ui_cm_interface::switch_permission_all(
+            "clipboard".to_owned(),
+            config::option2bool(&key, &value),
+        );
     }
+
     if key.eq("custom-rendezvous-server") {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
@@ -1417,7 +1406,8 @@ pub fn main_get_last_remote_id() -> String {
 }
 
 pub fn main_get_software_update_url() {
-    if get_local_option("enable-check-update".to_string()) != "N" {
+    let opt = get_local_option(config::keys::OPTION_ENABLE_CHECK_UPDATE.to_string());
+    if config::option2bool(config::keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
         crate::common::check_software_update();
     }
 }
@@ -2347,7 +2337,7 @@ pub mod server_side {
     use jni::{
         errors::{Error as JniError, Result as JniResult},
         objects::{JClass, JObject, JString},
-        sys::jstring,
+        sys::{jboolean, jstring},
         JNIEnv,
     };
 
@@ -2419,5 +2409,13 @@ pub mod server_side {
             "".into()
         };
         return env.new_string(res).unwrap_or_default().into_raw();
+    }
+
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_ffi_FFI_isServiceClipboardEnabled(
+        env: JNIEnv,
+        _class: JClass,
+    ) -> jboolean {
+        jboolean::from(crate::server::is_clipboard_service_ok())
     }
 }

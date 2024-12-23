@@ -1257,7 +1257,7 @@ void _rdpDialog(String id) async {
                         hintText: '3389'),
                     controller: portController,
                     autofocus: true,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ).marginOnly(bottom: isDesktop ? 8 : 0),
@@ -1277,7 +1277,7 @@ void _rdpDialog(String id) async {
                             labelText:
                                 isDesktop ? null : translate('Username')),
                         controller: userController,
-                      ),
+                      ).workaroundFreezeLinuxMint(),
                     ),
                   ],
                 ).marginOnly(bottom: stateGlobal.isPortrait.isFalse ? 8 : 0)),
@@ -1305,7 +1305,7 @@ void _rdpDialog(String id) async {
                                         ? Icons.visibility_off
                                         : Icons.visibility))),
                             controller: passwordController,
-                          )),
+                          ).workaroundFreezeLinuxMint()),
                     ),
                   ],
                 ))

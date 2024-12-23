@@ -179,6 +179,9 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
     }
     _svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
+    try {
+      stateGlobal.videoConnCount.value = status['video_conn_count'] as int;
+    } catch (_) {}
   }
 }
 
@@ -359,7 +362,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                         );
                       }
                       String textToFind = textEditingValue.text.toLowerCase();
-                      _autocompleteOpts =  peers
+                      _autocompleteOpts = peers
                           .where((peer) =>
                               peer.id.toLowerCase().contains(textToFind) ||
                               peer.username
@@ -421,7 +424,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                           onSubmitted: (_) {
                             onConnect();
                           },
-                        ));
+                        ).workaroundFreezeLinuxMint());
                   },
                   onSelected: (option) {
                     setState(() {

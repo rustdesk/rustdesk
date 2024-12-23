@@ -18,12 +18,15 @@ class StateGlobal {
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final svcStatus = SvcStatus.notReady.obs;
+  final RxInt videoConnCount = 0.obs;
   final RxBool isFocused = false.obs;
   // for mobile and web
   bool isInMainPage = true;
   bool isWebVisible = true;
 
   final isPortrait = false.obs;
+
+  final updateUrl = ''.obs;
 
   String _inputSource = '';
 

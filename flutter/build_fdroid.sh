@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -x
-
 #
 # Script to build F-Droid release of RustDesk
 #
@@ -22,6 +20,43 @@ set -x
 #   + prebuild: patch sources and do other stuff before the build
 #   + build: perform actual build of APK file
 #
+
+# Start of functions
+
+# Install Flutter of version `VERSION` from Github repository
+# into directory `FLUTTER_DIR` and apply patches if needed
+
+prepare_flutter() {
+	VERSION="${1}"
+	FLUTTER_DIR="${2}"
+
+	if [ ! -f "${FLUTTER_DIR}/bin/flutter" ]; then
+		git clone https://github.com/flutter/flutter "${FLUTTER_DIR}"
+	fi
+
+	pushd "${FLUTTER_DIR}"
+
+	git restore .
+	git checkout "${VERSION}"
+
+	# Patch flutter
+
+	if dpkg --compare-versions "${VERSION}" ge "3.24.4"; then
+		git apply "${ROOTDIR}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+	fi
+
+	flutter config --no-analytics
+
+	popd # ${FLUTTER_DIR}
+}
+
+# Start of script
+
+set -x
+
+# Note current working directory as root dir for patches
+
+ROOTDIR="${PWD}"
 
 # Parse command-line arguments
 
@@ -82,21 +117,6 @@ export PATH="${PATH}:${HOME}/flutter/bin:${HOME}/depot_tools"
 
 export VCPKG_ROOT="${HOME}/vcpkg"
 
-prepare_Flutter() {
-	version="${1}"
-
-	pushd "${HOME}"
-	if [ ! -f "${HOME}/flutter/bin/flutter" ]; then
-		git clone https://github.com/flutter/flutter
-	fi
-	pushd flutter
-	git restore .
-	git checkout "${version}"
-	flutter config --no-analytics
-	popd # flutter
-	popd # ${HOME}
-}
-
 # Now act depending on build step
 
 # NOTE: F-Droid maintainers require explicit declaration of dependencies
@@ -116,14 +136,19 @@ prebuild)
 		.env.CARGO_NDK_VERSION \
 		.github/workflows/flutter-build.yml)"
 
+	# Flutter used to compile main Rustdesk library
+
 	FLUTTER_VERSION="$(yq -r \
 		.env.ANDROID_FLUTTER_VERSION \
 		.github/workflows/flutter-build.yml)"
+
 	if [ -z "${FLUTTER_VERSION}" ]; then
 		FLUTTER_VERSION="$(yq -r \
 			.env.FLUTTER_VERSION \
 			.github/workflows/flutter-build.yml)"
 	fi
+
+	# Flutter used to compile Flutter<->Rust bridge files
 
 	FLUTTER_BRIDGE_VERSION="$(yq -r \
 		.env.FLUTTER_VERSION \
@@ -207,14 +232,16 @@ prebuild)
 
 	cargo install \
 		cargo-ndk \
-		--version "${CARGO_NDK_VERSION}"
+		--version "${CARGO_NDK_VERSION}" \
+		--locked
 
 	# Install rust bridge generator
 
 	cargo install cargo-expand
 	cargo install flutter_rust_bridge_codegen \
 		--version "${FLUTTER_RUST_BRIDGE_VERSION}" \
-		--features "uuid"
+		--features "uuid" \
+		--locked
 
 	# Populate native vcpkg dependencies
 
@@ -277,46 +304,66 @@ prebuild)
 
 	git apply res/fdroid/patches/*.patch
 
-	# Backup .gclient file, for later restore
+	# If Flutter version used to generate bridge files differs from Flutter
+	# version used to compile Rustdesk library, generate bridge using the
+	# `FLUTTER_BRIDGE_VERSION` an restore the pubspec later
 
-	cp flutter-sdk/.gclient flutter-sdk/.gclient.bak
+	if [ "${FLUTTER_VERSION}" != "${FLUTTER_BRIDGE_VERSION}" ]; then
+		# Install Flutter bridge version
 
-	# For FLUTTER_BRIDGE_VERSION
-	sed \
-		-i \
-		-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
-		flutter/pubspec.yaml
+		prepare_flutter "${FLUTTER_BRIDGE_VERSION}" "${HOME}/flutter"
 
-	# Install Flutter bridge version
-	prepare_Flutter "${FLUTTER_BRIDGE_VERSION}"
-	cp flutter-sdk/.gclient.bak flutter-sdk/.gclient
-	sed -i "s/FLUTTER_VERSION_PLACEHOLDER/${FLUTTER_BRIDGE_VERSION}/" flutter-sdk/.gclient
+		# Save changes
 
-	# Download Flutter dependencies
-	pushd flutter
-	flutter clean && flutter packages pub get
-	popd # flutter
+		git add .
 
-	# Generate FFI bindings
-	flutter_rust_bridge_codegen \
-		--rust-input ./src/flutter_ffi.rs \
-		--dart-output ./flutter/lib/generated_bridge.dart
+		# Edit pubspec to make flutter bridge version work
 
-	git restore flutter/pubspec.*
+		sed \
+			-i \
+			-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
+			flutter/pubspec.yaml
 
-	# Install Flutter
-	prepare_Flutter "${FLUTTER_VERSION}"
-	cp flutter-sdk/.gclient.bak flutter-sdk/.gclient
-	sed -i "s/FLUTTER_VERSION_PLACEHOLDER/${FLUTTER_VERSION}/" flutter-sdk/.gclient
+		# Download Flutter dependencies
+
+		pushd flutter
+
+		flutter clean
+		flutter packages pub get
+
+		popd # flutter
+
+		# Generate FFI bindings
+
+		flutter_rust_bridge_codegen \
+			--rust-input ./src/flutter_ffi.rs \
+			--dart-output ./flutter/lib/generated_bridge.dart
+
+		# Add bridge files to save-list
+
+		git add -f ./flutter/lib/generated_bridge.* ./src/bridge_generated.*
+
+		# Restore everything
+
+		git checkout '*'
+		git clean -dffx
+		git reset
+	fi
+
+	# Install Flutter version for RustDesk library build
+
+	prepare_flutter "${FLUTTER_VERSION}" "${HOME}/flutter"
 
 	# gms is not in thoes files now, but we still keep the following line for future reference(maybe).
+
 	sed \
 		-i \
 		-e '/gms/d' \
 		flutter/android/build.gradle \
 		flutter/android/app/build.gradle
 
-	# `firebase_analytics`` is not in thoes files now, but we still keep the following lines.
+	# `firebase_analytics` is not in these files now, but we still keep the following lines.
+
 	sed \
 		-i \
 		-e '/firebase_analytics/d' \
@@ -343,9 +390,12 @@ build)
 	# '.github/workflows/flutter-build.yml'
 	#
 
+	# Flutter used to compile main Rustdesk library
+
 	FLUTTER_VERSION="$(yq -r \
 		.env.ANDROID_FLUTTER_VERSION \
 		.github/workflows/flutter-build.yml)"
+
 	if [ -z "${FLUTTER_VERSION}" ]; then
 		FLUTTER_VERSION="$(yq -r \
 			.env.FLUTTER_VERSION \
@@ -381,7 +431,8 @@ build)
 
 	pushd flutter
 
-	flutter clean && flutter packages pub get
+	flutter clean
+	flutter packages pub get
 
 	popd # flutter
 

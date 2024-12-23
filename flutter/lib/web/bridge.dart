@@ -1801,6 +1801,26 @@ class RustdeskImpl {
     throw UnimplementedError("mainMaxEncryptLen");
   }
 
+  bool mainAudioSupportLoopback({dynamic hint}) {
+    return false;
+  }
+
+  Future<String> sessionReadLocalEmptyDirsRecursiveSync(
+      {required UuidValue sessionId,
+      required String path,
+      required bool includeHidden,
+      dynamic hint}) {
+    throw UnimplementedError("sessionReadLocalEmptyDirsRecursiveSync");
+  }
+
+  Future<void> sessionReadRemoteEmptyDirsRecursiveSync(
+      {required UuidValue sessionId,
+      required String path,
+      required bool includeHidden,
+      dynamic hint}) {
+    throw UnimplementedError("sessionReadRemoteEmptyDirsRecursiveSync");
+  }
+
   Future<void> sessionRenameFile(
       {required UuidValue sessionId,
       required int actId,

@@ -9,7 +9,7 @@ use clipboard_master::{CallbackResult, ClipboardHandler};
 #[cfg(target_os = "android")]
 use hbb_common::config::{keys, option2bool};
 #[cfg(target_os = "android")]
-use scrap::android::ffi::call_clipboard_manager_enable_service_clipboard;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     io,
     sync::mpsc::{channel, RecvTimeoutError, Sender},
@@ -17,6 +17,9 @@ use std::{
 };
 #[cfg(windows)]
 use tokio::runtime::Runtime;
+
+#[cfg(target_os = "android")]
+static CLIPBOARD_SERVICE_OK: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(target_os = "android"))]
 struct Handler {
@@ -27,6 +30,11 @@ struct Handler {
     stream: Option<ipc::ConnectionTmpl<parity_tokio_ipc::ConnectionClient>>,
     #[cfg(target_os = "windows")]
     rt: Option<Runtime>,
+}
+
+#[cfg(target_os = "android")]
+pub fn is_clipboard_service_ok() -> bool {
+    CLIPBOARD_SERVICE_OK.load(Ordering::SeqCst)
 }
 
 pub fn new() -> GenericService {
@@ -225,23 +233,14 @@ impl Handler {
 }
 
 #[cfg(target_os = "android")]
-fn is_clipboard_enabled() -> bool {
-    let keyboard_enabled = crate::ui_interface::get_option(keys::OPTION_ENABLE_KEYBOARD);
-    let keyboard_enabled = option2bool(keys::OPTION_ENABLE_KEYBOARD, &keyboard_enabled);
-    let clip_enabled = crate::ui_interface::get_option(keys::OPTION_ENABLE_CLIPBOARD);
-    let clip_enabled = option2bool(keys::OPTION_ENABLE_CLIPBOARD, &clip_enabled);
-    keyboard_enabled && clip_enabled
-}
-
-#[cfg(target_os = "android")]
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
-    let _res = call_clipboard_manager_enable_service_clipboard(is_clipboard_enabled());
+    CLIPBOARD_SERVICE_OK.store(sp.ok(), Ordering::SeqCst);
     while sp.ok() {
         if let Some(msg) = crate::clipboard::get_clipboards_msg(false) {
             sp.send(msg);
         }
         std::thread::sleep(Duration::from_millis(INTERVAL));
     }
-    let _res = call_clipboard_manager_enable_service_clipboard(false);
+    CLIPBOARD_SERVICE_OK.store(false, Ordering::SeqCst);
     Ok(())
 }
