@@ -100,7 +100,7 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &["rustdesk.th.kex-express.com"];
+pub const RENDEZVOUS_SERVERS: &[&str] = &["kexrd.th.kex-express.com"];
 pub const PUBLIC_RS_PUB_KEY: &str = "l43c4A4GlZqSWGMmHxWwNs50G1cAbW08JT4rbYcuulo=";
 
 pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
