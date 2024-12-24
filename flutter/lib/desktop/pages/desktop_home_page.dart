@@ -237,7 +237,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         style: TextStyle(
                           fontSize: 22,
                         ),
-                      ),
+                      ).workaroundFreezeLinuxMint(),
                     ),
                   )
                 ],
@@ -333,7 +333,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   EdgeInsets.only(top: 14, bottom: 10),
                             ),
                             style: TextStyle(fontSize: 15),
-                          ),
+                          ).workaroundFreezeLinuxMint(),
                         ),
                       ),
                       if (showOneTime)
@@ -430,7 +430,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         bind.mainUriPrefixSync().contains('rustdesk')) {
       return buildInstallCard(
           "Status",
-          "${translate("newer-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
+          "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
           "Click to download", () async {
         final Uri url = Uri.parse('https://rustdesk.com/download');
         await launchUrl(url);
@@ -940,7 +940,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                       });
                     },
                     maxLength: maxLength,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ),
@@ -967,7 +967,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                       });
                     },
                     maxLength: maxLength,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ),

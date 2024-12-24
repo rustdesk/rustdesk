@@ -1,5 +1,5 @@
 pkgname=rustdesk
-pkgver=1.3.5
+pkgver=1.3.6
 pkgrel=0
 epoch=
 pkgdesc=""
@@ -23,10 +23,10 @@ md5sums=() #generate with 'makepkg -g'
 
 package() {
   if [[ ${FLUTTER} ]]; then
-	  mkdir -p "${pkgdir}/usr/lib/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "${pkgdir}/usr/lib/rustdesk"
+	  mkdir -p "${pkgdir}/usr/share/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "${pkgdir}/usr/share/rustdesk"
   fi
   mkdir -p "${pkgdir}/usr/bin"
-  pushd ${pkgdir} && ln -s /usr/lib/rustdesk/rustdesk usr/bin/rustdesk && popd
+  pushd ${pkgdir} && ln -s /usr/share/rustdesk/rustdesk usr/bin/rustdesk && popd
   install -Dm 644 $HBB/res/rustdesk.service -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/res/rustdesk.desktop -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/res/rustdesk-link.desktop -t "${pkgdir}/usr/share/rustdesk/files"

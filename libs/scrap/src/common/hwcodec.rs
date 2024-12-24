@@ -692,8 +692,8 @@ pub fn check_available_hwcodec() -> String {
     #[cfg(not(feature = "vram"))]
     let vram_string = "".to_owned();
     let c = HwCodecConfig {
-        ram_encode: Encoder::available_encoders(ctx, Some(vram_string.clone())),
-        ram_decode: Decoder::available_decoders(Some(vram_string)),
+        ram_encode: Encoder::available_encoders(ctx, Some(vram_string)),
+        ram_decode: Decoder::available_decoders(),
         #[cfg(feature = "vram")]
         vram_encode: vram.0,
         #[cfg(feature = "vram")]
