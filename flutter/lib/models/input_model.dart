@@ -177,7 +177,7 @@ class PointerEventToRust {
   }
 }
 
-class ToReleaseKeys {
+class ToReleaseRawKeys {
   RawKeyEvent? lastLShiftKeyEvent;
   RawKeyEvent? lastRShiftKeyEvent;
   RawKeyEvent? lastLCtrlKeyEvent;
@@ -282,6 +282,48 @@ class ToReleaseKeys {
   }
 }
 
+class ToReleaseKeys {
+  KeyEvent? lastLShiftKeyEvent;
+  KeyEvent? lastRShiftKeyEvent;
+  KeyEvent? lastLCtrlKeyEvent;
+  KeyEvent? lastRCtrlKeyEvent;
+  KeyEvent? lastLAltKeyEvent;
+  KeyEvent? lastRAltKeyEvent;
+  KeyEvent? lastLCommandKeyEvent;
+  KeyEvent? lastRCommandKeyEvent;
+  KeyEvent? lastSuperKeyEvent;
+
+  reset() {
+    lastLShiftKeyEvent = null;
+    lastRShiftKeyEvent = null;
+    lastLCtrlKeyEvent = null;
+    lastRCtrlKeyEvent = null;
+    lastLAltKeyEvent = null;
+    lastRAltKeyEvent = null;
+    lastLCommandKeyEvent = null;
+    lastRCommandKeyEvent = null;
+    lastSuperKeyEvent = null;
+  }
+
+  release(KeyEventResult Function(KeyEvent e) handleKeyEvent) {
+    for (final key in [
+      lastLShiftKeyEvent,
+      lastRShiftKeyEvent,
+      lastLCtrlKeyEvent,
+      lastRCtrlKeyEvent,
+      lastLAltKeyEvent,
+      lastRAltKeyEvent,
+      lastLCommandKeyEvent,
+      lastRCommandKeyEvent,
+      lastSuperKeyEvent,
+    ]) {
+      if (key != null) {
+        handleKeyEvent(key);
+      }
+    }
+  }
+}
+
 class InputModel {
   final WeakReference<FFI> parent;
   String keyboardMode = '';
@@ -292,6 +334,7 @@ class InputModel {
   var alt = false;
   var command = false;
 
+  final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
 
   // trackpad
@@ -339,10 +382,99 @@ class InputModel {
     }
   }
 
+  void handleKeyDownEventModifiers(KeyEvent e) {
+    KeyUpEvent upEvent(e) => KeyUpEvent(
+          physicalKey: e.physicalKey,
+          logicalKey: e.logicalKey,
+          timeStamp: e.timeStamp,
+        );
+    if (e.logicalKey == LogicalKeyboardKey.altLeft) {
+      if (!alt) {
+        alt = true;
+      }
+      toReleaseKeys.lastLAltKeyEvent = upEvent(e);
+    } else if (e.logicalKey == LogicalKeyboardKey.altRight) {
+      if (!alt) {
+        alt = true;
+      }
+      toReleaseKeys.lastLAltKeyEvent = upEvent(e);
+    } else if (e.logicalKey == LogicalKeyboardKey.controlLeft) {
+      if (!ctrl) {
+        ctrl = true;
+      }
+      toReleaseKeys.lastLCtrlKeyEvent = upEvent(e);
+    } else if (e.logicalKey == LogicalKeyboardKey.controlRight) {
+      if (!ctrl) {
+        ctrl = true;
+      }
+      toReleaseKeys.lastRCtrlKeyEvent = upEvent(e);
+    } else if (e.logicalKey == LogicalKeyboardKey.shiftLeft) {
+      if (!shift) {
+        shift = true;
+      }
+      toReleaseKeys.lastLShiftKeyEvent = upEvent(e);
+    } else if (e.logicalKey == LogicalKeyboardKey.shiftRight) {
+      if (!shift) {
+        shift = true;
+      }
+      toReleaseKeys.lastRShiftKeyEvent = upEvent(e);
+    } else if (e.logicalKey == LogicalKeyboardKey.metaLeft) {
+      if (!command) {
+        command = true;
+      }
+      toReleaseKeys.lastLCommandKeyEvent = upEvent(e);
+    } else if (e.logicalKey == LogicalKeyboardKey.metaRight) {
+      if (!command) {
+        command = true;
+      }
+      toReleaseKeys.lastRCommandKeyEvent = upEvent(e);
+    } else if (e.logicalKey == LogicalKeyboardKey.superKey) {
+      if (!command) {
+        command = true;
+      }
+      toReleaseKeys.lastSuperKeyEvent = upEvent(e);
+    }
+  }
+
+  void handleKeyUpEventModifiers(KeyEvent e) {
+    if (e.logicalKey == LogicalKeyboardKey.altLeft) {
+      alt = false;
+      toReleaseKeys.lastLAltKeyEvent = null;
+    } else if (e.logicalKey == LogicalKeyboardKey.altRight) {
+      alt = false;
+      toReleaseKeys.lastRAltKeyEvent = null;
+    } else if (e.logicalKey == LogicalKeyboardKey.controlLeft) {
+      ctrl = false;
+      toReleaseKeys.lastLCtrlKeyEvent = null;
+    } else if (e.logicalKey == LogicalKeyboardKey.controlRight) {
+      ctrl = false;
+      toReleaseKeys.lastRCtrlKeyEvent = null;
+    } else if (e.logicalKey == LogicalKeyboardKey.shiftLeft) {
+      shift = false;
+      toReleaseKeys.lastLShiftKeyEvent = null;
+    } else if (e.logicalKey == LogicalKeyboardKey.shiftRight) {
+      shift = false;
+      toReleaseKeys.lastRShiftKeyEvent = null;
+    } else if (e.logicalKey == LogicalKeyboardKey.metaLeft) {
+      command = false;
+      toReleaseKeys.lastLCommandKeyEvent = null;
+    } else if (e.logicalKey == LogicalKeyboardKey.metaRight) {
+      command = false;
+      toReleaseKeys.lastRCommandKeyEvent = null;
+    } else if (e.logicalKey == LogicalKeyboardKey.superKey) {
+      command = false;
+      toReleaseKeys.lastSuperKeyEvent = null;
+    }
+  }
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
-    if ((isDesktop || isWebDesktop) && !isInputSourceFlutter) {
-      return KeyEventResult.handled;
+    if (!isInputSourceFlutter) {
+      if (isDesktop) {
+        return KeyEventResult.handled;
+      } else if (isWeb) {
+        return KeyEventResult.ignored;
+      }
     }
 
     final key = e.logicalKey;
@@ -358,7 +490,7 @@ class InputModel {
           command = true;
         }
       }
-      toReleaseKeys.updateKeyDown(key, e);
+      toReleaseRawKeys.updateKeyDown(key, e);
     }
     if (e is RawKeyUpEvent) {
       if (key == LogicalKeyboardKey.altLeft ||
@@ -376,12 +508,82 @@ class InputModel {
         command = false;
       }
 
-      toReleaseKeys.updateKeyUp(key, e);
+      toReleaseRawKeys.updateKeyUp(key, e);
     }
 
     // * Currently mobile does not enable map mode
-    if ((isDesktop || isWebDesktop) && keyboardMode == 'map') {
-      mapKeyboardMode(e);
+    if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
+      mapKeyboardModeRaw(e);
+    } else {
+      legacyKeyboardModeRaw(e);
+    }
+
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult handleKeyEvent(KeyEvent e) {
+    if (isViewOnly) return KeyEventResult.handled;
+    if (!isInputSourceFlutter) {
+      if (isDesktop) {
+        return KeyEventResult.handled;
+      } else if (isWeb) {
+        return KeyEventResult.ignored;
+      }
+    }
+    if (isWindows || isLinux) {
+      // Ignore meta keys. Because flutter window will loose focus if meta key is pressed.
+      if (e.physicalKey == PhysicalKeyboardKey.metaLeft ||
+          e.physicalKey == PhysicalKeyboardKey.metaRight) {
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (e is KeyUpEvent) {
+      handleKeyUpEventModifiers(e);
+    } else if (e is KeyDownEvent) {
+      handleKeyDownEventModifiers(e);
+    }
+
+    bool isMobileAndMapMode = false;
+    if (isMobile) {
+      // Do not use map mode if mobile -> Android. Android does not support map mode for now.
+      // Because simulating the physical key events(uhid) which requires root permission is not supported.
+      if (peerPlatform != kPeerPlatformAndroid) {
+        if (isIOS) {
+          isMobileAndMapMode = true;
+        } else {
+          // The physicalKey.usbHidUsage may be not correct for soft keyboard on Android.
+          // iOS does not have this issue.
+          // 1. Open the soft keyboard on Android
+          // 2. Switch to input method like zh/ko/ja
+          // 3. Click Backspace and Enter on the soft keyboard or physical keyboard
+          // 4. The physicalKey.usbHidUsage is not correct.
+          // PhysicalKeyboardKey#8ac83(usbHidUsage: "0x1100000042", debugName: "Key with ID 0x1100000042")
+          // LogicalKeyboardKey#2604c(keyId: "0x10000000d", keyLabel: "Enter", debugName: "Enter")
+          //
+          // The correct PhysicalKeyboardKey should be
+          // PhysicalKeyboardKey#e14a9(usbHidUsage: "0x00070028", debugName: "Enter")
+          // https://github.com/flutter/flutter/issues/157771
+          // We cannot use the debugName to determine the key is correct or not, because it's null in release mode.
+          // The normal `usbHidUsage` for keyboard shoud be between [0x00000010, 0x000c029f]
+          // https://github.com/flutter/flutter/blob/c051b69e2a2224300e20d93dbd15f4b91e8844d1/packages/flutter/lib/src/services/keyboard_key.g.dart#L5332 - 5600
+          final isNormalHsbHidUsage = (e.physicalKey.usbHidUsage >> 20) == 0;
+          isMobileAndMapMode = isNormalHsbHidUsage &&
+              // No need to check `!['Backspace', 'Enter'].contains(e.logicalKey.keyLabel)`
+              // But we still add it for more reliability.
+              !['Backspace', 'Enter'].contains(e.logicalKey.keyLabel);
+        }
+      }
+    }
+    final isDesktopAndMapMode =
+        isDesktop || (isWebDesktop && keyboardMode == kKeyMapMode);
+    if (isMobileAndMapMode || isDesktopAndMapMode) {
+      // FIXME: e.character is wrong for dead keys, eg: ^ in de
+      newKeyboardMode(
+          e.character ?? '',
+          e.physicalKey.usbHidUsage & 0xFFFF,
+          // Show repeat event be converted to "release+press" events?
+          e is KeyDownEvent || e is KeyRepeatEvent);
     } else {
       legacyKeyboardMode(e);
     }
@@ -389,7 +591,33 @@ class InputModel {
     return KeyEventResult.handled;
   }
 
-  void mapKeyboardMode(RawKeyEvent e) {
+  /// Send Key Event
+  void newKeyboardMode(String character, int usbHid, bool down) {
+    const capslock = 1;
+    const numlock = 2;
+    const scrolllock = 3;
+    int lockModes = 0;
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.capsLock)) {
+      lockModes |= (1 << capslock);
+    }
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.numLock)) {
+      lockModes |= (1 << numlock);
+    }
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.scrollLock)) {
+      lockModes |= (1 << scrolllock);
+    }
+    bind.sessionHandleFlutterKeyEvent(
+        sessionId: sessionId,
+        character: character,
+        usbHid: usbHid,
+        lockModes: lockModes,
+        downOrUp: down);
+  }
+
+  void mapKeyboardModeRaw(RawKeyEvent e) {
     int positionCode = -1;
     int platformCode = -1;
     bool down;
@@ -441,7 +669,7 @@ class InputModel {
         .contains(KeyboardLockMode.scrollLock)) {
       lockModes |= (1 << scrolllock);
     }
-    bind.sessionHandleFlutterKeyEvent(
+    bind.sessionHandleFlutterRawKeyEvent(
         sessionId: sessionId,
         name: name,
         platformCode: platformCode,
@@ -450,7 +678,7 @@ class InputModel {
         downOrUp: down);
   }
 
-  void legacyKeyboardMode(RawKeyEvent e) {
+  void legacyKeyboardModeRaw(RawKeyEvent e) {
     if (e is RawKeyDownEvent) {
       if (e.repeat) {
         sendRawKey(e, press: true);
@@ -464,6 +692,24 @@ class InputModel {
   }
 
   void sendRawKey(RawKeyEvent e, {bool? down, bool? press}) {
+    // for maximum compatibility
+    final label = physicalKeyMap[e.physicalKey.usbHidUsage] ??
+        logicalKeyMap[e.logicalKey.keyId] ??
+        e.logicalKey.keyLabel;
+    inputKey(label, down: down, press: press ?? false);
+  }
+
+  void legacyKeyboardMode(KeyEvent e) {
+    if (e is KeyDownEvent) {
+      sendKey(e, down: true);
+    } else if (e is KeyRepeatEvent) {
+      sendKey(e, press: true);
+    } else if (e is KeyUpEvent) {
+      sendKey(e);
+    }
+  }
+
+  void sendKey(KeyEvent e, {bool? down, bool? press}) {
     // for maximum compatibility
     final label = physicalKeyMap[e.physicalKey.usbHidUsage] ??
         logicalKeyMap[e.logicalKey.keyId] ??
@@ -522,22 +768,22 @@ class InputModel {
   }
 
   /// Send a mouse tap event(down and up).
-  void tap(MouseButtons button) {
-    sendMouse('down', button);
-    sendMouse('up', button);
+  Future<void> tap(MouseButtons button) async {
+    await sendMouse('down', button);
+    await sendMouse('up', button);
   }
 
-  void tapDown(MouseButtons button) {
-    sendMouse('down', button);
+  Future<void> tapDown(MouseButtons button) async {
+    await sendMouse('down', button);
   }
 
-  void tapUp(MouseButtons button) {
-    sendMouse('up', button);
+  Future<void> tapUp(MouseButtons button) async {
+    await sendMouse('up', button);
   }
 
   /// Send scroll event with scroll distance [y].
-  void scroll(int y) {
-    bind.sessionSendMouse(
+  Future<void> scroll(int y) async {
+    await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
@@ -558,15 +804,16 @@ class InputModel {
   }
 
   /// Send mouse press event.
-  void sendMouse(String type, MouseButtons button) {
+  Future<void> sendMouse(String type, MouseButtons button) async {
     if (!keyboardPerm) return;
-    bind.sessionSendMouse(
+    await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
   void enterOrLeave(bool enter) {
-    toReleaseKeys.release(handleRawKeyEvent);
+    toReleaseKeys.release(handleKeyEvent);
+    toReleaseRawKeys.release(handleRawKeyEvent);
     _pointerMovedAfterEnter = false;
 
     // Fix status
@@ -577,14 +824,17 @@ class InputModel {
     if (!isInputSourceFlutter) {
       bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
     }
+    if (!isWeb && enter) {
+      bind.setCurSessionId(sessionId: sessionId);
+    }
   }
 
   /// Send mouse movement event with distance in [x] and [y].
-  void moveMouse(double x, double y) {
+  Future<void> moveMouse(double x, double y) async {
     if (!keyboardPerm) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
-    bind.sessionSendMouse(
+    await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
   }
@@ -606,7 +856,7 @@ class InputModel {
     _stopFling = true;
     if (isViewOnly) return;
     if (peerPlatform == kPeerPlatformAndroid) {
-      handlePointerEvent('touch', 'pan_start', e.position);
+      handlePointerEvent('touch', kMouseEventTypePanStart, e.position);
     }
   }
 
@@ -649,8 +899,8 @@ class InputModel {
     }
     if (x != 0 || y != 0) {
       if (peerPlatform == kPeerPlatformAndroid) {
-        handlePointerEvent(
-            'touch', 'pan_update', Offset(x.toDouble(), y.toDouble()));
+        handlePointerEvent('touch', kMouseEventTypePanUpdate,
+            Offset(x.toDouble(), y.toDouble()));
       } else {
         bind.sessionSendMouse(
             sessionId: sessionId,
@@ -712,7 +962,7 @@ class InputModel {
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
     if (peerPlatform == kPeerPlatformAndroid) {
-      handlePointerEvent('touch', 'pan_end', e.position);
+      handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
       return;
     }
 
@@ -830,7 +1080,7 @@ class InputModel {
         onExit: true,
       );
 
-  int trySetNearestRange(int v, int min, int max, int n) {
+  static double tryGetNearestRange(double v, double min, double max, double n) {
     if (v < min && v >= min - n) {
       v = min;
     }
@@ -870,13 +1120,13 @@ class InputModel {
     // to-do: handle mouse events
 
     late final dynamic evtValue;
-    if (type == 'pan_update') {
+    if (type == kMouseEventTypePanUpdate) {
       evtValue = {
         'x': x.toInt(),
         'y': y.toInt(),
       };
     } else {
-      final isMoveTypes = ['pan_start', 'pan_end'];
+      final isMoveTypes = [kMouseEventTypePanStart, kMouseEventTypePanEnd];
       final pos = handlePointerDevicePos(
         kPointerEventKindTouch,
         x,
@@ -888,8 +1138,8 @@ class InputModel {
         return;
       }
       evtValue = {
-        'x': pos.x,
-        'y': pos.y,
+        'x': pos.x.toInt(),
+        'y': pos.y.toInt(),
       };
     }
 
@@ -931,14 +1181,14 @@ class InputModel {
       return;
     }
 
-    var type = '';
+    var type = kMouseEventTypeDefault;
     var isMove = false;
     switch (evt['type']) {
       case _kMouseEventDown:
-        type = 'down';
+        type = kMouseEventTypeDown;
         break;
       case _kMouseEventUp:
-        type = 'up';
+        type = kMouseEventTypeUp;
         break;
       case _kMouseEventMove:
         _pointerMovedAfterEnter = true;
@@ -949,7 +1199,7 @@ class InputModel {
     }
     evt['type'] = type;
 
-    if (type == 'down' && !_pointerMovedAfterEnter) {
+    if (type == kMouseEventTypeDown && !_pointerMovedAfterEnter) {
       // Move mouse to the position of the down event first.
       lastMousePos = ui.Offset(x, y);
       refreshMousePos();
@@ -971,8 +1221,8 @@ class InputModel {
       evt['x'] = '0';
       evt['y'] = '0';
     } else {
-      evt['x'] = '${pos.x}';
-      evt['y'] = '${pos.y}';
+      evt['x'] = '${pos.x.toInt()}';
+      evt['y'] = '${pos.y.toInt()}';
     }
 
     Map<int, String> mapButtons = {
@@ -1112,32 +1362,55 @@ class InputModel {
       y = pos.dy;
     }
 
-    var evtX = 0;
-    var evtY = 0;
-    try {
-      evtX = x.round();
-      evtY = y.round();
-    } catch (e) {
-      debugPrintStack(label: 'canvas.scale value ${canvas.scale}, $e');
-      return null;
-    }
+    return InputModel.getPointInRemoteRect(
+        true, peerPlatform, kind, evtType, x, y, rect,
+        buttons: buttons);
+  }
 
-    int minX = rect.left.toInt();
+  static Point<double>? getPointInRemoteRect(
+      bool isLocalDesktop,
+      String? peerPlatform,
+      String kind,
+      String evtType,
+      double evtX,
+      double evtY,
+      Rect rect,
+      {int buttons = kPrimaryMouseButton}) {
+    double minX = rect.left;
     // https://github.com/rustdesk/rustdesk/issues/6678
     // For Windows, [0,maxX], [0,maxY] should be set to enable window snapping.
-    int maxX = (rect.left + rect.width).toInt() -
+    double maxX = (rect.left + rect.width) -
         (peerPlatform == kPeerPlatformWindows ? 0 : 1);
-    int minY = rect.top.toInt();
-    int maxY = (rect.top + rect.height).toInt() -
+    double minY = rect.top;
+    double maxY = (rect.top + rect.height) -
         (peerPlatform == kPeerPlatformWindows ? 0 : 1);
-    evtX = trySetNearestRange(evtX, minX, maxX, 5);
-    evtY = trySetNearestRange(evtY, minY, maxY, 5);
-    if (kind == kPointerEventKindMouse) {
-      if (evtX < minX || evtY < minY || evtX > maxX || evtY > maxY) {
-        // If left mouse up, no early return.
-        if (!(buttons == kPrimaryMouseButton && evtType == 'up')) {
-          return null;
+    evtX = InputModel.tryGetNearestRange(evtX, minX, maxX, 5);
+    evtY = InputModel.tryGetNearestRange(evtY, minY, maxY, 5);
+    if (isLocalDesktop) {
+      if (kind == kPointerEventKindMouse) {
+        if (evtX < minX || evtY < minY || evtX > maxX || evtY > maxY) {
+          // If left mouse up, no early return.
+          if (!(buttons == kPrimaryMouseButton &&
+              evtType == kMouseEventTypeUp)) {
+            return null;
+          }
         }
+      }
+    } else {
+      bool evtXInRange = evtX >= minX && evtX <= maxX;
+      bool evtYInRange = evtY >= minY && evtY <= maxY;
+      if (!(evtXInRange || evtYInRange)) {
+        return null;
+      }
+      if (evtX < minX) {
+        evtX = minX;
+      } else if (evtX > maxX) {
+        evtX = maxX;
+      }
+      if (evtY < minY) {
+        evtY = minY;
+      } else if (evtY > maxY) {
+        evtY = maxY;
       }
     }
 
@@ -1164,15 +1437,15 @@ class InputModel {
   // Simulate a key press event.
   // `usbHidUsage` is the USB HID usage code of the key.
   Future<void> tapHidKey(int usbHidUsage) async {
-    inputRawKey(kKeyFlutterKey, usbHidUsage, 0, true);
+    newKeyboardMode(kKeyFlutterKey, usbHidUsage, true);
     await Future.delayed(Duration(milliseconds: 100));
-    inputRawKey(kKeyFlutterKey, usbHidUsage, 0, false);
+    newKeyboardMode(kKeyFlutterKey, usbHidUsage, false);
   }
 
   Future<void> onMobileVolumeUp() async =>
-      await tapHidKey(PhysicalKeyboardKey.audioVolumeUp.usbHidUsage);
+      await tapHidKey(PhysicalKeyboardKey.audioVolumeUp.usbHidUsage & 0xFFFF);
   Future<void> onMobileVolumeDown() async =>
-      await tapHidKey(PhysicalKeyboardKey.audioVolumeDown.usbHidUsage);
+      await tapHidKey(PhysicalKeyboardKey.audioVolumeDown.usbHidUsage & 0xFFFF);
   Future<void> onMobilePower() async =>
-      await tapHidKey(PhysicalKeyboardKey.power.usbHidUsage);
+      await tapHidKey(PhysicalKeyboardKey.power.usbHidUsage & 0xFFFF);
 }

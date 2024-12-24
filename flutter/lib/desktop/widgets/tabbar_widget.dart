@@ -246,7 +246,6 @@ class DesktopTab extends StatefulWidget {
   final Color? selectedTabBackgroundColor;
   final Color? unSelectedTabBackgroundColor;
   final Color? selectedBorderColor;
-  final RxBool? blockTab;
 
   final DesktopTabController controller;
 
@@ -272,7 +271,6 @@ class DesktopTab extends StatefulWidget {
     this.selectedTabBackgroundColor,
     this.unSelectedTabBackgroundColor,
     this.selectedBorderColor,
-    this.blockTab,
   }) : super(key: key);
 
   static RxString tablabelGetter(String peerId) {
@@ -311,7 +309,6 @@ class _DesktopTabState extends State<DesktopTab>
   Color? get unSelectedTabBackgroundColor =>
       widget.unSelectedTabBackgroundColor;
   Color? get selectedBorderColor => widget.selectedBorderColor;
-  RxBool? get blockTab => widget.blockTab;
   DesktopTabController get controller => widget.controller;
   RxList<String> get invisibleTabKeys => widget.invisibleTabKeys;
   Debouncer get _scrollDebounce => widget._scrollDebounce;
@@ -533,21 +530,9 @@ class _DesktopTabState extends State<DesktopTab>
     ]);
   }
 
-  Widget _buildBlock({required Widget child}) {
-    if (blockTab != null) {
-      return buildRemoteBlock(
-          child: child,
-          block: blockTab!,
-          use: canBeBlocked,
-          mask: tabType == DesktopTabType.main);
-    } else {
-      return child;
-    }
-  }
-
   List<Widget> _tabWidgets = [];
   Widget _buildPageView() {
-    final child = _buildBlock(
+    final child = Container(
         child: Obx(() => PageView(
             controller: state.value.pageController,
             physics: NeverScrollableScrollPhysics(),

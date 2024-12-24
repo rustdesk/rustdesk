@@ -344,14 +344,18 @@ pub fn is_inited_msg() -> Option<Message> {
     None
 }
 
-pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
+pub async fn update_get_sync_displays_on_login() -> ResultType<Vec<DisplayInfo>> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
             return super::wayland::get_displays().await;
         }
     }
-    check_update_displays(&try_get_displays()?);
+    #[cfg(not(windows))]
+    let displays = display_service::try_get_displays();
+    #[cfg(windows)]
+    let displays = display_service::try_get_displays_add_amyuni_headless();
+    check_update_displays(&displays?);
     Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
 }
 

@@ -124,6 +124,9 @@ class RustDeskMultiWindowManager {
     bool withScreenRect,
   ) async {
     final windowController = await DesktopMultiWindow.createWindow(msg);
+    if (isWindows) {
+      windowController.setInitBackgroundColor(Colors.black);
+    }
     final windowId = windowController.windowId;
     if (!withScreenRect) {
       windowController
@@ -198,6 +201,7 @@ class RustDeskMultiWindowManager {
     String? switchUuid,
     bool? isRDP,
     bool? isSharedPassword,
+    String? connToken,
   }) async {
     var params = {
       "type": type.index,
@@ -213,6 +217,9 @@ class RustDeskMultiWindowManager {
     }
     if (isSharedPassword != null) {
       params['isSharedPassword'] = isSharedPassword;
+    }
+    if (connToken != null) {
+      params['connToken'] = connToken;
     }
     final msg = jsonEncode(params);
 
@@ -251,8 +258,13 @@ class RustDeskMultiWindowManager {
     );
   }
 
-  Future<MultiWindowCallResult> newFileTransfer(String remoteId,
-      {String? password, bool? isSharedPassword, bool? forceRelay}) async {
+  Future<MultiWindowCallResult> newFileTransfer(
+    String remoteId, {
+    String? password,
+    bool? isSharedPassword,
+    bool? forceRelay,
+    String? connToken,
+  }) async {
     return await newSession(
       WindowType.FileTransfer,
       kWindowEventNewFileTransfer,
@@ -261,11 +273,18 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       isSharedPassword: isSharedPassword,
+      connToken: connToken,
     );
   }
 
-  Future<MultiWindowCallResult> newPortForward(String remoteId, bool isRDP,
-      {String? password, bool? isSharedPassword, bool? forceRelay}) async {
+  Future<MultiWindowCallResult> newPortForward(
+    String remoteId,
+    bool isRDP, {
+    String? password,
+    bool? isSharedPassword,
+    bool? forceRelay,
+    String? connToken,
+  }) async {
     return await newSession(
       WindowType.PortForward,
       kWindowEventNewPortForward,
@@ -275,6 +294,7 @@ class RustDeskMultiWindowManager {
       forceRelay: forceRelay,
       isRDP: isRDP,
       isSharedPassword: isSharedPassword,
+      connToken: connToken,
     );
   }
 

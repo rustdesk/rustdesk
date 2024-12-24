@@ -9,6 +9,7 @@ import 'package:flutter_hbb/models/model.dart';
 
 deleteCustomCursor(String key) =>
     custom_cursor_manager.CursorManager.instance.deleteCursor(key);
+resetSystemCursor() {}
 
 MouseCursor buildCursorOfCache(
     CursorModel cursor, double scale, CursorData? cache) {

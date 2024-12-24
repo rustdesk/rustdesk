@@ -5,7 +5,7 @@ use std::{
     task::Poll,
 };
 
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 
 use hbb_common::{
     allow_err,
@@ -84,6 +84,7 @@ lazy_static::lazy_static! {
     // Is server logic running. The server code can invoked to run by the main process if --server is not running.
     static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
     static ref IS_MAIN: bool = std::env::args().nth(1).map_or(true, |arg| !arg.starts_with("--"));
+    static ref IS_CM: bool = std::env::args().nth(1) == Some("--cm".to_owned()) || std::env::args().nth(1) == Some("--cm-no-ui".to_owned());
 }
 
 pub struct SimpleCallOnReturn {
@@ -135,6 +136,11 @@ pub fn is_server() -> bool {
 #[inline]
 pub fn is_main() -> bool {
     *IS_MAIN
+}
+
+#[inline]
+pub fn is_cm() -> bool {
+    *IS_CM
 }
 
 // Is server logic running.
@@ -822,6 +828,15 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     let response_url = latest_release_response.url().to_string();
 
     if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
+        #[cfg(feature = "flutter")]
+        {
+            let mut m = HashMap::new();
+            m.insert("name", "check_software_update_finish");
+            m.insert("url", &response_url);
+            if let Ok(data) = serde_json::to_string(&m) {
+                let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
+            }
+        }
         *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
     }
     Ok(())
@@ -1036,6 +1051,11 @@ pub fn get_supported_keyboard_modes(version: i64, peer_platform: &str) -> Vec<Ke
 }
 
 pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
+    let fd_json = _make_fd_to_json(id, path, entries);
+    serde_json::to_string(&fd_json).unwrap_or("".into())
+}
+
+pub fn _make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Map<String, Value> {
     use serde_json::json;
     let mut fd_json = serde_json::Map::new();
     fd_json.insert("id".into(), json!(id));
@@ -1051,7 +1071,33 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
         entries_out.push(entry_map);
     }
     fd_json.insert("entries".into(), json!(entries_out));
-    serde_json::to_string(&fd_json).unwrap_or("".into())
+    fd_json
+}
+
+pub fn make_vec_fd_to_json(fds: &[FileDirectory]) -> String {
+    let mut fd_jsons = vec![];
+
+    for fd in fds.iter() {
+        let fd_json = _make_fd_to_json(fd.id, fd.path.clone(), &fd.entries);
+        fd_jsons.push(fd_json);
+    }
+
+    serde_json::to_string(&fd_jsons).unwrap_or("".into())
+}
+
+pub fn make_empty_dirs_response_to_json(res: &ReadEmptyDirsResponse) -> String {
+    let mut map: Map<String, Value> = serde_json::Map::new();
+    map.insert("path".into(), json!(res.path));
+
+    let mut fd_jsons = vec![];
+
+    for fd in res.empty_dirs.iter() {
+        let fd_json = _make_fd_to_json(fd.id, fd.path.clone(), &fd.entries);
+        fd_jsons.push(fd_json);
+    }
+    map.insert("empty_dirs".into(), fd_jsons.into());
+
+    serde_json::to_string(&map).unwrap_or("".into())
 }
 
 /// The function to handle the url scheme sent by the system.
@@ -1643,4 +1689,14 @@ mod tests {
             Duration::from_nanos(0)
         );
     }
+}
+
+#[inline]
+pub fn get_builtin_option(key: &str) -> String {
+    config::BUILTIN_SETTINGS
+        .read()
+        .unwrap()
+        .get(key)
+        .cloned()
+        .unwrap_or_default()
 }

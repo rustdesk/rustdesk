@@ -123,7 +123,7 @@ pub fn get_home_as_string() -> String {
 }
 
 fn read_dir_recursive(
-    path: &PathBuf,
+    path: &Path,
     prefix: &Path,
     include_hidden: bool,
 ) -> ResultType<Vec<FileEntry>> {
@@ -183,6 +183,51 @@ fn read_dir_recursive(
 
 pub fn get_recursive_files(path: &str, include_hidden: bool) -> ResultType<Vec<FileEntry>> {
     read_dir_recursive(&get_path(path), &get_path(""), include_hidden)
+}
+
+fn read_empty_dirs_recursive(
+    path: &Path,
+    prefix: &Path,
+    include_hidden: bool,
+) -> ResultType<Vec<FileDirectory>> {
+    let mut dirs = Vec::new();
+    if path.is_dir() {
+        // to-do: symbol link handling, cp the link rather than the content
+        // to-do: file mode, for unix
+        let fd = read_dir(path, include_hidden)?;
+        if fd.entries.is_empty() {
+            dirs.push(fd);
+        } else {
+            for entry in fd.entries.iter() {
+                match entry.entry_type.enum_value() {
+                    Ok(FileType::Dir) => {
+                        if let Ok(mut tmp) = read_empty_dirs_recursive(
+                            &path.join(&entry.name),
+                            &prefix.join(&entry.name),
+                            include_hidden,
+                        ) {
+                            for entry in tmp.drain(0..) {
+                                dirs.push(entry);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(dirs)
+    } else if path.is_file() {
+        Ok(dirs)
+    } else {
+        bail!("Not exists");
+    }
+}
+
+pub fn get_empty_dirs_recursive(
+    path: &str,
+    include_hidden: bool,
+) -> ResultType<Vec<FileDirectory>> {
+    read_empty_dirs_recursive(&get_path(path), &get_path(""), include_hidden)
 }
 
 #[inline]
@@ -809,7 +854,7 @@ pub async fn handle_read_jobs(
     Ok(job_log)
 }
 
-pub fn remove_all_empty_dir(path: &PathBuf) -> ResultType<()> {
+pub fn remove_all_empty_dir(path: &Path) -> ResultType<()> {
     let fd = read_dir(path, true)?;
     for entry in fd.entries.iter() {
         match entry.entry_type.enum_value() {

@@ -1,4 +1,3 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::config::Config;
 use hbb_common::{
     allow_err,
@@ -22,7 +21,7 @@ use std::{
 
 type Message = RendezvousMessage;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub(super) fn start_listening() -> ResultType<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], get_broadcast_port()));
     let socket = std::net::UdpSocket::bind(addr)?;
@@ -40,13 +39,22 @@ pub(super) fn start_listening() -> ResultType<()> {
                                 &Config::get_option("enable-lan-discovery"),
                             )
                         {
+                            let id = Config::get_id();
+                            if p.id == id {
+                                continue;
+                            }
                             if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
                                 let mut msg_out = Message::new();
+                                let mut hostname = whoami::hostname();
+                                // The default hostname is "localhost" which is a bit confusing
+                                if hostname == "localhost" {
+                                    hostname = "unknown".to_owned();
+                                }
                                 let peer = PeerDiscovery {
                                     cmd: "pong".to_owned(),
                                     mac: get_mac(&self_addr),
-                                    id: Config::get_id(),
-                                    hostname: whoami::hostname(),
+                                    id,
+                                    hostname,
                                     username: crate::platform::get_active_username(),
                                     platform: whoami::platform().to_string(),
                                     ..Default::default()
@@ -100,17 +108,17 @@ fn get_broadcast_port() -> u16 {
 }
 
 fn get_mac(_ip: &IpAddr) -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     if let Ok(mac) = get_mac_by_ip(_ip) {
         mac.to_string()
     } else {
         "".to_owned()
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(target_os = "ios")]
     "".to_owned()
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 fn get_mac_by_ip(ip: &IpAddr) -> ResultType<String> {
     for interface in default_net::get_interfaces() {
         match ip {
@@ -153,6 +161,10 @@ fn get_ipaddr_by_peer<A: ToSocketAddrs>(peer: A) -> Option<IpAddr> {
 
 fn create_broadcast_sockets() -> Vec<UdpSocket> {
     let mut ipv4s = Vec::new();
+    // TODO: maybe we should use a better way to get ipv4 addresses.
+    // But currently, it's ok to use `[Ipv4Addr::UNSPECIFIED]` for discovery.
+    // `default_net::get_interfaces()` causes undefined symbols error when `flutter build` on iOS simulator x86_64
+    #[cfg(not(any(target_os = "ios")))]
     for interface in default_net::get_interfaces() {
         for ipv4 in &interface.ipv4 {
             ipv4s.push(ipv4.addr.clone());
@@ -178,8 +190,20 @@ fn send_query() -> ResultType<Vec<UdpSocket>> {
     }
 
     let mut msg_out = Message::new();
+    // We may not be able to get the mac address on mobile platforms.
+    // So we need to use the id to avoid discovering ourselves.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let id = crate::ui_interface::get_id();
+    // `crate::ui_interface::get_id()` will cause error:
+    // `get_id()` uses async code with `current_thread`, which is not allowed in this context.
+    //
+    // No need to get id for desktop platforms.
+    // We can use the mac address to identify the device.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let id = "".to_owned();
     let peer = PeerDiscovery {
         cmd: "ping".to_owned(),
+        id,
         ..Default::default()
     };
     msg_out.set_peer_discovery(peer);
