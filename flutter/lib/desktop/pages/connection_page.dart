@@ -78,9 +78,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
 
     setupServerWidget() => Flexible(
           child: Offstage(
-            offstage: !(!_svcStopped.value &&
-                stateGlobal.svcStatus.value == SvcStatus.ready &&
-                _svcIsUsingPublicServer.value),
+            offstage: true, // 始终设置为 true，确保组件始终不可见
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
