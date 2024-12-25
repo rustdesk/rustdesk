@@ -1189,7 +1189,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                       contentPadding:
                           EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                     ),
-                  ).marginOnly(right: 15),
+                  ).workaroundFreezeLinuxMint().marginOnly(right: 15),
                 ),
                 Obx(() => ElevatedButton(
                       onPressed: applyEnabled.value &&
@@ -1346,7 +1346,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     contentPadding:
                         EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                   ),
-                ).marginOnly(right: 15),
+                ).workaroundFreezeLinuxMint().marginOnly(right: 15),
               ),
               Obx(() => ElevatedButton(
                     onPressed:
@@ -2296,7 +2296,7 @@ _LabeledTextField(
             style: TextStyle(
               color: disabledTextColor(context, enabled),
             ),
-          ),
+          ).workaroundFreezeLinuxMint(),
         ],
       ),
     ],
@@ -2475,7 +2475,7 @@ void changeSocks5Proxy() async {
                     controller: proxyController,
                     autofocus: true,
                     enabled: !isOptFixed,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ).marginOnly(bottom: 8),
@@ -2495,7 +2495,7 @@ void changeSocks5Proxy() async {
                       labelText: isMobile ? translate('Username') : null,
                     ),
                     enabled: !isOptFixed,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ).marginOnly(bottom: 8),
@@ -2521,7 +2521,7 @@ void changeSocks5Proxy() async {
                         controller: pwdController,
                         enabled: !isOptFixed,
                         maxLength: bind.mainMaxEncryptLen(),
-                      )),
+                      ).workaroundFreezeLinuxMint()),
                 ),
               ],
             ),

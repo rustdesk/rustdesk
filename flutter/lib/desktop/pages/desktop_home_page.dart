@@ -237,7 +237,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         style: TextStyle(
                           fontSize: 22,
                         ),
-                      ),
+                      ).workaroundFreezeLinuxMint(),
                     ),
                   )
                 ],
@@ -333,7 +333,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   EdgeInsets.only(top: 14, bottom: 10),
                             ),
                             style: TextStyle(fontSize: 15),
-                          ),
+                          ).workaroundFreezeLinuxMint(),
                         ),
                       ),
                       if (showOneTime)
@@ -940,7 +940,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                       });
                     },
                     maxLength: maxLength,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ),
@@ -967,7 +967,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                       });
                     },
                     maxLength: maxLength,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ),

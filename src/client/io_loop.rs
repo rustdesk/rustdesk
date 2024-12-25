@@ -122,6 +122,28 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     pub async fn io_loop(&mut self, key: &str, token: &str, round: u32) {
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+        let _file_clip_context_holder = {
+            // `is_port_forward()` will not reach here, but we still check it for clarity.
+            if !self.handler.is_file_transfer() && !self.handler.is_port_forward() {
+                // It is ok to call this function multiple times.
+                ContextSend::enable(true);
+                Some(crate::SimpleCallOnReturn {
+                    b: true,
+                    f: Box::new(|| {
+                        // No need to call `enable(false)` for sciter version, because each client of sciter version is a new process.
+                        // It's better to check if the peers are windows(support file copy&paste), but it's not necessary.
+                        #[cfg(feature = "flutter")]
+                        if !crate::flutter::sessions::has_sessions_running(ConnType::DEFAULT_CONN) {
+                            ContextSend::enable(false);
+                        };
+                    }),
+                })
+            } else {
+                None
+            }
+        };
+
         let mut last_recv_time = Instant::now();
         let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
@@ -1199,6 +1221,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         let peer_platform = pi.platform.clone();
                         self.set_peer_info(&pi);
                         self.handler.handle_peer_info(pi);
+                        #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
                             #[cfg(feature = "flutter")]
@@ -1898,6 +1921,7 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
+    #[cfg(not(feature = "flutter"))]
     fn check_clipboard_file_context(&self) {
         #[cfg(any(
             target_os = "windows",
