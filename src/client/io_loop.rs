@@ -310,6 +310,12 @@ impl<T: InvokeUiSession> Remote<T> {
                 Ok(())
             });
         }
+
+        // It's better to check if the peers are windows, but it's not necessary.
+        #[cfg(feature = "flutter")]
+        if !crate::flutter::sessions::has_sessions_running(ConnType::DEFAULT_CONN) {
+            ContextSend::enable(false);
+        }
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -1199,6 +1205,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         let peer_platform = pi.platform.clone();
                         self.set_peer_info(&pi);
                         self.handler.handle_peer_info(pi);
+                        #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
                             #[cfg(feature = "flutter")]
@@ -1898,6 +1905,7 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
+    #[cfg(not(feature = "flutter"))]
     fn check_clipboard_file_context(&self) {
         #[cfg(any(
             target_os = "windows",
