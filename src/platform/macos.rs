@@ -27,7 +27,7 @@ use include_dir::{include_dir, Dir};
 use objc::rc::autoreleasepool;
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
@@ -661,7 +661,7 @@ pub fn hide_dock() {
 }
 
 #[inline]
-fn get_server_start_time_of(p: &Process, path: &PathBuf) -> Option<i64> {
+fn get_server_start_time_of(p: &Process, path: &Path) -> Option<i64> {
     let cmd = p.cmd();
     if cmd.len() <= 1 {
         return None;
@@ -679,7 +679,7 @@ fn get_server_start_time_of(p: &Process, path: &PathBuf) -> Option<i64> {
 }
 
 #[inline]
-fn get_server_start_time(sys: &mut System, path: &PathBuf) -> Option<(i64, Pid)> {
+fn get_server_start_time(sys: &mut System, path: &Path) -> Option<(i64, Pid)> {
     sys.refresh_processes_specifics(ProcessRefreshKind::new());
     for (_, p) in sys.processes() {
         if let Some(t) = get_server_start_time_of(p, path) {
