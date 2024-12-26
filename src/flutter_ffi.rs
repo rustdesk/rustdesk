@@ -1,16 +1,13 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
 use crate::{
     client::file_trait::FileManager,
-    common::make_fd_to_json,
+    common::{make_fd_to_json, make_vec_fd_to_json},
     flutter::{
         self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option,
     },
     input::*,
     ui_interface::{self, *},
-};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::{
-    common::get_default_sound_input,
-    keyboard::input_source::{change_input_source, get_cur_session_input_source},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(feature = "plugin_framework")]
@@ -121,6 +118,7 @@ pub fn session_add_sync(
     force_relay: bool,
     password: String,
     is_shared_password: bool,
+    conn_token: Option<String>,
 ) -> SyncReturn<String> {
     if let Err(e) = session_add(
         &session_id,
@@ -132,6 +130,7 @@ pub fn session_add_sync(
         force_relay,
         password,
         is_shared_password,
+        conn_token,
     ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -222,6 +221,10 @@ pub fn session_get_enable_trusted_devices(session_id: SessionID) -> SyncReturn<b
 
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
+        // `release_remote_keys` is not required for mobile platforms in common cases.
+        // But we still call it to make the code more stable.
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        crate::keyboard::release_remote_keys("map");
         session.close_event_stream(session_id);
         session.close();
     }
@@ -241,21 +244,17 @@ pub fn session_is_multi_ui_session(session_id: SessionID) -> SyncReturn<bool> {
     }
 }
 
-pub fn session_record_screen(
-    session_id: SessionID,
-    start: bool,
-    display: usize,
-    width: usize,
-    height: usize,
-) {
+pub fn session_record_screen(session_id: SessionID, start: bool) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.record_screen(start, display as _, width as _, height as _);
+        session.record_screen(start);
     }
 }
 
-pub fn session_record_status(session_id: SessionID, status: bool) {
+pub fn session_get_is_recording(session_id: SessionID) -> SyncReturn<bool> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.record_status(status);
+        SyncReturn(session.is_recording())
+    } else {
+        SyncReturn(false)
     }
 }
 
@@ -272,7 +271,7 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
         session.toggle_option(value.clone());
         try_sync_peer_option(&session, &session_id, &value, None);
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     if sessions::get_session_by_session_id(&session_id).is_some() && value == "disable-clipboard" {
         crate::flutter::update_text_clipboard_required();
     }
@@ -602,6 +601,7 @@ pub fn session_send_files(
     file_num: i32,
     include_hidden: bool,
     is_remote: bool,
+    _is_dir: bool,
 ) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send_files(act_id, path, to, file_num, include_hidden, is_remote);
@@ -633,7 +633,7 @@ pub fn session_remove_file(
     }
 }
 
-pub fn session_read_dir_recursive(
+pub fn session_read_dir_to_remove_recursive(
     session_id: SessionID,
     act_id: i32,
     path: String,
@@ -677,6 +677,27 @@ pub fn session_read_local_dir_sync(
         return make_fd_to_json(fd.id, path, &fd.entries);
     }
     "".to_string()
+}
+
+pub fn session_read_local_empty_dirs_recursive_sync(
+    _session_id: SessionID,
+    path: String,
+    include_hidden: bool,
+) -> String {
+    if let Ok(fds) = fs::get_empty_dirs_recursive(&path, include_hidden) {
+        return make_vec_fd_to_json(&fds);
+    }
+    "".to_string()
+}
+
+pub fn session_read_remote_empty_dirs_recursive_sync(
+    session_id: SessionID,
+    path: String,
+    include_hidden: bool,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.read_empty_dirs(path, include_hidden);
+    }
 }
 
 pub fn session_get_platform(session_id: SessionID, is_remote: bool) -> String {
@@ -771,13 +792,6 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     vec![String::from("")]
 }
 
-pub fn main_get_default_sound_input() -> Option<String> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return get_default_sound_input();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    None
-}
-
 pub fn main_get_login_device_info() -> SyncReturn<String> {
     SyncReturn(get_login_device_info_json())
 }
@@ -817,11 +831,19 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
 pub fn main_set_option(key: String, value: String) {
     #[cfg(target_os = "android")]
     if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
-        crate::ui_cm_interface::notify_input_control(config::option2bool(
-            config::keys::OPTION_ENABLE_KEYBOARD,
-            &value,
-        ));
+        crate::ui_cm_interface::switch_permission_all(
+            "keyboard".to_owned(),
+            config::option2bool(&key, &value),
+        );
     }
+    #[cfg(target_os = "android")]
+    if key.eq(config::keys::OPTION_ENABLE_CLIPBOARD) {
+        crate::ui_cm_interface::switch_permission_all(
+            "clipboard".to_owned(),
+            config::option2bool(&key, &value),
+        );
+    }
+
     if key.eq("custom-rendezvous-server") {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
@@ -1340,6 +1362,14 @@ pub fn session_close_voice_call(session_id: SessionID) {
     }
 }
 
+pub fn session_get_conn_token(session_id: SessionID) -> SyncReturn<Option<String>> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.get_conn_token())
+    } else {
+        SyncReturn(None)
+    }
+}
+
 pub fn cm_handle_incoming_voice_call(id: i32, accept: bool) {
     crate::ui_cm_interface::handle_incoming_voice_call(id, accept);
 }
@@ -1376,7 +1406,8 @@ pub fn main_get_last_remote_id() -> String {
 }
 
 pub fn main_get_software_update_url() {
-    if get_local_option("enable-check-update".to_string()) != "N" {
+    let opt = get_local_option(config::keys::OPTION_ENABLE_CHECK_UPDATE.to_string());
+    if config::option2bool(config::keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
         crate::common::check_software_update();
     }
 }
@@ -2290,13 +2321,23 @@ pub fn session_request_new_display_init_msgs(session_id: SessionID, display: usi
     }
 }
 
+pub fn main_audio_support_loopback() -> SyncReturn<bool> {
+    #[cfg(target_os = "windows")]
+    let is_surpport = true;
+    #[cfg(feature = "screencapturekit")]
+    let is_surpport = crate::audio_service::is_screen_capture_kit_available();
+    #[cfg(not(any(target_os = "windows", feature = "screencapturekit")))]
+    let is_surpport = false;
+    SyncReturn(is_surpport)
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::{config, log};
     use jni::{
         errors::{Error as JniError, Result as JniResult},
         objects::{JClass, JObject, JString},
-        sys::jstring,
+        sys::{jboolean, jstring},
         JNIEnv,
     };
 
@@ -2368,5 +2409,13 @@ pub mod server_side {
             "".into()
         };
         return env.new_string(res).unwrap_or_default().into_raw();
+    }
+
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_ffi_FFI_isServiceClipboardEnabled(
+        env: JNIEnv,
+        _class: JClass,
+    ) -> jboolean {
+        jboolean::from(crate::server::is_clipboard_service_ok())
     }
 }

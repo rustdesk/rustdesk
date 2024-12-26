@@ -30,6 +30,7 @@ import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'desktop/pages/remote_page.dart' as desktop_remote;
+import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
@@ -62,6 +63,9 @@ int androidVersion = 0;
 // https://stackoverflow.com/questions/8193613/gtk-window-resize-disable-without-going-back-to-default
 // So we need to use this flag to enable/disable resizable.
 bool _linuxWindowResizable = true;
+
+// Only used on Windows(window manager).
+bool _ignoreDevicePixelRatio = true;
 
 /// only available for Windows target
 int windowsBuildNumber = 0;
@@ -554,7 +558,7 @@ class MyTheme {
     return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
   }
 
-  static void changeDarkMode(ThemeMode mode) async {
+  static Future<void> changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
     if (desktopType == DesktopType.main || isAndroid || isIOS || isWeb) {
       if (mode == ThemeMode.system) {
@@ -680,10 +684,12 @@ closeConnection({String? id}) {
           overlays: SystemUiOverlay.values);
       gFFI.chatModel.hideChatOverlay();
       Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+      stateGlobal.isInMainPage = true;
     }();
   } else {
     if (isWeb) {
       Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+      stateGlobal.isInMainPage = true;
     } else {
       final controller = Get.find<DesktopTabController>();
       controller.closeBy(id);
@@ -1171,33 +1177,21 @@ void msgBox(SessionID sessionId, String type, String title, String text,
           dialogManager.dismissAll();
         }));
   }
-  if (reconnect != null && title == "Connection Error") {
+  if (reconnect != null &&
+      title == "Connection Error" &&
+      reconnectTimeout != null) {
     // `enabled` is used to disable the dialog button once the button is clicked.
     final enabled = true.obs;
-    final button = reconnectTimeout != null
-        ? Obx(() => _ReconnectCountDownButton(
-              second: reconnectTimeout,
-              onPressed: enabled.isTrue
-                  ? () {
-                      // Disable the button
-                      enabled.value = false;
-                      reconnect(dialogManager, sessionId, false);
-                    }
-                  : null,
-            ))
-        : Obx(
-            () => dialogButton(
-              'Reconnect',
-              isOutline: true,
-              onPressed: enabled.isTrue
-                  ? () {
-                      // Disable the button
-                      enabled.value = false;
-                      reconnect(dialogManager, sessionId, false);
-                    }
-                  : null,
-            ),
-          );
+    final button = Obx(() => _ReconnectCountDownButton(
+          second: reconnectTimeout,
+          onPressed: enabled.isTrue
+              ? () {
+                  // Disable the button
+                  enabled.value = false;
+                  reconnect(dialogManager, sessionId, false);
+                }
+              : null,
+        ));
     buttons.insert(0, button);
   }
   if (link.isNotEmpty) {
@@ -1620,12 +1614,6 @@ Widget getPlatformImage(String platform, {double size = 50}) {
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
 }
 
-class OffsetDevicePixelRatio {
-  Offset offset;
-  final double devicePixelRatio;
-  OffsetDevicePixelRatio(this.offset, this.devicePixelRatio);
-}
-
 class LastWindowPosition {
   double? width;
   double? height;
@@ -1708,8 +1696,10 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       if (isFullscreen || isMaximized) {
         setPreFrame();
       } else {
-        position = await windowManager.getPosition();
-        sz = await windowManager.getSize();
+        position = await windowManager.getPosition(
+            ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+        sz = await windowManager.getSize(
+            ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
       }
       break;
     default:
@@ -1827,7 +1817,7 @@ bool isPointInRect(Offset point, Rect rect) {
 }
 
 /// return null means center
-Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
+Future<Offset?> _adjustRestoreMainWindowOffset(
   double? left,
   double? top,
   double? width,
@@ -1841,13 +1831,9 @@ Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
   double? frameTop;
   double? frameRight;
   double? frameBottom;
-  double devicePixelRatio = 1.0;
 
   if (isDesktop || isWebDesktop) {
     for (final screen in await window_size.getScreenList()) {
-      if (isPointInRect(Offset(left, top), screen.visibleFrame)) {
-        devicePixelRatio = screen.scaleFactor;
-      }
       frameLeft = frameLeft == null
           ? screen.visibleFrame.left
           : min(screen.visibleFrame.left, frameLeft);
@@ -1881,7 +1867,7 @@ Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
       top < frameTop!) {
     return null;
   } else {
-    return OffsetDevicePixelRatio(Offset(left, top), devicePixelRatio);
+    return Offset(left, top);
   }
 }
 
@@ -1941,47 +1927,23 @@ Future<bool> restoreWindowPosition(WindowType type,
   }
 
   final size = await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-  final offsetDevicePixelRatio = await _adjustRestoreMainWindowOffset(
+  final offsetLeftTop = await _adjustRestoreMainWindowOffset(
     lpos.offsetWidth,
     lpos.offsetHeight,
     size.width,
     size.height,
   );
   debugPrint(
-      "restore lpos: ${size.width}/${size.height}, offset:${offsetDevicePixelRatio?.offset.dx}/${offsetDevicePixelRatio?.offset.dy}, devicePixelRatio:${offsetDevicePixelRatio?.devicePixelRatio}, isMaximized: ${lpos.isMaximized}, isFullscreen: ${lpos.isFullscreen}");
+      "restore lpos: ${size.width}/${size.height}, offset:${offsetLeftTop?.dx}/${offsetLeftTop?.dy}, isMaximized: ${lpos.isMaximized}, isFullscreen: ${lpos.isFullscreen}");
 
   switch (type) {
     case WindowType.Main:
-      // https://github.com/rustdesk/rustdesk/issues/8038
-      // `setBounds()` in `window_manager` will use the current devicePixelRatio.
-      // So we need to adjust the offset by the scale factor.
-      // https://github.com/rustdesk-org/window_manager/blob/f19acdb008645366339444a359a45c3257c8b32e/windows/window_manager.cpp#L701
-      if (isWindows) {
-        double? curDevicePixelRatio;
-        Offset curPos = await windowManager.getPosition();
-        for (final screen in await window_size.getScreenList()) {
-          if (isPointInRect(curPos, screen.visibleFrame)) {
-            curDevicePixelRatio = screen.scaleFactor;
-          }
-        }
-        if (curDevicePixelRatio != null &&
-            curDevicePixelRatio != 0 &&
-            offsetDevicePixelRatio != null) {
-          if (offsetDevicePixelRatio.devicePixelRatio != 0) {
-            final scale =
-                offsetDevicePixelRatio.devicePixelRatio / curDevicePixelRatio;
-            offsetDevicePixelRatio.offset =
-                offsetDevicePixelRatio.offset.scale(scale, scale);
-            debugPrint(
-                "restore new offset: ${offsetDevicePixelRatio.offset.dx}/${offsetDevicePixelRatio.offset.dy}, scale:$scale");
-          }
-        }
-      }
       restorePos() async {
-        if (offsetDevicePixelRatio == null) {
+        if (offsetLeftTop == null) {
           await windowManager.center();
         } else {
-          await windowManager.setPosition(offsetDevicePixelRatio.offset);
+          await windowManager.setPosition(offsetLeftTop,
+              ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
         }
       }
       if (lpos.isMaximized == true) {
@@ -1990,20 +1952,39 @@ Future<bool> restoreWindowPosition(WindowType type,
           await windowManager.maximize();
         }
       } else {
-        if (!bind.isIncomingOnly() || bind.isOutgoingOnly()) {
-          await windowManager.setSize(size);
+        final storeSize = !bind.isIncomingOnly() || bind.isOutgoingOnly();
+        if (isWindows) {
+          if (storeSize) {
+            // We need to set the window size first to avoid the incorrect size in some special cases.
+            // E.g. There are two monitors, the left one is 100% DPI and the right one is 175% DPI.
+            // The window belongs to the left monitor, but if it is moved a little to the right, it will belong to the right monitor.
+            // After restoring, the size will be incorrect.
+            // See known issue in https://github.com/rustdesk/rustdesk/pull/9840
+            await windowManager.setSize(size,
+                ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+          }
+          await restorePos();
+          if (storeSize) {
+            await windowManager.setSize(size,
+                ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+          }
+        } else {
+          if (storeSize) {
+            await windowManager.setSize(size,
+                ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+          }
+          await restorePos();
         }
-        await restorePos();
       }
       return true;
     default:
       final wc = WindowController.fromWindowId(windowId!);
       restoreFrame() async {
-        if (offsetDevicePixelRatio == null) {
+        if (offsetLeftTop == null) {
           await wc.center();
         } else {
-          final frame = Rect.fromLTWH(offsetDevicePixelRatio.offset.dx,
-              offsetDevicePixelRatio.offset.dy, size.width, size.height);
+          final frame = Rect.fromLTWH(
+              offsetLeftTop.dx, offsetLeftTop.dy, size.width, size.height);
           await wc.setFrame(frame);
         }
       }
@@ -2035,6 +2016,8 @@ Future<bool> restoreWindowPosition(WindowType type,
   return false;
 }
 
+var webInitialLink = "";
+
 /// Initialize uni links for macos/windows
 ///
 /// [Availability]
@@ -2051,7 +2034,12 @@ Future<bool> initUniLinks() async {
     if (initialLink == null || initialLink.isEmpty) {
       return false;
     }
-    return handleUriLink(uriString: initialLink);
+    if (isWeb) {
+      webInitialLink = initialLink;
+      return false;
+    } else {
+      return handleUriLink(uriString: initialLink);
+    }
   } catch (err) {
     debugPrintStack(label: "$err");
     return false;
@@ -2064,7 +2052,7 @@ Future<bool> initUniLinks() async {
 ///
 /// Returns a [StreamSubscription] which can listen the uni links.
 StreamSubscription? listenUniLinks({handleByFlutter = true}) {
-  if (isLinux) {
+  if (isLinux || isWeb) {
     return null;
   }
 
@@ -2257,7 +2245,10 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     }
   }
 
-  var key = uri.queryParameters["key"];
+  var queryParameters =
+      uri.queryParameters.map((k, v) => MapEntry(k.toLowerCase(), v));
+
+  var key = queryParameters["key"];
   if (id != null) {
     if (key != null) {
       id = "$id?key=$key";
@@ -2266,7 +2257,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
 
   if (isMobile) {
     if (id != null) {
-      final forceRelay = uri.queryParameters["relay"] != null;
+      final forceRelay = queryParameters["relay"] != null;
       connect(Get.context!, id, forceRelay: forceRelay);
       return null;
     }
@@ -2276,7 +2267,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   if (command != null && id != null) {
     args.add(command);
     args.add(id);
-    var param = uri.queryParameters;
+    var param = queryParameters;
     String? password = param["password"];
     if (password != null) args.addAll(['--password', password]);
     String? switch_uuid = param["switch_uuid"];
@@ -2294,16 +2285,19 @@ connectMainDesktop(String id,
     required bool isRDP,
     bool? forceRelay,
     String? password,
+    String? connToken,
     bool? isSharedPassword}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
         password: password,
         isSharedPassword: isSharedPassword,
+        connToken: connToken,
         forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP,
         password: password,
         isSharedPassword: isSharedPassword,
+        connToken: connToken,
         forceRelay: forceRelay);
   } else {
     await rustDeskWinManager.newRemoteDesktop(id,
@@ -2323,6 +2317,7 @@ connect(BuildContext context, String id,
     bool isRDP = false,
     bool forceRelay = false,
     String? password,
+    String? connToken,
     bool? isSharedPassword}) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
@@ -2364,24 +2359,40 @@ connect(BuildContext context, String id,
         'password': password,
         'isSharedPassword': isSharedPassword,
         'forceRelay': forceRelay,
+        'connToken': connToken,
       });
     }
   } else {
     if (isFileTransfer) {
-      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
-        if (!await AndroidPermissionManager.request(kManageExternalStorage)) {
-          return;
+      if (isAndroid) {
+        if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
+          if (!await AndroidPermissionManager.request(kManageExternalStorage)) {
+            return;
+          }
         }
       }
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (BuildContext context) => FileManagerPage(
-              id: id, password: password, isSharedPassword: isSharedPassword),
-        ),
-      );
+      if (isWeb) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) =>
+                desktop_file_manager.FileManagerPage(
+                    id: id,
+                    password: password,
+                    isSharedPassword: isSharedPassword),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) => FileManagerPage(
+                id: id, password: password, isSharedPassword: isSharedPassword),
+          ),
+        );
+      }
     } else {
-      if (isWebDesktop) {
+      if (isWeb) {
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -2405,6 +2416,7 @@ connect(BuildContext context, String id,
         );
       }
     }
+    stateGlobal.isInMainPage = false;
   }
 
   FocusScopeNode currentFocus = FocusScope.of(context);
@@ -2489,9 +2501,20 @@ Future<void> onActiveWindowChanged() async {
         // But the app will not close.
         //
         // No idea why we need to delay here, `terminate()` itself is also an async function.
-        Future.delayed(Duration.zero, () {
-          RdPlatformChannel.instance.terminate();
-        });
+        //
+        // A quick workaround, use `Timer.periodic` to avoid the app not closing.
+        // Because `await windowManager.close()` and `RdPlatformChannel.instance.terminate()`
+        // may not work since `Flutter 3.24.4`, see the following logs.
+        // A delay will allow the app to close.
+        //
+        //```
+        // embedder.cc (2725): 'FlutterPlatformMessageCreateResponseHandle' returned 'kInvalidArguments'. Engine handle was invalid.
+        // 2024-11-11 11:41:11.546 RustDesk[90272:2567686] Failed to create a FlutterPlatformMessageResponseHandle (2)
+        // embedder.cc (2672): 'FlutterEngineSendPlatformMessage' returned 'kInvalidArguments'. Invalid engine handle.
+        // 2024-11-11 11:41:11.565 RustDesk[90272:2567686] Failed to send message to Flutter engine on channel 'flutter/lifecycle' (2).
+        // ```
+        periodic_immediate(
+            Duration(milliseconds: 30), RdPlatformChannel.instance.terminate);
       }
     }
   }
@@ -2584,7 +2607,7 @@ class ServerConfig {
     config['relay'] = relayServer.trim();
     config['api'] = apiServer.trim();
     config['key'] = key.trim();
-    return base64Encode(Uint8List.fromList(jsonEncode(config).codeUnits))
+    return base64UrlEncode(Uint8List.fromList(jsonEncode(config).codeUnits))
         .split('')
         .reversed
         .join();
@@ -2707,30 +2730,6 @@ Future<bool> osxRequestAudio() async {
   return await kMacOSPermChannel.invokeMethod("requestRecordAudio");
 }
 
-class DraggableNeverScrollableScrollPhysics extends ScrollPhysics {
-  /// Creates scroll physics that does not let the user scroll.
-  const DraggableNeverScrollableScrollPhysics({super.parent});
-
-  @override
-  DraggableNeverScrollableScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return DraggableNeverScrollableScrollPhysics(parent: buildParent(ancestor));
-  }
-
-  @override
-  bool shouldAcceptUserOffset(ScrollMetrics position) {
-    // TODO: find a better solution to check if the offset change is caused by the scrollbar.
-    // Workaround: when dragging with the scrollbar, it always triggers an [IdleScrollActivity].
-    if (position is ScrollPositionWithSingleContext) {
-      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
-      return position.activity is IdleScrollActivity;
-    }
-    return false;
-  }
-
-  @override
-  bool get allowImplicitScrolling => false;
-}
-
 Widget futureBuilder(
     {required Future? future, required Widget Function(dynamic data) hasData}) {
   return FutureBuilder(
@@ -2810,7 +2809,7 @@ Widget buildRemoteBlock(
         onExit: (event) => block.value = false,
         child: Stack(children: [
           // scope block tab
-          FocusScope(child: child, canRequestFocus: !block.value),
+          preventMouseKeyBuilder(child: child, block: block.value),
           // mask block click, cm not block click and still use check_click_time to avoid block local click
           if (mask)
             Offstage(
@@ -2820,6 +2819,11 @@ Widget buildRemoteBlock(
                 )),
         ]),
       ));
+}
+
+Widget preventMouseKeyBuilder({required Widget child, required bool block}) {
+  return ExcludeFocus(
+      excluding: block, child: AbsorbPointer(child: child, absorbing: block));
 }
 
 Widget unreadMessageCountBuilder(RxInt? count,
@@ -3158,6 +3162,9 @@ importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
   if (text != null && text.isNotEmpty) {
     try {
       final sc = ServerConfig.decode(text);
+      if (isWeb || isIOS) {
+        sc.relayServer = '';
+      }
       if (sc.idServer.isNotEmpty) {
         Future<bool> success = setServerConfig(controllers, errMsgs, sc);
         success.then((value) {
@@ -3597,3 +3604,37 @@ List<SubWindowResizeEdge>? get subWindowManagerEnableResizeEdges => isWindows
         SubWindowResizeEdge.topRight,
       ]
     : null;
+
+void earlyAssert() {
+  assert('\1' == '1');
+}
+
+void checkUpdate() {
+  if (isDesktop || isAndroid) {
+    if (!bind.isCustomClient()) {
+      platformFFI.registerEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+          (Map<String, dynamic> evt) async {
+        if (evt['url'] is String) {
+          stateGlobal.updateUrl.value = evt['url'];
+        }
+      });
+      Timer(const Duration(seconds: 1), () async {
+        bind.mainGetSoftwareUpdateUrl();
+      });
+    }
+  }
+}
+
+// https://github.com/flutter/flutter/issues/153560#issuecomment-2497160535
+// For TextField, TextFormField
+extension WorkaroundFreezeLinuxMint on Widget {
+  Widget workaroundFreezeLinuxMint() {
+    // No need to check if is Linux Mint, because this workaround is harmless on other platforms.
+    if (isLinux) {
+      return ExcludeSemantics(child: this);
+    } else {
+      return this;
+    }
+  }
+}

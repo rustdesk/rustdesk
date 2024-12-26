@@ -18,9 +18,15 @@ class StateGlobal {
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final svcStatus = SvcStatus.notReady.obs;
+  final RxInt videoConnCount = 0.obs;
   final RxBool isFocused = false.obs;
+  // for mobile and web
+  bool isInMainPage = true;
+  bool isWebVisible = true;
 
   final isPortrait = false.obs;
+
+  final updateUrl = ''.obs;
 
   String _inputSource = '';
 
@@ -70,24 +76,37 @@ class StateGlobal {
     if (_fullscreen.value != v) {
       _fullscreen.value = v;
       _showTabBar.value = !_fullscreen.value;
-      refreshResizeEdgeSize();
-      print(
-          "fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
-      _windowBorderWidth.value = fullscreen.isTrue ? 0 : kWindowBorderWidth;
-      if (procWnd) {
-        final wc = WindowController.fromWindowId(windowId);
-        wc.setFullscreen(_fullscreen.isTrue).then((_) {
-          // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
-          if (isWindows && !v) {
-            Future.delayed(Duration.zero, () async {
-              final frame = await wc.getFrame();
-              final newRect = Rect.fromLTWH(
-                  frame.left, frame.top, frame.width + 1, frame.height + 1);
-              await wc.setFrame(newRect);
-            });
-          }
-        });
+      if (isWebDesktop) {
+        procFullscreenWeb();
+      } else {
+        procFullscreenNative(procWnd);
       }
+    }
+  }
+
+  procFullscreenWeb() {
+    final isFullscreen = ffiGetByName('fullscreen') == 'Y';
+    String fullscreenValue = '';
+    if (isFullscreen && _fullscreen.isFalse) {
+      fullscreenValue = 'N';
+    } else if (!isFullscreen && fullscreen.isTrue) {
+      fullscreenValue = 'Y';
+    }
+    if (fullscreenValue.isNotEmpty) {
+      ffiSetByName('fullscreen', fullscreenValue);
+    }
+  }
+
+  procFullscreenNative(bool procWnd) {
+    refreshResizeEdgeSize();
+    print("fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
+    _windowBorderWidth.value = fullscreen.isTrue ? 0 : kWindowBorderWidth;
+    if (procWnd) {
+      final wc = WindowController.fromWindowId(windowId);
+      wc.setFullscreen(_fullscreen.isTrue).then((_) {
+        // We remove the redraw (width + 1, height + 1), because this issue cannot be reproduced.
+        // https://github.com/rustdesk/rustdesk/issues/9675
+      });
     }
   }
 
@@ -109,7 +128,13 @@ class StateGlobal {
     _inputSource = bind.mainGetInputSource();
   }
 
-  StateGlobal._();
+  StateGlobal._() {
+    if (isWebDesktop) {
+      platformFFI.setFullscreenCallback((v) {
+        _fullscreen.value = v;
+      });
+    }
+  }
 
   static final StateGlobal instance = StateGlobal._();
 }

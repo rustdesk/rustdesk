@@ -13,7 +13,7 @@ use serde_derive::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     ffi::{c_char, c_void},
-    path::PathBuf,
+    path::Path,
     sync::{Arc, RwLock},
 };
 
@@ -299,7 +299,7 @@ pub(super) fn load_plugins(uninstalled_ids: &HashSet<String>) -> ResultType<()> 
     Ok(())
 }
 
-fn load_plugin_dir(dir: &PathBuf) {
+fn load_plugin_dir(dir: &Path) {
     log::debug!("Begin load plugin dir: {}", dir.display());
     if let Ok(rd) = std::fs::read_dir(dir) {
         for entry in rd {

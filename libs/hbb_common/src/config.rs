@@ -965,6 +965,10 @@ impl Config {
         .unwrap_or_default()
     }
 
+    pub fn get_bool_option(k: &str) -> bool {
+        option2bool(k, &Self::get_option(k))
+    }
+
     pub fn set_option(k: String, v: String) {
         if !is_option_can_save(&OVERWRITE_SETTINGS, &k, &DEFAULT_SETTINGS, &v) {
             return;
@@ -1558,6 +1562,21 @@ impl LocalConfig {
         .unwrap_or_default()
     }
 
+    // Usually get_option should be used.
+    pub fn get_option_from_file(k: &str) -> String {
+        get_or(
+            &OVERWRITE_LOCAL_SETTINGS,
+            &Self::load().options,
+            &DEFAULT_LOCAL_SETTINGS,
+            k,
+        )
+        .unwrap_or_default()
+    }
+
+    pub fn get_bool_option(k: &str) -> bool {
+        option2bool(k, &Self::get_option(k))
+    }
+
     pub fn set_option(k: String, v: String) {
         if !is_option_can_save(&OVERWRITE_LOCAL_SETTINGS, &k, &DEFAULT_LOCAL_SETTINGS, &v) {
             return;
@@ -1691,6 +1710,9 @@ impl UserDefaultConfig {
 
     pub fn get(&self, key: &str) -> String {
         match key {
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            keys::OPTION_VIEW_STYLE => self.get_string(key, "adaptive", vec!["original"]),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             keys::OPTION_VIEW_STYLE => self.get_string(key, "original", vec!["adaptive"]),
             keys::OPTION_SCROLL_STYLE => self.get_string(key, "scrollauto", vec!["scrollbar"]),
             keys::OPTION_IMAGE_QUALITY => {
@@ -2198,6 +2220,7 @@ pub mod keys {
     pub const OPTION_AUTO_DISCONNECT_TIMEOUT: &str = "auto-disconnect-timeout";
     pub const OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN: &str = "allow-only-conn-window-open";
     pub const OPTION_ALLOW_AUTO_RECORD_INCOMING: &str = "allow-auto-record-incoming";
+    pub const OPTION_ALLOW_AUTO_RECORD_OUTGOING: &str = "allow-auto-record-outgoing";
     pub const OPTION_VIDEO_SAVE_DIRECTORY: &str = "video-save-directory";
     pub const OPTION_ENABLE_ABR: &str = "enable-abr";
     pub const OPTION_ALLOW_REMOVE_WALLPAPER: &str = "allow-remove-wallpaper";
@@ -2205,6 +2228,7 @@ pub mod keys {
     pub const OPTION_ALLOW_LINUX_HEADLESS: &str = "allow-linux-headless";
     pub const OPTION_ENABLE_HWCODEC: &str = "enable-hwcodec";
     pub const OPTION_APPROVE_MODE: &str = "approve-mode";
+    pub const OPTION_VERIFICATION_METHOD: &str = "verification-method";
     pub const OPTION_CUSTOM_RENDEZVOUS_SERVER: &str = "custom-rendezvous-server";
     pub const OPTION_API_SERVER: &str = "api-server";
     pub const OPTION_KEY: &str = "key";
@@ -2214,6 +2238,7 @@ pub mod keys {
     pub const OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE: &str =
         "enable-android-software-encoding-half-scale";
     pub const OPTION_ENABLE_TRUSTED_DEVICES: &str = "enable-trusted-devices";
+    pub const OPTION_AV1_TEST: &str = "av1-test";
 
     // buildin options
     pub const OPTION_DISPLAY_NAME: &str = "display-name";
@@ -2321,6 +2346,8 @@ pub mod keys {
         OPTION_DISABLE_GROUP_PANEL,
         OPTION_PRE_ELEVATE_SERVICE,
         OPTION_ALLOW_REMOTE_CM_MODIFICATION,
+        OPTION_ALLOW_AUTO_RECORD_OUTGOING,
+        OPTION_VIDEO_SAVE_DIRECTORY,
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[
@@ -2342,13 +2369,13 @@ pub mod keys {
         OPTION_AUTO_DISCONNECT_TIMEOUT,
         OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN,
         OPTION_ALLOW_AUTO_RECORD_INCOMING,
-        OPTION_VIDEO_SAVE_DIRECTORY,
         OPTION_ENABLE_ABR,
         OPTION_ALLOW_REMOVE_WALLPAPER,
         OPTION_ALLOW_ALWAYS_SOFTWARE_RENDER,
         OPTION_ALLOW_LINUX_HEADLESS,
         OPTION_ENABLE_HWCODEC,
         OPTION_APPROVE_MODE,
+        OPTION_VERIFICATION_METHOD,
         OPTION_PROXY_URL,
         OPTION_PROXY_USERNAME,
         OPTION_PROXY_PASSWORD,

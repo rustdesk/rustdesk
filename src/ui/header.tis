@@ -301,26 +301,12 @@ class Header: Reactor.Component {
     }
 
     event click $(span#recording) (_, me) {
-        recording = !recording;
         header.update();
-        handler.record_status(recording);
-        // 0 is just a dummy value. It will be ignored by the handler.
-        if (recording) {
-            handler.refresh_video(0);
-            if (handler.version_cmp(pi.version, '1.2.4') >= 0) handler.record_screen(recording, pi.current_display, display_width, display_height);
-        }
-        else {
-            handler.record_screen(recording, pi.current_display, display_width, display_height);
-        }
+        handler.record_screen(!recording)
     }
 
     event click $(#screen) (_, me) {
         if (pi.current_display == me.index) return;
-        if (recording) {
-            recording = false;
-            handler.record_screen(false, pi.current_display, display_width, display_height);
-            handler.record_status(false);
-        }
         handler.switch_display(me.index);
     }
     
@@ -446,7 +432,7 @@ function handle_custom_image_quality() {
     var extendedBitrate = bitrate > 100;
     var maxRate = extendedBitrate ? 2000 : 100;
     msgbox("custom-image-quality", "Custom Image Quality", "<div .form> \
-          <div><input #bitrate-slider type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"" + maxRate + "\" min=\"5\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate <button|checkbox #extended-slider .custom-event " + (extendedBitrate ? "checked" : "") + ">More</button></div> \
+          <div><input #bitrate-slider type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"" + maxRate + "\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate <button|checkbox #extended-slider .custom-event " + (extendedBitrate ? "checked" : "") + ">More</button></div> \
       </div>", "", function(res=null) {
         if (!res) return;
         if (res.id === "extended-slider") {
@@ -518,6 +504,7 @@ if (!(is_file_transfer || is_port_forward)) {
 
 handler.updatePi = function(v) {
     pi = v;
+    recording = handler.is_recording();
     header.update();
     if (is_port_forward) {
         view.windowState = View.WINDOW_MINIMIZED;
@@ -681,4 +668,9 @@ handler.setConnectionType = function(secured, direct) {
        secure_connection: secured,
        direct_connection: direct, 
     });
+}
+
+handler.updateRecordStatus = function(status) {
+    recording = status;
+    header.update();
 }

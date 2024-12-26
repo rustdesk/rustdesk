@@ -96,6 +96,22 @@ impl ImageRgb {
     }
 }
 
+pub struct ImageTexture {
+    pub texture: *mut c_void,
+    pub w: usize,
+    pub h: usize,
+}
+
+impl Default for ImageTexture {
+    fn default() -> Self {
+        Self {
+            texture: std::ptr::null_mut(),
+            w: 0,
+            h: 0,
+        }
+    }
+}
+
 #[inline]
 pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> {
     // does this really help?
@@ -156,7 +172,7 @@ pub trait TraitPixelBuffer {
 #[cfg(not(any(target_os = "ios")))]
 pub enum Frame<'a> {
     PixelBuffer(PixelBuffer<'a>),
-    Texture(*mut c_void),
+    Texture((*mut c_void, usize)),
 }
 
 #[cfg(not(any(target_os = "ios")))]
@@ -164,7 +180,7 @@ impl Frame<'_> {
     pub fn valid<'a>(&'a self) -> bool {
         match self {
             Frame::PixelBuffer(pixelbuffer) => !pixelbuffer.data().is_empty(),
-            Frame::Texture(texture) => !texture.is_null(),
+            Frame::Texture((texture, _)) => !texture.is_null(),
         }
     }
 
@@ -186,7 +202,7 @@ impl Frame<'_> {
 
 pub enum EncodeInput<'a> {
     YUV(&'a [u8]),
-    Texture(*mut c_void),
+    Texture((*mut c_void, usize)),
 }
 
 impl<'a> EncodeInput<'a> {
@@ -197,7 +213,7 @@ impl<'a> EncodeInput<'a> {
         }
     }
 
-    pub fn texture(&self) -> ResultType<*mut c_void> {
+    pub fn texture(&self) -> ResultType<(*mut c_void, usize)> {
         match self {
             Self::Texture(f) => Ok(*f),
             _ => bail!("not texture frame"),
@@ -291,6 +307,19 @@ impl From<&VideoFrame> for CodecFormat {
             Some(video_frame::Union::Av1s(_)) => CodecFormat::AV1,
             Some(video_frame::Union::H264s(_)) => CodecFormat::H264,
             Some(video_frame::Union::H265s(_)) => CodecFormat::H265,
+            _ => CodecFormat::Unknown,
+        }
+    }
+}
+
+impl From<&video_frame::Union> for CodecFormat {
+    fn from(it: &video_frame::Union) -> Self {
+        match it {
+            video_frame::Union::Vp8s(_) => CodecFormat::VP8,
+            video_frame::Union::Vp9s(_) => CodecFormat::VP9,
+            video_frame::Union::Av1s(_) => CodecFormat::AV1,
+            video_frame::Union::H264s(_) => CodecFormat::H264,
+            video_frame::Union::H265s(_) => CodecFormat::H265,
             _ => CodecFormat::Unknown,
         }
     }

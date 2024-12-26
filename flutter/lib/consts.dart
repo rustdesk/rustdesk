@@ -89,6 +89,7 @@ const String kOptionAllowAutoDisconnect = "allow-auto-disconnect";
 const String kOptionAutoDisconnectTimeout = "auto-disconnect-timeout";
 const String kOptionEnableHwcodec = "enable-hwcodec";
 const String kOptionAllowAutoRecordIncoming = "allow-auto-record-incoming";
+const String kOptionAllowAutoRecordOutgoing = "allow-auto-record-outgoing";
 const String kOptionVideoSaveDirectory = "video-save-directory";
 const String kOptionAccessMode = "access-mode";
 const String kOptionEnableKeyboard = "enable-keyboard";
@@ -168,6 +169,13 @@ const int kWindowMainId = 0;
 const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
 
+const String kMouseEventTypeDefault = "";
+const String kMouseEventTypePanStart = "pan_start";
+const String kMouseEventTypePanUpdate = "pan_update";
+const String kMouseEventTypePanEnd = "pan_end";
+const String kMouseEventTypeDown = "down";
+const String kMouseEventTypeUp = "up";
+
 const String kKeyFlutterKey = "flutter_key";
 
 const String kKeyShowDisplaysAsIndividualWindows =
@@ -201,7 +209,7 @@ const double kMinFps = 5;
 const double kDefaultFps = 30;
 const double kMaxFps = 120;
 
-const double kMinQuality = 5;
+const double kMinQuality = 10;
 const double kDefaultQuality = 50;
 const double kMaxQuality = 100;
 const double kMaxMoreQuality = 2000;
@@ -236,10 +244,6 @@ const double kDesktopIconButtonSplashRadius = 20;
 /// [kMinCursorSize] indicates min cursor (w, h)
 const int kMinCursorSize = 12;
 
-/// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
-const kDefaultScrollAmountMultiplier = 5.0;
-const kDefaultScrollDuration = Duration(milliseconds: 50);
-const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
 const kMaximizeEdgeSize = 0.0;
 // Do not use kWindowResizeEdgeSize directly. Use `windowResizeEdgeSize` in `common.dart` instead.
