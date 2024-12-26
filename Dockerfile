@@ -2,6 +2,7 @@ FROM debian:bullseye-slim
 
 WORKDIR /
 ARG DEBIAN_FRONTEND=noninteractive
+ENV VCPKG_FORCE_SYSTEM_BINARIES=1
 RUN apt update -y && \
     apt install --yes --no-install-recommends \
         g++ \
@@ -21,7 +22,8 @@ RUN apt update -y && \
         libpam0g-dev \
         libpulse-dev \
         make \
-        cmake \
+        wget \
+        libssl-dev \
         unzip \
         zip \
         sudo \
@@ -30,6 +32,13 @@ RUN apt update -y && \
         ca-certificates \
         ninja-build && \
         rm -rf /var/lib/apt/lists/*
+
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.30.6/cmake-3.30.6.tar.gz --no-check-certificate && \
+    tar xzf cmake-3.30.6.tar.gz && \
+    cd cmake-3.30.6 && \
+    ./configure  --prefix=/usr/local && \
+    make && \
+    make install
 
 RUN git clone --branch 2023.04.15 --depth=1 https://github.com/microsoft/vcpkg && \
     /vcpkg/bootstrap-vcpkg.sh -disableMetrics && \

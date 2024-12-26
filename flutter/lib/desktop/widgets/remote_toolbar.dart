@@ -305,7 +305,7 @@ class RemoteMenuEntry {
   }) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        '${translate("Insert")} Ctrl + Alt + Del',
+        translate("Insert Ctrl + Alt + Del"),
         style: style,
       ),
       proc: () {
@@ -1495,7 +1495,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     );
   }
 
-  TextField _resolutionInput(TextEditingController controller) {
+  Widget _resolutionInput(TextEditingController controller) {
     return TextField(
       decoration: InputDecoration(
         border: InputBorder.none,
@@ -1509,7 +1509,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
       ],
       controller: controller,
-    );
+    ).workaroundFreezeLinuxMint();
   }
 
   List<Widget> _supportedResolutionMenuButtons() => resolutions
@@ -1924,8 +1924,7 @@ class _RecordMenu extends StatelessWidget {
     var ffi = Provider.of<FfiModel>(context);
     var recordingModel = Provider.of<RecordingModel>(context);
     final visible =
-        (recordingModel.start || ffi.permissions['recording'] != false) &&
-            ffi.pi.currentDisplay != kAllDisplayValue;
+        (recordingModel.start || ffi.permissions['recording'] != false);
     if (!visible) return Offstage();
     return _IconMenuButton(
       assetName: 'assets/rec.svg',

@@ -45,7 +45,7 @@ mod custom_server;
 mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 mod clipboard;
 
 #[cfg(all(feature = "flutter", feature = "plugin_framework"))]

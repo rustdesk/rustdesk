@@ -5,7 +5,7 @@ use std::{
     task::Poll,
 };
 
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 
 use hbb_common::{
     allow_err,
@@ -837,7 +837,7 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
                 let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
             }
         }
-        *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url; 
+        *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
     }
     Ok(())
 }
@@ -1051,6 +1051,11 @@ pub fn get_supported_keyboard_modes(version: i64, peer_platform: &str) -> Vec<Ke
 }
 
 pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
+    let fd_json = _make_fd_to_json(id, path, entries);
+    serde_json::to_string(&fd_json).unwrap_or("".into())
+}
+
+pub fn _make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Map<String, Value> {
     use serde_json::json;
     let mut fd_json = serde_json::Map::new();
     fd_json.insert("id".into(), json!(id));
@@ -1066,7 +1071,33 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
         entries_out.push(entry_map);
     }
     fd_json.insert("entries".into(), json!(entries_out));
-    serde_json::to_string(&fd_json).unwrap_or("".into())
+    fd_json
+}
+
+pub fn make_vec_fd_to_json(fds: &[FileDirectory]) -> String {
+    let mut fd_jsons = vec![];
+
+    for fd in fds.iter() {
+        let fd_json = _make_fd_to_json(fd.id, fd.path.clone(), &fd.entries);
+        fd_jsons.push(fd_json);
+    }
+
+    serde_json::to_string(&fd_jsons).unwrap_or("".into())
+}
+
+pub fn make_empty_dirs_response_to_json(res: &ReadEmptyDirsResponse) -> String {
+    let mut map: Map<String, Value> = serde_json::Map::new();
+    map.insert("path".into(), json!(res.path));
+
+    let mut fd_jsons = vec![];
+
+    for fd in res.empty_dirs.iter() {
+        let fd_json = _make_fd_to_json(fd.id, fd.path.clone(), &fd.entries);
+        fd_jsons.push(fd_json);
+    }
+    map.insert("empty_dirs".into(), fd_jsons.into());
+
+    serde_json::to_string(&map).unwrap_or("".into())
 }
 
 /// The function to handle the url scheme sent by the system.

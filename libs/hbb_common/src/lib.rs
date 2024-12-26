@@ -27,6 +27,7 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
+pub mod mem;
 pub use lazy_static;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use mac_address;

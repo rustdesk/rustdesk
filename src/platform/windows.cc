@@ -222,6 +222,11 @@ extern "C"
         return IsWindowsServer();
     }
 
+    bool is_windows_10_or_greater()
+    {
+        return IsWindows10OrGreater();
+    }
+
     HANDLE LaunchProcessWin(LPCWSTR cmd, DWORD dwSessionId, BOOL as_user, DWORD *pDwTokenPid)
     {
         HANDLE hProcess = NULL;
