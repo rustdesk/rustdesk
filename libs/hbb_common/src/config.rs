@@ -101,7 +101,8 @@ const CHARS: &[char] = &[
 ];
 
 pub const RENDEZVOUS_SERVERS: &[&str] = &["nas.zionlio.com"];
-pub const PUBLIC_RS_PUB_KEY: &str = "9EXoS7bcQRfIN1aWxRGhkoKmP0rGG8ubJTAPetGhz7w=";
+//pub const PUBLIC_RS_PUB_KEY: &str = "9EXoS7bcQRfIN1aWxRGhkoKmP0rGG8ubJTAPetGhz7w=";
+pub const PUBLIC_RS_PUB_KEY: &str = "nbZiY4QtQC8eYYYrpzjNy7IZECe6zNFKCFBvOHFuXAs=";
 
 pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
     Some(key) if !key.is_empty() => key,
