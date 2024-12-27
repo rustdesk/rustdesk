@@ -1290,7 +1290,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#7cb4ed0bd5546bf209edde0d0e9da5194753f2c0"
+source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#6b374bcaed076750ca8fce6da518ab39b882e14a"
 dependencies = [
  "alsa",
  "cidre",
@@ -3065,7 +3065,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.7.1"
-source = "git+https://github.com/rustdesk-org/hwcodec#835e599ed229e4e01b6fa3566e02ea45c73e2e9c"
+source = "git+https://github.com/rustdesk-org/hwcodec#3e7c0dc755f8a77bbed3b2a9921553a511fd7bb5"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -5219,7 +5219,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/rustdesk-org/rdev#01ac3ec8009f04f7615842b9152338844b806184"
+source = "git+https://github.com/rustdesk-org/rdev#f9b60b1dd0f3300a1b797d7a74c116683cd232c8"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
@@ -5466,7 +5466,7 @@ dependencies = [
 [[package]]
 name = "rust-pulsectl"
 version = "0.2.12"
-source = "git+https://github.com/open-trade/pulsectl#5e68f4c2b7c644fa321984688602d71e8ad0bba3"
+source = "git+https://github.com/rustdesk-org/pulsectl#aa34dde499aa912a3abc5289cc0b547bd07dd6e2"
 dependencies = [
  "libpulse-binding",
 ]
@@ -5494,7 +5494,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.3.5"
+version = "1.3.6"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -5594,7 +5594,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.3.5"
+version = "1.3.6"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
@@ -5813,7 +5813,7 @@ dependencies = [
 [[package]]
 name = "sciter-rs"
 version = "0.5.57"
-source = "git+https://github.com/open-trade/rust-sciter?branch=dyn#5322f3a755a0e6bf999fbc60d1efc35246c0f821"
+source = "git+https://github.com/rustdesk-org/rust-sciter?branch=dyn#5322f3a755a0e6bf999fbc60d1efc35246c0f821"
 dependencies = [
  "lazy_static",
  "libc",

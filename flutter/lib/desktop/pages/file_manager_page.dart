@@ -768,7 +768,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                                   ),
                                   controller: name,
                                   autofocus: true,
-                                ),
+                                ).workaroundFreezeLinuxMint(),
                               ],
                             ),
                             actions: [
@@ -1657,7 +1657,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             onChanged: _locationStatus.value == LocationStatus.fileSearchBar
                 ? (searchText) => onSearchText(searchText, isLocal)
                 : null,
-          ),
+          ).workaroundFreezeLinuxMint(),
         )
       ],
     );
