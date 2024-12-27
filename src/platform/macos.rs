@@ -219,9 +219,8 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
 }
 
 fn correct_app_name(s: &str) -> String {
-    let s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
-    let s = s.replace("RustDesk", &crate::get_app_name());
-    s
+    let app_name = crate::get_app_name();
+    s.replace("赢商远程", &app_name)
 }
 
 pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
