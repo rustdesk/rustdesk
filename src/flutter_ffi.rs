@@ -275,6 +275,12 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     if sessions::get_session_by_session_id(&session_id).is_some() && value == "disable-clipboard" {
         crate::flutter::update_text_clipboard_required();
     }
+    #[cfg(feature = "unix-file-copy-paste")]
+    if sessions::get_session_by_session_id(&session_id).is_some()
+        && value == config::keys::OPTION_ENABLE_FILE_COPY_PASTE
+    {
+        crate::flutter::update_file_clipboard_required();
+    }
 }
 
 pub fn session_toggle_privacy_mode(session_id: SessionID, impl_key: String, on: bool) {
@@ -1948,13 +1954,7 @@ pub fn main_hide_dock() -> SyncReturn<bool> {
 }
 
 pub fn main_has_file_clipboard() -> SyncReturn<bool> {
-    let ret = cfg!(any(
-        target_os = "windows",
-        all(
-            feature = "unix-file-copy-paste",
-            any(target_os = "linux", target_os = "macos")
-        )
-    ));
+    let ret = cfg!(any(target_os = "windows", feature = "unix-file-copy-paste",));
     SyncReturn(ret)
 }
 

@@ -1555,7 +1555,7 @@ jobs:
               export JOBS=""
             fi
             echo $JOBS
-            cargo build --lib $JOBS --features hwcodec,flutter --release
+            cargo build --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo
 
@@ -1708,7 +1708,7 @@ jobs:
               deb_arch: amd64,
               sciter_arch: x64,
               vcpkg-triplet: x64-linux,
-              extra_features: ",hwcodec",
+              extra_features: ",hwcodec,unix-file-copy-paste",
             }
           - {
               arch: armv7,
@@ -1718,7 +1718,7 @@ jobs:
               deb_arch: armhf,
               sciter_arch: arm32,
               vcpkg-triplet: arm-linux,
-              extra_features: "",
+              extra_features: ",unix-file-copy-paste",
             }
     steps:
       - name: Export GitHub Actions cache environment variables

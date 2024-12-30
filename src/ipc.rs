@@ -25,9 +25,7 @@ use hbb_common::{
     config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
-    log, password_security as password,
-    sodiumoxide::base64,
-    timeout,
+    log, password_security as password, timeout,
     tokio::{
         self,
         io::{AsyncRead, AsyncWrite},
@@ -230,7 +228,7 @@ pub enum Data {
     FS(FS),
     Test,
     SyncConfig(Option<Box<(Config, Config2)>>),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(target_os = "windows")]
     ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
     #[cfg(target_os = "windows")]
