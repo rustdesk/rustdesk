@@ -736,10 +736,17 @@ impl Config {
                 .next()
                 .unwrap_or_default();
         }
-        if !rendezvous_server.contains(':') {
-            rendezvous_server = format!("{rendezvous_server}:{RENDEZVOUS_PORT}");
+        match rendezvous_server.matches(':').count() {
+            0 => format!("{rendezvous_server}:{RENDEZVOUS_PORT}"),
+            1 => rendezvous_server,
+            _ => {
+                if rendezvous_server.starts_with('[') {
+                    format!("{rendezvous_server}:{RENDEZVOUS_PORT}")
+                } else {
+                    format!("[{rendezvous_server}]:{RENDEZVOUS_PORT}")
+                }
+            }
         }
-        rendezvous_server
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {

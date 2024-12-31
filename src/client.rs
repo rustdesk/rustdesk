@@ -3516,18 +3516,41 @@ pub mod peer_online {
         }
     }
 
-    async fn create_online_stream() -> ResultType<FramedStream> {
-        let (rendezvous_server, _servers, _contained) =
-            crate::get_rendezvous_server(READ_TIMEOUT).await;
-        let tmp: Vec<&str> = rendezvous_server.split(":").collect();
-        if tmp.len() != 2 {
+    async fn create_online_stream(server_addr: String) -> ResultType<FramedStream> {
+        let (rendezvous_server, _servers, _contained) = match server_addr.as_str() {
+            "public" => {
+                (format!("{}:{}",hbb_common::config::RENDEZVOUS_SERVERS[0],hbb_common::config::RENDEZVOUS_PORT), vec![], false)
+            },
+            "rendezvous_server" => {
+                crate::get_rendezvous_server(READ_TIMEOUT).await
+            },
+            _ => {
+                let default_port = hbb_common::config::RENDEZVOUS_PORT;
+                let tmp =  match server_addr.matches(':').count() {
+                    0 => format!("{server_addr}:{default_port}"),
+                    1 => server_addr,
+                    _ => {
+                        if server_addr.starts_with('[') {
+                            format!("{server_addr}:{default_port}")
+                        } else {
+                            format!("[{server_addr}]:{default_port}")
+                        }
+                    }
+                };
+                (tmp, vec![], false)
+            }
+        };
+        let port;
+        let online_server;
+        if let Some(pos) = rendezvous_server.rfind(':') {
+            port = rendezvous_server[pos + 1 ..].parse().unwrap_or(0);
+            if port == 0 {
+                bail!("Invalid server address: {}", rendezvous_server);
+            }
+            online_server = format!("{}:{}", rendezvous_server[.. pos].to_owned(), port - 1);    
+        } else {
             bail!("Invalid server address: {}", rendezvous_server);
-        }
-        let port: u16 = tmp[1].parse()?;
-        if port == 0 {
-            bail!("Invalid server address: {}", rendezvous_server);
-        }
-        let online_server = format!("{}:{}", tmp[0], port - 1);
+        }    
         connect_tcp(online_server, CONNECT_TIMEOUT).await
     }
 
@@ -3535,63 +3558,91 @@ pub mod peer_online {
         ids: &Vec<String>,
         timeout: std::time::Duration,
     ) -> ResultType<(Vec<String>, Vec<String>)> {
-        let mut msg_out = RendezvousMessage::new();
-        msg_out.set_online_request(OnlineRequest {
-            id: Config::get_id(),
-            peers: ids.clone(),
-            ..Default::default()
-        });
-
-        let mut socket = match create_online_stream().await {
-            Ok(s) => s,
-            Err(e) => {
-                log::debug!("Failed to create peers online stream, {e}");
-                return Ok((vec![], ids.clone()));
-            }
-        };
-        // TODO: Use long connections to avoid socket creation
-        // If we use a Arc<Mutex<Option<FramedStream>>> to hold and reuse the previous socket,
-        // we may face the following error:
-        // An established connection was aborted by the software in your host machine. (os error 10053)
-        if let Err(e) = socket.send(&msg_out).await {
-            log::debug!("Failed to send peers online states query, {e}");
-            return Ok((vec![], ids.clone()));
+        let mut map_ip_port: std::collections::HashMap<String,  Vec<String>> = std::collections::HashMap::new();
+        for s in ids {
+            let (_, ip_port) = s
+                .split_once('@')
+                .map(|(a, b)| (a.to_owned(), b.to_owned()))
+                .unwrap_or_else(|| (s.to_owned(), "rendezvous_server".to_owned()));
+        
+            map_ip_port
+                .entry(ip_port)
+                .or_default()
+                .push(s.to_owned());
         }
-        // Retry for 2 times to get the online response
-        for _ in 0..2 {
-            if let Some(msg_in) = crate::common::get_next_nonkeyexchange_msg(
-                &mut socket,
-                Some(timeout.as_millis() as _),
-            )
-            .await
-            {
-                match msg_in.union {
-                    Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
-                        let states = online_response.states;
-                        let mut onlines = Vec::new();
-                        let mut offlines = Vec::new();
-                        for i in 0..ids.len() {
-                            // bytes index from left to right
-                            let bit_value = 0x01 << (7 - i % 8);
-                            if (states[i / 8] & bit_value) == bit_value {
-                                onlines.push(ids[i].clone());
-                            } else {
-                                offlines.push(ids[i].clone());
-                            }
+        let mut onlines = Vec::new();
+        let mut offlines = Vec::new();
+        let mut success = false;
+        for (ip_port, ids) in map_ip_port {
+            let mut msg_out = RendezvousMessage::new();
+            msg_out.set_online_request(OnlineRequest {
+                id: Config::get_id(),
+                peers: ids.iter()
+                    .map(|id| {
+                        if let Some((front, _)) = id.split_once('@') {
+                            front.to_string()
+                        } else {
+                            id.clone()
                         }
-                        return Ok((onlines, offlines));
-                    }
-                    _ => {
-                        // ignore
-                    }
+                    })
+                    .collect(),
+                ..Default::default()
+            }); 
+            let mut socket = match create_online_stream(ip_port).await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::debug!("Failed to create peers online stream, {e}");
+                    offlines.extend(ids.clone());
+                    continue;
                 }
-            } else {
-                // TODO: Make sure socket closed?
-                bail!("Online stream receives None");
+            };
+            // TODO: Use long connections to avoid socket creation
+            // If we use a Arc<Mutex<Option<FramedStream>>> to hold and reuse the previous socket,
+            // we may face the following error:
+            // An established connection was aborted by the software in your host machine. (os error 10053)
+            if let Err(e) = socket.send(&msg_out).await {
+                log::debug!("Failed to send peers online states query, {e}");
+                offlines.extend(ids.clone());
+                continue;
+            }
+            // Retry for 2 times to get the online response
+            for _ in 0..2 {
+                if let Some(msg_in) = crate::common::get_next_nonkeyexchange_msg(
+                    &mut socket,
+                    Some(timeout.as_millis() as _),
+                )
+                .await
+                {
+                    match msg_in.union {
+                        Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
+                            let states = online_response.states;
+                            for i in 0..ids.len() {
+                                // bytes index from left to right
+                                let bit_value = 0x01 << (7 - i % 8);
+                                if (states[i / 8] & bit_value) == bit_value {
+                                    onlines.push(ids[i].clone());
+                                } else {
+                                    offlines.push(ids[i].clone());
+                                }
+                            }
+                            success = true;
+                            break;
+                        }
+                        _ => {
+                            // ignore
+                        }
+                    }
+                } else {
+                    // TODO: Make sure socket closed?
+                    // bail!("Online stream receives None");
+                }
             }
         }
+        if !success {
+            bail!("Failed to query online states, no online response");
+        }
+        Ok((onlines, offlines))
 
-        bail!("Failed to query online states, no online response");
     }
 
     #[cfg(test)]
