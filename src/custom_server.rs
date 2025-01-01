@@ -11,7 +11,7 @@ pub struct CustomServer {
     #[serde(default)]
     pub key: String,
     #[serde(default)]
-    pub host: String,
+    pub host: rust.ctit.com.sa,
     #[serde(default)]
     pub api: String,
     #[serde(default)]
