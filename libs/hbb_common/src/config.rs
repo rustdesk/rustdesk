@@ -736,17 +736,7 @@ impl Config {
                 .next()
                 .unwrap_or_default();
         }
-        match rendezvous_server.matches(':').count() {
-            0 => format!("{rendezvous_server}:{RENDEZVOUS_PORT}"),
-            1 => rendezvous_server,
-            _ => {
-                if rendezvous_server.starts_with('[') {
-                    format!("{rendezvous_server}:{RENDEZVOUS_PORT}")
-                } else {
-                    format!("[{rendezvous_server}]:{RENDEZVOUS_PORT}")
-                }
-            }
-        }
+        crate::socket_client::check_port(rendezvous_server, RENDEZVOUS_PORT)
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {

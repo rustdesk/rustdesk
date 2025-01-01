@@ -3525,19 +3525,7 @@ pub mod peer_online {
                 crate::get_rendezvous_server(READ_TIMEOUT).await
             },
             _ => {
-                let default_port = hbb_common::config::RENDEZVOUS_PORT;
-                let tmp =  match server_addr.matches(':').count() {
-                    0 => format!("{server_addr}:{default_port}"),
-                    1 => server_addr,
-                    _ => {
-                        if server_addr.starts_with('[') {
-                            format!("{server_addr}:{default_port}")
-                        } else {
-                            format!("[{server_addr}]:{default_port}")
-                        }
-                    }
-                };
-                (tmp, vec![], false)
+                (hbb_common::socket_client::check_port(server_addr, hbb_common::config::RENDEZVOUS_PORT), vec![], false)
             }
         };
         let port;
