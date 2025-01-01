@@ -2,12 +2,14 @@ use async_trait::async_trait;
 use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use clipboard_master::{CallbackResult, ClipboardHandler};
+#[cfg(not(target_os = "linux"))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
 };
 use crossbeam_queue::ArrayQueue;
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
+#[cfg(not(target_os = "linux"))]
 use ringbuf::{ring_buffer::RbBase, Rb};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -117,6 +119,7 @@ pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
 pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
 pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
+#[cfg(not(target_os = "linux"))]
 pub const AUDIO_BUFFER_MS: usize = 3000;
 
 #[cfg(feature = "flutter")]
@@ -139,6 +142,7 @@ struct TextClipboardState {
     running: bool,
 }
 
+#[cfg(not(target_os = "linux"))]
 lazy_static::lazy_static! {
     static ref AUDIO_HOST: Host = cpal::default_host();
 }
@@ -861,20 +865,28 @@ impl ClipboardHandler for ClientClipboardHandler {
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
+    #[cfg(target_os = "linux")]
+    simple: Option<psimple::Simple>,
+    #[cfg(not(target_os = "linux"))]
     audio_buffer: AudioBuffer,
     sample_rate: (u32, u32),
+    #[cfg(not(target_os = "linux"))]
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
+    #[cfg(not(target_os = "linux"))]
     device_channel: u16,
+    #[cfg(not(target_os = "linux"))]
     ready: Arc<std::sync::Mutex<bool>>,
 }
 
+#[cfg(not(target_os = "linux"))]
 struct AudioBuffer(
     pub Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
     usize,
     [usize; 30],
 );
 
+#[cfg(not(target_os = "linux"))]
 impl Default for AudioBuffer {
     fn default() -> Self {
         Self(
@@ -887,6 +899,7 @@ impl Default for AudioBuffer {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 impl AudioBuffer {
     pub fn resize(&mut self, sample_rate: usize, channels: usize) {
         let capacity = sample_rate * channels * AUDIO_BUFFER_MS / 1000;
@@ -989,7 +1002,37 @@ impl AudioBuffer {
 }
 
 impl AudioHandler {
+    #[cfg(target_os = "linux")]
+    fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
+        use psimple::Simple;
+        use pulse::sample::{Format, Spec};
+        use pulse::stream::Direction;
+
+        let spec = Spec {
+            format: Format::F32le,
+            channels: format0.channels as _,
+            rate: format0.sample_rate as _,
+        };
+        if !spec.is_valid() {
+            bail!("Invalid audio format");
+        }
+
+        self.simple = Some(Simple::new(
+            None,                   // Use the default server
+            &crate::get_app_name(), // Our application’s name
+            Direction::Playback,    // We want a playback stream
+            None,                   // Use the default device
+            "playback",             // Description of our stream
+            &spec,                  // Our sample format
+            None,                   // Use default channel map
+            None,                   // Use default buffering attributes
+        )?);
+        self.sample_rate = (format0.sample_rate, format0.sample_rate);
+        Ok(())
+    }
+
     /// Start the audio playback.
+    #[cfg(not(target_os = "linux"))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         let device = AUDIO_HOST
             .default_output_device()
@@ -1002,8 +1045,13 @@ impl AudioHandler {
         let sample_format = config.sample_format();
         log::info!("Default output format: {:?}", config);
         log::info!("Remote input format: {:?}", format0);
+        #[allow(unused_mut)]
         let mut config: StreamConfig = config.into();
-        config.buffer_size = cpal::BufferSize::Fixed(64);
+        #[cfg(not(target_os = "ios"))]
+        {
+            // this makes ios audio output not work
+            config.buffer_size = cpal::BufferSize::Fixed(64);
+        }
 
         self.sample_rate = (format0.sample_rate, config.sample_rate.0);
         let mut build_output_stream = |config: StreamConfig| match sample_format {
@@ -1052,13 +1100,20 @@ impl AudioHandler {
     /// Handle audio frame and play it.
     #[inline]
     pub fn handle_frame(&mut self, frame: AudioFrame) {
+        #[cfg(not(target_os = "linux"))]
         if self.audio_stream.is_none() || !self.ready.lock().unwrap().clone() {
+            return;
+        }
+        #[cfg(target_os = "linux")]
+        if self.simple.is_none() {
+            log::debug!("PulseAudio simple binding does not exists");
             return;
         }
         self.audio_decoder.as_mut().map(|(d, buffer)| {
             if let Ok(n) = d.decode_float(&frame.data, buffer, false) {
                 let channels = self.channels;
                 let n = n * (channels as usize);
+                #[cfg(not(target_os = "linux"))]
                 {
                     let sample_rate0 = self.sample_rate.0;
                     let sample_rate = self.sample_rate.1;
@@ -1082,11 +1137,18 @@ impl AudioHandler {
                     }
                     self.audio_buffer.append_pcm(&buffer);
                 }
+                #[cfg(target_os = "linux")]
+                {
+                    let data_u8 =
+                        unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
+                    self.simple.as_mut().map(|x| x.write(data_u8));
+                }
             }
         });
     }
 
     /// Build audio output stream for current device.
+    #[cfg(not(target_os = "linux"))]
     fn build_output_stream<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
         &mut self,
         config: &StreamConfig,
@@ -1379,7 +1441,8 @@ pub struct LoginConfigHandler {
     password_source: PasswordSource, // where the sent password comes from
     shared_password: Option<String>, // Store the shared password
     pub enable_trusted_devices: bool,
-    pub record: bool,
+    pub record_state: bool,
+    pub record_permission: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1484,7 +1547,8 @@ impl LoginConfigHandler {
         self.adapter_luid = adapter_luid;
         self.selected_windows_session_id = None;
         self.shared_password = shared_password;
-        self.record = LocalConfig::get_bool_option(OPTION_ALLOW_AUTO_RECORD_OUTGOING);
+        self.record_state = false;
+        self.record_permission = true;
     }
 
     /// Check if the client should auto login.
@@ -2349,10 +2413,11 @@ pub fn start_video_thread<F, T>(
                         let format = CodecFormat::from(&vf);
                         if video_handler.is_none() {
                             let mut handler = VideoHandler::new(format, display);
-                            let record = session.lc.read().unwrap().record;
+                            let record_state = session.lc.read().unwrap().record_state;
+                            let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();
-                            if record {
-                                handler.record_screen(record, id, display);
+                            if record_state && record_permission {
+                                handler.record_screen(true, id, display);
                             }
                             video_handler = Some(handler);
                         }
@@ -2431,8 +2496,6 @@ pub fn start_video_thread<F, T>(
                         }
                     }
                     MediaData::RecordScreen(start) => {
-                        log::info!("record screen command: start: {start}");
-                        session.update_record_status(start);
                         let id = session.lc.read().unwrap().id.clone();
                         if let Some(handler) = video_handler.as_mut() {
                             handler.record_screen(start, id, display);
@@ -2748,6 +2811,7 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
         return;
     }
     let mut key_event = KeyEvent::new();
+    key_event.mode = KeyboardMode::Legacy.into();
     key_event.press = true;
     let mut msg_out = Message::new();
     key_event.set_seq(p);

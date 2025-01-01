@@ -3,7 +3,7 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Seek},
     os::unix::prelude::PermissionsExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::SystemTime,
 };
@@ -51,7 +51,7 @@ pub(super) struct LocalFile {
 }
 
 impl LocalFile {
-    pub fn try_open(path: &PathBuf) -> Result<Self, CliprdrError> {
+    pub fn try_open(path: &Path) -> Result<Self, CliprdrError> {
         let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
             path: path.clone(),
             err: e,
@@ -219,7 +219,7 @@ impl LocalFile {
 
 pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, CliprdrError> {
     fn constr_file_lst(
-        path: &PathBuf,
+        path: &Path,
         file_list: &mut Vec<LocalFile>,
         visited: &mut HashSet<PathBuf>,
     ) -> Result<(), CliprdrError> {

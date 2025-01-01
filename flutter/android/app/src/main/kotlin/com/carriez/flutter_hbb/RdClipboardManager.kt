@@ -36,19 +36,19 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     // though the `lastUpdatedClipData` will be set to null once.
     private var lastUpdatedClipData: ClipData? = null
     private var isClientEnabled = true;
-    private var _isListening = false;
-    val isListening: Boolean
-        get() = _isListening
+    private var _isCaptureStarted = false;
 
-    fun checkPrimaryClip(isClient: Boolean, isSync: Boolean) {
+    val isCaptureStarted: Boolean
+        get() = _isCaptureStarted
+
+    fun checkPrimaryClip(isClient: Boolean) {
         val clipData = clipboardManager.primaryClip
         if (clipData != null && clipData.itemCount > 0) {
             // Only handle the first item in the clipboard for now.
             val clip = clipData.getItemAt(0)
-            val isHostSync = !isClient && isSync
-            // Ignore the `isClipboardDataEqual()` check if it's a host sync operation.
-            // Because it's a action manually triggered by the user.
-            if (!isHostSync) {
+            // Ignore the `isClipboardDataEqual()` check if it's a host operation.
+            // Because it's an action manually triggered by the user.
+            if (isClient) {
                 if (lastUpdatedClipData != null && isClipboardDataEqual(clipData, lastUpdatedClipData!!)) {
                     Log.d(logTag, "Clipboard data is the same as last update, ignore")
                     return
@@ -95,13 +95,6 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         }
     }
 
-    private val clipboardListener = object : ClipboardManager.OnPrimaryClipChangedListener {
-        override fun onPrimaryClipChanged() {
-            Log.d(logTag, "onPrimaryClipChanged")
-            checkPrimaryClip(true, false)
-        }
-    }
-
     private fun isSupportedMimeType(mimeType: String): Boolean {
         return supportedMimeTypes.contains(mimeType)
     }
@@ -136,43 +129,23 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         return true
     }
 
-    @Keep
-    fun rustEnableServiceClipboard(enable: Boolean) {
-        Log.d(logTag, "rustEnableServiceClipboard: enable: $enable, _isListening: $_isListening")
-        if (enable) {
-            if (!_isListening) {
-                clipboardManager.addPrimaryClipChangedListener(clipboardListener)
-                _isListening = true
-            }
-        } else {
-            if (_isListening) {
-                clipboardManager.removePrimaryClipChangedListener(clipboardListener)
-                _isListening = false
-                lastUpdatedClipData = null
-            }
-        }
+    fun setCaptureStarted(started: Boolean) {
+        _isCaptureStarted = started
     }
 
     @Keep
     fun rustEnableClientClipboard(enable: Boolean) {
         Log.d(logTag, "rustEnableClientClipboard: enable: $enable")
         isClientEnabled = enable
-        if (enable) {
-            lastUpdatedClipData = clipboardManager.primaryClip
-        } else {
-            lastUpdatedClipData = null
-        }
+        lastUpdatedClipData = null
     }
 
     fun syncClipboard(isClient: Boolean) {
-        Log.d(logTag, "syncClipboard: isClient: $isClient, isClientEnabled: $isClientEnabled, _isListening: $_isListening")
+        Log.d(logTag, "syncClipboard: isClient: $isClient, isClientEnabled: $isClientEnabled")
         if (isClient && !isClientEnabled) {
             return
         }
-        if (!isClient && !_isListening) {
-            return
-        }
-        checkPrimaryClip(isClient, true)
+        checkPrimaryClip(isClient)
     }
 
     @Keep

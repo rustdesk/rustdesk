@@ -2809,7 +2809,7 @@ Widget buildRemoteBlock(
         onExit: (event) => block.value = false,
         child: Stack(children: [
           // scope block tab
-          FocusScope(child: child, canRequestFocus: !block.value),
+          preventMouseKeyBuilder(child: child, block: block.value),
           // mask block click, cm not block click and still use check_click_time to avoid block local click
           if (mask)
             Offstage(
@@ -2819,6 +2819,11 @@ Widget buildRemoteBlock(
                 )),
         ]),
       ));
+}
+
+Widget preventMouseKeyBuilder({required Widget child, required bool block}) {
+  return ExcludeFocus(
+      excluding: block, child: AbsorbPointer(child: child, absorbing: block));
 }
 
 Widget unreadMessageCountBuilder(RxInt? count,
@@ -3602,4 +3607,34 @@ List<SubWindowResizeEdge>? get subWindowManagerEnableResizeEdges => isWindows
 
 void earlyAssert() {
   assert('\1' == '1');
+}
+
+void checkUpdate() {
+  if (isDesktop || isAndroid) {
+    if (!bind.isCustomClient()) {
+      platformFFI.registerEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+          (Map<String, dynamic> evt) async {
+        if (evt['url'] is String) {
+          stateGlobal.updateUrl.value = evt['url'];
+        }
+      });
+      Timer(const Duration(seconds: 1), () async {
+        bind.mainGetSoftwareUpdateUrl();
+      });
+    }
+  }
+}
+
+// https://github.com/flutter/flutter/issues/153560#issuecomment-2497160535
+// For TextField, TextFormField
+extension WorkaroundFreezeLinuxMint on Widget {
+  Widget workaroundFreezeLinuxMint() {
+    // No need to check if is Linux Mint, because this workaround is harmless on other platforms.
+    if (isLinux) {
+      return ExcludeSemantics(child: this);
+    } else {
+      return this;
+    }
+  }
 }
