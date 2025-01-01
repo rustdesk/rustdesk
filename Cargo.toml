@@ -1,6 +1,5 @@
 [package]
-# name = "rustdesk"
-name = "雅戈尔远程"
+name = "rustdesk"
 version = "1.3.6"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
