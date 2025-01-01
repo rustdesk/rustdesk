@@ -405,12 +405,13 @@ def build_flutter_dmg(version, features):
     if not skip_cargo:
         # set minimum osx build target, now is 10.14, which is the same as the flutter xcode project
         system2(
-            f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --lib --release')
+            f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --release')
     # copy dylib
     system2(
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
     os.chdir('flutter')
     system2('flutter build macos --release')
+    system2('cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/')
     '''
     system2(
         "create-dmg --volname \"RustDesk Installer\" --window-pos 200 120 --window-size 800 400 --icon-size 100 --app-drop-link 600 185 --icon RustDesk.app 200 190 --hide-extension RustDesk.app rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")

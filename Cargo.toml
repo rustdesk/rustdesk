@@ -16,6 +16,10 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 name = "naming"
 path = "src/naming.rs"
 
+[[bin]]
+name = "service"
+path = "src/service.rs"
+
 [features]
 inline = []
 cli = []
