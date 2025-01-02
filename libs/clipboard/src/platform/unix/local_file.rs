@@ -53,7 +53,7 @@ pub(super) struct LocalFile {
 impl LocalFile {
     pub fn try_open(path: &Path) -> Result<Self, CliprdrError> {
         let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
-            path: path.clone(),
+            path: path.to_string_lossy().to_string(),
             err: e,
         })?;
         let size = mt.len() as u64;
@@ -79,7 +79,7 @@ impl LocalFile {
 
         Ok(Self {
             name,
-            path: path.clone(),
+            path: path.to_path_buf(),
             handle,
             offset,
             size,
@@ -172,12 +172,12 @@ impl LocalFile {
     pub fn load_handle(&mut self) -> Result<(), CliprdrError> {
         if !self.is_dir && self.handle.is_none() {
             let handle = std::fs::File::open(&self.path).map_err(|e| CliprdrError::FileError {
-                path: self.path.clone(),
+                path: self.path.to_string_lossy().to_string(),
                 err: e,
             })?;
             let mut reader = BufReader::with_capacity(BLOCK_SIZE as usize * 2, handle);
             reader.fill_buf().map_err(|e| CliprdrError::FileError {
-                path: self.path.clone(),
+                path: self.path.to_string_lossy().to_string(),
                 err: e,
             })?;
             self.handle = Some(reader);
@@ -188,20 +188,25 @@ impl LocalFile {
     pub fn read_exact_at(&mut self, buf: &mut [u8], offset: u64) -> Result<(), CliprdrError> {
         self.load_handle()?;
 
-        let handle = self.handle.as_mut()?;
+        let Some(handle) = self.handle.as_mut() else {
+            return Err(CliprdrError::FileError {
+                path: self.path.to_string_lossy().to_string(),
+                err: std::io::Error::new(std::io::ErrorKind::NotFound, "file handle not found"),
+            });
+        };
 
         if offset != self.offset.load(Ordering::Relaxed) {
             handle
                 .seek(std::io::SeekFrom::Start(offset))
                 .map_err(|e| CliprdrError::FileError {
-                    path: self.path.clone(),
+                    path: self.path.to_string_lossy().to_string(),
                     err: e,
                 })?;
         }
         handle
             .read_exact(buf)
             .map_err(|e| CliprdrError::FileError {
-                path: self.path.clone(),
+                path: self.path.to_string_lossy().to_string(),
                 err: e,
             })?;
         let new_offset = offset + (buf.len() as u64);
@@ -227,20 +232,26 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
         if visited.contains(path) {
             return Ok(());
         }
-        visited.insert(path.clone());
+        visited.insert(path.to_path_buf());
 
         let local_file = LocalFile::try_open(path)?;
         file_list.push(local_file);
 
         let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
-            path: path.clone(),
+            path: path.to_string_lossy().to_string(),
             err: e,
         })?;
 
         if mt.is_dir() {
-            let dir = std::fs::read_dir(path)?;
+            let dir = std::fs::read_dir(path).map_err(|e| CliprdrError::FileError {
+                path: path.to_string_lossy().to_string(),
+                err: e,
+            })?;
             for entry in dir {
-                let entry = entry?;
+                let entry = entry.map_err(|e| CliprdrError::FileError {
+                    path: path.to_string_lossy().to_string(),
+                    err: e,
+                })?;
                 let path = entry.path();
                 constr_file_lst(&path, file_list, visited)?;
             }

@@ -1,12 +1,12 @@
 use super::{input_service::*, *};
+#[cfg(feature = "unix-file-copy-paste")]
+use crate::clipboard::try_empty_clipboard_files;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::{update_clipboard, ClipboardSide};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use crate::clipboard_file::*;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
-#[cfg(target_os = "linux")]
-use crate::platform::linux::is_x11;
 #[cfg(target_os = "linux")]
 use crate::platform::linux_desktop_manager;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -443,6 +443,20 @@ impl Connection {
         std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
+        #[cfg(feature = "unix-file-copy-paste")]
+        let rx_clip1;
+        let mut rx_clip;
+        let _tx_clip: mpsc::UnboundedSender<i32>;
+        #[cfg(feature = "unix-file-copy-paste")]
+        {
+            rx_clip1 = clipboard::get_rx_cliprdr_server(id);
+            rx_clip = rx_clip1.lock().await;
+        }
+        #[cfg(not(feature = "unix-file-copy-paste"))]
+        {
+            (_tx_clip, rx_clip) = mpsc::unbounded_channel::<i32>();
+        }
+
         loop {
             tokio::select! {
                 // biased; // video has higher priority // causing test_delay_timer failed while transferring big file
@@ -490,6 +504,12 @@ impl Connection {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
                                         conn.inner.clone(), conn.can_sub_clipboard_service());
+                                    #[cfg(feature = "unix-file-copy-paste")]
+                                    s.write().unwrap().subscribe(
+                                        super::clipboard_service::FILE_NAME,
+                                        conn.inner.clone(),
+                                        conn.can_sub_file_clipboard_service(),
+                                    );
                                     s.write().unwrap().subscribe(
                                         NAME_CURSOR,
                                         conn.inner.clone(), enabled || conn.show_remote_cursor);
@@ -515,6 +535,18 @@ impl Connection {
                             } else if &name == "file" {
                                 conn.file = enabled;
                                 conn.send_permission(Permission::File, enabled).await;
+                                #[cfg(feature = "unix-file-copy-paste")]
+                                if !enabled {
+                                    conn.try_empty_file_clipboard();
+                                }
+                                #[cfg(feature = "unix-file-copy-paste")]
+                                if let Some(s) = conn.server.upgrade() {
+                                    s.write().unwrap().subscribe(
+                                        super::clipboard_service::FILE_NAME,
+                                        conn.inner.clone(),
+                                        conn.can_sub_file_clipboard_service(),
+                                    );
+                                }
                             } else if &name == "restart" {
                                 conn.restart = enabled;
                                 conn.send_permission(Permission::Restart, enabled).await;
@@ -529,7 +561,7 @@ impl Connection {
                         ipc::Data::RawMessage(bytes) => {
                             allow_err!(conn.stream.send_raw(bytes).await);
                         }
-                        #[cfg(any(target_os="windows", target_os="linux", target_os = "macos"))]
+                        #[cfg(target_os = "windows")]
                         ipc::Data::ClipboardFile(clip) => {
                             allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
                         }
@@ -738,6 +770,17 @@ impl Connection {
                     }
                     video_service::VIDEO_QOS.lock().unwrap().user_delay_response_elapsed(conn.inner.id(), conn.delay_response_instant.elapsed().as_millis());
                 }
+                clip_file = rx_clip.recv() => match clip_file {
+                    Some(_clip) => {
+                        #[cfg(feature = "unix-file-copy-paste")]
+                        {
+                            conn.handle_file_clip(_clip).await;
+                        }
+                    }
+                    None => {
+                        //
+                    }
+                },
             }
         }
 
@@ -1200,15 +1243,22 @@ impl Connection {
             );
         }
 
-        #[cfg(any(
-            target_os = "windows",
-            all(
-                any(target_os = "linux", target_os = "macos"),
-                feature = "unix-file-copy-paste"
-            )
-        ))]
+        #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
         {
-            platform_additions.insert("has_file_clipboard".into(), json!(true));
+            // to-do: support cross-platform file clipboard
+            let is_same_platform = if cfg!(target_os = "windows") {
+                self.lr.my_platform == whoami::Platform::Windows.to_string()
+            } else if cfg!(target_os = "linux") {
+                self.lr.my_platform == whoami::Platform::Linux.to_string()
+            } else {
+                // to-do: We do not support file clipboard on macOS for now.
+                // Though copy&paste works fine between macOS and Linux.
+                // Because https://github.com/macfuse/macfuse/wiki/Getting-Started#enabling-support-for-third-party-kernel-extensions-apple-silicon-macs
+                false
+            };
+            if is_same_platform {
+                platform_additions.insert("has_file_clipboard".into(), json!(is_same_platform));
+            }
         }
 
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
@@ -1373,6 +1423,10 @@ impl Connection {
                 if !self.can_sub_clipboard_service() {
                     noperms.push(super::clipboard_service::NAME);
                 }
+                #[cfg(feature = "unix-file-copy-paste")]
+                if !self.can_sub_file_clipboard_service() {
+                    noperms.push(super::clipboard_service::FILE_NAME);
+                }
                 if !self.audio_enabled() {
                     noperms.push(super::audio_service::NAME);
                 }
@@ -1453,9 +1507,16 @@ impl Connection {
         self.audio && !self.disable_audio
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     fn file_transfer_enabled(&self) -> bool {
         self.file && self.enable_file_transfer
+    }
+
+    #[cfg(feature = "unix-file-copy-paste")]
+    fn can_sub_file_clipboard_service(&self) -> bool {
+        self.clipboard_enabled()
+            && self.file_transfer_enabled()
+            && crate::get_builtin_option(keys::OPTION_ONE_WAY_FILE_TRANSFER) != "Y"
     }
 
     fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
@@ -2112,12 +2173,18 @@ impl Connection {
                     #[cfg(target_os = "android")]
                     crate::clipboard::handle_msg_multi_clipboards(_mcb);
                 }
-                Some(message::Union::Cliprdr(_clip)) =>
-                {
-                    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+                Some(message::Union::Cliprdr(_clip)) => {
+                    #[cfg(target_os = "windows")]
                     if let Some(clip) = msg_2_clip(_clip) {
-                        log::debug!("got clipfile from client peer");
                         self.send_to_cm(ipc::Data::ClipboardFile(clip))
+                    }
+                    #[cfg(feature = "unix-file-copy-paste")]
+                    if let Some(clip) = msg_2_clip(_clip) {
+                        if let Some(msg) =
+                            unix_file_clip::serve_clip_messages(false, clip, self.inner.id())
+                        {
+                            self.send(msg).await;
+                        }
                     }
                 }
                 Some(message::Union::FileAction(fa)) => {
@@ -2910,13 +2977,26 @@ impl Connection {
                 }
             }
         }
-        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;
+                #[cfg(target_os = "windows")]
                 self.send_to_cm(ipc::Data::ClipboardFileEnabled(
                     self.file_transfer_enabled(),
                 ));
+                #[cfg(feature = "unix-file-copy-paste")]
+                if !self.enable_file_transfer {
+                    self.try_empty_file_clipboard();
+                }
+                #[cfg(feature = "unix-file-copy-paste")]
+                if let Some(s) = self.server.upgrade() {
+                    s.write().unwrap().subscribe(
+                        super::clipboard_service::FILE_NAME,
+                        self.inner.clone(),
+                        self.can_sub_file_clipboard_service(),
+                    );
+                }
             }
         }
         if let Ok(q) = o.disable_clipboard.enum_value() {
@@ -2939,6 +3019,12 @@ impl Connection {
                         super::clipboard_service::NAME,
                         self.inner.clone(),
                         self.can_sub_clipboard_service(),
+                    );
+                    #[cfg(feature = "unix-file-copy-paste")]
+                    s.write().unwrap().subscribe(
+                        super::clipboard_service::FILE_NAME,
+                        self.inner.clone(),
+                        self.can_sub_file_clipboard_service(),
                     );
                     s.write().unwrap().subscribe(
                         NAME_CURSOR,
@@ -3321,6 +3407,43 @@ impl Connection {
             name: self.lr.my_name.clone(),
             session_id: self.lr.session_id,
         }
+    }
+
+    #[cfg(feature = "unix-file-copy-paste")]
+    async fn handle_file_clip(&mut self, clip: clipboard::ClipboardFile) {
+        let is_stopping_allowed = clip.is_stopping_allowed();
+        let is_keyboard_enabled = self.peer_keyboard_enabled();
+        let file_transfer_enabled = self.file_transfer_enabled();
+        let stop = is_stopping_allowed && !file_transfer_enabled;
+        log::debug!(
+            "Process clipboard message from clip, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
+            stop, is_stopping_allowed, file_transfer_enabled);
+        if !stop {
+            use hbb_common::config::keys::OPTION_ONE_WAY_FILE_TRANSFER;
+            // Note: Code will not reach here if `crate::get_builtin_option(OPTION_ONE_WAY_FILE_TRANSFER) == "Y"` is true.
+            // Because `file-clipboard` service will not be subscribed.
+            // But we still check it here to keep the same logic to windows version in `ui_cm_interface.rs`.
+            if clip.is_beginning_message()
+                && crate::get_builtin_option(OPTION_ONE_WAY_FILE_TRANSFER) == "Y"
+            {
+                // If one way file transfer is enabled, don't send clipboard file to client
+            } else {
+                // Maybe we should end the connection, because copy&paste files causes everything to wait.
+                allow_err!(
+                    self.stream
+                        .send(&crate::clipboard_file::clip_2_msg(clip))
+                        .await
+                );
+            }
+        }
+    }
+
+    #[inline]
+    #[cfg(feature = "unix-file-copy-paste")]
+    fn try_empty_file_clipboard(&mut self) {
+        // No need to check if current clipboard files are set by this connection or the other ones.
+        // It's a rare case.
+        try_empty_clipboard_files(ClipboardSide::Host);
     }
 }
 

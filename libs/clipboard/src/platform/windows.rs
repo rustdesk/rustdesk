@@ -6,10 +6,10 @@
 #![allow(deref_nullptr)]
 
 use crate::{
-    allow_err, send_data, ClipboardFile, CliprdrError, CliprdrServiceContext, ResultType,
+    send_data, ClipboardFile, CliprdrError, CliprdrServiceContext, ResultType,
     ERR_CODE_INVALID_PARAMETER, ERR_CODE_SEND_MSG, ERR_CODE_SERVER_FUNCTION_NONE, VEC_MSG_CHANNEL,
 };
-use hbb_common::log;
+use hbb_common::{allow_err, log};
 use std::{
     boxed::Box,
     ffi::{CStr, CString},

@@ -150,9 +150,9 @@ impl fuser::Filesystem for FuseClient {
         server.release(req, ino, fh, _flags, _lock_owner, _flush, reply)
     }
 
-    fn getattr(&mut self, req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyAttr) {
+    fn getattr(&mut self, req: &fuser::Request<'_>, ino: u64, fh: Option<u64>, reply: fuser::ReplyAttr) {
         let mut server = self.server.lock();
-        server.getattr(req, ino, reply)
+        server.getattr(req, ino, fh, reply)
     }
 
     fn statfs(&mut self, req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyStatfs) {
@@ -247,7 +247,6 @@ impl fuser::Filesystem for FuseServer {
 
         if parent_entry.attributes.kind != FileType::Directory {
             log::error!("fuse: parent is not a directory");
-
             reply.error(libc::ENOTDIR);
             return;
         }
@@ -480,7 +479,7 @@ impl fuser::Filesystem for FuseServer {
         reply.ok();
     }
 
-    fn getattr(&mut self, _req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyAttr) {
+    fn getattr(&mut self, _req: &fuser::Request<'_>, ino: u64, _fh: Option<u64>, reply: fuser::ReplyAttr) {
         let files = &self.files;
         let Some(entry) = files.get(ino as usize - 1) else {
             reply.error(libc::ENOENT);
@@ -527,14 +526,6 @@ impl FuseServer {
         size: u32,
     ) -> Result<Vec<u8>, std::io::Error> {
         // todo: async and concurrent read, generate stream_id per request
-        log::debug!(
-            "reading {:?} offset {} size {} on stream: {}",
-            node.name,
-            offset,
-            size,
-            node.stream_id
-        );
-
         let cb_requested = unsafe {
             // convert `size` from u32 to i32
             // yet with same bit representation
@@ -554,16 +545,14 @@ impl FuseServer {
             clip_data_id: 0,
         };
 
-        send_data(node.conn_id, request.clone());
-
-        log::debug!(
-            "waiting for read reply for {:?} on stream: {}",
-            node.name,
-            node.stream_id
-        );
+        send_data(node.conn_id, request.clone()).map_err(|e| {
+            log::error!("failed to send file list to channel: {:?}", e);
+            std::io::Error::new(std::io::ErrorKind::Other, e)
+        })?;
 
         let mut retry_times = 0;
 
+        // to-do: more tests needed
         loop {
             let reply = self.rx.recv_timeout(self.timeout).map_err(|e| {
                 log::error!("failed to receive file list from channel: {:?}", e);
@@ -590,7 +579,10 @@ impl FuseServer {
                             ));
                         }
 
-                        send_data(node.conn_id, request.clone());
+                        send_data(node.conn_id, request.clone()).map_err(|e| {
+                            log::error!("failed to send file list to channel: {:?}", e);
+                            std::io::Error::new(std::io::ErrorKind::Other, e)
+                        })?;
                         continue;
                     }
                     return Ok(requested_data);
@@ -881,7 +873,7 @@ impl FuseNode {
                     format!("invalid file name {}", file.name.display()),
                 );
                 CliprdrError::FileError {
-                    path: file.name.clone(),
+                    path: file.name.to_string_lossy().to_string(),
                     err,
                 }
             })?;
@@ -1064,8 +1056,6 @@ impl FileHandles {
 
 #[cfg(test)]
 mod fuse_test {
-    use std::str::FromStr;
-
     use super::*;
 
     // todo: more tests needed!
