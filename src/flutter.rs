@@ -2104,7 +2104,8 @@ pub(super) mod async_tasks {
         let _ = TX_QUERY_ONLINES.lock().unwrap().take();
     }
 
-    #[tokio::main(flavor = "current_thread")]
+    // #[tokio::main(flavor = "current_thread")]
+    #[tokio::main(flavor = "multi_thread")]
     async fn start_flutter_async_runner_() {
         // Only one task is allowed to run at the same time.
         let (tx_onlines, rx_onlines) = sync_channel::<Vec<String>>(1);

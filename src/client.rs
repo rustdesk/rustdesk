@@ -3485,16 +3485,15 @@ async fn hc_connection_(
 }
 
 pub mod peer_online {
+    use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+
     use hbb_common::{
-        anyhow::bail,
-        config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT},
-        log,
-        rendezvous_proto::*,
-        sleep,
-        socket_client::connect_tcp,
-        tcp::FramedStream,
-        ResultType,
+        anyhow::bail, config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT}, log, rendezvous_proto::*, sleep, socket_client::connect_tcp, tcp::FramedStream, ResultType, tokio
     };
+
+    use std::collections::{
+        HashMap, HashSet,
+    }; 
 
     pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
         let test = false;
@@ -3505,7 +3504,7 @@ pub mod peer_online {
             f(onlines, offlines)
         } else {
             let query_timeout = std::time::Duration::from_millis(3_000);
-            match query_online_states_(&ids, query_timeout).await {
+            match query_online_states_with_server_addr(&ids, query_timeout).await {
                 Ok((onlines, offlines)) => {
                     f(onlines, offlines);
                 }
@@ -3514,6 +3513,187 @@ pub mod peer_online {
                 }
             }
         }
+    }
+
+    lazy_static::lazy_static! {
+        static ref ONLINE_IDS: Arc<tokio::sync::Mutex<HashSet<String>>> = Arc::new(tokio::sync::Mutex::new(HashSet::new()));
+        static ref RUNNING_POLLING: tokio::sync::Mutex<HashMap<String, Arc<AtomicBool>>> = tokio::sync::Mutex::new(HashMap::new());
+    }
+
+    // Utilize FIRST_CALL to await the partial update of ONLINE_IDS before returning, 
+    // thereby ensuring that the initial response is meaningful.
+    static FIRST_CALL: AtomicBool = AtomicBool::new(true);
+
+    async fn query_online_states_with_server_addr(
+        ids: &Vec<String>,
+        timeout: std::time::Duration,
+    ) -> ResultType<(Vec<String>, Vec<String>)> {
+        
+        let mut target_servers_ids: HashMap<String,  Vec<String>> = HashMap::new();
+        for s in ids {
+            let (_, server_addr) = s
+                .split_once('@')
+                .map(|(a, b)| (a.to_owned(), b.to_owned()))
+                .unwrap_or_else(|| (s.to_owned(), "rendezvous_server".to_owned()));
+        
+            target_servers_ids
+                .entry(server_addr)
+                .or_default()
+                .push(s.to_owned());
+        }
+
+        RUNNING_POLLING.lock().await.retain(|k, v| {
+            if !target_servers_ids.contains_key(k) {
+                v.store(true, Ordering::Release);
+                return false;
+            }
+            true
+        });
+
+        for (server_addr, ids) in target_servers_ids {
+            let mut guard = RUNNING_POLLING.lock().await;
+            if !guard.contains_key(&server_addr) {
+                let stop_flag = Arc::new(AtomicBool::new(false));
+                guard.insert(server_addr.clone(), stop_flag);
+                tokio::spawn(async move {
+                    let stop_flag = {
+                        RUNNING_POLLING.lock().await.get(&server_addr).unwrap().clone()
+                    };
+                    loop {
+                        if let ((), Err(_)) = tokio::join! {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(5)),
+                            fetch_and_update_online_status(&server_addr, &ids, timeout)
+                        }{};
+                        if stop_flag.load(Ordering::Acquire) {
+                            break;
+                        }
+                    }
+                });
+            }
+        }
+
+        if FIRST_CALL.swap(false, Ordering::SeqCst) {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        }
+
+        let lock_set = ONLINE_IDS.lock().await;
+        let mut onlines = Vec::new();
+        let mut offlines = Vec::new();
+        for id in ids {
+            if lock_set.contains(id) {
+                onlines.push(id.clone());
+            } else {
+                offlines.push(id.clone());
+            }
+        }
+        Ok((onlines, offlines))
+    }
+
+    #[inline]
+    async fn help_query_error(ids: &Vec<String>) {
+        let mut guard = ONLINE_IDS.lock().await;
+        for id in ids {
+            guard.remove(id);
+        }
+    }
+
+    async fn create_socket(server_addr: &String, ids: &Vec<String>) -> ResultType<FramedStream> {
+        let host;
+        let port;
+        if server_addr == "public" {
+            host = hbb_common::config::RENDEZVOUS_SERVERS[0].to_string();
+            port = hbb_common::config::RENDEZVOUS_PORT;
+        } else {
+            let tmp = hbb_common::socket_client::check_port(server_addr.clone(), hbb_common::config::RENDEZVOUS_PORT);
+            if let Some(pos) = tmp.rfind(':') {
+                host = tmp[.. pos].to_string();
+                port = tmp[pos + 1 ..].parse().unwrap_or(0);
+            } else {
+                help_query_error(ids).await;
+                bail!("Invalid server address: {server_addr}");
+            }
+        }
+        if port == 0 {
+            help_query_error(ids).await;
+            bail!("Invalid server address: {server_addr}");
+        }
+        let socket = match connect_tcp(format!("{}:{}", host, port - 1), CONNECT_TIMEOUT).await {
+            Ok(s) => s,
+            Err(e) => {
+                help_query_error(ids).await;
+                bail!("Failed to create a peer-online stream for {server_addr}. Error: {e}");
+            }
+        };
+        Ok(socket)
+    }
+
+    async fn fetch_and_update_online_status(
+        server_addr: &String,
+        ids: &Vec<String>,
+        timeout: std::time::Duration
+    ) -> ResultType<()> {
+        if server_addr == "rendezvous_server" {
+            let (on, off) = query_online_states_(&ids, timeout).await?;
+            let mut guard = ONLINE_IDS.lock().await;
+            for id in off {
+                guard.remove(&id);
+            }
+            guard.extend(on);
+            return Ok(());
+        }
+        let mut msg_out = RendezvousMessage::new();
+        msg_out.set_online_request(OnlineRequest {
+            id: Config::get_id(),
+            peers: ids.iter()
+            .map(|id| {
+                if let Some((front, _)) = id.split_once('@') {
+                    front.to_string()
+                } else {
+                    id.clone()
+                }
+            })
+            .collect(),
+            ..Default::default()
+        });
+
+        let mut socket = create_socket(server_addr, ids).await?;
+
+        if let Err(e) = socket.send(&msg_out).await {
+            help_query_error(ids).await;
+            bail!("Failed to send peers online states query to server: {server_addr}. Error: {e}");
+        }
+        for _ in 0..2 {
+            if let Some(msg_in) = crate::common::get_next_nonkeyexchange_msg(
+                &mut socket,
+                Some(timeout.as_millis() as _),
+            )
+            .await
+            {  
+                match msg_in.union {
+                    Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
+                        let states = online_response.states;
+                        for i in 0..ids.len() {
+                            // bytes index from left to right
+                            let bit_value = 0x01 << (7 - i % 8);
+                            if (states[i / 8] & bit_value) == bit_value {
+                                ONLINE_IDS.lock().await.insert(ids[i].clone());
+                            } else {
+                                ONLINE_IDS.lock().await.remove(&ids[i]);
+                            }
+                        }
+                        return Ok(());
+                    }
+                    _ => {
+                        // ignore
+                    }
+                }
+            } else {
+                help_query_error(ids).await;
+                bail!("Online stream receives None to {server_addr}");
+            }
+        }
+        help_query_error(ids).await;
+        bail!("Failed to query online states, no online response");
     }
 
     async fn create_online_stream() -> ResultType<FramedStream> {
@@ -3593,6 +3773,7 @@ pub mod peer_online {
 
         bail!("Failed to query online states, no online response");
     }
+
 
     #[cfg(test)]
     mod tests {

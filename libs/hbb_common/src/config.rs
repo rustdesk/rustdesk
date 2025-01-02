@@ -736,10 +736,8 @@ impl Config {
                 .next()
                 .unwrap_or_default();
         }
-        if !rendezvous_server.contains(':') {
-            rendezvous_server = format!("{rendezvous_server}:{RENDEZVOUS_PORT}");
-        }
-        rendezvous_server
+
+        crate::socket_client::check_port(rendezvous_server, RENDEZVOUS_PORT)
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {
