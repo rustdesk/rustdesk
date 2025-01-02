@@ -12,7 +12,7 @@
         <array>
         <string>/bin/sh</string>
         <string>-c</string>
-        <string>sleep 3; if pgrep -f '/Applications/RustDesk.app/Contents/MacOS/RustDesk --server' > /dev/null; then /Applications/RustDesk.app/Contents/MacOS/RustDesk --service; fi</string>
+        <string>/Applications/RustDesk.app/Contents/MacOS/service</string>
         </array>
         <key>RunAtLoad</key>
         <true/>

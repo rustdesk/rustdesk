@@ -515,53 +515,6 @@ pub fn lock_screen() {
 
 pub fn start_os_service() {
     log::info!("Username: {}", crate::username());
-    let mut sys = System::new();
-    let path =
-        std::fs::canonicalize(std::env::current_exe().unwrap_or_default()).unwrap_or_default();
-    let mut server = get_server_start_time(&mut sys, &path);
-    if server.is_none() {
-        log::error!("Agent not started yet, please restart --server first to make delegate work",);
-        std::process::exit(-1);
-    }
-    let my_start_time = sys
-        .process((std::process::id() as usize).into())
-        .map(|p| p.start_time())
-        .unwrap_or_default() as i64;
-    log::info!("Startime: {my_start_time} vs {:?}", server);
-
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        if server.is_none() {
-            server = get_server_start_time(&mut sys, &path);
-        }
-        let Some((start_time, pid)) = server else {
-            log::error!(
-                "Agent not started yet, please restart --server first to make delegate work",
-            );
-            std::process::exit(-1);
-        };
-        if my_start_time <= start_time + 3 {
-            log::error!(
-                    "Agent start later, {my_start_time} vs {start_time}, please start --server first to make delegate work, earlier more 3 seconds",
-                );
-            std::process::exit(-1);
-        }
-        // only refresh this pid and check if valid, no need to refresh all processes since refreshing all is expensive, about 10ms on my machine
-        if !sys.refresh_process_specifics(pid, ProcessRefreshKind::new()) {
-            server = None;
-            continue;
-        }
-        if let Some(p) = sys.process(pid.into()) {
-            if let Some(p) = get_server_start_time_of(p, &path) {
-                server = Some((p, pid));
-            } else {
-                server = None;
-            }
-        } else {
-            server = None;
-        }
-    });
-
     if let Err(err) = crate::ipc::start("_service") {
         log::error!("Failed to start ipc_service: {}", err);
     }
