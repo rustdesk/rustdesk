@@ -58,7 +58,7 @@ index da7b291b03..3c866177f5 100644
 +                int status = VTSessionSetProperty(vtctx->session,
 +                                            kVTCompressionPropertyKey_AverageBitRate,
 +                                            bit_rate_num);
-+                if (!status) {
++                if (status) {
 +                    av_log(avctx, AV_LOG_ERROR, "Error: cannot set average bit rate: %d\n", status);
 +                }
 +            }
