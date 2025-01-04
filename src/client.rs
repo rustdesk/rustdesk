@@ -3607,7 +3607,11 @@ pub mod peer_online {
             let tmp = hbb_common::socket_client::check_port(server_addr.clone(), hbb_common::config::RENDEZVOUS_PORT);
             if let Some(pos) = tmp.rfind(':') {
                 host = tmp[.. pos].to_string();
-                port = tmp[pos + 1 ..].parse().unwrap_or(0);
+                port = if pos + 1 < tmp.len() {
+                    tmp[pos + 1..].parse().unwrap_or(0)
+                } else {
+                    0
+                };
             } else {
                 help_query_error(ids).await;
                 bail!("Invalid server address: {server_addr}");
