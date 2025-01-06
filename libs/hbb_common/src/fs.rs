@@ -303,16 +303,9 @@ fn get_ext(name: &str) -> &str {
 
 #[inline]
 fn is_compressed_file(name: &str) -> bool {
+    let compressed_exts = ["xz", "gz", "zip", "7z", "rar", "bz2", "tgz", "png", "jpg"];
     let ext = get_ext(name);
-    ext == "xz"
-        || ext == "gz"
-        || ext == "zip"
-        || ext == "7z"
-        || ext == "rar"
-        || ext == "bz2"
-        || ext == "tgz"
-        || ext == "png"
-        || ext == "jpg"
+    compressed_exts.contains(&ext)
 }
 
 impl TransferJob {
