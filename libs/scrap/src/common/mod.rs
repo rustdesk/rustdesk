@@ -13,12 +13,12 @@ cfg_if! {
     } else if #[cfg(x11)] {
         cfg_if! {
             if #[cfg(feature="wayland")] {
-        mod linux;
-        mod wayland;
-        mod x11;
-        pub use self::linux::*;
-        pub use self::wayland::set_map_err;
-        pub use self::x11::PixelBuffer;
+                mod linux;
+                mod wayland;
+                mod x11;
+                pub use self::linux::*;
+                pub use self::wayland::set_map_err;
+                pub use self::x11::PixelBuffer;
             } else {
                 mod x11;
                 pub use self::x11::*;
