@@ -165,6 +165,3 @@ Upewnij się, że uruchamiasz te polecenia z katalogu głównego repozytorium Ru
 
 ![image](https://user-images.githubusercontent.com/71636191/135385039-38fdbd72-379a-422d-b97f-33df71fb1cec.png)
 
-## [Serwery publiczne](#public-servers)
-
-RustDesk jest obsługiwany przez bezpłatne serwer w Unii Europejskiej, uprzejmie dostarczony przez [Codext GmbH](https://codext.link/rustdesk?utm_source=github)
