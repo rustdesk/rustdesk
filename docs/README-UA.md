@@ -172,6 +172,3 @@ target/release/rustdesk
 
 ![Тунелювання TCP](https://github.com/rustdesk/rustdesk/assets/28412477/78e8708f-e87e-4570-8373-1360033ea6c5)
 
-## [Публічні сервери](#публічні-сервери)
-
-RustDesk підтримується безкоштовним європейським сервером, любʼязно наданим [Codext GmbH](https://codext.link/rustdesk?utm_source=github)
