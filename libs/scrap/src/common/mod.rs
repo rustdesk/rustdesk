@@ -189,7 +189,7 @@ impl Frame<'_> {
         yuvfmt: EncodeYuvFormat,
         yuv: &'a mut Vec<u8>,
         mid_data: &mut Vec<u8>,
-    ) -> ResultType<EncodeInput> {
+    ) -> ResultType<EncodeInput<'a>> {
         match self {
             Frame::PixelBuffer(pixelbuffer) => {
                 convert_to_yuv(&pixelbuffer, yuvfmt, yuv, mid_data)?;
