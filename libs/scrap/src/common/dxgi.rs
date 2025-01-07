@@ -115,8 +115,11 @@ pub struct Display(dxgi::Display);
 
 impl Display {
     pub fn primary() -> io::Result<Display> {
-        // not implemented yet
-        Err(NotFound.into())
+        let d = Self::all()?
+            .drain(..)
+            .find(|x| x.is_primary())
+            .ok_or(NotFound)?;
+        Ok(d)
     }
 
     pub fn all() -> io::Result<Vec<Display>> {
