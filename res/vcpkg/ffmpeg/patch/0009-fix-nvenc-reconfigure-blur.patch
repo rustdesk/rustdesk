@@ -1,0 +1,28 @@
+From bec8d49e75b37806e1cff39c75027860fde0bfa2 Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Fri, 27 Dec 2024 08:43:12 +0800
+Subject: [PATCH] fix nvenc reconfigure blur
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/nvenc.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/libavcodec/nvenc.c b/libavcodec/nvenc.c
+index 2cce478be0..f4c559b7ce 100644
+--- a/libavcodec/nvenc.c
++++ b/libavcodec/nvenc.c
+@@ -2741,8 +2741,8 @@ static void reconfig_encoder(AVCodecContext *avctx, const AVFrame *frame)
+         }
+ 
+         if (reconfig_bitrate) {
+-            params.resetEncoder = 1;
+-            params.forceIDR = 1;
++            params.resetEncoder = 0;
++            params.forceIDR = 0;
+ 
+             needs_encode_config = 1;
+             needs_reconfig = 1;
+-- 
+2.43.0.windows.1
+

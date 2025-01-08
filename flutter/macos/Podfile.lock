@@ -95,17 +95,17 @@ SPEC CHECKSUMS:
   desktop_drop: 69eeff437544aa619c8db7f4481b3a65f7696898
   desktop_multi_window: 566489c048b501134f9d7fb6a2354c60a9126486
   device_info_plus: 5401765fde0b8d062a2f8eb65510fb17e77cf07f
-  file_selector_macos: 54fdab7caa3ac3fc43c9fac4d7d8d231277f8cf2
+  file_selector_macos: 468fb6b81fac7c0e88d71317f3eec34c3b008ff9
   flutter_custom_cursor: 629957115075c672287bd0fa979d863ccf6024f7
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   package_info_plus: 02d7a575e80f194102bef286361c6c326e4c29ce
-  path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
+  path_provider_foundation: 3784922295ac71e43754bd15e0653ccfd36a147c
   screen_retriever: 59634572a57080243dd1bf715e55b6c54f241a38
   sqflite: 673a0e54cc04b7d6dba8d24fb8095b31c3a99eec
   texture_rgba_renderer: cbed959a3c127122194a364e14b8577bd62dc8f2
   uni_links_desktop: 45900fb319df48fcdea2df0756e9c2626696b026
-  url_launcher_macos: 5f437abeda8c85500ceb03f5c1938a8c5a705399
-  video_player_avfoundation: 7c6c11d8470e1675df7397027218274b6d2360b3
+  url_launcher_macos: d2691c7dd33ed713bf3544850a623080ec693d95
+  video_player_avfoundation: 02011213dab73ae3687df27ce441fbbcc82b5579
   wakelock_plus: 4783562c9a43d209c458cb9b30692134af456269
   window_manager: 3a1844359a6295ab1e47659b1a777e36773cd6e8
   window_size: 339dafa0b27a95a62a843042038fa6c3c48de195
