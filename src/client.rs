@@ -3517,7 +3517,9 @@ pub mod peer_online {
 
     lazy_static::lazy_static! {
         static ref ONLINE_IDS: Arc<tokio::sync::Mutex<HashSet<String>>> = Arc::new(tokio::sync::Mutex::new(HashSet::new()));
-        static ref RUNNING_POLLING: tokio::sync::Mutex<HashMap<String, Arc<AtomicBool>>> = tokio::sync::Mutex::new(HashMap::new());
+        static ref RUNNING_SENDER: tokio::sync::Mutex<HashMap<String, Arc<AtomicBool>>> = tokio::sync::Mutex::new(HashMap::new());
+        static ref ONLINE_SOCKETS: Arc<tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<FramedStream>>>>> =
+            Arc::new(tokio::sync::Mutex::new(HashMap::new()));
     }
 
     // Utilize FIRST_CALL to await the partial update of ONLINE_IDS before returning, 
@@ -3542,7 +3544,7 @@ pub mod peer_online {
                 .push(s.to_owned());
         }
 
-        RUNNING_POLLING.lock().await.retain(|k, v| {
+        RUNNING_SENDER.lock().await.retain(|k, v| {
             if !target_servers_ids.contains_key(k) {
                 v.store(true, Ordering::Release);
                 return false;
@@ -3551,13 +3553,13 @@ pub mod peer_online {
         });
 
         for (server_addr, ids) in target_servers_ids {
-            let mut guard = RUNNING_POLLING.lock().await;
+            let mut guard = RUNNING_SENDER.lock().await;
             if !guard.contains_key(&server_addr) {
                 let stop_flag = Arc::new(AtomicBool::new(false));
                 guard.insert(server_addr.clone(), stop_flag);
                 tokio::spawn(async move {
                     let stop_flag = {
-                        RUNNING_POLLING.lock().await.get(&server_addr).unwrap().clone()
+                        RUNNING_SENDER.lock().await.get(&server_addr).unwrap().clone()
                     };
                     loop {
                         if let ((), Err(_)) = tokio::join! {
@@ -3590,7 +3592,7 @@ pub mod peer_online {
     }
 
     #[inline]
-    async fn help_query_error(ids: &Vec<String>) {
+    async fn help_query_error(server_addr: &String, ids: &Vec<String>) {
         let mut guard = ONLINE_IDS.lock().await;
         for id in ids {
             guard.remove(id);
@@ -3613,18 +3615,18 @@ pub mod peer_online {
                     0
                 };
             } else {
-                help_query_error(ids).await;
+                help_query_error(server_addr, ids).await;
                 bail!("Invalid server address: {server_addr}");
             }
         }
         if port == 0 {
-            help_query_error(ids).await;
+            help_query_error(server_addr, ids).await;
             bail!("Invalid server address: {server_addr}");
         }
         let socket = match connect_tcp(format!("{}:{}", host, port - 1), CONNECT_TIMEOUT).await {
             Ok(s) => s,
             Err(e) => {
-                help_query_error(ids).await;
+                help_query_error(server_addr, ids).await;
                 bail!("Failed to create a peer-online stream for {server_addr}. Error: {e}");
             }
         };
@@ -3660,19 +3662,35 @@ pub mod peer_online {
             ..Default::default()
         });
 
-        let mut socket = create_socket(server_addr, ids).await?;
+        let socket_mutex = {
+            let mut guard = ONLINE_SOCKETS.lock().await;
+            match guard.get_mut(server_addr) {
+                Some(s) => s.clone(),
+                None => {
+                    drop(guard);
+                    let new_socket = create_socket(server_addr, ids).await?;
+                    let arc = Arc::new(tokio::sync::Mutex::new(new_socket));
+                    let mut guard_again = ONLINE_SOCKETS.lock().await;
+                    guard_again.insert(server_addr.clone(), arc .clone());
+                    arc
+                }
+            }
+        };
+        let mut socket = socket_mutex.lock().await;
 
         if let Err(e) = socket.send(&msg_out).await {
-            help_query_error(ids).await;
+            help_query_error(server_addr, ids).await;
+            let mut guard = ONLINE_SOCKETS.lock().await;
+            guard.remove(server_addr);
             bail!("Failed to send peers online states query to server: {server_addr}. Error: {e}");
         }
+
         for _ in 0..2 {
             if let Some(msg_in) = crate::common::get_next_nonkeyexchange_msg(
                 &mut socket,
                 Some(timeout.as_millis() as _),
-            )
-            .await
-            {  
+            ).await
+            {
                 match msg_in.union {
                     Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
                         let states = online_response.states;
@@ -3692,11 +3710,11 @@ pub mod peer_online {
                     }
                 }
             } else {
-                help_query_error(ids).await;
+                help_query_error(server_addr, ids).await;
                 bail!("Online stream receives None to {server_addr}");
             }
         }
-        help_query_error(ids).await;
+        help_query_error(server_addr, ids).await;
         bail!("Failed to query online states, no online response");
     }
 
