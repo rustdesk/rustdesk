@@ -175,6 +175,3 @@ Please ensure that you are running these commands from the root of the RustDesk 
 
 ![TCP Tunneling](https://github.com/rustdesk/rustdesk/assets/28412477/78e8708f-e87e-4570-8373-1360033ea6c5)
 
-## [Public Servers](#public-servers)
-
-RustDesk is supported by a free EU server, graciously provided by [Codext GmbH](https://codext.link/rustdesk?utm_source=github)
