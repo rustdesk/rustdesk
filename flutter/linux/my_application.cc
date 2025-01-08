@@ -14,10 +14,12 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+GtkWidget *find_gl_area(GtkWidget *widget);
+void try_set_transparent(GtkWindow* window, GdkScreen* screen, FlView* view);
+
 extern bool gIsConnectionManager;
 
 GtkWidget *find_gl_area(GtkWidget *widget);
-void try_set_transparent(GtkWindow* window, GdkScreen* screen, FlView* view);
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
@@ -70,17 +72,18 @@ static void my_application_activate(GApplication* application) {
     height = 490;
   }
   gtk_window_set_default_size(window, width, height);   // <-- comment this line
-  gtk_widget_show(GTK_WIDGET(window));
+  // gtk_widget_show(GTK_WIDGET(window));
   gtk_widget_set_opacity(GTK_WIDGET(window), 0);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
-  gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
-  try_set_transparent(window, screen, view);
+  try_set_transparent(window, gtk_window_get_screen(window), view);
+  gtk_widget_show(GTK_WIDGET(window));
+  gtk_widget_show(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
@@ -150,69 +153,11 @@ GtkWidget *find_gl_area(GtkWidget *widget)
   return NULL;
 }
 
-bool is_linux_mint()
-{
-  bool is_mint = false;
-  char line[256];
-  FILE *fp = fopen("/etc/os-release", "r");
-  if (fp == NULL) {
-    return false;
-  }
-  while (fgets(line, sizeof(line), fp)) {
-    if (strstr(line, "ID=linuxmint") != NULL) {
-        is_mint = true;
-        break;
-    }
-  }
-  fclose(fp);
-
-  return is_mint;
-}
-
-bool is_desktop_mate()
-{
-  const char* desktop = NULL;
-  desktop = getenv("XDG_CURRENT_DESKTOP");
-  printf("Linux desktop, XDG_CURRENT_DESKTOP: %s\n", desktop == NULL ? "" : desktop);
-  if (desktop == NULL) {
-    desktop = getenv("XDG_SESSION_DESKTOP");
-    printf("Linux desktop, XDG_SESSION_DESKTOP: %s\n", desktop == NULL ? "" : desktop);
-  }
-  if (desktop == NULL) {
-      desktop = getenv("DESKTOP_SESSION");
-      printf("Linux desktop, DESKTOP_SESSION: %s\n", desktop == NULL ? "" : desktop);
-  }
-  if (desktop != NULL && strcasecmp(desktop, "mate") == 0) {
-    return true;
-  }
-  return false;
-}
-
-bool skip_setting_transparent()
-{
-  if (is_desktop_mate()) {
-    printf("Linux desktop, MATE\n");
-    return true;
-  }
-
-  if (is_linux_mint()) {
-    printf("Linux desktop, Linux Mint\n");
-    return true;
-  }
-
-  return false;
-}
-
 // https://github.com/flutter/flutter/issues/152154
 // Remove this workaround when flutter version is updated.
 void try_set_transparent(GtkWindow* window, GdkScreen* screen, FlView* view)
 {
   GtkWidget *gl_area = NULL;
-
-  if (skip_setting_transparent()) {
-    printf("Skip setting transparent\n");
-    return;
-  }
 
   printf("Try setting transparent\n");
   

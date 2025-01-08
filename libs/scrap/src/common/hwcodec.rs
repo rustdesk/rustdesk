@@ -193,7 +193,7 @@ impl EncoderApi for HwRamEncoder {
     }
 
     fn support_abr(&self) -> bool {
-        ["qsv", "vaapi"].iter().all(|&x| !self.config.name.contains(x))
+        ["vaapi"].iter().all(|&x| !self.config.name.contains(x))
     }
 
     fn support_changing_quality(&self) -> bool {
@@ -692,8 +692,8 @@ pub fn check_available_hwcodec() -> String {
     #[cfg(not(feature = "vram"))]
     let vram_string = "".to_owned();
     let c = HwCodecConfig {
-        ram_encode: Encoder::available_encoders(ctx, Some(vram_string.clone())),
-        ram_decode: Decoder::available_decoders(Some(vram_string)),
+        ram_encode: Encoder::available_encoders(ctx, Some(vram_string)),
+        ram_decode: Decoder::available_decoders(),
         #[cfg(feature = "vram")]
         vram_encode: vram.0,
         #[cfg(feature = "vram")]

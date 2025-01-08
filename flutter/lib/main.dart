@@ -120,6 +120,7 @@ Future<void> initEnv(String appType) async {
 void runMainApp(bool startService) async {
   // register uni links
   await initEnv(kAppTypeMain);
+  checkUpdate();
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
   if (startService) {
@@ -156,6 +157,7 @@ void runMainApp(bool startService) async {
 
 void runMobileApp() async {
   await initEnv(kAppTypeMain);
+  checkUpdate();
   if (isAndroid) androidChannelInit();
   if (isAndroid) platformFFI.syncAndroidServiceAppDirConfigPath();
   draggablePositions.load();
@@ -483,16 +485,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                     child = keyListenerBuilder(context, child);
                   }
                   if (isLinux) {
-                    // `(!(isLinuxMateDesktop || isLinuxMint))` is not used here for clarity.
-                    // `isLinuxMint` will call ffi function.
-                    if (!isLinuxMateDesktop) {
-                      if (!isLinuxMint) {
-                        debugPrint(
-                            'Linux distro is not linuxmint, and desktop is not mate, '
-                            'so we build virtual window frame.');
-                        child = buildVirtualWindowFrame(context, child);
-                      }
-                    }
+                    child = buildVirtualWindowFrame(context, child);
                   }
                   return child;
                 },

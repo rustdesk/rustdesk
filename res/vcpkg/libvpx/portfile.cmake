@@ -4,7 +4,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO webmproject/libvpx
     REF "v${VERSION}"
-    SHA512 3e3bfad3d035c0bc3db7cb5a194d56d3c90f5963fb1ad527ae5252054e7c48ce2973de1346c97d94b59f7a95d4801bec44214cce10faf123f92b36fca79a8d1e
+    SHA512 8f483653a324c710fd431b87fd0d5d6f476f006bd8c8e9c6d1fa6abd105d6a40ac81c8fd5638b431c455d57ab2ee823c165e9875eb3932e6e518477422da3a7b
     HEAD_REF master
     PATCHES
         0002-Fix-nasm-debug-format-flag.patch

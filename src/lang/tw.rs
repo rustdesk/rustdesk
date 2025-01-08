@@ -364,7 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "錄製"),
         ("Directory", "路徑"),
         ("Automatically record incoming sessions", "自動錄製連入的工作階段"),
-        ("Automatically record outgoing sessions", ""),
+        ("Automatically record outgoing sessions", "自動錄製連出的工作階段"),
         ("Change", "變更"),
         ("Start session recording", "開始錄影"),
         ("Stop session recording", "停止錄影"),
@@ -655,5 +655,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Clipboard is synchronized", "剪貼簿已同步"),
         ("Update client clipboard", "更新客戶端的剪貼簿"),
         ("Untagged", "無標籤"),
+        ("new-version-of-{}-tip", "有新版本的 {} 可用"),
     ].iter().cloned().collect();
 }

@@ -1,7 +1,7 @@
 import Cocoa
 import FlutterMacOS
 
-@NSApplicationMain
+@main
 class AppDelegate: FlutterAppDelegate {
     var launched = false;
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

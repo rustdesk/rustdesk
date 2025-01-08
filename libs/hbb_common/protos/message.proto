@@ -284,7 +284,9 @@ enum ControlKey {
 }
 
 message KeyEvent {
+  // `down` indicates the key's state(down or up).
   bool down = 1;
+  // `press` indicates a click event(down and up).
   bool press = 2;
   oneof union {
     ControlKey control_key = 3;

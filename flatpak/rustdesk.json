@@ -1,19 +1,30 @@
 {
   "id": "com.rustdesk.RustDesk",
   "runtime": "org.freedesktop.Platform",
-  "runtime-version": "23.08",
+  "runtime-version": "24.08",
   "sdk": "org.freedesktop.Sdk",
   "command": "rustdesk",
-  "icon": "share/icons/hicolor/scalable/apps/rustdesk.svg",
+  "cleanup": ["/include", "/lib/pkgconfig", "/share/gtk-doc"],
+  "rename-desktop-file": "rustdesk.desktop",
+  "rename-icon": "rustdesk",
   "modules": [
     "shared-modules/libappindicator/libappindicator-gtk3-12.10.json",
-    "xdotool.json",
     {
-      "name": "pam",    
-      "buildsystem": "simple",
-      "build-commands": [
-          "./configure --disable-selinux --prefix=/app && make -j4 install"
-      ],
+      "name": "xdotool",
+      "no-autogen": true,
+      "make-install-args": ["PREFIX=${FLATPAK_DEST}"],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/jordansissel/xdotool/releases/download/v3.20211022.1/xdotool-3.20211022.1.tar.gz",
+          "sha256": "96f0facfde6d78eacad35b91b0f46fecd0b35e474c03e00e30da3fdd345f9ada"
+        }
+      ]
+    },
+    {
+      "name": "pam",
+      "buildsystem": "autotools",
+      "config-opts": ["--disable-selinux"],
       "sources": [
         {
           "type": "archive",
@@ -26,32 +37,24 @@
       "name": "rustdesk",
       "buildsystem": "simple",
       "build-commands": [
-        "bsdtar -zxvf rustdesk.deb",
-        "tar -xvf ./data.tar.xz",
-        "cp -r ./usr/*  /app/",
-        "mkdir -p /app/bin && ln -s /app/lib/rustdesk/rustdesk /app/bin/rustdesk",
-        "mv /app/share/applications/rustdesk.desktop /app/share/applications/com.rustdesk.RustDesk.desktop",
-        "mv /app/share/applications/rustdesk-link.desktop /app/share/applications/com.rustdesk.RustDesk-link.desktop",
-        "sed -i '/^Icon=/ c\\Icon=com.rustdesk.RustDesk' /app/share/applications/*.desktop",
-        "mv /app/share/icons/hicolor/scalable/apps/rustdesk.svg /app/share/icons/hicolor/scalable/apps/com.rustdesk.RustDesk.svg",
-        "for size in 16 24 32 48 64 128 256 512; do\n rsvg-convert -w $size -h $size -f png -o $size.png scalable.svg\n install -Dm644 $size.png /app/share/icons/hicolor/${size}x${size}/apps/com.rustdesk.RustDesk.png\n done"
+        "bsdtar -Oxf rustdesk.deb data.tar.xz | bsdtar -xf -",
+        "cp -r usr/* /app/",
+        "mkdir -p /app/bin && ln -s /app/share/rustdesk/rustdesk /app/bin/rustdesk"
       ],
-      "cleanup": ["/include", "/lib/pkgconfig", "/share/gtk-doc"],
       "sources": [
         {
           "type": "file",
-          "path": "./rustdesk.deb"
+          "path": "rustdesk.deb"
         },
         {
           "type": "file",
-          "path": "../res/scalable.svg"
+          "path": "com.rustdesk.RustDesk.metainfo.xml"
         }
       ]
     }
   ],
   "finish-args": [
     "--share=ipc",
-    "--socket=x11",
     "--socket=fallback-x11",
     "--socket=wayland",
     "--share=network",

@@ -402,6 +402,10 @@ class FfiModel with ChangeNotifier {
         if (isWeb) {
           parent.target?.fileModel.onSelectedFiles(evt);
         }
+      } else if (name == "send_emptry_dirs") {
+        if (isWeb) {
+          parent.target?.fileModel.sendEmptyDirs(evt);
+        }
       } else if (name == "record_status") {
         if (desktopType == DesktopType.remote || isMobile) {
           parent.target?.recordingModel.updateStatus(evt['start'] == 'true');

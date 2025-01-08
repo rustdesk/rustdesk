@@ -123,7 +123,7 @@ pub fn get_home_as_string() -> String {
 }
 
 fn read_dir_recursive(
-    path: &PathBuf,
+    path: &Path,
     prefix: &Path,
     include_hidden: bool,
 ) -> ResultType<Vec<FileEntry>> {
@@ -186,7 +186,7 @@ pub fn get_recursive_files(path: &str, include_hidden: bool) -> ResultType<Vec<F
 }
 
 fn read_empty_dirs_recursive(
-    path: &PathBuf,
+    path: &Path,
     prefix: &Path,
     include_hidden: bool,
 ) -> ResultType<Vec<FileDirectory>> {
@@ -303,16 +303,9 @@ fn get_ext(name: &str) -> &str {
 
 #[inline]
 fn is_compressed_file(name: &str) -> bool {
+    let compressed_exts = ["xz", "gz", "zip", "7z", "rar", "bz2", "tgz", "png", "jpg"];
     let ext = get_ext(name);
-    ext == "xz"
-        || ext == "gz"
-        || ext == "zip"
-        || ext == "7z"
-        || ext == "rar"
-        || ext == "bz2"
-        || ext == "tgz"
-        || ext == "png"
-        || ext == "jpg"
+    compressed_exts.contains(&ext)
 }
 
 impl TransferJob {
@@ -854,7 +847,7 @@ pub async fn handle_read_jobs(
     Ok(job_log)
 }
 
-pub fn remove_all_empty_dir(path: &PathBuf) -> ResultType<()> {
+pub fn remove_all_empty_dir(path: &Path) -> ResultType<()> {
     let fd = read_dir(path, true)?;
     for entry in fd.entries.iter() {
         match entry.entry_type.enum_value() {
