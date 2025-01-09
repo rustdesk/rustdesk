@@ -1260,7 +1260,8 @@ impl<T: InvokeUiSession> Remote<T> {
                             // to-do: Android, is `sync_init_clipboard` really needed?
                             // https://github.com/rustdesk/rustdesk/discussions/9010
 
-                            #[cfg(target_os = "android")]
+                            #[cfg(feature = "flutter")]
+                            #[cfg(not(target_os = "ios"))]
                             crate::flutter::update_text_clipboard_required();
 
                             // on connection established client
