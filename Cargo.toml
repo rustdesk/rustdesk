@@ -82,7 +82,8 @@ cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencaptu
 ringbuf = "0.3"
 
 [dependencies.nokhwa]
-version = "0.10"
+git = "https://github.com/l1npengtul/nokhwa.git"
+branch = "0.10"
 features = ["input-native"]
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
