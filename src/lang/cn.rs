@@ -584,7 +584,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code must be 6 digits.", "双重认证代码必须是 6 位数字。"),
         ("Multiple Windows sessions found", "发现多个 Windows 会话"),
         ("Please select the session you want to connect to", "请选择您要连接的会话"),
-        ("powered_by_me", "由 RustDesk 提供支持"),
+        ("powered_by_me", "由 资讯整合处 提供支持"),
         ("outgoing_only_desk_tip", "当前版本的软件是定制版本。\n您可以连接至其他设备，但是其他设备无法连接至您的设备。"),
         ("preset_password_warning", "此定制版本附有预设密码。 任何知晓此密码的人都能完全控制您的设备。如果这不是您所预期的，请立即卸载此软件。"),
         ("Security Alert", "安全警告"),
