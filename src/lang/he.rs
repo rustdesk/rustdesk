@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", ""),
         ("Disable clipboard", ""),
         ("Lock after session end", ""),
-        ("Insert", ""),
+        ("Insert Ctrl + Alt + Del", ""),
         ("Insert Lock", "הוסף נעילה"),
         ("Refresh", ""),
         ("ID does not exist", ""),
@@ -653,5 +653,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", ""),
         ("Upload files", ""),
         ("Clipboard is synchronized", ""),
+        ("Update client clipboard", ""),
+        ("Untagged", ""),
+        ("new-version-of-{}-tip", ""),
     ].iter().cloned().collect();
 }

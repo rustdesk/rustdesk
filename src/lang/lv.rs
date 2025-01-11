@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Rādīt kvalitātes monitoru"),
         ("Disable clipboard", "Atspējot starpliktuvi"),
         ("Lock after session end", "Bloķēt pēc sesijas beigām"),
-        ("Insert", "Ievietot"),
+        ("Insert Ctrl + Alt + Del", "Ievietot Ctrl + Alt + Del"),
         ("Insert Lock", "Ievietot Bloķēt"),
         ("Refresh", "Atsvaidzināt"),
         ("ID does not exist", "ID neeksistē"),
@@ -364,7 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Ierakstīšana"),
         ("Directory", "Direktorija"),
         ("Automatically record incoming sessions", "Automātiski ierakstīt ienākošās sesijas"),
-        ("Automatically record outgoing sessions", ""),
+        ("Automatically record outgoing sessions", "Automātiski ierakstīt izejošās sesijas"),
         ("Change", "Mainīt"),
         ("Start session recording", "Sākt sesijas ierakstīšanu"),
         ("Stop session recording", "Apturēt sesijas ierakstīšanu"),
@@ -653,5 +653,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "Augšupielādēt mapi"),
         ("Upload files", "Augšupielādēt failus"),
         ("Clipboard is synchronized", "Starpliktuve ir sinhronizēta"),
+        ("Update client clipboard", "Atjaunināt klienta starpliktuvi"),
+        ("Untagged", "Neatzīmēts"),
+        ("new-version-of-{}-tip", "Ir pieejama jauna {} versija"),
     ].iter().cloned().collect();
 }

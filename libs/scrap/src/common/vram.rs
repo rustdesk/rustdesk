@@ -64,7 +64,7 @@ impl EncoderApi for VRamEncoder {
                 let b = Self::convert_quality(config.quality, &config.feature);
                 let base_bitrate = base_bitrate(config.width as _, config.height as _);
                 let mut bitrate = base_bitrate * b / 100;
-                if base_bitrate <= 0 {
+                if bitrate <= 0 {
                     bitrate = base_bitrate;
                 }
                 let gop = config.keyframe_interval.unwrap_or(MAX_GOP as _) as i32;

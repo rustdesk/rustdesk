@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Показывать монитор качества"),
         ("Disable clipboard", "Отключить буфер обмена"),
         ("Lock after session end", "Заблокировать учётную запись после сеанса"),
-        ("Insert", "Вставить"),
+        ("Insert Ctrl + Alt + Del", "Вставить Ctrl + Alt + Del"),
         ("Insert Lock", "Заблокировать учётную запись"),
         ("Refresh", "Обновить"),
         ("ID does not exist", "ID не существует"),
@@ -364,7 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Запись"),
         ("Directory", "Папка"),
         ("Automatically record incoming sessions", "Автоматически записывать входящие сеансы"),
-        ("Automatically record outgoing sessions", ""),
+        ("Automatically record outgoing sessions", "Автоматически записывать исходящие сеансы"),
         ("Change", "Изменить"),
         ("Start session recording", "Начать запись сеанса"),
         ("Stop session recording", "Остановить запись сеанса"),
@@ -653,5 +653,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "Загрузить папку"),
         ("Upload files", "Загрузить файлы"),
         ("Clipboard is synchronized", "Буфер обмена синхронизирован"),
+        ("Update client clipboard", "Обновить буфер обмена клиента"),
+        ("Untagged", "Без метки"),
+        ("new-version-of-{}-tip", "Доступна новая версия {}"),
     ].iter().cloned().collect();
 }

@@ -453,6 +453,26 @@ const MOUSE_ACTIVE_DISTANCE: i32 = 5;
 
 static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
 
+// https://github.com/rustdesk/rustdesk/issues/9729
+// We need to do some special handling for macOS when using the legacy mode.
+#[cfg(target_os = "macos")]
+static LAST_KEY_LEGACY_MODE: AtomicBool = AtomicBool::new(true);
+// We use enigo to 
+// 1. Simulate mouse events
+// 2. Simulate the legacy mode key events
+// 3. Simulate the functioin key events, like LockScreen
+#[inline]
+#[cfg(target_os = "macos")]
+fn enigo_ignore_flags() -> bool {
+    !LAST_KEY_LEGACY_MODE.load(Ordering::SeqCst)
+}
+#[inline]
+#[cfg(target_os = "macos")]
+fn set_last_legacy_mode(v: bool) {
+    LAST_KEY_LEGACY_MODE.store(v, Ordering::SeqCst);
+    ENIGO.lock().unwrap().set_ignore_flags(!v);
+}
+
 pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
     if RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
         return None;
@@ -505,6 +525,19 @@ impl VirtualInputState {
     fn new() -> Option<Self> {
         VirtualInput::new(
             CGEventSourceStateID::CombinedSessionState,
+            // Note: `CGEventTapLocation::Session` will be affected by the mouse events.
+            // When we're simulating key events, then move the physical mouse, the key events will be affected.
+            // It looks like https://github.com/rustdesk/rustdesk/issues/9729#issuecomment-2432306822
+            // 1. Press "Command" key in RustDesk
+            // 2. Move the physical mouse
+            // 3. Press "V" key in RustDesk
+            // Then the controlled side just prints "v" instead of pasting.
+            //
+            // Changing `CGEventTapLocation::Session` to `CGEventTapLocation::HID` fixes it.
+            // But we do not consider this as a bug, because it's not a common case,
+            // we consider only RustDesk operates the controlled side.
+            //
+            // https://developer.apple.com/documentation/coregraphics/cgeventtaplocation/
             CGEventTapLocation::Session,
         )
         .map(|virtual_input| Self {
@@ -945,6 +978,8 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
     let mut en = ENIGO.lock().unwrap();
+    #[cfg(target_os = "macos")]
+    en.set_ignore_flags(enigo_ignore_flags());
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
     if evt_type == MOUSE_TYPE_DOWN {
@@ -1662,8 +1697,7 @@ pub fn handle_key_(evt: &KeyEvent) {
                     let is_numpad_key = false;
                     #[cfg(any(target_os = "windows", target_os = "linux"))]
                     let is_numpad_key = crate::keyboard::is_numpad_rdev_key(&key);
-                    _lock_mode_handler =
-                        Some(LockModesHandler::new_handler(evt, is_numpad_key));
+                    _lock_mode_handler = Some(LockModesHandler::new_handler(evt, is_numpad_key));
                 }
             }
         }
@@ -1672,12 +1706,20 @@ pub fn handle_key_(evt: &KeyEvent) {
 
     match evt.mode.enum_value() {
         Ok(KeyboardMode::Map) => {
+            #[cfg(target_os = "macos")]
+            set_last_legacy_mode(false);
             map_keyboard_mode(evt);
         }
         Ok(KeyboardMode::Translate) => {
+            #[cfg(target_os = "macos")]
+            set_last_legacy_mode(false);
             translate_keyboard_mode(evt);
         }
         _ => {
+            // All key down events are started from here,
+            // so we can reset the flag of last legacy mode here.
+            #[cfg(target_os = "macos")]
+            set_last_legacy_mode(true);
             legacy_keyboard_mode(evt);
         }
     }

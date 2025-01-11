@@ -4,6 +4,7 @@ import 'package:auto_size_text_field/auto_size_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -40,13 +41,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
   final _idController = IDTextEditingController();
   final RxBool _idEmpty = true.obs;
 
-  /// Update url. If it's not null, means an update is available.
-  var _updateUrl = '';
   List<Peer> peers = [];
 
   bool isPeersLoading = false;
   bool isPeersLoaded = false;
   StreamSubscription? _uniLinksSubscription;
+
+  // https://github.com/flutter/flutter/issues/157244
+  Iterable<Peer> _autocompleteOpts = [];
 
   _ConnectionPageState() {
     if (!isWeb) _uniLinksSubscription = listenUniLinks();
@@ -69,22 +71,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
         }
       });
     }
-    if (isAndroid) {
-      if (!bind.isCustomClient()) {
-        platformFFI.registerEventHandler(
-            kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
-            (Map<String, dynamic> evt) async {
-          if (evt['url'] is String) {
-            setState(() {
-              _updateUrl = evt['url'];
-            });
-          }
-        });
-        Timer(const Duration(seconds: 1), () async {
-          bind.mainGetSoftwareUpdateUrl();
-        });
-      }
-    }
   }
 
   @override
@@ -94,7 +80,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
       slivers: [
         SliverList(
             delegate: SliverChildListDelegate([
-          if (!bind.isCustomClient()) _buildUpdateUI(),
+          if (!bind.isCustomClient())
+            Obx(() => _buildUpdateUI(stateGlobal.updateUrl.value)),
           _buildRemoteIDTextField(),
         ])),
         SliverFillRemaining(
@@ -113,16 +100,22 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   /// UI for software update.
-  /// If [_updateUrl] is not empty, shows a button to update the software.
-  Widget _buildUpdateUI() {
-    return _updateUrl.isEmpty
+  /// If _updateUrl] is not empty, shows a button to update the software.
+  Widget _buildUpdateUI(String updateUrl) {
+    return updateUrl.isEmpty
         ? const SizedBox(height: 0)
         : InkWell(
             onTap: () async {
               final url = 'https://rustdesk.com/download';
-              if (await canLaunchUrl(Uri.parse(url))) {
-                await launchUrl(Uri.parse(url));
-              }
+              // https://pub.dev/packages/url_launcher#configuration
+              // https://developer.android.com/training/package-visibility/use-cases#open-urls-custom-tabs
+              //
+              // `await launchUrl(Uri.parse(url))` can also run if skip
+              // 1. The following check
+              // 2. `<action android:name="android.support.customtabs.action.CustomTabsService" />` in AndroidManifest.xml
+              //
+              // But it is better to add the check.
+              await launchUrl(Uri.parse(url));
             },
             child: Container(
                 alignment: AlignmentDirectional.center,
@@ -166,7 +159,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   child: Autocomplete<Peer>(
                     optionsBuilder: (TextEditingValue textEditingValue) {
                       if (textEditingValue.text == '') {
-                        return const Iterable<Peer>.empty();
+                        _autocompleteOpts = const Iterable<Peer>.empty();
                       } else if (peers.isEmpty && !isPeersLoaded) {
                         Peer emptyPeer = Peer(
                           id: '',
@@ -182,7 +175,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           rdpUsername: '',
                           loginName: '',
                         );
-                        return [emptyPeer];
+                        _autocompleteOpts = [emptyPeer];
                       } else {
                         String textWithoutSpaces =
                             textEditingValue.text.replaceAll(" ", "");
@@ -194,7 +187,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         }
                         String textToFind = textEditingValue.text.toLowerCase();
 
-                        return peers
+                        _autocompleteOpts = peers
                             .where((peer) =>
                                 peer.id.toLowerCase().contains(textToFind) ||
                                 peer.username
@@ -206,6 +199,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                                 peer.alias.toLowerCase().contains(textToFind))
                             .toList();
                       }
+                      return _autocompleteOpts;
                     },
                     fieldViewBuilder: (BuildContext context,
                         TextEditingController fieldTextEditingController,
@@ -274,6 +268,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     optionsViewBuilder: (BuildContext context,
                         AutocompleteOnSelected<Peer> onSelected,
                         Iterable<Peer> options) {
+                      options = _autocompleteOpts;
                       double maxHeight = options.length * 50;
                       if (options.length == 1) {
                         maxHeight = 52;
@@ -372,10 +367,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
     }
     if (Get.isRegistered<TextEditingController>()) {
       Get.delete<TextEditingController>();
-    }
-    if (!bind.isCustomClient()) {
-      platformFFI.unregisterEventHandler(
-          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish);
     }
     super.dispose();
   }

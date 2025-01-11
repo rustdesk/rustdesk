@@ -39,7 +39,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   double? get height => bind.isIncomingOnly() ? null : em * 3;
 
   void onUsePublicServerGuide() {
-    const url = "https://rustdesk.com/pricing.html";
+    const url = "https://rustdesk.com/pricing";
     canLaunchUrlString(url).then((can) {
       if (can) {
         launchUrlString(url);
@@ -179,6 +179,9 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
     }
     _svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
+    try {
+      stateGlobal.videoConnCount.value = status['video_conn_count'] as int;
+    } catch (_) {}
   }
 }
 
@@ -203,6 +206,8 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   bool isPeersLoading = false;
   bool isPeersLoaded = false;
+  // https://github.com/flutter/flutter/issues/157244
+  Iterable<Peer> _autocompleteOpts = [];
 
   @override
   void initState() {
@@ -330,7 +335,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                     child: Autocomplete<Peer>(
                   optionsBuilder: (TextEditingValue textEditingValue) {
                     if (textEditingValue.text == '') {
-                      return const Iterable<Peer>.empty();
+                      _autocompleteOpts = const Iterable<Peer>.empty();
                     } else if (peers.isEmpty && !isPeersLoaded) {
                       Peer emptyPeer = Peer(
                         id: '',
@@ -346,7 +351,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                         rdpUsername: '',
                         loginName: '',
                       );
-                      return [emptyPeer];
+                      _autocompleteOpts = [emptyPeer];
                     } else {
                       String textWithoutSpaces =
                           textEditingValue.text.replaceAll(" ", "");
@@ -357,8 +362,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                         );
                       }
                       String textToFind = textEditingValue.text.toLowerCase();
-
-                      return peers
+                      _autocompleteOpts = peers
                           .where((peer) =>
                               peer.id.toLowerCase().contains(textToFind) ||
                               peer.username
@@ -370,6 +374,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                               peer.alias.toLowerCase().contains(textToFind))
                           .toList();
                     }
+                    return _autocompleteOpts;
                   },
                   fieldViewBuilder: (
                     BuildContext context,
@@ -419,7 +424,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                           onSubmitted: (_) {
                             onConnect();
                           },
-                        ));
+                        ).workaroundFreezeLinuxMint());
                   },
                   onSelected: (option) {
                     setState(() {
@@ -430,6 +435,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                   optionsViewBuilder: (BuildContext context,
                       AutocompleteOnSelected<Peer> onSelected,
                       Iterable<Peer> options) {
+                    options = _autocompleteOpts;
                     double maxHeight = options.length * 50;
                     if (options.length == 1) {
                       maxHeight = 52;

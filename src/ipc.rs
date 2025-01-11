@@ -45,6 +45,10 @@ pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum FS {
+    ReadEmptyDirs {
+        dir: String,
+        include_hidden: bool,
+    },
     ReadDir {
         dir: String,
         include_hidden: bool,
@@ -213,8 +217,6 @@ pub enum Data {
     MouseMoveTime(i64),
     Authorize,
     Close,
-    #[cfg(target_os = "android")]
-    InputControl(bool),
     #[cfg(windows)]
     SAS,
     UserSid(Option<u32>),
@@ -264,6 +266,7 @@ pub enum Data {
     ControlledSessionCount(usize),
     CmErr(String),
     CheckHwcodec,
+    #[cfg(feature = "flutter")]
     VideoConnCount(Option<usize>),
     // Although the key is not neccessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
@@ -453,6 +456,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 log::info!("socks updated");
             }
         },
+        #[cfg(feature = "flutter")]
         Data::VideoConnCount(None) => {
             let n = crate::server::AUTHED_CONNS
                 .lock()
