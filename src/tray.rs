@@ -48,9 +48,9 @@ fn make_tray() -> hbb_common::ResultType<()> {
             .into_rgba8();
         let (width, height) = image.dimensions();
         let rgba = image.into_raw();
-        (rgba, 1, 1)
+        (rgba, width, height)
     };
-    let icon = tray_icon::Icon::from_rgba(icon_rgba, 1, 1)
+    let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .context("Failed to open icon")?;
 
     let mut event_loop = EventLoopBuilder::new().build();
