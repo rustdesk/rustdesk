@@ -47,8 +47,8 @@ class FloatingWindowService : Service(), View.OnTouchListener {
     companion object {
         private val logTag = "floatingService"
         private var firstCreate = true
-        private var viewWidth = 12
-        private var viewHeight = 12
+        private var viewWidth = 6
+        private var viewHeight = 6
         private const val MIN_VIEW_SIZE = 32 // size 0 does not help prevent the service from being killed
         private const val MAX_VIEW_SIZE = 320
         private var viewUntouchable = false
