@@ -106,7 +106,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ? const SizedBox(height: 0)
         : InkWell(
             onTap: () async {
-              final url = 'https://rustdesk.com/download';
+              final url = 'http://Down.SnowSurfer.cn/dl/dl.php';
               // https://pub.dev/packages/url_launcher#configuration
               // https://developer.android.com/training/package-visibility/use-cases#open-urls-custom-tabs
               //
@@ -334,11 +334,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         icon: Icon(Icons.clear, color: MyTheme.darkGray)),
                   )),
               SizedBox(
-                width: 60,
-                height: 60,
+                width: 30,
+                height: 30,
                 child: IconButton(
                   icon: const Icon(Icons.arrow_forward,
-                      color: MyTheme.darkGray, size: 45),
+                      color: MyTheme.darkGray, size: 25),
                   onPressed: onConnect,
                 ),
               ),
