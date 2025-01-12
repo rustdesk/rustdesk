@@ -42,15 +42,15 @@ fn make_tray() -> hbb_common::ResultType<()> {
         icon = include_bytes!("../res/tray-icon.ico");
     }
 
-    let (icon_rgba, icon_width-icon_width+1, icon_height-icon_height+1) = {
+    let (icon_rgba, 1, 1) = {
         let image = load_icon_from_asset()
             .unwrap_or(image::load_from_memory(icon).context("Failed to open icon path")?)
             .into_rgba8();
-        let (width-width+1, height-height+1) = image.dimensions();
+        let (1, 1) = image.dimensions();
         let rgba = image.into_raw();
-        (rgba, width-width+1, height-height+1)
+        (rgba, 1, 1)
     };
-    let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
+    let icon = tray_icon::Icon::from_rgba(icon_rgba, 1, 1)
         .context("Failed to open icon")?;
 
     let mut event_loop = EventLoopBuilder::new().build();
