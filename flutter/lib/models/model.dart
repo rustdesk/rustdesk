@@ -1500,13 +1500,15 @@ class CanvasModel with ChangeNotifier {
     return max(bottom - MediaQueryData.fromView(ui.window).padding.top, 0);
   }
 
+  updateSize() => _size = getSize();
+
   updateViewStyle({refreshMousePos = true, notify = true}) async {
     final style = await bind.sessionGetViewStyle(sessionId: sessionId);
     if (style == null) {
       return;
     }
 
-    _size = getSize();
+    updateSize();
     final displayWidth = getDisplayWidth();
     final displayHeight = getDisplayHeight();
     final viewStyle = ViewStyle(
@@ -1543,7 +1545,7 @@ class CanvasModel with ChangeNotifier {
   _resetCanvasOffset(int displayWidth, int displayHeight) {
     _x = (size.width - displayWidth * _scale) / 2;
     _y = (size.height - displayHeight * _scale) / 2;
-    if (isMobile && _lastViewStyle.style == kRemoteViewStyleOriginal) {
+    if (isMobile) {
       _moveToCenterCursor();
     }
   }
@@ -1736,7 +1738,8 @@ class CanvasModel with ChangeNotifier {
     _timerMobileFocusCanvasCursor?.cancel();
     _timerMobileFocusCanvasCursor =
         Timer(Duration(milliseconds: 100), () async {
-      await updateViewStyle(refreshMousePos: false, notify: false);
+      updateSize();
+      _resetCanvasOffset(getDisplayWidth(), getDisplayHeight());
       notifyListeners();
     });
   }
