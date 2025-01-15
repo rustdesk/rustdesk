@@ -346,7 +346,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Dark", "黑暗"),
         ("Light", "明亮"),
         ("Follow System", "跟随系统"),
-        ("Enable hardware codec", "使能硬件编解码"),
+        ("Enable hardware codec", "启用硬件编解码"),
         ("Unlock Security Settings", "解锁安全设置"),
         ("Enable audio", "允许传输音频"),
         ("Unlock Network Settings", "解锁网络设置"),
