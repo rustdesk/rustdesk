@@ -11,6 +11,7 @@ pub const EVK_BACK: u16 = 0x08;
 pub const EVK_ESCAPE: u16 = 0x1b;
 pub const EVK_LWIN: u16 = 0x5b;
 pub const EVK_SHIFT: u16 = 0x10;
+
 //pub const EVK_LSHIFT: u16 = 0xa0;
 pub const EVK_RSHIFT: u16 = 0xa1;
 //pub const EVK_LMENU: u16 = 0xa4;
