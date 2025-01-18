@@ -455,7 +455,7 @@ class ServerInfo extends StatelessWidget {
     const TextStyle textStyleHeading = TextStyle(
         fontSize: 16.0, fontWeight: FontWeight.bold, color: Colors.grey);
     const TextStyle textStyleValue =
-        TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold);
+        TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold, height: 25);
 
     void copyToClipboard(String value) {
       Clipboard.setData(ClipboardData(text: value));
@@ -512,7 +512,7 @@ class ServerInfo extends StatelessWidget {
                   onPressed: () {
                     copyToClipboard(model.serverId.value.text.trim());
                   })
-            ]).marginOnly(left: 39, bottom: 10),
+            ]).marginOnly(left: 40, bottom: 10),
             // Password
             Row(children: [
               const Icon(Icons.lock_outline, color: Colors.grey, size: iconSize)
