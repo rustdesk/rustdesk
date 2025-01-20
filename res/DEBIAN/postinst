@@ -5,7 +5,7 @@ set -e
 if [ "$1" = configure ]; then
 
 	INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
-    ln -s /usr/share/rustdesk/rustdesk /usr/bin/rustdesk
+	ln -f -s /usr/share/rustdesk/rustdesk /usr/bin/rustdesk
 	
 	if [ "systemd" == "$INITSYS" ]; then
 
