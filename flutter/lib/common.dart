@@ -3610,7 +3610,7 @@ void earlyAssert() {
 }
 
 void checkUpdate() {
-  if (isDesktop || isAndroid) {
+  if (!isWeb) {
     if (!bind.isCustomClient()) {
       platformFFI.registerEventHandler(
           kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,

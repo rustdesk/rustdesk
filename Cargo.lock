@@ -1582,6 +1582,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "default_net"
+version = "0.1.0"
+source = "git+https://github.com/rustdesk-org/default_net#a831d47bcacb4615b394968287697924a8f62be1"
+dependencies = [
+ "anyhow",
+ "regex",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "deranged"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2901,6 +2911,7 @@ dependencies = [
  "bytes",
  "chrono",
  "confy",
+ "default_net",
  "directories-next",
  "dirs-next",
  "dlopen",
@@ -2925,6 +2936,7 @@ dependencies = [
  "serde 1.0.203",
  "serde_derive",
  "serde_json 1.0.118",
+ "sha2",
  "socket2 0.3.19",
  "sodiumoxide",
  "sysinfo",
