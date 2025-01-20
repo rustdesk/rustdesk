@@ -1,13 +1,14 @@
 // https://github.com/astraw/vpx-encode
 // https://github.com/astraw/env-libvpx-sys
 // https://github.com/rust-av/vpx-rs/blob/master/src/decoder.rs
+// https://github.com/chromium/chromium/blob/e7b24573bc2e06fed4749dd6b6abfce67f29052f/media/video/vpx_video_encoder.cc#L522
 
 use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::log;
 use hbb_common::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use hbb_common::ResultType;
 
-use crate::codec::{base_bitrate, codec_thread_num, EncoderApi, Quality};
+use crate::codec::{base_bitrate, codec_thread_num, EncoderApi};
 use crate::{EncodeInput, EncodeYuvFormat, GoogleImage, Pixfmt, STRIDE_ALIGN};
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
@@ -18,9 +19,6 @@ use std::{ptr, slice};
 
 generate_call_macro!(call_vpx, false);
 generate_call_ptr_macro!(call_vpx_ptr);
-
-const DEFAULT_QP_MAX: u32 = 56; // no more than 63
-const DEFAULT_QP_MIN: u32 = 12; // no more than 63
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VpxVideoCodecId {
@@ -85,21 +83,11 @@ impl EncoderApi for VpxEncoder {
                     c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
                 }
 
-                let (q_min, q_max, b) = Self::convert_quality(config.quality);
-                if q_min > 0 && q_min < q_max && q_max < 64 {
-                    c.rc_min_quantizer = q_min;
-                    c.rc_max_quantizer = q_max;
-                } else {
-                    c.rc_min_quantizer = DEFAULT_QP_MIN;
-                    c.rc_max_quantizer = DEFAULT_QP_MAX;
-                }
-                let base_bitrate = base_bitrate(config.width as _, config.height as _);
-                let bitrate = base_bitrate * b / 100;
-                if bitrate > 0 {
-                    c.rc_target_bitrate = bitrate;
-                } else {
-                    c.rc_target_bitrate = base_bitrate;
-                }
+                let (q_min, q_max) = Self::calc_q_values(config.quality);
+                c.rc_min_quantizer = q_min;
+                c.rc_max_quantizer = q_max;
+                c.rc_target_bitrate =
+                    Self::bitrate(config.width as _, config.height as _, config.quality);
                 // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp9/common/vp9_enums.h#29
                 // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp8/vp8_cx_iface.c#282
                 c.g_profile = if i444 && config.codec == VpxVideoCodecId::VP9 {
@@ -212,17 +200,12 @@ impl EncoderApi for VpxEncoder {
         false
     }
 
-    fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
+    fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
         let mut c = unsafe { *self.ctx.config.enc.to_owned() };
-        let (q_min, q_max, b) = Self::convert_quality(quality);
-        if q_min > 0 && q_min < q_max && q_max < 64 {
-            c.rc_min_quantizer = q_min;
-            c.rc_max_quantizer = q_max;
-        }
-        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
-        if bitrate > 0 {
-            c.rc_target_bitrate = bitrate;
-        }
+        let (q_min, q_max) = Self::calc_q_values(ratio);
+        c.rc_min_quantizer = q_min;
+        c.rc_max_quantizer = q_max;
+        c.rc_target_bitrate = Self::bitrate(self.width as _, self.height as _, ratio);
         call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
         Ok(())
     }
@@ -232,9 +215,6 @@ impl EncoderApi for VpxEncoder {
         c.rc_target_bitrate
     }
 
-    fn support_abr(&self) -> bool {
-        true
-    }
     fn support_changing_quality(&self) -> bool {
         true
     }
@@ -331,30 +311,27 @@ impl VpxEncoder {
         }
     }
 
-    fn convert_quality(quality: Quality) -> (u32, u32, u32) {
-        match quality {
-            Quality::Best => (6, 45, 150),
-            Quality::Balanced => (12, 56, 100 * 2 / 3),
-            Quality::Low => (18, 56, 50),
-            Quality::Custom(b) => {
-                let (q_min, q_max) = Self::calc_q_values(b);
-                (q_min, q_max, b)
-            }
-        }
+    fn bitrate(width: u32, height: u32, ratio: f32) -> u32 {
+        let bitrate = base_bitrate(width, height) as f32;
+        (bitrate * ratio) as u32
     }
 
     #[inline]
-    fn calc_q_values(b: u32) -> (u32, u32) {
+    fn calc_q_values(ratio: f32) -> (u32, u32) {
+        let b = (ratio * 100.0) as u32;
         let b = std::cmp::min(b, 200);
-        let q_min1: i32 = 36;
+        let q_min1 = 36;
         let q_min2 = 0;
         let q_max1 = 56;
         let q_max2 = 37;
 
         let t = b as f32 / 200.0;
 
-        let q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
-        let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
+        let mut q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
+        let mut q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
+
+        q_min = q_min.clamp(q_min2, q_min1);
+        q_max = q_max.clamp(q_max2, q_max1);
 
         (q_min, q_max)
     }
@@ -415,8 +392,8 @@ pub struct VpxEncoderConfig {
     pub width: c_uint,
     /// The height (in pixels).
     pub height: c_uint,
-    /// The image quality
-    pub quality: Quality,
+    /// The bitrate ratio
+    pub quality: f32,
     /// The codec
     pub codec: VpxVideoCodecId,
     /// keyframe interval

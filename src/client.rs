@@ -12,7 +12,6 @@ use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 #[cfg(not(target_os = "linux"))]
 use ringbuf::{ring_buffer::RbBase, Rb};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     ffi::c_void,
@@ -31,6 +30,7 @@ pub use file_trait::FileManager;
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::UnboundedSender;
+use hbb_common::tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -44,6 +44,7 @@ use hbb_common::{
     protobuf::{Message as _, MessageField},
     rand,
     rendezvous_proto::*,
+    sha2::{Digest, Sha256},
     socket_client::{connect_tcp, connect_tcp_local, ipv4_to_ipv6},
     sodiumoxide::{base64, crypto::sign},
     tcp::FramedStream,
@@ -53,10 +54,6 @@ use hbb_common::{
         time::{interval, Duration, Instant},
     },
     AddrMangle, ResultType, Stream,
-};
-use hbb_common::{
-    config::keys::OPTION_ALLOW_AUTO_RECORD_OUTGOING,
-    tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver},
 };
 pub use helper::*;
 use scrap::{
