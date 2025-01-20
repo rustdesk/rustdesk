@@ -1,3 +1,15 @@
+use super::{BLOCK_SIZE, LDAP_EPOCH_DELTA};
+use crate::{
+    platform::unix::{
+        FLAGS_FD_ATTRIBUTES, FLAGS_FD_LAST_WRITE, FLAGS_FD_PROGRESSUI, FLAGS_FD_SIZE,
+        FLAGS_FD_UNIX_MODE,
+    },
+    CliprdrError,
+};
+use hbb_common::{
+    bytes::{BufMut, BytesMut},
+    log,
+};
 use std::{
     collections::HashSet,
     fs::File,
@@ -7,32 +19,11 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::SystemTime,
 };
-
-use hbb_common::{
-    bytes::{BufMut, BytesMut},
-    log,
-};
 use utf16string::WString;
-
-use crate::{
-    platform::{fuse::BLOCK_SIZE, LDAP_EPOCH_DELTA},
-    CliprdrError,
-};
-
-/// has valid file attributes
-const FLAGS_FD_ATTRIBUTES: u32 = 0x04;
-/// has valid file size
-const FLAGS_FD_SIZE: u32 = 0x40;
-/// has valid last write time
-const FLAGS_FD_LAST_WRITE: u32 = 0x20;
-/// show progress
-const FLAGS_FD_PROGRESSUI: u32 = 0x4000;
-/// transferred from unix, contains file mode
-/// P.S. this flag is not used in windows
-const FLAGS_FD_UNIX_MODE: u32 = 0x08;
 
 #[derive(Debug)]
 pub(super) struct LocalFile {
+    pub relative_root: PathBuf,
     pub path: PathBuf,
 
     pub handle: Option<BufReader<File>>,
@@ -51,9 +42,9 @@ pub(super) struct LocalFile {
 }
 
 impl LocalFile {
-    pub fn try_open(path: &Path) -> Result<Self, CliprdrError> {
+    pub fn try_open(relative_root: &Path, path: &Path) -> Result<Self, CliprdrError> {
         let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
-            path: path.clone(),
+            path: path.to_string_lossy().to_string(),
             err: e,
         })?;
         let size = mt.len() as u64;
@@ -79,7 +70,8 @@ impl LocalFile {
 
         Ok(Self {
             name,
-            path: path.clone(),
+            relative_root: relative_root.to_path_buf(),
+            path: path.to_path_buf(),
             handle,
             offset,
             size,
@@ -121,7 +113,12 @@ impl LocalFile {
         let size_high = (self.size >> 32) as u32;
         let size_low = (self.size & (u32::MAX as u64)) as u32;
 
-        let path = self.path.to_string_lossy().to_string();
+        let path = self
+            .path
+            .strip_prefix(&self.relative_root)
+            .unwrap_or(&self.path)
+            .to_string_lossy()
+            .into_owned();
 
         let wstr: WString<utf16string::LE> = WString::from(&path);
         let name = wstr.as_bytes();
@@ -172,12 +169,12 @@ impl LocalFile {
     pub fn load_handle(&mut self) -> Result<(), CliprdrError> {
         if !self.is_dir && self.handle.is_none() {
             let handle = std::fs::File::open(&self.path).map_err(|e| CliprdrError::FileError {
-                path: self.path.clone(),
+                path: self.path.to_string_lossy().to_string(),
                 err: e,
             })?;
             let mut reader = BufReader::with_capacity(BLOCK_SIZE as usize * 2, handle);
             reader.fill_buf().map_err(|e| CliprdrError::FileError {
-                path: self.path.clone(),
+                path: self.path.to_string_lossy().to_string(),
                 err: e,
             })?;
             self.handle = Some(reader);
@@ -188,20 +185,25 @@ impl LocalFile {
     pub fn read_exact_at(&mut self, buf: &mut [u8], offset: u64) -> Result<(), CliprdrError> {
         self.load_handle()?;
 
-        let handle = self.handle.as_mut()?;
+        let Some(handle) = self.handle.as_mut() else {
+            return Err(CliprdrError::FileError {
+                path: self.path.to_string_lossy().to_string(),
+                err: std::io::Error::new(std::io::ErrorKind::NotFound, "file handle not found"),
+            });
+        };
 
         if offset != self.offset.load(Ordering::Relaxed) {
             handle
                 .seek(std::io::SeekFrom::Start(offset))
                 .map_err(|e| CliprdrError::FileError {
-                    path: self.path.clone(),
+                    path: self.path.to_string_lossy().to_string(),
                     err: e,
                 })?;
         }
         handle
             .read_exact(buf)
             .map_err(|e| CliprdrError::FileError {
-                path: self.path.clone(),
+                path: self.path.to_string_lossy().to_string(),
                 err: e,
             })?;
         let new_offset = offset + (buf.len() as u64);
@@ -219,6 +221,7 @@ impl LocalFile {
 
 pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, CliprdrError> {
     fn constr_file_lst(
+        relative_root: &Path,
         path: &Path,
         file_list: &mut Vec<LocalFile>,
         visited: &mut HashSet<PathBuf>,
@@ -227,22 +230,28 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
         if visited.contains(path) {
             return Ok(());
         }
-        visited.insert(path.clone());
+        visited.insert(path.to_path_buf());
 
-        let local_file = LocalFile::try_open(path)?;
+        let local_file = LocalFile::try_open(relative_root, path)?;
         file_list.push(local_file);
 
         let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
-            path: path.clone(),
+            path: path.to_string_lossy().to_string(),
             err: e,
         })?;
 
         if mt.is_dir() {
-            let dir = std::fs::read_dir(path)?;
+            let dir = std::fs::read_dir(path).map_err(|e| CliprdrError::FileError {
+                path: path.to_string_lossy().to_string(),
+                err: e,
+            })?;
             for entry in dir {
-                let entry = entry?;
+                let entry = entry.map_err(|e| CliprdrError::FileError {
+                    path: path.to_string_lossy().to_string(),
+                    err: e,
+                })?;
                 let path = entry.path();
-                constr_file_lst(&path, file_list, visited)?;
+                constr_file_lst(relative_root, &path, file_list, visited)?;
             }
         }
         Ok(())
@@ -251,8 +260,18 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
     let mut file_list = Vec::new();
     let mut visited = HashSet::new();
 
+    let relative_root = paths
+        .first()
+        .ok_or(CliprdrError::InvalidRequest {
+            description: "empty file list".to_string(),
+        })?
+        .parent()
+        .ok_or(CliprdrError::InvalidRequest {
+            description: "empty parent".to_string(),
+        })?
+        .to_path_buf();
     for path in paths {
-        constr_file_lst(path, &mut file_list, &mut visited)?;
+        constr_file_lst(&relative_root, path, &mut file_list, &mut visited)?;
     }
     Ok(file_list)
 }
@@ -263,7 +282,7 @@ mod file_list_test {
 
     use hbb_common::bytes::{BufMut, BytesMut};
 
-    use crate::{platform::fuse::FileDescription, CliprdrError};
+    use crate::{platform::unix::filetype::FileDescription, CliprdrError};
 
     use super::LocalFile;
 
@@ -277,6 +296,7 @@ mod file_list_test {
         #[inline]
         fn generate_file(path: &str, name: &str, is_dir: bool) -> LocalFile {
             LocalFile {
+                relative_root: PathBuf::from("."),
                 path: PathBuf::from(path),
                 handle: None,
                 name: name.to_string(),
