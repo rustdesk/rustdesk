@@ -1152,8 +1152,26 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   }
 
   List<Widget> directIp(BuildContext context) {
-    return [];
+    return [
+      Offstage(
+        offstage: true,
+        child: Column(
+          children: [
+            _OptionCheckBox(
+                context, 'Enable direct IP access', kOptionDirectServer,
+                update: (_) {}, enabled: false),
+            _SubLabeledWidget(
+              context,
+              'Port',
+              const SizedBox.shrink(),
+              enabled: false,
+            ),
+          ],
+        ),
+      ),
+    ];
   }
+
 
   Widget whitelist() {
     bool enabled = !locked;
