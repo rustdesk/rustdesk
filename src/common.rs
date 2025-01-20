@@ -816,16 +816,17 @@ pub fn check_software_update() {
 
 #[tokio::main(flavor = "current_thread")]
 async fn check_software_update_() -> hbb_common::ResultType<()> {
-    let url = "https://github.com/rustdesk/rustdesk/releases/latest";
-    let latest_release_response = create_http_client_async().get(url).send().await?;
-    let latest_release_version = latest_release_response
-        .url()
-        .path()
-        .rsplit('/')
-        .next()
-        .unwrap_or_default();
-
-    let response_url = latest_release_response.url().to_string();
+    let (request, url) =
+        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    let latest_release_response = create_http_client_async()
+        .post(url)
+        .json(&request)
+        .send()
+        .await?;
+    let bytes = latest_release_response.bytes().await?;
+    let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
+    let response_url = resp.url;
+    let latest_release_version = response_url.rsplit('/').next().unwrap_or_default();
 
     if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
         #[cfg(feature = "flutter")]
@@ -1541,7 +1542,7 @@ pub fn is_empty_uni_link(arg: &str) -> bool {
 }
 
 pub fn get_hwid() -> Bytes {
-    use sha2::{Digest, Sha256};
+    use hbb_common::sha2::{Digest, Sha256};
 
     let uuid = hbb_common::get_uuid();
     let mut hasher = Sha256::new();

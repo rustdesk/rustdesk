@@ -87,6 +87,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -276,6 +278,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install LLVM and Clang
         uses: rustdesk-org/install-llvm-action-32bit@master
@@ -404,6 +408,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -489,6 +495,9 @@ jobs:
           brew install nasm yasm
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
@@ -594,6 +603,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       # $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
 
@@ -666,6 +677,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
@@ -958,6 +971,9 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
@@ -1234,6 +1250,9 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
@@ -1402,6 +1421,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set Swap Space
         if: ${{ matrix.job.arch == 'x86_64' }}
@@ -1730,6 +1751,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Free Space
         run: |
@@ -1920,6 +1943,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -1992,6 +2017,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -2049,6 +2076,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Prepare env
         run: |
