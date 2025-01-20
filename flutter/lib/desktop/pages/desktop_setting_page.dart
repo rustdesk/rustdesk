@@ -1151,7 +1151,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  List<Widget> directIp(BuildContext context) {
+  /*List<Widget> directIp(BuildContext context) {
     TextEditingController controller = TextEditingController();
     update(bool v) => setState(() {});
     RxBool applyEnabled = false.obs;
@@ -1215,7 +1215,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         return tmpWrapper();
       }(),
     ];
-  }
+  }*/
 
   Widget whitelist() {
     bool enabled = !locked;

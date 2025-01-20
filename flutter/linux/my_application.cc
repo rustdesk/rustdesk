@@ -27,7 +27,7 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
   gtk_window_set_decorated(window, FALSE);
-  // try setting icon for rustdesk, which uses the system cache 
+  // try setting icon for rustdesk, which uses the system cache
   GtkIconTheme* theme = gtk_icon_theme_get_default();
   gint icons[4] = {256, 128, 64, 32};
   for (int i = 0; i < 4; i++) {
