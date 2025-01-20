@@ -1113,7 +1113,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       shareRdp(context, enabled),
       _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
-      ...directIp(context),
+      ...[],
       whitelist(),
       ...autoDisconnect(context),
       if (bind.mainIsInstalled())
@@ -1123,6 +1123,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       if (bind.mainIsInstalled()) unlockPin()
     ]);
   }
+
 
   shareRdp(BuildContext context, bool enabled) {
     onChanged(bool b) async {
@@ -1153,24 +1154,22 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   List<Widget> directIp(BuildContext context) {
     return [
-      Offstage(
-        offstage: true,
-        child: Column(
-          children: [
-            _OptionCheckBox(
-                context, 'Enable direct IP access', kOptionDirectServer,
-                update: (_) {}, enabled: false),
-            _SubLabeledWidget(
-              context,
-              'Port',
-              const SizedBox.shrink(),
-              enabled: false,
-            ),
-          ],
-        ),
+      _OptionCheckBox(
+        context,
+        'Enable direct IP access',
+        kOptionDirectServer,
+        update: (_) {},
+        enabled: false,
+      ),
+      _SubLabeledWidget(
+        context,
+        'Port',
+        const SizedBox.shrink(),
+        enabled: false,
       ),
     ];
   }
+
 
 
   Widget whitelist() {
