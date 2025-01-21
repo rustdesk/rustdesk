@@ -62,11 +62,9 @@ pub trait EncoderApi {
     #[cfg(feature = "vram")]
     fn input_texture(&self) -> bool;
 
-    fn set_quality(&mut self, quality: Quality) -> ResultType<()>;
+    fn set_quality(&mut self, ratio: f32) -> ResultType<()>;
 
     fn bitrate(&self) -> u32;
-
-    fn support_abr(&self) -> bool;
 
     fn support_changing_quality(&self) -> bool;
 
@@ -882,12 +880,16 @@ pub fn enable_directx_capture() -> bool {
     )
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub const BR_BEST: f32 = 1.5;
+pub const BR_BALANCED: f32 = 0.67;
+pub const BR_SPEED: f32 = 0.5;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Quality {
     Best,
     Balanced,
     Low,
-    Custom(u32),
+    Custom(f32),
 }
 
 impl Default for Quality {
@@ -903,22 +905,59 @@ impl Quality {
             _ => false,
         }
     }
+
+    pub fn ratio(&self) -> f32 {
+        match self {
+            Quality::Best => BR_BEST,
+            Quality::Balanced => BR_BALANCED,
+            Quality::Low => BR_SPEED,
+            Quality::Custom(v) => *v,
+        }
+    }
 }
 
 pub fn base_bitrate(width: u32, height: u32) -> u32 {
-    #[allow(unused_mut)]
-    let mut base_bitrate = ((width * height) / 1000) as u32; // same as 1.1.9
-    if base_bitrate == 0 {
-        base_bitrate = 1920 * 1080 / 1000;
-    }
+    const RESOLUTION_PRESETS: &[(u32, u32, u32)] = &[
+        (640, 480, 400),     // VGA, 307k pixels
+        (800, 600, 500),     // SVGA, 480k pixels
+        (1024, 768, 800),    // XGA, 786k pixels
+        (1280, 720, 1000),   // 720p, 921k pixels
+        (1366, 768, 1100),   // HD, 1049k pixels
+        (1440, 900, 1300),   // WXGA+, 1296k pixels
+        (1600, 900, 1500),   // HD+, 1440k pixels
+        (1920, 1080, 2073),  // 1080p, 2073k pixels
+        (2048, 1080, 2200),  // 2K DCI, 2211k pixels
+        (2560, 1440, 3000),  // 2K QHD, 3686k pixels
+        (3440, 1440, 4000),  // UWQHD, 4953k pixels
+        (3840, 2160, 5000),  // 4K UHD, 8294k pixels
+        (7680, 4320, 12000), // 8K UHD, 33177k pixels
+    ];
+    let pixels = width * height;
+
+    let (preset_pixels, preset_bitrate) = RESOLUTION_PRESETS
+        .iter()
+        .map(|(w, h, bitrate)| (w * h, bitrate))
+        .min_by_key(|(preset_pixels, _)| {
+            if *preset_pixels >= pixels {
+                preset_pixels - pixels
+            } else {
+                pixels - preset_pixels
+            }
+        })
+        .unwrap_or(((1920 * 1080) as u32, &2073)); // default 1080p
+
+    let bitrate = (*preset_bitrate as f32 * (pixels as f32 / preset_pixels as f32)).round() as u32;
+
     #[cfg(target_os = "android")]
     {
-        // fix when android screen shrinks
         let fix = crate::Display::fix_quality() as u32;
         log::debug!("Android screen, fix quality:{}", fix);
-        base_bitrate = base_bitrate * fix;
+        bitrate * fix
     }
-    base_bitrate
+    #[cfg(not(target_os = "android"))]
+    {
+        bitrate
+    }
 }
 
 pub fn codec_thread_num(limit: usize) -> usize {
@@ -1001,8 +1040,7 @@ pub fn test_av1() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
         let f = || {
-            let (width, height, quality, keyframe_interval, i444) =
-                (1920, 1080, Quality::Balanced, None, false);
+            let (width, height, quality, keyframe_interval, i444) = (1920, 1080, 1.0, None, false);
             let frame_count = 10;
             let block_size = 300;
             let move_step = 50;

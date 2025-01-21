@@ -51,7 +51,7 @@ use scrap::vram::{VRamEncoder, VRamEncoderConfig};
 use scrap::Capturer;
 use scrap::{
     aom::AomEncoderConfig,
-    codec::{Encoder, EncoderCfg, Quality},
+    codec::{Encoder, EncoderCfg},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     CodecFormat, Display, EncodeInput, TraitCapturer,
@@ -413,9 +413,8 @@ fn run(vs: VideoService) -> ResultType<()> {
         c.set_gdi();
     }
     let mut video_qos = VIDEO_QOS.lock().unwrap();
-    video_qos.refresh(None);
-    let mut spf;
-    let mut quality = video_qos.quality();
+    let mut spf = video_qos.spf();
+    let mut quality = video_qos.ratio();
     let record_incoming = config::option2bool(
         "allow-auto-record-incoming",
         &Config::get_option("allow-auto-record-incoming"),
@@ -461,7 +460,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     VIDEO_QOS
         .lock()
         .unwrap()
-        .set_support_abr(display_idx, encoder.support_abr());
+        .set_support_changing_quality(display_idx, encoder.support_changing_quality());
     log::info!("initial quality: {quality:?}");
 
     if sp.is_option_true(OPTION_REFRESH) {
@@ -489,32 +488,20 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut first_frame = true;
     let capture_width = c.width;
     let capture_height = c.height;
+    let (mut second_instant, mut send_counter) = (Instant::now(), 0);
 
     while sp.ok() {
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
-
-        let mut video_qos = VIDEO_QOS.lock().unwrap();
-        spf = video_qos.spf();
-        if quality != video_qos.quality() {
-            log::debug!("quality: {:?} -> {:?}", quality, video_qos.quality());
-            quality = video_qos.quality();
-            if encoder.support_changing_quality() {
-                allow_err!(encoder.set_quality(quality));
-                video_qos.store_bitrate(encoder.bitrate());
-            } else {
-                if !video_qos.in_vbr_state() && !quality.is_custom() {
-                    log::info!("switch to change quality");
-                    bail!("SWITCH");
-                }
-            }
-        }
-        if client_record != video_qos.record() {
-            log::info!("switch due to record changed");
-            bail!("SWITCH");
-        }
-        drop(video_qos);
-
+        check_qos(
+            &mut encoder,
+            &mut quality,
+            &mut spf,
+            client_record,
+            &mut send_counter,
+            &mut second_instant,
+            display_idx,
+        )?;
         if sp.is_option_true(OPTION_REFRESH) {
             let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
             log::info!("switch to refresh");
@@ -582,6 +569,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_height,
                     )?;
                     frame_controller.set_send(now, send_conn_ids);
+                    send_counter += 1;
                 }
                 #[cfg(windows)]
                 {
@@ -640,6 +628,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_height,
                         )?;
                         frame_controller.set_send(now, send_conn_ids);
+                        send_counter += 1;
                     }
                 }
             }
@@ -691,6 +680,7 @@ struct Raii(usize);
 
 impl Raii {
     fn new(display_idx: usize) -> Self {
+        VIDEO_QOS.lock().unwrap().new_display(display_idx);
         Raii(display_idx)
     }
 }
@@ -701,14 +691,14 @@ impl Drop for Raii {
         VRamEncoder::set_not_use(self.0, false);
         #[cfg(feature = "vram")]
         Encoder::update(scrap::codec::EncodingUpdate::Check);
-        VIDEO_QOS.lock().unwrap().set_support_abr(self.0, true);
+        VIDEO_QOS.lock().unwrap().remove_display(self.0);
     }
 }
 
 fn setup_encoder(
     c: &CapturerInfo,
     display_idx: usize,
-    quality: Quality,
+    quality: f32,
     client_record: bool,
     record_incoming: bool,
     last_portable_service_running: bool,
@@ -737,7 +727,7 @@ fn setup_encoder(
 fn get_encoder_config(
     c: &CapturerInfo,
     _display_idx: usize,
-    quality: Quality,
+    quality: f32,
     record: bool,
     _portable_service: bool,
 ) -> EncoderCfg {
@@ -1060,4 +1050,41 @@ pub fn make_display_changed_msg(
     let mut msg_out = Message::new();
     msg_out.set_misc(misc);
     Some(msg_out)
+}
+
+fn check_qos(
+    encoder: &mut Encoder,
+    ratio: &mut f32,
+    spf: &mut Duration,
+    client_record: bool,
+    send_counter: &mut usize,
+    second_instant: &mut Instant,
+    display_idx: usize,
+) -> ResultType<()> {
+    let mut video_qos = VIDEO_QOS.lock().unwrap();
+    *spf = video_qos.spf();
+    if *ratio != video_qos.ratio() {
+        *ratio = video_qos.ratio();
+        if encoder.support_changing_quality() {
+            allow_err!(encoder.set_quality(*ratio));
+            video_qos.store_bitrate(encoder.bitrate());
+        } else {
+            // Now only vaapi doesn't support changing quality
+            if !video_qos.in_vbr_state() && !video_qos.latest_quality().is_custom() {
+                log::info!("switch to change quality");
+                bail!("SWITCH");
+            }
+        }
+    }
+    if client_record != video_qos.record() {
+        log::info!("switch due to record changed");
+        bail!("SWITCH");
+    }
+    if second_instant.elapsed() > Duration::from_secs(1) {
+        *second_instant = Instant::now();
+        video_qos.update_display_data(display_idx, *send_counter);
+        *send_counter = 0;
+    }
+    drop(video_qos);
+    Ok(())
 }

@@ -33,6 +33,7 @@ use hbb_common::{
     get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
     password_security::{self as password, ApproveMode},
+    sha2::{Digest, Sha256},
     sleep, timeout,
     tokio::{
         net::TcpStream,
@@ -45,7 +46,6 @@ use hbb_common::{
 use scrap::android::{call_main_service_key_event, call_main_service_pointer_input};
 use serde_derive::Serialize;
 use serde_json::{json, value::Value};
-use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::Ordering;
 use std::{
@@ -228,7 +228,6 @@ pub struct Connection {
     #[cfg(target_os = "linux")]
     linux_headless_handle: LinuxHeadlessHandle,
     closed: bool,
-    delay_response_instant: Instant,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     start_cm_ipc_para: Option<StartCmIpcPara>,
     auto_disconnect_timer: Option<(Instant, u64)>,
@@ -376,7 +375,6 @@ impl Connection {
             #[cfg(target_os = "linux")]
             linux_headless_handle,
             closed: false,
-            delay_response_instant: Instant::now(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             start_cm_ipc_para: Some(StartCmIpcPara {
                 rx_to_cm,
@@ -736,7 +734,11 @@ impl Connection {
                         });
                         conn.send(msg_out.into()).await;
                     }
-                    video_service::VIDEO_QOS.lock().unwrap().user_delay_response_elapsed(conn.inner.id(), conn.delay_response_instant.elapsed().as_millis());
+                    if conn.is_authed_remote_conn() {
+                        if let Some(last_test_delay) = conn.last_test_delay {
+                            video_service::VIDEO_QOS.lock().unwrap().user_delay_response_elapsed(id, last_test_delay.elapsed().as_millis());
+                        }
+                    }
                 }
             }
         }
@@ -1877,7 +1879,6 @@ impl Connection {
                         .user_network_delay(self.inner.id(), new_delay);
                     self.network_delay = new_delay;
                 }
-                self.delay_response_instant = Instant::now();
             }
         } else if let Some(message::Union::SwitchSidesResponse(_s)) = msg.union {
             #[cfg(feature = "flutter")]
@@ -3322,6 +3323,13 @@ impl Connection {
             session_id: self.lr.session_id,
         }
     }
+
+    fn is_authed_remote_conn(&self) -> bool {
+        if let Some(id) = self.authed_conn_id.as_ref() {
+            return id.conn_type() == AuthConnType::Remote;
+        }
+        false
+    }
 }
 
 pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
@@ -3809,10 +3817,6 @@ mod raii {
         fn drop(&mut self) {
             let mut active_conns_lock = ALIVE_CONNS.lock().unwrap();
             active_conns_lock.retain(|&c| c != self.0);
-            video_service::VIDEO_QOS
-                .lock()
-                .unwrap()
-                .on_connection_close(self.0);
         }
     }
 
@@ -3830,6 +3834,12 @@ mod raii {
             _ONCE.call_once(|| {
                 shutdown_hooks::add_shutdown_hook(connection_shutdown_hook);
             });
+            if conn_type == AuthConnType::Remote {
+                video_service::VIDEO_QOS
+                    .lock()
+                    .unwrap()
+                    .on_connection_open(conn_id);
+            }
             Self(conn_id, conn_type)
         }
 
@@ -3927,12 +3937,20 @@ mod raii {
                 );
             }
         }
+
+        pub fn conn_type(&self) -> AuthConnType {
+            self.1
+        }
     }
 
     impl Drop for AuthedConnID {
         fn drop(&mut self) {
             if self.1 == AuthConnType::Remote {
                 scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Remove(self.0));
+                video_service::VIDEO_QOS
+                    .lock()
+                    .unwrap()
+                    .on_connection_close(self.0);
             }
             AUTHED_CONNS.lock().unwrap().retain(|c| c.0 != self.0);
             let remote_count = AUTHED_CONNS
