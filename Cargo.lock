@@ -1584,7 +1584,7 @@ dependencies = [
 [[package]]
 name = "default_net"
 version = "0.1.0"
-source = "git+https://github.com/rustdesk-org/default_net#a831d47bcacb4615b394968287697924a8f62be1"
+source = "git+https://github.com/rustdesk-org/default_net#c400b0bbf49a987129796221fbc41a8a385b812e"
 dependencies = [
  "anyhow",
  "regex",
