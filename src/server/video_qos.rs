@@ -117,7 +117,7 @@ impl Default for VideoQoS {
     fn default() -> Self {
         VideoQoS {
             fps: FPS,
-            ratio: 1.0,
+            ratio: BR_BALANCED,
             users: Default::default(),
             displays: Default::default(),
             bitrate_store: 0,
@@ -327,7 +327,8 @@ impl VideoQoS {
             user.delay.fps = Some(fps);
         }
         self.adjust_fps();
-        if adjust_ratio {
+        if adjust_ratio && !cfg!(target_os = "linux") {
+            //Reduce the possibility of vaapi being created twice
             self.adjust_ratio(false);
         }
     }
@@ -412,6 +413,9 @@ impl VideoQoS {
 
     // Adjust quality ratio based on network delay and screen changes
     fn adjust_ratio(&mut self, dynamic_screen: bool) {
+        if !self.in_vbr_state() {
+            return;
+        }
         // Get maximum delay from all users
         let max_delay = self.users.iter().map(|u| u.1.delay.avg_delay()).max();
         let Some(max_delay) = max_delay else {
