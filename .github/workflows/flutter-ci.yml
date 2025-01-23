@@ -8,7 +8,7 @@ on:
     - "README.md"
   push:
     branches:
-      - master
+      - master-dev
     paths-ignore:
       - ".github/**"
       - "docs/**"
@@ -21,4 +21,4 @@ jobs:
   run-ci:
     uses: ./.github/workflows/flutter-build.yml
     with:
-      upload-artifact: false
+      upload-artifact: true
