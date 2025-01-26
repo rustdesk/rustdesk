@@ -134,6 +134,15 @@ pub fn clip_2_msg(clip: ClipboardFile) -> Message {
             })),
             ..Default::default()
         },
+        ClipboardFile::TryEmpty => Message {
+            union: Some(message::Union::Cliprdr(Cliprdr {
+                union: Some(cliprdr::Union::TryEmpty(CliprdrTryEmpty {
+                    ..Default::default()
+                })),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
     }
 }
 
@@ -176,6 +185,7 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipboardFile> {
                 requested_data: data.requested_data.into(),
             })
         }
+        Some(cliprdr::Union::TryEmpty(_)) => Some(ClipboardFile::TryEmpty),
         _ => None,
     }
 }
