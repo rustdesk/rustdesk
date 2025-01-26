@@ -31,7 +31,10 @@ macro_rules! my_println{
 pub fn core_main() -> Option<Vec<String>> {
     crate::load_custom_client();
     #[cfg(windows)]
-    crate::platform::windows::bootstrap();
+    if !crate::platform::windows::bootstrap() {
+        // return None to terminate the process
+        return None;
+    }
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
