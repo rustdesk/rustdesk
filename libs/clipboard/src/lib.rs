@@ -107,6 +107,7 @@ pub enum ClipboardFile {
         stream_id: i32,
         requested_data: Vec<u8>,
     },
+    TryEmpty,
 }
 
 struct MsgChannel {
@@ -223,6 +224,16 @@ fn send_data_to_channel(conn_id: i32, data: ClipboardFile) -> ResultType<()> {
         Ok(())
     } else {
         bail!("conn_id not found");
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn send_data_exclude(conn_id: i32, data: ClipboardFile) {
+    use hbb_common::log;
+    for msg_channel in VEC_MSG_CHANNEL.read().unwrap().iter() {
+        if msg_channel.conn_id != conn_id {
+            allow_err!(msg_channel.sender.send(data.clone()));
+        }
     }
 }
 
