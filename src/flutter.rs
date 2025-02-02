@@ -1318,7 +1318,9 @@ pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
     for s in sessions::get_sessions() {
         #[cfg(feature = "unix-file-copy-paste")]
         if _is_file {
-            if s.is_file_clipboard_required() {
+            if crate::is_support_file_copy_paste_num(s.lc.read().unwrap().version)
+                && s.is_file_clipboard_required()
+            {
                 s.send(Data::Message(msg.clone()));
             }
             continue;

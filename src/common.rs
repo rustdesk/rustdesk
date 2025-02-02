@@ -89,7 +89,7 @@ lazy_static::lazy_static! {
 
 pub struct SimpleCallOnReturn {
     pub b: bool,
-    pub f: Box<dyn Fn() + 'static>,
+    pub f: Box<dyn Fn() + Send + 'static>,
 }
 
 impl Drop for SimpleCallOnReturn {
@@ -125,6 +125,18 @@ pub fn is_support_multi_ui_session(ver: &str) -> bool {
 #[inline]
 pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number(MIN_VER_MULTI_UI_SESSION)
+}
+
+#[inline]
+#[cfg(feature = "unix-file-copy-paste")]
+pub fn is_support_file_copy_paste(ver: &str) -> bool {
+    is_support_file_copy_paste_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+#[cfg(feature = "unix-file-copy-paste")]
+pub fn is_support_file_copy_paste_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.3.8")
 }
 
 // is server process, with "--server" args

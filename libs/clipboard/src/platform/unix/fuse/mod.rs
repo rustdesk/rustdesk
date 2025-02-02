@@ -73,6 +73,8 @@ pub fn init_fuse_context(is_client: bool) -> Result<(), CliprdrError> {
         MountOption::RO,
     ];
     log::info!("mounting clipboard FUSE to {}", mount_point.display());
+    // to-do: ignore the error if the mount point is already mounted
+    // Because the sciter version uses separate processes as the controlling side.
     let session = fuser::spawn_mount2(
         FuseServer::client(server.clone()),
         mount_point.clone(),
@@ -185,6 +187,7 @@ fn uninit_fuse_context_(is_client: bool) {
 impl Drop for FuseContext {
     fn drop(&mut self) {
         self.session.lock().take().map(|s| s.join());
+        log::info!("unmounting clipboard FUSE from {}", self.mount_point.display());
     }
 }
 

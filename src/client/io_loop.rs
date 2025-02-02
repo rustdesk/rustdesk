@@ -36,7 +36,7 @@ use hbb_common::{
     },
     Stream,
 };
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use scrap::CodecFormat;
 use std::{
@@ -64,7 +64,7 @@ pub struct Remote<T: InvokeUiSession> {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     is_connected: bool,
     first_frame: bool,
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     client_conn_id: i32, // used for file clipboard
     data_count: Arc<AtomicUsize>,
     video_format: CodecFormat,
@@ -108,7 +108,7 @@ impl<T: InvokeUiSession> Remote<T> {
             last_update_jobs_status: (Instant::now(), Default::default()),
             is_connected: false,
             first_frame: false,
-            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+            #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
             client_conn_id: 0,
             data_count: Arc::new(AtomicUsize::new(0)),
             video_format: CodecFormat::Unknown,
@@ -176,26 +176,33 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
 
                 // just build for now
-                #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+                #[cfg(not(any(target_os = "windows", feature = "unix-file-copy-paste")))]
                 let (_tx_holder, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
 
-                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
                 let (_tx_holder, rx) = mpsc::unbounded_channel();
-                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-                let mut rx_clip_client_lock = Arc::new(TokioMutex::new(rx));
-                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+                let mut rx_clip_client_holder = (Arc::new(TokioMutex::new(rx)), None);
+                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
                 {
                     let is_conn_not_default = self.handler.is_file_transfer()
                         || self.handler.is_port_forward()
                         || self.handler.is_rdp();
                     if !is_conn_not_default {
-                        log::debug!("get cliprdr client for conn_id {}", self.client_conn_id);
-                        (self.client_conn_id, rx_clip_client_lock) =
+                        (self.client_conn_id, rx_clip_client_holder.0) =
                             clipboard::get_rx_cliprdr_client(&self.handler.get_id());
+                        log::debug!("get cliprdr client for conn_id {}", self.client_conn_id);
+                        let client_conn_id = self.client_conn_id;
+                        rx_clip_client_holder.1 = Some(crate::SimpleCallOnReturn {
+                            b: true,
+                            f: Box::new(move || {
+                                clipboard::remove_channel_by_conn_id(client_conn_id);
+                            }),
+                        });
                     };
                 }
-                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-                let mut rx_clip_client = rx_clip_client_lock.lock().await;
+                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+                let mut rx_clip_client = rx_clip_client_holder.0.lock().await;
 
                 let mut status_timer =
                     crate::rustdesk_interval(time::interval(Duration::new(1, 0)));
@@ -1233,6 +1240,10 @@ impl<T: InvokeUiSession> Remote<T> {
                                 crate::client::ClientClipboardContext {
                                     cfg: self.handler.get_permission_config(),
                                     tx: self.sender.clone(),
+                                    #[cfg(feature = "unix-file-copy-paste")]
+                                    is_file_supported: crate::is_support_file_copy_paste(
+                                        &peer_version,
+                                    ),
                                 },
                             ));
                             // To make sure current text clipboard data is updated.
@@ -1984,12 +1995,14 @@ impl<T: InvokeUiSession> Remote<T> {
                 });
             }
             #[cfg(feature = "unix-file-copy-paste")]
-            if let Some(msg) = unix_file_clip::serve_clip_messages(
-                ClipboardSide::Client,
-                clip,
-                self.client_conn_id,
-            ) {
-                allow_err!(_peer.send(&msg).await);
+            if crate::is_support_file_copy_paste_num(self.handler.lc.read().unwrap().version) {
+                if let Some(msg) = unix_file_clip::serve_clip_messages(
+                    ClipboardSide::Client,
+                    clip,
+                    self.client_conn_id,
+                ) {
+                    allow_err!(_peer.send(&msg).await);
+                }
             }
         }
     }

@@ -349,20 +349,29 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         let is_authorized = self.cm.is_authorized(self.conn_id);
 
         #[cfg(target_os = "windows")]
-        let rx_clip1;
+        let rx_clip_holder;
         let mut rx_clip;
         let _tx_clip;
         #[cfg(target_os = "windows")]
         if self.conn_id > 0 && is_authorized {
             log::debug!("Clipboard is enabled from client peer: type 1");
-            rx_clip1 = clipboard::get_rx_cliprdr_server(self.conn_id);
-            rx_clip = rx_clip1.lock().await;
+            let conn_id = self.conn_id;
+            rx_clip_holder = (
+                clipboard::get_rx_cliprdr_server(conn_id),
+                Some(crate::SimpleCallOnReturn {
+                    b: true,
+                    f: Box::new(move || {
+                        clipboard::remove_channel_by_conn_id(conn_id);
+                    }),
+                }),
+            );
+            rx_clip = rx_clip_holder.0.lock().await;
         } else {
             log::debug!("Clipboard is enabled from client peer, actually useless: type 2");
             let rx_clip2;
             (_tx_clip, rx_clip2) = unbounded_channel::<clipboard::ClipboardFile>();
-            rx_clip1 = Arc::new(TokioMutex::new(rx_clip2));
-            rx_clip = rx_clip1.lock().await;
+            rx_clip_holder = (Arc::new(TokioMutex::new(rx_clip2)), None);
+            rx_clip = rx_clip_holder.0.lock().await;
         }
         #[cfg(not(target_os = "windows"))]
         {

@@ -442,13 +442,21 @@ impl Connection {
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
         #[cfg(feature = "unix-file-copy-paste")]
-        let rx_clip1;
+        let rx_clip_holder;
         let mut rx_clip;
         let _tx_clip: mpsc::UnboundedSender<i32>;
         #[cfg(feature = "unix-file-copy-paste")]
         {
-            rx_clip1 = clipboard::get_rx_cliprdr_server(id);
-            rx_clip = rx_clip1.lock().await;
+            rx_clip_holder = (
+                clipboard::get_rx_cliprdr_server(id),
+                crate::SimpleCallOnReturn {
+                    b: true,
+                    f: Box::new(move || {
+                        clipboard::remove_channel_by_conn_id(id);
+                    }),
+                },
+            );
+            rx_clip = rx_clip_holder.0.lock().await;
         }
         #[cfg(not(feature = "unix-file-copy-paste"))]
         {
@@ -775,6 +783,7 @@ impl Connection {
                 clip_file = rx_clip.recv() => match clip_file {
                     Some(_clip) => {
                         #[cfg(feature = "unix-file-copy-paste")]
+                        if crate::is_support_file_copy_paste(&conn.lr.version)
                         {
                             conn.handle_file_clip(_clip).await;
                         }
@@ -1252,9 +1261,17 @@ impl Connection {
 
         #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
         {
+            let is_both_windows = cfg!(target_os = "windows")
+                && self.lr.my_platform == whoami::Platform::Windows.to_string();
+            #[cfg(feature = "unix-file-copy-paste")]
+            let is_unix_and_peer_supported = crate::is_support_file_copy_paste(&self.lr.version);
+            #[cfg(not(feature = "unix-file-copy-paste"))]
+            let is_unix_and_peer_supported = false;
             // to-do: add file clipboard support for macos
-            let has_file_clipboard = !(cfg!(target_os = "macos")
-                && self.lr.my_platform == whoami::Platform::MacOS.to_string());
+            let is_both_macos = cfg!(target_os = "macos")
+                && self.lr.my_platform == whoami::Platform::MacOS.to_string();
+            let has_file_clipboard =
+                is_both_windows || (is_unix_and_peer_supported && !is_both_macos);
             platform_additions.insert("has_file_clipboard".into(), json!(has_file_clipboard));
         }
 
@@ -2177,12 +2194,14 @@ impl Connection {
                             self.send_to_cm(ipc::Data::ClipboardFile(clip));
                         }
                         #[cfg(feature = "unix-file-copy-paste")]
-                        if let Some(msg) = unix_file_clip::serve_clip_messages(
-                            ClipboardSide::Host,
-                            clip,
-                            self.inner.id(),
-                        ) {
-                            self.send(msg).await;
+                        if crate::is_support_file_copy_paste(&self.lr.version) {
+                            if let Some(msg) = unix_file_clip::serve_clip_messages(
+                                ClipboardSide::Host,
+                                clip,
+                                self.inner.id(),
+                            ) {
+                                self.send(msg).await;
+                            }
                         }
                     }
                 }

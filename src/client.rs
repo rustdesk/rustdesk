@@ -130,6 +130,8 @@ pub(crate) struct ClientClipboardContext;
 pub(crate) struct ClientClipboardContext {
     pub cfg: SessionPermissionConfig,
     pub tx: UnboundedSender<Data>,
+    #[cfg(feature = "unix-file-copy-paste")]
+    pub is_file_supported: bool,
 }
 
 /// Client of the remote desktop.
@@ -689,6 +691,8 @@ impl Client {
         #[cfg(not(target_os = "android"))]
         clipboard_listener::unsubscribe(Self::CLIENT_CLIPBOARD_NAME);
         CLIPBOARD_STATE.lock().unwrap().running = false;
+        #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
+        clipboard::platform::unix::fuse::uninit_fuse_context(true);
     }
 
     // `try_start_clipboard` is called by all session when connection is established. (When handling peer info).
@@ -880,7 +884,9 @@ impl ClientClipboardHandler {
         if let Some(ctx) = &self.client_clip_ctx {
             #[cfg(feature = "unix-file-copy-paste")]
             if _is_file {
-                let _ = ctx.tx.send(Data::Message(msg));
+                if ctx.is_file_supported {
+                    let _ = ctx.tx.send(Data::Message(msg));
+                }
                 return;
             }
 

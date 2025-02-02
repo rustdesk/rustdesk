@@ -201,6 +201,13 @@ pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<C
     }
 }
 
+pub fn remove_channel_by_conn_id(conn_id: i32) {
+    let mut lock = VEC_MSG_CHANNEL.write().unwrap();
+    if let Some(index) = lock.iter().position(|x| x.conn_id == conn_id) {
+        lock.remove(index);
+    }
+}
+
 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
 #[inline]
 pub fn send_data(conn_id: i32, data: ClipboardFile) -> Result<(), CliprdrError> {

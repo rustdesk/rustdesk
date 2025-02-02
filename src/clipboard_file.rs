@@ -1,5 +1,5 @@
 use clipboard::ClipboardFile;
-use hbb_common::{log, message_proto::*};
+use hbb_common::message_proto::*;
 
 pub fn clip_2_msg(clip: ClipboardFile) -> Message {
     match clip {
@@ -204,12 +204,8 @@ pub mod unix_file_clip {
         get_local_format, serv_files, FILECONTENTS_FORMAT_ID, FILECONTENTS_FORMAT_NAME,
         FILEDESCRIPTORW_FORMAT_NAME, FILEDESCRIPTOR_FORMAT_ID,
     };
-    use hbb_common::{log, message_proto::*};
-    use std::{
-        collections::HashMap,
-        iter::FromIterator,
-        sync::{Arc, Mutex, RwLock},
-    };
+    use hbb_common::log;
+    use std::sync::{Arc, Mutex};
 
     lazy_static::lazy_static! {
         static ref CLIPBOARD_CTX: Arc<Mutex<Option<crate::clipboard::ClipboardContext>>> = Arc::new(Mutex::new(None));
