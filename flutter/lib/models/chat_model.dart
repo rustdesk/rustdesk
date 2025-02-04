@@ -362,10 +362,6 @@ class ChatModel with ChangeNotifier {
           .firstWhereOrNull((e) => e.id == id)
           ?.peerId;
     }
-    if (peerId == null) {
-      debugPrint("Failed to receive msg, peerId is null");
-      return;
-    }
 
     final messagekey = MessageKey(peerId, id);
 

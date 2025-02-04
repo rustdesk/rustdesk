@@ -2341,9 +2341,6 @@ class CursorModel with ChangeNotifier {
     } else {
       ByteData? imgBytes =
           await image.toByteData(format: ui.ImageByteFormat.png);
-      if (imgBytes == null) {
-        return false;
-      }
       data = imgBytes.buffer.asUint8List();
     }
     final cache = CursorData(

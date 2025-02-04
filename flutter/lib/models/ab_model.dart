@@ -652,10 +652,8 @@ class AbModel {
       return MyTheme.accent;
     }
     int? colorValue = current.tagColors[tag];
-    if (colorValue != null) {
-      return Color(colorValue);
-    }
-    return str2color2(tag, existing: current.tagColors.values.toList());
+    return Color(colorValue);
+      return str2color2(tag, existing: current.tagColors.values.toList());
   }
 
   List<String> addressBookNames() {
@@ -1133,11 +1131,9 @@ class LegacyAb extends BaseAb {
       }).toList();
     }
     int? oldColor = tagColors[oldTag];
-    if (oldColor != null) {
-      tagColors.remove(oldTag);
-      tagColors.addAll({newTag: oldColor});
-    }
-    return await pushAb();
+    tagColors.remove(oldTag);
+    tagColors.addAll({newTag: oldColor});
+      return await pushAb();
   }
 
   @override

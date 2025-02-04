@@ -262,8 +262,6 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   void selectInstallPath() async {
     String? install_path = await FilePicker.platform
         .getDirectoryPath(initialDirectory: controller.text);
-    if (install_path != null) {
-      controller.text = join(install_path, await bind.mainGetAppName());
+    controller.text = join(install_path, await bind.mainGetAppName());
     }
-  }
 }

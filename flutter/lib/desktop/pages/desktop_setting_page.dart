@@ -680,13 +680,11 @@ class _GeneralState extends State<_General> {
                               String? selectedDirectory =
                                   await FilePicker.platform.getDirectoryPath(
                                       initialDirectory: initialDirectory);
-                              if (selectedDirectory != null) {
-                                await bind.mainSetLocalOption(
-                                    key: kOptionVideoSaveDirectory,
-                                    value: selectedDirectory);
-                                setState(() {});
-                              }
-                            },
+                              await bind.mainSetLocalOption(
+                                  key: kOptionVideoSaveDirectory,
+                                  value: selectedDirectory);
+                              setState(() {});
+                                                        },
                       child: Text(translate('Change')))
                   .marginOnly(left: 5),
             ],

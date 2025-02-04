@@ -66,9 +66,6 @@ class HttpService {
     String? responseJson = " ";
     while (responseJson == " ") {
       responseJson = await bind.mainGetHttpStatus(url: url);
-      if (responseJson == null) {
-        throw Exception('The HTTP request failed');
-      }
       if (responseJson == " ") {
         await Future.delayed(const Duration(milliseconds: 100));
       }

@@ -495,14 +495,12 @@ class _AddressBookState extends State<AddressBook> {
           }
           String? errMsg2 = await gFFI.abModel.addIdToCurrent(
               id, aliasController.text.trim(), password, selectedTag);
-          if (errMsg2 != null) {
-            setState(() {
-              isInProgress = false;
-              errorMsg = errMsg2;
-            });
-            return;
-          }
-          // final currentPeers
+          setState(() {
+            isInProgress = false;
+            errorMsg = errMsg2;
+          });
+          return;
+                  // final currentPeers
         }
         close();
       }

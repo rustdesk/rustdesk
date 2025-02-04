@@ -67,11 +67,6 @@ class CmFileModel {
       return;
     }
     CmFileLog? job = jobTable.firstWhereOrNull((e) => e.id == data.id);
-    if (job == null) {
-      job = CmFileLog();
-      jobTable.add(job);
-      _addUnread(data.connId);
-    }
     job.id = data.id;
     job.action =
         data.isRemote ? CmFileAction.remoteToLocal : CmFileAction.localToRemote;
