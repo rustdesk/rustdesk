@@ -1277,7 +1277,6 @@ function login() {
             abLoading = false;
             err = translate(err);
             if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
-            err="数据提交错误";
             show_progress(false, err);
         });
         return " ";
