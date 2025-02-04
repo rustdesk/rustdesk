@@ -34,7 +34,6 @@ parking_lot = {version = "0.12"}
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 rand = {version = "0.8", optional = true}
-fuser = {version = "0.13", optional = true}
 libc = {version = "0.2", optional = true}
 dashmap = {version ="5.5", optional = true}
 utf16string = {version = "0.2", optional = true}
@@ -44,6 +43,7 @@ once_cell = {version = "1.18", optional = true}
 percent-encoding = {version  ="2.3", optional = true}
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
+fuser = {version = "0.15", default-features = false, optional = true}
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cacao = {git="https://github.com/clslaid/cacao", branch = "feat/set-file-urls", optional = true}

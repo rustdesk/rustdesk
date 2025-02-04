@@ -1305,9 +1305,26 @@ pub fn update_text_clipboard_required() {
     Client::set_is_text_clipboard_required(is_required);
 }
 
+#[cfg(feature = "unix-file-copy-paste")]
+pub fn update_file_clipboard_required() {
+    let is_required = sessions::get_sessions()
+        .iter()
+        .any(|s| s.is_file_clipboard_required());
+    Client::set_is_file_clipboard_required(is_required);
+}
+
 #[cfg(not(target_os = "ios"))]
-pub fn send_text_clipboard_msg(msg: Message) {
+pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
     for s in sessions::get_sessions() {
+        #[cfg(feature = "unix-file-copy-paste")]
+        if _is_file {
+            if crate::is_support_file_copy_paste_num(s.lc.read().unwrap().version)
+                && s.is_file_clipboard_required()
+            {
+                s.send(Data::Message(msg.clone()));
+            }
+            continue;
+        }
         if s.is_text_clipboard_required() {
             // Check if the client supports multi clipboards
             if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
