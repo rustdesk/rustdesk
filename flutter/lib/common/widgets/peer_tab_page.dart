@@ -156,7 +156,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             ?..withOpacity(0.5);
           final hover = false.obs;
           final deco = BoxDecoration(
-              color: Theme.of(context).colorScheme.background,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(6));
           final decoBorder = BoxDecoration(
               border: Border(
@@ -703,7 +703,7 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
     return Obx(() => Container(
           width: stateGlobal.isPortrait.isTrue ? 120 : 140,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.background,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(6),
           ),
           child: Row(
@@ -972,7 +972,7 @@ class RefreshWidgetState extends State<RefreshWidget> {
   @override
   Widget build(BuildContext context) {
     final deco = BoxDecoration(
-      color: Theme.of(context).colorScheme.background,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(6),
     );
     return AnimatedRotation(
@@ -1014,7 +1014,7 @@ Widget _hoverAction(
     EdgeInsetsGeometry padding = const EdgeInsets.all(4.0)}) {
   final hover = false.obs;
   final deco = BoxDecoration(
-    color: Theme.of(context).colorScheme.background,
+    color: Theme.of(context).colorScheme.surface,
     borderRadius: BorderRadius.circular(6),
   );
   return Tooltip(

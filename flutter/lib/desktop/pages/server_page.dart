@@ -83,7 +83,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
       child: Consumer<ServerModel>(
         builder: (context, serverModel, child) {
           final body = Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.background,
+            backgroundColor: Theme.of(context).colorScheme.surface,
             body: ConnectionManager(),
           );
           return isLinux
@@ -293,7 +293,7 @@ class ConnectionManagerState extends State<ConnectionManager>
                 windowManager.startDragging();
               },
               child: Container(
-                color: Theme.of(context).colorScheme.background,
+                color: Theme.of(context).colorScheme.surface,
               ),
             ),
           ),
@@ -601,7 +601,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
       padding: EdgeInsets.all(5.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10.0),
-        color: Theme.of(context).colorScheme.background,
+        color: Theme.of(context).colorScheme.surface,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.2),
@@ -789,8 +789,9 @@ class _CmControlPanel extends StatelessWidget {
                                 value: d,
                                 groupValue: currentDevice,
                                 onChanged: (v) {
-                                  if (v != null)
+                                  if (v != null) {
                                     AudioInput.setDevice(v, true, true);
+                                  }
                                 },
                                 child: Container(
                                   child: Text(

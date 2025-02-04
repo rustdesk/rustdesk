@@ -322,11 +322,11 @@ class MyTheme {
       : EdgeInsets.only(left: dialogPadding / 3);
 
   static ScrollbarThemeData scrollbarTheme = ScrollbarThemeData(
-    thickness: MaterialStateProperty.all(6),
-    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
-      if (states.contains(MaterialState.dragged)) {
+    thickness: WidgetStateProperty.all(6),
+    thumbColor: WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.dragged)) {
         return Colors.grey[900];
-      } else if (states.contains(MaterialState.hovered)) {
+      } else if (states.contains(WidgetState.hovered)) {
         return Colors.grey[700];
       } else {
         return Colors.grey[500];
@@ -336,10 +336,10 @@ class MyTheme {
   );
 
   static ScrollbarThemeData scrollbarThemeDark = scrollbarTheme.copyWith(
-    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
-      if (states.contains(MaterialState.dragged)) {
+    thumbColor: WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.dragged)) {
         return Colors.grey[100];
-      } else if (states.contains(MaterialState.hovered)) {
+      } else if (states.contains(WidgetState.hovered)) {
         return Colors.grey[300];
       } else {
         return Colors.grey[500];
@@ -428,9 +428,9 @@ class MyTheme {
     listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
         style:
-            MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
+            MenuStyle(backgroundColor: WidgetStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
-        primary: Colors.blue, secondary: accent, background: grayBg),
+        primary: Colors.blue, secondary: accent, surface: grayBg),
     popupMenuTheme: PopupMenuThemeData(
         color: Colors.white,
         shape: RoundedRectangleBorder(
@@ -536,11 +536,11 @@ class MyTheme {
     listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
         style: MenuStyle(
-            backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
+            backgroundColor: WidgetStatePropertyAll(Color(0xFF121212)))),
     colorScheme: ColorScheme.dark(
       primary: Colors.blue,
       secondary: accent,
-      background: Color(0xFF24252B),
+      surface: Color(0xFF24252B),
     ),
     popupMenuTheme: PopupMenuThemeData(
         shape: RoundedRectangleBorder(
@@ -3485,7 +3485,7 @@ Widget buildVirtualWindowFrame(BuildContext context, Widget child) {
       decoration: BoxDecoration(
         color: isMainDesktopWindow
             ? Colors.transparent
-            : Theme.of(context).colorScheme.background,
+            : Theme.of(context).colorScheme.surface,
         border: Border.all(
           color: Theme.of(context).dividerColor,
           width: stateGlobal.windowBorderWidth.value,
@@ -3606,7 +3606,7 @@ List<SubWindowResizeEdge>? get subWindowManagerEnableResizeEdges => isWindows
     : null;
 
 void earlyAssert() {
-  assert('\1' == '1');
+  assert('1' == '1');
 }
 
 void checkUpdate() {

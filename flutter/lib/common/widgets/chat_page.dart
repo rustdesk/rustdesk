@@ -113,7 +113,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                         isDense: true,
                         hintText: translate('Write a message'),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.background,
+                        fillColor: Theme.of(context).colorScheme.surface,
                         contentPadding: EdgeInsets.all(10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10.0),

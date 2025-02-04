@@ -675,7 +675,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         content: TextButton(
             child: Text(e.value),
             style:
-                ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
+                ButtonStyle(minimumSize: WidgetStateProperty.all(Size(0, 0))),
             onPressed: () => onPressed(list.sublist(0, e.key + 1))))));
     return breadCrumbList;
   }

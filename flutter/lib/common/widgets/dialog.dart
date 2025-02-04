@@ -2206,7 +2206,7 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
             icon: Icon(Icons.delete_outline_rounded),
             onPressed: () => change(''),
             buttonStyle: ButtonStyle(
-                backgroundColor: MaterialStatePropertyAll(Colors.red)),
+                backgroundColor: WidgetStatePropertyAll(Colors.red)),
           ),
         Obx(() => dialogButton(
               "OK",
