@@ -2905,6 +2905,7 @@ dependencies = [
 [[package]]
 name = "hbb_common"
 version = "0.1.0"
+source = "git+https://github.com/rustdesk/hbb_common.git#97266d7c180feef8b43726ea6fcb4491e3fd8752"
 dependencies = [
  "anyhow",
  "backtrace",

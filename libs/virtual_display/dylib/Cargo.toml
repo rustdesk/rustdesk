@@ -16,4 +16,4 @@ thiserror = "1.0.30"
 lazy_static = "1.4"
 serde = "1.0"
 serde_derive = "1.0"
-hbb_common = { path = "../../hbb_common" }
+hbb_common = { git = "https://github.com/rustdesk/hbb_common.git" }
