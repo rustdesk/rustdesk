@@ -120,6 +120,29 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
+## How to build on macOS
+
+```bash
+# install vcpkg
+cd ~ && git clone git@github.com:microsoft/vcpkg.git && cd vcpkg
+# set your http and https proxy here(bootstrap-vcpkg.sh will download vcpkg directly from github releases, so set your http_proxy and https_proxy if needed)
+./bootstrap-vcpkg.sh -disableMetrics
+# add these 2 lines to env files, like .bashrc
+export VCPKG_ROOT=$HOME/vcpkg
+export PATH=$PATH:$VCPKG_ROOT
+
+# install nasm and pkg-config(aom needs them)
+brew install nasm pkg-config
+git clone git@github.com:rustdesk/rustdesk.git && cd rustdesk
+vcpkg install --x-install-root="$VCPKG_ROOT/installed" # will read vcpkg.json and install
+
+# download Sciter sdk(see above) and move it to target/debug
+mkdir -p target/debug
+cp libsciter.dylib target/debug/
+# set git proxy here(this step will download https://chromium.googlesource.com/webm/libwebm so set git config --global http.proxy and git config --global http.proxy if needed)
+cargo run
+```
+
 ## How to build with Docker
 
 Begin by cloning the repository and building the Docker container:
