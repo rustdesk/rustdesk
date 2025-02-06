@@ -9,7 +9,6 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
@@ -2341,7 +2340,7 @@ class CursorModel with ChangeNotifier {
     } else {
       ByteData? imgBytes =
           await image.toByteData(format: ui.ImageByteFormat.png);
-      data = imgBytes.buffer.asUint8List();
+      data = imgBytes?.buffer.asUint8List();
     }
     final cache = CursorData(
       peerId: peerId,

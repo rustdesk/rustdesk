@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:js' as js;
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:html' as html;

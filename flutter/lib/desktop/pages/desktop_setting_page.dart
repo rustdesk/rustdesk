@@ -682,7 +682,7 @@ class _GeneralState extends State<_General> {
                                       initialDirectory: initialDirectory);
                               await bind.mainSetLocalOption(
                                   key: kOptionVideoSaveDirectory,
-                                  value: selectedDirectory);
+                                  value: selectedDirectory!);
                               setState(() {});
                                                         },
                       child: Text(translate('Change')))

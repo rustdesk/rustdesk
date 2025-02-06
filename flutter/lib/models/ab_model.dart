@@ -652,7 +652,7 @@ class AbModel {
       return MyTheme.accent;
     }
     int? colorValue = current.tagColors[tag];
-    return Color(colorValue);
+    return Color(colorValue!);
       return str2color2(tag, existing: current.tagColors.values.toList());
   }
 
@@ -1132,7 +1132,7 @@ class LegacyAb extends BaseAb {
     }
     int? oldColor = tagColors[oldTag];
     tagColors.remove(oldTag);
-    tagColors.addAll({newTag: oldColor});
+    tagColors.addAll({newTag: oldColor!});
       return await pushAb();
   }
 

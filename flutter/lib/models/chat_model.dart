@@ -363,7 +363,7 @@ class ChatModel with ChangeNotifier {
           ?.peerId;
     }
 
-    final messagekey = MessageKey(peerId, id);
+    final messagekey = MessageKey(peerId!, id);
 
     // mobile: first message show overlay icon
     if (!isDesktop && chatIconOverlayEntry == null) {

@@ -67,7 +67,7 @@ class CmFileModel {
       return;
     }
     CmFileLog? job = jobTable.firstWhereOrNull((e) => e.id == data.id);
-    job.id = data.id;
+    job!.id = data.id;
     job.action =
         data.isRemote ? CmFileAction.remoteToLocal : CmFileAction.localToRemote;
     job.fileName = data.path;
