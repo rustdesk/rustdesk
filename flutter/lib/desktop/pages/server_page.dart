@@ -88,12 +88,14 @@ class _DesktopServerPageState extends State<DesktopServerPage>
           );
           return isLinux
               ? buildVirtualWindowFrame(context, body)
-              : Container(
-                  decoration: BoxDecoration(
-                      border:
-                          Border.all(color: MyTheme.color(context).border!)),
-                  child: body,
-                );
+              : workaroundWindowBorder(
+                  context,
+                  Container(
+                    decoration: BoxDecoration(
+                        border:
+                            Border.all(color: MyTheme.color(context).border!)),
+                    child: body,
+                  ));
         },
       ),
     );

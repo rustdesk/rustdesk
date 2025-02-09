@@ -485,9 +485,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                     child = keyListenerBuilder(context, child);
                   }
                   if (isLinux) {
-                    child = buildVirtualWindowFrame(context, child);
+                    return buildVirtualWindowFrame(context, child);
+                  } else {
+                    return workaroundWindowBorder(context, child);
                   }
-                  return child;
                 },
         ),
       );
