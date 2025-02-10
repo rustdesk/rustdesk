@@ -248,7 +248,7 @@ const kFullScreenEdgeSize = 0.0;
 const kMaximizeEdgeSize = 0.0;
 // Do not use kWindowResizeEdgeSize directly. Use `windowResizeEdgeSize` in `common.dart` instead.
 const kWindowResizeEdgeSize = 5.0;
-const kWindowBorderWidth = 1.0;
+final kWindowBorderWidth = isWindows ? 0.0 : 1.0;
 const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
 const kFrameBorderRadius = 12.0;
 const kFrameClipRRectBorderRadius = 12.0;
