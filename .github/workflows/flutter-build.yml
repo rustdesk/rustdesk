@@ -31,17 +31,13 @@ env:
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2024.11.16
-  VCPKG_COMMIT_ID: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
-  VERSION: "1.3.6"
+  # vcpkg version: 2025.01.13
+  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
+  VERSION: "1.3.8"
   NDK_VERSION: "r27c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
-  # To make a custom build with your own servers set the below secret values
-  RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}"
-  RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
-  API_SERVER: "${{ secrets.API_SERVER }}"
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
 
@@ -87,6 +83,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -276,6 +274,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install LLVM and Clang
         uses: rustdesk-org/install-llvm-action-32bit@master
@@ -404,6 +404,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -413,7 +415,7 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          ./build.py --flutter --hwcodec
+          ./build.py --flutter --hwcodec --unix-file-copy-paste
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -489,6 +491,9 @@ jobs:
           brew install nasm yasm
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
@@ -594,6 +599,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       # $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
 
@@ -666,6 +673,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
@@ -787,7 +796,7 @@ jobs:
             sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
             sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
           fi
-          ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
+          ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -958,6 +967,9 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
@@ -1026,16 +1038,6 @@ jobs:
         with:
           prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
           key: ${{ matrix.job.target }}
-
-      - name: fix android for flutter 3.13
-        if: ${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
-        run: |
-          cd flutter
-          sed -i 's/uni_links_desktop/#uni_links_desktop/g' pubspec.yaml
-          sed -i 's/extended_text: .*/extended_text: 11.1.0/' pubspec.yaml
-          flutter pub get
-          cd lib
-          find . | grep dart | xargs sed -i 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g'
 
       - name: Build rustdesk lib
         env:
@@ -1234,6 +1236,9 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
@@ -1275,16 +1280,6 @@ jobs:
         with:
           name: librustdesk.so.i686-linux-android
           path: ./flutter/android/app/src/main/jniLibs/x86
-
-      - name: fix android for flutter 3.13
-        if: ${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
-        run: |
-          cd flutter
-          sed -i 's/uni_links_desktop/#uni_links_desktop/g' pubspec.yaml
-          sed -i 's/extended_text: .*/extended_text: 11.1.0/' pubspec.yaml
-          flutter pub get
-          cd lib
-          find . | grep dart | xargs sed -i 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g'
 
       - name: Build rustdesk
         shell: bash
@@ -1379,7 +1374,7 @@ jobs:
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
               distro: ubuntu18.04,
-              on: [self-hosted, Linux, ARM64],
+              on: ubuntu-22.04-arm,
               deb_arch: arm64,
               vcpkg-triplet: arm64-linux,
             }
@@ -1392,16 +1387,20 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Maximize build space
-        if: ${{ matrix.job.arch == 'x86_64' }}
         run: |
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /usr/share/dotnet
           sudo apt-get update -y
-          sudo apt-get install -y nasm qemu-user-static
+          sudo apt-get install -y nasm
+          if [[ "${{ matrix.job.arch }}" == "x86_64" ]]; then
+            sudo apt-get install -y qemu-user-static
+          fi
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set Swap Space
         if: ${{ matrix.job.arch == 'x86_64' }}
@@ -1555,7 +1554,7 @@ jobs:
               export JOBS=""
             fi
             echo $JOBS
-            cargo build --lib $JOBS --features hwcodec,flutter --release
+            cargo build --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo
 
@@ -1692,7 +1691,6 @@ jobs:
 
   build-rustdesk-linux-sciter:
     if: ${{ inputs.upload-artifact }}
-    needs: build-rustdesk-linux # not for dep, just make it run later for parallelism
     runs-on: ${{ matrix.job.on }}
     name: build-rustdesk-linux-sciter ${{ matrix.job.target }}
     strategy:
@@ -1708,17 +1706,17 @@ jobs:
               deb_arch: amd64,
               sciter_arch: x64,
               vcpkg-triplet: x64-linux,
-              extra_features: ",hwcodec",
+              extra_features: ",hwcodec,unix-file-copy-paste",
             }
           - {
               arch: armv7,
               target: armv7-unknown-linux-gnueabihf,
-              on: [self-hosted, Linux, ARM64],
+              on: ubuntu-22.04-arm,
               distro: ubuntu18.04-rustdesk,
               deb_arch: armhf,
               sciter_arch: arm32,
               vcpkg-triplet: arm-linux,
-              extra_features: "",
+              extra_features: ",unix-file-copy-paste",
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -1730,6 +1728,8 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Free Space
         run: |
@@ -1920,6 +1920,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -1985,13 +1987,15 @@ jobs:
               target: aarch64-unknown-linux-gnu,
               # try out newer flatpak since error of "error: Nothing matches org.freedesktop.Platform in remote flathub"
               distro: ubuntu22.04,
-              on: [self-hosted, Linux, ARM64],
+              on: ubuntu-22.04-arm,
               arch: aarch64,
               suffix: "",
             }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -2049,6 +2053,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Prepare env
         run: |

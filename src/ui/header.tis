@@ -174,6 +174,13 @@ class Header: Reactor.Component {
             }
         }
 
+        var is_file_copy_paste_supported = false;
+        if (handler.version_cmp(pi.version, '1.2.4') < 0) {
+            is_file_copy_paste_supported = is_win && pi.platform == "Windows";
+        } else {
+            is_file_copy_paste_supported = handler.has_file_clipboard() && pi.platform_additions.has_file_clipboard;
+        }
+
         return <popup>
             <menu.context #display-options>
                 <li #adjust-window style="display:none">{translate('Adjust Window')}</li> 
@@ -201,7 +208,7 @@ class Header: Reactor.Component {
                 {<li #follow-remote-window .toggle-option><span>{svg_checkmark}</span>{translate('Follow remote window focus')}</li>}
                 <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
-                {(is_win && pi.platform == "Windows") && file_enabled ? <li #enable-file-copy-paste .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
+                {is_file_copy_paste_supported && file_enabled ? <li #enable-file-copy-paste .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
                 {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
                 {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
                 {keyboard_enabled && pi.platform == "Windows" ? <li #privacy-mode><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}

@@ -89,7 +89,7 @@ lazy_static::lazy_static! {
 
 pub struct SimpleCallOnReturn {
     pub b: bool,
-    pub f: Box<dyn Fn() + 'static>,
+    pub f: Box<dyn Fn() + Send + 'static>,
 }
 
 impl Drop for SimpleCallOnReturn {
@@ -125,6 +125,18 @@ pub fn is_support_multi_ui_session(ver: &str) -> bool {
 #[inline]
 pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number(MIN_VER_MULTI_UI_SESSION)
+}
+
+#[inline]
+#[cfg(feature = "unix-file-copy-paste")]
+pub fn is_support_file_copy_paste(ver: &str) -> bool {
+    is_support_file_copy_paste_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+#[cfg(feature = "unix-file-copy-paste")]
+pub fn is_support_file_copy_paste_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.3.8")
 }
 
 // is server process, with "--server" args
@@ -751,7 +763,6 @@ pub fn get_sysinfo() -> serde_json::Value {
         os = format!("{os} - {}", system.os_version().unwrap_or_default());
     }
     let hostname = hostname(); // sys.hostname() return localhost on android in my test
-    use serde_json::json;
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let out;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -816,16 +827,17 @@ pub fn check_software_update() {
 
 #[tokio::main(flavor = "current_thread")]
 async fn check_software_update_() -> hbb_common::ResultType<()> {
-    let url = "https://github.com/rustdesk/rustdesk/releases/latest";
-    let latest_release_response = create_http_client_async().get(url).send().await?;
-    let latest_release_version = latest_release_response
-        .url()
-        .path()
-        .rsplit('/')
-        .next()
-        .unwrap_or_default();
-
-    let response_url = latest_release_response.url().to_string();
+    let (request, url) =
+        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    let latest_release_response = create_http_client_async()
+        .post(url)
+        .json(&request)
+        .send()
+        .await?;
+    let bytes = latest_release_response.bytes().await?;
+    let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
+    let response_url = resp.url;
+    let latest_release_version = response_url.rsplit('/').next().unwrap_or_default();
 
     if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
         #[cfg(feature = "flutter")]
@@ -1056,7 +1068,6 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
 }
 
 pub fn _make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Map<String, Value> {
-    use serde_json::json;
     let mut fd_json = serde_json::Map::new();
     fd_json.insert("id".into(), json!(id));
     fd_json.insert("path".into(), json!(path));
@@ -1541,7 +1552,7 @@ pub fn is_empty_uni_link(arg: &str) -> bool {
 }
 
 pub fn get_hwid() -> Bytes {
-    use sha2::{Digest, Sha256};
+    use hbb_common::sha2::{Digest, Sha256};
 
     let uuid = hbb_common::get_uuid();
     let mut hasher = Sha256::new();

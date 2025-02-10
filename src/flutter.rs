@@ -19,6 +19,7 @@ use serde_json::json;
 use std::{
     collections::{HashMap, HashSet},
     ffi::CString,
+    io::{Error as IoError, ErrorKind as IoErrorKind},
     os::raw::{c_char, c_int, c_void},
     str::FromStr,
     sync::{
@@ -50,7 +51,7 @@ lazy_static::lazy_static! {
 
 #[cfg(target_os = "windows")]
 lazy_static::lazy_static! {
-    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("texture_rgba_renderer_plugin.dll");
+    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = load_plugin_in_app_path("texture_rgba_renderer_plugin.dll");
 }
 
 #[cfg(target_os = "linux")]
@@ -65,7 +66,37 @@ lazy_static::lazy_static! {
 
 #[cfg(target_os = "windows")]
 lazy_static::lazy_static! {
-    pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("flutter_gpu_texture_renderer_plugin.dll");
+    pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> = load_plugin_in_app_path("flutter_gpu_texture_renderer_plugin.dll");
+}
+
+// Move this function into `src/platform/windows.rs` if there're more calls to load plugins.
+// Load dll with full path.
+#[cfg(target_os = "windows")]
+fn load_plugin_in_app_path(dll_name: &str) -> Result<Library, LibError> {
+    match std::env::current_exe() {
+        Ok(exe_file) => {
+            if let Some(cur_dir) = exe_file.parent() {
+                let full_path = cur_dir.join(dll_name);
+                if !full_path.exists() {
+                    Err(LibError::OpeningLibraryError(IoError::new(
+                        IoErrorKind::NotFound,
+                        format!("{} not found", dll_name),
+                    )))
+                } else {
+                    Library::open(full_path)
+                }
+            } else {
+                Err(LibError::OpeningLibraryError(IoError::new(
+                    IoErrorKind::Other,
+                    format!(
+                        "Invalid exe parent for {}",
+                        exe_file.to_string_lossy().as_ref()
+                    ),
+                )))
+            }
+        }
+        Err(e) => Err(LibError::OpeningLibraryError(e)),
+    }
 }
 
 /// FFI for rustdesk core's main entry.
@@ -1274,9 +1305,26 @@ pub fn update_text_clipboard_required() {
     Client::set_is_text_clipboard_required(is_required);
 }
 
+#[cfg(feature = "unix-file-copy-paste")]
+pub fn update_file_clipboard_required() {
+    let is_required = sessions::get_sessions()
+        .iter()
+        .any(|s| s.is_file_clipboard_required());
+    Client::set_is_file_clipboard_required(is_required);
+}
+
 #[cfg(not(target_os = "ios"))]
-pub fn send_text_clipboard_msg(msg: Message) {
+pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
     for s in sessions::get_sessions() {
+        #[cfg(feature = "unix-file-copy-paste")]
+        if _is_file {
+            if crate::is_support_file_copy_paste_num(s.lc.read().unwrap().version)
+                && s.is_file_clipboard_required()
+            {
+                s.send(Data::Message(msg.clone()));
+            }
+            continue;
+        }
         if s.is_text_clipboard_required() {
             // Check if the client supports multi clipboards
             if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
@@ -2076,11 +2124,7 @@ pub mod sessions {
 }
 
 pub(super) mod async_tasks {
-    use hbb_common::{
-        bail,
-        tokio::{self, select},
-        ResultType,
-    };
+    use hbb_common::{bail, tokio, ResultType};
     use std::{
         collections::HashMap,
         sync::{

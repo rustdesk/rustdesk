@@ -224,7 +224,7 @@ checksum = "b3d1d046238990b9cf5bcde22a3fb3584ee5cf65fb2765f454ed428c7a0063da"
 [[package]]
 name = "arboard"
 version = "3.4.0"
-source = "git+https://github.com/rustdesk-org/arboard#747ab2d9b40a5c9c5102051cf3b0bb38b4845e60"
+source = "git+https://github.com/rustdesk-org/arboard#4e16bad260ea05dd7dcdb68cc7549dad3920b940"
 dependencies = [
  "clipboard-win",
  "core-graphics 0.23.2",
@@ -234,6 +234,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "parking_lot",
+ "percent-encoding",
  "serde 1.0.203",
  "serde_derive",
  "windows-sys 0.48.0",
@@ -1582,6 +1583,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "default_net"
+version = "0.1.0"
+source = "git+https://github.com/rustdesk-org/default_net#78f8f70cd85151a3a2c4a3230d80d5272703c02e"
+dependencies = [
+ "anyhow",
+ "regex",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "deranged"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1697,7 +1708,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.4",
 ]
 
 [[package]]
@@ -2221,17 +2232,17 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "fuser"
-version = "0.13.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21370f84640642c8ea36dfb2a6bfc4c55941f476fcf431f6fef25a5ddcf0169b"
+checksum = "53274f494609e77794b627b1a3cddfe45d675a6b2e9ba9c0fdc8d8eee2184369"
 dependencies = [
  "libc",
  "log",
  "memchr",
+ "nix 0.29.0",
  "page_size",
- "pkg-config",
  "smallvec",
- "zerocopy 0.6.6",
+ "zerocopy 0.8.14",
 ]
 
 [[package]]
@@ -2901,6 +2912,7 @@ dependencies = [
  "bytes",
  "chrono",
  "confy",
+ "default_net",
  "directories-next",
  "dirs-next",
  "dlopen",
@@ -2925,6 +2937,7 @@ dependencies = [
  "serde 1.0.203",
  "serde_derive",
  "serde_json 1.0.118",
+ "sha2",
  "socket2 0.3.19",
  "sodiumoxide",
  "sysinfo",
@@ -3065,7 +3078,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.7.1"
-source = "git+https://github.com/rustdesk-org/hwcodec#c4d6b1c5c4ddc7548868306004cf5d4eb614a36f"
+source = "git+https://github.com/rustdesk-org/hwcodec#0ea7e709d3c48bb6446e33a9cc8fd0e0da5709b9"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -4163,7 +4176,7 @@ version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "681030a937600a36906c185595136d26abfebb4aa9c65701cefcaf8578bb982b"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 2.0.2",
  "proc-macro2 1.0.86",
  "quote 1.0.36",
  "syn 2.0.68",
@@ -4496,9 +4509,9 @@ dependencies = [
 
 [[package]]
 name = "page_size"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b7663cbd190cfd818d08efa8497f6cd383076688c49a391ef7c0d03cd12b561"
+checksum = "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
 dependencies = [
  "libc",
  "winapi 0.3.9",
@@ -5494,7 +5507,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.3.6"
+version = "1.3.8"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -5594,7 +5607,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.3.6"
+version = "1.3.8"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
@@ -8064,16 +8077,6 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.6.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "854e949ac82d619ee9a14c66a1b674ac730422372ccb759ce0c39cabcf2bf8e6"
-dependencies = [
- "byteorder",
- "zerocopy-derive 0.6.6",
-]
-
-[[package]]
-name = "zerocopy"
 version = "0.7.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae87e3fcd617500e5d106f0380cf7b77f3c6092aae37191433159dda23cfb087"
@@ -8082,10 +8085,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "zerocopy-derive"
-version = "0.6.6"
+name = "zerocopy"
+version = "0.8.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "125139de3f6b9d625c39e2efdd73d41bdac468ccd556556440e322be0e1bbd91"
+checksum = "a367f292d93d4eab890745e75a778da40909cab4d6ff8173693812f79c4a2468"
+dependencies = [
+ "zerocopy-derive 0.8.14",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.7.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15e934569e47891f7d9411f1a451d947a60e000ab3bd24fbb970f000387d1b3b"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.36",
@@ -8094,9 +8106,9 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.7.34"
+version = "0.8.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15e934569e47891f7d9411f1a451d947a60e000ab3bd24fbb970f000387d1b3b"
+checksum = "d3931cb58c62c13adec22e38686b559c86a30565e16ad6e8510a337cedc611e1"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.36",

@@ -168,6 +168,10 @@ target/release/rustdesk
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: デスクトップとモバイル向けのFlutterコード
 - **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Flutterウェブクライアント向けのJavaScript
 
+> [!注意]
+> **:不正使用に関する免責事項** <br>
+> RustDeskの開発者は、このソフトウェアの非倫理的または違法な使用を容認または支持しません。不正アクセス、不正な制御、またはプライバシーの侵害などの不正使用は、当社のガイドラインに厳密に違反します。開発者は、アプリケーションの不正使用に対して一切の責任を負いません。
+
 ## スクリーンショット
 
 ![Connection Manager](https://github.com/rustdesk/rustdesk/assets/28412477/db82d4e7-c4bc-4823-8e6f-6af7eadf7651)
