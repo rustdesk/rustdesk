@@ -1,17 +1,17 @@
 [Unit]
-Description=RustDesk
+Description=IPMRmt
 Requires=network.target
 After=systemd-user-sessions.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/rustdesk --service
+ExecStart=/usr/bin/ipmrmt --service
 # kill --tray and --server both
-ExecStop=pkill -f "rustdesk --"
+ExecStop=pkill -f "ipmrmt --"
 # below two lines do not work, have to use above one line
-#ExecStop=pkill -f "rustdesk --tray"
-#ExecStop=pkill -f "rustdesk --server"
-PIDFile=/run/rustdesk.pid
+#ExecStop=pkill -f "ipmrmt --tray"
+#ExecStop=pkill -f "ipmrmt --server"
+PIDFile=/run/ipmrmt.pid
 KillMode=mixed
 TimeoutStopSec=30
 User=root
