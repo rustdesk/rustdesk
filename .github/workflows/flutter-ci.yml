@@ -8,7 +8,7 @@ on:
     - "README.md"
   push:
     branches:
-      - master
+      - main
     paths-ignore:
       - ".github/**"
       - "docs/**"
