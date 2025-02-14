@@ -99,6 +99,10 @@ async fn start_hbbs_sync_async() {
                         if !strategy_name.is_empty() {
                             v[keys::OPTION_PRESET_STRATEGY_NAME] = json!(strategy_name);
                         }
+                        let device_group_name = get_builtin_option(keys::OPTION_PRESET_DEVICE_GROUP_NAME);
+                        if !device_group_name.is_empty() {
+                            v[keys::OPTION_PRESET_DEVICE_GROUP_NAME] = json!(device_group_name);
+                        }
                         match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
                             Ok(x)  => {
                                 if x == "SYSINFO_UPDATED" {

@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", "Aggiorna appunti client"),
         ("Untagged", "Senza tag"),
         ("new-version-of-{}-tip", "È disponibile una nuova versione di {}"),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

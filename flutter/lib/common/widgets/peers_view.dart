@@ -562,14 +562,23 @@ class MyGroupPeerView extends BasePeersView {
         );
 
   static bool filter(Peer peer) {
-    if (gFFI.groupModel.searchUserText.isNotEmpty) {
-      if (!peer.loginName.contains(gFFI.groupModel.searchUserText)) {
+    if (gFFI.groupModel.searchAccessibleItemNameText.isNotEmpty) {
+      if (!peer.loginName
+          .contains(gFFI.groupModel.searchAccessibleItemNameText)) {
         return false;
       }
     }
-    if (gFFI.groupModel.selectedUser.isNotEmpty) {
-      if (gFFI.groupModel.selectedUser.value != peer.loginName) {
-        return false;
+    if (gFFI.groupModel.selectedAccessibleItemName.isNotEmpty) {
+      if (gFFI.groupModel.isSelectedDeviceGroup.value) {
+        if (gFFI.groupModel.selectedAccessibleItemName.value !=
+            peer.device_group_name) {
+          return false;
+        }
+      } else {
+        if (gFFI.groupModel.selectedAccessibleItemName.value !=
+            peer.loginName) {
+          return false;
+        }
       }
     }
     return true;

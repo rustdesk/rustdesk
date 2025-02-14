@@ -427,15 +427,26 @@ pub fn core_main() -> Option<Vec<String>> {
                     if pos < max {
                         address_book_tag = Some(args[pos + 1].to_owned());
                     }
+                    let mut device_group_name = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--device_group_name")
+                        .unwrap_or(max);
+                    if pos < max {
+                        device_group_name = Some(args[pos + 1].to_owned());
+                    }
                     let mut body = serde_json::json!({
                         "id": id,
                         "uuid": uuid,
                     });
                     let header = "Authorization: Bearer ".to_owned() + &token;
-                    if user_name.is_none() && strategy_name.is_none() && address_book_name.is_none()
+                    if user_name.is_none()
+                        && strategy_name.is_none()
+                        && address_book_name.is_none()
+                        && device_group_name.is_none()
                     {
                         println!(
-                            "--user_name or --strategy_name or --address_book_name is required!"
+                            "--user_name or --strategy_name or --address_book_name or --device_group_name is required!"
                         );
                     } else {
                         if let Some(name) = user_name {
@@ -449,6 +460,9 @@ pub fn core_main() -> Option<Vec<String>> {
                             if let Some(name) = address_book_tag {
                                 body["address_book_tag"] = serde_json::json!(name);
                             }
+                        }
+                        if let Some(name) = device_group_name {
+                            body["device_group_name"] = serde_json::json!(name);
                         }
                         let url = crate::ui_interface::get_api_server() + "/api/devices/cli";
                         match crate::post_request_sync(url, body.to_string(), &header) {
