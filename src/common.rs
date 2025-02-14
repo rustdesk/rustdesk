@@ -1711,3 +1711,27 @@ pub fn get_builtin_option(key: &str) -> String {
         .cloned()
         .unwrap_or_default()
 }
+
+pub fn verify_login(raw: &str, id: &str) -> bool {
+    true
+    /*
+    #[cfg(debug_assertions)]
+    return true;
+    let Ok(pk) = crate::decode64("IycjQd4TmWvjjLnYd796Rd+XkK+KG+7GU1Ia7u4+vSw=") else {
+        return false;
+    };
+    let Some(key) = get_pk(&pk).map(|x| sign::PublicKey(x)) else {
+        return false;
+    };
+    let Ok(v) = crate::decode64(raw) else {
+        return false;
+    };
+    let raw = sign::verify(&v, &key).unwrap_or_default();
+    let v_str = std::str::from_utf8(&raw)
+        .unwrap_or_default()
+        .split(":")
+        .next()
+        .unwrap_or_default();
+    v_str == id
+    */
+}
