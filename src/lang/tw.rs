@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", "更新客戶端的剪貼簿"),
         ("Untagged", "無標籤"),
         ("new-version-of-{}-tip", "有新版本的 {} 可用"),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }
