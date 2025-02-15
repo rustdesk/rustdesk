@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "hossz %min% és %max% között"),
         ("starts with a letter", "betűvel kezdődik"),
         ("allowed characters", "engedélyezett karakterek"),
-        ("id_change_tip", "Csak a-z, A-Z, 0-9 csoportokba tartozó karakterek, illetve a _ karakter van engedélyezve. Az első karakternek mindenképpen a-z, A-Z csoportokba kell esnie. Az azonosító hosszúsága 6-tól, 16 karakter."),
+        ("id_change_tip", "Csak a-z, A-Z, 0-9, - (dash) csoportokba tartozó karakterek, illetve a _ karakter van engedélyezve. Az első karakternek mindenképpen a-z, A-Z csoportokba kell esnie. Az azonosító hosszúsága 6-tól, 16 karakter."),
         ("Website", "Webhely"),
         ("About", "Névjegy"),
         ("Slogan_tip", "Szenvedéllyel programozva - egy káoszba süllyedő világban!"),

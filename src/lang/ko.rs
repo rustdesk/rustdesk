@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "길이 %min% ~ %max%"),
         ("starts with a letter", "문자로 시작해야 합니다"),
         ("allowed characters", "허용되는 문자"),
-        ("id_change_tip", "a-z, A-Z, 0-9, _(언더바)만 입력 가능합니다. 첫 문자는 a-z 혹은 A-Z로 시작해야 합니다. 길이는 6~16글자가 요구됩니다."),
+        ("id_change_tip", "a-z, A-Z, 0-9, - (dash), _(언더바)만 입력 가능합니다. 첫 문자는 a-z 혹은 A-Z로 시작해야 합니다. 길이는 6~16글자가 요구됩니다."),
         ("Website", "웹사이트"),
         ("About", "정보"),
         ("Slogan_tip", "이 혼란스러운 세상에서 마음을 담아 만들었습니다!"),

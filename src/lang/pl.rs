@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "o długości od %min% do %max%"),
         ("starts with a letter", "rozpoczyna się literą"),
         ("allowed characters", "dozwolone znaki"),
-        ("id_change_tip", "Nowy ID może być złożony z małych i dużych liter a-zA-z, cyfry 0-9 oraz _ (podkreślenie). Pierwszym znakiem powinna być litera a-zA-Z, a całe ID powinno składać się z 6 do 16 znaków."),
+        ("id_change_tip", "Nowy ID może być złożony z małych i dużych liter a-zA-z, cyfry 0-9, - (dash) oraz _ (podkreślenie). Pierwszym znakiem powinna być litera a-zA-Z, a całe ID powinno składać się z 6 do 16 znaków."),
         ("Website", "Strona internetowa"),
         ("About", "O aplikacji"),
         ("Slogan_tip", "Tworzone z miłością w tym pełnym chaosu świecie!"),

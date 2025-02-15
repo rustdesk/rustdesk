@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", ""),
         ("starts with a letter", ""),
         ("allowed characters", ""),
-        ("id_change_tip", "Lejohen Vetëm karkteret a-z,A-Z,0-9 dhe _(nënvizimet).Shkronja e parë duhet të jetë a-z, A-Z. Gjatesia midis 6 dhe 16."),
+        ("id_change_tip", "Lejohen Vetëm karkteret a-z,A-Z,0-9, - (dash) dhe _(nënvizimet).Shkronja e parë duhet të jetë a-z, A-Z. Gjatesia midis 6 dhe 16."),
         ("Website", "Faqe ëebi"),
         ("About", "Rreth"),
         ("Slogan_tip", ""),

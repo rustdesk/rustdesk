@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "長度在 %min% 與 %max% 之間"),
         ("starts with a letter", "以字母開頭"),
         ("allowed characters", "允許的字元"),
-        ("id_change_tip", "僅能使用以下字元：a-z、A-Z、0-9、_ (底線)。第一個字元必須為 a-z 或 A-Z。長度介於 6 到 16 之間。"),
+        ("id_change_tip", "僅能使用以下字元：a-z、A-Z、0-9, - (dash)、_ (底線)。第一個字元必須為 a-z 或 A-Z。長度介於 6 到 16 之間。"),
         ("Website", "網站"),
         ("About", "關於"),
         ("Slogan_tip", "在這個混沌的世界中用心製作！"),
