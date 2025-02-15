@@ -71,7 +71,7 @@ void changeIdDialog() {
   final rules = [
     RegexValidationRule('starts with a letter', RegExp(r'^[a-zA-Z]')),
     LengthRangeValidationRule(6, 16),
-    RegexValidationRule('allowed characters', RegExp(r'^\w*$'))
+    RegexValidationRule('allowed characters', RegExp(r'^[\w-]*$'))
   ];
 
   gFFI.dialogManager.show((setState, close, context) {
