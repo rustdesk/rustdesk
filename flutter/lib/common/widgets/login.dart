@@ -418,11 +418,11 @@ Future<bool?> loginDialog() async {
 
     onDialogCancel() {
       isInProgress = false;
-      close(false);
+      (false);
     }
 
     handleLoginResponse(LoginResponse resp, bool storeIfAccessToken,
-        void Function([dynamic])? close) async {
+        void Function([dynamic])? ) async {
       switch (resp.type) {
         case HttpType.kAuthResTypeToken:
           if (resp.access_token != null) {
@@ -432,8 +432,8 @@ Future<bool?> loginDialog() async {
               await bind.mainSetLocalOption(
                   key: 'user_info', value: jsonEncode(resp.user ?? {}));
             }
-            if (close != null) {
-              close(true);
+            if ( != null) {
+              (true);
             }
             return;
           }
@@ -450,7 +450,7 @@ Future<bool?> loginDialog() async {
           }
           if (isEmailVerification != null) {
             if (isMobile) {
-              if (close != null) close(null);
+              if ( != null) (null);
               verificationCodeDialog(
                   resp.user, resp.secret, isEmailVerification);
             } else {
@@ -458,7 +458,7 @@ Future<bool?> loginDialog() async {
               final res = await verificationCodeDialog(
                   resp.user, resp.secret, isEmailVerification);
               if (res == true) {
-                if (close != null) close(false);
+                if ( != null) (false);
                 return;
               }
             }
@@ -490,7 +490,7 @@ Future<bool?> loginDialog() async {
             uuid: await bind.mainGetUuid(),
             autoLogin: true,
             type: HttpType.kAuthReqTypeAccount));
-        await handleLoginResponse(resp, true, close);
+        await handleLoginResponse(resp, true, );
       } on RequestException catch (err) {
         passwordMsg = translate(err.cause);
       } catch (err) {
@@ -531,7 +531,7 @@ Future<bool?> loginDialog() async {
                       debugPrint(
                           'Failed to parse oidc login body: "$authBody"');
                     }
-                    close(true);
+                    (true);
 
                     if (resp != null) {
                       handleLoginResponse(resp, false, null);
@@ -550,22 +550,22 @@ Future<bool?> loginDialog() async {
         Text(
           translate('Login'),
         ).marginOnly(top: MyTheme.dialogPadding),
-        InkWell(
-          child: Icon(
-            Icons.close,
-            size: 25,
-            // No need to handle the branch of null.
-            // Because we can ensure the color is not null when debug.
-            color: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.color
-                ?.withOpacity(0.55),
-          ),
-          onTap: onDialogCancel,
-          hoverColor: Colors.red,
-          borderRadius: BorderRadius.circular(5),
-        ).marginOnly(top: 10, right: 15),
+        // InkWell(
+        //   child: Icon(
+        //     Icons.close,
+        //     size: 25,
+        //     // No need to handle the branch of null.
+        //     // Because we can ensure the color is not null when debug.
+        //     color: Theme.of(context)
+        //         .textTheme
+        //         .titleLarge
+        //         ?.color
+        //         ?.withOpacity(0.55),
+        //   ),
+        //   onTap: onDialogCancel,
+        //   hoverColor: Colors.red,
+        //   borderRadius: BorderRadius.circular(5),
+        // ).marginOnly(top: 10, right: 15),
       ],
     );
     final titlePadding = EdgeInsets.fromLTRB(MyTheme.dialogPadding, 0, 0, 0);
