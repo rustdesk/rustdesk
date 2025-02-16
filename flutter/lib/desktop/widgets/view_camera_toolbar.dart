@@ -478,7 +478,6 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       state: widget.state,
       setFullscreen: _setFullscreen,
     ));
-    toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
     toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
     if (!isWeb) {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
@@ -1059,33 +1058,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         Divider(),
         toggles(),
       ];
-      // privacy mode
-      if (ffiModel.keyboard && pi.features.privacyMode) {
-        final privacyModeState = PrivacyModeState.find(id);
-        final privacyModeList =
-            toolbarPrivacyMode(privacyModeState, context, id, ffi);
-        if (privacyModeList.length == 1) {
-          menuChildren.add(CkbMenuButton(
-              value: privacyModeList[0].value,
-              onChanged: privacyModeList[0].onChanged,
-              child: privacyModeList[0].child,
-              ffi: ffi));
-        } else if (privacyModeList.length > 1) {
-          menuChildren.addAll([
-            Divider(),
-            _SubmenuButton(
-                ffi: widget.ffi,
-                child: Text(translate('Privacy mode')),
-                menuChildren: privacyModeList
-                    .map((e) => CkbMenuButton(
-                        value: e.value,
-                        onChanged: e.onChanged,
-                        child: e.child,
-                        ffi: ffi))
-                    .toList()),
-          ]);
-        }
-      }
       menuChildren.add(widget.pluginItem);
       return menuChildren;
     }
@@ -1297,7 +1269,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   @override
   Widget build(BuildContext context) {
     final isVirtualDisplay = ffiModel.isVirtualDisplayResolution;
-    final visible = ffiModel.keyboard &&
+    final visible =
         (isVirtualDisplay || resolutions.length > 1) &&
         pi.currentDisplay != kAllDisplayValue;
     if (!visible) return Offstage();
@@ -1551,215 +1523,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
     return bestFitResolution.width == rect?.width.toInt() &&
         bestFitResolution.height == rect?.height.toInt();
-  }
-}
-
-class _KeyboardMenu extends StatelessWidget {
-  final String id;
-  final FFI ffi;
-  _KeyboardMenu({
-    Key? key,
-    required this.id,
-    required this.ffi,
-  }) : super(key: key);
-
-  PeerInfo get pi => ffi.ffiModel.pi;
-
-  @override
-  Widget build(BuildContext context) {
-    var ffiModel = Provider.of<FfiModel>(context);
-    if (!ffiModel.keyboard) return Offstage();
-    toolbarToggles() => toolbarKeyboardToggles(ffi)
-        .map((e) => CkbMenuButton(
-            value: e.value, onChanged: e.onChanged, child: e.child, ffi: ffi))
-        .toList();
-    return _IconSubmenuButton(
-        tooltip: 'Keyboard Settings',
-        svg: "assets/keyboard.svg",
-        ffi: ffi,
-        color: _ToolbarTheme.blueColor,
-        hoverColor: _ToolbarTheme.hoverBlueColor,
-        menuChildrenGetter: () => [
-              keyboardMode(),
-              localKeyboardType(),
-              inputSource(),
-              Divider(),
-              viewMode(),
-              Divider(),
-              ...toolbarToggles(),
-              ...mobileActions(),
-            ]);
-  }
-
-  keyboardMode() {
-    return futureBuilder(future: () async {
-      return await bind.sessionGetKeyboardMode(sessionId: ffi.sessionId) ??
-          kKeyLegacyMode;
-    }(), hasData: (data) {
-      final groupValue = data as String;
-      List<InputModeMenu> modes = [
-        InputModeMenu(key: kKeyLegacyMode, menu: 'Legacy mode'),
-        InputModeMenu(key: kKeyMapMode, menu: 'Map mode'),
-        InputModeMenu(key: kKeyTranslateMode, menu: 'Translate mode'),
-      ];
-      List<RdoMenuButton> list = [];
-      final enabled = !ffi.ffiModel.viewOnly;
-      onChanged(String? value) async {
-        if (value == null) return;
-        await bind.sessionSetKeyboardMode(
-            sessionId: ffi.sessionId, value: value);
-        await ffi.inputModel.updateKeyboardMode();
-      }
-
-      // If use flutter to grab keys, we can only use one mode.
-      // Map mode and Legacy mode, at least one of them is supported.
-      String? modeOnly;
-      // Keep both map and legacy mode on web at the moment.
-      // TODO: Remove legacy mode after web supports translate mode on web.
-      if (isInputSourceFlutter && isDesktop) {
-        if (bind.sessionIsKeyboardModeSupported(
-            sessionId: ffi.sessionId, mode: kKeyMapMode)) {
-          modeOnly = kKeyMapMode;
-        } else if (bind.sessionIsKeyboardModeSupported(
-            sessionId: ffi.sessionId, mode: kKeyLegacyMode)) {
-          modeOnly = kKeyLegacyMode;
-        }
-      }
-
-      for (InputModeMenu mode in modes) {
-        if (modeOnly != null && mode.key != modeOnly) {
-          continue;
-        } else if (!bind.sessionIsKeyboardModeSupported(
-            sessionId: ffi.sessionId, mode: mode.key)) {
-          continue;
-        }
-
-        if (pi.isWayland && mode.key != kKeyMapMode) {
-          continue;
-        }
-
-        var text = translate(mode.menu);
-        if (mode.key == kKeyTranslateMode) {
-          text = '$text beta';
-        }
-        list.add(RdoMenuButton<String>(
-          child: Text(text),
-          value: mode.key,
-          groupValue: groupValue,
-          onChanged: enabled ? onChanged : null,
-          ffi: ffi,
-        ));
-      }
-      return Column(children: list);
-    });
-  }
-
-  localKeyboardType() {
-    final localPlatform = getLocalPlatformForKBLayoutType(pi.platform);
-    final visible = localPlatform != '';
-    if (!visible) return Offstage();
-    final enabled = !ffi.ffiModel.viewOnly;
-    return Column(
-      children: [
-        Divider(),
-        MenuButton(
-          child: Text(
-              '${translate('Local keyboard type')}: ${KBLayoutType.value}'),
-          trailingIcon: const Icon(Icons.settings),
-          ffi: ffi,
-          onPressed: enabled
-              ? () => showKBLayoutTypeChooser(localPlatform, ffi.dialogManager)
-              : null,
-        )
-      ],
-    );
-  }
-
-  inputSource() {
-    final supportedInputSource = bind.mainSupportedInputSource();
-    if (supportedInputSource.isEmpty) return Offstage();
-    late final List<dynamic> supportedInputSourceList;
-    try {
-      supportedInputSourceList = jsonDecode(supportedInputSource);
-    } catch (e) {
-      debugPrint('Failed to decode $supportedInputSource, $e');
-      return;
-    }
-    if (supportedInputSourceList.length < 2) return Offstage();
-    final inputSource = stateGlobal.getInputSource();
-    final enabled = !ffi.ffiModel.viewOnly;
-    final children = <Widget>[Divider()];
-    children.addAll(supportedInputSourceList.map((e) {
-      final d = e as List<dynamic>;
-      return RdoMenuButton<String>(
-        child: Text(translate(d[1] as String)),
-        value: d[0] as String,
-        groupValue: inputSource,
-        onChanged: enabled
-            ? (v) async {
-                if (v != null) {
-                  await stateGlobal.setInputSource(ffi.sessionId, v);
-                  await ffi.ffiModel.checkDesktopKeyboardMode();
-                  await ffi.inputModel.updateKeyboardMode();
-                }
-              }
-            : null,
-        ffi: ffi,
-      );
-    }));
-    return Column(children: children);
-  }
-
-  viewMode() {
-    final ffiModel = ffi.ffiModel;
-    final enabled = versionCmp(pi.version, '1.2.0') >= 0 && ffiModel.keyboard;
-    return CkbMenuButton(
-        value: ffiModel.viewOnly,
-        onChanged: enabled
-            ? (value) async {
-                if (value == null) return;
-                await bind.sessionToggleOption(
-                    sessionId: ffi.sessionId, value: kOptionToggleViewOnly);
-                final viewOnly = await bind.sessionGetToggleOption(
-                    sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
-                ffiModel.setViewOnly(id, viewOnly ?? value);
-              }
-            : null,
-        ffi: ffi,
-        child: Text(translate('View Mode')));
-  }
-
-  mobileActions() {
-    if (pi.platform != kPeerPlatformAndroid) return [];
-    final enabled = versionCmp(pi.version, '1.2.7') >= 0;
-    if (!enabled) return [];
-    return [
-      Divider(),
-      MenuButton(
-          child: Text(translate('Back')),
-          onPressed: () => ffi.inputModel.onMobileBack(),
-          ffi: ffi),
-      MenuButton(
-          child: Text(translate('Home')),
-          onPressed: () => ffi.inputModel.onMobileHome(),
-          ffi: ffi),
-      MenuButton(
-          child: Text(translate('Apps')),
-          onPressed: () => ffi.inputModel.onMobileApps(),
-          ffi: ffi),
-      MenuButton(
-          child: Text(translate('Volume up')),
-          onPressed: () => ffi.inputModel.onMobileVolumeUp(),
-          ffi: ffi),
-      MenuButton(
-          child: Text(translate('Volume down')),
-          onPressed: () => ffi.inputModel.onMobileVolumeDown(),
-          ffi: ffi),
-      MenuButton(
-          child: Text(translate('Power')),
-          onPressed: () => ffi.inputModel.onMobilePower(),
-          ffi: ffi),
-    ];
   }
 }
 
