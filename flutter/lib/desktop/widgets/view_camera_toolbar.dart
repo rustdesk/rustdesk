@@ -460,7 +460,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
     toolbarItems.add(Obx(() {
       if (PrivacyModeState.find(widget.id).isEmpty &&
-          (pi.displaysCount.value - pi.monitorNum) > 1) {
+          pi.displaysCount.value > 1) {
         return _MonitorMenu(
             id: widget.id,
             ffi: widget.ffi,
@@ -660,8 +660,8 @@ class _MonitorMenu extends StatelessWidget {
         child: Text(translate('Show displays as individual windows')));
   }
 
-  buildOneMonitorButton(i, curDisplay, monitorNum) => Text(
-        '${i - monitorNum + 1}',
+  buildOneMonitorButton(i, curDisplay) => Text(
+        '${i + 1}',
         style: TextStyle(
           color: i == curDisplay
               ? _ToolbarTheme.blueColor
@@ -715,7 +715,7 @@ class _MonitorMenu extends StatelessWidget {
                           colorFilter:
                               ColorFilter.mode(Colors.white, BlendMode.srcIn),
                         ),
-                        Obx(() => buildOneMonitorButton(i, display.value, pi.monitorNum)),
+                        Obx(() => buildOneMonitorButton(i, display.value)),
                       ],
                     ),
                   ),
@@ -723,11 +723,10 @@ class _MonitorMenu extends StatelessWidget {
           );
         });
 
-    // FIXME: handle the case that cameras don't exist.
-    for (int i = pi.monitorNum; i < pi.displays.length; i++) {
-      monitorList.add(buildMonitorButton(i - pi.monitorNum));
+    for (int i = 0; i < pi.displays.length; i++) {
+      monitorList.add(buildMonitorButton(i));
     }
-    if (supportIndividualWindows && (pi.displays.length - pi.monitorNum) > 1) {
+    if (supportIndividualWindows && (pi.displays.length) > 1) {
       monitorList.add(buildMonitorButton(kAllDisplayValue));
     }
     return monitorList;
@@ -748,7 +747,7 @@ class _MonitorMenu extends StatelessWidget {
       final startX = startY;
 
       final children = <Widget>[];
-      for (var i = pi.monitorNum; i < pi.displays.length; i++) {
+      for (var i = 0; i < pi.displays.length; i++) {
         final d = pi.displays[i];
         double s = d.scale;
         int dWidth = d.width.toDouble() ~/ s;

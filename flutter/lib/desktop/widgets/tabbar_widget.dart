@@ -51,6 +51,7 @@ enum DesktopTabType {
   cm,
   remoteScreen,
   fileTransfer,
+  viewCamera,
   portForward,
   install,
 }
@@ -725,6 +726,7 @@ class WindowActionPanelState extends State<WindowActionPanel> {
     return widget.tabController.state.value.tabs.length > 1 &&
         (widget.tabController.tabType == DesktopTabType.remoteScreen ||
             widget.tabController.tabType == DesktopTabType.fileTransfer ||
+            widget.tabController.tabType == DesktopTabType.viewCamera ||
             widget.tabController.tabType == DesktopTabType.portForward ||
             widget.tabController.tabType == DesktopTabType.cm);
   }

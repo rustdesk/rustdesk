@@ -76,6 +76,7 @@ class RustdeskImpl {
       {required UuidValue sessionId,
       required String id,
       required bool isFileTransfer,
+      required bool isViewCamera,
       required bool isPortForward,
       required bool isRdp,
       required String switchUuid,
@@ -90,7 +91,8 @@ class RustdeskImpl {
         'id': id,
         'password': password,
         'is_shared_password': isSharedPassword,
-        'isFileTransfer': isFileTransfer
+        'isFileTransfer': isFileTransfer,
+        'isViewCamera': isViewCamera
       })
     ]);
   }

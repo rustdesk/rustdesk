@@ -44,6 +44,7 @@ const String kAppTypeConnectionManager = "cm";
 
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
+const String kAppTypeDesktopViewCamera = "view camera";
 const String kAppTypeDesktopPortForward = "port forward";
 
 const String kWindowMainWindowOnTop = "main_window_on_top";
@@ -58,6 +59,7 @@ const String kWindowConnect = "connect";
 
 const String kWindowEventNewRemoteDesktop = "new_remote_desktop";
 const String kWindowEventNewFileTransfer = "new_file_transfer";
+const String kWindowEventNewViewCamera = "new_view_camera";
 const String kWindowEventNewPortForward = "new_port_forward";
 const String kWindowEventActiveSession = "active_session";
 const String kWindowEventActiveDisplaySession = "active_display_session";
