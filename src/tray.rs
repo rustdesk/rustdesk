@@ -63,13 +63,13 @@ fn make_tray() -> hbb_common::ResultType<()> {
         if count == 0 {
             format!(
                 "{} {}",
-                crate::get_app_name(),
-                translate("Service is running".to_owned()),
+                "IPMon Remote Desktop",   //crate::get_app_name(), (JEM)
+                "",                       // translate("Service is running".to_owned()), 
             )
         } else {
             format!(
                 "{} - {}\n{}",
-                crate::get_app_name(),
+                "IPMon Remote Desktop",   //crate::get_app_name(),
                 translate("Ready".to_owned()),
                 translate("{".to_string() + &format!("{count}") + "} sessions"),
             )
