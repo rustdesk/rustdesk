@@ -134,6 +134,7 @@ class _MyGroupState extends State<MyGroup> {
           controller: searchUserController,
           onChanged: (value) {
             searchAccessibleItemNameText.value = value;
+            selectedAccessibleItemName.value = '';
           },
           textAlignVertical: TextAlignVertical.center,
           style: TextStyle(fontSize: fontSize),
