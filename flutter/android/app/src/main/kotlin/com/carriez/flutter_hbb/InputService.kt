@@ -35,10 +35,15 @@ import hbb.MessageOuterClass.KeyEvent
 import hbb.MessageOuterClass.KeyboardMode
 import hbb.KeyEventConverter
 
+// const val BUTTON_UP = 2
+// const val BUTTON_BACK = 0x08
+
 const val LEFT_DOWN = 9
 const val LEFT_MOVE = 8
 const val LEFT_UP = 10
 const val RIGHT_UP = 18
+// (BUTTON_BACK << 3) | BUTTON_UP
+const val BACK_UP = 66
 const val WHEEL_BUTTON_DOWN = 33
 const val WHEEL_BUTTON_UP = 34
 const val WHEEL_DOWN = 523331
@@ -139,6 +144,11 @@ class InputService : AccessibilityService() {
 
         if (mask == RIGHT_UP) {
             longPress(mouseX, mouseY)
+            return
+        }
+
+        if (mask == BACK_UP) {
+            performGlobalAction(GLOBAL_ACTION_BACK)
             return
         }
 
