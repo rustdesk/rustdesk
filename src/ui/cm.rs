@@ -27,6 +27,7 @@ impl InvokeUiCM for SciterHandler {
                 client.keyboard,
                 client.clipboard,
                 client.audio,
+                client.camera,
                 client.file,
                 client.restart,
                 client.recording,

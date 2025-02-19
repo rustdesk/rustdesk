@@ -1531,6 +1531,9 @@ impl<T: InvokeUiSession> Remote<T> {
                                     );
                                 }
                             }
+                            Ok(Permission::Camera) => {
+                                self.handler.set_permission("camera", p.enabled);
+                            }
                             Ok(Permission::Restart) => {
                                 self.handler.set_permission("restart", p.enabled);
                             }

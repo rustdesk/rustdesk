@@ -312,7 +312,7 @@ impl Server {
 
     // TODO: add microphone permission.
     pub fn add_camera_connection(&mut self, conn: ConnInner, camera_enabled: bool) {
-        if camera::primary_camera_exists() {
+        if camera_enabled && camera::primary_camera_exists() {
             let primary_camera_name =
                 video_service::get_service_name(VideoSource::Camera, camera::PRIMARY_CAMERA_IDX);
             self.services[&primary_camera_name].on_subscribe(conn.clone());

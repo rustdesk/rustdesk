@@ -54,6 +54,7 @@ pub struct Client {
     pub keyboard: bool,
     pub clipboard: bool,
     pub audio: bool,
+    pub camera: bool,
     pub file: bool,
     pub restart: bool,
     pub recording: bool,
@@ -137,6 +138,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         keyboard: bool,
         clipboard: bool,
         audio: bool,
+        camera: bool,
         file: bool,
         restart: bool,
         recording: bool,
@@ -156,6 +158,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             keyboard,
             clipboard,
             audio,
+            camera,
             file,
             restart,
             recording,
@@ -405,9 +408,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
+                                Data::Login{id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, camera, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, camera, file, restart, recording, block_input, from_switch, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(target_os = "windows")]
                                     {
@@ -683,6 +686,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 keyboard,
                 clipboard,
                 audio,
+                camera,
                 file,
                 restart,
                 recording,
@@ -702,6 +706,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     keyboard,
                     clipboard,
                     audio,
+                    camera,
                     file,
                     restart,
                     recording,

@@ -691,6 +691,21 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                     translate('Enable remote restart'),
                   ),
                 ] : []),
+                ...((client.type_() == ClientType.camera) ? [
+                  // TODO: add microphone permission.
+                  buildPermissionIcon(
+                    client.camera,
+                    Icons.camera,
+                    (enabled) {
+                      bind.cmSwitchPermission(
+                          connId: client.id, name: "camera", enabled: enabled);
+                      setState(() {
+                        client.camera = enabled;
+                      });
+                    },
+                    translate('Enable camera'),
+                  ),
+                ] : []),
                 buildPermissionIcon(
                   client.recording,
                   Icons.videocam_rounded,

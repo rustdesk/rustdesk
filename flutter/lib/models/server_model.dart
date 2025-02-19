@@ -806,6 +806,7 @@ class Client {
   bool keyboard = false;
   bool clipboard = false;
   bool audio = false;
+  bool camera = false;
   bool file = false;
   bool restart = false;
   bool recording = false;
@@ -818,7 +819,7 @@ class Client {
   RxInt unreadChatMessageCount = 0.obs;
 
   Client(this.id, this.authorized, this.isFileTransfer, this.isViewCamera, this.name, this.peerId,
-      this.keyboard, this.clipboard, this.audio);
+      this.keyboard, this.clipboard, this.audio, this.camera);
 
   Client.fromJson(Map<String, dynamic> json) {
     id = json['id'];
@@ -832,6 +833,7 @@ class Client {
     keyboard = json['keyboard'];
     clipboard = json['clipboard'];
     audio = json['audio'];
+    camera = json['camera'];
     file = json['file'];
     restart = json['restart'];
     recording = json['recording'];
@@ -854,6 +856,7 @@ class Client {
     data['keyboard'] = keyboard;
     data['clipboard'] = clipboard;
     data['audio'] = audio;
+    data['camera'] = camera;
     data['file'] = file;
     data['restart'] = restart;
     data['recording'] = recording;

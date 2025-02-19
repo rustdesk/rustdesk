@@ -196,6 +196,7 @@ pub enum Data {
         keyboard: bool,
         clipboard: bool,
         audio: bool,
+        camera: bool,
         file: bool,
         file_transfer_enabled: bool,
         restart: bool,
