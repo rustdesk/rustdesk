@@ -190,6 +190,14 @@ impl<T: InvokeUiSession> Session<T> {
             .eq(&ConnType::FILE_TRANSFER)
     }
 
+    pub fn is_view_camera(&self) -> bool {
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::VIEW_CAMERA)
+    }
+
     pub fn is_port_forward(&self) -> bool {
         let conn_type = self.lc.read().unwrap().conn_type;
         conn_type == ConnType::PORT_FORWARD || conn_type == ConnType::RDP

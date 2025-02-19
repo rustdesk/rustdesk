@@ -188,6 +188,7 @@ pub enum Data {
     Login {
         id: i32,
         is_file_transfer: bool,
+        is_view_camera: bool,
         peer_id: String,
         name: String,
         authorized: bool,

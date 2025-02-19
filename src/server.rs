@@ -24,9 +24,11 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, sign},
     timeout, tokio, ResultType, Stream,
 };
+use scrap::camera;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
 use service::{EmptyExtraFieldService, GenericService, Service, Subscriber};
+use video_service::VideoSource;
 
 use crate::ipc::Data;
 
@@ -279,22 +281,49 @@ async fn create_relay_connection_(
 
 impl Server {
     fn is_video_service_name(name: &str) -> bool {
-        name.starts_with(video_service::NAME)
+        name.starts_with(VideoSource::Monitor.service_name_prefix())
+            || name.starts_with(VideoSource::Camera.service_name_prefix())
+    }
+
+    pub fn try_add_primary_camera_service(&mut self) {
+        if !camera::primary_camera_exists() {
+            return;
+        }
+        let primary_camera_name =
+            video_service::get_service_name(VideoSource::Camera, camera::PRIMARY_CAMERA_IDX);
+        if !self.contains(&primary_camera_name) {
+            self.add_service(Box::new(video_service::new(
+                VideoSource::Camera,
+                camera::PRIMARY_CAMERA_IDX,
+            )));
+        }
     }
 
     pub fn try_add_primay_video_service(&mut self) {
         let primary_video_service_name =
-            video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
+            video_service::get_service_name(VideoSource::Monitor, *display_service::PRIMARY_DISPLAY_IDX);
         if !self.contains(&primary_video_service_name) {
             self.add_service(Box::new(video_service::new(
+                VideoSource::Monitor,
                 *display_service::PRIMARY_DISPLAY_IDX,
             )));
         }
     }
 
+    // TODO: add microphone permission.
+    pub fn add_camera_connection(&mut self, conn: ConnInner, camera_enabled: bool) {
+        if camera::primary_camera_exists() {
+            let primary_camera_name =
+                video_service::get_service_name(VideoSource::Camera, camera::PRIMARY_CAMERA_IDX);
+            self.services[&primary_camera_name].on_subscribe(conn.clone());
+        }
+        self.connections.insert(conn.id(), conn);
+        *CONN_COUNT.lock().unwrap() = self.connections.len();
+    }
+
     pub fn add_connection(&mut self, conn: ConnInner, noperms: &Vec<&'static str>) {
         let primary_video_service_name =
-            video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
+            video_service::get_service_name(VideoSource::Monitor, *display_service::PRIMARY_DISPLAY_IDX);
         for s in self.services.values() {
             let name = s.name();
             if Self::is_video_service_name(&name) && name != primary_video_service_name {
@@ -361,10 +390,10 @@ impl Server {
         self.id_count
     }
 
-    pub fn set_video_service_opt(&self, display: Option<usize>, opt: &str, value: &str) {
+    pub fn set_video_service_opt(&self, display: Option<(VideoSource, usize)>, opt: &str, value: &str) {
         for (k, v) in self.services.iter() {
-            if let Some(display) = display {
-                if k != &video_service::get_service_name(display) {
+            if let Some((source, display)) = display {
+                if k != &video_service::get_service_name(source, display) {
                     continue;
                 }
             }
@@ -392,13 +421,14 @@ impl Server {
     fn capture_displays(
         &mut self,
         conn: ConnInner,
+        source: VideoSource,
         displays: &[usize],
         include: bool,
         exclude: bool,
     ) {
         let displays = displays
             .iter()
-            .map(|d| video_service::get_service_name(*d))
+            .map(|d| video_service::get_service_name(source, *d))
             .collect::<Vec<_>>();
         let keys = self.services.keys().cloned().collect::<Vec<_>>();
         for name in keys.iter() {

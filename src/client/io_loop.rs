@@ -149,6 +149,8 @@ impl<T: InvokeUiSession> Remote<T> {
         let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
             ConnType::FILE_TRANSFER
+        } else if self.handler.is_view_camera() {
+            ConnType::VIEW_CAMERA
         } else {
             ConnType::default()
         };
