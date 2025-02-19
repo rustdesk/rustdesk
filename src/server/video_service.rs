@@ -51,6 +51,7 @@ use scrap::vram::{VRamEncoder, VRamEncoderConfig};
 use scrap::Capturer;
 use scrap::{
     aom::AomEncoderConfig,
+    camera::Cameras,
     codec::{Encoder, EncoderCfg},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
@@ -65,7 +66,6 @@ use std::{
     time::{self, Duration, Instant},
 };
 
-pub const NAME: &'static str = "video";
 pub const OPTION_REFRESH: &'static str = "refresh";
 
 lazy_static::lazy_static! {
@@ -133,10 +133,34 @@ impl VideoFrameController {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum VideoSource {
+    Monitor,
+    Camera,
+}
+
+impl VideoSource {
+    pub fn service_name_prefix(&self) -> &'static str {
+        match self {
+            VideoSource::Monitor => "monitor",
+            VideoSource::Camera => "camera",
+        }
+    }
+
+    pub fn is_monitor(&self) -> bool {
+        matches!(self, VideoSource::Monitor)
+    }
+
+    pub fn is_camera(&self) -> bool {
+        matches!(self, VideoSource::Camera)
+    }
+}
+
 #[derive(Clone)]
 pub struct VideoService {
     sp: GenericService,
     idx: usize,
+    source: VideoSource,
 }
 
 impl Deref for VideoService {
@@ -153,14 +177,15 @@ impl DerefMut for VideoService {
     }
 }
 
-pub fn get_service_name(idx: usize) -> String {
-    format!("{}{}", NAME, idx)
+pub fn get_service_name(source: VideoSource, idx: usize) -> String {
+    format!("{}{}", source.service_name_prefix(), idx)
 }
 
-pub fn new(idx: usize) -> GenericService {
+pub fn new(source: VideoSource, idx: usize) -> GenericService {
     let vs = VideoService {
-        sp: GenericService::new(get_service_name(idx), true),
+        sp: GenericService::new(get_service_name(source, idx), true),
         idx,
+        source,
     };
     GenericService::run(&vs, run);
     vs.sp
@@ -292,7 +317,10 @@ impl DerefMut for CapturerInfo {
     }
 }
 
-fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<CapturerInfo> {
+fn get_capturer_monitor(
+    current: usize,
+    portable_service_running: bool,
+) -> ResultType<CapturerInfo> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
@@ -309,6 +337,7 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
             ndisplay
         );
     }
+
     let display = displays.remove(current);
 
     #[cfg(target_os = "linux")]
@@ -382,6 +411,57 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
     })
 }
 
+fn get_capturer_camera(current: usize) -> ResultType<CapturerInfo> {
+    let cameras = camera::Cameras::get_sync_cameras();
+    let ncamera = cameras.len();
+    if ncamera <= current {
+        bail!("Failed to get camera {}, cameras len: {}", current, ncamera,);
+    }
+    let Some(camera) = cameras.get(current) else {
+        bail!(
+            "Camera of index {} doesn't exist or platform not supported",
+            current
+        );
+    };
+    let capturer = camera::Cameras::get_capturer(current)?;
+    let (width, height) = (camera.width as usize, camera.height as usize);
+    let origin = (camera.x as i32, camera.y as i32);
+    let name = &camera.name;
+    let privacy_mode_id = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
+    let _capturer_privacy_mode_id = privacy_mode_id;
+    log::debug!(
+        "#cameras={}, current={}, origin: {:?}, width={}, height={}, cpus={}/{}, name:{}",
+        ncamera,
+        current,
+        &origin,
+        width,
+        height,
+        num_cpus::get_physical(),
+        num_cpus::get(),
+        name,
+    );
+    return Ok(CapturerInfo {
+        origin,
+        width,
+        height,
+        ndisplay: ncamera,
+        current,
+        privacy_mode_id,
+        _capturer_privacy_mode_id: privacy_mode_id,
+        capturer,
+    });
+}
+fn get_capturer(
+    source: VideoSource,
+    current: usize,
+    portable_service_running: bool,
+) -> ResultType<CapturerInfo> {
+    match source {
+        VideoSource::Monitor => get_capturer_monitor(current, portable_service_running),
+        VideoSource::Camera => get_capturer_camera(current),
+    }
+}
+
 fn run(vs: VideoService) -> ResultType<()> {
     let _raii = Raii::new(vs.idx);
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
@@ -406,7 +486,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
     let display_idx = vs.idx;
     let sp = vs.sp;
-    let mut c = get_capturer(display_idx, last_portable_service_running)?;
+    let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
     #[cfg(windows)]
     if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
         log::info!("disable dxgi with option, fall back to gdi");
@@ -452,9 +532,11 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     #[cfg(target_os = "android")]
-    if let Err(e) = check_change_scale(encoder.is_hardware()) {
-        try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
-        bail!(e);
+    if vs.source.is_monitor() {
+        if let Err(e) = check_change_scale(encoder.is_hardware()) {
+            try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
+            bail!(e);
+        }
     }
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
     VIDEO_QOS
@@ -503,7 +585,9 @@ fn run(vs: VideoService) -> ResultType<()> {
             display_idx,
         )?;
         if sp.is_option_true(OPTION_REFRESH) {
-            let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
+            if vs.source.is_monitor() {
+                let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
+            }
             log::info!("switch to refresh");
             bail!("SWITCH");
         }
@@ -530,7 +614,9 @@ fn run(vs: VideoService) -> ResultType<()> {
             VRamEncoder::set_fallback_gdi(display_idx, true);
             bail!("SWITCH");
         }
-        check_privacy_mode_changed(&sp, display_idx, &c)?;
+        if vs.source.is_monitor() {
+            check_privacy_mode_changed(&sp, display_idx, &c)?;
+        }
         #[cfg(windows)]
         {
             if crate::platform::windows::desktop_changed()
@@ -540,7 +626,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             }
         }
         let now = time::Instant::now();
-        if last_check_displays.elapsed().as_millis() > 1000 {
+        if vs.source.is_monitor() && last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
             // This check may be redundant, but it is better to be safe.
             // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
@@ -635,7 +721,9 @@ fn run(vs: VideoService) -> ResultType<()> {
             Err(err) => {
                 // This check may be redundant, but it is better to be safe.
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-                try_broadcast_display_changed(&sp, display_idx, &c, true)?;
+                if vs.source.is_monitor() {
+                    try_broadcast_display_changed(&sp, display_idx, &c, true)?;
+                }
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
@@ -657,7 +745,9 @@ fn run(vs: VideoService) -> ResultType<()> {
         let timeout_millis = 3_000u64;
         let wait_begin = Instant::now();
         while wait_begin.elapsed().as_millis() < timeout_millis as _ {
-            check_privacy_mode_changed(&sp, display_idx, &c)?;
+            if vs.source.is_monitor() {
+                check_privacy_mode_changed(&sp, display_idx, &c)?;
+            }
             frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
             // break if all connections have received current frame
             if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
@@ -1004,7 +1094,9 @@ fn try_broadcast_display_changed(
         (cap.origin.0, cap.origin.1, cap.width, cap.height),
     ) {
         log::info!("Display {} changed", display);
-        if let Some(msg_out) = make_display_changed_msg(display_idx, Some(display)) {
+        if let Some(msg_out) =
+            make_display_changed_msg(display_idx, Some(display), VideoSource::Monitor)
+        {
             let msg_out = Arc::new(msg_out);
             sp.send_shared(msg_out.clone());
             // switch display may occur before the first video frame, add snapshot to send to new subscribers
@@ -1021,10 +1113,16 @@ fn try_broadcast_display_changed(
 pub fn make_display_changed_msg(
     display_idx: usize,
     opt_display: Option<DisplayInfo>,
+    source: VideoSource,
 ) -> Option<Message> {
     let display = match opt_display {
         Some(d) => d,
-        None => get_display_info(display_idx)?,
+        None => match source {
+            VideoSource::Monitor => display_service::get_display_info(display_idx)?,
+            VideoSource::Camera => camera::Cameras::get_sync_cameras()
+                .get(display_idx)?
+                .clone(),
+        },
     };
     let mut misc = Misc::new();
     misc.set_switch_display(SwitchDisplay {
@@ -1033,13 +1131,24 @@ pub fn make_display_changed_msg(
         y: display.y,
         width: display.width,
         height: display.height,
-        cursor_embedded: display_service::capture_cursor_embedded(),
+        cursor_embedded: match source {
+            VideoSource::Monitor => display_service::capture_cursor_embedded(),
+            VideoSource::Camera => false,
+        },
         #[cfg(not(target_os = "android"))]
         resolutions: Some(SupportedResolutions {
-            resolutions: if display.name.is_empty() {
-                vec![]
-            } else {
-                crate::platform::resolutions(&display.name)
+            resolutions: match source {
+                VideoSource::Monitor => {
+                    if display.name.is_empty() {
+                        vec![]
+                    } else {
+                        crate::platform::resolutions(&display.name)
+                    }
+                }
+                VideoSource::Camera => camera::Cameras::get_camera_resolution(display_idx)
+                    .ok()
+                    .into_iter()
+                    .collect(),
             },
             ..SupportedResolutions::default()
         })
