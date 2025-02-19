@@ -18,7 +18,7 @@ import '../common.dart';
 import '../consts.dart';
 
 /// Mouse button enum.
-enum MouseButtons { left, right, wheel }
+enum MouseButtons { left, right, wheel, back }
 
 const _kMouseEventDown = 'mousedown';
 const _kMouseEventUp = 'mouseup';
@@ -155,6 +155,8 @@ extension ToString on MouseButtons {
         return 'right';
       case MouseButtons.wheel:
         return 'wheel';
+      case MouseButtons.back:
+        return 'back';
     }
   }
 }
@@ -1426,7 +1428,18 @@ class InputModel {
     }
   }
 
-  void onMobileBack() => tap(MouseButtons.right);
+  void onMobileBack() {
+    final minBackButtonVersion = "1.3.8";
+    final peerVersion =
+        parent.target?.ffiModel.pi.version ?? minBackButtonVersion;
+    var btn = MouseButtons.back;
+    // For compatibility with old versions
+    if (versionCmp(peerVersion, minBackButtonVersion) < 0) {
+      btn = MouseButtons.right;
+    }
+    tap(btn);
+  }
+
   void onMobileHome() => tap(MouseButtons.wheel);
   Future<void> onMobileApps() async {
     sendMouse('down', MouseButtons.wheel);
