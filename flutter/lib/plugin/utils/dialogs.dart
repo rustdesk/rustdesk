@@ -6,12 +6,13 @@ import 'package:flutter_hbb/models/platform_model.dart';
 
 void showPeerSelectionDialog(
     {bool singleSelection = false,
-    required Function(List<String>) onPeersCallback}) {
-  final peers = bind.mainLoadRecentPeersSync();
+    required Function(List<String>) onPeersCallback}) async {
+  final peers = await bind.mainGetRecentPeers(getAll: true);
   if (peers.isEmpty) {
-    debugPrint("load recent peers sync failed.");
+    debugPrint("load recent peers failed.");
     return;
   }
+
   Map<String, dynamic> map = jsonDecode(peers);
   List<dynamic> peersList = map['peers'] ?? [];
   final selected = List<String>.empty(growable: true);

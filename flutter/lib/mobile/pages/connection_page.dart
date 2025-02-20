@@ -41,10 +41,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
   final _idController = IDTextEditingController();
   final RxBool _idEmpty = true.obs;
 
-  List<Peer> peers = [];
+  final FocusNode _idFocusNode = FocusNode();
+  final TextEditingController _idEditingController = TextEditingController();
 
-  bool isPeersLoading = false;
-  bool isPeersLoaded = false;
+  AllPeersLoader allPeersLoader = AllPeersLoader();
+
   StreamSubscription? _uniLinksSubscription;
 
   // https://github.com/flutter/flutter/issues/157244
@@ -61,6 +62,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   void initState() {
     super.initState();
+    _idFocusNode.addListener(onFocusChanged);
     if (_idController.text.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
@@ -99,6 +101,13 @@ class _ConnectionPageState extends State<ConnectionPage> {
     connect(context, id);
   }
 
+  void onFocusChanged() {
+    _idEmpty.value = _idEditingController.text.isEmpty;
+    if (_idFocusNode.hasFocus && !allPeersLoader.isPeersLoading) {
+      allPeersLoader.getAllPeers(setState);
+    }
+  }
+
   /// UI for software update.
   /// If _updateUrl] is not empty, shows a button to update the software.
   Widget _buildUpdateUI(String updateUrl) {
@@ -127,18 +136,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
-  Future<void> _fetchPeers() async {
-    setState(() {
-      isPeersLoading = true;
-    });
-    await Future.delayed(Duration(milliseconds: 100));
-    peers = await getAllPeers();
-    setState(() {
-      isPeersLoading = false;
-      isPeersLoaded = true;
-    });
-  }
-
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField() {
@@ -156,11 +153,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.only(left: 16, right: 16),
-                  child: Autocomplete<Peer>(
+                  child: RawAutocomplete<Peer>(
                     optionsBuilder: (TextEditingValue textEditingValue) {
                       if (textEditingValue.text == '') {
                         _autocompleteOpts = const Iterable<Peer>.empty();
-                      } else if (peers.isEmpty && !isPeersLoaded) {
+                      } else if (allPeersLoader.peers.isEmpty &&
+                          !allPeersLoader.isLoaded) {
                         Peer emptyPeer = Peer(
                           id: '',
                           username: '',
@@ -188,7 +186,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         }
                         String textToFind = textEditingValue.text.toLowerCase();
 
-                        _autocompleteOpts = peers
+                        _autocompleteOpts = allPeersLoader.peers
                             .where((peer) =>
                                 peer.id.toLowerCase().contains(textToFind) ||
                                 peer.username
@@ -202,6 +200,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       }
                       return _autocompleteOpts;
                     },
+                    focusNode: _idFocusNode,
+                    textEditingController: _idEditingController,
                     fieldViewBuilder: (BuildContext context,
                         TextEditingController fieldTextEditingController,
                         FocusNode fieldFocusNode,
@@ -209,18 +209,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       fieldTextEditingController.text = _idController.text;
                       Get.put<TextEditingController>(
                           fieldTextEditingController);
-                      fieldFocusNode.addListener(() async {
-                        _idEmpty.value =
-                            fieldTextEditingController.text.isEmpty;
-                        if (fieldFocusNode.hasFocus && !isPeersLoading) {
-                          _fetchPeers();
-                        }
-                      });
-                      final textLength =
-                          fieldTextEditingController.value.text.length;
-                      // select all to facilitate removing text, just following the behavior of address input of chrome
-                      fieldTextEditingController.selection = TextSelection(
-                          baseOffset: 0, extentOffset: textLength);
+
+                      // Temporarily remove Selection because Selection can cause users to accidentally delete previously entered content during input.
+                      // final textLength =
+                      //     fieldTextEditingController.value.text.length;
+                      // // select all to facilitate removing text, just following the behavior of address input of chrome
+                      // fieldTextEditingController.selection = TextSelection(
+                      //     baseOffset: 0, extentOffset: textLength);
+
                       return AutoSizeTextField(
                         controller: fieldTextEditingController,
                         focusNode: fieldFocusNode,
@@ -300,7 +296,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
                                             maxHeight: maxHeight,
                                             maxWidth: 320,
                                           ),
-                                          child: peers.isEmpty && isPeersLoading
+                                          child: allPeersLoader.peers.isEmpty &&
+                                                  !allPeersLoader.isLoaded
                                               ? Container(
                                                   height: 80,
                                                   child: Center(
@@ -363,6 +360,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
   void dispose() {
     _uniLinksSubscription?.cancel();
     _idController.dispose();
+    _idFocusNode.removeListener(onFocusChanged);
+    _idFocusNode.dispose();
+    _idEditingController.dispose();
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();
     }
