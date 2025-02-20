@@ -44,7 +44,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   final FocusNode _idFocusNode = FocusNode();
   final TextEditingController _idEditingController = TextEditingController();
 
-  AllPeersLoader allPeersLoader = AllPeersLoader();
+  final AllPeersLoader _allPeersLoader = AllPeersLoader();
 
   StreamSubscription? _uniLinksSubscription;
 
@@ -62,6 +62,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   void initState() {
     super.initState();
+    _allPeersLoader.init(setState);
     _idFocusNode.addListener(onFocusChanged);
     if (_idController.text.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -103,8 +104,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   void onFocusChanged() {
     _idEmpty.value = _idEditingController.text.isEmpty;
-    if (_idFocusNode.hasFocus && !allPeersLoader.isPeersLoading) {
-      allPeersLoader.getAllPeers(setState);
+    if (_idFocusNode.hasFocus && !_allPeersLoader.isPeersLoading) {
+      _allPeersLoader.getAllPeers();
     }
   }
 
@@ -157,8 +158,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     optionsBuilder: (TextEditingValue textEditingValue) {
                       if (textEditingValue.text == '') {
                         _autocompleteOpts = const Iterable<Peer>.empty();
-                      } else if (allPeersLoader.peers.isEmpty &&
-                          !allPeersLoader.isLoaded) {
+                      } else if (_allPeersLoader.peers.isEmpty &&
+                          !_allPeersLoader.isPeersLoaded) {
                         Peer emptyPeer = Peer(
                           id: '',
                           username: '',
@@ -186,7 +187,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         }
                         String textToFind = textEditingValue.text.toLowerCase();
 
-                        _autocompleteOpts = allPeersLoader.peers
+                        _autocompleteOpts = _allPeersLoader.peers
                             .where((peer) =>
                                 peer.id.toLowerCase().contains(textToFind) ||
                                 peer.username
@@ -296,8 +297,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
                                             maxHeight: maxHeight,
                                             maxWidth: 320,
                                           ),
-                                          child: allPeersLoader.peers.isEmpty &&
-                                                  !allPeersLoader.isLoaded
+                                          child: _allPeersLoader
+                                                      .peers.isEmpty &&
+                                                  !_allPeersLoader.isPeersLoaded
                                               ? Container(
                                                   height: 80,
                                                   child: Center(
@@ -361,6 +363,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     _uniLinksSubscription?.cancel();
     _idController.dispose();
     _idFocusNode.removeListener(onFocusChanged);
+    _allPeersLoader.clear();
     _idFocusNode.dispose();
     _idEditingController.dispose();
     if (Get.isRegistered<IDTextEditingController>()) {
