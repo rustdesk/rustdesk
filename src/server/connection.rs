@@ -168,6 +168,7 @@ pub enum AuthConnType {
     Remote,
     FileTransfer,
     PortForward,
+    ViewCamera,
 }
 
 pub struct Connection {
@@ -1210,6 +1211,8 @@ impl Connection {
             (1, AuthConnType::FileTransfer)
         } else if self.port_forward_socket.is_some() {
             (2, AuthConnType::PortForward)
+        } else if self.view_camera {
+            (3, AuthConnType::ViewCamera)
         } else {
             (0, AuthConnType::Remote)
         };
@@ -1309,7 +1312,7 @@ impl Connection {
             return;
         }
         #[cfg(target_os = "linux")]
-        if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
+        if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() && !self.view_camera {
             let mut msg = "".to_string();
             if crate::platform::linux::is_login_screen_wayland() {
                 msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned()
@@ -2647,6 +2650,8 @@ impl Connection {
                                 if let Some((dir, show_hidden)) = self.delayed_read_dir.take() {
                                     self.read_dir(&dir, show_hidden);
                                 }
+                            } else if self.view_camera {
+                                self.try_sub_camera_displays();
                             } else {
                                 self.try_sub_services();
                             }
@@ -3373,6 +3378,7 @@ impl Connection {
     fn portable_check(&mut self) {
         if self.portable.is_installed
             || self.file_transfer.is_some()
+            || self.view_camera
             || self.port_forward_socket.is_some()
             || !self.keyboard
         {
