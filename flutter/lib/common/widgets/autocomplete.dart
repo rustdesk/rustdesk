@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import '../../../models/platform_model.dart';
@@ -8,87 +7,56 @@ import 'package:flutter_hbb/common/widgets/peer_card.dart';
 
 class AllPeersLoader {
   List<Peer> peers = [];
-  bool hasMoreRecentPeers = false;
 
   bool isPeersLoading = false;
-  bool _isPartialPeersLoaded = false;
-  bool _isPeersLoaded = false;
+  bool isPeersLoaded = false;
+
+  final String _listenerKey = 'AllPeersLoader';
+
+  late void Function(VoidCallback) setState;
 
   AllPeersLoader();
 
-  bool get isLoaded => _isPartialPeersLoaded || _isPeersLoaded;
-
-  void reset() {
-    peers.clear();
-    hasMoreRecentPeers = false;
-    _isPartialPeersLoaded = false;
-    _isPeersLoaded = false;
+  void init(void Function(VoidCallback) setState) {
+    this.setState = setState;
+    gFFI.recentPeersModel.addListener(_mergeAllPeers);
+    gFFI.lanPeersModel.addListener(_mergeAllPeers);
+    gFFI.abModel.addPeerUpdateListener(_listenerKey, _mergeAllPeers);
+    gFFI.groupModel.addPeerUpdateListener(_listenerKey, _mergeAllPeers);
   }
 
-  Future<void> getAllPeers(void Function(VoidCallback) setState) async {
-    if (isPeersLoading) {
+  void clear() {
+    gFFI.recentPeersModel.removeListener(_mergeAllPeers);
+    gFFI.lanPeersModel.removeListener(_mergeAllPeers);
+    gFFI.abModel.removePeerUpdateListener(_listenerKey);
+    gFFI.groupModel.removePeerUpdateListener(_listenerKey);
+  }
+
+  Future<void> getAllPeers() async {
+    if (isPeersLoaded || isPeersLoading) {
       return;
     }
-    reset();
     isPeersLoading = true;
 
+    if (gFFI.recentPeersModel.peers.isEmpty) {
+      bind.mainLoadRecentPeers();
+    }
+    if (gFFI.lanPeersModel.peers.isEmpty) {
+      bind.mainLoadLanPeers();
+    }
+    // No need to care about peers from abModel, and group model.
+    // Because they will pull data in `refreshCurrentUser()` on startup.
+
     final startTime = DateTime.now();
-    await _getAllPeers(false);
-    if (!hasMoreRecentPeers) {
-      final diffTime = DateTime.now().difference(startTime).inMilliseconds;
-      if (diffTime < 100) {
-        await Future.delayed(Duration(milliseconds: diffTime));
-      }
-      setState(() {
-        isPeersLoading = false;
-        _isPeersLoaded = true;
-      });
-    } else {
-      setState(() {
-        _isPartialPeersLoaded = true;
-      });
-      await _getAllPeers(true);
-      setState(() {
-        isPeersLoading = false;
-        _isPeersLoaded = true;
-      });
+    _mergeAllPeers();
+    final diffTime = DateTime.now().difference(startTime).inMilliseconds;
+    if (diffTime < 100) {
+      await Future.delayed(Duration(milliseconds: diffTime));
     }
   }
 
-  Future<void> _getAllPeers(bool getAllRecentPeers) async {
-    Map<String, dynamic> recentPeers =
-        jsonDecode(await bind.mainGetRecentPeers(getAll: getAllRecentPeers));
-    Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
+  void _mergeAllPeers() {
     Map<String, dynamic> combinedPeers = {};
-
-    void mergePeers(Map<String, dynamic> peers) {
-      if (peers.containsKey("peers")) {
-        dynamic peerData = peers["peers"];
-
-        if (peerData is String) {
-          try {
-            peerData = jsonDecode(peerData);
-          } catch (e) {
-            print("Error decoding peers: $e");
-            return;
-          }
-        }
-
-        if (peerData is List) {
-          for (var peer in peerData) {
-            if (peer is Map && peer.containsKey("id")) {
-              String id = peer["id"];
-              if (!combinedPeers.containsKey(id)) {
-                combinedPeers[id] = peer;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    mergePeers(recentPeers);
-    mergePeers(lanPeers);
     for (var p in gFFI.abModel.allPeers()) {
       if (!combinedPeers.containsKey(p.id)) {
         combinedPeers[p.id] = p.toJson();
@@ -101,27 +69,36 @@ class AllPeersLoader {
     }
 
     List<Peer> parsedPeers = [];
-
     for (var peer in combinedPeers.values) {
       parsedPeers.add(Peer.fromJson(peer));
     }
 
-    try {
-      final List<dynamic> moreRecentPeerIds =
-          jsonDecode(recentPeers["ids"] ?? '[]');
-      hasMoreRecentPeers = false;
-      for (final id in moreRecentPeerIds) {
-        final sid = id.toString();
-        if (!parsedPeers.any((element) => element.id == sid)) {
-          parsedPeers.add(Peer.fromJson({'id': sid}));
-          hasMoreRecentPeers = true;
-        }
+    Set<String> peerIds = combinedPeers.keys.toSet();
+    for (final peer in gFFI.lanPeersModel.peers) {
+      if (!peerIds.contains(peer.id)) {
+        parsedPeers.add(peer);
+        peerIds.add(peer.id);
       }
-    } catch (e) {
-      debugPrint("Error parsing more peer ids: $e");
+    }
+
+    for (final peer in gFFI.recentPeersModel.peers) {
+      if (!peerIds.contains(peer.id)) {
+        parsedPeers.add(peer);
+        peerIds.add(peer.id);
+      }
+    }
+    for (final id in gFFI.recentPeersModel.restPeerIds) {
+      if (!peerIds.contains(id)) {
+        parsedPeers.add(Peer.fromJson({'id': id}));
+        peerIds.add(id);
+      }
     }
 
     peers = parsedPeers;
+    setState(() {
+      isPeersLoading = false;
+      isPeersLoaded = true;
+    });
   }
 }
 

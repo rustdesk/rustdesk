@@ -23,6 +23,8 @@ class GroupModel {
   var _cacheLoadOnceFlag = false;
   var _statusCode = 200;
 
+  final Map<String, VoidCallback> _peerIdUpdateListeners = {};
+
   bool get emtpy => deviceGroups.isEmpty && users.isEmpty && peers.isEmpty;
 
   late final Peers peersModel;
@@ -92,6 +94,7 @@ class GroupModel {
         .map((e) => e.online = true)
         .toList();
     groupLoadError.value = '';
+    _callbackPeerUpdate();
   }
 
   Future<bool> _getDeviceGroups(
@@ -329,6 +332,7 @@ class GroupModel {
         for (final peer in data['peers']) {
           peers.add(Peer.fromJson(peer));
         }
+        _callbackPeerUpdate();
       }
     } catch (e) {
       debugPrint("load group cache: $e");
@@ -342,5 +346,19 @@ class GroupModel {
     peers.clear();
     selectedAccessibleItemName.value = '';
     await bind.mainClearGroup();
+  }
+
+  void _callbackPeerUpdate() {
+    for (var listener in _peerIdUpdateListeners.values) {
+      listener();
+    }
+  }
+
+  void addPeerUpdateListener(String key, VoidCallback listener) {
+    _peerIdUpdateListeners[key] = listener;
+  }
+
+  void removePeerUpdateListener(String key) {
+    _peerIdUpdateListeners.remove(key);
   }
 }

@@ -1127,84 +1127,48 @@ pub fn main_load_recent_peers() {
             return;
         }
 
-        let push_to_flutter = |peers| {
-            let data = HashMap::from([("name", "load_recent_peers".to_owned()), ("peers", peers)]);
+        let push_to_flutter = |peers, ids| {
+            let mut data =
+                HashMap::from([("name", "load_recent_peers".to_owned()), ("peers", peers)]);
+            if let Some(ids) = ids {
+                data.insert("ids", ids);
+            }
             let _res = flutter::push_global_event(
                 flutter::APP_TYPE_MAIN,
                 serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
             );
         };
 
-        let load_two_times =
-            vec_id_modified_time_path.len() > PeerConfig::BATCH_LOADING_COUNT && cfg!(target_os = "windows");
+        let load_two_times = vec_id_modified_time_path.len() > PeerConfig::BATCH_LOADING_COUNT
+            && cfg!(target_os = "windows");
         let mut all_peers = vec![];
         if load_two_times {
             let next_from = load_recent_peers(&vec_id_modified_time_path, false, &mut all_peers, 0);
-            push_to_flutter(serde_json::ser::to_string(&all_peers).unwrap_or("".to_owned()));
+            let rest_ids = if next_from < vec_id_modified_time_path.len() {
+                Some(
+                    vec_id_modified_time_path[next_from..]
+                        .iter()
+                        .map(|(id, _, _)| id.clone())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )
+            } else {
+                None
+            };
+            push_to_flutter(
+                serde_json::ser::to_string(&all_peers).unwrap_or("".to_owned()),
+                rest_ids,
+            );
             let _ = load_recent_peers(&vec_id_modified_time_path, true, &mut all_peers, next_from);
         } else {
             let _ = load_recent_peers(&vec_id_modified_time_path, true, &mut all_peers, 0);
         }
-        push_to_flutter(serde_json::ser::to_string(&all_peers).unwrap_or("".to_owned()));
-    }
-}
-
-fn get_partial_recent_peers(
-    vec_id_modified_time_path: Vec<(String, SystemTime, std::path::PathBuf)>,
-    count: usize,
-) -> String {
-    let (peers, next_from) = PeerConfig::batch_peers(
-        &vec_id_modified_time_path,
-        0,
-        Some(count.min(vec_id_modified_time_path.len())),
-    );
-    let peer_maps: Vec<_> = peers
-        .into_iter()
-        .map(|(id, _, p)| peer_to_map(id, p))
-        .collect();
-    let mut data = HashMap::from([(
-        "peers",
-        serde_json::ser::to_string(&peer_maps).unwrap_or("[]".to_owned()),
-    )]);
-    if next_from < vec_id_modified_time_path.len() {
-        let ids: Vec<_> = vec_id_modified_time_path[next_from..]
-            .iter()
-            .map(|(id, _, _)| id.clone())
-            .collect();
-        data.insert(
-            "ids",
-            serde_json::ser::to_string(&ids).unwrap_or("[]".to_owned()),
+        // Don't check if `all_peers` is empty, because we need this message to update the state in the flutter side.
+        push_to_flutter(
+            serde_json::ser::to_string(&all_peers).unwrap_or("".to_owned()),
+            None,
         );
     }
-    return serde_json::ser::to_string(&data).unwrap_or("".to_owned());
-}
-
-pub fn main_get_recent_peers(get_all: bool) -> String {
-    if !config::APP_DIR.read().unwrap().is_empty() {
-        let vec_id_modified_time_path = PeerConfig::get_vec_id_modified_time_path(&None);
-
-        let load_two_times = !get_all
-            && vec_id_modified_time_path.len() > PeerConfig::BATCH_LOADING_COUNT
-            && cfg!(target_os = "windows");
-        let load_count = if load_two_times {
-            PeerConfig::BATCH_LOADING_COUNT
-        } else {
-            vec_id_modified_time_path.len()
-        };
-        return get_partial_recent_peers(vec_id_modified_time_path, load_count);
-    }
-    "".to_string()
-}
-
-pub fn main_load_lan_peers_sync() -> SyncReturn<String> {
-    let data = HashMap::from([
-        ("name", "load_lan_peers".to_owned()),
-        (
-            "peers",
-            serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
-        ),
-    ]);
-    return SyncReturn(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
 }
 
 pub fn main_load_recent_peers_for_ab(filter: String) -> String {

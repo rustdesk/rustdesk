@@ -2,14 +2,15 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
 
 void showPeerSelectionDialog(
     {bool singleSelection = false,
     required Function(List<String>) onPeersCallback}) async {
-  final peers = await bind.mainGetRecentPeers(getAll: true);
+  // load recent peers, we can directly use the peers in `gFFI.recentPeersModel`.
+  // The plugin is not used for now, so just left it empty here.
+  final peers = '';
   if (peers.isEmpty) {
-    debugPrint("load recent peers failed.");
+    // debugPrint("load recent peers failed.");
     return;
   }
 

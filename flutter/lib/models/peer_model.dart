@@ -165,6 +165,11 @@ class Peers extends ChangeNotifier {
   final String name;
   final String loadEvent;
   List<Peer> peers = List.empty(growable: true);
+  // Part of the peers that are not in the rest peers list.
+  // When there're too many peers, we may want to load the front 100 peers first,
+  // so we can see peers in UI quickly. `restPeerIds` is the rest peers' ids.
+  // And then load all peers later.
+  List<String> restPeerIds = List.empty(growable: true);
   final GetInitPeers? getInitPeers;
   UpdateEvent event = UpdateEvent.load;
   static const _cbQueryOnlines = 'callback_query_onlines';
@@ -238,6 +243,12 @@ class Peers extends ChangeNotifier {
     } else {
       peers = _decodePeers(evt['peers']);
     }
+
+    restPeerIds = [];
+    if (evt['ids'] != null) {
+      restPeerIds = (evt['ids'] as String).split(',');
+    }
+
     for (var peer in peers) {
       final state = onlineStates[peer.id];
       peer.online = state != null && state != false;

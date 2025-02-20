@@ -822,7 +822,11 @@ class OverlayDialogManager {
 
     close([res]) {
       _dialogs.remove(dialogTag);
-      dialog.complete(res);
+      try {
+        dialog.complete(res);
+      } catch (e) {
+        debugPrint("Dialog complete catch error: $e");
+      }
       BackButtonInterceptor.removeByName(dialogTag);
     }
 
