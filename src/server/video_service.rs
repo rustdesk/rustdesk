@@ -146,6 +146,14 @@ impl VideoSource {
             VideoSource::Camera => "camera",
         }
     }
+
+    pub fn is_monitor(&self) -> bool {
+        matches!(self, VideoSource::Monitor)
+    }
+
+    pub fn is_camera(&self) -> bool {
+        matches!(self, VideoSource::Camera)
+    }
 }
 
 #[derive(Clone)]
@@ -516,9 +524,11 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     #[cfg(target_os = "android")]
-    if let Err(e) = check_change_scale(encoder.is_hardware()) {
-        try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
-        bail!(e);
+    if vs.source.is_monitor() {
+        if let Err(e) = check_change_scale(encoder.is_hardware()) {
+            try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
+            bail!(e);
+        }
     }
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
     VIDEO_QOS
@@ -566,7 +576,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             &mut second_instant,
             display_idx,
         )?;
-        if sp.is_option_true(OPTION_REFRESH) {
+        if vs.source.is_monitor() && sp.is_option_true(OPTION_REFRESH) {
             let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
             log::info!("switch to refresh");
             bail!("SWITCH");
@@ -594,7 +604,9 @@ fn run(vs: VideoService) -> ResultType<()> {
             VRamEncoder::set_fallback_gdi(display_idx, true);
             bail!("SWITCH");
         }
-        check_privacy_mode_changed(&sp, display_idx, &c)?;
+        if vs.source.is_monitor() {
+            check_privacy_mode_changed(&sp, display_idx, &c)?;
+        }
         #[cfg(windows)]
         {
             if crate::platform::windows::desktop_changed()
@@ -604,7 +616,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             }
         }
         let now = time::Instant::now();
-        if last_check_displays.elapsed().as_millis() > 1000 {
+        if vs.source.is_monitor() && last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
             // This check may be redundant, but it is better to be safe.
             // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
@@ -699,7 +711,9 @@ fn run(vs: VideoService) -> ResultType<()> {
             Err(err) => {
                 // This check may be redundant, but it is better to be safe.
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-                try_broadcast_display_changed(&sp, display_idx, &c, true)?;
+                if vs.source.is_monitor() {
+                    try_broadcast_display_changed(&sp, display_idx, &c, true)?;
+                }
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
@@ -721,7 +735,9 @@ fn run(vs: VideoService) -> ResultType<()> {
         let timeout_millis = 3_000u64;
         let wait_begin = Instant::now();
         while wait_begin.elapsed().as_millis() < timeout_millis as _ {
-            check_privacy_mode_changed(&sp, display_idx, &c)?;
+            if vs.source.is_monitor() {
+                check_privacy_mode_changed(&sp, display_idx, &c)?;
+            }
             frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
             // break if all connections have received current frame
             if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
