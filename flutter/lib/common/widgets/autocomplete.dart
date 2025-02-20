@@ -6,56 +6,123 @@ import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 
-Future<List<Peer>> getAllPeers() async {
-  Map<String, dynamic> recentPeers = jsonDecode(bind.mainLoadRecentPeersSync());
-  Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
-  Map<String, dynamic> combinedPeers = {};
+class AllPeersLoader {
+  List<Peer> peers = [];
+  bool hasMoreRecentPeers = false;
 
-  void mergePeers(Map<String, dynamic> peers) {
-    if (peers.containsKey("peers")) {
-      dynamic peerData = peers["peers"];
+  bool isPeersLoading = false;
+  bool _isPartialPeersLoaded = false;
+  bool _isPeersLoaded = false;
 
-      if (peerData is String) {
-        try {
-          peerData = jsonDecode(peerData);
-        } catch (e) {
-          print("Error decoding peers: $e");
-          return;
-        }
+  AllPeersLoader();
+
+  bool get isLoaded => _isPartialPeersLoaded || _isPeersLoaded;
+
+  void reset() {
+    peers.clear();
+    hasMoreRecentPeers = false;
+    _isPartialPeersLoaded = false;
+    _isPeersLoaded = false;
+  }
+
+  Future<void> getAllPeers(void Function(VoidCallback) setState) async {
+    if (isPeersLoading) {
+      return;
+    }
+    reset();
+    isPeersLoading = true;
+
+    final startTime = DateTime.now();
+    await _getAllPeers(false);
+    if (!hasMoreRecentPeers) {
+      final diffTime = DateTime.now().difference(startTime).inMilliseconds;
+      if (diffTime < 100) {
+        await Future.delayed(Duration(milliseconds: diffTime));
       }
+      setState(() {
+        isPeersLoading = false;
+        _isPeersLoaded = true;
+      });
+    } else {
+      setState(() {
+        _isPartialPeersLoaded = true;
+      });
+      await _getAllPeers(true);
+      setState(() {
+        isPeersLoading = false;
+        _isPeersLoaded = true;
+      });
+    }
+  }
 
-      if (peerData is List) {
-        for (var peer in peerData) {
-          if (peer is Map && peer.containsKey("id")) {
-            String id = peer["id"];
-            if (!combinedPeers.containsKey(id)) {
-              combinedPeers[id] = peer;
+  Future<void> _getAllPeers(bool getAllRecentPeers) async {
+    Map<String, dynamic> recentPeers =
+        jsonDecode(await bind.mainGetRecentPeers(getAll: getAllRecentPeers));
+    Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
+    Map<String, dynamic> combinedPeers = {};
+
+    void mergePeers(Map<String, dynamic> peers) {
+      if (peers.containsKey("peers")) {
+        dynamic peerData = peers["peers"];
+
+        if (peerData is String) {
+          try {
+            peerData = jsonDecode(peerData);
+          } catch (e) {
+            print("Error decoding peers: $e");
+            return;
+          }
+        }
+
+        if (peerData is List) {
+          for (var peer in peerData) {
+            if (peer is Map && peer.containsKey("id")) {
+              String id = peer["id"];
+              if (!combinedPeers.containsKey(id)) {
+                combinedPeers[id] = peer;
+              }
             }
           }
         }
       }
     }
-  }
 
-  mergePeers(recentPeers);
-  mergePeers(lanPeers);
-  for (var p in gFFI.abModel.allPeers()) {
-    if (!combinedPeers.containsKey(p.id)) {
-      combinedPeers[p.id] = p.toJson();
+    mergePeers(recentPeers);
+    mergePeers(lanPeers);
+    for (var p in gFFI.abModel.allPeers()) {
+      if (!combinedPeers.containsKey(p.id)) {
+        combinedPeers[p.id] = p.toJson();
+      }
     }
-  }
-  for (var p in gFFI.groupModel.peers.map((e) => Peer.copy(e)).toList()) {
-    if (!combinedPeers.containsKey(p.id)) {
-      combinedPeers[p.id] = p.toJson();
+    for (var p in gFFI.groupModel.peers.map((e) => Peer.copy(e)).toList()) {
+      if (!combinedPeers.containsKey(p.id)) {
+        combinedPeers[p.id] = p.toJson();
+      }
     }
-  }
 
-  List<Peer> parsedPeers = [];
+    List<Peer> parsedPeers = [];
 
-  for (var peer in combinedPeers.values) {
-    parsedPeers.add(Peer.fromJson(peer));
+    for (var peer in combinedPeers.values) {
+      parsedPeers.add(Peer.fromJson(peer));
+    }
+
+    try {
+      final List<dynamic> moreRecentPeerIds =
+          jsonDecode(recentPeers["ids"] ?? '[]');
+      hasMoreRecentPeers = false;
+      for (final id in moreRecentPeerIds) {
+        final sid = id.toString();
+        if (!parsedPeers.any((element) => element.id == sid)) {
+          parsedPeers.add(Peer.fromJson({'id': sid}));
+          hasMoreRecentPeers = true;
+        }
+      }
+    } catch (e) {
+      debugPrint("Error parsing more peer ids: $e");
+    }
+
+    peers = parsedPeers;
   }
-  return parsedPeers;
 }
 
 class AutocompletePeerTile extends StatefulWidget {
