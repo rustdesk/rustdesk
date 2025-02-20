@@ -1467,7 +1467,6 @@ impl Connection {
     fn try_sub_camera_displays(&mut self) {
         if let Some(s) = self.server.upgrade() {
             let mut s = s.write().unwrap();
-            self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
 
             // TODO: add microphone permission.
             s.try_add_primary_camera_service();
@@ -1477,7 +1476,7 @@ impl Connection {
 
     // FIXME: rename to contrast with camera services.
     fn try_sub_services(&mut self) {
-        let is_remote = self.file_transfer.is_none() && self.port_forward_socket.is_none();
+        let is_remote = self.file_transfer.is_none() && self.port_forward_socket.is_none() && !self.view_camera;
         if is_remote && !self.services_subed {
             self.services_subed = true;
             if let Some(s) = self.server.upgrade() {
