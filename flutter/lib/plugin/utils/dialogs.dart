@@ -10,7 +10,7 @@ void showPeerSelectionDialog(
   // The plugin is not used for now, so just left it empty here.
   final peers = '';
   if (peers.isEmpty) {
-    debugPrint("load recent peers failed.");
+    // debugPrint("load recent peers failed.");
     return;
   }
 
