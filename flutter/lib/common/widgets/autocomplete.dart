@@ -8,12 +8,15 @@ import 'package:flutter_hbb/common/widgets/peer_card.dart';
 class AllPeersLoader {
   List<Peer> peers = [];
 
-  bool isPeersLoading = false;
-  bool isPeersLoaded = false;
+  bool _isPeersLoading = false;
+  bool _isPeersLoaded = false;
 
   final String _listenerKey = 'AllPeersLoader';
 
   late void Function(VoidCallback) setState;
+
+  bool get needLoad => !_isPeersLoaded && !_isPeersLoading;
+  bool get isPeersLoaded => _isPeersLoaded;
 
   AllPeersLoader();
 
@@ -33,10 +36,10 @@ class AllPeersLoader {
   }
 
   Future<void> getAllPeers() async {
-    if (isPeersLoaded || isPeersLoading) {
+    if (!needLoad) {
       return;
     }
-    isPeersLoading = true;
+    _isPeersLoading = true;
 
     if (gFFI.recentPeersModel.peers.isEmpty) {
       bind.mainLoadRecentPeers();
@@ -96,8 +99,8 @@ class AllPeersLoader {
 
     peers = parsedPeers;
     setState(() {
-      isPeersLoading = false;
-      isPeersLoaded = true;
+      _isPeersLoading = false;
+      _isPeersLoaded = true;
     });
   }
 }

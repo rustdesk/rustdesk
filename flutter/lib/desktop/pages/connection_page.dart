@@ -282,8 +282,15 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   void onFocusChanged() {
     _idInputFocused.value = _idFocusNode.hasFocus;
-    if (_idFocusNode.hasFocus && !_allPeersLoader.isPeersLoading) {
-      _allPeersLoader.getAllPeers();
+    if (_idFocusNode.hasFocus) {
+      if (_allPeersLoader.needLoad) {
+        _allPeersLoader.getAllPeers();
+      }
+
+      final textLength = _idEditingController.value.text.length;
+      // Select all to facilitate removing text, just following the behavior of address input of chrome.
+      _idEditingController.selection =
+          TextSelection(baseOffset: 0, extentOffset: textLength);
     }
   }
 
@@ -390,17 +397,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                   ) {
                     fieldTextEditingController.text = _idController.text;
                     Get.put<TextEditingController>(fieldTextEditingController);
-
-                    // The listener will be added multiple times when the widget is rebuilt.
-                    // We may need to use the `RawAutocomplete` to get the focus node.
-
-                    // Temporarily remove Selection because Selection can cause users to accidentally delete previously entered content during input.
-                    // final textLength =
-                    //     fieldTextEditingController.value.text.length;
-                    // // Select all to facilitate removing text, just following the behavior of address input of chrome.
-                    // fieldTextEditingController.selection =
-                    //     TextSelection(baseOffset: 0, extentOffset: textLength);
-
                     return Obx(() => TextField(
                           autocorrect: false,
                           enableSuggestions: false,
