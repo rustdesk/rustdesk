@@ -315,7 +315,9 @@ impl Server {
         if camera_enabled && camera::primary_camera_exists() {
             let primary_camera_name =
                 video_service::get_service_name(VideoSource::Camera, camera::PRIMARY_CAMERA_IDX);
-            self.services[&primary_camera_name].on_subscribe(conn.clone());
+            if let Some(s) = self.services.get(&primary_camera_name) {
+                s.on_subscribe(conn.clone());
+            }
         }
         self.connections.insert(conn.id(), conn);
         *CONN_COUNT.lock().unwrap() = self.connections.len();
