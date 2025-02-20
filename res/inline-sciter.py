@@ -5,39 +5,64 @@ import re
 
 def strip(s): return re.sub(r'\s+\n', '\n', re.sub(r'\n\s+', '\n', s))
 
-common_css = open('src/ui/common.css').read()
-common_tis = open('src/ui/common.tis', encoding='UTF8').read()
 
-index = open('src/ui/index.html').read() \
-    .replace('@import url(index.css);', open('src/ui/index.css').read()) \
-    .replace('include "index.tis";', open('src/ui/index.tis').read()) \
-    .replace('include "msgbox.tis";', open('src/ui/msgbox.tis').read()) \
-    .replace('include "ab.tis";', open('src/ui/ab.tis').read())
+def read_file(file_path, encoding=None):
+    with open(file_path, encoding=encoding) as f:
+        return f.read()
 
-remote = open('src/ui/remote.html').read() \
-    .replace('@import url(remote.css);', open('src/ui/remote.css').read()) \
-    .replace('@import url(header.css);', open('src/ui/header.css').read()) \
-    .replace('@import url(file_transfer.css);', open('src/ui/file_transfer.css').read()) \
-    .replace('include "remote.tis";', open('src/ui/remote.tis').read()) \
-    .replace('include "msgbox.tis";', open('src/ui/msgbox.tis').read()) \
-    .replace('include "grid.tis";', open('src/ui/grid.tis').read()) \
-    .replace('include "header.tis";', open('src/ui/header.tis').read()) \
-    .replace('include "file_transfer.tis";', open('src/ui/file_transfer.tis').read()) \
-    .replace('include "port_forward.tis";', open('src/ui/port_forward.tis').read())
 
-chatbox = open('src/ui/chatbox.html').read()
-install = open('src/ui/install.html').read().replace('include "install.tis";', open('src/ui/install.tis').read())
+common_css = read_file('src/ui/common.css')
+common_tis = read_file('src/ui/common.tis', encoding='UTF8')
 
-cm = open('src/ui/cm.html').read() \
-    .replace('@import url(cm.css);', open('src/ui/cm.css').read()) \
-    .replace('include "cm.tis";', open('src/ui/cm.tis').read())
+index_html = read_file('src/ui/index.html')
+index_css = read_file('src/ui/index.css')
+index_tis = read_file('src/ui/index.tis')
+msgbox_tis = read_file('src/ui/msgbox.tis')
+ab_tis = read_file('src/ui/ab.tis')
+
+index = index_html.replace('@import url(index.css);', index_css) \
+    .replace('include "index.tis";', index_tis) \
+    .replace('include "msgbox.tis";', msgbox_tis) \
+    .replace('include "ab.tis";', ab_tis)
+
+remote_html = read_file('src/ui/remote.html')
+remote_css = read_file('src/ui/remote.css')
+header_css = read_file('src/ui/header.css')
+file_transfer_css = read_file('src/ui/file_transfer.css')
+remote_tis = read_file('src/ui/remote.tis')
+msgbox_tis = read_file('src/ui/msgbox.tis')
+grid_tis = read_file('src/ui/grid.tis')
+header_tis = read_file('src/ui/header.tis')
+file_transfer_tis = read_file('src/ui/file_transfer.tis')
+port_forward_tis = read_file('src/ui/port_forward.tis')
+
+remote = remote_html.replace('@import url(remote.css);', remote_css) \
+    .replace('@import url(header.css);', header_css) \
+    .replace('@import url(file_transfer.css);', file_transfer_css) \
+    .replace('include "remote.tis";', remote_tis) \
+    .replace('include "msgbox.tis";', msgbox_tis) \
+    .replace('include "grid.tis";', grid_tis) \
+    .replace('include "header.tis";', header_tis) \
+    .replace('include "file_transfer.tis";', file_transfer_tis) \
+    .replace('include "port_forward.tis";', port_forward_tis)
+
+chatbox = read_file('src/ui/chatbox.html')
+install_html = read_file('src/ui/install.html')
+install_tis = read_file('src/ui/install.tis')
+
+install = install_html.replace('include "install.tis";', install_tis)
+
+cm_html = read_file('src/ui/cm.html')
+cm_css = read_file('src/ui/cm.css')
+cm_tis = read_file('src/ui/cm.tis')
+
+cm = cm_html.replace('@import url(cm.css);', cm_css).replace('include "cm.tis";', cm_tis)
 
 
 def compress(s):
     s = s.replace("\r\n", "\n")
     x = bytes(s, encoding='utf-8')
-    return '&[u8; ' + str(len(x)) + '] = b"' + str(x)[2:-1].replace(r"\'", "'").replace(r'"',
-                                                                                  r'\"') + '"'
+    return '&[u8; ' + str(len(x)) + '] = b"' + str(x)[2:-1].replace(r"\'", "'").replace(r'"', r'\"') + '"'
 
 
 with open('src/ui/inline.rs', 'wt') as fh:
