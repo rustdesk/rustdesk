@@ -4029,7 +4029,6 @@ impl Retina {
 }
 
 mod raii {
-    // CONN_COUNT: remote connection count in fact
     // ALIVE_CONNS: all connections, including unauthorized connections
     // AUTHED_CONNS: all authorized connections
 

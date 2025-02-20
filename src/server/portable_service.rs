@@ -808,7 +808,7 @@ pub mod client {
                                                             },
                                                             ConnCount(None) => {
                                                                 if !quick_support {
-                                                                    let cnt = crate::server::CONN_COUNT.lock().unwrap().clone();
+                                                                    let cnt = crate::connection::AUTHED_CONNS.lock().unwrap().len();
                                                                     stream.send(&Data::DataPortableService(ConnCount(Some(cnt)))).await.ok();
                                                                 }
                                                             },

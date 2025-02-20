@@ -78,7 +78,6 @@ const CONFIG_SYNC_INTERVAL_SECS: f32 = 0.3;
 
 lazy_static::lazy_static! {
     pub static ref CHILD_PROCESS: Childs = Default::default();
-    pub static ref CONN_COUNT: Arc<Mutex<usize>> = Default::default();
     // A client server used to provide local services(audio, video, clipboard, etc.)
     // for all initiative connections.
     //
@@ -320,7 +319,6 @@ impl Server {
             }
         }
         self.connections.insert(conn.id(), conn);
-        *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
     pub fn add_connection(&mut self, conn: ConnInner, noperms: &Vec<&'static str>) {
@@ -338,7 +336,6 @@ impl Server {
         #[cfg(target_os = "macos")]
         self.update_enable_retina();
         self.connections.insert(conn.id(), conn);
-        *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
     pub fn remove_connection(&mut self, conn: &ConnInner) {
@@ -346,7 +343,6 @@ impl Server {
             s.on_unsubscribe(conn.id());
         }
         self.connections.remove(&conn.id());
-        *CONN_COUNT.lock().unwrap() = self.connections.len();
         #[cfg(target_os = "macos")]
         self.update_enable_retina();
     }

@@ -501,8 +501,8 @@ pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
 }
 
 pub fn try_stop_record_cursor_pos() {
-    let count_lock = CONN_COUNT.lock().unwrap();
-    if *count_lock > 0 {
+    let count_lock = AUTHED_CONNS.lock().unwrap().len();
+    if count_lock > 0 {
         return;
     }
     RECORD_CURSOR_POS_RUNNING.store(false, Ordering::SeqCst);
