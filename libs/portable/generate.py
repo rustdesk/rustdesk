@@ -11,6 +11,7 @@ length_count = 4
 # encoding
 encoding = 'utf-8'
 
+
 # output: {path: (compressed_data, file_md5)}
 
 
@@ -24,11 +25,12 @@ def generate_md5_table(folder: str, level) -> dict:
             md5_generator = md5()
             full_path = os.path.join(root, f)
             print(f"Processing {full_path}...")
-            f = open(full_path, "rb")
-            content = f.read()
-            content_compressed = brotli.compress(
-                content, quality=level)
-            md5_generator.update(content)
+
+            with open(full_path, "rb") as file:
+                content = file.read()
+                content_compressed = brotli.compress(content, quality=level)
+                md5_generator.update(content)
+
             md5_code = md5_generator.hexdigest().encode(encoding=encoding)
             res[full_path] = (content_compressed, md5_code)
     os.chdir(curdir)
@@ -58,11 +60,13 @@ def write_package_metadata(md5_table: dict, output_folder: str, exe: str):
         f.write(exe.encode(encoding='utf-8'))
     print(f"Metadata has been written to {output_path}")
 
+
 def write_app_metadata(output_folder: str):
     output_path = os.path.join(output_folder, "app_metadata.toml")
     with open(output_path, "w") as f:
         f.write(f"timestamp = {int(datetime.datetime.now().timestamp() * 1000)}\n")
     print(f"App metadata has been written to {output_path}")
+
 
 def build_portable(output_folder: str, target: str):
     os.chdir(output_folder)
@@ -70,6 +74,7 @@ def build_portable(output_folder: str, target: str):
         os.system("cargo build --release --target " + target)
     else:
         os.system("cargo build --release")
+
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe
