@@ -11,11 +11,6 @@ import argparse
 import sys
 from pathlib import Path
 
-
-print(123)
-
-
-
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
