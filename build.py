@@ -32,11 +32,13 @@ def get_deb_arch() -> str:
         return "amd64"
     return custom_arch
 
+
 def get_deb_extra_depends() -> str:
     custom_arch = os.environ.get("DEB_ARCH")
-    if custom_arch == "armhf": # for arm32v7 libsciter-gtk.so
+    if custom_arch == "armhf":  # for arm32v7 libsciter-gtk.so
         return ", libatomic1"
     return ""
+
 
 def system2(cmd):
     exit_code = os.system(cmd)
@@ -221,7 +223,8 @@ def download_extract_features(features, res_dir):
                 checksum_md5 = line.split()[0]
                 filename, _headers = urllib.request.urlretrieve(feat_info['zip_url'],
                                                                 download_filename)
-                md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
+                with open(filename, 'rb') as file:
+                    md5 = hashlib.md5(file.read()).hexdigest()
                 if checksum_md5 != md5:
                     raise Exception(f'{feat} download failed')
                 print(f'{feat} download end. extract bein')
@@ -632,8 +635,10 @@ def main():
 
 
 def md5_file(fn):
-    md5 = hashlib.md5(open('tmpdeb/' + fn, 'rb').read()).hexdigest()
+    with open('tmpdeb/' + fn, 'rb') as file:
+        md5 = hashlib.md5(file.read()).hexdigest()
     system2('echo "%s  /%s" >> tmpdeb/DEBIAN/md5sums' % (md5, fn))
+
 
 def md5_file_folder(base_dir):
     base_path = Path(base_dir)
