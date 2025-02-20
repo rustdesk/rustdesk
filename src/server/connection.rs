@@ -208,8 +208,6 @@ pub struct Connection {
     // by peer
     disable_audio: bool,
     // by peer
-    disable_camera: bool,
-    // by peer
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     enable_file_transfer: bool,
     // by peer
@@ -360,7 +358,6 @@ impl Connection {
             multi_ui_session: false,
             ip: "".to_owned(),
             disable_audio: false,
-            disable_camera: false,
             #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             enable_file_transfer: false,
             disable_clipboard: false,
@@ -1578,7 +1575,7 @@ impl Connection {
     }
 
     fn camera_enabled(&self) -> bool {
-        self.camera && !self.disable_camera
+        self.camera
     }
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
