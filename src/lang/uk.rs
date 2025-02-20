@@ -546,6 +546,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "Зʼєднання розірвано через неактивність"),
         ("Check for software update on startup", "Перевіряти оновлення під час запуску"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Будь ласка, оновіть RustDesk Server Pro до версії {} чи новіше!"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Будь ласка, оновіть RustDesk клієнт на віддаленому пристрої до версії {} чи новіше!"),
         ("pull_group_failed_tip", "Не вдалося оновити групу"),
         ("Filter by intersection", "Фільтр за збігом"),
         ("Remove wallpaper during incoming sessions", "Прибирати шпалеру під час вхідних сеансів"),

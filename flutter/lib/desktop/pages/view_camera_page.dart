@@ -342,6 +342,23 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
       body: Obx(() {
+        if (_ffi.ffiModel.pi.isSet.isTrue) {
+          final version = _ffi.ffiModel.pi.version;
+          if (versionCmp(version, '1.3.8') < 0) {
+            submit() async {
+              closeConnection();
+            }
+
+            return CustomAlertDialog(
+              content: msgboxContent('error', translate('Download new version'),
+                  translate('upgrade_remote_rustdesk_client_to_{1.3.8}_tip')),
+              actions: [
+                dialogButton('OK', onPressed: submit),
+              ],
+            );
+          }
+        }
+
         final imageReady = _ffi.ffiModel.pi.isSet.isTrue &&
             _ffi.ffiModel.waitForFirstImage.isFalse;
         if (imageReady) {

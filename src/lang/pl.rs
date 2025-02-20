@@ -546,6 +546,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "Automatycznie rozłącz przy bezczynności"),
         ("Check for software update on startup", "Sprawdź aktualizacje przy starcie programu"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Proszę zaktualizować RustDesk Server Pro do wersji {} lub nowszej!"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Proszę zaktualizować zdalny klient RustDesk do wersji {} lub nowszej!"),
         ("pull_group_failed_tip", "Błąd odświeżania grup"),
         ("Filter by intersection", "Filtruj wg przecięcia"),
         ("Remove wallpaper during incoming sessions", "Usuń tapetę podczas sesji przychodzących"),

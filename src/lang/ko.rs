@@ -546,6 +546,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "장시간 활동이 없어 연결이 자동으로 종료되었습니다"),
         ("Check for software update on startup", "시작 시 소프트웨어 업데이트 확인"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "RustDesk Server Pro를 {} 버전 이상으로 업그레이드하십시오!"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "원격 측의 RustDesk 클라이언트를 {} 버전 이상으로 업그레이드하십시오!"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "원격 측의 RustDesk 클라이언트를 {} 버전 이상으로 업그레이드하십시오!"),
         ("pull_group_failed_tip", "그룹 정보를 가져오지 못했습니다"),
         ("Filter by intersection", "교차로로 필터링"),
         ("Remove wallpaper during incoming sessions", "세션 수락시 배경화면 제거"),
