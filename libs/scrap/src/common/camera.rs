@@ -164,13 +164,10 @@ impl TraitCapturer for CameraCapturer {
             Ok(buffer) => {
                 match buffer.decode_image::<RgbAFormat>() {
                     Ok(mut decoded) => {
-                        for chunk in decoded.chunks_mut(4) {
-                            chunk.swap(0, 2);
-                        }
                         self.data = decoded.as_raw().to_vec();
-                        // FIXME: PixelBuffer::new has different signatures on different platforms.
+                        // FIXME: macos's PixelBuffer cannot be directly created from bytes slice.
                         cfg_if::cfg_if! {
-                            if #[cfg(target_os = "linux")] {
+                            if #[cfg(any(target_os = "linux", target_os = "windows"))] {
                                 Ok(Frame::PixelBuffer(PixelBuffer::new(
                                     &self.data,
                                     Pixfmt::RGBA,
@@ -178,11 +175,10 @@ impl TraitCapturer for CameraCapturer {
                                     decoded.height() as usize,
                                 )))
                             } else {
-                                Ok(Frame::PixelBuffer(PixelBuffer::new(
-                                    &self.data,
-                                    decoded.width() as usize,
-                                    decoded.height() as usize,
-                                )))
+                                Err(e) => Err(io::Error::new(
+                                    io::ErrorKind::Other,
+                                    format!("Camera is not supported on this platform yet"),
+                                )),
                             }
                         }
                     }

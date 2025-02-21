@@ -717,7 +717,7 @@ pub mod client {
                     }
                     let frame_ptr = base.add(ADDR_CAPTURE_FRAME);
                     let data = slice::from_raw_parts(frame_ptr, (*frame_info).length);
-                    Ok(Frame::PixelBuffer(PixelBuffer::new(
+                    Ok(Frame::PixelBuffer(PixelBuffer::with_BGRA(
                         data,
                         self.width,
                         self.height,
