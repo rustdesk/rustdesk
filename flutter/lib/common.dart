@@ -3706,11 +3706,11 @@ Widget workaroundWindowBorder(BuildContext context, Widget child) {
   );
 }
 
-void updateTextAndPreserveSelection(TextEditingController controller, String text) {
-  final preSelectionStart = controller.selection.start;
-  final preSelectionEnd = controller.selection.end;
+void updateTextAndPreserveSelection(
+    TextEditingController controller, String text) {
   // Only care about select all for now.
-  final isSelected = preSelectionEnd > preSelectionStart;
+  final isSelected = controller.selection.isValid &&
+      controller.selection.end > controller.selection.start;
 
   // Set text will make the selection invalid.
   controller.text = text;
