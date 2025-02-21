@@ -749,7 +749,7 @@ class _CmControlPanel extends StatelessWidget {
     final model = Provider.of<ServerModel>(context);
     final showElevation = canElevate &&
         model.showElevation &&
-        (client.type_() == ClientType.remote || client.type_() == ClientType.camera);
+        (client.type_() == ClientType.remote);
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
