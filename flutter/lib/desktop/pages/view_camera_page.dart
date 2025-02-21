@@ -17,7 +17,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
-import '../widgets/view_camera_toolbar.dart';
+import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
 
@@ -75,11 +75,6 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   Timer? _timer;
   String keyboardMode = "legacy";
   bool _isWindowBlur = false;
-  final _cursorOverImage = false.obs;
-  late RxBool _showRemoteCursor;
-  late RxBool _zoomCursor;
-  late RxBool _remoteCursorMoved;
-  late RxBool _keyboardEnabled;
 
   var _blockableOverlayState = BlockableOverlayState();
 
@@ -98,12 +93,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     _initStates(id);
   }
 
-  void _initStates(String id) {
-    _zoomCursor = PeerBoolOption.find(id, kOptionZoomCursor);
-    _showRemoteCursor = ShowRemoteCursorState.find(id);
-    _keyboardEnabled = KeyboardEnabledState.find(id);
-    _remoteCursorMoved = RemoteCursorMovedState.find(id);
-  }
+  void _initStates(String id) {}
 
   @override
   void initState() {
@@ -140,13 +130,6 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     if (!isWeb) bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     _ffi.dialogManager.loadMobileActionsOverlayVisible();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Session option should be set after models.dart/FFI.start
-      _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
-          sessionId: sessionId, arg: 'show-remote-cursor');
-      _zoomCursor.value = bind.sessionGetToggleOptionSync(
-          sessionId: sessionId, arg: kOptionZoomCursor);
-    });
     DesktopMultiWindow.addListener(this);
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(
@@ -405,7 +388,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   }
 
   void enterView(PointerEnterEvent evt) {
-    _cursorOverImage.value = true;
+    // _cursorOverImage.value = true;
     _firstEnterImage.value = true;
     if (_onEnterOrLeaveImage4Toolbar != null) {
       try {
@@ -428,7 +411,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       _ffi.inputModel.tryMoveEdgeOnExit(evt.position);
     }
 
-    _cursorOverImage.value = false;
+    // _cursorOverImage.value = false;
     _firstEnterImage.value = false;
     if (_onEnterOrLeaveImage4Toolbar != null) {
       try {
@@ -453,21 +436,22 @@ class _ViewCameraPageState extends State<ViewCameraPage>
         final c = Provider.of<CanvasModel>(context, listen: false);
         Future.delayed(Duration.zero, () => c.updateViewStyle());
         final peerDisplay = CurrentDisplayState.find(widget.id);
+
         return Obx(
-          () => _ffi.ffiModel.pi.isSet.isFalse
-              ? Container(color: Colors.transparent)
-              : Obx(() {
-                  widget.toolbarState.initShow(sessionId);
-                  _ffi.textureModel.updateCurrentDisplay(peerDisplay.value);
-                  return ImagePaint(
-                    id: widget.id,
-                    zoomCursor: _zoomCursor,
-                    cursorOverImage: _cursorOverImage,
-                    keyboardEnabled: _keyboardEnabled,
-                    remoteCursorMoved: _remoteCursorMoved,
-                    ffi: _ffi,
-                  );
-                }),
+          () {
+            if (_ffi.ffiModel.pi.isSet.isFalse) {
+              return Container(color: Colors.transparent);
+            } else {
+              // Call the methods that were inside the second Obx
+              widget.toolbarState.initShow(sessionId);
+              _ffi.textureModel.updateCurrentDisplay(peerDisplay.value);
+              
+              return ImagePaint(
+                id: widget.id,
+                ffi: _ffi,
+              );
+            }
+          },
         );
       }))
     ];
@@ -491,20 +475,12 @@ class _ViewCameraPageState extends State<ViewCameraPage>
 class ImagePaint extends StatefulWidget {
   final FFI ffi;
   final String id;
-  final RxBool zoomCursor;
-  final RxBool cursorOverImage;
-  final RxBool keyboardEnabled;
-  final RxBool remoteCursorMoved;
   final Widget Function(Widget)? listenerBuilder;
 
   ImagePaint(
       {Key? key,
       required this.ffi,
       required this.id,
-      required this.zoomCursor,
-      required this.cursorOverImage,
-      required this.keyboardEnabled,
-      required this.remoteCursorMoved,
       this.listenerBuilder})
       : super(key: key);
 
@@ -516,10 +492,6 @@ class _ImagePaintState extends State<ImagePaint> {
   bool _lastRemoteCursorMoved = false;
 
   String get id => widget.id;
-  RxBool get zoomCursor => widget.zoomCursor;
-  RxBool get cursorOverImage => widget.cursorOverImage;
-  RxBool get keyboardEnabled => widget.keyboardEnabled;
-  RxBool get remoteCursorMoved => widget.remoteCursorMoved;
   Widget Function(Widget)? get listenerBuilder => widget.listenerBuilder;
 
   @override
@@ -531,46 +503,10 @@ class _ImagePaintState extends State<ImagePaint> {
     bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
-    mouseRegion({child}) => Obx(() {
-          double getCursorScale() {
-            var c = Provider.of<CanvasModel>(context);
-            var cursorScale = 1.0;
-            if (isWindows) {
-              // debug win10
-              if (zoomCursor.value && isViewAdaptive()) {
-                cursorScale = s * c.devicePixelRatio;
-              }
-            } else {
-              if (zoomCursor.value || isViewOriginal()) {
-                cursorScale = s;
-              }
-            }
-            return cursorScale;
-          }
-
-          return MouseRegion(
-              cursor: cursorOverImage.isTrue
-                  ? c.cursorEmbedded
-                      ? SystemMouseCursors.none
-                      : keyboardEnabled.isTrue
-                          ? (() {
-                              if (remoteCursorMoved.isTrue) {
-                                _lastRemoteCursorMoved = true;
-                                return SystemMouseCursors.none;
-                              } else {
-                                if (_lastRemoteCursorMoved) {
-                                  _lastRemoteCursorMoved = false;
-                                  _firstEnterImage.value = true;
-                                }
-                                return _buildCustomCursor(
-                                    context, getCursorScale());
-                              }
-                            }())
-                          : _buildDisabledCursor(context, getCursorScale())
-                  : MouseCursor.defer,
-              onHover: (evt) {},
-              child: child);
-        });
+    mouseRegion({child}) => MouseRegion(
+                              cursor: MouseCursor.defer,
+                              onHover: (evt) {},
+                              child: child);
     if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
@@ -694,9 +630,7 @@ class _ImagePaintState extends State<ImagePaint> {
         child: SingleChildScrollView(
           controller: horizontal,
           scrollDirection: Axis.horizontal,
-          physics: cursorOverImage.isTrue
-              ? const NeverScrollableScrollPhysics()
-              : null,
+          physics: null,
           child: widget,
         ),
       );
@@ -715,9 +649,7 @@ class _ImagePaintState extends State<ImagePaint> {
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: SingleChildScrollView(
           controller: vertical,
-          physics: cursorOverImage.isTrue
-              ? const NeverScrollableScrollPhysics()
-              : null,
+          physics: null,
           child: widget,
         ),
       );
