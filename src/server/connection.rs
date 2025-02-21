@@ -21,6 +21,7 @@ use crate::{
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
+use scrap::camera;
 use cidr_utils::cidr::IpCidr;
 #[cfg(target_os = "linux")]
 use hbb_common::platform::linux::run_cmds;
@@ -167,6 +168,7 @@ pub enum AuthConnType {
     Remote,
     FileTransfer,
     PortForward,
+    ViewCamera,
 }
 
 pub struct Connection {
@@ -179,6 +181,7 @@ pub struct Connection {
     timer: crate::RustDeskInterval,
     file_timer: crate::RustDeskInterval,
     file_transfer: Option<(String, bool)>,
+    view_camera: bool,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
     port_forward_address: String,
     tx_to_cm: mpsc::UnboundedSender<ipc::Data>,
@@ -188,6 +191,7 @@ pub struct Connection {
     clipboard: bool,
     audio: bool,
     file: bool,
+    camera: bool,
     restart: bool,
     recording: bool,
     block_input: bool,
@@ -331,6 +335,7 @@ impl Connection {
             timer: crate::rustdesk_interval(time::interval(SEC30)),
             file_timer: crate::rustdesk_interval(time::interval(SEC30)),
             file_transfer: None,
+            view_camera: false,
             port_forward_socket: None,
             port_forward_address: "".to_owned(),
             tx_to_cm,
@@ -340,6 +345,7 @@ impl Connection {
             audio: Connection::permission("enable-audio"),
             // to-do: make sure is the option correct here
             file: Connection::permission(keys::OPTION_ENABLE_FILE_TRANSFER),
+            camera: Connection::permission("enable-camera"),
             restart: Connection::permission("enable-remote-restart"),
             recording: Connection::permission("enable-record-session"),
             block_input: Connection::permission("enable-block-input"),
@@ -406,6 +412,9 @@ impl Connection {
         #[cfg(not(target_os = "android"))]
         if !conn.keyboard {
             conn.send_permission(Permission::Keyboard, false).await;
+        }
+        if !conn.camera {
+            conn.send_permission(Permission::Camera, false).await;
         }
         if !conn.clipboard {
             conn.send_permission(Permission::Clipboard, false).await;
@@ -536,6 +545,16 @@ impl Connection {
                                         s.write().unwrap().subscribe(
                                             super::audio_service::NAME,
                                             conn.inner.clone(), conn.audio_enabled());
+                                    }
+                                }
+                            } else if &name == "camera" {
+                                conn.camera = enabled;
+                                conn.send_permission(Permission::Camera, enabled).await;
+                                if conn.authorized {
+                                    if let Some(s) = conn.server.upgrade() {
+                                        s.write().unwrap().subscribe(
+                                            &video_service::get_service_name(VideoSource::Camera, camera::PRIMARY_CAMERA_IDX),
+                                            conn.inner.clone(), conn.camera_enabled());
                                     }
                                 }
                             } else if &name == "file" {
@@ -1189,6 +1208,8 @@ impl Connection {
             (1, AuthConnType::FileTransfer)
         } else if self.port_forward_socket.is_some() {
             (2, AuthConnType::PortForward)
+        } else if self.view_camera {
+            (3, AuthConnType::ViewCamera)
         } else {
             (0, AuthConnType::Remote)
         };
@@ -1288,7 +1309,7 @@ impl Connection {
             return;
         }
         #[cfg(target_os = "linux")]
-        if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
+        if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() && !self.view_camera {
             let mut msg = "".to_string();
             if crate::platform::linux::is_login_screen_wayland() {
                 msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned()
@@ -1345,6 +1366,24 @@ impl Connection {
         self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
         if self.file_transfer.is_some() {
             res.set_peer_info(pi);
+        } else if self.view_camera {
+            let supported_encoding = scrap::codec::Encoder::supported_encoding();
+            self.last_supported_encoding = Some(supported_encoding.clone());
+            log::info!("peer info supported_encoding: {:?}", supported_encoding);
+            pi.encoding = Some(supported_encoding).into();
+
+            pi.displays = camera::Cameras::all_info().unwrap_or(Vec::new());
+            pi.current_display = camera::PRIMARY_CAMERA_IDX as _;
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                pi.resolutions = 
+                    Some(SupportedResolutions {
+                        resolutions: camera::Cameras::get_camera_resolution(pi.current_display as usize).ok().into_iter().collect(),
+                        ..Default::default()
+                    }).into();
+            }
+            res.set_peer_info(pi);
+            self.update_codec_on_login();
         } else {
             let supported_encoding = scrap::codec::Encoder::supported_encoding();
             self.last_supported_encoding = Some(supported_encoding.clone());
@@ -1412,6 +1451,10 @@ impl Connection {
             } else {
                 self.delayed_read_dir = Some((dir.to_owned(), show_hidden));
             }
+        } else if self.view_camera {
+            if !wait_session_id_confirm {
+                self.try_sub_camera_displays();
+            }
         } else if sub_service {
             if !wait_session_id_confirm {
                 self.try_sub_services();
@@ -1419,8 +1462,19 @@ impl Connection {
         }
     }
 
+    fn try_sub_camera_displays(&mut self) {
+        if let Some(s) = self.server.upgrade() {
+            let mut s = s.write().unwrap();
+
+            // TODO: add microphone permission.
+            s.try_add_primary_camera_service();
+            s.add_camera_connection(self.inner.clone(), self.camera_enabled());
+        }
+    }
+
+    // FIXME: rename to contrast with camera services.
     fn try_sub_services(&mut self) {
-        let is_remote = self.file_transfer.is_none() && self.port_forward_socket.is_none();
+        let is_remote = self.file_transfer.is_none() && self.port_forward_socket.is_none() && !self.view_camera;
         if is_remote && !self.services_subed {
             self.services_subed = true;
             if let Some(s) = self.server.upgrade() {
@@ -1521,6 +1575,10 @@ impl Connection {
         self.audio && !self.disable_audio
     }
 
+    fn camera_enabled(&self) -> bool {
+        self.camera
+    }
+
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     fn file_transfer_enabled(&self) -> bool {
         self.file && self.enable_file_transfer
@@ -1537,6 +1595,7 @@ impl Connection {
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),
+            is_view_camera: self.view_camera,
             port_forward: self.port_forward_address.clone(),
             peer_id,
             name,
@@ -1544,6 +1603,7 @@ impl Connection {
             keyboard: self.keyboard,
             clipboard: self.clipboard,
             audio: self.audio,
+            camera: self.camera,
             file: self.file,
             file_transfer_enabled: self.file,
             restart: self.restart,
@@ -1778,6 +1838,15 @@ impl Connection {
                         return false;
                     }
                     self.file_transfer = Some((ft.dir, ft.show_hidden));
+                }
+                Some(login_request::Union::ViewCamera(vc)) => {
+                    if !Connection::permission(keys::OPTION_ENABLE_CAMERA) {
+                        self.send_login_error("No permission of viewing camera")
+                            .await;
+                        sleep(1.).await;
+                        return false;
+                    }
+                    self.view_camera = true;
                 }
                 Some(login_request::Union::PortForward(mut pf)) => {
                     if !Connection::permission("enable-tunnel") {
@@ -2577,6 +2646,8 @@ impl Connection {
                                 if let Some((dir, show_hidden)) = self.delayed_read_dir.take() {
                                     self.read_dir(&dir, show_hidden);
                                 }
+                            } else if self.view_camera {
+                                self.try_sub_camera_displays();
                             } else {
                                 self.try_sub_services();
                             }
@@ -2684,7 +2755,7 @@ impl Connection {
         video_service::refresh();
         self.server.upgrade().map(|s| {
             s.read().unwrap().set_video_service_opt(
-                display,
+                display.map(|d| (self.video_source(), d)),
                 video_service::OPTION_REFRESH,
                 super::service::SERVICE_OPTION_VALUE_TRUE,
             );
@@ -2720,13 +2791,28 @@ impl Connection {
         }
     }
 
+    fn video_source(&self) -> VideoSource {
+        if self.view_camera {
+            VideoSource::Camera
+        } else {
+            VideoSource::Monitor
+        }
+    }
+
+    fn is_primary_video_index(&self, index: usize) -> bool {
+        match self.video_source() {
+            VideoSource::Monitor => index == *display_service::PRIMARY_DISPLAY_IDX,
+            VideoSource::Camera => index == camera::PRIMARY_CAMERA_IDX,
+        }
+    }
+
     fn switch_display_to(&mut self, display_idx: usize, server: Arc<RwLock<Server>>) {
-        let new_service_name = video_service::get_service_name(display_idx);
-        let old_service_name = video_service::get_service_name(self.display_idx);
+        let new_service_name = video_service::get_service_name(self.video_source(), display_idx);
+        let old_service_name = video_service::get_service_name(self.video_source(), self.display_idx);
         let mut lock = server.write().unwrap();
         if display_idx != *display_service::PRIMARY_DISPLAY_IDX {
             if !lock.contains(&new_service_name) {
-                lock.add_service(Box::new(video_service::new(display_idx)));
+                lock.add_service(Box::new(video_service::new(self.video_source(), display_idx)));
             }
         }
         // For versions greater than 1.2.4, a `CaptureDisplays` message will be sent immediately.
@@ -2761,26 +2847,27 @@ impl Connection {
     }
 
     async fn capture_displays(&mut self, add: &[usize], sub: &[usize], set: &[usize]) {
+        let video_source = self.video_source();
         if let Some(sever) = self.server.upgrade() {
             let mut lock = sever.write().unwrap();
             for display in add.iter() {
-                let service_name = video_service::get_service_name(*display);
+                let service_name = video_service::get_service_name(video_source, *display);
                 if !lock.contains(&service_name) {
-                    lock.add_service(Box::new(video_service::new(*display)));
+                    lock.add_service(Box::new(video_service::new(video_source, *display)));
                 }
             }
             for display in set.iter() {
-                let service_name = video_service::get_service_name(*display);
+                let service_name = video_service::get_service_name(video_source, *display);
                 if !lock.contains(&service_name) {
-                    lock.add_service(Box::new(video_service::new(*display)));
+                    lock.add_service(Box::new(video_service::new(video_source, *display)));
                 }
             }
             if !add.is_empty() {
-                lock.capture_displays(self.inner.clone(), add, true, false);
+                lock.capture_displays(self.inner.clone(), video_source, add, true, false);
             } else if !sub.is_empty() {
-                lock.capture_displays(self.inner.clone(), sub, false, true);
+                lock.capture_displays(self.inner.clone(), video_source, sub, false, true);
             } else {
-                lock.capture_displays(self.inner.clone(), set, true, true);
+                lock.capture_displays(self.inner.clone(), video_source, set, true, true);
             }
             self.multi_ui_session = lock.get_subbed_displays_count(self.inner.id()) > 1;
             if self.follow_remote_window {
@@ -3287,6 +3374,7 @@ impl Connection {
     fn portable_check(&mut self) {
         if self.portable.is_installed
             || self.file_transfer.is_some()
+            || self.view_camera
             || self.port_forward_socket.is_some()
             || !self.keyboard
         {
@@ -3937,7 +4025,6 @@ impl Retina {
 }
 
 mod raii {
-    // CONN_COUNT: remote connection count in fact
     // ALIVE_CONNS: all connections, including unauthorized connections
     // AUTHED_CONNS: all authorized connections
 

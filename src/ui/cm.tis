@@ -356,7 +356,7 @@ function bring_to_top(idx=-1) {
     }
 }
 
-handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
+handler.addConnection = function(id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
     stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
@@ -550,7 +550,7 @@ function adjustHeader() {
 
 view.on("size", adjustHeader);
 
-// handler.addConnection(0, false, 0, "", "test1", true, false, false, true, true);
-// handler.addConnection(1, false, 0, "", "test2--------", true, false, false, false, false);
-// handler.addConnection(2, false, 0, "", "test3", true, false, false, false, false);
+// handler.addConnection(0, false, false, 0, "", "test1", true, false, false, true, true);
+// handler.addConnection(1, false, false, 0, "", "test2--------", true, false, false, false, false);
+// handler.addConnection(2, false, false, 0, "", "test3", true, false, false, false, false);
 // handler.newMessage(0, 'h');

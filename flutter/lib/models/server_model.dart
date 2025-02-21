@@ -29,6 +29,7 @@ class ServerModel with ChangeNotifier {
   bool _mediaOk = false;
   bool _inputOk = false;
   bool _audioOk = false;
+  bool _cameraOk = false;
   bool _fileOk = false;
   bool _clipboardOk = false;
   bool _showElevation = false;
@@ -57,6 +58,8 @@ class ServerModel with ChangeNotifier {
   bool get inputOk => _inputOk;
 
   bool get audioOk => _audioOk;
+
+  bool get cameraOk => _cameraOk;
 
   bool get fileOk => _fileOk;
 
@@ -791,6 +794,7 @@ class ServerModel with ChangeNotifier {
 enum ClientType {
   remote,
   file,
+  camera,
   portForward,
 }
 
@@ -798,12 +802,14 @@ class Client {
   int id = 0; // client connections inner count id
   bool authorized = false;
   bool isFileTransfer = false;
+  bool isViewCamera = false;
   String portForward = "";
   String name = "";
   String peerId = ""; // peer user's id,show at app
   bool keyboard = false;
   bool clipboard = false;
   bool audio = false;
+  bool camera = false;
   bool file = false;
   bool restart = false;
   bool recording = false;
@@ -815,19 +821,22 @@ class Client {
 
   RxInt unreadChatMessageCount = 0.obs;
 
-  Client(this.id, this.authorized, this.isFileTransfer, this.name, this.peerId,
-      this.keyboard, this.clipboard, this.audio);
+  Client(this.id, this.authorized, this.isFileTransfer, this.isViewCamera, this.name, this.peerId,
+      this.keyboard, this.clipboard, this.audio, this.camera);
 
   Client.fromJson(Map<String, dynamic> json) {
     id = json['id'];
     authorized = json['authorized'];
     isFileTransfer = json['is_file_transfer'];
+    // TODO: no entry then default.
+    isViewCamera = json['is_view_camera'];
     portForward = json['port_forward'];
     name = json['name'];
     peerId = json['peer_id'];
     keyboard = json['keyboard'];
     clipboard = json['clipboard'];
     audio = json['audio'];
+    camera = json['camera'];
     file = json['file'];
     restart = json['restart'];
     recording = json['recording'];
@@ -843,12 +852,14 @@ class Client {
     data['id'] = id;
     data['authorized'] = authorized;
     data['is_file_transfer'] = isFileTransfer;
+    data['is_view_camera'] = isViewCamera;
     data['port_forward'] = portForward;
     data['name'] = name;
     data['peer_id'] = peerId;
     data['keyboard'] = keyboard;
     data['clipboard'] = clipboard;
     data['audio'] = audio;
+    data['camera'] = camera;
     data['file'] = file;
     data['restart'] = restart;
     data['recording'] = recording;
@@ -863,6 +874,8 @@ class Client {
   ClientType type_() {
     if (isFileTransfer) {
       return ClientType.file;
+    } else if (isViewCamera) {
+      return ClientType.camera;
     } else if (portForward.isNotEmpty) {
       return ClientType.portForward;
     } else {

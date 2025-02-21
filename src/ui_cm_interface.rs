@@ -47,12 +47,14 @@ pub struct Client {
     pub authorized: bool,
     pub disconnected: bool,
     pub is_file_transfer: bool,
+    pub is_view_camera: bool,
     pub port_forward: String,
     pub name: String,
     pub peer_id: String,
     pub keyboard: bool,
     pub clipboard: bool,
     pub audio: bool,
+    pub camera: bool,
     pub file: bool,
     pub restart: bool,
     pub recording: bool,
@@ -128,6 +130,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         &self,
         id: i32,
         is_file_transfer: bool,
+        is_view_camera: bool,
         port_forward: String,
         peer_id: String,
         name: String,
@@ -135,6 +138,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         keyboard: bool,
         clipboard: bool,
         audio: bool,
+        camera: bool,
         file: bool,
         restart: bool,
         recording: bool,
@@ -147,12 +151,14 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             authorized,
             disconnected: false,
             is_file_transfer,
+            is_view_camera,
             port_forward,
             name: name.clone(),
             peer_id: peer_id.clone(),
             keyboard,
             clipboard,
             audio,
+            camera,
             file,
             restart,
             recording,
@@ -402,9 +408,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
+                                Data::Login{id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, camera, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, camera, file, restart, recording, block_input, from_switch, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(target_os = "windows")]
                                     {
@@ -672,6 +678,7 @@ pub async fn start_listen<T: InvokeUiCM>(
             Some(Data::Login {
                 id,
                 is_file_transfer,
+                is_view_camera,
                 port_forward,
                 peer_id,
                 name,
@@ -679,6 +686,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 keyboard,
                 clipboard,
                 audio,
+                camera,
                 file,
                 restart,
                 recording,
@@ -690,6 +698,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 cm.add_connection(
                     id,
                     is_file_transfer,
+                    is_view_camera,
                     port_forward,
                     peer_id,
                     name,
@@ -697,6 +706,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     keyboard,
                     clipboard,
                     audio,
+                    camera,
                     file,
                     restart,
                     recording,

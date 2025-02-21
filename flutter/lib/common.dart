@@ -31,6 +31,7 @@ import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'desktop/pages/remote_page.dart' as desktop_remote;
 import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
+import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
@@ -96,6 +97,7 @@ enum DesktopType {
   main,
   remote,
   fileTransfer,
+  viewCamera,
   cm,
   portForward,
 }
@@ -2200,7 +2202,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
 List<String>? urlLinkToCmdArgs(Uri uri) {
   String? command;
   String? id;
-  final options = ["connect", "play", "file-transfer", "port-forward", "rdp"];
+  final options = ["connect", "play", "file-transfer", "view-camera", "port-forward", "rdp"];
   if (uri.authority.isEmpty &&
       uri.path.split('').every((char) => char == '/')) {
     return [];
@@ -2238,6 +2240,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
         connect(Get.context!, id);
       } else if (optionIndex == 2) {
         connect(Get.context!, id, isFileTransfer: true);
+      } else if (optionIndex == 3) {
+        connect(Get.context!, id, isViewCamera: true);
       }
       return null;
     }
@@ -2290,6 +2294,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
 
 connectMainDesktop(String id,
     {required bool isFileTransfer,
+    required bool isViewCamera,
     required bool isTcpTunneling,
     required bool isRDP,
     bool? forceRelay,
@@ -2301,6 +2306,11 @@ connectMainDesktop(String id,
         password: password,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
+        forceRelay: forceRelay);
+  } else if (isViewCamera) {
+    await rustDeskWinManager.newViewCamera(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
         forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP,
@@ -2318,10 +2328,12 @@ connectMainDesktop(String id,
 
 /// Connect to a peer with [id].
 /// If [isFileTransfer], starts a session only for file transfer.
+/// If [isViewCamera], starts a session only for view camera.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
 connect(BuildContext context, String id,
     {bool isFileTransfer = false,
+    bool isViewCamera = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool forceRelay = false,
@@ -2353,6 +2365,7 @@ connect(BuildContext context, String id,
       await connectMainDesktop(
         id,
         isFileTransfer: isFileTransfer,
+        isViewCamera: isViewCamera,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
         password: password,
@@ -2363,6 +2376,7 @@ connect(BuildContext context, String id,
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
         'isFileTransfer': isFileTransfer,
+        'isViewCamera': isViewCamera,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
         'password': password,
@@ -2397,6 +2411,23 @@ connect(BuildContext context, String id,
           MaterialPageRoute(
             builder: (BuildContext context) => FileManagerPage(
                 id: id, password: password, isSharedPassword: isSharedPassword),
+          ),
+        );
+      }
+    } else if (isViewCamera) {
+      // TODO: add mobile page.
+      if (isWeb) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) => desktop_view_camera.ViewCameraPage(
+              key: ValueKey(id),
+              id: id,
+              toolbarState: ToolbarState(),
+              password: password,
+              forceRelay: forceRelay,
+              isSharedPassword: isSharedPassword,
+            ),
           ),
         );
       }
@@ -2686,6 +2717,8 @@ String getWindowName({WindowType? overrideType}) {
       return name;
     case WindowType.FileTransfer:
       return "File Transfer - $name";
+    case WindowType.ViewCamera:
+      return "View Camera - $name";
     case WindowType.PortForward:
       return "Port Forward - $name";
     case WindowType.RemoteDesktop:

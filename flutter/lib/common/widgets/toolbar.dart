@@ -149,10 +149,11 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   }
 
   connectWithToken(
-      {required bool isFileTransfer, required bool isTcpTunneling}) {
+      {bool isFileTransfer = false, bool isViewCamera = false, bool isTcpTunneling = false}) {
     final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
     connect(context, id,
         isFileTransfer: isFileTransfer,
+        isViewCamera: isViewCamera,
         isTcpTunneling: isTcpTunneling,
         connToken: connToken);
   }
@@ -163,7 +164,16 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       TTextMenu(
           child: Text(translate('Transfer file')),
           onPressed: () =>
-              connectWithToken(isFileTransfer: true, isTcpTunneling: false)),
+              connectWithToken(isFileTransfer: true)),
+    );
+  }
+  // viewCamera 
+  if (isDesktop) {
+    v.add(
+      TTextMenu(
+          child: Text(translate('View camera')),
+          onPressed: () =>
+              connectWithToken(isViewCamera: true)),
     );
   }
   // tcpTunneling
@@ -172,7 +182,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       TTextMenu(
           child: Text(translate('TCP tunneling')),
           onPressed: () =>
-              connectWithToken(isFileTransfer: false, isTcpTunneling: true)),
+              connectWithToken(isTcpTunneling: true)),
     );
   }
   // note

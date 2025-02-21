@@ -204,6 +204,7 @@ class WebHomePage extends StatelessWidget {
       return;
     }
     bool isFileTransfer = false;
+    bool isViewCamera = false;
     String? id;
     String? password;
     for (int i = 0; i < args.length; i++) {
@@ -219,6 +220,11 @@ class WebHomePage extends StatelessWidget {
           id = args[i + 1];
           i++;
           break;
+        case '--view-camera':
+          isViewCamera = true;
+          id = args[i + 1];
+          i++;
+          break;
         case '--password':
           password = args[i + 1];
           i++;
@@ -228,7 +234,7 @@ class WebHomePage extends StatelessWidget {
       }
     }
     if (id != null) {
-      connect(context, id, isFileTransfer: isFileTransfer, password: password);
+      connect(context, id, isFileTransfer: isFileTransfer, isViewCamera: isViewCamera, password: password);
     }
   }
 }
