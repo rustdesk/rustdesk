@@ -1383,6 +1383,7 @@ impl Connection {
                     }).into();
             }
             res.set_peer_info(pi);
+            self.update_codec_on_login();
         } else {
             let supported_encoding = scrap::codec::Encoder::supported_encoding();
             self.last_supported_encoding = Some(supported_encoding.clone());
