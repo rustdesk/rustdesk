@@ -225,6 +225,7 @@ class _ConnectionPageState extends State<ConnectionPage>
         }
       });
     }
+    Get.put<TextEditingController>(_idEditingController);
     Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
@@ -395,8 +396,8 @@ class _ConnectionPageState extends State<ConnectionPage>
                     FocusNode fieldFocusNode,
                     VoidCallback onFieldSubmitted,
                   ) {
-                    fieldTextEditingController.text = _idController.text;
-                    Get.put<TextEditingController>(fieldTextEditingController);
+                    updateTextAndPreserveSelection(
+                        fieldTextEditingController, _idController.text);
                     return Obx(() => TextField(
                           autocorrect: false,
                           enableSuggestions: false,

@@ -74,6 +74,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         }
       });
     }
+    Get.put<TextEditingController>(_idEditingController);
   }
 
   @override
@@ -214,9 +215,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         TextEditingController fieldTextEditingController,
                         FocusNode fieldFocusNode,
                         VoidCallback onFieldSubmitted) {
-                      fieldTextEditingController.text = _idController.text;
-                      Get.put<TextEditingController>(
-                          fieldTextEditingController);
+                      updateTextAndPreserveSelection(
+                          fieldTextEditingController, _idController.text);
                       return AutoSizeTextField(
                         controller: fieldTextEditingController,
                         focusNode: fieldFocusNode,
