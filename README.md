@@ -127,6 +127,7 @@ Begin by cloning the repository and building the Docker container:
 ```sh
 git clone https://github.com/rustdesk/rustdesk
 cd rustdesk
+git submodule update --init --recursive
 docker build -t "rustdesk-builder" .
 ```
 
