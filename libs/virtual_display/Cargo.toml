@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lazy_static = "1.4"
-hbb_common = { path = "../hbb_common" }
+lazy_static = { workspace = true }
+hbb_common = { workspace = true }

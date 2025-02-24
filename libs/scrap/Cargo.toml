@@ -17,17 +17,14 @@ hwcodec = ["dep:hwcodec"]
 vram = ["hwcodec/vram"]
 
 [dependencies]
-cfg-if = "1.0"
-num_cpus = "1.15"
-lazy_static = "1.4"
-hbb_common = { path = "../hbb_common" }
-webm = { git = "https://github.com/rustdesk-org/rust-webm" }
-serde = {version="1.0", features=["derive"]}
-
-[dependencies.winapi]
-version = "0.3"
-default-features = true
-features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser", "winerror", "errhandlingapi", "libloaderapi"]
+cfg-if = { workspace = true }
+num_cpus = { workspace = true }
+lazy_static = { workspace = true }
+hbb_common = { workspace = true }
+webm = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+winapi= { workspace = true, features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser", "winerror", "errhandlingapi", "libloaderapi"] }
+hwcodec= { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block = "0.1"
@@ -47,9 +44,9 @@ docopt = "1.1"
 quest = "0.3"
 
 [build-dependencies]
-target_build_utils = "0.3"
-bindgen = "0.65"
-pkg-config = { version = "0.3.27", optional = true }
+target_build_utils = { workspace = true }
+bindgen = { workspace = true }
+pkg-config = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", optional = true }
@@ -57,8 +54,4 @@ tracing = { version = "0.1", optional = true }
 gstreamer = { version = "0.16", optional = true }
 gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
 gstreamer-video = { version = "0.16", optional = true }
-
-[dependencies.hwcodec]
-git = "https://github.com/rustdesk-org/hwcodec"
-optional = true
 

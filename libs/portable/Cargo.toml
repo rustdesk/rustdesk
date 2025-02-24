@@ -9,10 +9,10 @@ description = "RustDesk Remote Desktop"
 build = "build.rs"
 
 [dependencies]
-brotli = "3.4"
-dirs = "5.0"
-md5 = "0.7"
-winapi = { version = "0.3", features = ["winbase"] }
+brotli = { workspace = true }
+dirs = { workspace = true }
+md5 = { workspace = true }
+winapi = { workspace = true, features = ["winbase"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 native-windows-gui = {version = "1.0", default-features = false, features = ["animation-timer", "image-decoder"]}

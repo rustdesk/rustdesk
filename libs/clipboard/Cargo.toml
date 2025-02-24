@@ -7,7 +7,7 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-cc = "1.0"
+cc = { workspace = true }
 
 [features]
 default = []
@@ -25,12 +25,12 @@ unix-file-copy-paste = [
 ]
 
 [dependencies]
-thiserror = "1.0"
-lazy_static = "1.4"
-serde = "1.0"
-serde_derive = "1.0"
-hbb_common = { path = "../hbb_common" }
-parking_lot = {version = "0.12"}
+thiserror = { workspace = true }
+lazy_static = { workspace = true }
+serde = { workspace = true }
+serde_derive = { workspace = true }
+hbb_common = { workspace = true }
+parking_lot = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 rand = {version = "0.8", optional = true}
