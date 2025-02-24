@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Hiện chưa sẵn sàng. Hãy kiểm tra kết nối của bạn"),
         ("Control Remote Desktop", "Điều khiển Desktop Từ Xa"),
         ("Transfer file", "Truyền Tệp Tin"),
+        ("View camera", "Xem camera"),
         ("Connect", "Kết nối"),
         ("Recent sessions", "Các session gần đây"),
         ("Address book", "Quyển địa chỉ"),

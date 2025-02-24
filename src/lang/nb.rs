@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Ikke klar. Vennligst sjekk din tilkobling"),
         ("Control Remote Desktop", "Kontroller fjernskrivebord"),
         ("Transfer file", "Overfør fil"),
+        ("View camera", "Vis kamera"),
         ("Connect", "Koble til"),
         ("Recent sessions", "Siste sesjoner"),
         ("Address book", "Adressebok"),

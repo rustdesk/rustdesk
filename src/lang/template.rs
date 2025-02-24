@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", ""),
         ("Control Remote Desktop", ""),
         ("Transfer file", ""),
+        ("View camera", ""),
         ("Connect", ""),
         ("Recent sessions", ""),
         ("Address book", ""),

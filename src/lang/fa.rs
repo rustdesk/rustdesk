@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "ارتباط برقرار نشد. لطفا شبکه خود را بررسی کنید"),
         ("Control Remote Desktop", "کنترل دسکتاپ میزبان"),
         ("Transfer file", "انتقال فایل"),
+        ("View camera", "نمایش دوربین"),
         ("Connect", "اتصال"),
         ("Recent sessions", "جلسات اخیر"),
         ("Address book", "دفترچه آدرس"),

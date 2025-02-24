@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "غير جاهز. الرجاء التأكد من الاتصال"),
         ("Control Remote Desktop", "التحكم بسطح المكتب البعيد"),
         ("Transfer file", "نقل ملف"),
+        ("View camera", "عرض الكاميرا"),
         ("Connect", "اتصال"),
         ("Recent sessions", "الجلسات الحديثة"),
         ("Address book", "كتاب العناوين"),

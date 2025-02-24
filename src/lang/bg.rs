@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Не е в готовност. Моля проверете мрежова връзка"),
         ("Control Remote Desktop", "Отдалечено управление на работна среда"),
         ("Transfer file", "Прехвърляне на файл"),
+        ("View camera", "Преглед на камерата"),
         ("Connect", "Свързване"),
         ("Recent sessions", "Последни сесии"),
         ("Address book", "Адресник"),

@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Jo gati.Ju lutem kontolloni lidhjen tuaj."),
         ("Control Remote Desktop", "Kontrolli i desktopit në distancë"),
         ("Transfer file", "Transfero dosje"),
+        ("View camera", ""),
         ("Connect", "Lidh"),
         ("Recent sessions", "Sessioni i fundit"),
         ("Address book", "Libër adresash"),

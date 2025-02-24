@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Ez dago prest. Mesedez, egiaztatu zure konexioa"),
         ("Control Remote Desktop", "Kontrolatu urruneko mahaigaina"),
         ("Transfer file", "Transferitu fitxategia"),
+        ("View camera", "Ikusi kamera"),
         ("Connect", "Konektatu"),
         ("Recent sessions", "Azken saioak"),
         ("Address book", "Helbide-liburua"),

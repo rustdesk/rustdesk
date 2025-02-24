@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Nav gatavs. Lūdzu, pārbaudiet savienojumu"),
         ("Control Remote Desktop", "Vadīt attālo darbvirsmu"),
         ("Transfer file", "Pārsūtīt failu"),
+        ("View camera", "Skatīt kameru"),
         ("Connect", "Savienoties"),
         ("Recent sessions", "Pēdējās sesijas"),
         ("Address book", "Adrešu grāmata"),

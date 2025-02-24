@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Kapcsolódási hiba. Ellenőrizze a hálózati beállításokat."),
         ("Control Remote Desktop", "Távoli számítógép vezérlése"),
         ("Transfer file", "Fájlátvitel"),
+        ("View camera", "Kamera megtekintése"),
         ("Connect", "Kapcsolódás"),
         ("Recent sessions", "Legutóbbi munkamenetek"),
         ("Address book", "Címjegyzék"),

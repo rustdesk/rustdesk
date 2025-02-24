@@ -15,6 +15,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Дайын емес. Қосылымды тексеруді өтінеміз"),
         ("Control Remote Desktop", "Қашықтағы Жұмыс үстелін Басқару"),
         ("Transfer file", "Файыл Тасымалдау"),
+        ("View camera", "Камераны Көру"),
         ("Connect", "Қосылу"),
         ("Recent sessions", "Соңғы Сештер"),
         ("Address book", "Мекенжай Кітабы"),
