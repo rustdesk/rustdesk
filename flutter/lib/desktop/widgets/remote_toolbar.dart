@@ -1057,12 +1057,13 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             menuChildren: getVirtualDisplayMenuChildren(ffi, id, null),
             child: Text(translate("Virtual display")),
           ),
-        cursorToggles(),
+        if (ffi.connType == ConnType.defaultConn)
+          cursorToggles(),
         Divider(),
         toggles(),
       ];
       // privacy mode
-      if (ffiModel.keyboard && pi.features.privacyMode) {
+      if (ffi.connType == ConnType.defaultConn && ffiModel.keyboard && pi.features.privacyMode) {
         final privacyModeState = PrivacyModeState.find(id);
         final privacyModeList =
             toolbarPrivacyMode(privacyModeState, context, id, ffi);

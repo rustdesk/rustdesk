@@ -91,171 +91,176 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   final sessionId = ffi.sessionId;
 
   List<TTextMenu> v = [];
-  // elevation
-  if (perms['keyboard'] != false && ffi.elevationModel.showRequestMenu) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Request Elevation')),
-          onPressed: () =>
-              showRequestElevationDialog(sessionId, ffi.dialogManager)),
-    );
-  }
-  // osAccount / osPassword
-  if (perms['keyboard'] != false) {
-    v.add(
-      TTextMenu(
-        child: Row(children: [
-          Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
-        ]),
-        trailingIcon: Transform.scale(
-          scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
-          child: IconButton(
-            onPressed: () {
-              if (isMobile && Navigator.canPop(context)) {
-                Navigator.pop(context);
-              }
-              if (pi.isHeadless) {
-                showSetOSAccount(sessionId, ffi.dialogManager);
-              } else {
-                handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
-              }
-            },
-            icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
+
+  // Only show these options when viewing remote desktop.
+  // Camera page doesn't need them.
+  if (ffi.connType == ConnType.defaultConn) {
+    // elevation
+    if (perms['keyboard'] != false && ffi.elevationModel.showRequestMenu) {
+      v.add(
+        TTextMenu(
+            child: Text(translate('Request Elevation')),
+            onPressed: () =>
+                showRequestElevationDialog(sessionId, ffi.dialogManager)),
+      );
+    }
+    // osAccount / osPassword
+    if (perms['keyboard'] != false) {
+      v.add(
+        TTextMenu(
+          child: Row(children: [
+            Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
+          ]),
+          trailingIcon: Transform.scale(
+            scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
+            child: IconButton(
+              onPressed: () {
+                if (isMobile && Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+                if (pi.isHeadless) {
+                  showSetOSAccount(sessionId, ffi.dialogManager);
+                } else {
+                  handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
+                }
+              },
+              icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
+            ),
           ),
+          onPressed: () => pi.isHeadless
+              ? showSetOSAccount(sessionId, ffi.dialogManager)
+              : handleOsPasswordAction(sessionId, ffi.dialogManager),
         ),
-        onPressed: () => pi.isHeadless
-            ? showSetOSAccount(sessionId, ffi.dialogManager)
-            : handleOsPasswordAction(sessionId, ffi.dialogManager),
-      ),
-    );
-  }
-  // paste
-  if (pi.platform != kPeerPlatformAndroid && perms['keyboard'] != false) {
-    v.add(TTextMenu(
-        child: Text(translate('Send clipboard keystrokes')),
-        onPressed: () async {
-          ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-          if (data != null && data.text != null) {
-            bind.sessionInputString(
-                sessionId: sessionId, value: data.text ?? "");
-          }
-        }));
-  }
-  // reset canvas
-  if (isMobile) {
-    v.add(TTextMenu(
-        child: Text(translate('Reset canvas')),
-        onPressed: () => ffi.cursorModel.reset()));
-  }
+      );
+    }
+    // paste
+    if (pi.platform != kPeerPlatformAndroid && perms['keyboard'] != false) {
+      v.add(TTextMenu(
+          child: Text(translate('Send clipboard keystrokes')),
+          onPressed: () async {
+            ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
+            if (data != null && data.text != null) {
+              bind.sessionInputString(
+                  sessionId: sessionId, value: data.text ?? "");
+            }
+          }));
+    }
+    // reset canvas
+    if (isMobile) {
+      v.add(TTextMenu(
+          child: Text(translate('Reset canvas')),
+          onPressed: () => ffi.cursorModel.reset()));
+    }
 
-  connectWithToken(
-      {bool isFileTransfer = false, bool isViewCamera = false, bool isTcpTunneling = false}) {
-    final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
-    connect(context, id,
-        isFileTransfer: isFileTransfer,
-        isViewCamera: isViewCamera,
-        isTcpTunneling: isTcpTunneling,
-        connToken: connToken);
-  }
+    connectWithToken(
+        {bool isFileTransfer = false, bool isViewCamera = false, bool isTcpTunneling = false}) {
+      final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
+      connect(context, id,
+          isFileTransfer: isFileTransfer,
+          isViewCamera: isViewCamera,
+          isTcpTunneling: isTcpTunneling,
+          connToken: connToken);
+    }
 
-  // transferFile
-  if (isDesktop) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Transfer file')),
+    // transferFile
+    if (isDesktop) {
+      v.add(
+        TTextMenu(
+            child: Text(translate('Transfer file')),
+            onPressed: () =>
+                connectWithToken(isFileTransfer: true)),
+      );
+    }
+    // viewCamera 
+    if (isDesktop) {
+      v.add(
+        TTextMenu(
+            child: Text(translate('View camera')),
+            onPressed: () =>
+                connectWithToken(isViewCamera: true)),
+      );
+    }
+    // tcpTunneling
+    if (isDesktop) {
+      v.add(
+        TTextMenu(
+            child: Text(translate('TCP tunneling')),
+            onPressed: () =>
+                connectWithToken(isTcpTunneling: true)),
+      );
+    }
+    // note
+    if (bind
+        .sessionGetAuditServerSync(sessionId: sessionId, typ: "conn")
+        .isNotEmpty) {
+      v.add(
+        TTextMenu(
+            child: Text(translate('Note')),
+            onPressed: () => showAuditDialog(ffi)),
+      );
+    }
+    // divider
+    if (isDesktop || isWebDesktop) {
+      v.add(TTextMenu(child: Offstage(), onPressed: () {}, divider: true));
+    }
+    // ctrlAltDel
+    if (!ffiModel.viewOnly &&
+        ffiModel.keyboard &&
+        (pi.platform == kPeerPlatformLinux || pi.sasEnabled)) {
+      v.add(
+        TTextMenu(
+            child: Text('${translate("Insert Ctrl + Alt + Del")}'),
+            onPressed: () => bind.sessionCtrlAltDel(sessionId: sessionId)),
+      );
+    }
+    // restart
+    if (perms['restart'] != false &&
+        (pi.platform == kPeerPlatformLinux ||
+            pi.platform == kPeerPlatformWindows ||
+            pi.platform == kPeerPlatformMacOS)) {
+      v.add(
+        TTextMenu(
+            child: Text(translate('Restart remote device')),
+            onPressed: () =>
+                showRestartRemoteDevice(pi, id, sessionId, ffi.dialogManager)),
+      );
+    }
+    // insertLock
+    if (!ffiModel.viewOnly && ffi.ffiModel.keyboard) {
+      v.add(
+        TTextMenu(
+            child: Text(translate('Insert Lock')),
+            onPressed: () => bind.sessionLockScreen(sessionId: sessionId)),
+      );
+    }
+    // blockUserInput
+    if (ffi.ffiModel.keyboard &&
+        ffi.ffiModel.permissions['block_input'] != false &&
+        pi.platform == kPeerPlatformWindows) // privacy-mode != true ??
+    {
+      v.add(TTextMenu(
+          child: Obx(() => Text(translate(
+              '${BlockInputState.find(id).value ? 'Unb' : 'B'}lock user input'))),
+          onPressed: () {
+            RxBool blockInput = BlockInputState.find(id);
+            bind.sessionToggleOption(
+                sessionId: sessionId,
+                value: '${blockInput.value ? 'un' : ''}block-input');
+            blockInput.value = !blockInput.value;
+          }));
+    }
+    // switchSides
+    if (isDesktop &&
+        ffiModel.keyboard &&
+        pi.platform != kPeerPlatformAndroid &&
+        pi.platform != kPeerPlatformMacOS &&
+        versionCmp(pi.version, '1.2.0') >= 0 &&
+        bind.peerGetDefaultSessionsCount(id: id) == 1) {
+      v.add(TTextMenu(
+          child: Text(translate('Switch Sides')),
           onPressed: () =>
-              connectWithToken(isFileTransfer: true)),
-    );
-  }
-  // viewCamera 
-  if (isDesktop) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('View camera')),
-          onPressed: () =>
-              connectWithToken(isViewCamera: true)),
-    );
-  }
-  // tcpTunneling
-  if (isDesktop) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('TCP tunneling')),
-          onPressed: () =>
-              connectWithToken(isTcpTunneling: true)),
-    );
-  }
-  // note
-  if (bind
-      .sessionGetAuditServerSync(sessionId: sessionId, typ: "conn")
-      .isNotEmpty) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Note')),
-          onPressed: () => showAuditDialog(ffi)),
-    );
-  }
-  // divider
-  if (isDesktop || isWebDesktop) {
-    v.add(TTextMenu(child: Offstage(), onPressed: () {}, divider: true));
-  }
-  // ctrlAltDel
-  if (!ffiModel.viewOnly &&
-      ffiModel.keyboard &&
-      (pi.platform == kPeerPlatformLinux || pi.sasEnabled)) {
-    v.add(
-      TTextMenu(
-          child: Text('${translate("Insert Ctrl + Alt + Del")}'),
-          onPressed: () => bind.sessionCtrlAltDel(sessionId: sessionId)),
-    );
-  }
-  // restart
-  if (perms['restart'] != false &&
-      (pi.platform == kPeerPlatformLinux ||
-          pi.platform == kPeerPlatformWindows ||
-          pi.platform == kPeerPlatformMacOS)) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Restart remote device')),
-          onPressed: () =>
-              showRestartRemoteDevice(pi, id, sessionId, ffi.dialogManager)),
-    );
-  }
-  // insertLock
-  if (!ffiModel.viewOnly && ffi.ffiModel.keyboard) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Insert Lock')),
-          onPressed: () => bind.sessionLockScreen(sessionId: sessionId)),
-    );
-  }
-  // blockUserInput
-  if (ffi.ffiModel.keyboard &&
-      ffi.ffiModel.permissions['block_input'] != false &&
-      pi.platform == kPeerPlatformWindows) // privacy-mode != true ??
-  {
-    v.add(TTextMenu(
-        child: Obx(() => Text(translate(
-            '${BlockInputState.find(id).value ? 'Unb' : 'B'}lock user input'))),
-        onPressed: () {
-          RxBool blockInput = BlockInputState.find(id);
-          bind.sessionToggleOption(
-              sessionId: sessionId,
-              value: '${blockInput.value ? 'un' : ''}block-input');
-          blockInput.value = !blockInput.value;
-        }));
-  }
-  // switchSides
-  if (isDesktop &&
-      ffiModel.keyboard &&
-      pi.platform != kPeerPlatformAndroid &&
-      pi.platform != kPeerPlatformMacOS &&
-      versionCmp(pi.version, '1.2.0') >= 0 &&
-      bind.peerGetDefaultSessionsCount(id: id) == 1) {
-    v.add(TTextMenu(
-        child: Text(translate('Switch Sides')),
-        onPressed: () =>
-            showConfirmSwitchSidesDialog(sessionId, id, ffi.dialogManager)));
+              showConfirmSwitchSidesDialog(sessionId, id, ffi.dialogManager)));
+    }
   }
   // refresh
   if (pi.version.isNotEmpty) {
@@ -557,64 +562,69 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         },
         child: Text(translate('Mute'))));
   }
-  // file copy and paste
-  // If the version is less than 1.2.4, file copy and paste is supported on Windows only.
-  final isSupportIfPeer_1_2_3 = versionCmp(pi.version, '1.2.4') < 0 &&
-      isWindows &&
-      pi.platform == kPeerPlatformWindows;
-  // If the version is 1.2.4 or later, file copy and paste is supported when kPlatformAdditionsHasFileClipboard is set.
-  final isSupportIfPeer_1_2_4 = versionCmp(pi.version, '1.2.4') >= 0 &&
-      bind.mainHasFileClipboard() &&
-      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard);
-  if (ffiModel.keyboard &&
-      perms['file'] != false &&
-      (isSupportIfPeer_1_2_3 || isSupportIfPeer_1_2_4)) {
-    final enabled = !ffiModel.viewOnly;
-    final value = bind.sessionGetToggleOptionSync(
-        sessionId: sessionId, arg: kOptionEnableFileCopyPaste);
-    v.add(TToggleMenu(
-        value: value,
-        onChanged: enabled
-            ? (value) {
-                if (value == null) return;
-                bind.sessionToggleOption(
-                    sessionId: sessionId, value: kOptionEnableFileCopyPaste);
-              }
-            : null,
-        child: Text(translate('Enable file copy and paste'))));
-  }
-  // disable clipboard
-  if (ffiModel.keyboard && perms['clipboard'] != false) {
-    final enabled = !ffiModel.viewOnly;
-    final option = 'disable-clipboard';
-    var value =
-        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
-    if (ffiModel.viewOnly) value = true;
-    v.add(TToggleMenu(
-        value: value,
-        onChanged: enabled
-            ? (value) {
-                if (value == null) return;
-                bind.sessionToggleOption(sessionId: sessionId, value: option);
-              }
-            : null,
-        child: Text(translate('Disable clipboard'))));
-  }
-  // lock after session end
-  if (ffiModel.keyboard && !ffiModel.isPeerAndroid) {
-    final enabled = !ffiModel.viewOnly;
-    final option = 'lock-after-session-end';
-    final value =
-        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
-    v.add(TToggleMenu(
-        value: value,
-        onChanged: enabled
-            ? (value) {
-                if (value == null) return;
-                bind.sessionToggleOption(sessionId: sessionId, value: option);
-              }
-            : null,
-        child: Text(translate('Lock after session end'))));
+
+  // Only show these options when viewing remote desktop.
+  // Camera page doesn't need them.
+  if (ffi.connType == ConnType.defaultConn) {
+    // file copy and paste
+    // If the version is less than 1.2.4, file copy and paste is supported on Windows only.
+    final isSupportIfPeer_1_2_3 = versionCmp(pi.version, '1.2.4') < 0 &&
+        isWindows &&
+        pi.platform == kPeerPlatformWindows;
+    // If the version is 1.2.4 or later, file copy and paste is supported when kPlatformAdditionsHasFileClipboard is set.
+    final isSupportIfPeer_1_2_4 = versionCmp(pi.version, '1.2.4') >= 0 &&
+        bind.mainHasFileClipboard() &&
+        pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard);
+    if (ffiModel.keyboard &&
+        perms['file'] != false &&
+        (isSupportIfPeer_1_2_3 || isSupportIfPeer_1_2_4)) {
+      final enabled = !ffiModel.viewOnly;
+      final value = bind.sessionGetToggleOptionSync(
+          sessionId: sessionId, arg: kOptionEnableFileCopyPaste);
+      v.add(TToggleMenu(
+          value: value,
+          onChanged: enabled
+              ? (value) {
+                  if (value == null) return;
+                  bind.sessionToggleOption(
+                      sessionId: sessionId, value: kOptionEnableFileCopyPaste);
+                }
+              : null,
+          child: Text(translate('Enable file copy and paste'))));
+    }
+    // disable clipboard
+    if (ffiModel.keyboard && perms['clipboard'] != false) {
+      final enabled = !ffiModel.viewOnly;
+      final option = 'disable-clipboard';
+      var value =
+          bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+      if (ffiModel.viewOnly) value = true;
+      v.add(TToggleMenu(
+          value: value,
+          onChanged: enabled
+              ? (value) {
+                  if (value == null) return;
+                  bind.sessionToggleOption(sessionId: sessionId, value: option);
+                }
+              : null,
+          child: Text(translate('Disable clipboard'))));
+    }
+    // lock after session end
+    if (ffiModel.keyboard && !ffiModel.isPeerAndroid) {
+      final enabled = !ffiModel.viewOnly;
+      final option = 'lock-after-session-end';
+      final value =
+          bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+      v.add(TToggleMenu(
+          value: value,
+          onChanged: enabled
+              ? (value) {
+                  if (value == null) return;
+                  bind.sessionToggleOption(sessionId: sessionId, value: option);
+                }
+              : null,
+          child: Text(translate('Lock after session end'))));
+    }
   }
 
   if (pi.isSupportMultiDisplay &&
