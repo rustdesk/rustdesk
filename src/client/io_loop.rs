@@ -1232,7 +1232,9 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.handle_peer_info(pi);
                         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
                         self.check_clipboard_file_context();
-                        if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
+                        if !(self.handler.is_file_transfer()
+                            || self.handler.is_port_forward()
+                            || self.handler.is_view_camera()) {
                             #[cfg(feature = "flutter")]
                             #[cfg(not(target_os = "ios"))]
                             let rx = Client::try_start_clipboard(None);
