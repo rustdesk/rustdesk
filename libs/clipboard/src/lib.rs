@@ -1,6 +1,9 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex, RwLock},
+};
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use hbb_common::ResultType;
 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
 use hbb_common::{allow_err, log};
@@ -11,13 +14,20 @@ use hbb_common::{
         Mutex as TokioMutex,
     },
 };
+use platform::unix::FileDescription;
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[cfg(target_os = "windows")]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "macos", feature = "unix-file-copy-paste")
+))]
 pub mod context_send;
 pub mod platform;
-#[cfg(target_os = "windows")]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "macos", feature = "unix-file-copy-paste")
+))]
 pub use context_send::*;
 
 #[cfg(target_os = "windows")]
@@ -27,7 +37,10 @@ const ERR_CODE_INVALID_PARAMETER: u32 = 0x00000002;
 #[cfg(target_os = "windows")]
 const ERR_CODE_SEND_MSG: u32 = 0x00000003;
 
-#[cfg(target_os = "windows")]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "macos", feature = "unix-file-copy-paste")
+))]
 pub(crate) use platform::create_cliprdr_context;
 
 // to-do: This trait may be removed, because unix file copy paste does not need it.
@@ -110,6 +123,14 @@ pub enum ClipboardFile {
         requested_data: Vec<u8>,
     },
     TryEmpty,
+    #[cfg(target_os = "macos")]
+    FileTransferJobs {
+        // The directory where the files are to be saved.
+        target_dir: PathBuf,
+        // The relative root directory where the files are copied from.
+        from_dir: PathBuf,
+        files: Vec<FileDescription>,
+    },
 }
 
 struct MsgChannel {

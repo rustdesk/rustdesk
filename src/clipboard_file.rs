@@ -143,6 +143,11 @@ pub fn clip_2_msg(clip: ClipboardFile) -> Message {
             })),
             ..Default::default()
         },
+        #[cfg(target_os = "macos")]
+        ClipboardFile::FileTransferJobs { .. } => {
+            // This type is not use for message, this block is only for compilation
+            Message::default()
+        }
     }
 }
 

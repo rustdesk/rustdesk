@@ -75,6 +75,24 @@ pub fn check_clipboard(
     None
 }
 
+#[cfg(all(feature = "unix-file-copy-paste", target_os = "macos"))]
+pub fn is_file_url_set_by_rustdesk(url: &Vec<String>) -> bool {
+    if url.len() != 1 {
+        return false;
+    }
+    url.iter()
+        .next()
+        .map(|s| {
+            for prefix in &["file:///tmp/.rustdesk_", "//tmp/.rustdesk_"] {
+                if s.starts_with(prefix) {
+                    return s[prefix.len()..].parse::<uuid::Uuid>().is_ok();
+                }
+            }
+            false
+        })
+        .unwrap_or(false)
+}
+
 #[cfg(feature = "unix-file-copy-paste")]
 pub fn check_clipboard_files(
     ctx: &mut Option<ClipboardContext>,

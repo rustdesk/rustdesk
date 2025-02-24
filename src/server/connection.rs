@@ -2195,11 +2195,38 @@ impl Connection {
                         }
                         #[cfg(feature = "unix-file-copy-paste")]
                         if crate::is_support_file_copy_paste(&self.lr.version) {
-                            if let Some(msg) = unix_file_clip::serve_clip_messages(
-                                ClipboardSide::Host,
-                                clip,
-                                self.inner.id(),
-                            ) {
+                            let mut out_msg = None;
+
+                            #[cfg(target_os = "macos")]
+                            if clipboard::platform::unix::macos::should_handle_msg(&clip) {
+                                if let Err(e) = clipboard::ContextSend::make_sure_enabled() {
+                                    log::error!("failed to restart clipboard context: {}", e);
+                                } else {
+                                    let _ =
+                                        clipboard::ContextSend::proc(|context| -> ResultType<()> {
+                                            context
+                                                .server_clip_file(self.inner.id(), clip)
+                                                .map_err(|e| e.into())
+                                        });
+                                }
+                            } else {
+                                out_msg = unix_file_clip::serve_clip_messages(
+                                    ClipboardSide::Host,
+                                    clip,
+                                    self.inner.id(),
+                                );
+                            }
+
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                out_msg = unix_file_clip::serve_clip_messages(
+                                    ClipboardSide::Host,
+                                    clip,
+                                    self.inner.id(),
+                                );
+                            }
+
+                            if let Some(msg) = out_msg {
                                 self.send(msg).await;
                             }
                         }
@@ -3437,6 +3464,11 @@ impl Connection {
     #[cfg(feature = "unix-file-copy-paste")]
     async fn handle_file_clip(&mut self, clip: clipboard::ClipboardFile) {
         let is_stopping_allowed = clip.is_stopping_allowed();
+        #[cfg(target_os = "macos")]
+        let is_file_transfer_jobs =
+            matches!(&clip, clipboard::ClipboardFile::FileTransferJobs { .. });
+        #[cfg(target_os = "macos")]
+        let is_stopping_allowed = is_stopping_allowed || is_file_transfer_jobs;
         let is_keyboard_enabled = self.peer_keyboard_enabled();
         let file_transfer_enabled = self.file_transfer_enabled();
         let stop = is_stopping_allowed && !file_transfer_enabled;
@@ -3453,13 +3485,78 @@ impl Connection {
             {
                 // If one way file transfer is enabled, don't send clipboard file to client
             } else {
-                // Maybe we should end the connection, because copy&paste files causes everything to wait.
+                #[cfg(target_os = "macos")]
+                if is_file_transfer_jobs {
+                    self.handle_file_clip_transfer_jobs(clip).await;
+                    return;
+                }
+
+                // Maybe we should end the connection if failed to send the message,
+                // because copy&paste files causes everything to wait.
                 allow_err!(
                     self.stream
                         .send(&crate::clipboard_file::clip_2_msg(clip))
                         .await
                 );
             }
+        }
+    }
+
+    #[cfg(all(feature = "unix-file-copy-paste", target_os = "macos"))]
+    async fn handle_file_clip_transfer_jobs(&mut self, clip: clipboard::ClipboardFile) {
+        if let clipboard::ClipboardFile::FileTransferJobs {
+            target_dir,
+            from_dir,
+            files,
+        } = clip
+        {
+            use clipboard::platform::unix;
+
+            let total_size = files.iter().map(|f| f.size).sum();
+            let files = files
+                .iter()
+                .map(|f| FileEntry {
+                    entry_type: match f.kind {
+                        unix::FileType::File => FileType::File,
+                        unix::FileType::Directory => FileType::Dir,
+                        // to-do: FileLink or DirLink?
+                        unix::FileType::Symlink => FileType::FileLink,
+                    }
+                    .into(),
+                    name: f.name.to_string_lossy().to_string(),
+                    is_hidden: false,
+                    size: f.size,
+                    modified_time: f
+                        .last_modified
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                    ..Default::default()
+                })
+                .collect::<Vec<_>>();
+
+            let file_num = files.len() as _;
+            let receive = FileTransferReceiveRequest {
+                id: 0,
+                path: target_dir.to_string_lossy().to_string(),
+                files,
+                total_size,
+                file_num,
+                is_copy_paste: true,
+                ..Default::default()
+            };
+            let msg_out = Message {
+                union: Some(message::Union::Cliprdr(Cliprdr {
+                    union: Some(cliprdr::Union::Receive(CliprdrReceiveFiles {
+                        receive: Some(receive).into(),
+                        from_dir: from_dir.to_string_lossy().to_string(),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            };
+            allow_err!(self.stream.send(&msg_out).await);
         }
     }
 
