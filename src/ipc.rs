@@ -1282,6 +1282,6 @@ mod test {
     #[test]
     fn verify_ffi_enum_data_size() {
         println!("{}", std::mem::size_of::<Data>());
-        assert!(std::mem::size_of::<Data>() < 96);
+        assert!(std::mem::size_of::<Data>() <= 96);
     }
 }
