@@ -506,63 +506,79 @@ class _ConnectionPageState extends State<ConnectionPage>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ElevatedButton(
-                    onPressed: () {
-                      if (selectedConnectionType == 'Transfer file') {
-                        onConnect(isFileTransfer: true);
-                      } else if (selectedConnectionType == 'View camera') {
-                        onConnect(isViewCamera: true);
-                      } else {
-                        onConnect();
-                      }
-                    },
-                    child: Text(translate(selectedConnectionType)), // Show current selection
-                  ),
-                  MenuAnchor(
-                    builder: (context, controller, builder) {
-                      return IconButton(
-                        visualDensity: VisualDensity.compact,
-                        icon: controller.isOpen ? const Icon(Icons.arrow_drop_up) : const Icon(Icons.arrow_drop_down),
-                        onPressed: () {
-                          setState(() {
-                            if (controller.isOpen) {
-                              controller.close();
-                            } else {
-                              controller.open();
-                            }
-                          });
-                        },
-                      );
-                    },
-                    menuChildren: <Widget>[
-                      MenuItemButton(
-                        onPressed: () {
-                          setState(() {
-                            selectedConnectionType = 'Connect';
-                          });
-                          onConnect();
-                        },
-                        child: Text(translate('Connect')),
-                      ),
-                      MenuItemButton(
-                        onPressed: () {
-                          setState(() {
-                            selectedConnectionType = 'Transfer file';
-                          });
+                  SizedBox(
+                    height: 28.0,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (selectedConnectionType == 'Transfer file') {
                           onConnect(isFileTransfer: true);
-                        },
-                        child: Text(translate('Transfer file')),
-                      ),
-                      MenuItemButton(
-                        onPressed: () {
-                          setState(() {
-                            selectedConnectionType = 'View camera';
-                          });
+                        } else if (selectedConnectionType == 'View camera') {
                           onConnect(isViewCamera: true);
+                        } else {
+                          onConnect();
+                        }
+                      },
+                      child: Text(translate(selectedConnectionType)), // Show current selection
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Container(
+                    height: 28.0,
+                    width: 28.0,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: MenuAnchor(
+                        builder: (context, controller, builder) {
+                          return IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: BoxConstraints(),
+                            visualDensity: VisualDensity.compact,
+                            icon: controller.isOpen ? const Icon(Icons.keyboard_arrow_up) : const Icon(Icons.keyboard_arrow_down),
+                            onPressed: () {
+                              setState(() {
+                                if (controller.isOpen) {
+                                  controller.close();
+                                } else {
+                                  controller.open();
+                                }
+                              });
+                            },
+                          );
                         },
-                        child: Text(translate('View camera')),
+                        menuChildren: <Widget>[
+                          MenuItemButton(
+                            onPressed: () {
+                              setState(() {
+                                selectedConnectionType = 'Connect';
+                              });
+                              onConnect();
+                            },
+                            child: Text(translate('Connect')),
+                          ),
+                          MenuItemButton(
+                            onPressed: () {
+                              setState(() {
+                                selectedConnectionType = 'Transfer file';
+                              });
+                              onConnect(isFileTransfer: true);
+                            },
+                            child: Text(translate('Transfer file')),
+                          ),
+                          MenuItemButton(
+                            onPressed: () {
+                              setState(() {
+                                selectedConnectionType = 'View camera';
+                              });
+                              onConnect(isViewCamera: true);
+                            },
+                            child: Text(translate('View camera')),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ]
               ),
