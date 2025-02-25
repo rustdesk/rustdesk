@@ -1,4 +1,4 @@
-use super::pasteboard_context::PasteTaskInfo;
+use super::pasteboard_context::PasteObserverInfo;
 use fsevent::{self, StreamFlags};
 use hbb_common::{bail, log, ResultType};
 use std::{
@@ -23,7 +23,7 @@ struct FseventThreadInfo {
 
 pub struct PasteObserver {
     exit: Arc<Mutex<bool>>,
-    task_info: Arc<Mutex<Option<PasteTaskInfo>>>,
+    observer_info: Arc<Mutex<Option<PasteObserverInfo>>>,
     tx_handle_fsevent_thread: Option<FseventThreadInfo>,
     handle_observer_thread: Option<thread::JoinHandle<()>>,
 }
@@ -47,13 +47,13 @@ impl PasteObserver {
     pub fn new() -> Self {
         Self {
             exit: Arc::new(Mutex::new(false)),
-            task_info: Default::default(),
+            observer_info: Default::default(),
             tx_handle_fsevent_thread: None,
             handle_observer_thread: None,
         }
     }
 
-    pub fn init(&mut self, cb_pasted: fn(&PasteTaskInfo) -> ()) -> ResultType<()> {
+    pub fn init(&mut self, cb_pasted: fn(&PasteObserverInfo) -> ()) -> ResultType<()> {
         let Some(home_dir) = dirs::home_dir() else {
             bail!("No home dir is set, do not observe.");
         };
@@ -61,7 +61,7 @@ impl PasteObserver {
         let (tx_observer, rx_observer) = channel::<fsevent::Event>();
         let handle_observer = Self::init_thread_observer(
             self.exit.clone(),
-            self.task_info.clone(),
+            self.observer_info.clone(),
             rx_observer,
             cb_pasted,
         );
@@ -90,9 +90,9 @@ impl PasteObserver {
 
     fn init_thread_observer(
         exit: Arc<Mutex<bool>>,
-        task_info: Arc<Mutex<Option<PasteTaskInfo>>>,
+        observer_info: Arc<Mutex<Option<PasteObserverInfo>>>,
         rx_observer: Receiver<fsevent::Event>,
-        cb_pasted: fn(&PasteTaskInfo) -> (),
+        cb_pasted: fn(&PasteObserverInfo) -> (),
     ) -> thread::JoinHandle<()> {
         thread::spawn(move || loop {
             match rx_observer.recv_timeout(Duration::from_millis(300)) {
@@ -101,7 +101,7 @@ impl PasteObserver {
                         && (event.flag & StreamFlags::ITEM_REMOVED) == StreamFlags::NONE
                         && (event.flag & StreamFlags::IS_FILE) != StreamFlags::NONE
                     {
-                        let source_file = task_info
+                        let source_file = observer_info
                             .lock()
                             .unwrap()
                             .as_ref()
@@ -109,9 +109,10 @@ impl PasteObserver {
                         if let Some(source_file) = source_file {
                             let file = Self::get_file_from_path(&event.path);
                             if source_file == file {
-                                if let Some(task_info) = task_info.lock().unwrap().as_mut() {
-                                    task_info.target_path = event.path.clone();
-                                    cb_pasted(task_info);
+                                if let Some(observer_info) = observer_info.lock().unwrap().as_mut()
+                                {
+                                    observer_info.target_path = event.path.clone();
+                                    cb_pasted(observer_info);
                                 }
                             }
                         }
@@ -162,16 +163,16 @@ impl PasteObserver {
         })
     }
 
-    pub fn start(&mut self, task_info: PasteTaskInfo) {
+    pub fn start(&mut self, observer_info: PasteObserverInfo) {
         if let Some(tx_handle_fsevent_thread) = self.tx_handle_fsevent_thread.as_ref() {
-            self.task_info.lock().unwrap().replace(task_info);
+            self.observer_info.lock().unwrap().replace(observer_info);
             tx_handle_fsevent_thread.tx.send(FseventControl::Start).ok();
         }
     }
 
     pub fn stop(&mut self) {
         if let Some(tx_handle_fsevent_thread) = &self.tx_handle_fsevent_thread {
-            self.task_info = Default::default();
+            self.observer_info = Default::default();
             tx_handle_fsevent_thread.tx.send(FseventControl::Stop).ok();
         }
     }

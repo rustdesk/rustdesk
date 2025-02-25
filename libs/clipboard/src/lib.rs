@@ -123,14 +123,6 @@ pub enum ClipboardFile {
         requested_data: Vec<u8>,
     },
     TryEmpty,
-    #[cfg(target_os = "macos")]
-    FileTransferJobs {
-        // The directory where the files are to be saved.
-        target_dir: PathBuf,
-        // The relative root directory where the files are copied from.
-        from_dir: PathBuf,
-        files: Vec<FileDescription>,
-    },
 }
 
 struct MsgChannel {

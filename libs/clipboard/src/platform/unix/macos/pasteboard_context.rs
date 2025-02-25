@@ -23,18 +23,18 @@ use std::{
 };
 
 lazy_static::lazy_static! {
-    static ref PASTE_TASK_INFO: Arc<Mutex<Option<PasteTaskInfo>>> = Default::default();
+    static ref PASTE_OBSERVER_INFO: Arc<Mutex<Option<PasteObserverInfo>>> = Default::default();
 }
 
 #[derive(Default, Debug, Clone, PartialEq)]
-pub(super) struct PasteTaskInfo {
+pub(super) struct PasteObserverInfo {
     pub file_descriptor_id: i32,
     pub conn_id: i32,
     pub source_path: String,
     pub target_path: String,
 }
 
-impl PasteTaskInfo {
+impl PasteObserverInfo {
     fn exit_msg() -> Self {
         Self::default()
     }
@@ -45,7 +45,7 @@ impl PasteTaskInfo {
 }
 
 struct ContextInfo {
-    tx: Sender<io::Result<PasteTaskInfo>>,
+    tx: Sender<io::Result<PasteObserverInfo>>,
     handle: thread::JoinHandle<()>,
 }
 
@@ -63,7 +63,7 @@ impl Drop for PasteboardContext {
     fn drop(&mut self) {
         self.observer.lock().unwrap().stop();
         if let Some(tx_handle) = self.tx_handle.take() {
-            if tx_handle.tx.send(Ok(PasteTaskInfo::exit_msg())).is_ok() {
+            if tx_handle.tx.send(Ok(PasteObserverInfo::exit_msg())).is_ok() {
                 tx_handle.handle.join().ok();
             }
         }
@@ -98,10 +98,10 @@ impl PasteboardContext {
 
     fn init_thread_paste_task(
         tx_remove_file: Sender<String>,
-        rx: Receiver<io::Result<PasteTaskInfo>>,
+        rx: Receiver<io::Result<PasteObserverInfo>>,
         observer: Arc<Mutex<PasteObserver>>,
     ) -> thread::JoinHandle<()> {
-        let exit_msg = PasteTaskInfo::exit_msg();
+        let exit_msg = PasteObserverInfo::exit_msg();
         thread::spawn(move || loop {
             match rx.recv() {
                 Ok(Ok(task_info)) => {
@@ -155,8 +155,8 @@ impl PasteboardContext {
     fn server_clip_file_(&mut self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
         match msg {
             ClipboardFile::FormatList { format_list } => {
-                let task_lock = PASTE_TASK_INFO.lock().unwrap();
-                if task_lock
+                let observer_lock = PASTE_OBSERVER_INFO.lock().unwrap();
+                if observer_lock
                     .as_ref()
                     .map(|task| task.is_in_pasting())
                     .unwrap_or(false)
@@ -214,7 +214,7 @@ impl PasteboardContext {
 
             let tx = tx_handle.tx.clone();
             let provider = create_pasteboard_file_url_provider(
-                PasteTaskInfo {
+                PasteObserverInfo {
                     file_descriptor_id,
                     conn_id,
                     source_path: "".to_string(),
@@ -257,8 +257,8 @@ impl PasteboardContext {
             // return failure message?
         }
 
-        let mut task_lock = PASTE_TASK_INFO.lock().unwrap();
-        let target_dir = task_lock
+        let mut observer_lock = PASTE_OBSERVER_INFO.lock().unwrap();
+        let target_dir = observer_lock
             .as_ref()
             .map(|task| Path::new(&task.target_path).parent())
             .flatten();
@@ -277,46 +277,16 @@ impl PasteboardContext {
         let target_dir = target_dir.to_owned();
         match FileDescription::parse_file_descriptors(format_data, conn_id) {
             Ok(files) => {
-                let mut from_dir: Option<PathBuf> = None;
-                for file in files.iter() {
-                    if let Some(parent) = file.name.parent() {
-                        if let Some(temp_root) = from_dir.as_ref() {
-                            if temp_root.starts_with(parent) {
-                                from_dir = Some(parent.to_owned());
-                            }
-                        } else {
-                            from_dir = Some(parent.to_owned());
-                        }
-                    }
-                }
-                let Some(from_dir) = from_dir else {
-                    task_lock.replace(PasteTaskInfo::default());
-                    return Err(CliprdrError::CommonError {
-                        description: "failed to get relative root directory".to_string(),
-                    });
-                };
-
-                if let Err(e) = send_data(
-                    conn_id,
-                    ClipboardFile::FileTransferJobs {
-                        target_dir,
-                        from_dir,
-                        files,
-                    },
-                ) {
-                    log::error!("failed to send file transfer jobs: {e}");
-                    task_lock.replace(PasteTaskInfo::default());
-                }
+                // start a new works thread to handle file pasting
                 Ok(())
             }
             Err(e) => {
-                task_lock.replace(PasteTaskInfo::default());
+                observer_lock.replace(PasteObserverInfo::default());
                 Err(e)
             }
         }
     }
 
-    // This function is unreachable, we use the common file transfer jobs instead(see message.proto).
     fn handle_file_contents_response(
         &self,
         _conn_id: i32,
@@ -339,7 +309,7 @@ impl PasteboardContext {
     }
 }
 
-fn handle_paste_result(task_info: &PasteTaskInfo) {
+fn handle_paste_result(task_info: &PasteObserverInfo) {
     log::info!(
         "file {} is pasted to {}",
         &task_info.source_path,
@@ -353,8 +323,11 @@ fn handle_paste_result(task_info: &PasteTaskInfo) {
         return;
     }
 
-    PASTE_TASK_INFO.lock().unwrap().replace(task_info.clone());
-    // to-do: add a timeout to clear data in `PASTE_TASK_INFO`.
+    PASTE_OBSERVER_INFO
+        .lock()
+        .unwrap()
+        .replace(task_info.clone());
+    // to-do: add a timeout to clear data in `PASTE_OBSERVER_INFO`.
     std::fs::remove_file(&task_info.source_path).ok();
     std::fs::remove_file(&task_info.target_path).ok();
     let data = ClipboardFile::FormatDataRequest {

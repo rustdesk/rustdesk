@@ -42,8 +42,6 @@ use hbb_common::{
 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use scrap::CodecFormat;
-#[cfg(not(target_os = "ios"))]
-use std::path::{Path, PathBuf};
 use std::{
     collections::HashMap,
     ffi::c_void,
@@ -344,7 +342,7 @@ impl<T: InvokeUiSession> Remote<T> {
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     async fn handle_local_clipboard_msg(
-        &mut self,
+        &self,
         peer: &mut crate::client::FramedStream,
         msg: Option<clipboard::ClipboardFile>,
     ) {
@@ -359,10 +357,6 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 _ => {
                     let is_stopping_allowed = clip.is_stopping_allowed();
-                    #[cfg(target_os = "macos")]
-                    let is_file_transfer_jobs =
-                        matches!(&clip, clipboard::ClipboardFile::FileTransferJobs { .. });
-                    let is_stopping_allowed = is_stopping_allowed || is_file_transfer_jobs;
                     let server_file_transfer_enabled =
                         *self.handler.server_file_transfer_enabled.read().unwrap();
                     let file_transfer_enabled =
@@ -387,13 +381,6 @@ impl<T: InvokeUiSession> Remote<T> {
                             log::error!("failed to restart clipboard context: {}", e);
                             // to-do: Show msgbox with "Don't show again" option
                         };
-                        #[cfg(target_os = "macos")]
-                        if is_file_transfer_jobs {
-                            self.start_file_transfer_jobs_for_file_clip(peer, clip)
-                                .await;
-                            return;
-                        }
-
                         log::debug!("Send system clipboard message to remote");
                         let msg = crate::clipboard_file::clip_2_msg(clip);
                         allow_err!(peer.send(&msg).await);
@@ -402,55 +389,6 @@ impl<T: InvokeUiSession> Remote<T> {
             },
             None => {
                 // unreachable!()
-            }
-        }
-    }
-
-    #[cfg(all(feature = "unix-file-copy-paste", target_os = "macos"))]
-    async fn start_file_transfer_jobs_for_file_clip(
-        &mut self,
-        peer: &mut crate::client::FramedStream,
-        clip: clipboard::ClipboardFile,
-    ) {
-        #[inline]
-        fn get_top_level_name(path: String) -> String {
-            let first_slash = path.find('/').or_else(|| path.find('\\'));
-            match first_slash {
-                Some(index) => path[..index].to_string(),
-                None => path,
-            }
-        }
-
-        if let clipboard::ClipboardFile::FileTransferJobs {
-            target_dir,
-            from_dir,
-            files,
-        } = clip
-        {
-            let mut file_paths = HashMap::new();
-            for file in files.iter() {
-                // get the top path(file or dir) relative to the root
-                if let Ok(p) = file.name.strip_prefix(&from_dir) {
-                    let path = get_top_level_name(p.to_string_lossy().to_string());
-                    let file_num = *file_paths.get(&path).unwrap_or(&0);
-                    file_paths.insert(path, file_num + 1);
-                }
-            }
-            let mut id = 0;
-            for (path, file_num) in file_paths {
-                self.handle_send_files(
-                    peer,
-                    id,
-                    None,
-                    path,
-                    target_dir.to_string_lossy().to_string(),
-                    file_num,
-                    true,
-                    true,
-                    true,
-                )
-                .await;
-                id += 1;
             }
         }
     }
@@ -605,18 +543,71 @@ impl<T: InvokeUiSession> Remote<T> {
                 allow_err!(peer.send(&msg).await);
             }
             Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
-                self.handle_send_files(
-                    peer,
-                    id,
-                    None,
-                    path,
-                    to,
-                    file_num,
-                    include_hidden,
-                    is_remote,
-                    false,
-                )
-                .await;
+                log::info!("send files, is remote {}", is_remote);
+                let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
+                if is_remote {
+                    log::debug!("New job {}, write to {} from remote {}", id, to, path);
+                    self.write_jobs.push(fs::TransferJob::new_write(
+                        id,
+                        path.clone(),
+                        to,
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        Vec::new(),
+                        od,
+                    ));
+                    allow_err!(
+                        peer.send(&fs::new_send(id, path, file_num, include_hidden))
+                            .await
+                    );
+                } else {
+                    match fs::TransferJob::new_read(
+                        id,
+                        to.clone(),
+                        path.clone(),
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        od,
+                    ) {
+                        Err(err) => {
+                            self.handle_job_status(id, -1, Some(err.to_string()));
+                        }
+                        Ok(job) => {
+                            log::debug!(
+                                "New job {}, read {} to remote {}, {} files",
+                                id,
+                                path,
+                                to,
+                                job.files().len()
+                            );
+                            self.handler.update_folder_files(
+                                job.id(),
+                                job.files(),
+                                path,
+                                !is_remote,
+                                true,
+                            );
+                            #[cfg(not(windows))]
+                            let files = job.files().clone();
+                            #[cfg(windows)]
+                            let mut files = job.files().clone();
+                            #[cfg(windows)]
+                            if self.handler.peer_platform() != "Windows" {
+                                // peer is not windows, need transform \ to /
+                                fs::transform_windows_path(&mut files);
+                            }
+                            let total_size = job.total_size();
+                            self.read_jobs.push(job);
+                            self.timer = crate::rustdesk_interval(time::interval(MILLI1));
+                            allow_err!(
+                                peer.send(&fs::new_receive(id, to, file_num, files, total_size))
+                                    .await
+                            );
+                        }
+                    }
+                }
             }
             Data::AddJob((id, path, to, file_num, include_hidden, is_remote)) => {
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
@@ -683,8 +674,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 id,
                                 job.remote.clone(),
                                 job.file_num,
-                                job.show_hidden,
-                                false
+                                job.show_hidden
                             ))
                             .await
                         );
@@ -699,7 +689,6 @@ impl<T: InvokeUiSession> Remote<T> {
                                 job.file_num,
                                 job.files.clone(),
                                 job.total_size(),
-                                false,
                             ))
                             .await
                         );
@@ -950,99 +939,6 @@ impl<T: InvokeUiSession> Remote<T> {
             _ => {}
         }
         true
-    }
-
-    async fn handle_send_files(
-        &mut self,
-        peer: &mut Stream,
-        id: i32,
-        read_job: Option<fs::TransferJob>,
-        path: String,
-        to: String,
-        file_num: i32,
-        include_hidden: bool,
-        is_remote: bool,
-        is_copy_paste: bool,
-    ) {
-        log::info!("send files, is remote {}", is_remote);
-        println!("REMOVE ME ========================== send files, id: {}, path: {}, to: {}, file_num: {}, include_hidden: {}, is_remote: {}, is_copy_paste: {}", id, &path, &to, file_num, include_hidden, is_remote, is_copy_paste);
-        let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
-        if is_remote {
-            log::debug!("New job {}, write to {} from remote {}", id, to, path);
-            self.write_jobs.push(fs::TransferJob::new_write(
-                id,
-                path.clone(),
-                to,
-                file_num,
-                include_hidden,
-                is_remote,
-                Vec::new(),
-                od,
-            ));
-            allow_err!(
-                peer.send(&fs::new_send(
-                    id,
-                    path,
-                    file_num,
-                    include_hidden,
-                    is_copy_paste
-                ))
-                .await
-            );
-        } else {
-            let job = match read_job {
-                Some(job) => job,
-                None => match fs::TransferJob::new_read(
-                    id,
-                    to.clone(),
-                    path.clone(),
-                    file_num,
-                    include_hidden,
-                    is_remote,
-                    od,
-                ) {
-                    Err(err) => {
-                        self.handle_job_status(id, -1, Some(err.to_string()));
-                        return;
-                    }
-                    Ok(job) => job,
-                },
-            };
-            log::debug!(
-                "New job {}, read {} to remote {}, {} files",
-                id,
-                path,
-                to,
-                job.files().len()
-            );
-            if !is_copy_paste {
-                self.handler
-                    .update_folder_files(job.id(), job.files(), path, !is_remote, true);
-            }
-            #[cfg(not(windows))]
-            let files = job.files().clone();
-            #[cfg(windows)]
-            let mut files = job.files().clone();
-            #[cfg(windows)]
-            if self.handler.peer_platform() != "Windows" {
-                // peer is not windows, need transform \ to /
-                fs::transform_windows_path(&mut files);
-            }
-            let total_size = job.total_size();
-            self.read_jobs.push(job);
-            self.timer = crate::rustdesk_interval(time::interval(MILLI1));
-            allow_err!(
-                peer.send(&fs::new_receive(
-                    id,
-                    to,
-                    file_num,
-                    files,
-                    total_size,
-                    is_copy_paste
-                ))
-                .await
-            );
-        }
     }
 
     #[inline]
@@ -1468,10 +1364,6 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Digest(digest)) => {
-                            println!(
-                                "REMOVE ME ========================== file response digest: {:?}",
-                                digest
-                            );
                             if digest.is_upload {
                                 if let Some(job) = fs::get_job(digest.id, &mut self.read_jobs) {
                                     if let Some(file) = job.files().get(digest.file_num as usize) {
@@ -1568,7 +1460,6 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Block(block)) => {
-                            println!("REMOVE ME ========================== file response block");
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                                 if let Err(_err) = job.write(block).await {
                                     // to-do: add "skip" for writing job
@@ -2082,11 +1973,6 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
 
-        if let Some(hbb_common::message_proto::cliprdr::Union::Receive(..)) = &clip.union {
-            self.handle_cliprdr_transfer_file_receive(peer, clip).await;
-            return;
-        }
-
         let Some(clip) = crate::clipboard_file::msg_2_clip(clip) else {
             log::warn!("failed to decode cliprdr msg from server peer");
             return;
@@ -2145,42 +2031,6 @@ impl<T: InvokeUiSession> Remote<T> {
                 if let Some(msg) = out_msg {
                     allow_err!(peer.send(&msg).await);
                 }
-            }
-        }
-    }
-
-    #[inline]
-    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
-    async fn handle_cliprdr_transfer_file_receive(
-        &mut self,
-        peer: &mut Stream,
-        clip: hbb_common::message_proto::Cliprdr,
-    ) {
-        if let Some(hbb_common::message_proto::cliprdr::Union::Receive(receive)) = clip.union {
-            if let Some(recv) = receive.receive.into_option() {
-                let job = fs::TransferJob::new_read_with_files(
-                    recv.id,
-                    recv.path.clone(),
-                    receive.from_dir.clone(),
-                    recv.files,
-                    recv.file_num,
-                    recv.total_size,
-                    true,
-                    false,
-                    true,
-                );
-                self.handle_send_files(
-                    peer,
-                    recv.id,
-                    Some(job),
-                    receive.from_dir.clone(),
-                    recv.path,
-                    recv.file_num,
-                    true,
-                    false,
-                    true,
-                )
-                .await;
             }
         }
     }

@@ -1,4 +1,4 @@
-use super::pasteboard_context::PasteTaskInfo;
+use super::pasteboard_context::PasteObserverInfo;
 use objc2::{
     declare_class, msg_send_id, mutability,
     rc::Id,
@@ -13,8 +13,8 @@ use objc2_foundation::NSString;
 use std::{io::Result, sync::mpsc::Sender};
 
 pub(super) struct Ivars {
-    task_info: PasteTaskInfo,
-    tx: Sender<Result<PasteTaskInfo>>,
+    task_info: PasteObserverInfo,
+    tx: Sender<Result<PasteObserverInfo>>,
 }
 
 declare_class!(
@@ -67,8 +67,8 @@ declare_class!(
 );
 
 pub(super) fn create_pasteboard_file_url_provider(
-    task_info: PasteTaskInfo,
-    tx: Sender<Result<PasteTaskInfo>>,
+    task_info: PasteObserverInfo,
+    tx: Sender<Result<PasteObserverInfo>>,
 ) -> Id<PasteboardFileUrlProvider> {
     let provider = PasteboardFileUrlProvider::alloc();
     let provider = provider.set_ivars(Ivars { task_info, tx });
