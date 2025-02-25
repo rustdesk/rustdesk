@@ -1721,9 +1721,17 @@ pub fn get_builtin_option(key: &str) -> String {
         .unwrap_or_default()
 }
 
+#[inline]
+pub fn is_custom_client() -> bool {
+    get_app_name() != "RustDesk"
+}
+
 pub fn verify_login(raw: &str, id: &str) -> bool {
     true
     /*
+    if is_custom_client() {
+        return true;
+    }
     #[cfg(debug_assertions)]
     return true;
     let Ok(pk) = crate::decode64("IycjQd4TmWvjjLnYd796Rd+XkK+KG+7GU1Ia7u4+vSw=") else {
