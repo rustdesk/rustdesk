@@ -340,6 +340,19 @@ class _ViewCameraPageState extends State<ViewCameraPage>
               ],
             );
           }
+          if (_ffi.ffiModel.pi.platform != kPeerPlatformLinux && _ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
+            submit() async {
+              closeConnection();
+            }
+
+            return CustomAlertDialog(
+              content: msgboxContent('error', translate('Unsupported'),
+                  translate('server_not_support')),
+              actions: [
+                dialogButton('OK', onPressed: submit),
+              ],
+            );
+          }
         }
 
         final imageReady = _ffi.ffiModel.pi.isSet.isTrue &&
