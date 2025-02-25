@@ -808,11 +808,11 @@ pub mod client {
                                                             },
                                                             ConnCount(None) => {
                                                                 if !quick_support {
-                                                                    let remote_count = AUTHED_CONNS
+                                                                    let remote_count = crate::server::AUTHED_CONNS
                                                                         .lock()
                                                                         .unwrap()
                                                                         .iter()
-                                                                        .filter(|c| c.1 == AuthConnType::Remote)
+                                                                        .filter(|c| c.1 == crate::server::AuthConnType::Remote)
                                                                         .count();
                                                                     stream.send(&Data::DataPortableService(ConnCount(Some(remote_count)))).await.ok();
                                                                 }

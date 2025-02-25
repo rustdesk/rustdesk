@@ -418,7 +418,9 @@ fn get_capturer_camera(current: usize) -> ResultType<CapturerInfo> {
             ncamera, 
         );
     }
-    let camera = &cameras[current];
+    let Some(camera) = cameras.get(current) else {
+        bail!("Camera of index {} doesn't exist or platform not supported", current);
+    };
     let capturer = camera::Cameras::get_capturer(current)?;
     let (width,height) = (camera.width as usize,camera.height as usize);
     let origin = (camera.x as i32,camera.y as i32);

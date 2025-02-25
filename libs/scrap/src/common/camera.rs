@@ -12,6 +12,9 @@ use nokhwa::{
 
 use hbb_common::message_proto::{DisplayInfo, Resolution};
 
+#[cfg(feature = "vram")]
+use crate::AdapterDevice;
+
 use crate::common::{bail, ResultType};
 use crate::{Frame, PixelBuffer, Pixfmt, TraitCapturer};
 
@@ -30,6 +33,10 @@ pub fn primary_camera_exists() -> bool {
 
 impl Cameras {
     pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
+        // TODO: support more platforms.
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+        return Ok(Vec::new());
+
         match query(ApiBackend::Auto) {
             Ok(cameras) => {
                 let mut camera_displays = SYNC_CAMERA_DISPLAYS.lock().unwrap();
@@ -96,6 +103,10 @@ impl Cameras {
     }
 
     pub fn exists(index: usize) -> bool {
+        // TODO: support more platforms.
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+        return false;
+
         match query(ApiBackend::Auto) {
             Ok(cameras) => index < cameras.len(),
             _ => return false,
@@ -103,6 +114,10 @@ impl Cameras {
     }
 
     fn create_camera(index: &CameraIndex) -> ResultType<Camera> {
+        // TODO: support more platforms.
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+        bail!("This platform doesn't support camera yet");
+
         let result = Camera::new(
             index.clone(),
             RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution),
@@ -175,10 +190,10 @@ impl TraitCapturer for CameraCapturer {
                                     decoded.height() as usize,
                                 )))
                             } else {
-                                Err(e) => Err(io::Error::new(
+                                Err(io::Error::new(
                                     io::ErrorKind::Other,
                                     format!("Camera is not supported on this platform yet"),
-                                )),
+                                ))
                             }
                         }
                     }
