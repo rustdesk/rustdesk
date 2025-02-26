@@ -21,12 +21,6 @@ pub fn init() {
 }
 
 fn map_err_scrap(err: String) -> io::Error {
-    // to-do: Remove this the following log
-    log::error!(
-        "REMOVE ME ===================================== wayland scrap error {}",
-        &err
-    );
-
     // to-do: Handle error better, do not restart server
     if err.starts_with("Did not receive a reply") {
         log::error!("Fatal pipewire error, {}", &err);

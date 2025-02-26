@@ -1,18 +1,27 @@
 use super::*;
 #[cfg(not(target_os = "android"))]
+use crate::clipboard::clipboard_listener;
+#[cfg(not(target_os = "android"))]
 pub use crate::clipboard::{check_clipboard, ClipboardContext, ClipboardSide};
 pub use crate::clipboard::{CLIPBOARD_INTERVAL as INTERVAL, CLIPBOARD_NAME as NAME};
 #[cfg(windows)]
 use crate::ipc::{self, ClipboardFile, ClipboardNonFile, Data};
+#[cfg(feature = "unix-file-copy-paste")]
+pub use crate::{
+    clipboard::{check_clipboard_files, FILE_CLIPBOARD_NAME as FILE_NAME},
+    clipboard_file::unix_file_clip,
+};
+#[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
+use clipboard::platform::unix::fuse::{init_fuse_context, uninit_fuse_context};
 #[cfg(not(target_os = "android"))]
-use clipboard_master::{CallbackResult, ClipboardHandler};
+use clipboard_master::CallbackResult;
 #[cfg(target_os = "android")]
 use hbb_common::config::{keys, option2bool};
 #[cfg(target_os = "android")]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     io,
-    sync::mpsc::{channel, RecvTimeoutError, Sender},
+    sync::mpsc::{channel, RecvTimeoutError},
     time::Duration,
 };
 #[cfg(windows)]
@@ -23,9 +32,7 @@ static CLIPBOARD_SERVICE_OK: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(target_os = "android"))]
 struct Handler {
-    sp: EmptyExtraFieldService,
     ctx: Option<ClipboardContext>,
-    tx_cb_result: Sender<CallbackResult>,
     #[cfg(target_os = "windows")]
     stream: Option<ipc::ConnectionTmpl<parity_tokio_ipc::ConnectionClient>>,
     #[cfg(target_os = "windows")]
@@ -37,39 +44,51 @@ pub fn is_clipboard_service_ok() -> bool {
     CLIPBOARD_SERVICE_OK.load(Ordering::SeqCst)
 }
 
-pub fn new() -> GenericService {
-    let svc = EmptyExtraFieldService::new(NAME.to_owned(), false);
+pub fn new(name: String) -> GenericService {
+    let svc = EmptyExtraFieldService::new(name, false);
     GenericService::run(&svc.clone(), run);
     svc.sp
 }
 
 #[cfg(not(target_os = "android"))]
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
+    #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
+    let _fuse_call_on_ret = {
+        if sp.name() == FILE_NAME {
+            Some(init_fuse_context(false).map(|_| crate::SimpleCallOnReturn {
+                b: true,
+                f: Box::new(|| {
+                    uninit_fuse_context(false);
+                }),
+            }))
+        } else {
+            None
+        }
+    };
+
     let (tx_cb_result, rx_cb_result) = channel();
-    let handler = Handler {
-        sp: sp.clone(),
-        ctx: Some(ClipboardContext::new()?),
-        tx_cb_result,
+    let ctx = Some(ClipboardContext::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?);
+    clipboard_listener::subscribe(sp.name(), tx_cb_result)?;
+    let mut handler = Handler {
+        ctx,
         #[cfg(target_os = "windows")]
         stream: None,
         #[cfg(target_os = "windows")]
         rt: None,
     };
 
-    let (tx_start_res, rx_start_res) = channel();
-    let h = crate::clipboard::start_clipbard_master_thread(handler, tx_start_res);
-    let shutdown = match rx_start_res.recv() {
-        Ok((Some(s), _)) => s,
-        Ok((None, err)) => {
-            bail!(err);
-        }
-        Err(e) => {
-            bail!("Failed to create clipboard listener: {}", e);
-        }
-    };
-
     while sp.ok() {
         match rx_cb_result.recv_timeout(Duration::from_millis(INTERVAL)) {
+            Ok(CallbackResult::Next) => {
+                #[cfg(feature = "unix-file-copy-paste")]
+                if sp.name() == FILE_NAME {
+                    handler.check_clipboard_file();
+                    continue;
+                }
+                if let Some(msg) = handler.get_clipboard_msg() {
+                    sp.send(msg);
+                }
+            }
             Ok(CallbackResult::Stop) => {
                 log::debug!("Clipboard listener stopped");
                 break;
@@ -78,36 +97,40 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
                 bail!("Clipboard listener stopped with error: {}", err);
             }
             Err(RecvTimeoutError::Timeout) => {}
-            _ => {}
+            Err(RecvTimeoutError::Disconnected) => {
+                log::error!("Clipboard listener disconnected");
+                break;
+            }
         }
     }
-    shutdown.signal();
-    h.join().ok();
+
+    clipboard_listener::unsubscribe(&sp.name());
 
     Ok(())
 }
 
 #[cfg(not(target_os = "android"))]
-impl ClipboardHandler for Handler {
-    fn on_clipboard_change(&mut self) -> CallbackResult {
-        if self.sp.ok() {
-            if let Some(msg) = self.get_clipboard_msg() {
-                self.sp.send(msg);
+impl Handler {
+    #[cfg(feature = "unix-file-copy-paste")]
+    fn check_clipboard_file(&mut self) {
+        if let Some(urls) = check_clipboard_files(&mut self.ctx, ClipboardSide::Host, false) {
+            if !urls.is_empty() {
+                match clipboard::platform::unix::serv_files::sync_files(&urls) {
+                    Ok(()) => {
+                        // Use `send_data()` here to reuse `handle_file_clip()` in `connection.rs`.
+                        hbb_common::allow_err!(clipboard::send_data(
+                            0,
+                            unix_file_clip::get_format_list()
+                        ));
+                    }
+                    Err(e) => {
+                        log::error!("Failed to sync clipboard files: {}", e);
+                    }
+                }
             }
         }
-        CallbackResult::Next
     }
 
-    fn on_clipboard_error(&mut self, error: io::Error) -> CallbackResult {
-        self.tx_cb_result
-            .send(CallbackResult::StopWithError(error))
-            .ok();
-        CallbackResult::Next
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-impl Handler {
     fn get_clipboard_msg(&mut self) -> Option<Message> {
         #[cfg(target_os = "windows")]
         if crate::common::is_server() && crate::platform::is_root() {
@@ -144,6 +167,7 @@ impl Handler {
                 }
             }
         }
+
         check_clipboard(&mut self.ctx, ClipboardSide::Host, false)
     }
 

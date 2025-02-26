@@ -45,6 +45,8 @@ jobs:
   #   steps:
   #   - name: Checkout source code
   #     uses: actions/checkout@v3
+  #     with:
+  #       submodules: recursive
 
   #   - name: Install rust toolchain (v${{ env.MIN_SUPPORTED_RUST_VERSION }})
   #     uses: actions-rs/toolchain@v1
@@ -92,6 +94,8 @@ jobs:
 
     - name: Checkout source code
       uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
     - name: Install prerequisites
       shell: bash

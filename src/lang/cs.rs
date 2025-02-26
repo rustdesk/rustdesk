@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "délka mezi %min% a %max%"),
         ("starts with a letter", "začíná písmenem"),
         ("allowed characters", "povolené znaky"),
-        ("id_change_tip", "Použít je možné pouze znaky a-z, A-Z, 0-9 a _ (podtržítko). Dále je třeba aby začínalo písmenem a-z, A-Z. Délka mezi 6 a 16 znaky."),
+        ("id_change_tip", "Použít je možné pouze znaky a-z, A-Z, 0-9, - (dash) a _ (podtržítko). Dále je třeba aby začínalo písmenem a-z, A-Z. Délka mezi 6 a 16 znaky."),
         ("Website", "Webové stránky"),
         ("About", "O aplikaci"),
         ("Slogan_tip", "Vytvořeno srdcem v tomto chaotickém světě!"),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

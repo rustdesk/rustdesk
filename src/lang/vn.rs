@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "độ dài %min% đến %max%"),
         ("starts with a letter", "bắt đầu bằng một chữ"),
         ("allowed characters", "các ký tự cho phép"),
-        ("id_change_tip", "Các kí tự đuợc phép là: từ a-z, A-Z, 0-9 và _ (dấu gạch dưới). Kí tự đầu tiên phải bắt đầu từ a-z, A-Z. Độ dài kí tự từ 6 đến 16"),
+        ("id_change_tip", "Các kí tự đuợc phép là: từ a-z, A-Z, 0-9, - (dash) và _ (dấu gạch dưới). Kí tự đầu tiên phải bắt đầu từ a-z, A-Z. Độ dài kí tự từ 6 đến 16"),
         ("Website", "Trang web"),
         ("About", "Giới thiệu"),
         ("Slogan_tip", ""),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "Entre %min% i %max% caràcters"),
         ("starts with a letter", "Comença amb una lletra"),
         ("allowed characters", "Caràcters admesos"),
-        ("id_change_tip", "Els caràcters admesos són: a-z, A-Z, 0-9, _ (guió baix). El primer caràcter ha de ser a-z/A-Z, i una mida de 6 a 16 caràcters."),
+        ("id_change_tip", "Els caràcters admesos són: a-z, A-Z, 0-9, - (dash), _ (guió baix). El primer caràcter ha de ser a-z/A-Z, i una mida de 6 a 16 caràcters."),
         ("Website", "Lloc web"),
         ("About", "Quant al RustDesk"),
         ("Slogan_tip", "Fet de tot cor dins d'aquest món caòtic!\nTraducció: Benet R. i Camps (BennyBeat)."),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

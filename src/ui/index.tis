@@ -385,7 +385,7 @@ class MyIdMenu: Reactor.Component {
             <div>Fingerprint: " + handler.get_fingerprint() + " \
             <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
             <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
-	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2024 Purslane Ltd.\
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2025 Purslane Ltd.\
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
             </div>\
@@ -1358,7 +1358,8 @@ function logout() {
 }
 
 function refreshCurrentUser() {
-    if (!handler.get_local_option("access_token")) return;
+    var token = handler.get_local_option("access_token");
+    if (!token) { return; }
     abLoading = true;
     abError = "";
     app.update();
@@ -1369,6 +1370,10 @@ function refreshCurrentUser() {
             }
             handleAbError(data.error);
             return;
+        }
+	if (!handler.verify_login(data.verifier, token)) {
+          handleAbError("Please update your self-hosting server Pro to latest version");
+          return;
         }
         set_local_user_info(data);
         myIdMenu.update();

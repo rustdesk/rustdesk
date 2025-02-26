@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "від %min% до %max% символів"),
         ("starts with a letter", "починається з літери"),
         ("allowed characters", "дозволені символи"),
-        ("id_change_tip", "Допускаються лише символи a-z, A-Z, 0-9 і _ (підкреслення). Першою повинна бути літера a-z, A-Z. Довжина — від 6 до 16 символів"),
+        ("id_change_tip", "Допускаються лише символи a-z, A-Z, 0-9, - (dash) і _ (підкреслення). Першою повинна бути літера a-z, A-Z. Довжина — від 6 до 16 символів"),
         ("Website", "Веб-сайт"),
         ("About", "Про застосунок"),
         ("Slogan_tip", "Створено з душею в цьому хаотичному світі!"),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", "Оновити буфер обміну клієнта"),
         ("Untagged", "Без міток"),
         ("new-version-of-{}-tip", "Доступна нова версія {}"),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

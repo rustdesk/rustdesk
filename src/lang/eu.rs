@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "%min%(e)tik %max% arteko luzera"),
         ("starts with a letter", "hizki batekin hasten da"),
         ("allowed characters", "onartutako karaktereak"),
-        ("id_change_tip", "Soilik a-z, A-Z, 0-9 eta _ (barra baxua) karaktereak daude onartuta. Lehen hizkia a-z, A-Z izan behar da. Luzera 6 eta 16 artekoa izan behar da."),
+        ("id_change_tip", "Soilik a-z, A-Z, 0-9, - (dash) eta _ (barra baxua) karaktereak daude onartuta. Lehen hizkia a-z, A-Z izan behar da. Luzera 6 eta 16 artekoa izan behar da."),
         ("Website", "Webgunea"),
         ("About", "Honi buruz"),
         ("Slogan_tip", "Bihotzez eginda mundu kaotiko honetan!"),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

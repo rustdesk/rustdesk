@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "longeco %min% al %max%"),
         ("starts with a letter", "komencas kun letero"),
         ("allowed characters", "permesitaj signoj"),
-        ("id_change_tip", "Nur la signoj a-z, A-Z, 0-9, _ (substreko) povas esti uzataj. La unua litero povas esti inter a-z, A-Z. La longeco devas esti inter 6 kaj 16."),
+        ("id_change_tip", "Nur la signoj a-z, A-Z, 0-9, - (dash), _ (substreko) povas esti uzataj. La unua litero povas esti inter a-z, A-Z. La longeco devas esti inter 6 kaj 16."),
         ("Website", "Retejo"),
         ("About", "Pri"),
         ("Slogan_tip", "Farita kun koro en ĉi tiu ĥaosa mondo!"),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

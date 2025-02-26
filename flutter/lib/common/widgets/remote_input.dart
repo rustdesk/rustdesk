@@ -187,6 +187,11 @@ class _RawTouchGestureDetectorRegionState
         return;
       }
       _cacheLongPressPositionTs = DateTime.now().millisecondsSinceEpoch;
+      if (ffiModel.isPeerMobile) {
+        await ffi.cursorModel
+            .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
+        await inputModel.tapDown(MouseButtons.left);
+      }
     }
   }
 
@@ -204,15 +209,31 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
+    if (!ffi.ffiModel.isPeerMobile) {
+      if (handleTouch) {
+        final isMoved = await ffi.cursorModel
+            .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
+        if (!isMoved) {
+          return;
+        }
+      }
+      await inputModel.tap(MouseButtons.right);
+    } else {
+      // It's better to send a message to tell the controlled device that the long press event is triggered.
+      // We're now using a `TimerTask` in `InputService.kt` to decide whether to trigger the long press event.
+      // It's not accurate and it's better to use the same detection logic in the controlling side.
+    }
+  }
+
+  onLongPressMoveUpdate(LongPressMoveUpdateDetails d) async {
+    if (!ffiModel.isPeerMobile || lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
     if (handleTouch) {
-      final isMoved = await ffi.cursorModel
-          .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
-      if (!isMoved) {
+      if (!ffi.cursorModel.isInRemoteRect(d.localPosition)) {
         return;
       }
-    }
-    if (!ffi.ffiModel.isPeerMobile) {
-      await inputModel.tap(MouseButtons.right);
+      await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
     }
   }
 
@@ -340,7 +361,7 @@ class _RawTouchGestureDetectorRegionState
       ffi.cursorModel.clearRemoteWindowCoords();
     }
     if (handleTouch) {
-        await inputModel.sendMouse('up', MouseButtons.left);
+      await inputModel.sendMouse('up', MouseButtons.left);
     }
   }
 
@@ -432,7 +453,8 @@ class _RawTouchGestureDetectorRegionState
         instance
           ..onLongPressDown = onLongPressDown
           ..onLongPressUp = onLongPressUp
-          ..onLongPress = onLongPress;
+          ..onLongPress = onLongPress
+          ..onLongPressMoveUpdate = onLongPressMoveUpdate;
       }),
       // Customized
       HoldTapMoveGestureRecognizer:

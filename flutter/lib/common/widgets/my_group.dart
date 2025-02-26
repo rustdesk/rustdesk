@@ -20,8 +20,11 @@ class MyGroup extends StatefulWidget {
 }
 
 class _MyGroupState extends State<MyGroup> {
-  RxString get selectedUser => gFFI.groupModel.selectedUser;
-  RxString get searchUserText => gFFI.groupModel.searchUserText;
+  RxBool get isSelectedDeviceGroup => gFFI.groupModel.isSelectedDeviceGroup;
+  RxString get selectedAccessibleItemName =>
+      gFFI.groupModel.selectedAccessibleItemName;
+  RxString get searchAccessibleItemNameText =>
+      gFFI.groupModel.searchAccessibleItemNameText;
   static TextEditingController searchUserController = TextEditingController();
 
   @override
@@ -72,7 +75,7 @@ class _MyGroupState extends State<MyGroup> {
                   child: Container(
                     width: double.infinity,
                     height: double.infinity,
-                    child: _buildUserContacts(),
+                    child: _buildLeftList(),
                   ),
                 )
               ],
@@ -105,7 +108,7 @@ class _MyGroupState extends State<MyGroup> {
                 _buildLeftHeader(),
                 Container(
                   width: double.infinity,
-                  child: _buildUserContacts(),
+                  child: _buildLeftList(),
                 )
               ],
             ),
@@ -130,7 +133,8 @@ class _MyGroupState extends State<MyGroup> {
             child: TextField(
           controller: searchUserController,
           onChanged: (value) {
-            searchUserText.value = value;
+            searchAccessibleItemNameText.value = value;
+            selectedAccessibleItemName.value = '';
           },
           textAlignVertical: TextAlignVertical.center,
           style: TextStyle(fontSize: fontSize),
@@ -150,20 +154,30 @@ class _MyGroupState extends State<MyGroup> {
     );
   }
 
-  Widget _buildUserContacts() {
+  Widget _buildLeftList() {
     return Obx(() {
-      final items = gFFI.groupModel.users.where((p0) {
-        if (searchUserText.isNotEmpty) {
+      final userItems = gFFI.groupModel.users.where((p0) {
+        if (searchAccessibleItemNameText.isNotEmpty) {
           return p0.name
               .toLowerCase()
-              .contains(searchUserText.value.toLowerCase());
+              .contains(searchAccessibleItemNameText.value.toLowerCase());
+        }
+        return true;
+      }).toList();
+      final deviceGroupItems = gFFI.groupModel.deviceGroups.where((p0) {
+        if (searchAccessibleItemNameText.isNotEmpty) {
+          return p0.name
+              .toLowerCase()
+              .contains(searchAccessibleItemNameText.value.toLowerCase());
         }
         return true;
       }).toList();
       listView(bool isPortrait) => ListView.builder(
           shrinkWrap: isPortrait,
-          itemCount: items.length,
-          itemBuilder: (context, index) => _buildUserItem(items[index]));
+          itemCount: deviceGroupItems.length + userItems.length,
+          itemBuilder: (context, index) => index < deviceGroupItems.length
+              ? _buildDeviceGroupItem(deviceGroupItems[index])
+              : _buildUserItem(userItems[index - deviceGroupItems.length]));
       var maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
       return Obx(() => stateGlobal.isPortrait.isFalse
           ? listView(false)
@@ -174,14 +188,16 @@ class _MyGroupState extends State<MyGroup> {
   Widget _buildUserItem(UserPayload user) {
     final username = user.name;
     return InkWell(onTap: () {
-      if (selectedUser.value != username) {
-        selectedUser.value = username;
+      isSelectedDeviceGroup.value = false;
+      if (selectedAccessibleItemName.value != username) {
+        selectedAccessibleItemName.value = username;
       } else {
-        selectedUser.value = '';
+        selectedAccessibleItemName.value = '';
       }
     }, child: Obx(
       () {
-        bool selected = selectedUser.value == username;
+        bool selected = !isSelectedDeviceGroup.value &&
+            selectedAccessibleItemName.value == username;
         final isMe = username == gFFI.userModel.userName.value;
         final colorMe = MyTheme.color(context).me!;
         return Container(
@@ -231,6 +247,45 @@ class _MyGroupState extends State<MyGroup> {
                     ),
                   ),
                 if (!isMe) Expanded(child: Text(username)),
+              ],
+            ).paddingSymmetric(vertical: 4),
+          ),
+        );
+      },
+    )).marginSymmetric(horizontal: 12).marginOnly(bottom: 6);
+  }
+
+  Widget _buildDeviceGroupItem(DeviceGroupPayload deviceGroup) {
+    final name = deviceGroup.name;
+    return InkWell(onTap: () {
+      isSelectedDeviceGroup.value = true;
+      if (selectedAccessibleItemName.value != name) {
+        selectedAccessibleItemName.value = name;
+      } else {
+        selectedAccessibleItemName.value = '';
+      }
+    }, child: Obx(
+      () {
+        bool selected = isSelectedDeviceGroup.value &&
+            selectedAccessibleItemName.value == name;
+        return Container(
+          decoration: BoxDecoration(
+            color: selected ? MyTheme.color(context).highlight : null,
+            border: Border(
+                bottom: BorderSide(
+                    width: 0.7,
+                    color: Theme.of(context).dividerColor.withOpacity(0.1))),
+          ),
+          child: Container(
+            child: Row(
+              children: [
+                Container(
+                  width: 20,
+                  height: 20,
+                  child: Icon(IconFont.deviceGroupOutline,
+                      color: MyTheme.accent, size: 19),
+                ).marginOnly(right: 4),
+                Expanded(child: Text(name)),
               ],
             ).paddingSymmetric(vertical: 4),
           ),

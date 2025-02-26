@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "الطول من %min% الى %max%"),
         ("starts with a letter", "يبدأ بحرف"),
         ("allowed characters", "الحروف المسموح بها"),
-        ("id_change_tip", "فقط a-z, A-Z, 0-9 و _ مسموح بها. اول حرف يجب ان يكون a-z او A-Z. الطول بين 6 و 16."),
+        ("id_change_tip", "فقط a-z, A-Z, 0-9, - (dash) و _ مسموح بها. اول حرف يجب ان يكون a-z او A-Z. الطول بين 6 و 16."),
         ("Website", "الموقع"),
         ("About", "عن"),
         ("Slogan_tip", "صنع بحب في هذا العالم الفوضوي!"),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

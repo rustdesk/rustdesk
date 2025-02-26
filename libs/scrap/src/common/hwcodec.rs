@@ -1,7 +1,5 @@
 use crate::{
-    codec::{
-        base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg, Quality as Q,
-    },
+    codec::{base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg},
     convert::*,
     CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
@@ -47,7 +45,7 @@ pub struct HwRamEncoderConfig {
     pub mc_name: Option<String>,
     pub width: usize,
     pub height: usize,
-    pub quality: Q,
+    pub quality: f32,
     pub keyframe_interval: Option<usize>,
 }
 
@@ -67,12 +65,8 @@ impl EncoderApi for HwRamEncoder {
         match cfg {
             EncoderCfg::HWRAM(config) => {
                 let rc = Self::rate_control(&config);
-                let b = Self::convert_quality(&config.name, config.quality);
-                let base_bitrate = base_bitrate(config.width as _, config.height as _);
-                let mut bitrate = base_bitrate * b / 100;
-                if bitrate <= 0 {
-                    bitrate = base_bitrate;
-                }
+                let mut bitrate =
+                    Self::bitrate(&config.name, config.width, config.height, config.quality);
                 bitrate = Self::check_bitrate_range(&config, bitrate);
                 let gop = config.keyframe_interval.unwrap_or(DEFAULT_GOP as _) as i32;
                 let ctx = EncodeContext {
@@ -176,24 +170,24 @@ impl EncoderApi for HwRamEncoder {
         false
     }
 
-    fn set_quality(&mut self, quality: crate::codec::Quality) -> ResultType<()> {
-        let b = Self::convert_quality(&self.config.name, quality);
-        let mut bitrate = base_bitrate(self.config.width as _, self.config.height as _) * b / 100;
+    fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
+        let mut bitrate = Self::bitrate(
+            &self.config.name,
+            self.config.width,
+            self.config.height,
+            ratio,
+        );
         if bitrate > 0 {
             bitrate = Self::check_bitrate_range(&self.config, bitrate);
             self.encoder.set_bitrate(bitrate as _).ok();
             self.bitrate = bitrate;
         }
-        self.config.quality = quality;
+        self.config.quality = ratio;
         Ok(())
     }
 
     fn bitrate(&self) -> u32 {
         self.bitrate
-    }
-
-    fn support_abr(&self) -> bool {
-        ["qsv", "vaapi"].iter().all(|&x| !self.config.name.contains(x))
     }
 
     fn support_changing_quality(&self) -> bool {
@@ -254,21 +248,35 @@ impl HwRamEncoder {
         RC_CBR
     }
 
-    pub fn convert_quality(name: &str, quality: crate::codec::Quality) -> u32 {
-        use crate::codec::Quality;
-        let quality = match quality {
-            Quality::Best => 150,
-            Quality::Balanced => 100,
-            Quality::Low => 50,
-            Quality::Custom(b) => b,
-        };
-        let factor = if name.contains("mediacodec") {
+    pub fn bitrate(name: &str, width: usize, height: usize, ratio: f32) -> u32 {
+        Self::calc_bitrate(width, height, ratio, name.contains("h264"))
+    }
+
+    pub fn calc_bitrate(width: usize, height: usize, ratio: f32, h264: bool) -> u32 {
+        let base = base_bitrate(width as _, height as _) as f32 * ratio;
+        let threshold = 2000.0;
+        let decay_rate = 0.001; // 1000 * 0.001 = 1
+        let factor: f32 = if cfg!(target_os = "android") {
             // https://stackoverflow.com/questions/26110337/what-are-valid-bit-rates-to-set-for-mediacodec?rq=3
-            5
+            if base > threshold {
+                1.0 + 4.0 / (1.0 + (base - threshold) * decay_rate)
+            } else {
+                5.0
+            }
+        } else if h264 {
+            if base > threshold {
+                1.0 + 1.0 / (1.0 + (base - threshold) * decay_rate)
+            } else {
+                2.0
+            }
         } else {
-            1
+            if base > threshold {
+                1.0 + 0.5 / (1.0 + (base - threshold) * decay_rate)
+            } else {
+                1.5
+            }
         };
-        quality * factor
+        (base * factor) as u32
     }
 
     pub fn check_bitrate_range(_config: &HwRamEncoderConfig, bitrate: u32) -> u32 {

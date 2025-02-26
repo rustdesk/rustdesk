@@ -25,6 +25,7 @@ vcpkg_from_github(
     patch/0007-fix-linux-configure.patch
     patch/0008-remove-amf-loop-query.patch
     patch/0009-fix-nvenc-reconfigure-blur.patch
+    patch/0010.disable-loading-DLLs-from-app-dir.patch
 )
 
 if(SOURCE_PATH MATCHES " ")

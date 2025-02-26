@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "dolžina od %min% do %max%"),
         ("starts with a letter", "začne se s črko"),
         ("allowed characters", "dovoljeni znaki"),
-        ("id_change_tip", "Dovoljeni znaki so a-z, A-Z (brez šumnikov), 0-9 in _. Prvi znak mora biti črka, dolžina od 6 do 16 znakov."),
+        ("id_change_tip", "Dovoljeni znaki so a-z, A-Z (brez šumnikov), 0-9, - (dash) in _. Prvi znak mora biti črka, dolžina od 6 do 16 znakov."),
         ("Website", "Spletna stran"),
         ("About", "O programu"),
         ("Slogan_tip", ""),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", "Osveži odjemalčevo odložišče"),
         ("Untagged", "Neoznačeno"),
         ("new-version-of-{}-tip", "Na voljo je nova različica {}"),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

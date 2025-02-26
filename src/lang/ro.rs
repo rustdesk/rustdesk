@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "lungime între %min% și %max%"),
         ("starts with a letter", "începe cu o literă"),
         ("allowed characters", "caractere permise"),
-        ("id_change_tip", "Pot fi utilizate doar caractere a-z, A-Z, 0-9, _ (bară jos). Primul caracter trebuie să fie a-z, A-Z. Lungimea trebuie să fie între 6 și 16 caractere."),
+        ("id_change_tip", "Pot fi utilizate doar caractere a-z, A-Z, 0-9, - (dash), _ (bară jos). Primul caracter trebuie să fie a-z, A-Z. Lungimea trebuie să fie între 6 și 16 caractere."),
         ("Website", "Site web"),
         ("About", "Despre"),
         ("Slogan_tip", "Făcut din inimă în lumea aceasta haotică!"),
@@ -656,5 +656,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
     ].iter().cloned().collect();
 }

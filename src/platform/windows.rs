@@ -18,12 +18,11 @@ use hbb_common::{
 use std::{
     collections::HashMap,
     ffi::{CString, OsString},
-    fs, io,
-    io::prelude::*,
+    fs,
+    io::{self, prelude::*},
     mem,
     os::windows::process::CommandExt,
     path::*,
-    process::{Command, Stdio},
     ptr::null_mut,
     sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
@@ -32,11 +31,13 @@ use wallpaper;
 use winapi::{
     ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
-    um::sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
-        libloaderapi::{GetProcAddress, LoadLibraryA},
+        libloaderapi::{
+            GetProcAddress, LoadLibraryExA, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
+            LOAD_LIBRARY_SEARCH_USER_DIRS,
+        },
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
@@ -44,6 +45,7 @@ use winapi::{
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
+        sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
         winbase::*,
         wingdi::*,
         winnt::{
@@ -1563,10 +1565,63 @@ pub fn is_win_10_or_greater() -> bool {
     unsafe { is_windows_10_or_greater() > 0 }
 }
 
-pub fn bootstrap() {
+pub fn bootstrap() -> bool {
     if let Ok(lic) = get_license_from_exe_name() {
         *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
     }
+
+    set_safe_load_dll()
+}
+
+fn set_safe_load_dll() -> bool {
+    if !unsafe { set_default_dll_directories() } {
+        return false;
+    }
+
+    // `SetDllDirectoryW` should never fail.
+    // https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setdlldirectoryw
+    if unsafe { SetDllDirectoryW(wide_string("").as_ptr()) == FALSE } {
+        eprintln!("SetDllDirectoryW failed: {}", io::Error::last_os_error());
+        return false;
+    }
+
+    true
+}
+
+// https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-setdefaultdlldirectories
+unsafe fn set_default_dll_directories() -> bool {
+    let module = LoadLibraryExW(
+        wide_string("Kernel32.dll").as_ptr(),
+        0 as _,
+        LOAD_LIBRARY_SEARCH_SYSTEM32,
+    );
+    if module.is_null() {
+        return false;
+    }
+
+    match CString::new("SetDefaultDllDirectories") {
+        Err(e) => {
+            eprintln!("CString::new failed: {}", e);
+            return false;
+        }
+        Ok(func_name) => {
+            let func = GetProcAddress(module, func_name.as_ptr());
+            if func.is_null() {
+                eprintln!("GetProcAddress failed: {}", io::Error::last_os_error());
+                return false;
+            }
+            type SetDefaultDllDirectories = unsafe extern "system" fn(DWORD) -> BOOL;
+            let func: SetDefaultDllDirectories = std::mem::transmute(func);
+            if func(LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_USER_DIRS) == FALSE {
+                eprintln!(
+                    "SetDefaultDllDirectories failed: {}",
+                    io::Error::last_os_error()
+                );
+                return false;
+            }
+        }
+    }
+    true
 }
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
@@ -2530,7 +2585,11 @@ pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
 fn nt_terminate_process(process_id: DWORD) -> ResultType<()> {
     type NtTerminateProcess = unsafe extern "system" fn(HANDLE, DWORD) -> DWORD;
     unsafe {
-        let h_module = LoadLibraryA(CString::new("ntdll.dll")?.as_ptr());
+        let h_module = LoadLibraryExA(
+            CString::new("ntdll.dll")?.as_ptr(),
+            std::ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_SYSTEM32,
+        );
         if !h_module.is_null() {
             let f_nt_terminate_process: NtTerminateProcess = std::mem::transmute(GetProcAddress(
                 h_module,
