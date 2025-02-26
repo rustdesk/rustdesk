@@ -628,69 +628,82 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               padding: EdgeInsets.symmetric(horizontal: spacing),
               mainAxisSpacing: spacing,
               crossAxisSpacing: spacing,
-              children: [
-                ...((client.type_() == ClientType.remote) ? [
-                  buildPermissionIcon(
-                    client.keyboard,
-                    Icons.keyboard,
-                    (enabled) {
-                      bind.cmSwitchPermission(
-                          connId: client.id, name: "keyboard", enabled: enabled);
-                      setState(() {
-                        client.keyboard = enabled;
-                      });
-                    },
-                    translate('Enable keyboard/mouse'),
-                  ),
-                  buildPermissionIcon(
-                    client.clipboard,
-                    Icons.assignment_rounded,
-                    (enabled) {
-                      bind.cmSwitchPermission(
-                          connId: client.id, name: "clipboard", enabled: enabled);
-                      setState(() {
-                        client.clipboard = enabled;
-                      });
-                    },
-                    translate('Enable clipboard'),
-                  ),
-                  buildPermissionIcon(
-                    client.audio,
-                    Icons.volume_up_rounded,
-                    (enabled) {
-                      bind.cmSwitchPermission(
-                          connId: client.id, name: "audio", enabled: enabled);
-                      setState(() {
-                        client.audio = enabled;
-                      });
-                    },
-                    translate('Enable audio'),
-                  ),
-                  buildPermissionIcon(
-                    client.file,
-                    Icons.upload_file_rounded,
-                    (enabled) {
-                      bind.cmSwitchPermission(
-                          connId: client.id, name: "file", enabled: enabled);
-                      setState(() {
-                        client.file = enabled;
-                      });
-                    },
-                    translate('Enable file copy and paste'),
-                  ),
-                  buildPermissionIcon(
-                    client.restart,
-                    Icons.restart_alt_rounded,
-                    (enabled) {
-                      bind.cmSwitchPermission(
-                          connId: client.id, name: "restart", enabled: enabled);
-                      setState(() {
-                        client.restart = enabled;
-                      });
-                    },
-                    translate('Enable remote restart'),
-                  ),
-                ] : []),
+              children: client.type_() == ClientType.camera
+                ? [
+                    buildPermissionIcon(
+                      client.recording,
+                      Icons.videocam_rounded,
+                      (enabled) {
+                        bind.cmSwitchPermission(
+                            connId: client.id, name: "recording", enabled: enabled);
+                        setState(() {
+                          client.recording = enabled;
+                        });
+                      },
+                      translate('Enable recording session'),
+                    ),
+                  ] 
+                : [
+                buildPermissionIcon(
+                  client.keyboard,
+                  Icons.keyboard,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "keyboard", enabled: enabled);
+                    setState(() {
+                      client.keyboard = enabled;
+                    });
+                  },
+                  translate('Enable keyboard/mouse'),
+                ),
+                buildPermissionIcon(
+                  client.clipboard,
+                  Icons.assignment_rounded,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "clipboard", enabled: enabled);
+                    setState(() {
+                      client.clipboard = enabled;
+                    });
+                  },
+                  translate('Enable clipboard'),
+                ),
+                buildPermissionIcon(
+                  client.audio,
+                  Icons.volume_up_rounded,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "audio", enabled: enabled);
+                    setState(() {
+                      client.audio = enabled;
+                    });
+                  },
+                  translate('Enable audio'),
+                ),
+                buildPermissionIcon(
+                  client.file,
+                  Icons.upload_file_rounded,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "file", enabled: enabled);
+                    setState(() {
+                      client.file = enabled;
+                    });
+                  },
+                  translate('Enable file copy and paste'),
+                ),
+                buildPermissionIcon(
+                  client.restart,
+                  Icons.restart_alt_rounded,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "restart", enabled: enabled);
+                    setState(() {
+                      client.restart = enabled;
+                    });
+                  },
+                  translate('Enable remote restart'),
+                ),
                 buildPermissionIcon(
                   client.recording,
                   Icons.videocam_rounded,
@@ -749,7 +762,7 @@ class _CmControlPanel extends StatelessWidget {
     final model = Provider.of<ServerModel>(context);
     final showElevation = canElevate &&
         model.showElevation &&
-        (client.type_() == ClientType.remote);
+        client.type_() == ClientType.remote;
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
