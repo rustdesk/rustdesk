@@ -1267,11 +1267,13 @@ impl Connection {
             let is_unix_and_peer_supported = crate::is_support_file_copy_paste(&self.lr.version);
             #[cfg(not(feature = "unix-file-copy-paste"))]
             let is_unix_and_peer_supported = false;
-            // to-do: add file clipboard support for macos
             let is_both_macos = cfg!(target_os = "macos")
                 && self.lr.my_platform == whoami::Platform::MacOS.to_string();
-            let has_file_clipboard =
-                is_both_windows || (is_unix_and_peer_supported && !is_both_macos);
+            let is_peer_support_paste_if_macos =
+                crate::is_support_file_paste_if_macos(&self.lr.version);
+            let has_file_clipboard = is_both_windows
+                || (is_unix_and_peer_supported
+                    && (!is_both_macos || is_peer_support_paste_if_macos));
             platform_additions.insert("has_file_clipboard".into(), json!(has_file_clipboard));
         }
 

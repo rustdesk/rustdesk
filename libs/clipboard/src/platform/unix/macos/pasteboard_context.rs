@@ -1,11 +1,13 @@
 use super::{
-    item_data_provider::create_pasteboard_file_url_provider, paste_observer::PasteObserver,
+    item_data_provider::create_pasteboard_file_url_provider,
+    paste_observer::PasteObserver,
+    paste_task::{FileContentsResponse, PasteTask},
 };
 use crate::{
     platform::unix::{
         filetype::FileDescription, FILECONTENTS_FORMAT_NAME, FILEDESCRIPTORW_FORMAT_NAME,
     },
-    send_data, ClipboardFile, CliprdrError, CliprdrServiceContext,
+    send_data, ClipboardFile, CliprdrError, CliprdrServiceContext, ProgressPercent,
 };
 use hbb_common::{allow_err, bail, log, ResultType};
 use objc2::{msg_send_id, rc::Id, runtime::ProtocolObject, ClassType};
@@ -13,7 +15,7 @@ use objc2_app_kit::{NSPasteboard, NSPasteboardTypeFileURL};
 use objc2_foundation::{NSArray, NSString};
 use std::{
     io,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
         mpsc::{channel, Receiver, RecvTimeoutError, Sender},
         Arc, Mutex,
@@ -25,6 +27,8 @@ use std::{
 lazy_static::lazy_static! {
     static ref PASTE_OBSERVER_INFO: Arc<Mutex<Option<PasteObserverInfo>>> = Default::default();
 }
+
+pub const TEMP_FILE_PREFIX: &str = ".rustdesk_";
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub(super) struct PasteObserverInfo {
@@ -38,10 +42,6 @@ impl PasteObserverInfo {
     fn exit_msg() -> Self {
         Self::default()
     }
-
-    fn is_in_pasting(&self) -> bool {
-        !self.target_path.is_empty()
-    }
 }
 
 struct ContextInfo {
@@ -53,7 +53,10 @@ pub struct PasteboardContext {
     pasteboard: Id<NSPasteboard>,
     observer: Arc<Mutex<PasteObserver>>,
     tx_handle: Option<ContextInfo>,
+    tx_remove_file: Option<Sender<String>>,
     remove_file_handle: Option<thread::JoinHandle<()>>,
+    tx_paste_task: Sender<FileContentsResponse>,
+    paste_task: Arc<Mutex<PasteTask>>,
 }
 
 unsafe impl Send for PasteboardContext {}
@@ -82,21 +85,30 @@ impl CliprdrServiceContext for PasteboardContext {
     fn server_clip_file(&mut self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
         self.server_clip_file_(conn_id, msg)
     }
+
+    fn get_progress_percent(&self) -> Option<ProgressPercent> {
+        self.paste_task.lock().unwrap().progress_percent()
+    }
+
+    fn cancel(&mut self) {
+        self.paste_task.lock().unwrap().cancel();
+    }
 }
 
 impl PasteboardContext {
     fn init(&mut self) {
         let (tx_remove_file, rx_remove_file) = channel();
         let handle_remove_file = Self::init_thread_remove_file(rx_remove_file);
+        self.tx_remove_file = Some(tx_remove_file.clone());
         self.remove_file_handle = Some(handle_remove_file);
 
         let (tx, rx) = channel();
         let observer: Arc<Mutex<PasteObserver>> = self.observer.clone();
-        let handle = Self::init_thread_paste_task(tx_remove_file, rx, observer);
+        let handle = Self::init_thread_observer(tx_remove_file, rx, observer);
         self.tx_handle = Some(ContextInfo { tx, handle });
     }
 
-    fn init_thread_paste_task(
+    fn init_thread_observer(
         tx_remove_file: Sender<String>,
         rx: Receiver<io::Result<PasteObserverInfo>>,
         observer: Arc<Mutex<PasteObserver>>,
@@ -125,18 +137,24 @@ impl PasteboardContext {
 
     fn init_thread_remove_file(rx: Receiver<String>) -> thread::JoinHandle<()> {
         thread::spawn(move || {
-            let mut cur_file = None;
+            let mut cur_file: Option<String> = None;
             loop {
                 match rx.recv_timeout(Duration::from_secs(30)) {
                     Ok(path) => {
                         if let Some(file) = cur_file.take() {
-                            std::fs::remove_file(&file).ok();
+                            if !file.is_empty() {
+                                std::fs::remove_file(&file).ok();
+                            }
                         }
-                        cur_file = Some(path);
+                        if !path.is_empty() {
+                            cur_file = Some(path);
+                        }
                     }
                     Err(e) => {
                         if let Some(file) = cur_file.take() {
-                            std::fs::remove_file(&file).ok();
+                            if !file.is_empty() {
+                                std::fs::remove_file(&file).ok();
+                            }
                         }
                         if e == RecvTimeoutError::Disconnected {
                             break;
@@ -147,20 +165,52 @@ impl PasteboardContext {
         })
     }
 
+    // Just removing the file can also make paste option in the context menu disappear.
     fn empty_clipboard_(&mut self, _conn_id: i32) -> bool {
-        unsafe { self.pasteboard.clearContents() };
+        self.tx_remove_file
+            .as_ref()
+            .map(|tx| tx.send("".to_string()).ok());
         true
+    }
+
+    fn temp_files_count() -> usize {
+        let mut count = 0;
+        if let Ok(entries) = std::fs::read_dir("/tmp") {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(file_name) = path.file_name() {
+                            if let Some(file_name_str) = file_name.to_str() {
+                                if file_name_str.starts_with(TEMP_FILE_PREFIX) {
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        count
     }
 
     fn server_clip_file_(&mut self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
         match msg {
             ClipboardFile::FormatList { format_list } => {
-                let observer_lock = PASTE_OBSERVER_INFO.lock().unwrap();
-                if observer_lock
-                    .as_ref()
-                    .map(|task| task.is_in_pasting())
-                    .unwrap_or(false)
-                {
+                let temp_files = Self::temp_files_count();
+                if temp_files >= 3 {
+                    // The temp files should be 0 or 1 in normal case.
+                    // We should not continue to paste files if there are more than 3 temp files.
+                    return Err(CliprdrError::CommonError {
+                        description: format!(
+                            "too many temp files, current: {}, limit: {}",
+                            temp_files, 3
+                        ),
+                    });
+                }
+
+                let task_lock = self.paste_task.lock().unwrap();
+                if !task_lock.is_finished() {
                     return Err(CliprdrError::CommonError {
                         description: "previous file paste task is not finished".to_string(),
                     });
@@ -257,13 +307,14 @@ impl PasteboardContext {
             // return failure message?
         }
 
-        let mut observer_lock = PASTE_OBSERVER_INFO.lock().unwrap();
-        let target_dir = observer_lock
+        let mut task_lock = self.paste_task.lock().unwrap();
+        let target_dir = PASTE_OBSERVER_INFO
+            .lock()
+            .unwrap()
             .as_ref()
-            .map(|task| Path::new(&task.target_path).parent())
-            .flatten();
+            .map(|task| task.target_path.clone());
         // unreachable in normal case
-        let Some(target_dir) = target_dir else {
+        let Some(target_dir) = target_dir.as_ref().map(|d| Path::new(d).parent()).flatten() else {
             return Err(CliprdrError::CommonError {
                 description: "failed to get parent path".to_string(),
             });
@@ -277,11 +328,14 @@ impl PasteboardContext {
         let target_dir = target_dir.to_owned();
         match FileDescription::parse_file_descriptors(format_data, conn_id) {
             Ok(files) => {
-                // start a new works thread to handle file pasting
+                task_lock.start(target_dir, files);
                 Ok(())
             }
             Err(e) => {
-                observer_lock.replace(PasteObserverInfo::default());
+                PASTE_OBSERVER_INFO
+                    .lock()
+                    .unwrap()
+                    .replace(PasteObserverInfo::default());
                 Err(e)
             }
         }
@@ -289,12 +343,20 @@ impl PasteboardContext {
 
     fn handle_file_contents_response(
         &self,
-        _conn_id: i32,
-        _msg_flags: i32,
-        _stream_id: i32,
-        _requested_data: Vec<u8>,
+        conn_id: i32,
+        msg_flags: i32,
+        stream_id: i32,
+        requested_data: Vec<u8>,
     ) -> Result<(), CliprdrError> {
         log::debug!("handle file contents response");
+        self.tx_paste_task
+            .send(FileContentsResponse {
+                conn_id,
+                msg_flags,
+                stream_id,
+                requested_data,
+            })
+            .ok();
         Ok(())
     }
 
@@ -345,12 +407,37 @@ pub fn create_pasteboard_context() -> ResultType<Box<PasteboardContext>> {
     };
     let mut observer = PasteObserver::new();
     observer.init(handle_paste_result)?;
+    let (tx, rx) = channel();
     let mut context = Box::new(PasteboardContext {
         pasteboard,
         observer: Arc::new(Mutex::new(observer)),
         tx_handle: None,
+        tx_remove_file: None,
         remove_file_handle: None,
+        tx_paste_task: tx,
+        paste_task: Arc::new(Mutex::new(PasteTask::new(rx))),
     });
     context.init();
     Ok(context)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_temp_files_count() {
+        let mut c = super::PasteboardContext::temp_files_count();
+
+        for _ in 0..10 {
+            let path = format!(
+                "/tmp/{}{}",
+                super::TEMP_FILE_PREFIX,
+                uuid::Uuid::new_v4().to_string()
+            );
+            if std::fs::File::create(&path).is_ok() {
+                c += 1;
+            }
+        }
+
+        assert_eq!(c, super::PasteboardContext::temp_files_count());
+    }
 }

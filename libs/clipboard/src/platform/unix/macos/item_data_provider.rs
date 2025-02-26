@@ -1,4 +1,4 @@
-use super::pasteboard_context::PasteObserverInfo;
+use super::pasteboard_context::{PasteObserverInfo, TEMP_FILE_PREFIX};
 use objc2::{
     declare_class, msg_send_id, mutability,
     rc::Id,
@@ -42,7 +42,7 @@ declare_class!(
             r#type: &NSPasteboardType,
         ) {
             if r#type == NSPasteboardTypeFileURL {
-                let path = format!("/tmp/.rustdesk_{}", uuid::Uuid::new_v4().to_string());
+                let path = format!("/tmp/{}{}", TEMP_FILE_PREFIX, uuid::Uuid::new_v4().to_string());
                 match std::fs::File::create(&path) {
                     Ok(_) => {
                         let url = format!("file:///{}", &path);

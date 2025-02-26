@@ -978,6 +978,7 @@ dependencies = [
  "cacao",
  "cc",
  "dashmap",
+ "dirs 5.0.1",
  "fsevent",
  "fuser",
  "hbb_common",
@@ -997,6 +998,7 @@ dependencies = [
  "uuid",
  "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
+ "xattr",
 ]
 
 [[package]]
@@ -8022,6 +8024,17 @@ name = "x11rb-protocol"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec107c4503ea0b4a98ef47356329af139c0a4f7750e621cf2973cd3385ebcb3d"
+
+[[package]]
+name = "xattr"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e105d177a3871454f754b33bb0ee637ecaaac997446375fd3e5d43a2ed00c909"
+dependencies = [
+ "libc",
+ "linux-raw-sys 0.4.14",
+ "rustix 0.38.34",
+]
 
 [[package]]
 name = "xdg-home"

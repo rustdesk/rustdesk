@@ -2006,11 +2006,13 @@ impl<T: InvokeUiSession> Remote<T> {
 
                 #[cfg(target_os = "macos")]
                 if clipboard::platform::unix::macos::should_handle_msg(&clip) {
-                    let _ = ContextSend::proc(|context| -> ResultType<()> {
+                    if let Err(e) = ContextSend::proc(|context| -> ResultType<()> {
                         context
                             .server_clip_file(self.client_conn_id, clip)
                             .map_err(|e| e.into())
-                    });
+                    }) {
+                        log::error!("failed to handle cliprdr msg: {}", e);
+                    }
                 } else {
                     out_msg = unix_file_clip::serve_clip_messages(
                         ClipboardSide::Client,

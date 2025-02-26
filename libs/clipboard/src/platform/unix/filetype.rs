@@ -145,7 +145,6 @@ impl FileDescription {
             atime: last_modified,
             last_modified,
             last_metadata_changed: last_modified,
-
             creation_time: last_modified,
             size,
             perm,
