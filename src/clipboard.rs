@@ -75,6 +75,24 @@ pub fn check_clipboard(
     None
 }
 
+#[cfg(all(feature = "unix-file-copy-paste", target_os = "macos"))]
+pub fn is_file_url_set_by_rustdesk(url: &Vec<String>) -> bool {
+    if url.len() != 1 {
+        return false;
+    }
+    url.iter()
+        .next()
+        .map(|s| {
+            for prefix in &["file:///tmp/.rustdesk_", "//tmp/.rustdesk_"] {
+                if s.starts_with(prefix) {
+                    return s[prefix.len()..].parse::<uuid::Uuid>().is_ok();
+                }
+            }
+            false
+        })
+        .unwrap_or(false)
+}
+
 #[cfg(feature = "unix-file-copy-paste")]
 pub fn check_clipboard_files(
     ctx: &mut Option<ClipboardContext>,
@@ -110,7 +128,6 @@ pub fn update_clipboard_files(files: Vec<String>, side: ClipboardSide) {
 
 #[cfg(feature = "unix-file-copy-paste")]
 pub fn try_empty_clipboard_files(_side: ClipboardSide, _conn_id: i32) {
-    #[cfg(target_os = "linux")]
     std::thread::spawn(move || {
         let mut ctx = CLIPBOARD_CTX.lock().unwrap();
         if ctx.is_none() {
@@ -125,9 +142,22 @@ pub fn try_empty_clipboard_files(_side: ClipboardSide, _conn_id: i32) {
             }
         }
         if let Some(mut ctx) = ctx.as_mut() {
-            use clipboard::platform::unix;
-            if unix::fuse::empty_local_files(_side == ClipboardSide::Client, _conn_id) {
+            #[cfg(target_os = "linux")]
+            {
+                use clipboard::platform::unix;
+                if unix::fuse::empty_local_files(_side == ClipboardSide::Client, _conn_id) {
+                    ctx.try_empty_clipboard_files(_side);
+                }
+            }
+            #[cfg(target_os = "macos")]
+            {
                 ctx.try_empty_clipboard_files(_side);
+                // No need to make sure the context is enabled.
+                clipboard::ContextSend::proc(|context| -> ResultType<()> {
+                    context.empty_clipboard(_conn_id).ok();
+                    Ok(())
+                })
+                .ok();
             }
         }
     });
@@ -351,27 +381,43 @@ impl ClipboardContext {
         Ok(())
     }
 
+    #[cfg(all(feature = "unix-file-copy-paste", target_os = "macos"))]
+    fn get_file_urls_set_by_rustdesk(
+        data: Vec<ClipboardData>,
+        _side: ClipboardSide,
+    ) -> Vec<String> {
+        for item in data.into_iter() {
+            if let ClipboardData::FileUrl(urls) = item {
+                if is_file_url_set_by_rustdesk(&urls) {
+                    return urls;
+                }
+            }
+        }
+        vec![]
+    }
+
+    #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
+    fn get_file_urls_set_by_rustdesk(data: Vec<ClipboardData>, side: ClipboardSide) -> Vec<String> {
+        let exclude_path =
+            clipboard::platform::unix::fuse::get_exclude_paths(side == ClipboardSide::Client);
+        data.into_iter()
+            .filter_map(|c| match c {
+                ClipboardData::FileUrl(urls) => Some(
+                    urls.into_iter()
+                        .filter(|s| s.starts_with(&*exclude_path))
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>()
+    }
+
     #[cfg(feature = "unix-file-copy-paste")]
     fn try_empty_clipboard_files(&mut self, side: ClipboardSide) {
         let _lock = ARBOARD_MTX.lock().unwrap();
         if let Ok(data) = self.get_formats(&[ClipboardFormat::FileUrl]) {
-            #[cfg(target_os = "linux")]
-            let exclude_path =
-                clipboard::platform::unix::fuse::get_exclude_paths(side == ClipboardSide::Client);
-            #[cfg(target_os = "macos")]
-            let exclude_path: Arc<String> = Default::default();
-            let urls = data
-                .into_iter()
-                .filter_map(|c| match c {
-                    ClipboardData::FileUrl(urls) => Some(
-                        urls.into_iter()
-                            .filter(|s| s.starts_with(&*exclude_path))
-                            .collect::<Vec<_>>(),
-                    ),
-                    _ => None,
-                })
-                .flatten()
-                .collect::<Vec<_>>();
+            let urls = Self::get_file_urls_set_by_rustdesk(data, side);
             if !urls.is_empty() {
                 // FIXME:
                 // The host-side clear file clipboard `let _ = self.inner.clear();`,

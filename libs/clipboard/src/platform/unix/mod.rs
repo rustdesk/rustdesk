@@ -2,9 +2,13 @@ use dashmap::DashMap;
 use lazy_static::lazy_static;
 
 mod filetype;
+pub use filetype::{FileDescription, FileType};
 /// use FUSE for file pasting on these platforms
 #[cfg(target_os = "linux")]
 pub mod fuse;
+#[cfg(target_os = "macos")]
+pub mod macos;
+
 pub mod local_file;
 pub mod serv_files;
 
