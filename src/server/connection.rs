@@ -783,7 +783,7 @@ impl Connection {
                         });
                         conn.send(msg_out.into()).await;
                     }
-                    if conn.is_authed_remote_conn() {
+                    if conn.is_authed_remote_conn() || conn.view_camera {
                         if let Some(last_test_delay) = conn.last_test_delay {
                             video_service::VIDEO_QOS.lock().unwrap().user_delay_response_elapsed(id, last_test_delay.elapsed().as_millis());
                         }
