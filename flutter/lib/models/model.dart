@@ -856,7 +856,7 @@ class FfiModel with ChangeNotifier {
       }
       parent.target?.elevationModel.onPeerInfo(_pi);
     }
-    if (connType == ConnType.defaultConn || connType == ConnType.viewCamera) {
+    if (connType == ConnType.defaultConn) {
       setViewOnly(
           peerId,
           bind.sessionGetToggleOptionSync(
