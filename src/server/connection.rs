@@ -4059,7 +4059,7 @@ mod raii {
             _ONCE.call_once(|| {
                 shutdown_hooks::add_shutdown_hook(connection_shutdown_hook);
             });
-            if conn_type == AuthConnType::Remote {
+            if conn_type == AuthConnType::Remote || conn_type == AuthConnType::ViewCamera {
                 video_service::VIDEO_QOS
                     .lock()
                     .unwrap()
@@ -4170,7 +4170,7 @@ mod raii {
 
     impl Drop for AuthedConnID {
         fn drop(&mut self) {
-            if self.1 == AuthConnType::Remote {
+            if self.1 == AuthConnType::Remote || self.1 == AuthConnType::ViewCamera {
                 scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Remove(self.0));
                 video_service::VIDEO_QOS
                     .lock()
