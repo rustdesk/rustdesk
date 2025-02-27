@@ -286,6 +286,7 @@ class RustDeskMultiWindowManager {
     bool? isSharedPassword,
     String? switchUuid,
     bool? forceRelay,
+    String? connToken,
   }) async {
     return await newSession(
       WindowType.ViewCamera,
@@ -296,6 +297,7 @@ class RustDeskMultiWindowManager {
       forceRelay: forceRelay,
       switchUuid: switchUuid,
       isSharedPassword: isSharedPassword,
+      connToken: connToken,
     );
   }
 

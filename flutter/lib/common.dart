@@ -2311,6 +2311,7 @@ connectMainDesktop(String id,
     await rustDeskWinManager.newViewCamera(id,
         password: password,
         isSharedPassword: isSharedPassword,
+        connToken: connToken,
         forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP,
