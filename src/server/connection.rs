@@ -1593,7 +1593,6 @@ impl Connection {
             keyboard: self.keyboard,
             clipboard: self.clipboard,
             audio: self.audio,
-            camera: self.camera,
             file: self.file,
             file_transfer_enabled: self.file,
             restart: self.restart,
