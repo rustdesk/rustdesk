@@ -407,7 +407,9 @@ class FfiModel with ChangeNotifier {
           parent.target?.fileModel.sendEmptyDirs(evt);
         }
       } else if (name == "record_status") {
-        if (desktopType == DesktopType.remote || isMobile) {
+        if (desktopType == DesktopType.remote || 
+            desktopType == DesktopType.viewCamera ||
+            isMobile) {
           parent.target?.recordingModel.updateStatus(evt['start'] == 'true');
         }
       } else {
