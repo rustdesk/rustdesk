@@ -754,19 +754,19 @@ class CanScreenRecording: Reactor.Component {
     }
 }
 
-class InstallDaemon: Reactor.Component {
-    function render() {
-        return <div .install-me>
-            <span />
-            <div>{translate('install_daemon_tip')}</div>
-            <div #install-me.link>{translate('Install')}</div>
-        </div>;
-    }
-
-    event click $(#install-me) {
-        handler.is_installed_daemon(true);
-    }
-}
+//class InstallDaemon: Reactor.Component {
+//    function render() {
+//        return <div .install-me>
+//            <span />
+//            <div>{translate('install_daemon_tip')}</div>
+//            <div #install-me.link>{translate('Install')}</div>
+//        </div>;
+//    }
+//
+//    event click $(#install-me) {
+//        handler.is_installed_daemon(true);
+//    }
+//}
 
 class FixWayland: Reactor.Component {
     function render() {
