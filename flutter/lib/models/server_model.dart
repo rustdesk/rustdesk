@@ -29,7 +29,6 @@ class ServerModel with ChangeNotifier {
   bool _mediaOk = false;
   bool _inputOk = false;
   bool _audioOk = false;
-  bool _cameraOk = false;
   bool _fileOk = false;
   bool _clipboardOk = false;
   bool _showElevation = false;
@@ -58,8 +57,6 @@ class ServerModel with ChangeNotifier {
   bool get inputOk => _inputOk;
 
   bool get audioOk => _audioOk;
-
-  bool get cameraOk => _cameraOk;
 
   bool get fileOk => _fileOk;
 
