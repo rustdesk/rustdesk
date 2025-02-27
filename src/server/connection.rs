@@ -1508,7 +1508,7 @@ impl Connection {
         if let Some(current_sid) = crate::platform::get_current_process_session_id() {
             if crate::platform::is_installed()
                 && crate::platform::is_share_rdp()
-                && raii::AuthedConnID::remote_and_file_conn_count() == 1
+                && raii::AuthedConnID::non_port_forward_conn_count() == 1
                 && sessions.len() > 1
                 && sessions.iter().any(|e| e.sid == current_sid)
                 && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
@@ -2621,7 +2621,7 @@ impl Connection {
                             let sessions = crate::platform::get_available_sessions(false);
                             if crate::platform::is_installed()
                                 && crate::platform::is_share_rdp()
-                                && raii::AuthedConnID::remote_and_file_conn_count() == 1
+                                && raii::AuthedConnID::non_port_forward_conn_count() == 1
                                 && sessions.len() > 1
                                 && current_process_sid != sid
                                 && sessions.iter().any(|e| e.sid == sid)
@@ -4071,12 +4071,12 @@ mod raii {
                 .send((conn_count, remote_count)));
         }
 
-        pub fn remote_and_file_conn_count() -> usize {
+        pub fn non_port_forward_conn_count() -> usize {
             AUTHED_CONNS
                 .lock()
                 .unwrap()
                 .iter()
-                .filter(|c| c.1 == AuthConnType::Remote || c.1 == AuthConnType::FileTransfer)
+                .filter(|c| c.1 != AuthConnType::PortForward)
                 .count()
         }
 
