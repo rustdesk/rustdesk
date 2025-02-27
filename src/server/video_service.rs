@@ -578,8 +578,10 @@ fn run(vs: VideoService) -> ResultType<()> {
             &mut second_instant,
             display_idx,
         )?;
-        if vs.source.is_monitor() && sp.is_option_true(OPTION_REFRESH) {
-            let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
+        if sp.is_option_true(OPTION_REFRESH) {
+            if vs.source.is_monitor() {
+                let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
+            }
             log::info!("switch to refresh");
             bail!("SWITCH");
         }
