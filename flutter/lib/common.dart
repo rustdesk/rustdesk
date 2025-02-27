@@ -2087,6 +2087,7 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
 enum UriLinkType {
   remoteDesktop,
   fileTransfer,
+  viewCamera,
   portForward,
   rdp,
 }
@@ -2138,6 +2139,11 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         id = args[i + 1];
         i++;
         break;
+      case '--view-camera':
+        type = UriLinkType.viewCamera;
+        id = args[i + 1];
+        i++;
+        break;
       case '--port-forward':
         type = UriLinkType.portForward;
         id = args[i + 1];
@@ -2176,6 +2182,12 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
       case UriLinkType.fileTransfer:
         Future.delayed(Duration.zero, () {
           rustDeskWinManager.newFileTransfer(id!,
+              password: password, forceRelay: forceRelay);
+        });
+        break;
+      case UriLinkType.viewCamera:
+        Future.delayed(Duration.zero, () {
+          rustDeskWinManager.newViewCamera(id!,
               password: password, forceRelay: forceRelay);
         });
         break;
