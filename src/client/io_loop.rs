@@ -190,6 +190,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     let is_conn_not_default = self.handler.is_file_transfer()
                         || self.handler.is_port_forward()
                         || self.handler.is_rdp();
+                        || self.handler.is_view_camera();
                     if !is_conn_not_default {
                         (self.client_conn_id, rx_clip_client_holder.0) =
                             clipboard::get_rx_cliprdr_client(&self.handler.get_id());
