@@ -547,16 +547,6 @@ impl Connection {
                                             conn.inner.clone(), conn.audio_enabled());
                                     }
                                 }
-                            } else if &name == "camera" {
-                                conn.camera = enabled;
-                                conn.send_permission(Permission::Camera, enabled).await;
-                                if conn.authorized {
-                                    if let Some(s) = conn.server.upgrade() {
-                                        s.write().unwrap().subscribe(
-                                            &video_service::get_service_name(VideoSource::Camera, camera::PRIMARY_CAMERA_IDX),
-                                            conn.inner.clone(), conn.camera_enabled());
-                                    }
-                                }
                             } else if &name == "file" {
                                 conn.file = enabled;
                                 conn.send_permission(Permission::File, enabled).await;
