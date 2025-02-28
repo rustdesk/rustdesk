@@ -46,7 +46,7 @@ declare_class!(
                 match std::fs::File::create(&path) {
                     Ok(_) => {
                         let url = format!("file:///{}", &path);
-                        item.setString_forType(&NSString::from_str(&url), &NSPasteboardTypeFileURL);
+                            item.setString_forType(&NSString::from_str(&url), &NSPasteboardTypeFileURL);
                         let mut task_info = self.ivars().task_info.clone();
                         task_info.source_path = path;
                         self.ivars().tx.send(Ok(task_info)).ok();

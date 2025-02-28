@@ -10,7 +10,7 @@ use crate::{
     send_data, ClipboardFile, CliprdrError, CliprdrServiceContext, ProgressPercent,
 };
 use hbb_common::{allow_err, bail, log, ResultType};
-use objc2::{msg_send_id, rc::Id, runtime::ProtocolObject, ClassType};
+use objc2::{msg_send_id, rc::autoreleasepool, rc::Id, runtime::ProtocolObject, ClassType};
 use objc2_app_kit::{NSPasteboard, NSPasteboardTypeFileURL};
 use objc2_foundation::{NSArray, NSString};
 use std::{
@@ -262,36 +262,46 @@ impl PasteboardContext {
                 });
             };
 
-            let tx = tx_handle.tx.clone();
-            let provider = create_pasteboard_file_url_provider(
-                PasteObserverInfo {
-                    file_descriptor_id,
-                    conn_id,
-                    source_path: "".to_string(),
-                    target_path: "".to_string(),
-                },
-                tx,
-            );
-            unsafe {
-                let types = NSArray::from_vec(vec![NSString::from_str(
-                    &NSPasteboardTypeFileURL.to_string(),
-                )]);
-                let item = objc2_app_kit::NSPasteboardItem::new();
-                item.setDataProvider_forTypes(&ProtocolObject::from_id(provider), &types);
-                self.pasteboard.clearContents();
-                if !self
-                    .pasteboard
-                    .writeObjects(&Id::cast(NSArray::from_vec(vec![item])))
-                {
-                    return Err(CliprdrError::CommonError {
-                        description: "failed to write objects".to_string(),
-                    });
-                }
-            }
+            autoreleasepool(|_| self.set_clipboard_item(tx_handle, conn_id, file_descriptor_id))?;
         } else {
             return Err(CliprdrError::CommonError {
                 description: "pasteboard context is not inited".to_string(),
             });
+        }
+        Ok(())
+    }
+
+    fn set_clipboard_item(
+        &self,
+        tx_handle: &ContextInfo,
+        conn_id: i32,
+        file_descriptor_id: i32,
+    ) -> Result<(), CliprdrError> {
+        let tx = tx_handle.tx.clone();
+        let provider = create_pasteboard_file_url_provider(
+            PasteObserverInfo {
+                file_descriptor_id,
+                conn_id,
+                source_path: "".to_string(),
+                target_path: "".to_string(),
+            },
+            tx,
+        );
+        unsafe {
+            let types = NSArray::from_vec(vec![NSString::from_str(
+                &NSPasteboardTypeFileURL.to_string(),
+            )]);
+            let item = objc2_app_kit::NSPasteboardItem::new();
+            item.setDataProvider_forTypes(&ProtocolObject::from_id(provider), &types);
+            self.pasteboard.clearContents();
+            if !self
+                .pasteboard
+                .writeObjects(&Id::cast(NSArray::from_vec(vec![item])))
+            {
+                return Err(CliprdrError::CommonError {
+                    description: "failed to write objects".to_string(),
+                });
+            }
         }
         Ok(())
     }
@@ -427,6 +437,7 @@ mod tests {
     fn test_temp_files_count() {
         let mut c = super::PasteboardContext::temp_files_count();
 
+        let mut created_files = vec![];
         for _ in 0..10 {
             let path = format!(
                 "/tmp/{}{}",
@@ -434,10 +445,16 @@ mod tests {
                 uuid::Uuid::new_v4().to_string()
             );
             if std::fs::File::create(&path).is_ok() {
+                created_files.push(path);
                 c += 1;
             }
         }
 
         assert_eq!(c, super::PasteboardContext::temp_files_count());
+
+        // Clean up the created files.
+        for file in created_files {
+            std::fs::remove_file(&file).ok();
+        }
     }
 }
