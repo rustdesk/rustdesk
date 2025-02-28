@@ -525,8 +525,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "2ded7f146437a761ffe6981e2f742038f85ca68d"
-      resolved-ref: "2ded7f146437a761ffe6981e2f742038f85ca68d"
+      ref: "08a471bb8ceccdd50483c81cdfa8b81b07b14b87"
+      resolved-ref: "08a471bb8ceccdd50483c81cdfa8b81b07b14b87"
       url: "https://github.com/rustdesk-org/flutter_gpu_texture_renderer"
     source: git
     version: "0.0.1"
