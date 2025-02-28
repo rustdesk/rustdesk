@@ -12,6 +12,7 @@ def view(
     device_name=None,
     user_name=None,
     group_name=None,
+    device_group_name=None,
     offline_days=None,
 ):
     headers = {"Authorization": f"Bearer {token}"}
@@ -21,6 +22,7 @@ def view(
         "device_name": device_name,
         "user_name": user_name,
         "group_name": group_name,
+        "device_group_name": device_group_name,
     }
 
     params = {
@@ -118,7 +120,8 @@ def main():
     parser.add_argument("--id", help="Device ID")
     parser.add_argument("--device_name", help="Device name")
     parser.add_argument("--user_name", help="User name")
-    parser.add_argument("--group_name", help="Group name")
+    parser.add_argument("--group_name", help="User group name")
+    parser.add_argument("--device_group_name", help="Device group name")
     parser.add_argument(
         "--assign_to",
         help="<type>=<value>, e.g. user_name=mike, strategy_name=test, ab=ab1, ab=ab1,tag1",
@@ -138,6 +141,7 @@ def main():
         args.device_name,
         args.user_name,
         args.group_name,
+        args.device_group_name,
         args.offline_days,
     )
 

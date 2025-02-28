@@ -19,95 +19,48 @@ class ScanPage extends StatefulWidget {
 class _ScanPageState extends State<ScanPage> {
   QRViewController? controller;
   final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
+  StreamSubscription? scanSubscription;
 
-  // In order to get hot reload to work we need to pause the camera if the platform
-  // is android, or resume the camera if the platform is iOS.
   @override
   void reassemble() {
     super.reassemble();
-    if (isAndroid) {
+    if (isAndroid && controller != null) {
       controller!.pauseCamera();
+    } else if (controller != null) {
+      controller!.resumeCamera();
     }
-    controller!.resumeCamera();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('Scan QR'),
-          actions: [
-            IconButton(
-                color: Colors.white,
-                icon: Icon(Icons.image_search),
-                iconSize: 32.0,
-                onPressed: () async {
-                  final ImagePicker picker = ImagePicker();
-                  final XFile? file =
-                      await picker.pickImage(source: ImageSource.gallery);
-                  if (file != null) {
-                    var image = img.decodeNamedImage(
-                        file.path, File(file.path).readAsBytesSync())!;
-
-                    LuminanceSource source = RGBLuminanceSource(
-                        image.width,
-                        image.height,
-                        image
-                            .getBytes(order: img.ChannelOrder.abgr)
-                            .buffer
-                            .asInt32List());
-                    var bitmap = BinaryBitmap(HybridBinarizer(source));
-
-                    var reader = QRCodeReader();
-                    try {
-                      var result = reader.decode(bitmap);
-                      if (result.text.startsWith(bind.mainUriPrefixSync())) {
-                        handleUriLink(uriString: result.text);
-                      } else {
-                        showServerSettingFromQr(result.text);
-                      }
-                    } catch (e) {
-                      showToast('No QR code found');
-                    }
-                  }
-                }),
-            IconButton(
-                color: Colors.yellow,
-                icon: Icon(Icons.flash_on),
-                iconSize: 32.0,
-                onPressed: () async {
-                  await controller?.toggleFlash();
-                }),
-            IconButton(
-              color: Colors.white,
-              icon: Icon(Icons.switch_camera),
-              iconSize: 32.0,
-              onPressed: () async {
-                await controller?.flipCamera();
-              },
-            ),
-          ],
-        ),
-        body: _buildQrView(context));
+      appBar: AppBar(
+        title: const Text('Scan QR'),
+        actions: [
+          _buildImagePickerButton(),
+          _buildFlashToggleButton(),
+          _buildCameraSwitchButton(),
+        ],
+      ),
+      body: _buildQrView(context),
+    );
   }
 
   Widget _buildQrView(BuildContext context) {
-    // For this example we check how width or tall the device is and change the scanArea and overlay accordingly.
-    var scanArea = (MediaQuery.of(context).size.width < 400 ||
-            MediaQuery.of(context).size.height < 400)
+    var scanArea = MediaQuery.of(context).size.width < 400 ||
+            MediaQuery.of(context).size.height < 400
         ? 150.0
         : 300.0;
-    // To ensure the Scanner view is properly sizes after rotation
-    // we need to listen for Flutter SizeChanged notification and update controller
     return QRView(
       key: qrKey,
       onQRViewCreated: _onQRViewCreated,
       overlay: QrScannerOverlayShape(
-          borderColor: Colors.red,
-          borderRadius: 10,
-          borderLength: 30,
-          borderWidth: 10,
-          cutOutSize: scanArea),
+        borderColor: Colors.red,
+        borderRadius: 10,
+        borderLength: 30,
+        borderWidth: 10,
+        cutOutSize: scanArea,
+      ),
       onPermissionSet: (ctrl, p) => _onPermissionSet(context, ctrl, p),
     );
   }
@@ -116,7 +69,7 @@ class _ScanPageState extends State<ScanPage> {
     setState(() {
       this.controller = controller;
     });
-    controller.scannedDataStream.listen((scanData) {
+    scanSubscription = controller.scannedDataStream.listen((scanData) {
       if (scanData.code != null) {
         showServerSettingFromQr(scanData.code!);
       }
@@ -129,8 +82,66 @@ class _ScanPageState extends State<ScanPage> {
     }
   }
 
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? file = await picker.pickImage(source: ImageSource.gallery);
+    if (file != null) {
+      try {
+        var image = img.decodeImage(await File(file.path).readAsBytes())!;
+        LuminanceSource source = RGBLuminanceSource(
+          image.width,
+          image.height,
+          image.getBytes(order: img.ChannelOrder.abgr).buffer.asInt32List(),
+        );
+        var bitmap = BinaryBitmap(HybridBinarizer(source));
+
+        var reader = QRCodeReader();
+        var result = reader.decode(bitmap);
+        if (result.text.startsWith(bind.mainUriPrefixSync())) {
+          handleUriLink(uriString: result.text);
+        } else {
+          showServerSettingFromQr(result.text);
+        }
+      } catch (e) {
+        showToast('No QR code found');
+      }
+    }
+  }
+
+  Widget _buildImagePickerButton() {
+    return IconButton(
+      color: Colors.white,
+      icon: Icon(Icons.image_search),
+      iconSize: 32.0,
+      onPressed: _pickImage,
+    );
+  }
+
+  Widget _buildFlashToggleButton() {
+    return IconButton(
+      color: Colors.yellow,
+      icon: Icon(Icons.flash_on),
+      iconSize: 32.0,
+      onPressed: () async {
+        await controller?.toggleFlash();
+      },
+    );
+  }
+
+  Widget _buildCameraSwitchButton() {
+    return IconButton(
+      color: Colors.white,
+      icon: Icon(Icons.switch_camera),
+      iconSize: 32.0,
+      onPressed: () async {
+        await controller?.flipCamera();
+      },
+    );
+  }
+
   @override
   void dispose() {
+    scanSubscription?.cancel();
     controller?.dispose();
     super.dispose();
   }

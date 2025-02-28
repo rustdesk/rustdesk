@@ -1,7 +1,5 @@
 use crate::{
-    codec::{
-        base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg, Quality as Q,
-    },
+    codec::{base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg},
     convert::*,
     CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
@@ -15,7 +13,7 @@ use hbb_common::{
 };
 use hwcodec::{
     common::{
-        DataFormat,
+        DataFormat, HwcodecErrno,
         Quality::{self, *},
         RateControl::{self, *},
     },
@@ -31,6 +29,7 @@ const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_FPS: i32 = 30;
 const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
+pub const ERR_HEVC_POC: i32 = HwcodecErrno::HWCODEC_ERR_HEVC_COULD_NOT_FIND_POC as i32;
 
 crate::generate_call_macro!(call_yuv, false);
 
@@ -46,7 +45,7 @@ pub struct HwRamEncoderConfig {
     pub mc_name: Option<String>,
     pub width: usize,
     pub height: usize,
-    pub quality: Q,
+    pub quality: f32,
     pub keyframe_interval: Option<usize>,
 }
 
@@ -66,12 +65,8 @@ impl EncoderApi for HwRamEncoder {
         match cfg {
             EncoderCfg::HWRAM(config) => {
                 let rc = Self::rate_control(&config);
-                let b = Self::convert_quality(&config.name, config.quality);
-                let base_bitrate = base_bitrate(config.width as _, config.height as _);
-                let mut bitrate = base_bitrate * b / 100;
-                if base_bitrate <= 0 {
-                    bitrate = base_bitrate;
-                }
+                let mut bitrate =
+                    Self::bitrate(&config.name, config.width, config.height, config.quality);
                 bitrate = Self::check_bitrate_range(&config, bitrate);
                 let gop = config.keyframe_interval.unwrap_or(DEFAULT_GOP as _) as i32;
                 let ctx = EncodeContext {
@@ -175,15 +170,19 @@ impl EncoderApi for HwRamEncoder {
         false
     }
 
-    fn set_quality(&mut self, quality: crate::codec::Quality) -> ResultType<()> {
-        let b = Self::convert_quality(&self.config.name, quality);
-        let mut bitrate = base_bitrate(self.config.width as _, self.config.height as _) * b / 100;
+    fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
+        let mut bitrate = Self::bitrate(
+            &self.config.name,
+            self.config.width,
+            self.config.height,
+            ratio,
+        );
         if bitrate > 0 {
-            bitrate = Self::check_bitrate_range(&self.config, self.bitrate);
+            bitrate = Self::check_bitrate_range(&self.config, bitrate);
             self.encoder.set_bitrate(bitrate as _).ok();
             self.bitrate = bitrate;
         }
-        self.config.quality = quality;
+        self.config.quality = ratio;
         Ok(())
     }
 
@@ -191,16 +190,8 @@ impl EncoderApi for HwRamEncoder {
         self.bitrate
     }
 
-    fn support_abr(&self) -> bool {
-        ["qsv", "vaapi", "mediacodec", "videotoolbox"]
-            .iter()
-            .all(|&x| !self.config.name.contains(x))
-    }
-
     fn support_changing_quality(&self) -> bool {
-        ["vaapi", "mediacodec", "videotoolbox"]
-            .iter()
-            .all(|&x| !self.config.name.contains(x))
+        ["vaapi"].iter().all(|&x| !self.config.name.contains(x))
     }
 
     fn latency_free(&self) -> bool {
@@ -257,21 +248,35 @@ impl HwRamEncoder {
         RC_CBR
     }
 
-    pub fn convert_quality(name: &str, quality: crate::codec::Quality) -> u32 {
-        use crate::codec::Quality;
-        let quality = match quality {
-            Quality::Best => 150,
-            Quality::Balanced => 100,
-            Quality::Low => 50,
-            Quality::Custom(b) => b,
-        };
-        let factor = if name.contains("mediacodec") {
+    pub fn bitrate(name: &str, width: usize, height: usize, ratio: f32) -> u32 {
+        Self::calc_bitrate(width, height, ratio, name.contains("h264"))
+    }
+
+    pub fn calc_bitrate(width: usize, height: usize, ratio: f32, h264: bool) -> u32 {
+        let base = base_bitrate(width as _, height as _) as f32 * ratio;
+        let threshold = 2000.0;
+        let decay_rate = 0.001; // 1000 * 0.001 = 1
+        let factor: f32 = if cfg!(target_os = "android") {
             // https://stackoverflow.com/questions/26110337/what-are-valid-bit-rates-to-set-for-mediacodec?rq=3
-            5
+            if base > threshold {
+                1.0 + 4.0 / (1.0 + (base - threshold) * decay_rate)
+            } else {
+                5.0
+            }
+        } else if h264 {
+            if base > threshold {
+                1.0 + 1.0 / (1.0 + (base - threshold) * decay_rate)
+            } else {
+                2.0
+            }
         } else {
-            1
+            if base > threshold {
+                1.0 + 0.5 / (1.0 + (base - threshold) * decay_rate)
+            } else {
+                1.5
+            }
         };
-        quality * factor
+        (base * factor) as u32
     }
 
     pub fn check_bitrate_range(_config: &HwRamEncoderConfig, bitrate: u32) -> u32 {
@@ -498,6 +503,15 @@ pub struct HwCodecConfig {
     pub vram_decode: Vec<hwcodec::vram::DecodeContext>,
 }
 
+// HwCodecConfig2 is used to store the config in json format,
+// confy can't serde HwCodecConfig successfully if the non-first struct Vec is empty due to old toml version.
+// struct T { a: Vec<A>, b: Vec<String>} will fail if b is empty, but struct T { a: Vec<String>, b: Vec<String>} is ok.
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+struct HwCodecConfig2 {
+    #[serde(default)]
+    pub config: String,
+}
+
 // ipc server process start check process once, other process get from ipc server once
 // install: --server start check process, check process send to --server,  ui get from --server
 // portable: ui start check process, check process send to ui
@@ -509,7 +523,12 @@ impl HwCodecConfig {
         log::info!("set hwcodec config");
         log::debug!("{config:?}");
         #[cfg(any(windows, target_os = "macos"))]
-        hbb_common::config::common_store(&config, "_hwcodec");
+        hbb_common::config::common_store(
+            &HwCodecConfig2 {
+                config: serde_json::to_string_pretty(&config).unwrap_or_default(),
+            },
+            "_hwcodec",
+        );
         *CONFIG.lock().unwrap() = Some(config);
         *CONFIG_SET_BY_IPC.lock().unwrap() = true;
     }
@@ -587,7 +606,8 @@ impl HwCodecConfig {
                 Some(c) => c,
                 None => {
                     log::info!("try load cached hwcodec config");
-                    let c = hbb_common::config::common_load::<HwCodecConfig>("_hwcodec");
+                    let c = hbb_common::config::common_load::<HwCodecConfig2>("_hwcodec");
+                    let c: HwCodecConfig = serde_json::from_str(&c.config).unwrap_or_default();
                     let new_signature = hwcodec::common::get_gpu_signature();
                     if c.signature == new_signature {
                         log::debug!("load cached hwcodec config: {c:?}");
@@ -680,8 +700,8 @@ pub fn check_available_hwcodec() -> String {
     #[cfg(not(feature = "vram"))]
     let vram_string = "".to_owned();
     let c = HwCodecConfig {
-        ram_encode: Encoder::available_encoders(ctx, Some(vram_string.clone())),
-        ram_decode: Decoder::available_decoders(Some(vram_string)),
+        ram_encode: Encoder::available_encoders(ctx, Some(vram_string)),
+        ram_decode: Decoder::available_decoders(),
         #[cfg(feature = "vram")]
         vram_encode: vram.0,
         #[cfg(feature = "vram")]

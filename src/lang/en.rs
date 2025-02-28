@@ -5,7 +5,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("connecting_status", "Connecting to the RustDesk network..."),
         ("not_ready_status", "Not ready. Please check your connection"),
         ("ID/Relay Server", "ID/Relay server"),
-        ("id_change_tip", "Only a-z, A-Z, 0-9 and _ (underscore) characters allowed. The first letter must be a-z, A-Z. Length between 6 and 16."),
+        ("id_change_tip", "Only a-z, A-Z, 0-9, - (dash) and _ (underscore) characters allowed. The first letter must be a-z, A-Z. Length between 6 and 16."),
         ("Slogan_tip", "Made with heart in this chaotic world!"),
         ("Build Date", "Build date"),
         ("Audio Input", "Audio input"),
@@ -234,5 +234,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("About RustDesk", ""),
         ("network_error_tip", "Please check your network connection, then click retry."),
         ("enable-trusted-devices-tip", "Skip 2FA verification on trusted devices"),
+        ("one-way-file-transfer-tip", "One-way file transfer is enabled on the controlled side."),
+        ("web_id_input_tip", "You can input an ID in the same server, direct IP access is not supported in web client.\nIf you want to access a device on another server, please append the server address (<id>@<server_address>?key=<key_value>), for example,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nIf you want to access a device on a public server, please input \"<id>@public\", the key is not needed for public server."),
+        ("new-version-of-{}-tip", "There is a new version of {} available"),
     ].iter().cloned().collect();
 }

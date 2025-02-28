@@ -48,6 +48,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
           isSharedPassword: params['isSharedPassword'],
           tabController: tabController,
           forceRelay: params['forceRelay'],
+          connToken: params['connToken'],
         )));
   }
 
@@ -56,7 +57,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     super.initState();
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
-      print(
+      debugPrint(
           "[FileTransfer] call ${call.method} with args ${call.arguments} from window $fromWindowId to ${windowId()}");
       // for simplify, just replace connectionId
       if (call.method == kWindowEventNewFileTransfer) {
@@ -76,6 +77,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
               isSharedPassword: args['isSharedPassword'],
               tabController: tabController,
               forceRelay: args['forceRelay'],
+              connToken: args['connToken'],
             )));
       } else if (call.method == "onDestroy") {
         tabController.clear();
@@ -101,11 +103,13 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         ));
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
-        : Container(
-            decoration: BoxDecoration(
-                border: Border.all(color: MyTheme.color(context).border!)),
-            child: child,
-          );
+        : workaroundWindowBorder(
+            context,
+            Container(
+              decoration: BoxDecoration(
+                  border: Border.all(color: MyTheme.color(context).border!)),
+              child: child,
+            ));
     return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : SubWindowDragToResizeArea(

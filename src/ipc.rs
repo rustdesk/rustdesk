@@ -25,9 +25,7 @@ use hbb_common::{
     config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
-    log, password_security as password,
-    sodiumoxide::base64,
-    timeout,
+    log, password_security as password, timeout,
     tokio::{
         self,
         io::{AsyncRead, AsyncWrite},
@@ -45,6 +43,10 @@ pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum FS {
+    ReadEmptyDirs {
+        dir: String,
+        include_hidden: bool,
+    },
     ReadDir {
         dir: String,
         include_hidden: bool,
@@ -121,6 +123,7 @@ pub struct ClipboardNonFile {
     pub height: i32,
     // message.proto: ClipboardFormat
     pub format: i32,
+    pub special_name: String,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -212,8 +215,6 @@ pub enum Data {
     MouseMoveTime(i64),
     Authorize,
     Close,
-    #[cfg(target_os = "android")]
-    InputControl(bool),
     #[cfg(windows)]
     SAS,
     UserSid(Option<u32>),
@@ -227,7 +228,7 @@ pub enum Data {
     FS(FS),
     Test,
     SyncConfig(Option<Box<(Config, Config2)>>),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(target_os = "windows")]
     ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
     #[cfg(target_os = "windows")]
@@ -263,6 +264,7 @@ pub enum Data {
     ControlledSessionCount(usize),
     CmErr(String),
     CheckHwcodec,
+    #[cfg(feature = "flutter")]
     VideoConnCount(Option<usize>),
     // Although the key is not neccessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
@@ -403,7 +405,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     {
                         hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0)
                             .await;
-                        crate::run_me::<&str>(vec![]).ok();
+                        // https://github.com/rustdesk/rustdesk/discussions/9254
+                        crate::run_me::<&str>(vec!["--no-server"]).ok();
                     }
                     #[cfg(target_os = "macos")]
                     {
@@ -451,6 +454,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 log::info!("socks updated");
             }
         },
+        #[cfg(feature = "flutter")]
         Data::VideoConnCount(None) => {
             let n = crate::server::AUTHED_CONNS
                 .lock()
@@ -888,7 +892,7 @@ pub async fn set_data(data: &Data) -> ResultType<()> {
     set_data_async(data).await
 }
 
-pub async fn set_data_async(data: &Data) -> ResultType<()> {
+async fn set_data_async(data: &Data) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(data).await?;
     Ok(())
@@ -928,16 +932,23 @@ pub fn set_permanent_password(v: String) -> ResultType<()> {
 pub fn set_unlock_pin(v: String, translate: bool) -> ResultType<()> {
     let v = v.trim().to_owned();
     let min_len = 4;
-    if !v.is_empty() && v.len() < min_len {
-        let err = if translate {
-            crate::lang::translate(
-                "Requires at least {".to_string() + &format!("{min_len}") + "} characters",
-            )
-        } else {
-            // Sometimes, translated can't show normally in command line
-            format!("Requires at least {} characters", min_len)
-        };
-        bail!(err);
+    let max_len = crate::ui_interface::max_encrypt_len();
+    let len = v.chars().count();
+    if !v.is_empty() {
+        if len < min_len {
+            let err = if translate {
+                crate::lang::translate(
+                    "Requires at least {".to_string() + &format!("{min_len}") + "} characters",
+                )
+            } else {
+                // Sometimes, translated can't show normally in command line
+                format!("Requires at least {} characters", min_len)
+            };
+            bail!(err);
+        }
+        if len > max_len {
+            bail!("No more than {max_len} characters");
+        }
     }
     Config::set_unlock_pin(&v);
     set_config("unlock-pin", v)

@@ -148,6 +148,10 @@ target/release/rustdesk
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: свяжитесь с [rustdesk-server](https://github.com/rustdesk/rustdesk-server), дождитесь удаленного прямого (обход TCP NAT) или ретранслируемого соединения
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: специфичный для платформы код
 
+> [!Осторожно]
+> **Отказ от ответственности за неправомерное использование:** <br>
+> Разработчики RustDesk не одобряют и не поддерживают какое-либо неэтичное или незаконное использование данного программного обеспечения. Неправомерное использование, такое как несанкционированный доступ, контроль или вторжение в частную жизнь, строго противоречит нашим правилам. Авторы не несут ответственности за любое неправомерное использование приложения.
+
 ## Скриншоты
 
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)

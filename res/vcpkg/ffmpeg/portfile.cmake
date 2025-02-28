@@ -1,41 +1,32 @@
-if(VCPKG_TARGET_IS_WINDOWS OR VCPKG_TARGET_IS_LINUX)
-    set(FF_VERSION "n5.1.5")
-    set(FF_SHA512 "a933f18e53207ccc277b42c9a68db00f31cefec555e6d5d7c57db3409023b2c38fd93ebe2ccfcd17ba2397adb912e93f2388241ca970b7d8bd005ccfe86d5679")
-else()
-    set(FF_VERSION "n7.0.1")
-    set(FF_SHA512 "1212ebcb78fdaa103b0304373d374e41bf1fe680e1fa4ce0f60624857491c26b4dda004c490c3ef32d4a0e10f42ae6b54546f9f318e2dcfbaa116117f687bc88")
-endif()
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO ffmpeg/ffmpeg
-    REF "${FF_VERSION}"
-    SHA512 "${FF_SHA512}"
+    REF "n${VERSION}"
+    SHA512 3b273769ef1a1b63aed0691eef317a760f8c83b1d0e1c232b67bbee26db60b4864aafbc88df0e86d6bebf07185bbd057f33e2d5258fde6d97763b9994cd48b6f
     HEAD_REF master
     PATCHES
-    0002-fix-msvc-link.patch # upstreamed in future version
+    0001-create-lib-libraries.patch
+    0002-fix-msvc-link.patch
     0003-fix-windowsinclude.patch
-    0005-fix-nasm.patch # upstreamed in future version
-    0012-Fix-ssl-110-detection.patch
+    0004-dependencies.patch
+    0005-fix-nasm.patch
+    0007-fix-lib-naming.patch
     0013-define-WINVER.patch
+    0020-fix-aarch64-libswscale.patch
+    0024-fix-osx-host-c11.patch
+    0040-ffmpeg-add-av_stream_get_first_dts-for-chromium.patch # Do not remove this patch. It is required by chromium
+    0041-add-const-for-opengl-definition.patch
+    0043-fix-miss-head.patch
+    patch/0001-avcodec-amfenc-add-query_timeout-option-for-h264-hev.patch
+    patch/0002-libavcodec-amfenc-reconfig-when-bitrate-change.patch
+    patch/0004-videotoolbox-changing-bitrate.patch
+    patch/0005-mediacodec-changing-bitrate.patch
+    patch/0006-dlopen-libva.patch
+    patch/0007-fix-linux-configure.patch
+    patch/0008-remove-amf-loop-query.patch
+    patch/0009-fix-nvenc-reconfigure-blur.patch
+    patch/0010.disable-loading-DLLs-from-app-dir.patch
 )
-
-if(VCPKG_TARGET_IS_WINDOWS OR VCPKG_TARGET_IS_LINUX)
-    vcpkg_apply_patches(
-        SOURCE_PATH ${SOURCE_PATH}
-        PATCHES
-            ${CMAKE_CURRENT_LIST_DIR}/5.1/0001-avcodec-amfenc-add-query_timeout-option-for-h264-hev.patch
-            ${CMAKE_CURRENT_LIST_DIR}/5.1/0002-libavcodec-amfenc-reconfig-when-bitrate-change.patch
-            ${CMAKE_CURRENT_LIST_DIR}/5.1/0003-use-release-7.0-s-qsvenc-update_bitrate.patch
-            ${CMAKE_CURRENT_LIST_DIR}/5.1/0004-amf-colorspace.patch
-    )
-elseif(VCPKG_TARGET_IS_ANDROID)
-    vcpkg_apply_patches(
-        SOURCE_PATH ${SOURCE_PATH}
-        PATCHES
-            ${CMAKE_CURRENT_LIST_DIR}/7.0/0001-android-mediacodec-encode-align-64.patch
-    )
-endif()
 
 if(SOURCE_PATH MATCHES " ")
     message(FATAL_ERROR "Error: ffmpeg will not build with spaces in the path. Please use a directory with no spaces")
@@ -70,6 +61,7 @@ set(OPTIONS "\
 --disable-debug \
 --disable-valgrind-backtrace \
 --disable-large-tests \
+--disable-bzlib \
 --disable-avdevice \
 --enable-avcodec \
 --enable-avformat \
@@ -99,13 +91,15 @@ else()
 endif()
 
 if(VCPKG_TARGET_IS_LINUX)
-    string(APPEND OPTIONS  "\
+    string(APPEND OPTIONS "\
 --target-os=linux \
 --enable-pthreads \
+--disable-vdpau \
 ")
+
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
     else()
-        string(APPEND OPTIONS  "\
+        string(APPEND OPTIONS "\
 --enable-cuda \
 --enable-ffnvcodec \
 --enable-encoder=h264_nvenc \
@@ -120,8 +114,9 @@ if(VCPKG_TARGET_IS_LINUX)
 --enable-encoder=h264_vaapi \
 --enable-encoder=hevc_vaapi \
 ")
+
         if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
-            string(APPEND OPTIONS  "\
+            string(APPEND OPTIONS "\
     --enable-cuda_llvm \
 ")
         endif()
@@ -130,6 +125,7 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
     string(APPEND OPTIONS "\
 --target-os=win32 \
 --toolchain=msvc \
+--cc=cl \
 --enable-gpl \
 --enable-d3d11va \
 --enable-cuda \
@@ -148,7 +144,8 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --enable-libmfx \
 --enable-encoder=h264_qsv \
 --enable-encoder=hevc_qsv \
-")    
+")
+
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
         set(LIB_MACHINE_ARG /machine:x86)
         string(APPEND OPTIONS " --arch=i686 --enable-cross-compile")
@@ -211,6 +208,11 @@ endif()
 string(APPEND VCPKG_COMBINED_C_FLAGS_DEBUG " -I \"${CURRENT_INSTALLED_DIR}/include\"")
 string(APPEND VCPKG_COMBINED_C_FLAGS_RELEASE " -I \"${CURRENT_INSTALLED_DIR}/include\"")
 
+if(VCPKG_TARGET_IS_WINDOWS)
+    string(APPEND VCPKG_COMBINED_C_FLAGS_DEBUG " -I \"${CURRENT_INSTALLED_DIR}/include/mfx\"")
+    string(APPEND VCPKG_COMBINED_C_FLAGS_RELEASE " -I \"${CURRENT_INSTALLED_DIR}/include/mfx\"")
+endif()
+
 # # Setup vcpkg toolchain
 set(prog_env "")
 
@@ -220,7 +222,10 @@ if(VCPKG_DETECTED_CMAKE_C_COMPILER)
     set(ENV{CC} "${CC_filename}")
     string(APPEND OPTIONS " --cc=${CC_filename}")
 
-    # string(APPEND OPTIONS " --host_cc=${CC_filename}") ffmpeg not yet setup for cross builds?
+    if(VCPKG_HOST_IS_WINDOWS)
+        string(APPEND OPTIONS " --host_cc=${CC_filename}")
+    endif()
+
     list(APPEND prog_env "${CC_path}")
 endif()
 
@@ -289,6 +294,14 @@ if(VCPKG_DETECTED_CMAKE_STRIP)
     set(ENV{STRIP} "${STRIP_filename}")
     string(APPEND OPTIONS " --strip=${STRIP_filename}")
     list(APPEND prog_env "${STRIP_path}")
+endif()
+
+if(VCPKG_HOST_IS_WINDOWS)
+    vcpkg_acquire_msys(MSYS_ROOT PACKAGES automake1.16)
+    set(SHELL "${MSYS_ROOT}/usr/bin/bash.exe")
+    list(APPEND prog_env "${MSYS_ROOT}/usr/bin" "${MSYS_ROOT}/usr/share/automake-1.16")
+else()
+    # find_program(SHELL bash)
 endif()
 
 list(REMOVE_DUPLICATES prog_env)

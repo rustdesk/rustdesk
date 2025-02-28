@@ -152,10 +152,13 @@ class Header: Reactor.Component {
     }
 
     function renderKeyboardPop(){
+        const is_map_mode_supported = handler.is_keyboard_mode_supported("map");
+        const is_translate_mode_supported = handler.is_keyboard_mode_supported("translate");
         return <popup>
             <menu.context #keyboard-options>
-                <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li> 
-                <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> 
+                <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li>
+                { is_map_mode_supported && <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> }
+                { is_translate_mode_supported && <li #translate><span>{svg_checkmark}</span>{translate('Translate mode')}</li> }
             </menu>
         </popup>;
     }
@@ -169,6 +172,13 @@ class Header: Reactor.Component {
             if (pi.displays.length > pi.current_display) {
                 cursor_embedded = pi.displays[pi.current_display].cursor_embedded;
             }
+        }
+
+        var is_file_copy_paste_supported = false;
+        if (handler.version_cmp(pi.version, '1.2.4') < 0) {
+            is_file_copy_paste_supported = is_win && pi.platform == "Windows";
+        } else {
+            is_file_copy_paste_supported = handler.has_file_clipboard() && pi.platform_additions.has_file_clipboard;
         }
 
         return <popup>
@@ -198,7 +208,7 @@ class Header: Reactor.Component {
                 {<li #follow-remote-window .toggle-option><span>{svg_checkmark}</span>{translate('Follow remote window focus')}</li>}
                 <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
-                {(is_win && pi.platform == "Windows") && file_enabled ? <li #enable-file-copy-paste .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
+                {is_file_copy_paste_supported && file_enabled ? <li #enable-file-copy-paste .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
                 {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
                 {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
                 {keyboard_enabled && pi.platform == "Windows" ? <li #privacy-mode><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
@@ -298,26 +308,12 @@ class Header: Reactor.Component {
     }
 
     event click $(span#recording) (_, me) {
-        recording = !recording;
         header.update();
-        handler.record_status(recording);
-        // 0 is just a dummy value. It will be ignored by the handler.
-        if (recording) {
-            handler.refresh_video(0);
-            if (handler.version_cmp(pi.version, '1.2.4') >= 0) handler.record_screen(recording, pi.current_display, display_width, display_height);
-        }
-        else {
-            handler.record_screen(recording, pi.current_display, display_width, display_height);
-        }
+        handler.record_screen(!recording)
     }
 
     event click $(#screen) (_, me) {
         if (pi.current_display == me.index) return;
-        if (recording) {
-            recording = false;
-            handler.record_screen(false, pi.current_display, display_width, display_height);
-            handler.record_status(false);
-        }
         handler.switch_display(me.index);
     }
     
@@ -515,6 +511,7 @@ if (!(is_file_transfer || is_port_forward)) {
 
 handler.updatePi = function(v) {
     pi = v;
+    recording = handler.is_recording();
     header.update();
     if (is_port_forward) {
         view.windowState = View.WINDOW_MINIMIZED;
@@ -678,4 +675,9 @@ handler.setConnectionType = function(secured, direct) {
        secure_connection: secured,
        direct_connection: direct, 
     });
+}
+
+handler.updateRecordStatus = function(status) {
+    recording = status;
+    header.update();
 }

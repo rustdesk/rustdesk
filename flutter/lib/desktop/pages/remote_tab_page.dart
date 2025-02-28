@@ -212,14 +212,16 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     );
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
-        : Obx(() => Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                    color: MyTheme.color(context).border!,
-                    width: stateGlobal.windowBorderWidth.value),
-              ),
-              child: child,
-            ));
+        : workaroundWindowBorder(
+            context,
+            Obx(() => Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                        color: MyTheme.color(context).border!,
+                        width: stateGlobal.windowBorderWidth.value),
+                  ),
+                  child: child,
+                )));
     return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(() => SubWindowDragToResizeArea(
@@ -395,7 +397,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       RemoteCountState.find().value = tabController.length;
 
   Future<dynamic> _remoteMethodHandler(call, fromWindowId) async {
-    print(
+    debugPrint(
         "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
     dynamic returnValue;
