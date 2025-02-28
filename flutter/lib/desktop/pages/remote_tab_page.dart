@@ -418,7 +418,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           stateGlobal.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(
-            windowId(), id!, prePeerCount, display, screenRect);
+            windowId(), id!, prePeerCount, WindowType.RemoteDesktop, display, screenRect);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });

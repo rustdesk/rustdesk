@@ -389,7 +389,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           stateGlobal.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(
-            windowId(), id!, prePeerCount, display, screenRect);
+            windowId(), id!, prePeerCount, WindowType.ViewCamera, display, screenRect);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });

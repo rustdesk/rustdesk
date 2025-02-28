@@ -1752,7 +1752,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   await bind.setLocalFlutterOption(
       k: windowFramePrefix + type.name, v: pos.toString());
 
-  if (type == WindowType.RemoteDesktop && windowId != null) {
+  if ((type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) && windowId != null) {
     await _saveSessionWindowPosition(
         type, windowId, isMaximized, isFullscreen, pos);
   }
@@ -1903,7 +1903,7 @@ Future<bool> restoreWindowPosition(WindowType type,
   String? pos;
   // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
   // Though "open in tabs" is true and the new window restore peer position, it's ok.
-  if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
+  if ((type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) && windowId != null && peerId != null) {
     final peerPos = bind.mainGetPeerFlutterOptionSync(
         id: peerId, k: windowFramePrefix + type.name);
     if (peerPos.isNotEmpty) {
@@ -1918,7 +1918,7 @@ Future<bool> restoreWindowPosition(WindowType type,
     debugPrint("no window position saved, ignoring position restoration");
     return false;
   }
-  if (type == WindowType.RemoteDesktop) {
+  if (type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) {
     if (!isRemotePeerPos && windowId != null) {
       if (lpos.offsetWidth != null) {
         lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
@@ -3110,13 +3110,13 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
       kMainWindowId, kWindowEventOpenMonitorSession, jsonEncode(args));
 }
 
-setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
+setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount, WindowType windowType,
     int? display, Rect? screenRect) async {
   if (screenRect == null) {
     // Do not restore window position to new connection if there's a pre-session.
     // https://github.com/rustdesk/rustdesk/discussions/8825
     if (preSessionCount == 0) {
-      await restoreWindowPosition(WindowType.RemoteDesktop,
+      await restoreWindowPosition(windowType,
           windowId: windowId, display: display, peerId: peerId);
     }
   } else {
