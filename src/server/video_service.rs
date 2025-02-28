@@ -1088,7 +1088,7 @@ fn try_broadcast_display_changed(
         (cap.origin.0, cap.origin.1, cap.width, cap.height),
     ) {
         log::info!("Display {} changed", display);
-        if let Some(msg_out) = make_display_changed_msg(display_idx, Some(display)) {
+        if let Some(msg_out) = make_display_changed_msg(display_idx, Some(display), VideoSource::Monitor) {
             let msg_out = Arc::new(msg_out);
             sp.send_shared(msg_out.clone());
             // switch display may occur before the first video frame, add snapshot to send to new subscribers
@@ -1105,10 +1105,14 @@ fn try_broadcast_display_changed(
 pub fn make_display_changed_msg(
     display_idx: usize,
     opt_display: Option<DisplayInfo>,
+    source: VideoSource,
 ) -> Option<Message> {
     let display = match opt_display {
         Some(d) => d,
-        None => get_display_info(display_idx)?,
+        None => match source {
+            VideoSource::Monitor => display_service::get_display_info(display_idx)?,
+            VideoSource::Camera => camera::Cameras::get_sync_cameras().get(display_idx)?.clone(),
+        },
     };
     let mut misc = Misc::new();
     misc.set_switch_display(SwitchDisplay {
@@ -1117,13 +1121,19 @@ pub fn make_display_changed_msg(
         y: display.y,
         width: display.width,
         height: display.height,
-        cursor_embedded: display_service::capture_cursor_embedded(),
+        cursor_embedded: match source {
+            VideoSource::Monitor => display_service::capture_cursor_embedded(),
+            VideoSource::Camera => false,
+        },
         #[cfg(not(target_os = "android"))]
         resolutions: Some(SupportedResolutions {
-            resolutions: if display.name.is_empty() {
-                vec![]
-            } else {
-                crate::platform::resolutions(&display.name)
+            resolutions: match source {
+                VideoSource::Monitor => if display.name.is_empty() {
+                        vec![]
+                    } else {
+                        crate::platform::resolutions(&display.name)
+                    },
+                VideoSource::Camera => camera::Cameras::get_camera_resolution(display_idx).ok().into_iter().collect(),
             },
             ..SupportedResolutions::default()
         })

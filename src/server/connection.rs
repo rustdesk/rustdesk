@@ -2644,7 +2644,7 @@ impl Connection {
                     }
                     Some(misc::Union::MessageQuery(mq)) => {
                         if let Some(msg_out) =
-                            video_service::make_display_changed_msg(mq.switch_display as _, None)
+                            video_service::make_display_changed_msg(mq.switch_display as _, None, self.video_source())
                         {
                             self.send(msg_out).await;
                         }
@@ -2774,7 +2774,7 @@ impl Connection {
             // 1. For compatibility with old versions ( < 1.2.4 ).
             // 2. Sciter version.
             // 3. Update `SupportedResolutions`.
-            if let Some(msg_out) = video_service::make_display_changed_msg(self.display_idx, None) {
+            if let Some(msg_out) = video_service::make_display_changed_msg(self.display_idx, None, self.video_source()) {
                 self.send(msg_out).await;
             }
         }
