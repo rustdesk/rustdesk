@@ -906,7 +906,7 @@ class _CmControlPanel extends StatelessWidget {
                   icon: Icon(
                     Icons.link_off_rounded,
                     color: Colors.white,
-                    size: 14,
+                    size: 28,
                   ),
                   textColor: Colors.white),
             ),
