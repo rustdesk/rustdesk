@@ -55,21 +55,32 @@ class RustDeskMultiWindowManager {
   final List<int> _viewCameraWindows = List.empty(growable: true);
   final List<int> _portForwardWindows = List.empty(growable: true);
 
-  moveTabToNewWindow(int windowId, String peerId, String sessionId) async {
+  moveTabToNewWindow(int windowId, String peerId, String sessionId, WindowType windowType) async {
     var params = {
-      'type': WindowType.RemoteDesktop.index,
+      'type': windowType.index,
       'id': peerId,
       'tab_window_id': windowId,
       'session_id': sessionId,
     };
-    await _newSession(
-      false,
-      WindowType.RemoteDesktop,
-      kWindowEventNewRemoteDesktop,
-      peerId,
-      _remoteDesktopWindows,
-      jsonEncode(params),
-    );
+    if (windowType == WindowType.RemoteDesktop) {
+      await _newSession(
+        false,
+        WindowType.RemoteDesktop,
+        kWindowEventNewRemoteDesktop,
+        peerId,
+        _remoteDesktopWindows,
+        jsonEncode(params),
+      );
+    } else if (windowType == WindowType.ViewCamera) {
+      await _newSession(
+        false,
+        WindowType.ViewCamera,
+        kWindowEventNewViewCamera,
+        peerId,
+        _viewCameraWindows,
+        jsonEncode(params),
+      );
+    }
   }
 
   // This function must be called in the main window thread.

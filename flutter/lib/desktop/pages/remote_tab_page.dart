@@ -270,7 +270,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         ),
         proc: () async {
           await DesktopMultiWindow.invokeMethod(kMainWindowId,
-              kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId');
+              kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId,RemoteDesktop');
           cancelFunc();
         },
         padding: padding,

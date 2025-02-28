@@ -785,9 +785,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         } catch (e) {
           debugPrint("Failed to parse window id '${call.arguments}': $e");
         }
-        if (windowId != null) {
+        WindowType? windowType;
+        try {
+          windowType = WindowType.values.byName(args[3]);
+        } catch (e) {
+          debugPrint("Failed to parse window type '${call.arguments}': $e");
+        }
+        if (windowId != null && windowType != null) {
           await rustDeskWinManager.moveTabToNewWindow(
-              windowId, args[1], args[2]);
+              windowId, args[1], args[2], windowType);
         }
       } else if (call.method == kWindowEventOpenMonitorSession) {
         final args = jsonDecode(call.arguments);

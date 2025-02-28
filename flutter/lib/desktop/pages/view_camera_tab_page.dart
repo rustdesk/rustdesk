@@ -269,7 +269,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         ),
         proc: () async {
           await DesktopMultiWindow.invokeMethod(kMainWindowId,
-              kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId');
+              kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId,ViewCamera');
           cancelFunc();
         },
         padding: padding,
