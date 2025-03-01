@@ -978,10 +978,15 @@ dependencies = [
  "cacao",
  "cc",
  "dashmap",
+ "dirs 5.0.1",
+ "fsevent",
  "fuser",
  "hbb_common",
  "lazy_static",
  "libc",
+ "objc2 0.5.2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "once_cell",
  "parking_lot",
  "percent-encoding",
@@ -990,8 +995,10 @@ dependencies = [
  "serde_derive",
  "thiserror",
  "utf16string",
+ "uuid",
  "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
+ "xattr",
 ]
 
 [[package]]
@@ -2216,6 +2223,25 @@ dependencies = [
  "objc-foundation",
  "objc_id",
  "time 0.1.45",
+]
+
+[[package]]
+name = "fsevent"
+version = "2.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8836d1f147a0a195bf517a5fd211ea7023d19ced903135faf6c4504f2cf8775f"
+dependencies = [
+ "bitflags 1.3.2",
+ "fsevent-sys",
+]
+
+[[package]]
+name = "fsevent-sys"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -7998,6 +8024,17 @@ name = "x11rb-protocol"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec107c4503ea0b4a98ef47356329af139c0a4f7750e621cf2973cd3385ebcb3d"
+
+[[package]]
+name = "xattr"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e105d177a3871454f754b33bb0ee637ecaaac997446375fd3e5d43a2ed00c909"
+dependencies = [
+ "libc",
+ "linux-raw-sys 0.4.14",
+ "rustix 0.38.34",
+]
 
 [[package]]
 name = "xdg-home"

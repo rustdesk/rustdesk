@@ -12,7 +12,10 @@ use crate::{
 };
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
-#[cfg(target_os = "windows")]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "macos", feature = "unix-file-copy-paste")
+))]
 use clipboard::ContextSend;
 use crossbeam_queue::ArrayQueue;
 #[cfg(not(target_os = "ios"))]
@@ -1956,9 +1959,9 @@ impl<T: InvokeUiSession> Remote<T> {
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     async fn handle_cliprdr_msg(
-        &self,
+        &mut self,
         clip: hbb_common::message_proto::Cliprdr,
-        _peer: &mut Stream,
+        peer: &mut Stream,
     ) {
         log::debug!("handling cliprdr msg from server peer");
         #[cfg(feature = "flutter")]
@@ -1982,7 +1985,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
         if !stop {
-            #[cfg(target_os = "windows")]
+            #[cfg(any(
+                target_os = "windows",
+                all(target_os = "macos", feature = "unix-file-copy-paste")
+            ))]
             if let Err(e) = ContextSend::make_sure_enabled() {
                 log::error!("failed to restart clipboard context: {}", e);
             };
@@ -1996,12 +2002,36 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             #[cfg(feature = "unix-file-copy-paste")]
             if crate::is_support_file_copy_paste_num(self.handler.lc.read().unwrap().version) {
-                if let Some(msg) = unix_file_clip::serve_clip_messages(
-                    ClipboardSide::Client,
-                    clip,
-                    self.client_conn_id,
-                ) {
-                    allow_err!(_peer.send(&msg).await);
+                let mut out_msg = None;
+
+                #[cfg(target_os = "macos")]
+                if clipboard::platform::unix::macos::should_handle_msg(&clip) {
+                    if let Err(e) = ContextSend::proc(|context| -> ResultType<()> {
+                        context
+                            .server_clip_file(self.client_conn_id, clip)
+                            .map_err(|e| e.into())
+                    }) {
+                        log::error!("failed to handle cliprdr msg: {}", e);
+                    }
+                } else {
+                    out_msg = unix_file_clip::serve_clip_messages(
+                        ClipboardSide::Client,
+                        clip,
+                        self.client_conn_id,
+                    );
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                {
+                    out_msg = unix_file_clip::serve_clip_messages(
+                        ClipboardSide::Client,
+                        clip,
+                        self.client_conn_id,
+                    );
+                }
+
+                if let Some(msg) = out_msg {
+                    allow_err!(peer.send(&msg).await);
                 }
             }
         }

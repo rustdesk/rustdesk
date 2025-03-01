@@ -1267,11 +1267,13 @@ impl Connection {
             let is_unix_and_peer_supported = crate::is_support_file_copy_paste(&self.lr.version);
             #[cfg(not(feature = "unix-file-copy-paste"))]
             let is_unix_and_peer_supported = false;
-            // to-do: add file clipboard support for macos
             let is_both_macos = cfg!(target_os = "macos")
                 && self.lr.my_platform == whoami::Platform::MacOS.to_string();
-            let has_file_clipboard =
-                is_both_windows || (is_unix_and_peer_supported && !is_both_macos);
+            let is_peer_support_paste_if_macos =
+                crate::is_support_file_paste_if_macos(&self.lr.version);
+            let has_file_clipboard = is_both_windows
+                || (is_unix_and_peer_supported
+                    && (!is_both_macos || is_peer_support_paste_if_macos));
             platform_additions.insert("has_file_clipboard".into(), json!(has_file_clipboard));
         }
 
@@ -2195,11 +2197,38 @@ impl Connection {
                         }
                         #[cfg(feature = "unix-file-copy-paste")]
                         if crate::is_support_file_copy_paste(&self.lr.version) {
-                            if let Some(msg) = unix_file_clip::serve_clip_messages(
-                                ClipboardSide::Host,
-                                clip,
-                                self.inner.id(),
-                            ) {
+                            let mut out_msg = None;
+
+                            #[cfg(target_os = "macos")]
+                            if clipboard::platform::unix::macos::should_handle_msg(&clip) {
+                                if let Err(e) = clipboard::ContextSend::make_sure_enabled() {
+                                    log::error!("failed to restart clipboard context: {}", e);
+                                } else {
+                                    let _ =
+                                        clipboard::ContextSend::proc(|context| -> ResultType<()> {
+                                            context
+                                                .server_clip_file(self.inner.id(), clip)
+                                                .map_err(|e| e.into())
+                                        });
+                                }
+                            } else {
+                                out_msg = unix_file_clip::serve_clip_messages(
+                                    ClipboardSide::Host,
+                                    clip,
+                                    self.inner.id(),
+                                );
+                            }
+
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                out_msg = unix_file_clip::serve_clip_messages(
+                                    ClipboardSide::Host,
+                                    clip,
+                                    self.inner.id(),
+                                );
+                            }
+
+                            if let Some(msg) = out_msg {
                                 self.send(msg).await;
                             }
                         }
