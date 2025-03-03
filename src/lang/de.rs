@@ -55,6 +55,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hardware Codec", "Hardware-Codec"),
         ("Adaptive bitrate", "Bitrate automatisch anpassen"),
         ("ID Server", "ID-Server"),
+        ("ID Server upd", "ID-Server-upd"),
         ("Relay Server", "Relay-Server"),
         ("API Server", "API-Server"),
         ("invalid_http", "Muss mit http:// oder https:// beginnen"),
