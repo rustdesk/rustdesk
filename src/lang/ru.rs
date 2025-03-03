@@ -299,7 +299,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Unsupported", "Не поддерживается"),
         ("Peer denied", "Отклонено удалённым узлом"),
         ("Please install plugins", "Установите плагины"),
-        ("Peer exit", "Удалённый узел отключён"),
+        ("Peer exit", "Отключено пользователем"),
         ("Failed to turn off", "Невозможно отключить"),
         ("Turned off", "Отключён"),
         ("Language", "Язык"),
