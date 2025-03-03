@@ -543,6 +543,9 @@ extern "C"
         DWORD count;
         auto rdp = "rdp";
         auto nrdp = strlen(rdp);
+        // https://github.com/rustdesk/rustdesk/discussions/937#discussioncomment-12373814 citrix session
+        auto ica = "ica";
+        auto nica = strlen(ica);
         if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &pInfos, &count))
         {
             for (DWORD i = 0; i < count; i++)
@@ -558,7 +561,7 @@ extern "C"
                         WTSFreeMemory(pInfos);
                         return id;
                     }
-                    if (!strnicmp(info.pWinStationName, rdp, nrdp))
+                    if (!strnicmp(info.pWinStationName, rdp, nrdp) || !strnicmp(info.pWinStationName, ica, nica))
                     {
                         rdp_or_console = info.SessionId;
                     }
@@ -614,6 +617,8 @@ extern "C"
                 auto info = pInfos[i];
                 auto rdp = "rdp";
                 auto nrdp = strlen(rdp);
+                auto ica = "ica";
+                auto nica = strlen(ica);
                 if (info.State == WTSActive) {
                     if (info.pWinStationName == NULL)
                         continue;
@@ -625,6 +630,9 @@ extern "C"
                     }
                     else if (include_rdp && !strnicmp(info.pWinStationName, rdp, nrdp)) {
                         sessionIds.push_back(std::wstring(L"RDP:") + std::to_wstring(info.SessionId));
+                    }
+                    else if (include_rdp && !strnicmp(info.pWinStationName, ica, nica)) {
+                        sessionIds.push_back(std::wstring(L"ICA:") + std::to_wstring(info.SessionId));
                     }
                 }
             }
