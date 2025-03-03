@@ -9,6 +9,7 @@ import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
+import 'package:flutter_hbb/desktop/pages/view_camera_page.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -180,11 +181,13 @@ class DesktopTabController {
       jumpTo(state.value.tabs.indexWhere((tab) => tab.key == key),
           callOnSelected: callOnSelected);
 
-  bool jumpToByKeyAndDisplay(String key, int display) {
+  bool jumpToByKeyAndDisplay(String key, int display, {bool isCamera = false}) {
     for (int i = 0; i < state.value.tabs.length; i++) {
       final tab = state.value.tabs[i];
       if (tab.key == key) {
-        final ffi = (tab.page as RemotePage).ffi;
+        final ffi = isCamera
+            ? (tab.page as ViewCameraPage).ffi
+            : (tab.page as RemotePage).ffi;
         if (ffi.ffiModel.pi.currentDisplay == display) {
           return jumpTo(i, callOnSelected: true);
         }

@@ -194,7 +194,8 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
                 final viewCameraPage = tabController.state.value.tabs
                     .firstWhere((tab) => tab.key == key)
                     .page as ViewCameraPage;
-                if (viewCameraPage.ffi.ffiModel.pi.isSet.isTrue && e.buttons == 2) {
+                if (viewCameraPage.ffi.ffiModel.pi.isSet.isTrue &&
+                    e.buttons == 2) {
                   showRightMenu(
                     (CancelFunc cancelFunc) {
                       return _tabMenuBuilder(key, cancelFunc);
@@ -268,8 +269,10 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           style: style,
         ),
         proc: () async {
-          await DesktopMultiWindow.invokeMethod(kMainWindowId,
-              kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId,ViewCamera');
+          await DesktopMultiWindow.invokeMethod(
+              kMainWindowId,
+              kWindowEventMoveTabToNewWindow,
+              '${windowId()},$key,$sessionId,ViewCamera');
           cancelFunc();
         },
         padding: padding,
@@ -370,7 +373,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
 
   Future<dynamic> _remoteMethodHandler(call, fromWindowId) async {
     debugPrint(
-        "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+        "[View Camera Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
     dynamic returnValue;
     // for simplify, just replace connectionId
@@ -388,8 +391,8 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           await WindowController.fromWindowId(windowId()).setFullscreen(false);
           stateGlobal.setFullscreen(false, procWnd: false);
         }
-        await setNewConnectWindowFrame(
-            windowId(), id!, prePeerCount, WindowType.ViewCamera, display, screenRect);
+        await setNewConnectWindowFrame(windowId(), id!, prePeerCount,
+            WindowType.ViewCamera, display, screenRect);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });
@@ -431,7 +434,8 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
       final args = jsonDecode(call.arguments);
       final id = args['id'];
       final display = args['display'];
-      final jumpOk = tabController.jumpToByKeyAndDisplay(id, display);
+      final jumpOk =
+          tabController.jumpToByKeyAndDisplay(id, display, isCamera: true);
       if (jumpOk) {
         windowOnTop(windowId());
       }

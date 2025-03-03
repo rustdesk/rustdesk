@@ -158,7 +158,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   }
 
   connectWithToken(
-      {bool isFileTransfer = false, bool isViewCamera = false, bool isTcpTunneling = false}) {
+      {bool isFileTransfer = false,
+      bool isViewCamera = false,
+      bool isTcpTunneling = false}) {
     final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
     connect(context, id,
         isFileTransfer: isFileTransfer,
@@ -172,17 +174,15 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(
       TTextMenu(
           child: Text(translate('Transfer file')),
-          onPressed: () =>
-              connectWithToken(isFileTransfer: true)),
+          onPressed: () => connectWithToken(isFileTransfer: true)),
     );
   }
-  // viewCamera 
+  // viewCamera
   if (isDesktop) {
     v.add(
       TTextMenu(
           child: Text(translate('View camera')),
-          onPressed: () =>
-              connectWithToken(isViewCamera: true)),
+          onPressed: () => connectWithToken(isViewCamera: true)),
     );
   }
   // tcpTunneling
@@ -190,8 +190,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(
       TTextMenu(
           child: Text(translate('TCP tunneling')),
-          onPressed: () =>
-              connectWithToken(isTcpTunneling: true)),
+          onPressed: () => connectWithToken(isTcpTunneling: true)),
     );
   }
   // note
@@ -260,7 +259,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       pi.platform != kPeerPlatformAndroid &&
       pi.platform != kPeerPlatformMacOS &&
       versionCmp(pi.version, '1.2.0') >= 0 &&
-      bind.peerGetDefaultSessionsCount(id: id) == 1) {
+      bind.peerGetSessionsCount(id: id, isViewCamera: false) == 1) {
     v.add(TTextMenu(
         child: Text(translate('Switch Sides')),
         onPressed: () =>

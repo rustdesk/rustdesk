@@ -407,7 +407,7 @@ class FfiModel with ChangeNotifier {
           parent.target?.fileModel.sendEmptyDirs(evt);
         }
       } else if (name == "record_status") {
-        if (desktopType == DesktopType.remote || 
+        if (desktopType == DesktopType.remote ||
             desktopType == DesktopType.viewCamera ||
             isMobile) {
           parent.target?.recordingModel.updateStatus(evt['start'] == 'true');
@@ -503,7 +503,10 @@ class FfiModel with ChangeNotifier {
     final display = int.parse(evt['display']);
 
     if (_pi.currentDisplay != kAllDisplayValue) {
-      if (bind.peerGetDefaultSessionsCount(id: peerId) > 1) {
+      if (bind.peerGetSessionsCount(
+              id: peerId,
+              isViewCamera: parent.target?.connType == ConnType.viewCamera) >
+          1) {
         if (display != _pi.currentDisplay) {
           return;
         }
@@ -811,7 +814,10 @@ class FfiModel with ChangeNotifier {
       _pi.primaryDisplay = currentDisplay;
     }
 
-    if (bind.peerGetDefaultSessionsCount(id: peerId) <= 1) {
+    if (bind.peerGetSessionsCount(
+            id: peerId,
+            isViewCamera: parent.target?.connType == ConnType.viewCamera) <=
+        1) {
       _pi.currentDisplay = currentDisplay;
     }
 
@@ -832,7 +838,8 @@ class FfiModel with ChangeNotifier {
     // FIXME: handle ViewCamera ConnType independently.
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
-    } else if (connType == ConnType.defaultConn || connType == ConnType.viewCamera) {
+    } else if (connType == ConnType.defaultConn ||
+        connType == ConnType.viewCamera) {
       List<Display> newDisplays = [];
       List<dynamic> displays = json.decode(evt['displays']);
       for (int i = 0; i < displays.length; ++i) {
@@ -2673,13 +2680,14 @@ class FFI {
     closed = false;
     auditNote = '';
     if (isMobile) mobileReset();
-    assert((!(isPortForward && isViewCamera)) 
-      && (!(isViewCamera && isPortForward)) 
-      && (!(isPortForward && isFileTransfer)), 
-      'more than one connect type');
+    assert(
+        (!(isPortForward && isViewCamera)) &&
+            (!(isViewCamera && isPortForward)) &&
+            (!(isPortForward && isFileTransfer)),
+        'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
-    } else if (isViewCamera) { 
+    } else if (isViewCamera) {
       connType = ConnType.viewCamera;
     } else if (isPortForward) {
       connType = ConnType.portForward;
@@ -2716,7 +2724,10 @@ class FFI {
         return;
       }
       final addRes = bind.sessionAddExistedSync(
-          id: id, sessionId: sessionId, displays: Int32List.fromList(displays));
+          id: id,
+          sessionId: sessionId,
+          displays: Int32List.fromList(displays),
+          isViewCamera: isViewCamera);
       if (addRes != '') {
         debugPrint(
             'Unreachable, failed to add existed session to $id, $addRes');

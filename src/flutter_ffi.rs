@@ -92,16 +92,22 @@ pub fn host_stop_system_key_propagate(_stopped: bool) {
 }
 
 // This function is only used to count the number of control sessions.
-pub fn peer_get_default_sessions_count(id: String) -> SyncReturn<usize> {
-    SyncReturn(sessions::get_session_count(id, ConnType::DEFAULT_CONN))
+pub fn peer_get_sessions_count(id: String, is_view_camera: bool) -> SyncReturn<usize> {
+    let conn_type = if is_view_camera {
+        ConnType::VIEW_CAMERA
+    } else {
+        ConnType::DEFAULT_CONN
+    };
+    SyncReturn(sessions::get_session_count(id, conn_type))
 }
 
 pub fn session_add_existed_sync(
     id: String,
     session_id: SessionID,
     displays: Vec<i32>,
+    is_view_camera: bool,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add_existed(id.clone(), session_id, displays) {
+    if let Err(e) = session_add_existed(id.clone(), session_id, displays, is_view_camera) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())

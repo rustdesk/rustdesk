@@ -11,7 +11,14 @@ import 'package:flutter_hbb/models/input_model.dart';
 
 /// must keep the order
 // ignore: constant_identifier_names
-enum WindowType { Main, RemoteDesktop, FileTransfer, ViewCamera, PortForward, Unknown }
+enum WindowType {
+  Main,
+  RemoteDesktop,
+  FileTransfer,
+  ViewCamera,
+  PortForward,
+  Unknown
+}
 
 extension Index on int {
   WindowType get windowType {
@@ -55,7 +62,8 @@ class RustDeskMultiWindowManager {
   final List<int> _viewCameraWindows = List.empty(growable: true);
   final List<int> _portForwardWindows = List.empty(growable: true);
 
-  moveTabToNewWindow(int windowId, String peerId, String sessionId, WindowType windowType) async {
+  moveTabToNewWindow(int windowId, String peerId, String sessionId,
+      WindowType windowType) async {
     var params = {
       'type': windowType.index,
       'id': peerId,
@@ -86,9 +94,11 @@ class RustDeskMultiWindowManager {
   // This function must be called in the main window thread.
   // Because the _remoteDesktopWindows is managed in that thread.
   openMonitorSession(int windowId, String peerId, int display, int displayCount,
-      Rect? screenRect) async {
-    if (_remoteDesktopWindows.length > 1) {
-      for (final windowId in _remoteDesktopWindows) {
+      Rect? screenRect, int windowType) async {
+    final isCamera = windowType == WindowType.ViewCamera.index;
+    final windowIDs = isCamera ? _viewCameraWindows : _remoteDesktopWindows;
+    if (windowIDs.length > 1) {
+      for (final windowId in windowIDs) {
         if (await DesktopMultiWindow.invokeMethod(
             windowId,
             kWindowEventActiveDisplaySession,
@@ -105,7 +115,7 @@ class RustDeskMultiWindowManager {
         ? List.generate(displayCount, (index) => index)
         : [display];
     var params = {
-      'type': WindowType.RemoteDesktop.index,
+      'type': windowType,
       'id': peerId,
       'tab_window_id': windowId,
       'display': display,
@@ -121,10 +131,10 @@ class RustDeskMultiWindowManager {
     }
     await _newSession(
       false,
-      WindowType.RemoteDesktop,
-      kWindowEventNewRemoteDesktop,
+      windowType.windowType,
+      isCamera ? kWindowEventNewViewCamera : kWindowEventNewRemoteDesktop,
       peerId,
-      _remoteDesktopWindows,
+      windowIDs,
       jsonEncode(params),
       screenRect: screenRect,
     );
