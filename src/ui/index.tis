@@ -431,9 +431,11 @@ class MyIdMenu: Reactor.Component {
             var old_relay = configOptions["relay-server"] || "";
             var old_api = configOptions["api-server"] || "";
             var old_id = configOptions["custom-rendezvous-server"] || "";
+            var old_id_udp = configOptions["custom-rendezvous-server-udp"] || "";
             var old_key = configOptions["key"] || "";
             msgbox("custom-server", "ID/Relay Server", "<div .form .set-password> \
             <div><span>" + translate("ID Server") + ": </span><input|text .outline-focus name='id' value='" + old_id + "' /></div> \
+            <div><span>" + translate("ID Server udp") + ": </span><input|text .outline-focus name='id_udp' value='" + old_id_udp + "' /></div> \
             <div><span>" + translate("Relay Server") + ": </span><input|text name='relay' value='" + old_relay + "' /></div> \
             <div><span>" + translate("API Server") + ": </span><input|text name='api' value='" + old_api + "' /></div> \
             <div><span>" + translate("Key") + ": </span><input|text name='key' value='" + old_key + "' /></div> \
@@ -449,6 +451,10 @@ class MyIdMenu: Reactor.Component {
                     var err = handler.test_if_valid_server(id, true);
                     if (err) return translate("ID Server") + ": " + err;
                 }
+                if (id_udp) {
+                    var err = handler.test_if_valid_server(id_udp, true);
+                    if (err) return translate("ID Server udp") + ": " + err;
+                }
                 if (relay) {
                     var err = handler.test_if_valid_server(relay, true);
                     if (err) return translate("Relay Server") + ": " + err;
@@ -459,6 +465,7 @@ class MyIdMenu: Reactor.Component {
                     }
                 }
                 configOptions["custom-rendezvous-server"] = id;
+                configOptions["custom-rendezvous-server-udp"] = id;
                 configOptions["relay-server"] = relay;
                 configOptions["api-server"] = api;
                 configOptions["key"] = key;
