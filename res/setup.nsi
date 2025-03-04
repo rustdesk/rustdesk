@@ -27,7 +27,7 @@ VIAddVersionKey "FileVersion" "${VERSION}.0"
 # Installer Attributes
 
 Name "${PRODUCT_NAME}"
-Outfile "赢商远程-${VERSION}-setup.exe"
+Outfile "rustdesk-${VERSION}-setup.exe"
 Caption "Setup - ${PRODUCT_NAME}"
 BrandingText "${PRODUCT_NAME}"
 
