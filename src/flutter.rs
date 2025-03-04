@@ -1256,8 +1256,6 @@ pub fn session_start_(
     id: &str,
     event_stream: StreamSink<EventToUI>,
 ) -> ResultType<()> {
-    println!("===============session_start_ {:?}", session_id);
-
     // is_connected is used to indicate whether to start a peer connection. For two cases:
     // 1. "Move tab to new window"
     // 2. multi ui session within the same peer connection.
@@ -1269,11 +1267,6 @@ pub fn session_start_(
             try_send_close_event(&h.event_stream);
             h.event_stream = Some(event_stream);
             is_found = true;
-            println!(
-                "find session_start_ {:?}, {:?}",
-                session_id,
-                s.lc.read().unwrap().conn_type
-            );
             break;
         }
     }
@@ -2085,10 +2078,6 @@ pub mod sessions {
 
     #[inline]
     pub fn insert_session(session_id: SessionID, conn_type: ConnType, session: FlutterSession) {
-        println!(
-            "===============insert_session {:?}, {:?}",
-            session_id, conn_type
-        );
         SESSIONS
             .write()
             .unwrap()
