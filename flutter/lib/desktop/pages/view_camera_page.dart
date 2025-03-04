@@ -40,6 +40,7 @@ class ViewCameraPage extends StatefulWidget {
     this.display,
     this.displays,
     this.tabController,
+    this.connToken,
     this.forceRelay,
     this.isSharedPassword,
   }) : super(key: key) {
@@ -55,6 +56,7 @@ class ViewCameraPage extends StatefulWidget {
   final ToolbarState toolbarState;
   final bool? forceRelay;
   final bool? isSharedPassword;
+  final String? connToken;
   final SimpleWrapper<State<ViewCameraPage>?> _lastState = SimpleWrapper(null);
   final DesktopTabController? tabController;
 
@@ -113,6 +115,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       tabWindowId: widget.tabWindowId,
       display: widget.display,
       displays: widget.displays,
+      connToken: widget.connToken,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
