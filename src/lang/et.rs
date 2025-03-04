@@ -15,7 +15,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Pole valmis. Palun kontrolli oma ühendust"),
         ("Control Remote Desktop", ""),
         ("Transfer file", ""),
-        ("View camera", "Vaata kaamerat"),
         ("Connect", ""),
         ("Recent sessions", ""),
         ("Address book", ""),
@@ -547,7 +546,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "Mitteaktiivsuse tõttu automaatselt lahti ühendatud"),
         ("Check for software update on startup", ""),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Palun täienda RustDesk Server Pro versioonile {} või uuem!"),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", "Täiendage RustDeski klient kaugküljel versioonile {} või uuemale!"),
         ("pull_group_failed_tip", "Grupi värskendamine ebaõnnestus"),
         ("Filter by intersection", ""),
         ("Remove wallpaper during incoming sessions", ""),
@@ -659,5 +657,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
         ("Accessible devices", ""),
+        ("View camera", "Vaata kaamerat"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Täiendage RustDeski klient kaugküljel versioonile {} või uuemale!"),
     ].iter().cloned().collect();
 }

@@ -15,7 +15,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Nije spremno. Proverite konekciju."),
         ("Control Remote Desktop", "Upravljanje udaljenom radnom površinom"),
         ("Transfer file", "Prenos fajla"),
-        ("View camera", "Pregled kamere"),
         ("Connect", "Spajanje"),
         ("Recent sessions", "Poslednje sesije"),
         ("Address book", "Adresar"),
@@ -547,7 +546,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", ""),
         ("Check for software update on startup", ""),
         ("upgrade_rustdesk_server_pro_to_{}_tip", ""),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", ""),
         ("pull_group_failed_tip", ""),
         ("Filter by intersection", ""),
         ("Remove wallpaper during incoming sessions", ""),
@@ -659,5 +657,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
         ("Accessible devices", ""),
+        ("View camera", "Pregled kamere"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", ""),
     ].iter().cloned().collect();
 }

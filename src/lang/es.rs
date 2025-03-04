@@ -15,7 +15,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "No está listo. Comprueba tu conexión"),
         ("Control Remote Desktop", "Controlar escritorio remoto"),
         ("Transfer file", "Transferir archivo"),
-        ("View camera", "Ver cámara"),
         ("Connect", "Conectar"),
         ("Recent sessions", "Sesiones recientes"),
         ("Address book", "Directorio"),
@@ -547,7 +546,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "Desconectar automáticamente por inactividad."),
         ("Check for software update on startup", "Comprobar actualización al iniciar"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "¡Por favor, actualiza RustDesk Server Pro a la versión {} o superior"),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", "Por favor, actualiza el cliente RustDesk a la versión {} o superior en el lado remoto"),
         ("pull_group_failed_tip", "No se ha podido refrescar el grupo"),
         ("Filter by intersection", "Filtrar por intersección"),
         ("Remove wallpaper during incoming sessions", "Quitar el fondo de pantalla durante sesiones entrantes"),
@@ -659,5 +657,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Untagged", "Sin itiquetar"),
         ("new-version-of-{}-tip", "Hay una nueva versión de {} disponible"),
         ("Accessible devices", ""),
+        ("View camera", "Ver cámara"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Por favor, actualiza el cliente RustDesk a la versión {} o superior en el lado remoto"),
     ].iter().cloned().collect();
 }

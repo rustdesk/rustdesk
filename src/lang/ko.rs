@@ -15,7 +15,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "준비되지 않았습니다. 연결을 확인해주세요."),
         ("Control Remote Desktop", "원격 데스크탑 제어"),
         ("Transfer file", "파일 전송"),
-        ("View camera", "카메라 보기"),
         ("Connect", "연결하기"),
         ("Recent sessions", "최근 세션"),
         ("Address book", "세션 주소록"),
@@ -547,8 +546,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "장시간 활동이 없어 연결이 자동으로 종료되었습니다"),
         ("Check for software update on startup", "시작 시 소프트웨어 업데이트 확인"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "RustDesk Server Pro를 {} 버전 이상으로 업그레이드하십시오!"),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", "원격 측의 RustDesk 클라이언트를 {} 버전 이상으로 업그레이드하십시오!"),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", "원격 측의 RustDesk 클라이언트를 {} 버전 이상으로 업그레이드하십시오!"),
         ("pull_group_failed_tip", "그룹 정보를 가져오지 못했습니다"),
         ("Filter by intersection", "교차로로 필터링"),
         ("Remove wallpaper during incoming sessions", "세션 수락시 배경화면 제거"),
@@ -660,5 +657,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Untagged", "태그 없음"),
         ("new-version-of-{}-tip", "{} 의 새로운 버전이 출시되었습니다."),
         ("Accessible devices", ""),
+        ("View camera", "카메라 보기"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "원격 측의 RustDesk 클라이언트를 {} 버전 이상으로 업그레이드하십시오!"),
     ].iter().cloned().collect();
 }

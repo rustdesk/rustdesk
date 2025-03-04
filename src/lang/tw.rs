@@ -546,7 +546,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "由於長時間沒有操作，已自動關閉工作階段"),
         ("Check for software update on startup", "啟動時檢查更新"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "請升級專業版伺服器到{}或更高版本！"),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", "請將遠端 RustDesk 用戶端升級到 {} 或更新版本！"),
         ("pull_group_failed_tip", "獲取群組訊息失敗"),
         ("Filter by intersection", "按照交集篩選"),
         ("Remove wallpaper during incoming sessions", "在接受連入連線時移除桌布"),
@@ -658,5 +657,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Untagged", "無標籤"),
         ("new-version-of-{}-tip", "有新版本的 {} 可用"),
         ("Accessible devices", "可存取的裝置"),
+        ("View camera", "檢視相機"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "請將遠端 RustDesk 用戶端升級到 {} 或更新版本！"),
     ].iter().cloned().collect();
 }
