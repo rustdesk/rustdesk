@@ -11,7 +11,7 @@
 ####################################################################
 # File Info
 
-!define PRODUCT_NAME "赢商远程"
+!define PRODUCT_NAME "RustDesk"
 !define PRODUCT_DESCRIPTION "Installer for ${PRODUCT_NAME}"
 !define COPYRIGHT "Copyright © 2021"
 !define VERSION "1.1.6"
