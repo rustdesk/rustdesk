@@ -115,6 +115,10 @@ impl Handler {
     fn check_clipboard_file(&mut self) {
         if let Some(urls) = check_clipboard_files(&mut self.ctx, ClipboardSide::Host, false) {
             if !urls.is_empty() {
+                #[cfg(target_os = "macos")]
+                if crate::clipboard::is_file_url_set_by_rustdesk(&urls) {
+                    return;
+                }
                 match clipboard::platform::unix::serv_files::sync_files(&urls) {
                     Ok(()) => {
                         // Use `send_data()` here to reuse `handle_file_clip()` in `connection.rs`.

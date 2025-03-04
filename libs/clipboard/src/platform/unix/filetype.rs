@@ -4,15 +4,17 @@ use hbb_common::{
     bytes::{Buf, Bytes},
     log,
 };
+use serde_derive::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
     time::{Duration, SystemTime},
 };
 use utf16string::WStr;
 
+#[cfg(target_os = "linux")]
 pub type Inode = u64;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FileType {
     File,
     Directory,
@@ -28,10 +30,11 @@ pub const PERM_RW: u16 = 0o644;
 pub const PERM_SELF_RO: u16 = 0o400;
 /// rwx
 pub const PERM_RWX: u16 = 0o755;
+#[allow(dead_code)]
 /// max length of file name
 pub const MAX_NAME_LEN: usize = 255;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileDescription {
     pub conn_id: i32,
     pub name: PathBuf,
@@ -40,9 +43,7 @@ pub struct FileDescription {
     pub last_modified: SystemTime,
     pub last_metadata_changed: SystemTime,
     pub creation_time: SystemTime,
-
     pub size: u64,
-
     pub perm: u16,
 }
 
@@ -144,7 +145,6 @@ impl FileDescription {
             atime: last_modified,
             last_modified,
             last_metadata_changed: last_modified,
-
             creation_time: last_modified,
             size,
             perm,
