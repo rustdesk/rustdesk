@@ -9,7 +9,7 @@
 
 void CreateAndAttachConsole() {
   if (::AllocConsole()) {
-    FILE *unused;
+    FILE *unused;122
     if (freopen_s(&unused, "CONOUT$", "w", stdout)) {
       _dup2(_fileno(stdout), 1);
     }
