@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "pikkus %min%-%max%"),
         ("starts with a letter", "algab tähega"),
         ("allowed characters", "lubatud tähemärgid"),
-        ("id_change_tip", "Lubatud on vaid a-z, A-Z, 0-9, - (dash) ja _ (alakriips) tähemärgid. Esimene täht peab olema a-z või A-Z. Pikkus vahemikus 6-16."),
+        ("id_change_tip", "Lubatud on vaid a-z, A-Z, 0-9, - (kriips) ja _ (alakriips) tähemärgid. Esimene täht peab olema a-z või A-Z. Pikkus vahemikus 6-16."),
         ("Website", "Veebileht"),
         ("About", "Meist"),
         ("Slogan_tip", "Loodud südamega selles kaootilises maailmas!"),
