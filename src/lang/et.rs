@@ -629,7 +629,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-bot-tip", "Kui lubad selle funktsiooni, saad 2FA koodi oma botilt. See võib töötada ka ühenduse teavitusena."),
         ("enable-bot-desc", "1. Ava vestlus kasutajaga @BotFather.\n2. Saada käsklus \"/newbot\". Pärast selle sammu lõpetamist saad tokeni.\n3. Alusta vestlust oma uue loodud botiga. Saada sõnum, mis algab kaldkriipsuga (\"/\") nagu \"/hello\", et see aktiveerida.\n"),
         ("cancel-2fa-confirm-tip", "Kas oled kindel, et soovid 2FA tühistada?"),
-        ("cancel-bot-confirm-tip", "Kas oled kindel, et soovid Telegrami boti tühistada?")
+        ("cancel-bot-confirm-tip", "Kas oled kindel, et soovid Telegrami boti tühistada?"),
         ("About RustDesk", "RustDeski teave"),
         ("Send clipboard keystrokes", "Saada lõikelaua klahvivajutused"),
         ("network_error_tip", "Palun kontrolli oma võrguühendust ja seejärel klõpsa nuppu \"Proovi uuesti\"."),
@@ -648,7 +648,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "Ühesuunaline failiedastus on lubatud juhitataval poolel."),
         ("Authentication Required", "Autentimine nõutud"),
         ("Authenticate", "Autendi"),
-        ("web_id_input_tip", "Saad sisestada sama serveri ID, otse IP-juurdepääs ei ole veebikliendis toetatud.\nKui soovid seadmele teises serveris ligi pääseda, palun lisa serveri aadress (<id>@<serveri_aadress>?key=<võtme_väärtus>), näiteks,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nKui soovid seadmele avalikus serveris ligi pääseda, palun sisesta \"<id>@public\"; võti ei ole avaliku serveri jaoks vajalik.")
+        ("web_id_input_tip", "Saad sisestada sama serveri ID, otse IP-juurdepääs ei ole veebikliendis toetatud.\nKui soovid seadmele teises serveris ligi pääseda, palun lisa serveri aadress (<id>@<serveri_aadress>?key=<võtme_väärtus>), näiteks,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nKui soovid seadmele avalikus serveris ligi pääseda, palun sisesta \"<id>@public\"; võti ei ole avaliku serveri jaoks vajalik."),
         ("Download", "Laadi alla"),
         ("Upload folder", "Laadi kaust üles"),
         ("Upload files", "Laadi failid üles"),
