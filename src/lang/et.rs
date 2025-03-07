@@ -600,7 +600,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "Igaüks"),
         ("ab_web_console_tip", "Rohkem leiad veebikonsoolist"),
         ("allow-only-conn-window-open-tip", "Luba ühendus ainult siis, kui RustDeski aken on avatud."),
-        ("no_need_privacy_mode_no_physical_displays_tip", "Füüsilisi ekraane pole, privaatsusrežiimi kasutamine pole vajalik.")        
+        ("no_need_privacy_mode_no_physical_displays_tip", "Füüsilisi ekraane pole, privaatsusrežiimi kasutamine pole vajalik."),        
         ("Follow remote cursor", "Jälgi kaugkursorit"),
         ("Follow remote window focus", "Jälgi kaugakna fookust"),
         ("default_proxy_tip", "Vaikimisi protokoll ja port on Socks5 ja 1080."),
@@ -610,11 +610,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Clear Wayland screen selection", "Tühjenda Waylandi ekraanivalik"),
         ("clear_Wayland_screen_selection_tip", "Pärast ekraanivaliku tühistamist saad uuesti jagatava ekraani valida."),
         ("confirm_clear_Wayland_screen_selection_tip", "Kas oled kindel, et soovid Waylandi ekraanivaliku tühistada?"),
-        ("android_new_voice_call_tip", "Uus häälkõne taotlus on saadud. Vastu võtmisel lülitub heli häälkommunikatsioonile.")
+        ("android_new_voice_call_tip", "Uus häälkõne taotlus on saadud. Vastu võtmisel lülitub heli häälkommunikatsioonile."),
         ("texture_render_tip", "Kasuta tekstuurirenderdust, et muuta pildid sujuvamaks. Renderdusprobleemide esinemisel võid proovida selle valiku keelata."),
         ("Use texture rendering", "Kasuta tekstuurirenderdust"),
         ("Floating window", "Ujuv aken"),
-        ("floating_window_tip", "See aitab säilitada RustDeski taustateenust.")
+        ("floating_window_tip", "See aitab säilitada RustDeski taustateenust."),
         ("Keep screen on", "Hoia ekraan sees"),
         ("Never", "Mitte kunagi"),
         ("During controlled", "Juhtimise ajal"),
