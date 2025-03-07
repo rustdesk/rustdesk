@@ -548,7 +548,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Atualiza RustDesk Server Pro a sa versione {} o prus noa!"),
         ("pull_group_failed_tip", "Non faghet a annoare su grupu"),
         ("Filter by intersection", "Filtra pro rugrada"),
-        ("Remove wallpaper during incoming sessions", "Boga s'isfundu durante sas essiones in intrada"),
+        ("Remove wallpaper during incoming sessions", "Boga s'isfundu durante sas sessiones in intrada"),
         ("Test", "Proa"),
         ("display_is_plugged_out_msg", "S'ischermu est iscollegadu, colo a su primu ischermu."),
         ("No displays", "Perunu ischermu"),
