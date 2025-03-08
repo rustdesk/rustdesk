@@ -90,6 +90,7 @@ impl<'a> PixelBuffer<'a> {
         }
     }
 
+    #[allow(non_snake_case)]
     pub fn with_BGRA(data: &'a [u8], width: usize, height: usize) -> Self {
         Self::new(data, Pixfmt::BGRA, width, height)
     }

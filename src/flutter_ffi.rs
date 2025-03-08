@@ -92,9 +92,15 @@ pub fn host_stop_system_key_propagate(_stopped: bool) {
 }
 
 // This function is only used to count the number of control sessions.
-pub fn peer_get_sessions_count(id: String, is_view_camera: bool) -> SyncReturn<usize> {
-    let conn_type = if is_view_camera {
+pub fn peer_get_sessions_count(id: String, conn_type: i32) -> SyncReturn<usize> {
+    let conn_type = if conn_type == ConnType::VIEW_CAMERA as i32 {
         ConnType::VIEW_CAMERA
+    } else if conn_type == ConnType::FILE_TRANSFER as i32 {
+        ConnType::FILE_TRANSFER
+    } else if conn_type == ConnType::PORT_FORWARD as i32 {
+        ConnType::PORT_FORWARD
+    } else if conn_type == ConnType::RDP as i32 {
+        ConnType::RDP
     } else {
         ConnType::DEFAULT_CONN
     };

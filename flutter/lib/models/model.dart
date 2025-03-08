@@ -504,8 +504,7 @@ class FfiModel with ChangeNotifier {
 
     if (_pi.currentDisplay != kAllDisplayValue) {
       if (bind.peerGetSessionsCount(
-              id: peerId,
-              isViewCamera: parent.target?.connType == ConnType.viewCamera) >
+              id: peerId, connType: parent.target!.connType.index) >
           1) {
         if (display != _pi.currentDisplay) {
           return;
@@ -815,8 +814,7 @@ class FfiModel with ChangeNotifier {
     }
 
     if (bind.peerGetSessionsCount(
-            id: peerId,
-            isViewCamera: parent.target?.connType == ConnType.viewCamera) <=
+            id: peerId, connType: parent.target!.connType.index) <=
         1) {
       _pi.currentDisplay = currentDisplay;
     }
@@ -2586,6 +2584,7 @@ class ElevationModel with ChangeNotifier {
   onPortableServiceRunning(bool running) => _running = running;
 }
 
+// The index values of `ConnType` are same as rust protobuf.
 enum ConnType { defaultConn, fileTransfer, portForward, rdp, viewCamera }
 
 /// Flutter state manager and data communication with the Rust core.

@@ -61,7 +61,7 @@ class RustdeskImpl {
   }
 
   int peerGetSessionsCount(
-      {required String id, required bool isViewCamera, dynamic hint}) {
+      {required String id, required int connType, dynamic hint}) {
     return 0;
   }
 
