@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    codec::{base_bitrate, enable_vram_option, EncoderApi, EncoderCfg},
+    codec::{enable_vram_option, EncoderApi, EncoderCfg},
     hwcodec::HwCodecConfig,
     AdapterDevice, CodecFormat, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
@@ -30,8 +30,8 @@ use hwcodec::{
 // https://cybersided.com/two-monitors-two-gpus/
 // https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-getadapterluid#remarks
 lazy_static::lazy_static! {
-    static ref ENOCDE_NOT_USE: Arc<Mutex<HashMap<usize, bool>>> = Default::default();
-    static ref FALLBACK_GDI_DISPLAYS: Arc<Mutex<HashSet<usize>>> = Default::default();
+    static ref ENOCDE_NOT_USE: Arc<Mutex<HashMap<String, bool>>> = Default::default();
+    static ref FALLBACK_GDI_DISPLAYS: Arc<Mutex<HashSet<String>>> = Default::default();
 }
 
 #[derive(Debug, Clone)]
@@ -287,16 +287,25 @@ impl VRamEncoder {
         crate::hwcodec::HwRamEncoder::calc_bitrate(width, height, ratio, fmt == DataFormat::H264)
     }
 
-    pub fn set_not_use(display: usize, not_use: bool) {
-        log::info!("set display#{display} not use vram encode to {not_use}");
-        ENOCDE_NOT_USE.lock().unwrap().insert(display, not_use);
+    pub fn set_not_use(video_service_name: String, not_use: bool) {
+        log::info!("set {video_service_name} not use vram encode to {not_use}");
+        ENOCDE_NOT_USE
+            .lock()
+            .unwrap()
+            .insert(video_service_name, not_use);
     }
 
-    pub fn set_fallback_gdi(display: usize, fallback: bool) {
+    pub fn set_fallback_gdi(video_service_name: String, fallback: bool) {
         if fallback {
-            FALLBACK_GDI_DISPLAYS.lock().unwrap().insert(display);
+            FALLBACK_GDI_DISPLAYS
+                .lock()
+                .unwrap()
+                .insert(video_service_name);
         } else {
-            FALLBACK_GDI_DISPLAYS.lock().unwrap().remove(&display);
+            FALLBACK_GDI_DISPLAYS
+                .lock()
+                .unwrap()
+                .remove(&video_service_name);
         }
     }
 }

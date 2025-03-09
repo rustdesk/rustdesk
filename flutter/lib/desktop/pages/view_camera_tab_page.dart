@@ -9,7 +9,7 @@ import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:flutter_hbb/desktop/pages/remote_page.dart';
+import 'package:flutter_hbb/desktop/pages/view_camera_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
@@ -20,7 +20,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
 
-import '../../common/widgets/dialog.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {
@@ -30,18 +29,18 @@ class _MenuTheme {
   static const double dividerHeight = 12.0;
 }
 
-class ConnectionTabPage extends StatefulWidget {
+class ViewCameraTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
 
-  const ConnectionTabPage({Key? key, required this.params}) : super(key: key);
+  const ViewCameraTabPage({Key? key, required this.params}) : super(key: key);
 
   @override
-  State<ConnectionTabPage> createState() => _ConnectionTabPageState(params);
+  State<ViewCameraTabPage> createState() => _ViewCameraTabPageState(params);
 }
 
-class _ConnectionTabPageState extends State<ConnectionTabPage> {
+class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
   final tabController =
-      Get.put(DesktopTabController(tabType: DesktopTabType.remoteScreen));
+      Get.put(DesktopTabController(tabType: DesktopTabType.viewCamera));
   final contentKey = UniqueKey();
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
@@ -52,7 +51,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
-  _ConnectionTabPageState(Map<String, dynamic> params) {
+  _ViewCameraTabPageState(Map<String, dynamic> params) {
     RemoteCountState.init();
     peerId = params['id'];
     final sessionId = params['session_id'];
@@ -66,9 +65,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     if (peerId != null) {
       ConnectionTypeState.init(peerId!);
       tabController.onSelected = (id) {
-        final remotePage = tabController.widget(id);
-        if (remotePage is RemotePage) {
-          final ffi = remotePage.ffi;
+        final viewCameraPage = tabController.widget(id);
+        if (viewCameraPage is ViewCameraPage) {
+          final ffi = viewCameraPage.ffi;
           bind.setCurSessionId(sessionId: ffi.sessionId);
         }
         WindowController.fromWindowId(params['windowId'])
@@ -81,7 +80,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
         onTabCloseButton: () => tabController.closeBy(peerId),
-        page: RemotePage(
+        page: ViewCameraPage(
           key: ValueKey(peerId),
           id: peerId!,
           sessionId: sessionId == null ? null : SessionID(sessionId),
@@ -91,7 +90,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           password: params['password'],
           toolbarState: ToolbarState(),
           tabController: tabController,
-          switchUuid: params['switch_uuid'],
+          connToken: params['connToken'],
           forceRelay: params['forceRelay'],
           isSharedPassword: params['isSharedPassword'],
         ),
@@ -109,7 +108,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     if (!_isScreenRectSet) {
       Future.delayed(Duration.zero, () {
         restoreWindowPosition(
-          WindowType.RemoteDesktop,
+          WindowType.ViewCamera,
           windowId: windowId(),
           peerId: tabController.state.value.tabs.isEmpty
               ? null
@@ -192,10 +191,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 if (e.kind != ui.PointerDeviceKind.mouse) {
                   return;
                 }
-                final remotePage = tabController.state.value.tabs
+                final viewCameraPage = tabController.state.value.tabs
                     .firstWhere((tab) => tab.key == key)
-                    .page as RemotePage;
-                if (remotePage.ffi.ffiModel.pi.isSet.isTrue && e.buttons == 2) {
+                    .page as ViewCameraPage;
+                if (viewCameraPage.ffi.ffiModel.pi.isSet.isTrue &&
+                    e.buttons == 2) {
                   showRightMenu(
                     (CancelFunc cancelFunc) {
                       return _tabMenuBuilder(key, cancelFunc);
@@ -239,14 +239,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   Widget _tabMenuBuilder(String key, CancelFunc cancelFunc) {
     final List<MenuEntryBase<String>> menu = [];
     const EdgeInsets padding = EdgeInsets.only(left: 8.0, right: 5.0);
-    final remotePage = tabController.state.value.tabs
+    final viewCameraPage = tabController.state.value.tabs
         .firstWhere((tab) => tab.key == key)
-        .page as RemotePage;
-    final ffi = remotePage.ffi;
-    final pi = ffi.ffiModel.pi;
-    final perms = ffi.ffiModel.permissions;
+        .page as ViewCameraPage;
+    final ffi = viewCameraPage.ffi;
     final sessionId = ffi.sessionId;
-    final toolbarState = remotePage.toolbarState;
+    final toolbarState = viewCameraPage.toolbarState;
     menu.addAll([
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Obx(() => Text(
@@ -272,39 +270,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           await DesktopMultiWindow.invokeMethod(
               kMainWindowId,
               kWindowEventMoveTabToNewWindow,
-              '${windowId()},$key,$sessionId,RemoteDesktop');
+              '${windowId()},$key,$sessionId,ViewCamera');
           cancelFunc();
         },
         padding: padding,
       );
       menu.insert(1, splitAction);
-    }
-
-    if (perms['restart'] != false &&
-        (pi.platform == kPeerPlatformLinux ||
-            pi.platform == kPeerPlatformWindows ||
-            pi.platform == kPeerPlatformMacOS)) {
-      menu.add(MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Restart remote device'),
-          style: style,
-        ),
-        proc: () => showRestartRemoteDevice(
-            pi, peerId ?? '', sessionId, ffi.dialogManager),
-        padding: padding,
-        dismissOnClicked: true,
-        dismissCallback: cancelFunc,
-      ));
-    }
-
-    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
-      menu.add(RemoteMenuEntry.insertLock(sessionId, padding,
-          dismissFunc: cancelFunc));
-
-      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
-        menu.add(RemoteMenuEntry.insertCtrlAltDel(sessionId, padding,
-            dismissFunc: cancelFunc));
-      }
     }
 
     menu.addAll([
@@ -400,14 +371,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   Future<dynamic> _remoteMethodHandler(call, fromWindowId) async {
     debugPrint(
-        "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+        "[View Camera Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
     dynamic returnValue;
     // for simplify, just replace connectionId
-    if (call.method == kWindowEventNewRemoteDesktop) {
+    if (call.method == kWindowEventNewViewCamera) {
       final args = jsonDecode(call.arguments);
       final id = args['id'];
-      final switchUuid = args['switch_uuid'];
       final sessionId = args['session_id'];
       final tabWindowId = args['tab_window_id'];
       final display = args['display'];
@@ -420,7 +390,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           stateGlobal.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(windowId(), id!, prePeerCount,
-            WindowType.RemoteDesktop, display, screenRect);
+            WindowType.ViewCamera, display, screenRect);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });
@@ -432,7 +402,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
         onTabCloseButton: () => tabController.closeBy(id),
-        page: RemotePage(
+        page: ViewCameraPage(
           key: ValueKey(id),
           id: id,
           sessionId: sessionId == null ? null : SessionID(sessionId),
@@ -442,7 +412,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           password: args['password'],
           toolbarState: ToolbarState(),
           tabController: tabController,
-          switchUuid: switchUuid,
+          connToken: args['connToken'],
           forceRelay: args['forceRelay'],
           isSharedPassword: args['isSharedPassword'],
         ),
@@ -463,7 +433,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final args = jsonDecode(call.arguments);
       final id = args['id'];
       final display = args['display'];
-      final jumpOk = tabController.jumpToByKeyAndDisplay(id, display);
+      final jumpOk =
+          tabController.jumpToByKeyAndDisplay(id, display, isCamera: true);
       if (jumpOk) {
         windowOnTop(windowId());
       }
@@ -475,7 +446,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           .join(',');
     } else if (call.method == kWindowEventGetSessionIdList) {
       return tabController.state.value.tabs
-          .map((e) => '${e.key},${(e.page as RemotePage).ffi.sessionId}')
+          .map((e) => '${e.key},${(e.page as ViewCameraPage).ffi.sessionId}')
           .toList()
           .join(';');
     } else if (call.method == kWindowEventGetCachedSessionData) {
@@ -484,10 +455,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final id = args['id'];
       final close = args['close'];
       try {
-        final remotePage = tabController.state.value.tabs
+        final viewCameraPage = tabController.state.value.tabs
             .firstWhere((tab) => tab.key == id)
-            .page as RemotePage;
-        returnValue = remotePage.ffi.ffiModel.cachedPeerData.toString();
+            .page as ViewCameraPage;
+        returnValue = viewCameraPage.ffi.ffiModel.cachedPeerData.toString();
       } catch (e) {
         debugPrint('Failed to get cached session data: $e');
       }
@@ -496,9 +467,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         tabController.closeBy(id);
       }
     } else if (call.method == kWindowEventRemoteWindowCoords) {
-      final remotePage =
-          tabController.state.value.selectedTabInfo.page as RemotePage;
-      final ffi = remotePage.ffi;
+      final viewCameraPage =
+          tabController.state.value.selectedTabInfo.page as ViewCameraPage;
+      final ffi = viewCameraPage.ffi;
       final displayRect = ffi.ffiModel.displaysRect();
       if (displayRect != null) {
         final wc = WindowController.fromWindowId(windowId());

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -53,13 +54,14 @@ class RawKeyFocusScope extends StatelessWidget {
 class RawTouchGestureDetectorRegion extends StatefulWidget {
   final Widget child;
   final FFI ffi;
-
+  final bool isCamera;
   late final InputModel inputModel = ffi.inputModel;
   late final FfiModel ffiModel = ffi.ffiModel;
 
   RawTouchGestureDetectorRegion({
     required this.child,
     required this.ffi,
+    this.isCamera = false,
   });
 
   @override
@@ -382,6 +384,7 @@ class _RawTouchGestureDetectorRegionState
       _scale = d.scale;
 
       if (scale != 0) {
+        if (widget.isCamera) return;
         await bind.sessionSendPointer(
             sessionId: sessionId,
             msg: json.encode(
@@ -402,6 +405,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if ((isDesktop || isWebDesktop)) {
+      if (widget.isCamera) return;
       await bind.sessionSendPointer(
           sessionId: sessionId,
           msg: json.encode(
@@ -529,6 +533,49 @@ class RawPointerMouseRegion extends StatelessWidget {
         cursor: inputModel.isViewOnly
             ? MouseCursor.defer
             : (cursor ?? MouseCursor.defer),
+        onEnter: onEnter,
+        onExit: onExit,
+        child: child,
+      ),
+    );
+  }
+}
+
+class CameraRawPointerMouseRegion extends StatelessWidget {
+  final InputModel inputModel;
+  final Widget child;
+  final PointerEnterEventListener? onEnter;
+  final PointerExitEventListener? onExit;
+  final PointerDownEventListener? onPointerDown;
+  final PointerUpEventListener? onPointerUp;
+
+  CameraRawPointerMouseRegion({
+    this.onEnter,
+    this.onExit,
+    this.onPointerDown,
+    this.onPointerUp,
+    required this.inputModel,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerHover: (evt) {
+        final offset = evt.position;
+        double x = offset.dx;
+        double y = max(0.0, offset.dy);
+        inputModel.handlePointerDevicePos(
+            kPointerEventKindMouse, x, y, true, kMouseEventTypeDefault);
+      },
+      onPointerDown: (evt) {
+        onPointerDown?.call(evt);
+      },
+      onPointerUp: (evt) {
+        onPointerUp?.call(evt);
+      },
+      child: MouseRegion(
+        cursor: MouseCursor.defer,
         onEnter: onEnter,
         onExit: onExit,
         child: child,

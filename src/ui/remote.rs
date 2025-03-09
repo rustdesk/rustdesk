@@ -316,6 +316,7 @@ impl InvokeUiSession for SciterHandler {
             ConnType::RDP => {}
             ConnType::PORT_FORWARD => {}
             ConnType::FILE_TRANSFER => {}
+            ConnType::VIEW_CAMERA => {}
             ConnType::DEFAULT_CONN => {
                 crate::keyboard::client::start_grab_loop();
             }
@@ -557,6 +558,8 @@ impl SciterSession {
 
         let conn_type = if cmd.eq("--file-transfer") {
             ConnType::FILE_TRANSFER
+        } else if cmd.eq("--view-camera") {
+            ConnType::VIEW_CAMERA
         } else if cmd.eq("--port-forward") {
             ConnType::PORT_FORWARD
         } else if cmd.eq("--rdp") {

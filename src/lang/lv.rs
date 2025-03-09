@@ -657,5 +657,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Untagged", "Neatzīmēts"),
         ("new-version-of-{}-tip", "Ir pieejama jauna {} versija"),
         ("Accessible devices", "Pieejamas ierīces"),
+        ("View camera", "Skatīt kameru"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Lūdzu, jauniniet attālās puses RustDesk klientu uz versiju {} vai jaunāku!"),
+        ("view_camera_unsupported_tip", ""),
+        ("Enable camera", ""),
+        ("No cameras", ""),
     ].iter().cloned().collect();
 }

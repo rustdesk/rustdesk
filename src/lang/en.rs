@@ -237,5 +237,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "One-way file transfer is enabled on the controlled side."),
         ("web_id_input_tip", "You can input an ID in the same server, direct IP access is not supported in web client.\nIf you want to access a device on another server, please append the server address (<id>@<server_address>?key=<key_value>), for example,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nIf you want to access a device on a public server, please input \"<id>@public\", the key is not needed for public server."),
         ("new-version-of-{}-tip", "There is a new version of {} available"),
+        ("View camera", "View camera"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Please upgrade the RustDesk client to version {} or newer on the remote side!"),
+        ("view_camera_unsupported_tip", "The remote device does not support viewing the camera."),
     ].iter().cloned().collect();
 }

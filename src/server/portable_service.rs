@@ -717,7 +717,7 @@ pub mod client {
                     }
                     let frame_ptr = base.add(ADDR_CAPTURE_FRAME);
                     let data = slice::from_raw_parts(frame_ptr, (*frame_info).length);
-                    Ok(Frame::PixelBuffer(PixelBuffer::new(
+                    Ok(Frame::PixelBuffer(PixelBuffer::with_BGRA(
                         data,
                         self.width,
                         self.height,
@@ -808,8 +808,13 @@ pub mod client {
                                                             },
                                                             ConnCount(None) => {
                                                                 if !quick_support {
-                                                                    let cnt = crate::server::CONN_COUNT.lock().unwrap().clone();
-                                                                    stream.send(&Data::DataPortableService(ConnCount(Some(cnt)))).await.ok();
+                                                                    let remote_count = crate::server::AUTHED_CONNS
+                                                                        .lock()
+                                                                        .unwrap()
+                                                                        .iter()
+                                                                        .filter(|c| c.1 == crate::server::AuthConnType::Remote)
+                                                                        .count();
+                                                                    stream.send(&Data::DataPortableService(ConnCount(Some(remote_count)))).await.ok();
                                                                 }
                                                             },
                                                             WillClose => {

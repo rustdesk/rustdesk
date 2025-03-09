@@ -17,7 +17,6 @@ import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
-import '../widgets/button.dart';
 
 class OnlineStatusWidget extends StatefulWidget {
   const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
@@ -203,6 +202,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   final FocusNode _idFocusNode = FocusNode();
   final TextEditingController _idEditingController = TextEditingController();
 
+  String selectedConnectionType = 'Connect';
+
   bool isWindowMinimized = false;
 
   final AllPeersLoader _allPeersLoader = AllPeersLoader();
@@ -321,9 +322,10 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   /// Callback for the connect button.
   /// Connects to the selected peer.
-  void onConnect({bool isFileTransfer = false}) {
+  void onConnect({bool isFileTransfer = false, bool isViewCamera = false}) {
     var id = _idController.id;
-    connect(context, id, isFileTransfer: isFileTransfer);
+    connect(context, id,
+        isFileTransfer: isFileTransfer, isViewCamera: isViewCamera);
   }
 
   /// UI for the remote ID TextField.
@@ -501,21 +503,64 @@ class _ConnectionPageState extends State<ConnectionPage>
             ),
             Padding(
               padding: const EdgeInsets.only(top: 13.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Button(
-                    isOutline: true,
-                    onTap: () => onConnect(isFileTransfer: true),
-                    text: "Transfer file",
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                SizedBox(
+                  height: 28.0,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      onConnect();
+                    },
+                    child: Text(translate("Connect")),
                   ),
-                  const SizedBox(
-                    width: 17,
+                ),
+                const SizedBox(width: 3),
+                Container(
+                  height: 28.0,
+                  width: 28.0,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  Button(onTap: onConnect, text: "Connect"),
-                ],
-              ),
-            )
+                  child: Center(
+                    child: MenuAnchor(
+                      builder: (context, controller, builder) {
+                        return IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints(),
+                          visualDensity: VisualDensity.compact,
+                          icon: controller.isOpen
+                              ? const Icon(Icons.keyboard_arrow_up)
+                              : const Icon(Icons.keyboard_arrow_down),
+                          onPressed: () {
+                            setState(() {
+                              if (controller.isOpen) {
+                                controller.close();
+                              } else {
+                                controller.open();
+                              }
+                            });
+                          },
+                        );
+                      },
+                      menuChildren: <Widget>[
+                        MenuItemButton(
+                          onPressed: () {
+                            onConnect(isFileTransfer: true);
+                          },
+                          child: Text(translate('Transfer file')),
+                        ),
+                        MenuItemButton(
+                          onPressed: () {
+                            onConnect(isViewCamera: true);
+                          },
+                          child: Text(translate('View camera')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ]),
+            ),
           ],
         ),
       ),

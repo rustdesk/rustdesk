@@ -600,7 +600,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "Igaüks"),
         ("ab_web_console_tip", "Rohkem leiad veebikonsoolist"),
         ("allow-only-conn-window-open-tip", "Luba ühendus ainult siis, kui RustDeski aken on avatud."),
-        ("no_need_privacy_mode_no_physical_displays_tip", "Füüsilisi ekraane pole, privaatsusrežiimi kasutamine pole vajalik."),        
+        ("no_need_privacy_mode_no_physical_displays_tip", "Füüsilisi ekraane pole, privaatsusrežiimi kasutamine pole vajalik."),
         ("Follow remote cursor", "Jälgi kaugkursorit"),
         ("Follow remote window focus", "Jälgi kaugakna fookust"),
         ("default_proxy_tip", "Vaikimisi protokoll ja port on Socks5 ja 1080."),
@@ -657,5 +657,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Untagged", "Sildistamata"),
         ("new-version-of-{}-tip", "Saadaval on {} uus versioon"),
         ("Accessible devices", "Ligipääsetavad seadmed"),
+        ("View camera", "Vaata kaamerat"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Täiendage RustDeski klient kaugküljel versioonile {} või uuemale!"),
+        ("view_camera_unsupported_tip", ""),
+        ("Enable camera", ""),
+        ("No cameras", ""),
     ].iter().cloned().collect();
 }
