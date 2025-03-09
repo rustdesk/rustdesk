@@ -127,7 +127,7 @@ impl VideoFrameController {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VideoSource {
     Monitor,
     Camera,
@@ -457,7 +457,7 @@ fn get_capturer(
 }
 
 fn run(vs: VideoService) -> ResultType<()> {
-    let _raii = Raii::new(vs.idx);
+    let _raii = Raii::new(vs.sp.name());
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
     // ensure_inited() is needed because clear() may be called.
@@ -497,11 +497,12 @@ fn run(vs: VideoService) -> ResultType<()> {
     drop(video_qos);
     let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
         &c,
-        display_idx,
+        sp.name(),
         quality,
         client_record,
         record_incoming,
         last_portable_service_running,
+        vs.source,
     ) {
         Ok(result) => result,
         Err(err) => {
@@ -515,11 +516,12 @@ fn run(vs: VideoService) -> ResultType<()> {
             }));
             setup_encoder(
                 &c,
-                display_idx,
+                sp.name(),
                 quality,
                 client_record,
                 record_incoming,
                 last_portable_service_running,
+                vs.source,
             )?
         }
     };
@@ -536,7 +538,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     VIDEO_QOS
         .lock()
         .unwrap()
-        .set_support_changing_quality(display_idx, encoder.support_changing_quality());
+        .set_support_changing_quality(&sp.name(), encoder.support_changing_quality());
     log::info!("initial quality: {quality:?}");
 
     if sp.is_option_true(OPTION_REFRESH) {
@@ -576,7 +578,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             client_record,
             &mut send_counter,
             &mut second_instant,
-            display_idx,
+            &sp.name(),
         )?;
         if sp.is_option_true(OPTION_REFRESH) {
             if vs.source.is_monitor() {
@@ -605,7 +607,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         #[cfg(all(windows, feature = "vram"))]
         if c.is_gdi() && encoder.input_texture() {
             log::info!("changed to gdi when using vram");
-            VRamEncoder::set_fallback_gdi(display_idx, true);
+            VRamEncoder::set_fallback_gdi(sp.name(), true);
             bail!("SWITCH");
         }
         if vs.source.is_monitor() {
@@ -655,7 +657,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 {
                     #[cfg(feature = "vram")]
                     if try_gdi == 1 && !c.is_gdi() {
-                        VRamEncoder::set_fallback_gdi(display_idx, false);
+                        VRamEncoder::set_fallback_gdi(sp.name(), false);
                     }
                     try_gdi = 0;
                 }
@@ -760,32 +762,35 @@ fn run(vs: VideoService) -> ResultType<()> {
     Ok(())
 }
 
-struct Raii(usize);
+struct Raii(String);
 
 impl Raii {
-    fn new(display_idx: usize) -> Self {
-        VIDEO_QOS.lock().unwrap().new_display(display_idx);
-        Raii(display_idx)
+    fn new(name: String) -> Self {
+        log::info!("new video service: {}", name);
+        VIDEO_QOS.lock().unwrap().new_display(name.clone());
+        Raii(name)
     }
 }
 
 impl Drop for Raii {
     fn drop(&mut self) {
+        log::info!("stop video service: {}", self.0);
         #[cfg(feature = "vram")]
-        VRamEncoder::set_not_use(self.0, false);
+        VRamEncoder::set_not_use(self.0.clone(), false);
         #[cfg(feature = "vram")]
         Encoder::update(scrap::codec::EncodingUpdate::Check);
-        VIDEO_QOS.lock().unwrap().remove_display(self.0);
+        VIDEO_QOS.lock().unwrap().remove_display(&self.0);
     }
 }
 
 fn setup_encoder(
     c: &CapturerInfo,
-    display_idx: usize,
+    name: String,
     quality: f32,
     client_record: bool,
     record_incoming: bool,
     last_portable_service_running: bool,
+    source: VideoSource,
 ) -> ResultType<(
     Encoder,
     EncoderCfg,
@@ -795,14 +800,15 @@ fn setup_encoder(
 )> {
     let encoder_cfg = get_encoder_config(
         &c,
-        display_idx,
+        name.to_string(),
         quality,
         client_record || record_incoming,
         last_portable_service_running,
+        source,
     );
     Encoder::set_fallback(&encoder_cfg);
     let codec_format = Encoder::negotiated_codec();
-    let recorder = get_recorder(record_incoming, display_idx);
+    let recorder = get_recorder(record_incoming, name);
     let use_i444 = Encoder::use_i444(&encoder_cfg);
     let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
     Ok((encoder, encoder_cfg, codec_format, use_i444, recorder))
@@ -810,15 +816,16 @@ fn setup_encoder(
 
 fn get_encoder_config(
     c: &CapturerInfo,
-    _display_idx: usize,
+    _name: String,
     quality: f32,
     record: bool,
     _portable_service: bool,
+    _source: VideoSource,
 ) -> EncoderCfg {
     #[cfg(all(windows, feature = "vram"))]
-    if _portable_service || c.is_gdi() {
+    if _portable_service || c.is_gdi() || _source == VideoSource::Camera {
         log::info!("gdi:{}, portable:{}", c.is_gdi(), _portable_service);
-        VRamEncoder::set_not_use(_display_idx, true);
+        VRamEncoder::set_not_use(_name, true);
     }
     #[cfg(feature = "vram")]
     Encoder::update(scrap::codec::EncodingUpdate::Check);
@@ -884,7 +891,7 @@ fn get_encoder_config(
     }
 }
 
-fn get_recorder(record_incoming: bool, display: usize) -> Arc<Mutex<Option<Recorder>>> {
+fn get_recorder(record_incoming: bool, video_service_name: String) -> Arc<Mutex<Option<Recorder>>> {
     #[cfg(windows)]
     let root = crate::platform::is_root();
     #[cfg(not(windows))]
@@ -903,7 +910,7 @@ fn get_recorder(record_incoming: bool, display: usize) -> Arc<Mutex<Option<Recor
             server: true,
             id: Config::get_id(),
             dir: crate::ui_interface::video_save_directory(root),
-            display,
+            video_service_name,
             tx,
         })
         .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))))
@@ -1162,7 +1169,7 @@ fn check_qos(
     client_record: bool,
     send_counter: &mut usize,
     second_instant: &mut Instant,
-    display_idx: usize,
+    name: &str,
 ) -> ResultType<()> {
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     *spf = video_qos.spf();
@@ -1185,7 +1192,7 @@ fn check_qos(
     }
     if second_instant.elapsed() > Duration::from_secs(1) {
         *second_instant = Instant::now();
-        video_qos.update_display_data(display_idx, *send_counter);
+        video_qos.update_display_data(&name, *send_counter);
         *send_counter = 0;
     }
     drop(video_qos);
