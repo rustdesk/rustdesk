@@ -369,6 +369,7 @@ class InputModel {
   String? get peerPlatform => parent.target?.ffiModel.pi.platform;
   bool get isViewOnly => parent.target!.ffiModel.viewOnly;
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
+  bool get isViewCamera => parent.target!.connType == ConnType.viewCamera;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
@@ -471,6 +472,7 @@ class InputModel {
 
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
+    if (isViewCamera) return KeyEventResult.handled;
     if (!isInputSourceFlutter) {
       if (isDesktop) {
         return KeyEventResult.handled;
@@ -525,6 +527,7 @@ class InputModel {
 
   KeyEventResult handleKeyEvent(KeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
+    if (isViewCamera) return KeyEventResult.handled;
     if (!isInputSourceFlutter) {
       if (isDesktop) {
         return KeyEventResult.handled;
@@ -724,6 +727,7 @@ class InputModel {
   /// [press] indicates a click event(down and up).
   void inputKey(String name, {bool? down, bool? press}) {
     if (!keyboardPerm) return;
+    if (isViewCamera) return;
     bind.sessionInputKey(
         sessionId: sessionId,
         name: name,
@@ -785,6 +789,7 @@ class InputModel {
 
   /// Send scroll event with scroll distance [y].
   Future<void> scroll(int y) async {
+    if (isViewCamera) return;
     await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json
@@ -808,6 +813,7 @@ class InputModel {
   /// Send mouse press event.
   Future<void> sendMouse(String type, MouseButtons button) async {
     if (!keyboardPerm) return;
+    if (isViewCamera) return;
     await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
@@ -834,6 +840,7 @@ class InputModel {
   /// Send mouse movement event with distance in [x] and [y].
   Future<void> moveMouse(double x, double y) async {
     if (!keyboardPerm) return;
+    if (isViewCamera) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
     await bind.sessionSendMouse(
@@ -857,6 +864,7 @@ class InputModel {
     _lastScale = 1.0;
     _stopFling = true;
     if (isViewOnly) return;
+    if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
       handlePointerEvent('touch', kMouseEventTypePanStart, e.position);
     }
@@ -865,6 +873,7 @@ class InputModel {
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
     if (isViewOnly) return;
+    if (isViewCamera) return;
     if (peerPlatform != kPeerPlatformAndroid) {
       final scale = ((e.scale - _lastScale) * 1000).toInt();
       _lastScale = e.scale;
@@ -904,6 +913,7 @@ class InputModel {
         handlePointerEvent('touch', kMouseEventTypePanUpdate,
             Offset(x.toDouble(), y.toDouble()));
       } else {
+        if (isViewCamera) return;
         bind.sessionSendMouse(
             sessionId: sessionId,
             msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
@@ -912,6 +922,7 @@ class InputModel {
   }
 
   void _scheduleFling(double x, double y, int delay) {
+    if (isViewCamera) return;
     if ((x == 0 && y == 0) || _stopFling) {
       _fling = false;
       return;
@@ -963,6 +974,7 @@ class InputModel {
   }
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
       handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
       return;
@@ -994,6 +1006,7 @@ class InputModel {
     _remoteWindowCoords = [];
     _windowRect = null;
     if (isViewOnly) return;
+    if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) {
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
@@ -1007,6 +1020,7 @@ class InputModel {
   void onPointUpImage(PointerUpEvent e) {
     if (isDesktop) _queryOtherWindowCoords = false;
     if (isViewOnly) return;
+    if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
       handleMouse(_getMouseEvent(e, _kMouseEventUp), e.position);
@@ -1015,6 +1029,7 @@ class InputModel {
 
   void onPointMoveImage(PointerMoveEvent e) {
     if (isViewOnly) return;
+    if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (_queryOtherWindowCoords) {
       Future.delayed(Duration.zero, () async {
@@ -1049,6 +1064,7 @@ class InputModel {
 
   void onPointerSignalImage(PointerSignalEvent e) {
     if (isViewOnly) return;
+    if (isViewCamera) return;
     if (e is PointerScrollEvent) {
       var dx = e.scrollDelta.dx.toInt();
       var dy = e.scrollDelta.dy.toInt();
@@ -1146,6 +1162,7 @@ class InputModel {
     }
 
     final evt = PointerEventToRust(kind, type, evtValue).toJson();
+    if (isViewCamera) return;
     bind.sessionSendPointer(
         sessionId: sessionId, msg: json.encode(modify(evt)));
   }
@@ -1177,6 +1194,7 @@ class InputModel {
     Offset offset, {
     bool onExit = false,
   }) {
+    if (isViewCamera) return;
     double x = offset.dx;
     double y = max(0.0, offset.dy);
     if (_checkPeerControlProtected(x, y)) {

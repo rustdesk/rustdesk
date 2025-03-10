@@ -1149,8 +1149,14 @@ pub fn session_add_existed(
     peer_id: String,
     session_id: SessionID,
     displays: Vec<i32>,
+    is_view_camera: bool,
 ) -> ResultType<()> {
-    sessions::insert_peer_session_id(peer_id, ConnType::DEFAULT_CONN, session_id, displays);
+    let conn_type = if is_view_camera {
+        ConnType::VIEW_CAMERA
+    } else {
+        ConnType::DEFAULT_CONN
+    };
+    sessions::insert_peer_session_id(peer_id, conn_type, session_id, displays);
     Ok(())
 }
 
@@ -1160,11 +1166,13 @@ pub fn session_add_existed(
 ///
 /// * `id` - The identifier of the remote session with prefix. Regex: [\w]*[\_]*[\d]+
 /// * `is_file_transfer` - If the session is used for file transfer.
+/// * `is_view_camera` - If the session is used for view camera.
 /// * `is_port_forward` - If the session is used for port forward.
 pub fn session_add(
     session_id: &SessionID,
     id: &str,
     is_file_transfer: bool,
+    is_view_camera: bool,
     is_port_forward: bool,
     is_rdp: bool,
     switch_uuid: &str,
@@ -1175,6 +1183,8 @@ pub fn session_add(
 ) -> ResultType<FlutterSession> {
     let conn_type = if is_file_transfer {
         ConnType::FILE_TRANSFER
+    } else if is_view_camera {
+        ConnType::VIEW_CAMERA
     } else if is_port_forward {
         if is_rdp {
             ConnType::RDP

@@ -92,16 +92,28 @@ pub fn host_stop_system_key_propagate(_stopped: bool) {
 }
 
 // This function is only used to count the number of control sessions.
-pub fn peer_get_default_sessions_count(id: String) -> SyncReturn<usize> {
-    SyncReturn(sessions::get_session_count(id, ConnType::DEFAULT_CONN))
+pub fn peer_get_sessions_count(id: String, conn_type: i32) -> SyncReturn<usize> {
+    let conn_type = if conn_type == ConnType::VIEW_CAMERA as i32 {
+        ConnType::VIEW_CAMERA
+    } else if conn_type == ConnType::FILE_TRANSFER as i32 {
+        ConnType::FILE_TRANSFER
+    } else if conn_type == ConnType::PORT_FORWARD as i32 {
+        ConnType::PORT_FORWARD
+    } else if conn_type == ConnType::RDP as i32 {
+        ConnType::RDP
+    } else {
+        ConnType::DEFAULT_CONN
+    };
+    SyncReturn(sessions::get_session_count(id, conn_type))
 }
 
 pub fn session_add_existed_sync(
     id: String,
     session_id: SessionID,
     displays: Vec<i32>,
+    is_view_camera: bool,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add_existed(id.clone(), session_id, displays) {
+    if let Err(e) = session_add_existed(id.clone(), session_id, displays, is_view_camera) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -112,6 +124,7 @@ pub fn session_add_sync(
     session_id: SessionID,
     id: String,
     is_file_transfer: bool,
+    is_view_camera: bool,
     is_port_forward: bool,
     is_rdp: bool,
     switch_uuid: String,
@@ -124,6 +137,7 @@ pub fn session_add_sync(
         &session_id,
         &id,
         is_file_transfer,
+        is_view_camera,
         is_port_forward,
         is_rdp,
         &switch_uuid,

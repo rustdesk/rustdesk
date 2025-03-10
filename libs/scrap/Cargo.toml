@@ -23,6 +23,7 @@ lazy_static = "1.4"
 hbb_common = { path = "../hbb_common" }
 webm = { git = "https://github.com/rustdesk-org/rust-webm" }
 serde = {version="1.0", features=["derive"]}
+nokhwa = { git = "https://github.com/rustdesk-org/nokhwa.git", branch = "fix_from_raw_parts", features = ["input-native"] }
 
 [dependencies.winapi]
 version = "0.3"

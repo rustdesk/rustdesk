@@ -11,6 +11,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_view_camera_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
@@ -74,6 +75,13 @@ Future<void> main(List<String> args) async {
         runMultiWindow(
           argument,
           kAppTypeDesktopFileTransfer,
+        );
+        break;
+      case WindowType.ViewCamera:
+        desktopType = DesktopType.viewCamera;
+        runMultiWindow(
+          argument,
+          kAppTypeDesktopViewCamera,
         );
         break;
       case WindowType.PortForward:
@@ -192,6 +200,12 @@ void runMultiWindow(
         params: argument,
       );
       break;
+    case kAppTypeDesktopViewCamera:
+      draggablePositions.load();
+      widget = DesktopViewCameraScreen(
+        params: argument,
+      );
+      break;
     case kAppTypeDesktopPortForward:
       widget = DesktopPortForwardScreen(
         params: argument,
@@ -226,6 +240,19 @@ void runMultiWindow(
     case kAppTypeDesktopFileTransfer:
       await restoreWindowPosition(WindowType.FileTransfer,
           windowId: kWindowId!);
+      break;
+    case kAppTypeDesktopViewCamera:
+      // If screen rect is set, the window will be moved to the target screen and then set fullscreen.
+      if (argument['screen_rect'] == null) {
+        // display can be used to control the offset of the window.
+        await restoreWindowPosition(
+          WindowType.ViewCamera,
+          windowId: kWindowId!,
+          peerId: argument['id'] as String?,
+          // FIXME: fix display index.
+          display: argument['display'] as int?,
+        );
+      }
       break;
     case kAppTypeDesktopPortForward:
       await restoreWindowPosition(WindowType.PortForward, windowId: kWindowId!);
