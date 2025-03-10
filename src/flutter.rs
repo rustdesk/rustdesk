@@ -2036,6 +2036,8 @@ pub mod sessions {
                     // This operation will also cause the peer to send a switch display message.
                     // The switch display message will contain `SupportedResolutions`, which is useful when changing resolutions.
                     s.switch_display(value[0]);
+                    // Reset the valid flag of the display.
+                    s.next_rgba(value[0] as usize);
 
                     if !is_desktop {
                         s.capture_displays(vec![], vec![], value);
@@ -2113,6 +2115,11 @@ pub mod sessions {
                 .write()
                 .unwrap()
                 .insert(session_id, h);
+            // If the session is a single display session, it may be a software rgba rendered display.
+            // If this is the second time the display is opened, the old valid flag may be true.
+            if displays.len() == 1 {
+                s.ui_handler.next_rgba(displays[0] as usize);
+            }
             true
         } else {
             false
