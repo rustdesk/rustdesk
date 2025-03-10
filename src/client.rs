@@ -894,7 +894,8 @@ impl ClientClipboardHandler {
                 return;
             }
 
-            if let Some(pi) = ctx.cfg.lc.read().unwrap().peer_info.as_ref() {
+            let pi = ctx.cfg.lc.read().unwrap().peer_info.clone();
+            if let Some(pi) = pi.as_ref() {
                 if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
                     if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(
                         &pi.version,
