@@ -2,10 +2,12 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -17,6 +19,7 @@ import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
+import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 
 class OnlineStatusWidget extends StatefulWidget {
   const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
@@ -210,6 +213,8 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   // https://github.com/flutter/flutter/issues/157244
   Iterable<Peer> _autocompleteOpts = [];
+
+  final _menuOpen = false.obs;
 
   @override
   void initState() {
@@ -513,7 +518,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                     child: Text(translate("Connect")),
                   ),
                 ),
-                const SizedBox(width: 3),
+                const SizedBox(width: 8),
                 Container(
                   height: 28.0,
                   width: 28.0,
@@ -522,41 +527,64 @@ class _ConnectionPageState extends State<ConnectionPage>
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(
-                    child: MenuAnchor(
-                      builder: (context, controller, builder) {
-                        return IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(),
-                          visualDensity: VisualDensity.compact,
-                          icon: controller.isOpen
-                              ? const Icon(Icons.keyboard_arrow_up)
-                              : const Icon(Icons.keyboard_arrow_down),
-                          onPressed: () {
-                            setState(() {
-                              if (controller.isOpen) {
-                                controller.close();
-                              } else {
-                                controller.open();
-                              }
-                            });
-                          },
-                        );
-                      },
-                      menuChildren: <Widget>[
-                        MenuItemButton(
-                          onPressed: () {
-                            onConnect(isFileTransfer: true);
-                          },
-                          child: Text(translate('Transfer file')),
-                        ),
-                        MenuItemButton(
-                          onPressed: () {
-                            onConnect(isViewCamera: true);
-                          },
-                          child: Text(translate('View camera')),
-                        ),
-                      ],
-                    ),
+                    child: Obx(() {
+                      var offset = Offset(0, 0);
+                      return InkWell(
+                        child: _menuOpen.value
+                            ? Transform.rotate(
+                                angle: pi,
+                                child: Icon(IconFont.more, size: 14),
+                              )
+                            : Icon(IconFont.more, size: 14),
+                        onTapDown: (e) {
+                          offset = e.globalPosition;
+                        },
+                        onTap: () async {
+                          _menuOpen.value = true;
+                          final x = offset.dx;
+                          final y = offset.dy;
+                          await mod_menu
+                              .showMenu(
+                            context: context,
+                            position: RelativeRect.fromLTRB(x, y, x, y),
+                            items: [
+                              (
+                                'Transfer file',
+                                () => onConnect(isFileTransfer: true)
+                              ),
+                              (
+                                'View camera',
+                                () => onConnect(isViewCamera: true)
+                              ),
+                            ]
+                                .map((e) => MenuEntryButton<String>(
+                                      childBuilder: (TextStyle? style) => Text(
+                                        translate(e.$1),
+                                        style: style,
+                                      ),
+                                      proc: () => e.$2(),
+                                      padding: EdgeInsets.symmetric(
+                                          horizontal: kDesktopMenuPadding.left),
+                                      dismissOnClicked: true,
+                                    ))
+                                .map((e) => e.build(
+                                    context,
+                                    const MenuConfig(
+                                        commonColor:
+                                            CustomPopupMenuTheme.commonColor,
+                                        height: CustomPopupMenuTheme.height,
+                                        dividerHeight: CustomPopupMenuTheme
+                                            .dividerHeight)))
+                                .expand((i) => i)
+                                .toList(),
+                            elevation: 8,
+                          )
+                              .then((_) {
+                            _menuOpen.value = false;
+                          });
+                        },
+                      );
+                    }),
                   ),
                 ),
               ]),

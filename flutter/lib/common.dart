@@ -108,6 +108,8 @@ class IconFont {
   static const _family2 = 'PeerSearchbar';
   static const _family3 = 'AddressBook';
   static const _family4 = 'DeviceGroup';
+  static const _family5 = 'More';
+
   IconFont._();
 
   static const IconData max = IconData(0xe606, fontFamily: _family1);
@@ -123,6 +125,7 @@ class IconFont {
       IconData(0xe623, fontFamily: _family4);
   static const IconData deviceGroupFill =
       IconData(0xe748, fontFamily: _family4);
+  static const IconData more = IconData(0xe609, fontFamily: _family5);
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
