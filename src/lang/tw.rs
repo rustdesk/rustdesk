@@ -658,9 +658,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("new-version-of-{}-tip", "有新版本的 {} 可用"),
         ("Accessible devices", "可存取的裝置"),
         ("View camera", "檢視相機"),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", "請將遠端 RustDesk 用戶端升級到 {} 或更新版本！"),
-        ("view_camera_unsupported_tip", ""),
-        ("Enable camera", ""),
-        ("No cameras", ""),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "請將遠端 RustDesk 客戶端升級到 {} 或更新版本！"),
+        ("view_camera_unsupported_tip", "您的遠端設備不支援查看鏡頭"),
+        ("Enable camera", "允許查看鏡頭"),
+        ("No cameras", "沒有鏡頭"),
     ].iter().cloned().collect();
 }
