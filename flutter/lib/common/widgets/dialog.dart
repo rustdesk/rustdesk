@@ -412,24 +412,38 @@ class DialogTextField extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: TextField(
-            decoration: InputDecoration(
-              labelText: title,
-              hintText: hintText,
-              prefixIcon: prefixIcon,
-              suffixIcon: suffixIcon,
-              helperText: helperText,
-              helperMaxLines: 8,
-              errorText: errorText,
-              errorMaxLines: 8,
-            ),
-            controller: controller,
-            focusNode: focusNode,
-            autofocus: true,
-            obscureText: obscureText,
-            keyboardType: keyboardType,
-            inputFormatters: inputFormatters,
-            maxLength: maxLength,
+          child: Column(
+            children: [
+              TextField(
+                decoration: InputDecoration(
+                  labelText: title,
+                  hintText: hintText,
+                  prefixIcon: prefixIcon,
+                  suffixIcon: suffixIcon,
+                  helperText: helperText,
+                  helperMaxLines: 8,
+                ),
+                controller: controller,
+                focusNode: focusNode,
+                autofocus: true,
+                obscureText: obscureText,
+                keyboardType: keyboardType,
+                inputFormatters: inputFormatters,
+                maxLength: maxLength,
+              ),
+              if (errorText != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SelectableText(
+                    errorText!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.left,
+                  ).paddingOnly(top: 8, left: 12),
+                ),
+            ],
           ).workaroundFreezeLinuxMint(),
         ),
       ],

@@ -6,8 +6,9 @@
 #![allow(deref_nullptr)]
 
 use crate::{
-    send_data, send_data_exclude, ClipboardFile, CliprdrError, CliprdrServiceContext, ResultType,
-    ERR_CODE_INVALID_PARAMETER, ERR_CODE_SEND_MSG, ERR_CODE_SERVER_FUNCTION_NONE, VEC_MSG_CHANNEL,
+    send_data, send_data_exclude, ClipboardFile, CliprdrError, CliprdrServiceContext,
+    ProgressPercent, ResultType, ERR_CODE_INVALID_PARAMETER, ERR_CODE_SEND_MSG,
+    ERR_CODE_SERVER_FUNCTION_NONE, VEC_MSG_CHANNEL,
 };
 use hbb_common::{allow_err, log};
 use std::{
@@ -602,6 +603,12 @@ impl CliprdrServiceContext for CliprdrClientContext {
         let ret = server_clip_file(self, conn_id, msg);
         ret_to_result(ret)
     }
+
+    fn get_progress_percent(&self) -> Option<ProgressPercent> {
+        None
+    }
+
+    fn cancel(&mut self) {}
 }
 
 fn ret_to_result(ret: u32) -> Result<(), CliprdrError> {
@@ -745,7 +752,11 @@ pub fn server_clip_file(
         ClipboardFile::TryEmpty => {
             log::debug!("empty_clipboard called");
             let ret = empty_clipboard(context, conn_id);
-            log::debug!("empty_clipboard called, conn_id {}, return {}", conn_id, ret);
+            log::debug!(
+                "empty_clipboard called, conn_id {}, return {}",
+                conn_id,
+                ret
+            );
         }
     }
     ret

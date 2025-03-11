@@ -848,6 +848,10 @@ impl ClientClipboardHandler {
             #[cfg(feature = "unix-file-copy-paste")]
             if let Some(urls) = check_clipboard_files(&mut self.ctx, ClipboardSide::Client, false) {
                 if !urls.is_empty() {
+                    #[cfg(target_os = "macos")]
+                    if crate::clipboard::is_file_url_set_by_rustdesk(&urls) {
+                        return;
+                    }
                     if self.is_file_required() {
                         match clipboard::platform::unix::serv_files::sync_files(&urls) {
                             Ok(()) => {
@@ -890,7 +894,8 @@ impl ClientClipboardHandler {
                 return;
             }
 
-            if let Some(pi) = ctx.cfg.lc.read().unwrap().peer_info.as_ref() {
+            let pi = ctx.cfg.lc.read().unwrap().peer_info.clone();
+            if let Some(pi) = pi.as_ref() {
                 if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
                     if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(
                         &pi.version,
@@ -1384,14 +1389,14 @@ impl VideoHandler {
     }
 
     /// Start or stop screen record.
-    pub fn record_screen(&mut self, start: bool, id: String, display: usize) {
+    pub fn record_screen(&mut self, start: bool, id: String, video_service_name: String) {
         self.record = false;
         if start {
             self.recorder = Recorder::new(RecorderContext {
                 server: false,
                 id,
                 dir: crate::ui_interface::video_save_directory(false),
-                display,
+                video_service_name,
                 tx: None,
             })
             .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
@@ -2344,6 +2349,7 @@ impl LoginConfigHandler {
                 show_hidden: !self.get_option("remote_show_hidden").is_empty(),
                 ..Default::default()
             }),
+            ConnType::VIEW_CAMERA => lr.set_view_camera(Default::default()),
             ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
@@ -2431,6 +2437,14 @@ pub fn start_video_thread<F, T>(
 {
     let mut video_callback = video_callback;
     let mut last_chroma = None;
+    let video_service_name = crate::video_service::get_service_name(
+        if session.is_view_camera() {
+            crate::video_service::VideoSource::Camera
+        } else {
+            crate::video_service::VideoSource::Monitor
+        },
+        display,
+    );
 
     std::thread::spawn(move || {
         #[cfg(windows)]
@@ -2473,7 +2487,7 @@ pub fn start_video_thread<F, T>(
                             let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();
                             if record_state && record_permission {
-                                handler.record_screen(true, id, display);
+                                handler.record_screen(true, id, video_service_name.clone());
                             }
                             video_handler = Some(handler);
                         }
@@ -2554,7 +2568,7 @@ pub fn start_video_thread<F, T>(
                     MediaData::RecordScreen(start) => {
                         let id = session.lc.read().unwrap().id.clone();
                         if let Some(handler) = video_handler.as_mut() {
-                            handler.record_screen(start, id, display);
+                            handler.record_screen(start, id, video_service_name.clone());
                         }
                     }
                     _ => {}
