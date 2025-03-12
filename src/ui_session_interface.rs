@@ -488,14 +488,14 @@ impl<T: InvokeUiSession> Session<T> {
         (vp8, av1, h264, h265)
     }
 
-    pub fn change_prefer_codec(&self) {
+    pub fn update_supported_decodings(&self) {
         let msg = self.lc.write().unwrap().update_supported_decodings();
         self.send(Data::Message(msg));
     }
 
     pub fn use_texture_render_changed(&self) {
         self.send(Data::ResetDecoder(None));
-        self.change_prefer_codec();
+        self.update_supported_decodings();
         self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 

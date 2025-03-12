@@ -662,5 +662,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("view_camera_unsupported_tip", "您的遠端設備不支援查看鏡頭"),
         ("Enable camera", "允許查看鏡頭"),
         ("No cameras", "沒有鏡頭"),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }
