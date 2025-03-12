@@ -1,10 +1,10 @@
-#  RustDesk 기여 가이드라인
+#  TechDesk 기여 가이드라인
 
-RustDesk는 모든 사람의 기여를 환영합니다. 만약 RustDesk에 기여하고 싶다면 아래 가이드를 참고해주세요:
+TechDesk는 모든 사람의 기여를 환영합니다. 만약 TechDesk에 기여하고 싶다면 아래 가이드를 참고해주세요:
 
 ## 기여 방식
 
-RustDesk 또는 종속성에 대한 기여는 GitHub Pull Request 형태로 이루어져야 합니다.
+TechDesk 또는 종속성에 대한 기여는 GitHub Pull Request 형태로 이루어져야 합니다.
 모든 Pull Request는 코어 기여자가 검토하며, 메인 저장소에 반영되거나 필요한 수정 사항에 대한 피드백을 받습니다.
 모든 기여는 이 형식을 따라야 합니다.
 
@@ -25,7 +25,7 @@ RustDesk 또는 종속성에 대한 기여는 GitHub Pull Request 형태로 이�
 Git에서는 `git commit` 명령어에 `-s` 옵션을 사용해 서명을 추가할 수 있습니다.
 
 - PR이 검토되지 않거나 특정 리뷰어가 필요하면, 
-<br/> PR이나 댓글에서 리뷰어를 태그하거나 [이메일](mailto:info@rustdesk.com)로 리뷰를 요청할 수 있습니다.
+<br/> PR이나 댓글에서 리뷰어를 태그하거나 [이메일](mailto:info@techdesk.com)로 리뷰를 요청할 수 있습니다.
 
 - 수정된 버그나 추가된 기능과 관련된 테스트 코드를 포함해주세요.
 
@@ -33,8 +33,8 @@ Git 사용에 대한 자세한 내용은 [GitHub workflow 101](https://github.co
 
 ## 행동 강령
 
-https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT.md
+https://github.com/techdesk/techdesk/blob/master/docs/CODE_OF_CONDUCT.md
 
 ## 커뮤니케이션
 
-RustDesk 기여자들은 [Discord](https://discord.gg/nDceKgxnkV)에서 활동하고 있습니다.
+TechDesk 기여자들은 [Discord](https://discord.gg/nDceKgxnkV)에서 활동하고 있습니다.

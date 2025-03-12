@@ -188,7 +188,7 @@ class WebHomePage extends StatelessWidget {
           return;
         }
         list.removeAt(0);
-        fakelink = "rustdesk://${list.join(s)}";
+        fakelink = "techdesk://${list.join(s)}";
         break;
       }
     }
@@ -234,7 +234,10 @@ class WebHomePage extends StatelessWidget {
       }
     }
     if (id != null) {
-      connect(context, id, isFileTransfer: isFileTransfer, isViewCamera: isViewCamera, password: password);
+      connect(context, id,
+          isFileTransfer: isFileTransfer,
+          isViewCamera: isViewCamera,
+          password: password);
     }
   }
 }

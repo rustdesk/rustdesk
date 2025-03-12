@@ -113,10 +113,10 @@ mod test {
 
     #[test]
     fn test_filename_license_string() {
-        assert!(get_custom_server_from_string("rustdesk.exe").is_err());
-        assert!(get_custom_server_from_string("rustdesk").is_err());
+        assert!(get_custom_server_from_string("techdesk.exe").is_err());
+        assert!(get_custom_server_from_string("techdesk").is_err());
         assert_eq!(
-            get_custom_server_from_string("rustdesk-host=server.example.net.exe").unwrap(),
+            get_custom_server_from_string("techdesk-host=server.example.net.exe").unwrap(),
             CustomServer {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
@@ -125,7 +125,7 @@ mod test {
             }
         );
         assert_eq!(
-            get_custom_server_from_string("rustdesk-host=server.example.net,.exe").unwrap(),
+            get_custom_server_from_string("techdesk-host=server.example.net,.exe").unwrap(),
             CustomServer {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
@@ -136,7 +136,7 @@ mod test {
         // key in these tests is "foobar.,2" base64 encoded
         assert_eq!(
             get_custom_server_from_string(
-                "rustdesk-host=server.example.net,api=abc,key=Zm9vYmFyLiwyCg==.exe"
+                "techdesk-host=server.example.net,api=abc,key=Zm9vYmFyLiwyCg==.exe"
             )
             .unwrap(),
             CustomServer {
@@ -148,7 +148,7 @@ mod test {
         );
         assert_eq!(
             get_custom_server_from_string(
-                "rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe"
+                "techdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe"
             )
             .unwrap(),
             CustomServer {
@@ -160,7 +160,7 @@ mod test {
         );
         assert_eq!(
             get_custom_server_from_string(
-                "rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,relay=server.example.net.exe"
+                "techdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,relay=server.example.net.exe"
             )
             .unwrap(),
             CustomServer {
@@ -172,7 +172,7 @@ mod test {
         );
         assert_eq!(
             get_custom_server_from_string(
-                "rustdesk-Host=server.example.net,Key=Zm9vYmFyLiwyCg==,RELAY=server.example.net.exe"
+                "techdesk-Host=server.example.net,Key=Zm9vYmFyLiwyCg==,RELAY=server.example.net.exe"
             )
             .unwrap(),
             CustomServer {
@@ -189,31 +189,31 @@ mod test {
             relay: "".to_owned(),
         };
         assert_eq!(
-            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
+            get_custom_server_from_string("techdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
+            get_custom_server_from_string("techdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_custom_server_from_string("rustdesk--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
+            get_custom_server_from_string("techdesk--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1).exe")
+            get_custom_server_from_string("techdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1).exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1) (2).exe")
+            get_custom_server_from_string("techdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1) (2).exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--abc.exe")
+            get_custom_server_from_string("techdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--abc.exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_custom_server_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+            get_custom_server_from_string("techdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_custom_server_from_string("rustdesk-licensed---0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+            get_custom_server_from_string("techdesk-licensed---0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_custom_server_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+            get_custom_server_from_string("techdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
                 .unwrap(), lic);
     }
 }

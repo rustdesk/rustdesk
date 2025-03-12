@@ -90,7 +90,7 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
 
 // macOS >= 10.15
 // https://stackoverflow.com/questions/56597221/detecting-screen-recording-settings-on-macos-catalina/
-// remove just one app from all the permissions: tccutil reset All com.carriez.rustdesk
+// remove just one app from all the permissions: tccutil reset All com.carriez.techdesk
 fn unsafe_is_can_screen_recording(prompt: bool) -> bool {
     // we got some report that we show no permission even after set it, so we try to use new api for screen recording check
     // the new api is only available on macOS >= 10.15, but on stackoverflow, some people said it works on >= 10.16 (crash on 10.15),
@@ -219,8 +219,8 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
 }
 
 fn correct_app_name(s: &str) -> String {
-    let s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
-    let s = s.replace("RustDesk", &crate::get_app_name());
+    let s = s.replace("techdesk", &crate::get_app_name().to_lowercase());
+    let s = s.replace("TechDesk", &crate::get_app_name());
     s
 }
 
@@ -522,8 +522,8 @@ pub fn start_os_service() {
     /* // mouse/keyboard works in prelogin now with launchctl asuser.
        // below can avoid multi-users logged in problem, but having its own below problem.
        // Not find a good way to start --cm without root privilege (affect file transfer).
-       // one way is to start with `launchctl asuser <uid> open -n -a /Applications/RustDesk.app/ --args --cm`,
-       // this way --cm is started with the user privilege, but we will have problem to start another RustDesk.app
+       // one way is to start with `launchctl asuser <uid> open -n -a /Applications/TechDesk.app/ --args --cm`,
+       // this way --cm is started with the user privilege, but we will have problem to start another TechDesk.app
        // with open in explorer.
         use std::sync::{
             atomic::{AtomicBool, Ordering},

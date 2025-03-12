@@ -1,15 +1,15 @@
 [package]
-name = "rustdesk"
+name = "techdesk"
 version = "1.3.9"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["techdesk <info@techdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "TechDesk Remote Desktop"
+default-run = "techdesk"
 rust-version = "1.75"
 
 [lib]
-name = "librustdesk"
+name = "libtechdesk"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
@@ -182,9 +182,9 @@ exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
-FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+ProductName = "TechDesk"
+FileDescription = "TechDesk Remote Desktop"
+OriginalFilename = "techdesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -199,8 +199,8 @@ os-version = "0.2"
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "TechDesk"
+identifier = "com.carriez.techdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

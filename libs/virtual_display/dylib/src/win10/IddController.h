@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 /**
- * @brief Install or Update RustDeskIddDriver.
+ * @brief Install or Update TechDeskIddDriver.
  *
  * @param fullInfPath [in] Full path of the driver inf file.
  * @param rebootRequired [out] Indicates whether a restart is required.
@@ -20,7 +20,7 @@ extern "C" {
 BOOL InstallUpdate(LPCTSTR fullInfPath, PBOOL rebootRequired);
 
 /**
- * @brief Uninstall RustDeskIddDriver.
+ * @brief Uninstall TechDeskIddDriver.
  *
  * @param fullInfPath [in] Full path of the driver inf file.
  * @param rebootRequired [out] Indicates whether a restart is required.
@@ -32,7 +32,7 @@ BOOL InstallUpdate(LPCTSTR fullInfPath, PBOOL rebootRequired);
 BOOL Uninstall(LPCTSTR fullInfPath, PBOOL rebootRequired);
 
 /**
- * @brief Check if RustDeskIddDriver device is created before.
+ * @brief Check if TechDeskIddDriver device is created before.
  *        The driver device(adapter) should be single instance.
  *
  * @param created [out] Indicates whether the device is created before.

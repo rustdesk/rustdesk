@@ -254,11 +254,11 @@ pub(super) fn get_original_resolution(
     h: usize,
 ) -> MessageField<Resolution> {
     #[cfg(windows)]
-    let is_rustdesk_virtual_display =
-        crate::virtual_display_manager::rustdesk_idd::is_virtual_display(&display_name);
+    let is_techdesk_virtual_display =
+        crate::virtual_display_manager::techdesk_idd::is_virtual_display(&display_name);
     #[cfg(not(windows))]
-    let is_rustdesk_virtual_display = false;
-    Some(if is_rustdesk_virtual_display {
+    let is_techdesk_virtual_display = false;
+    Some(if is_techdesk_virtual_display {
         Resolution {
             width: 0,
             height: 0,

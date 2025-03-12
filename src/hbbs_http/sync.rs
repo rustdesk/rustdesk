@@ -52,7 +52,7 @@ pub struct StrategyOptions {
 #[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn start_hbbs_sync_async() {
-    let mut interval = crate::rustdesk_interval(tokio::time::interval_at(
+    let mut interval = crate::techdesk_interval(tokio::time::interval_at(
         Instant::now() + TIME_CONN,
         TIME_CONN,
     ));
@@ -200,7 +200,7 @@ fn heartbeat_url() -> String {
         Config::get_option("api-server"),
         Config::get_option("custom-rendezvous-server"),
     );
-    if url.is_empty() || url.contains("rustdesk.com") {
+    if url.is_empty() || url.contains("techdesk.com") {
         return "".to_owned();
     }
     format!("{}/api/heartbeat", url)

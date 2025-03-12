@@ -54,7 +54,7 @@ utpekt representant på digitale og fysiske arrangsjemanger.
 
 Hendelser av misbruk, trakasserende eller på noen måte uakseptert oppførsel kann
 bli raportert til felleskapets ledere med ansvar for håndheving på
-[info@rustdesk.com](mailto:info@rustdesk.com).
+[info@techdesk.com](mailto:info@techdesk.com).
 All tilbakemelding vill bli sett gjennom og investigert rettferdig så fort som mulig.
 
 Alle felleskapets ledere er obligert til å respektere privatlivet og sikkerhetet ovenfor

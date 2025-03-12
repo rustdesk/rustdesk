@@ -15,7 +15,7 @@ use std::{
     time::Duration,
 };
 
-const MSG_TO_RUSTDESK_TARGET: &str = "rustdesk";
+const MSG_TO_RUSTDESK_TARGET: &str = "techdesk";
 const MSG_TO_PEER_TARGET: &str = "peer";
 const MSG_TO_UI_TARGET: &str = "ui";
 const MSG_TO_CONFIG_TARGET: &str = "config";
@@ -47,7 +47,7 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Deserialize)]
-pub struct MsgToRustDesk {
+pub struct MsgToTechDesk {
     pub r#type: String,
     pub data: Vec<u8>,
 }
@@ -228,7 +228,7 @@ pub(super) extern "C" fn cb_msg(
             );
             super::callback_ext::ext_support_callback(&id, &peer, &msg)
         }
-        MSG_TO_RUSTDESK_TARGET => handle_msg_to_rustdesk(id, content, len),
+        MSG_TO_RUSTDESK_TARGET => handle_msg_to_techdesk(id, content, len),
         _ => PluginReturn::new(
             errno::ERR_CALLBACK_TARGET,
             &format!("Unknown target '{}'", target),
@@ -243,20 +243,20 @@ fn is_peer_channel(channel: u16) -> bool {
         || channel & MSG_TO_UI_FLUTTER_CHANNEL_FORWARD != 0
 }
 
-fn handle_msg_to_rustdesk(id: String, content: *const c_void, len: usize) -> PluginReturn {
+fn handle_msg_to_techdesk(id: String, content: *const c_void, len: usize) -> PluginReturn {
     let s = early_return_value!(
         std::str::from_utf8(unsafe { std::slice::from_raw_parts(content as _, len) }),
         ERR_CALLBACK_INVALID_MSG,
         "parse msg string"
     );
-    let msg_to_rustdesk = early_return_value!(
-        serde_json::from_str::<MsgToRustDesk>(s),
+    let msg_to_techdesk = early_return_value!(
+        serde_json::from_str::<MsgToTechDesk>(s),
         ERR_CALLBACK_INVALID_MSG,
         "parse msg '{}'",
         s
     );
-    match &msg_to_rustdesk.r#type as &str {
-        MSG_TO_RUSTDESK_SIGNATURE_VERIFICATION => request_plugin_sign(id, msg_to_rustdesk),
+    match &msg_to_techdesk.r#type as &str {
+        MSG_TO_RUSTDESK_SIGNATURE_VERIFICATION => request_plugin_sign(id, msg_to_techdesk),
         t => PluginReturn::new(
             errno::ERR_CALLBACK_TARGET_TYPE,
             &format!(
@@ -267,9 +267,9 @@ fn handle_msg_to_rustdesk(id: String, content: *const c_void, len: usize) -> Plu
     }
 }
 
-fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginReturn {
+fn request_plugin_sign(id: String, msg_to_techdesk: MsgToTechDesk) -> PluginReturn {
     let signature_data = early_return_value!(
-        std::str::from_utf8(&msg_to_rustdesk.data),
+        std::str::from_utf8(&msg_to_techdesk.data),
         ERR_CALLBACK_INVALID_MSG,
         "parse signature data string"
     );

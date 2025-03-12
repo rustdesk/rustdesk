@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=TechDeskURL Scheme Handler
+NoDisplay=true
+MimeType=x-scheme-handler/techdesk;
+TryExec=techdesk
+Exec=techdesk %u
+Icon=techdesk
+Terminal=false
+Type=Application
+StartupNotify=false

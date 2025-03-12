@@ -58,7 +58,7 @@ UINT __stdcall RemoveInstallFolder(
     hr = WcaReadStringFromCaData(&pwz, &installFolder);
     ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
 
-    StringCchPrintfW(runtimeBroker, sizeof(runtimeBroker) / sizeof(runtimeBroker[0]), L"%ls\\RuntimeBroker_rustdesk.exe", installFolder);
+    StringCchPrintfW(runtimeBroker, sizeof(runtimeBroker) / sizeof(runtimeBroker[0]), L"%ls\\RuntimeBroker_techdesk.exe", installFolder);
 
     SHFILEOPSTRUCTW fileOp;
     ZeroMemory(&fileOp, sizeof(SHFILEOPSTRUCT));

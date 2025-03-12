@@ -183,7 +183,7 @@ class GroupModel {
               json['error']
                   .toString()
                   .contains('ambiguous column name: status')) {
-            throw translate('upgrade_rustdesk_server_pro_to_{1.1.10}_tip');
+            throw translate('upgrade_techdesk_server_pro_to_{1.1.10}_tip');
           } else {
             throw json['error'];
           }

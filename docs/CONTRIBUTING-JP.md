@@ -1,11 +1,11 @@
-# RustDesk へのコントリビュート
+# TechDesk へのコントリビュート
 
-RustDesk は皆さんからのコントリビュートを歓迎します。ご協力いただける方のガイドラインは
+TechDesk は皆さんからのコントリビュートを歓迎します。ご協力いただける方のガイドラインは
 以下の通りです:
 
 ## コントリビューション
 
-RustDesk またはその依存関係へのコントリビュートは、GitHub のプルリクエストの形で行ってください。
+TechDesk またはその依存関係へのコントリビュートは、GitHub のプルリクエストの形で行ってください。
 それぞれのプルリクエストは、コアコントリビューター（パッチの適用を許可されている人）によってレビューされ、
 メインツリーに適用されるか、必要な変更についてのフィードバックが与えられます。
 コアコントリビューターからのものであっても、すべてのコントリビューターはこのフォーマットに従うべきです。
@@ -26,7 +26,7 @@ RustDesk またはその依存関係へのコントリビュートは、GitHub �
   同意していることを示すものです。git では、これは `git commit` の `-s` オプションを使います。
 
 - もしあなたのパッチがレビューされなかったり、特定の人にレビューしてもらう必要がある場合、
-  プルリクエストやコメントでレビューを依頼するレビュアーに@返信したり、[email](mailto:info@rustdesk.com) でレビューを依頼することができます。
+  プルリクエストやコメントでレビューを依頼するレビュアーに@返信したり、[email](mailto:info@techdesk.com) でレビューを依頼することができます。
 
 - 修正したバグや新機能に関連するテストを追加する。
 
@@ -34,8 +34,8 @@ RustDesk またはその依存関係へのコントリビュートは、GitHub �
 
 ## 行動規範
 
-https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT.md
+https://github.com/techdesk/techdesk/blob/master/docs/CODE_OF_CONDUCT.md
 
 ## コミュニケーション
 
-RustDesk のコントリビューターは、[Discord](https://discord.gg/nDceKgxnkV) を良く使っています。
+TechDesk のコントリビューターは、[Discord](https://discord.gg/nDceKgxnkV) を良く使っています。

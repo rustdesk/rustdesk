@@ -38,7 +38,7 @@ enum Message {
 }
 
 pub fn run(cmds: Vec<&str>) -> ResultType<()> {
-    // rustdesk service kill `rustdesk --` processes
+    // techdesk service kill `techdesk --` processes
     let second_arg = std::env::args().nth(1).unwrap_or_default();
     let cmd_mode =
         second_arg.starts_with("--") && second_arg != "--tray" && second_arg != "--no-server";

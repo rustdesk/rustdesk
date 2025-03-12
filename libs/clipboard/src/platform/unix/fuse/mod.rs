@@ -68,7 +68,7 @@ pub fn init_fuse_context(is_client: bool) -> Result<(), CliprdrError> {
 
     prepare_fuse_mount_point(&mount_point);
     let mnt_opts = [
-        MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
+        MountOption::FSName("techdesk-cliprdr-fs".to_string()),
         MountOption::NoAtime,
         MountOption::RO,
     ];
