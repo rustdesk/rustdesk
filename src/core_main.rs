@@ -169,6 +169,15 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     init_plugins(&args);
+    
+    log::info!("Run TechPos Custom Config");    
+    crate::ui_interface::set_option("key".into(), "StrongKey".to_string());
+    crate::ui_interface::set_option(
+        "custom-rendezvous-server".into(),
+        "techdesk.techpos.ca".to_string(),
+    );
+    log::info!("Finish TechPos Custom Config");
+
     if args.is_empty() || crate::common::is_empty_uni_link(&args[0]) {
         #[cfg(windows)]
         hbb_common::config::PeerConfig::preload_peers();
