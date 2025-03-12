@@ -3,7 +3,7 @@
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>com.carriez.rustdesk.service</string>
+        <string>com.carriez.RustDesk_service</string>
         <key>KeepAlive</key>
         <true/>
         <key>ThrottleInterval</key>
