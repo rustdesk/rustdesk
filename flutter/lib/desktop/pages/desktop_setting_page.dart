@@ -1461,7 +1461,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                     translate('ID/Relay Server'),
                     style: TextStyle(fontSize: _kContentFontSize),
                   ),
-                  enabled: !locked,
+                  enabled: false, //!locked,
                   onTap: () => showServerSettings(gFFI.dialogManager),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
