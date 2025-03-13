@@ -1389,14 +1389,15 @@ impl VideoHandler {
     }
 
     /// Start or stop screen record.
-    pub fn record_screen(&mut self, start: bool, id: String, video_service_name: String) {
+    pub fn record_screen(&mut self, start: bool, id: String, display_idx: usize, camera: bool) {
         self.record = false;
         if start {
             self.recorder = Recorder::new(RecorderContext {
                 server: false,
                 id,
                 dir: crate::ui_interface::video_save_directory(false),
-                video_service_name,
+                display_idx,
+                camera,
                 tx: None,
             })
             .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
@@ -2437,14 +2438,7 @@ pub fn start_video_thread<F, T>(
 {
     let mut video_callback = video_callback;
     let mut last_chroma = None;
-    let video_service_name = crate::video_service::get_service_name(
-        if session.is_view_camera() {
-            crate::video_service::VideoSource::Camera
-        } else {
-            crate::video_service::VideoSource::Monitor
-        },
-        display,
-    );
+    let is_view_camera = session.is_view_camera();
 
     std::thread::spawn(move || {
         #[cfg(windows)]
@@ -2487,7 +2481,7 @@ pub fn start_video_thread<F, T>(
                             let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();
                             if record_state && record_permission {
-                                handler.record_screen(true, id, video_service_name.clone());
+                                handler.record_screen(true, id, display, is_view_camera);
                             }
                             video_handler = Some(handler);
                         }
@@ -2568,7 +2562,7 @@ pub fn start_video_thread<F, T>(
                     MediaData::RecordScreen(start) => {
                         let id = session.lc.read().unwrap().id.clone();
                         if let Some(handler) = video_handler.as_mut() {
-                            handler.record_screen(start, id, video_service_name.clone());
+                            handler.record_screen(start, id, display, is_view_camera);
                         }
                     }
                     _ => {}

@@ -864,7 +864,7 @@ pub fn enable_vram_option(encode: bool) -> bool {
         if encode {
             enable && enable_directx_capture()
         } else {
-            enable
+            enable && allow_d3d_render()
         }
     } else {
         false
@@ -874,10 +874,13 @@ pub fn enable_vram_option(encode: bool) -> bool {
 #[cfg(windows)]
 pub fn enable_directx_capture() -> bool {
     use hbb_common::config::keys::OPTION_ENABLE_DIRECTX_CAPTURE as OPTION;
-    option2bool(
-        OPTION,
-        &Config::get_option(hbb_common::config::keys::OPTION_ENABLE_DIRECTX_CAPTURE),
-    )
+    option2bool(OPTION, &Config::get_option(OPTION))
+}
+
+#[cfg(windows)]
+pub fn allow_d3d_render() -> bool {
+    use hbb_common::config::keys::OPTION_ALLOW_D3D_RENDER as OPTION;
+    option2bool(OPTION, &hbb_common::config::LocalConfig::get_option(OPTION))
 }
 
 pub const BR_BEST: f32 = 1.5;

@@ -503,6 +503,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         record_incoming,
         last_portable_service_running,
         vs.source,
+        display_idx,
     ) {
         Ok(result) => result,
         Err(err) => {
@@ -522,6 +523,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 record_incoming,
                 last_portable_service_running,
                 vs.source,
+                display_idx,
             )?
         }
     };
@@ -791,6 +793,7 @@ fn setup_encoder(
     record_incoming: bool,
     last_portable_service_running: bool,
     source: VideoSource,
+    display_idx: usize,
 ) -> ResultType<(
     Encoder,
     EncoderCfg,
@@ -808,7 +811,7 @@ fn setup_encoder(
     );
     Encoder::set_fallback(&encoder_cfg);
     let codec_format = Encoder::negotiated_codec();
-    let recorder = get_recorder(record_incoming, name);
+    let recorder = get_recorder(record_incoming, display_idx, source == VideoSource::Camera);
     let use_i444 = Encoder::use_i444(&encoder_cfg);
     let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
     Ok((encoder, encoder_cfg, codec_format, use_i444, recorder))
@@ -891,7 +894,11 @@ fn get_encoder_config(
     }
 }
 
-fn get_recorder(record_incoming: bool, video_service_name: String) -> Arc<Mutex<Option<Recorder>>> {
+fn get_recorder(
+    record_incoming: bool,
+    display_idx: usize,
+    camera: bool,
+) -> Arc<Mutex<Option<Recorder>>> {
     #[cfg(windows)]
     let root = crate::platform::is_root();
     #[cfg(not(windows))]
@@ -910,7 +917,8 @@ fn get_recorder(record_incoming: bool, video_service_name: String) -> Arc<Mutex<
             server: true,
             id: Config::get_id(),
             dir: crate::ui_interface::video_save_directory(root),
-            video_service_name,
+            display_idx,
+            camera,
             tx,
         })
         .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))))
