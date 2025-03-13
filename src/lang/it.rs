@@ -662,7 +662,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("view_camera_unsupported_tip", "Il dispositivo remoto non supporta la visualizzazione della camera."),
         ("Enable camera", "Abilita camera"),
         ("No cameras", "Nessuna camera"),
-        ("d3d_render_tip", ""),
-        ("Use D3D rendering", ""),
+        ("d3d_render_tip", "Quando è abilitato il rendering D3D, in alcuni computer la schermata del telecomando potrebbe essere nera."),
+        ("Use D3D rendering", "Usa rendering D3D"),
     ].iter().cloned().collect();
 }
