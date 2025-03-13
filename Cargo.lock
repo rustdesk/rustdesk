@@ -5772,6 +5772,7 @@ dependencies = [
  "dbus-crossroads",
  "default-net",
  "dispatch",
+ "docopt",
  "enigo",
  "errno",
  "evdev",
