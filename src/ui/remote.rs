@@ -533,7 +533,7 @@ impl sciter::EventHandler for SciterSession {
         fn is_keyboard_mode_supported(String);
         fn save_keyboard_mode(String);
         fn alternative_codecs();
-        fn change_prefer_codec();
+        fn update_supported_decodings();
         fn restart_remote_device();
         fn request_voice_call();
         fn close_voice_call();

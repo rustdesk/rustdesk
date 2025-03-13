@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use nokhwa::{
     pixel_format::RgbAFormat,
     query,
@@ -23,6 +24,9 @@ lazy_static::lazy_static! {
     static ref SYNC_CAMERA_DISPLAYS: Arc<Mutex<Vec<DisplayInfo>>> = Arc::new(Mutex::new(Vec::new()));
 }
 
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+const CAMERA_NOT_SUPPORTED: &str = "This platform doesn't support camera yet";
+
 pub struct Cameras;
 
 // pre-condition
@@ -30,12 +34,9 @@ pub fn primary_camera_exists() -> bool {
     Cameras::exists(PRIMARY_CAMERA_IDX)
 }
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 impl Cameras {
     pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
-        // TODO: support more platforms.
-        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-        return Ok(Vec::new());
-
         match query(ApiBackend::Auto) {
             Ok(cameras) => {
                 let mut camera_displays = SYNC_CAMERA_DISPLAYS.lock().unwrap();
@@ -102,10 +103,6 @@ impl Cameras {
     }
 
     pub fn exists(index: usize) -> bool {
-        // TODO: support more platforms.
-        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-        return false;
-
         match query(ApiBackend::Auto) {
             Ok(cameras) => index < cameras.len(),
             _ => return false,
@@ -113,10 +110,6 @@ impl Cameras {
     }
 
     fn create_camera(index: &CameraIndex) -> ResultType<Camera> {
-        // TODO: support more platforms.
-        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-        bail!("This platform doesn't support camera yet");
-
         let result = Camera::new(
             index.clone(),
             RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution),
@@ -147,13 +140,41 @@ impl Cameras {
     }
 }
 
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+impl Cameras {
+    pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
+        return Ok(Vec::new());
+    }
+
+    pub fn exists(index: usize) -> bool {
+        false
+    }
+
+    pub fn get_camera_resolution(index: usize) -> ResultType<Resolution> {
+        bail!(CAMERA_NOT_SUPPORTED);
+    }
+
+    pub fn get_sync_cameras() -> Vec<DisplayInfo> {
+        vec![]
+    }
+
+    pub fn get_capturer(current: usize) -> ResultType<Box<dyn TraitCapturer>> {
+        bail!(CAMERA_NOT_SUPPORTED);
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub struct CameraCapturer {
     camera: Camera,
     data: Vec<u8>,
     last_data: Vec<u8>, // for faster compare and copy
 }
 
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+pub struct CameraCapturer;
+
 impl CameraCapturer {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn new(current: usize) -> ResultType<Self> {
         let index = CameraIndex::Index(current as u32);
         let camera = Cameras::create_camera(&index)?;
@@ -163,9 +184,15 @@ impl CameraCapturer {
             last_data: Vec::new(),
         })
     }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    fn new(_current: usize) -> ResultType<Self> {
+        bail!(CAMERA_NOT_SUPPORTED);
+    }
 }
 
 impl TraitCapturer for CameraCapturer {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn frame<'a>(&'a mut self, _timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
         // TODO: move this check outside `frame`.
         if !self.camera.is_stream_open() {
@@ -210,6 +237,14 @@ impl TraitCapturer for CameraCapturer {
                 format!("Camera frame error: {}", e),
             )),
         }
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    fn frame<'a>(&'a mut self, _timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            CAMERA_NOT_SUPPORTED.to_string(),
+        ))
     }
 
     #[cfg(windows)]
