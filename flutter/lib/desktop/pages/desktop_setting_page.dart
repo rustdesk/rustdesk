@@ -496,6 +496,16 @@ class _GeneralState extends State<_General> {
                   await bind.mainSetLocalOption(key: k, value: v ? 'Y' : 'N'),
             ),
           ),
+        if (isWindows)
+          Tooltip(
+            message: translate('d3d_render_tip'),
+            child: _OptionCheckBox(
+              context,
+              "Use D3D rendering",
+              kOptionD3DRender,
+              isServer: false,
+            ),
+          ),
         if (!isWeb && !bind.isCustomClient())
           _OptionCheckBox(
             context,

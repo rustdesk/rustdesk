@@ -662,5 +662,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("view_camera_unsupported_tip", ""),
         ("Enable camera", ""),
         ("No cameras", ""),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }

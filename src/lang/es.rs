@@ -662,5 +662,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("view_camera_unsupported_tip", "El dispositivo remoto no soporta la visualización de la cámara."),
         ("Enable camera", "Habilitar cámara"),
         ("No cameras", "No hay cámaras"),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }
