@@ -1246,7 +1246,7 @@ oLink.Save
     .to_str()
     .unwrap_or("")
     .to_owned();
-    let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
+    //let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
     let mut reg_value_desktop_shortcuts = "0".to_owned();
     let mut reg_value_start_menu_shortcuts = "0".to_owned();
     let mut shortcuts = Default::default();
@@ -1275,10 +1275,10 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
     // https://www.windowscentral.com/how-edit-registry-using-command-prompt-windows-10
     // https://www.tenforums.com/tutorials/70903-add-remove-allowed-apps-through-windows-firewall-windows-10-a.html
     // Note: without if exist, the bat may exit in advance on some Windows7 https://github.com/rustdesk/rustdesk/issues/895
+    //if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\" has been removed from dels
     let dels = format!(
         "
 if exist \"{mk_shortcut}\" del /f /q \"{mk_shortcut}\"
-if exist \"{uninstall_shortcut}\" del /f /q \"{uninstall_shortcut}\"
 if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
 if exist \"{tmp_path}\\{app_name}.lnk\" del /f /q \"{tmp_path}\\{app_name}.lnk\"
 if exist \"{tmp_path}\\Uninstall {app_name}.lnk\" del /f /q \"{tmp_path}\\Uninstall {app_name}.lnk\"
@@ -1294,15 +1294,16 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         Config::set_option("api-server".into(), lic.api);
     }
 
-    let tray_shortcuts = if config::is_outgoing_only() {
-        "".to_owned()
-    } else {
-        format!("
-cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
-")
-    };
+//     let tray_shortcuts = if config::is_outgoing_only() {
+//         "".to_owned()
+//     } else {
+//         format!("
+// cscript \"{tray_shortcut}\"
+// copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+// ")
+//     };
 
+//{tray_shortcuts} has been removed from cmds
     let cmds = format!(
         "
 {uninstall_str}
@@ -1325,7 +1326,6 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
 cscript \"{mk_shortcut}\"
 cscript \"{uninstall_shortcut}\"
-{tray_shortcuts}
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {dels}
@@ -2241,19 +2241,19 @@ pub fn install_service() -> bool {
     let _installing = crate::platform::InstallingService::new();
     let (_, _, _, exe) = get_install_info();
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
-    let tray_shortcut = get_tray_shortcut(&exe, &tmp_path).unwrap_or_default();
+    //let tray_shortcut = get_tray_shortcut(&exe, &tmp_path).unwrap_or_default();
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "".into());
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
+    //if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\" has been removed from cmds
+    //cscript \"{tray_shortcut}\" has been removed from cmds
     let cmds = format!(
         "
 chcp 65001
 taskkill /F /IM {app_name}.exe{filter}
-cscript \"{tray_shortcut}\"
 copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
 {import_config}
 {create_service}
-if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
     ",
         app_name = crate::get_app_name(),
         import_config = get_import_config(&exe),
@@ -2269,27 +2269,27 @@ if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
     std::process::exit(0);
 }
 
-pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
-    Ok(write_cmds(
-        format!(
-            "
-Set oWS = WScript.CreateObject(\"WScript.Shell\")
-sLinkFile = \"{tmp_path}\\{app_name} Tray.lnk\"
+// pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
+//     Ok(write_cmds(
+//         format!(
+//             "
+// Set oWS = WScript.CreateObject(\"WScript.Shell\")
+// sLinkFile = \"{tmp_path}\\{app_name} Tray.lnk\"
 
-Set oLink = oWS.CreateShortcut(sLinkFile)
-    oLink.TargetPath = \"{exe}\"
-    oLink.Arguments = \"--tray\"
-oLink.Save
-        ",
-            app_name = crate::get_app_name(),
-        ),
-        "vbs",
-        "tray_shortcut",
-    )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned())
-}
+// Set oLink = oWS.CreateShortcut(sLinkFile)
+//     oLink.TargetPath = \"{exe}\"
+//     oLink.Arguments = \"--tray\"
+// oLink.Save
+//         ",
+//             app_name = crate::get_app_name(),
+//         ),
+//         "vbs",
+//         "tray_shortcut",
+//     )?
+//     .to_str()
+//     .unwrap_or("")
+//     .to_owned())
+// }
 
 fn get_import_config(exe: &str) -> String {
     if config::is_outgoing_only() {
@@ -2335,9 +2335,9 @@ fn run_after_run_cmds(silent: bool) {
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .spawn());
     }
-    if Config::get_option("stop-service") != "Y" {
-        allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
-    }
+    // if Config::get_option("stop-service") != "Y" {
+    //     allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
+    // }
     std::thread::sleep(std::time::Duration::from_millis(300));
 }
 
