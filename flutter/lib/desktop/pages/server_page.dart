@@ -800,7 +800,7 @@ class __CmControlPanelState extends State<_CmControlPanel> {
     final model = Provider.of<ServerModel>(context);
     final showElevation = canElevate &&
         model.showElevation &&
-        widget.client.type_() == ClientType.remote;
+        client.type_() == ClientType.remote;
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
@@ -1102,11 +1102,11 @@ class __CmControlPanelState extends State<_CmControlPanel> {
         borderRadius: borderRadius,
         onTap: () {
           if (onClick == null) return;
-          checkClickTime(client.id, onClick);
+          checkClickTime(widget.client.id, onClick);
         },
         onTapDown: (details) {
           if (onTapDown == null) return;
-          checkClickTime(client.id, () {
+          checkClickTime(widget.client.id, () {
             onTapDown.call(details);
           });
         },
@@ -1129,7 +1129,7 @@ class __CmControlPanelState extends State<_CmControlPanel> {
   }
 
   void handleDisconnect() {
-    bind.cmCloseConnection(connId: client.id);
+    bind.cmCloseConnection(connId: widget.client.id);
   }
 
   void handleAccept(BuildContext context) {
@@ -1144,7 +1144,7 @@ class __CmControlPanelState extends State<_CmControlPanel> {
   }
 
   void handleClose() async {
-    await bind.cmRemoveDisconnectedConnection(connId: client.id);
+    await bind.cmRemoveDisconnectedConnection(connId: widget.client.id);
     if (await bind.cmGetClientsLength() == 0) {
       windowManager.close();
     }
@@ -1155,11 +1155,11 @@ class __CmControlPanelState extends State<_CmControlPanel> {
   }
 
   void handleVoiceCall(bool accept) {
-    bind.cmHandleIncomingVoiceCall(id: client.id, accept: accept);
+    bind.cmHandleIncomingVoiceCall(id: widget.client.id, accept: accept);
   }
 
   void closeVoiceCall() {
-    bind.cmCloseVoiceCall(id: client.id);
+    bind.cmCloseVoiceCall(id: widget.client.id);
   }
 }
 
