@@ -235,15 +235,13 @@ jobs:
         run: |
           BASE_URL=${{ secrets.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput
 
-      - name: Publish Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         if: env.UPLOAD_ARTIFACT == 'true'
         with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: |
-            ./SignOutput/rustdesk-*.msi
-            ./SignOutput/rustdesk-*.exe
+          name: windows-flutter-artifacts
+          path: ./SignOutput/
+          retention-days: 1
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
@@ -380,11 +378,59 @@ jobs:
         run: |
           BASE_URL=${{ secrets.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput/
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: env.UPLOAD_ARTIFACT == 'true'
+        with:
+          name: windows-sciter-artifacts
+          path: ./SignOutput/
+          retention-days: 1
+
+  publish-release:
+    name: Publish Nightly Release
+    needs: [build-for-windows-flutter, build-for-windows-sciter]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect build outputs
+        run: |
+          mkdir -p combined_artifacts
+          find artifacts -name 'rustdesk-*' -exec cp {} combined_artifacts/ \;
+
+      - name: Generate Release Notes
+        id: gen_notes
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B | sed ':a;N;$!ba;s/\n/<br>/g')  # 处理多行提交信息
+          echo "notes=| 项目                | 值                                  |
+          |---------------------|-------------------------------------|
+          | **构建类型**        | \`${{ matrix.job.target }}\`        |
+          | **架构**            | \`${{ matrix.job.arch }}\`          |
+          | **触发分支**        | \`${{ github.ref_name }}\`          |
+          | **提交哈希**        | \`${{ github.sha }}\`               |
+          | **提交信息**        | ${COMMIT_MSG}                       |
+          | **构建时间 (UTC)**  | $(date -u '+%Y-%m-%d %H:%M:%S')     |
+          | **工作流运行**      | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          | **构建日志**    | [View Raw Logs](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}/checks) |
+          | **Rust 版本**       | \`${{ env.RUST_VERSION }}\`         |
+          | **Flutter 版本**    | \`${{ env.FLUTTER_VERSION }}\`      |
+          | **VCPKG 提交**      | \`${{ env.VCPKG_COMMIT_ID }}\`      |
+          " >> $GITHUB_OUTPUT
+        shell: bash
+
       - name: Publish Release
         uses: softprops/action-gh-release@v1
         if: env.UPLOAD_ARTIFACT == 'true'
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
+          body: ${{ steps.gen_notes.outputs.notes }}
+          replace: true
           files: |
-            ./SignOutput/rustdesk-*.exe
+            combined_artifacts/*
