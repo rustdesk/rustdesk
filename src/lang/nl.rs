@@ -662,7 +662,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("view_camera_unsupported_tip", "Het externe apparaat ondersteunt geen cameraweergave."),
         ("Enable camera", "Camera inschakelen"),
         ("No cameras", "Geen camera's"),
-        ("d3d_render_tip", ""),
-        ("Use D3D rendering", ""),
+        ("d3d_render_tip", "Wanneer D3D-rendering is ingeschakeld kan het externe scherm op sommige apparaten, zwart zijn."),
+        ("Use D3D rendering", "Gebruik D3D-rendering"),
     ].iter().cloned().collect();
 }
