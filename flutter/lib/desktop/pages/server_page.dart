@@ -1134,13 +1134,13 @@ class __CmControlPanelState extends State<_CmControlPanel> {
 
   void handleAccept(BuildContext context) {
     final model = Provider.of<ServerModel>(context, listen: false);
-    model.sendLoginResponse(client, true);
+    model.sendLoginResponse(widget.client, true);
   }
 
   void handleElevate(BuildContext context) {
     final model = Provider.of<ServerModel>(context, listen: false);
     model.setShowElevation(false);
-    bind.cmElevatePortable(connId: client.id);
+    bind.cmElevatePortable(connId: widget.client.id);
   }
 
   void handleClose() async {
@@ -1151,7 +1151,7 @@ class __CmControlPanelState extends State<_CmControlPanel> {
   }
 
   void handleSwitchBack(BuildContext context) {
-    bind.cmSwitchBack(connId: client.id);
+    bind.cmSwitchBack(connId: widget.client.id);
   }
 
   void handleVoiceCall(bool accept) {
