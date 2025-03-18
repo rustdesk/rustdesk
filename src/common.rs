@@ -826,7 +826,13 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 }
 
 pub fn check_software_update() {
-    std::thread::spawn(move || allow_err!(check_software_update_()));
+    if is_custom_client() {
+        return;
+    } 
+    let opt = config::LocalConfig::get_option(config::keys::OPTION_ENABLE_CHECK_UPDATE);
+    if config::option2bool(config::keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
+        std::thread::spawn(move || allow_err!(check_software_update_()));
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
