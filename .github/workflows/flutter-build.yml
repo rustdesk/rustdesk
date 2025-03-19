@@ -1078,9 +1078,9 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           case ${{ matrix.job.target }} in
@@ -1284,9 +1284,9 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           mv ./flutter/android/app/src/main/jniLibs/arm64-v8a/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
