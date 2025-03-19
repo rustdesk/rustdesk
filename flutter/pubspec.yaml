@@ -121,8 +121,8 @@ dependency_overrides:
   
 # rerun: flutter pub run flutter_launcher_icons
 flutter_icons:
-  image_path: "../res/icon.png"
-  remove_alpha_ios: true
+  image_path: "assets/icon.png"
+  remove_alpha_ios: true  
   android: true
   ios: true
   windows:
