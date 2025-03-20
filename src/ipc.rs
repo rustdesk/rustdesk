@@ -272,6 +272,8 @@ pub enum Data {
     HwCodecConfig(Option<String>),
     RemoveTrustedDevices(Vec<Bytes>),
     ClearTrustedDevices,
+    #[cfg(all(target_os = "windows", feature = "flutter"))]
+    PrinterDriver(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -461,7 +463,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 .lock()
                 .unwrap()
                 .iter()
-                .filter(|x| x.1 == crate::server::AuthConnType::Remote)
+                .filter(|x| x.conn_type == crate::server::AuthConnType::Remote)
                 .count();
             allow_err!(stream.send(&Data::VideoConnCount(Some(n))).await);
         }
@@ -841,7 +843,11 @@ where
                 if let Ok(s) = std::str::from_utf8(&bytes) {
                     if let Ok(data) = serde_json::from_str::<Data>(s) {
                         return Ok(Some(data));
+                    } else {
+                        log::error!("serde failed, ipc json bytes: {:?}", bytes);
                     }
+                } else {
+                    log::error!("from utf8 failed, ipc json bytes: {:?}", bytes);
                 }
                 return Ok(None);
             }

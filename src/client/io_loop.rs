@@ -41,6 +41,8 @@ use hbb_common::{
 };
 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
+#[cfg(all(target_os = "windows", feature = "flutter"))]
+use remote_printer::printer_job::PrinterJob;
 use scrap::CodecFormat;
 use std::{
     collections::HashMap,
@@ -76,6 +78,8 @@ pub struct Remote<T: InvokeUiSession> {
     video_threads: HashMap<usize, VideoThread>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
+    #[cfg(all(target_os = "windows", feature = "flutter"))]
+    printer_jobs: HashMap<i32, PrinterJob>,
 }
 
 #[derive(Default)]
@@ -123,6 +127,8 @@ impl<T: InvokeUiSession> Remote<T> {
             video_threads: Default::default(),
             chroma: Default::default(),
             last_record_state: false,
+            #[cfg(all(target_os = "windows", feature = "flutter"))]
+            printer_jobs: Default::default(),
         }
     }
 
@@ -1789,6 +1795,68 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler.set_displays(&pi.displays);
                     self.handler.set_platform_additions(&pi.platform_additions);
                 }
+                #[cfg(all(target_os = "windows", feature = "flutter"))]
+                Some(message::Union::Printer(p)) => match p.union {
+                    Some(printer::Union::PrinterRequest(pr)) => {
+                        let action = LocalConfig::get_option(
+                            config::keys::OPTION_PRINTER_INCOMING_JOB_ACTION,
+                        );
+                        if action == "dismiss" {
+                            self.handler.printer_response(pr.id, false, "".to_string());
+                        } else {
+                            let allow_auto_print = LocalConfig::get_bool_option(
+                                config::keys::OPTION_PRINTER_ALLOW_AUTO_PRINT,
+                            );
+                            if allow_auto_print {
+                                let printer_name = LocalConfig::get_option(
+                                    config::keys::OPTION_PRINTER_SELECTED_NAME,
+                                );
+                                self.handler.printer_response(pr.id, true, printer_name);
+                            } else {
+                                self.handler.printer_request(pr.id);
+                            }
+                        }
+                    }
+                    #[cfg(all(target_os = "windows", feature = "flutter"))]
+                    Some(printer::Union::PrinterBlock(b)) => {
+                        if !self.printer_jobs.contains_key(&b.id) {
+                            match PrinterJob::new_write(b.id).await {
+                                Ok(job) => {
+                                    self.printer_jobs.insert(b.id, job);
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to create printer job: {}", e);
+                                }
+                            }
+                        }
+                        if let Some(job) = self.printer_jobs.get_mut(&b.id) {
+                            log::info!("write printer block: {:?}", b.data.len());
+                            if let Err(e) = job.write_block(b).await {
+                                log::error!("Failed to write printer block: {}", e);
+                                // todo
+                            }
+                        }
+                    }
+                    #[cfg(all(target_os = "windows", feature = "flutter"))]
+                    Some(printer::Union::PrinterDone(d)) => {
+                        if let Some(job) = self.printer_jobs.remove(&d.id) {
+                            let path = job.path();
+                            drop(job);
+                            if path.exists() {
+                                let path = path.to_string_lossy().to_string();
+                                let printer_name =
+                                    self.handler.printer_names.write().unwrap().remove(&d.id);
+                                crate::platform::send_file_to_printer(printer_name, &path).ok();
+                            }
+                        }
+                    }
+                    #[cfg(all(target_os = "windows", feature = "flutter"))]
+                    Some(printer::Union::PrinterError(e)) => {
+                        log::error!("Failed to print: {}", e);
+                        let _ = self.printer_jobs.remove(&e.id);
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -2004,7 +2072,7 @@ impl<T: InvokeUiSession> Remote<T> {
     async fn handle_cliprdr_msg(
         &mut self,
         clip: hbb_common::message_proto::Cliprdr,
-        peer: &mut Stream,
+        _peer: &mut Stream,
     ) {
         log::debug!("handling cliprdr msg from server peer");
         #[cfg(feature = "flutter")]
@@ -2074,7 +2142,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
 
                 if let Some(msg) = out_msg {
-                    allow_err!(peer.send(&msg).await);
+                    allow_err!(_peer.send(&msg).await);
                 }
             }
         }

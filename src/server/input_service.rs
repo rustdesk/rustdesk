@@ -505,7 +505,7 @@ pub fn try_stop_record_cursor_pos() {
         .lock()
         .unwrap()
         .iter()
-        .filter(|c| c.1 == AuthConnType::Remote)
+        .filter(|c| c.conn_type == AuthConnType::Remote)
         .count();
     if remote_count > 0 {
         return;

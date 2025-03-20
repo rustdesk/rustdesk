@@ -58,6 +58,7 @@ pub struct Session<T: InvokeUiSession> {
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
     pub connection_round_state: Arc<Mutex<ConnectionRoundState>>,
+    pub printer_names: Arc<RwLock<HashMap<i32, String>>>,
 }
 
 #[derive(Clone)]
@@ -1505,6 +1506,22 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn get_conn_token(&self) -> Option<String> {
         self.lc.read().unwrap().get_conn_token()
     }
+
+    #[cfg(feature = "flutter")]
+    pub fn printer_response(&self, id: i32, accepted: bool, printer_name: String) {
+        if accepted {
+            self.printer_names.write().unwrap().insert(id, printer_name);
+        }
+        let mut printer = Printer::new();
+        printer.set_printer_response(PrinterResponse {
+            id,
+            accepted,
+            ..Default::default()
+        });
+        let mut msg = Message::new();
+        msg.set_printer(printer);
+        self.send(Data::Message(msg));
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
@@ -1570,6 +1587,8 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn is_multi_ui_session(&self) -> bool;
     fn update_record_status(&self, start: bool);
     fn update_empty_dirs(&self, _res: ReadEmptyDirsResponse) {}
+    #[cfg(feature = "flutter")]
+    fn printer_request(&self, id: i32);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

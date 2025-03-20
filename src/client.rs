@@ -2326,6 +2326,15 @@ impl LoginConfigHandler {
         } else {
             Bytes::new()
         };
+        #[cfg(feature = "flutter")]
+        let platform_additions = serde_json::Map::new();
+        #[cfg(not(feature = "flutter"))]
+        let mut platform_additions = serde_json::Map::new();
+        #[cfg(not(feature = "flutter"))]
+        {
+            platform_additions.insert("flutter".into(), false.into());
+        }
+        let platform_additions = serde_json::to_string(&platform_additions).unwrap_or_default();
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -2342,6 +2351,7 @@ impl LoginConfigHandler {
             })
             .into(),
             hwid,
+            platform_additions,
             ..Default::default()
         };
         match self.conn_type {
