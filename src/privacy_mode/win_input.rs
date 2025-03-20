@@ -1,6 +1,7 @@
 use hbb_common::{allow_err, bail, lazy_static, log, ResultType};
 use std::{
     io::Error,
+    num::NonZero,
     sync::{
         mpsc::{channel, Sender},
         Mutex,
@@ -22,14 +23,18 @@ const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS: u32 = 4;
 const WM_USER_EXIT_HOOK: u32 = WM_USER + 1;
 
 lazy_static::lazy_static! {
-    static ref CUR_HOOK_THREAD_ID: Mutex<DWORD> = Mutex::new(0);
+    /// thread id of the currently attached to thread (non-zero)
+    static ref CUR_HOOK_THREAD_ID: Mutex<Option<NonZero<DWORD>>> = Mutex::new(None);
 }
 
+/// Hook keyboard and mouse to the current thread
 fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
-    let invalid_ret = (0 as HHOOK, 0 as HHOOK);
+    let invalid_ret: (HHOOK, HHOOK) = (0 as _, 0 as _);
 
     let mut cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
-    if *cur_hook_thread_id != 0 {
+
+    // Check that we are not already hooked
+    if cur_hook_thread_id.is_some() {
         // unreachable!
         tx.send("Already hooked".to_owned())?;
         return Ok(invalid_ret);
@@ -91,7 +96,16 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
             return Ok(invalid_ret);
         }
 
-        *cur_hook_thread_id = GetCurrentThreadId();
+        // Thread ids can never be 0, so we can unwrap
+        //
+        // > A thread can use the GetCurrentThreadId function to get its own thread identifier.
+        //  The identifiers are valid from the time the thread is created until the thread has been terminated.
+        //  Note that no thread identifier will ever be 0.
+        //
+        // source: https://learn.microsoft.com/en-us/windows/win32/procthread/thread-handles-and-identifiers
+        let thread_id = NonZero::new(GetCurrentThreadId()).unwrap();
+        *cur_hook_thread_id = Some(thread_id);
+
         tx.send("".to_owned())?;
         return Ok((hook_keyboard, hook_mouse));
     }
@@ -154,34 +168,30 @@ pub fn hook() -> ResultType<()> {
                 );
             }
 
-            *CUR_HOOK_THREAD_ID.lock().unwrap() = 0;
+            *CUR_HOOK_THREAD_ID.lock().unwrap() = None;
         }
     });
 
     match rx.recv() {
-        Ok(msg) => {
-            if msg == "" {
-                Ok(())
-            } else {
-                bail!(msg)
-            }
-        }
-        Err(e) => {
-            bail!("Failed to wait hook result {}", e)
-        }
+        Ok(msg) if msg.is_empty() => Ok(()),
+        Ok(msg) => bail!(msg),
+        Err(e) => bail!("Failed to wait hook result {}", e),
     }
 }
 
+/// Unhook keyboard and mouse from the current thread
 pub fn unhook() -> ResultType<()> {
-    unsafe {
-        let cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
-        if *cur_hook_thread_id != 0 {
-            if FALSE == PostThreadMessageA(*cur_hook_thread_id, WM_USER_EXIT_HOOK, 0, 0) {
-                bail!(
-                    "Failed to post message to exit hook, error {}",
-                    Error::last_os_error()
-                );
-            }
+    let cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
+    if let Some(thread_id) = *cur_hook_thread_id {
+        // SAFETY: thread_id is non-zero
+        unsafe {
+            let post_result = PostThreadMessageA(thread_id.get(), WM_USER_EXIT_HOOK, 0, 0);
+        }
+        if post_result == FALSE {
+            bail!(
+                "Failed to post message to exit hook, error {}",
+                Error::last_os_error()
+            );
         }
     }
     Ok(())
