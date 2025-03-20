@@ -292,33 +292,42 @@ class InputService : AccessibilityService() {
         lastY = y
     }
 
+    // @RequiresApi(Build.VERSION_CODES.N)
+    // private fun doDispatchGesture(x: Int, y: Int, willContinue: Boolean) {
+    //     touchPath.lineTo(x.toFloat(), y.toFloat())
+    //     var duration = System.currentTimeMillis() - lastTouchGestureStartTime
+    //     if (duration <= 0) {
+    //         duration = 1
+    //     }
+    //     try {
+    //         if (stroke == null) {
+    //             stroke = GestureDescription.StrokeDescription(
+    //                 touchPath,
+    //                 0,
+    //                 duration,
+    //                 willContinue
+    //             )
+    //         } else {
+    //             stroke = stroke?.continueStroke(touchPath, 0, duration, willContinue)
+    //         }
+    //         stroke?.let {
+    //             val builder = GestureDescription.Builder()
+    //             builder.addStroke(it)
+    //             Log.d(logTag, "doDispatchGesture x:$x y:$y time:$duration")
+    //             dispatchGesture(builder.build(), null, null)
+    //         }
+    //     } catch (e: Exception) {
+    //         Log.e(logTag, "doDispatchGesture, willContinue:$willContinue, error:$e")
+    //     }
+    // }
+
     @RequiresApi(Build.VERSION_CODES.N)
     private fun doDispatchGesture(x: Int, y: Int, willContinue: Boolean) {
-        touchPath.lineTo(x.toFloat(), y.toFloat())
-        var duration = System.currentTimeMillis() - lastTouchGestureStartTime
-        if (duration <= 0) {
-            duration = 1
-        }
-        try {
-            if (stroke == null) {
-                stroke = GestureDescription.StrokeDescription(
-                    touchPath,
-                    0,
-                    duration,
-                    willContinue
-                )
-            } else {
-                stroke = stroke?.continueStroke(touchPath, 0, duration, willContinue)
-            }
-            stroke?.let {
-                val builder = GestureDescription.Builder()
-                builder.addStroke(it)
-                Log.d(logTag, "doDispatchGesture x:$x y:$y time:$duration")
-                dispatchGesture(builder.build(), null, null)
-            }
-        } catch (e: Exception) {
-            Log.e(logTag, "doDispatchGesture, willContinue:$willContinue, error:$e")
-        }
+        // Simulate a tap using adbClickEvent
+        adbClickEvent(x, y)
+
+        // Log the event
+        Log.d(logTag, "Simulated tap at x:$x y:$y")
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
@@ -412,6 +421,25 @@ class InputService : AccessibilityService() {
                 }
             }
         }
+    }
+
+    private fun adbClickEvent(x: Int, y: Int) {
+        val intent = Intent(this, AutoAccessibilityService::class.java)
+        val timeInterval = 5000L
+    
+        val runnable = Runnable {
+            try {
+                // Simulate a tap using ADB
+                Runtime.getRuntime().exec("input tap $x $y")
+                startService(intent)
+                Thread.sleep(timeInterval)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    
+        val thread = Thread(runnable)
+        thread.start()
     }
 
     private fun tryHandleVolumeKeyEvent(event: KeyEventAndroid): Boolean {
