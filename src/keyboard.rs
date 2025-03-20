@@ -22,6 +22,7 @@ use std::{
 
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
+static LOCAL_OVERRIDE: AtomicBool = AtomicBool::new(false);
 
 #[allow(dead_code)]
 const OS_LOWER_WINDOWS: &str = "windows";
@@ -53,6 +54,116 @@ lazy_static::lazy_static! {
         m.insert(Key::MetaRight, false);
         Mutex::new(m)
     };
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_alt_tab_open() {
+    // Injiserer Alt+Tab uten å slippe Alt, slik at alt-tab-menyen forblir åpen.
+    use winapi::um::winuser::{
+        SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU, VK_TAB,
+    };
+    use std::mem::{size_of, zeroed};
+    unsafe {
+        // Vi sender tre INPUT-elementer:
+        // 1. Alt-ned (hold Alt nede)
+        // 2. Tab-ned
+        // 3. Tab-oppt
+        let mut inputs: [INPUT; 3] = [zeroed(); 3];
+
+        // Alt-ned (VK_MENU)
+        inputs[0].type_ = INPUT_KEYBOARD;
+        *inputs[0].u.ki_mut() = KEYBDINPUT {
+            wVk: VK_MENU as u16,
+            wScan: 0,
+            dwFlags: 0, // ingen KEYEVENTF_KEYUP, så Alt holdes nede
+            time: 0,
+            dwExtraInfo: 0,
+        };
+
+        // Tab-ned (VK_TAB)
+        inputs[1].type_ = INPUT_KEYBOARD;
+        *inputs[1].u.ki_mut() = KEYBDINPUT {
+            wVk: VK_TAB as u16,
+            wScan: 0,
+            dwFlags: 0,
+            time: 0,
+            dwExtraInfo: 0,
+        };
+
+        // Tab-oppt (VK_TAB)
+        inputs[2].type_ = INPUT_KEYBOARD;
+        *inputs[2].u.ki_mut() = KEYBDINPUT {
+            wVk: VK_TAB as u16,
+            wScan: 0,
+            dwFlags: KEYEVENTF_KEYUP,
+            time: 0,
+            dwExtraInfo: 0,
+        };
+
+        let sent = SendInput(inputs.len() as u32, inputs.as_mut_ptr(), size_of::<INPUT>() as i32);
+        if sent != inputs.len() as u32 {
+            log::error!("simulate_alt_tab_open: SendInput sendte ikke alle tastene, sendte {}", sent);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_alt_release() {
+    // Simulerer at Alt slippes, slik at alt-tab-menyen lukkes
+    use winapi::um::winuser::{SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU};
+    use std::mem::{size_of, zeroed};
+    unsafe {
+        let mut input: INPUT = zeroed();
+        input.type_ = INPUT_KEYBOARD;
+        *input.u.ki_mut() = KEYBDINPUT {
+            wVk: VK_MENU as u16,
+            wScan: 0,
+            dwFlags: KEYEVENTF_KEYUP, // Nå slipper vi Alt
+            time: 0,
+            dwExtraInfo: 0,
+        };
+        let sent = SendInput(1, &mut input, size_of::<INPUT>() as i32);
+        if sent != 1 {
+            log::error!("simulate_alt_release: SendInput sendte ikke Alt opp");
+        }
+    }
+}
+
+
+
+#[cfg(target_os = "windows")]
+fn simulate_local_key(key: Key, is_press: bool) {
+    use winapi::um::winuser::{
+        SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+        VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_TAB,
+    };
+    use std::mem::{size_of, zeroed};
+
+    let vk: i32 = match key {
+        Key::UpArrow    => VK_UP,
+        Key::DownArrow  => VK_DOWN,
+        Key::LeftArrow  => VK_LEFT,
+        Key::RightArrow => VK_RIGHT,
+        Key::Return     => VK_RETURN,
+        Key::Tab        => VK_TAB,
+        _ => return,
+    };
+    
+    unsafe {
+        let mut input: INPUT = zeroed();
+        input.type_ = INPUT_KEYBOARD;
+        *input.u.ki_mut() = KEYBDINPUT {
+            wVk: vk as u16, // Her kaster vi fra i32 til u16
+            wScan: 0,
+            dwFlags: if is_press { 0 } else { KEYEVENTF_KEYUP },
+            time: 0,
+            dwExtraInfo: 0,
+        };
+        let sent = SendInput(1, &mut input, size_of::<INPUT>() as i32);
+        if sent != 1 {
+            log::error!("simulate_local_key: Feilet for nøkkel {:?}", key);
+        }
+    }
 }
 
 pub mod client {
@@ -271,11 +382,54 @@ fn start_grab_loop() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let try_handle_keyboard = move |event: Event, key: Key, is_press: bool| -> Option<Event> {
-            // fix #2211：CAPS LOCK don't work
+            // Eksisterende fiks for CapsLock/NumLock
             if key == Key::CapsLock || key == Key::NumLock {
                 return Some(event);
             }
-
+        
+            // Hvis vi oppdager Alt+Tab (Tab med Alt/AltGr ned)
+            if key == Key::Tab && (rdev::get_modifier(Key::Alt) || rdev::get_modifier(Key::AltGr)) {
+                #[cfg(target_os = "windows")]
+                {
+                    if is_press {
+                        simulate_alt_tab_open();
+                    }
+                    LOCAL_OVERRIDE.store(true, Ordering::SeqCst);
+                    // Ikke send denne hendelsen videre
+                    return None;
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    return Some(event);
+                }
+            }
+        
+            // Dersom override-modus er aktiv, injiser alle tastetrykk lokalt
+            if LOCAL_OVERRIDE.load(Ordering::SeqCst) {
+                #[cfg(target_os = "windows")]
+                {
+                    // Injiser nøkkelen lokalt
+                    simulate_local_key(key, is_press);
+                    // Avslutt override-modus hvis:
+                    // - Enter trykkes (Key::Return) ved KeyPress,
+                    // - Space trykkes ved KeyPress, eller
+                    // - Alt slippes (Key::Alt) ved KeyRelease.
+                    if (key == Key::Return && is_press)
+                        || (key == Key::Space && is_press)
+                        || (key == Key::Alt && !is_press)
+                    {
+                        simulate_alt_release();
+                        LOCAL_OVERRIDE.store(false, Ordering::SeqCst);
+                    }
+                    return None;
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    return Some(event);
+                }
+            }
+        
+            // Normal behandling av hendelsen hvis override ikke er aktiv
             let _scan_code = event.position_code;
             let _code = event.platform_code as KeyCode;
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
@@ -382,7 +536,7 @@ pub fn release_remote_keys(keyboard_mode: &str) {
     for (key, mut event) in to_release.into_iter() {
         event.event_type = EventType::KeyRelease(key);
         client::process_event(keyboard_mode, &event, None);
-        // If Alt or AltGr is pressed, we need to send another key stoke to release it.
+        // If Alt or AltGr is pressed, we need to send another key stroke to release it.
         // Because the controlled side may hold the alt state, if local window is switched by [Alt + Tab].
         if key == Key::Alt || key == Key::AltGr {
             event.event_type = EventType::KeyPress(key);
@@ -944,9 +1098,9 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
         OS_LOWER_LINUX => rdev::usb_hid_code_to_linux_code(event.usb_hid as _)?,
         OS_LOWER_MACOS => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
-                rdev::usb_hid_code_to_macos_iso_code(event.usb_hid as _)?
+                rdev::usb_hid_code_to_macos_iso_code(event.usb_hid as _)? 
             } else {
-                rdev::usb_hid_code_to_macos_code(event.usb_hid as _)?
+                rdev::usb_hid_code_to_macos_code(event.usb_hid as _)? 
             }
         }
         OS_LOWER_ANDROID => rdev::usb_hid_code_to_android_key_code(event.usb_hid as _)?,
@@ -969,8 +1123,7 @@ fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &m
                 }
             }
         }
-        None =>
-        {
+        None => {
             #[cfg(target_os = "windows")]
             if _peer == OS_LOWER_LINUX {
                 if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
