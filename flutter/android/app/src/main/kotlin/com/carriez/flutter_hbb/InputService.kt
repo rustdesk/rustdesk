@@ -423,24 +423,9 @@ class InputService : AccessibilityService() {
             }
         }
     }
-
-    // Define AutoAccessibilityService if not already defined
-    class AutoAccessibilityService : AccessibilityService() {
-        override fun onServiceConnected() {
-            Log.d("AutoAccessibilityService", "Service connected")
-        }
-
-        override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-            Log.d("AutoAccessibilityService", "Accessibility event: ${event?.eventType}")
-        }
-
-        override fun onInterrupt() {
-            Log.d("AutoAccessibilityService", "Service interrupted")
-        }
-    }
-
+       
     private fun adbClickEvent(x: Int, y: Int) {
-        val intent = Intent(this, AutoAccessibilityService::class.java)
+        val intent = Intent(this, InputService::class.java)
         val timeInterval = 5000L
     
         val runnable = Runnable {
