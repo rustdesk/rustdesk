@@ -29,7 +29,7 @@ lazy_static::lazy_static! {
 
 /// Hook keyboard and mouse to the current thread
 fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
-    let invalid_ret = (0 as HHOOK, 0 as HHOOK);
+    let invalid_ret: (HHOOK, HHOOK) = (0, 0);
 
     let mut cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
 
@@ -173,16 +173,9 @@ pub fn hook() -> ResultType<()> {
     });
 
     match rx.recv() {
-        Ok(msg) => {
-            if msg == "" {
-                Ok(())
-            } else {
-                bail!(msg)
-            }
-        }
-        Err(e) => {
-            bail!("Failed to wait hook result {}", e)
-        }
+        Ok(msg) if msg.is_empty() => Ok(()),
+        Ok(msg) => bail!(msg),
+        Err(e) => bail!("Failed to wait hook result {}", e),
     }
 }
 
