@@ -181,15 +181,17 @@ pub fn hook() -> ResultType<()> {
 
 /// Unhook keyboard and mouse from the current thread
 pub fn unhook() -> ResultType<()> {
-    unsafe {
-        let cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
-        if let Some(thread_id) = *cur_hook_thread_id {
-            if FALSE == PostThreadMessageA(thread_id.get(), WM_USER_EXIT_HOOK, 0, 0) {
-                bail!(
-                    "Failed to post message to exit hook, error {}",
-                    Error::last_os_error()
-                );
-            }
+    let cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
+    if let Some(thread_id) = *cur_hook_thread_id {
+        // SAFETY: thread_id is non-zero
+        unsafe {
+            let post_result = PostThreadMessageA(thread_id.get(), WM_USER_EXIT_HOOK, 0, 0);
+        }
+        if post_result == FALSE {
+            bail!(
+                "Failed to post message to exit hook, error {}",
+                Error::last_os_error()
+            );
         }
     }
     Ok(())
