@@ -6,6 +6,7 @@ package com.carriez.flutter_hbb
  * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
  */
 
+import android.content.Intent
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
@@ -420,6 +421,21 @@ class InputService : AccessibilityService() {
                     }
                 }
             }
+        }
+    }
+
+    // Define AutoAccessibilityService if not already defined
+    class AutoAccessibilityService : AccessibilityService() {
+        override fun onServiceConnected() {
+            Log.d("AutoAccessibilityService", "Service connected")
+        }
+
+        override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+            Log.d("AutoAccessibilityService", "Accessibility event: ${event?.eventType}")
+        }
+
+        override fun onInterrupt() {
+            Log.d("AutoAccessibilityService", "Service interrupted")
         }
     }
 
