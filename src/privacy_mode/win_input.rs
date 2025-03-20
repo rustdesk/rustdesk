@@ -29,7 +29,7 @@ lazy_static::lazy_static! {
 
 /// Hook keyboard and mouse to the current thread
 fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
-    let invalid_ret: (HHOOK, HHOOK) = (0, 0);
+    let invalid_ret: (HHOOK, HHOOK) = (0 as _, 0 as _);
 
     let mut cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
 
