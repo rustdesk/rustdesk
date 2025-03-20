@@ -96,11 +96,18 @@ class InputService : AccessibilityService() {
         val x = max(0, _x)
         val y = max(0, _y)
 
+        // Log the function call with parameters
+        Log.d("MouseInput", "onMouseInput called: mask=$mask, _x=$_x, _y=$_y, x=$x, y=$y")
+
+        
         if (mask == 0 || mask == LEFT_MOVE) {
             val oldX = mouseX
             val oldY = mouseY
             mouseX = x * SCREEN_INFO.scale
             mouseY = y * SCREEN_INFO.scale
+
+            Log.d("MouseInput", "LEFT_MOVE called: mask=$mask, mouseX=$mouseX, mouseY=$mouseY")
+
             if (isWaitingLongPress) {
                 val delta = abs(oldX - mouseX) + abs(oldY - mouseY)
                 Log.d(logTag,"delta:$delta")
