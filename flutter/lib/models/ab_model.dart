@@ -58,6 +58,9 @@ class AbModel {
   String? _personalAbGuid;
   RxBool legacyMode = false.obs;
 
+  // Only handles peers add/remove
+  final Map<String, VoidCallback> _peerIdUpdateListeners = {};
+
   final sortTags = shouldSortTags().obs;
   final filterByIntersection = filterAbTagByIntersection().obs;
 
@@ -188,6 +191,7 @@ class AbModel {
         debugPrint("pull current Ab error: $e");
       }
     }
+    _callbackPeerUpdate();
     if (listInitialized && current.initialized) {
       _saveCache();
     }
@@ -419,6 +423,7 @@ class AbModel {
         }
       });
     }
+    _callbackPeerUpdate();
     return ret;
   }
 
@@ -620,6 +625,9 @@ class AbModel {
           }
         }
       }
+      if (abEntries.isNotEmpty) {
+        _callbackPeerUpdate();
+      }
     }
   }
 
@@ -740,6 +748,20 @@ class AbModel {
     } else {
       return name;
     }
+  }
+
+  void _callbackPeerUpdate() {
+    for (var listener in _peerIdUpdateListeners.values) {
+      listener();
+    }
+  }
+
+  void addPeerUpdateListener(String key, VoidCallback listener) {
+    _peerIdUpdateListeners[key] = listener;
+  }
+
+  void removePeerUpdateListener(String key) {
+    _peerIdUpdateListeners.remove(key);
   }
 
 // #endregion

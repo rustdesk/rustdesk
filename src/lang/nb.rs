@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", ""),
         ("starts with a letter", ""),
         ("allowed characters", ""),
-        ("id_change_tip", "Kun tegnene a-z, A-Z, 0-9 og _ (understrek) er tillat. Den første bokstaven skal være a-z, A-Z. Lengde mellom 6 og 16."),
+        ("id_change_tip", "Kun tegnene a-z, A-Z, 0-9, - (dash) og _ (understrek) er tillat. Den første bokstaven skal være a-z, A-Z. Lengde mellom 6 og 16."),
         ("Website", "Hjemmeside"),
         ("About", "Om"),
         ("Slogan_tip", ""),
@@ -656,5 +656,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
+        ("View camera", "Vis kamera"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", ""),
+        ("view_camera_unsupported_tip", ""),
+        ("Enable camera", ""),
+        ("No cameras", ""),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }

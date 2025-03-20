@@ -53,6 +53,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 "--connect",
                 "--play",
                 "--file-transfer",
+                "--view-camera",
                 "--port-forward",
                 "--rdp",
             ]
@@ -99,7 +100,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     #[cfg(windows)]
-    if args.contains(&"--connect".to_string()) {
+    if args.contains(&"--connect".to_string()) || args.contains(&"--view-camera".to_string()) {
         hbb_common::platform::windows::start_cpu_performance_monitor();
     }
     #[cfg(feature = "flutter")]
@@ -169,6 +170,8 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     init_plugins(&args);
     if args.is_empty() || crate::common::is_empty_uni_link(&args[0]) {
+        #[cfg(windows)]
+        hbb_common::config::PeerConfig::preload_peers();
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
         #[cfg(windows)]
@@ -427,15 +430,26 @@ pub fn core_main() -> Option<Vec<String>> {
                     if pos < max {
                         address_book_tag = Some(args[pos + 1].to_owned());
                     }
+                    let mut device_group_name = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--device_group_name")
+                        .unwrap_or(max);
+                    if pos < max {
+                        device_group_name = Some(args[pos + 1].to_owned());
+                    }
                     let mut body = serde_json::json!({
                         "id": id,
                         "uuid": uuid,
                     });
                     let header = "Authorization: Bearer ".to_owned() + &token;
-                    if user_name.is_none() && strategy_name.is_none() && address_book_name.is_none()
+                    if user_name.is_none()
+                        && strategy_name.is_none()
+                        && address_book_name.is_none()
+                        && device_group_name.is_none()
                     {
                         println!(
-                            "--user_name or --strategy_name or --address_book_name is required!"
+                            "--user_name or --strategy_name or --address_book_name or --device_group_name is required!"
                         );
                     } else {
                         if let Some(name) = user_name {
@@ -449,6 +463,9 @@ pub fn core_main() -> Option<Vec<String>> {
                             if let Some(name) = address_book_tag {
                                 body["address_book_tag"] = serde_json::json!(name);
                             }
+                        }
+                        if let Some(name) = device_group_name {
+                            body["device_group_name"] = serde_json::json!(name);
                         }
                         let url = crate::ui_interface::get_api_server() + "/api/devices/cli";
                         match crate::post_request_sync(url, body.to_string(), &header) {
@@ -573,7 +590,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     let mut param_array = vec![];
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--connect" | "--play" | "--file-transfer" | "--port-forward" | "--rdp" => {
+            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward" | "--rdp" => {
                 authority = Some((&arg.to_string()[2..]).to_owned());
                 id = args.next();
             }

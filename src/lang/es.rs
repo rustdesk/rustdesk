@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "de %min% a %max% de longitud"),
         ("starts with a letter", "comenzar con una letra"),
         ("allowed characters", "Caracteres permitidos"),
-        ("id_change_tip", "Solo puedes usar caracteres a-z, A-Z, 0-9 e _ (guion bajo). El primer carácter debe ser a-z o A-Z. La longitud debe estar entre 6 y 16 caracteres."),
+        ("id_change_tip", "Solo puedes usar caracteres a-z, A-Z, 0-9, - (dash) e _ (guion bajo). El primer carácter debe ser a-z o A-Z. La longitud debe estar entre 6 y 16 caracteres."),
         ("Website", "Sitio web"),
         ("About", "Acerca de"),
         ("Slogan_tip", "¡Hecho con corazón en este mundo caótico!"),
@@ -656,5 +656,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", "Actualizar portapapeles del cliente"),
         ("Untagged", "Sin itiquetar"),
         ("new-version-of-{}-tip", "Hay una nueva versión de {} disponible"),
+        ("Accessible devices", ""),
+        ("View camera", "Ver cámara"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Por favor, actualiza el cliente RustDesk a la versión {} o superior en el lado remoto"),
+        ("view_camera_unsupported_tip", "El dispositivo remoto no soporta la visualización de la cámara."),
+        ("Enable camera", "Habilitar cámara"),
+        ("No cameras", "No hay cámaras"),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }

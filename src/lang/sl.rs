@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "dolžina od %min% do %max%"),
         ("starts with a letter", "začne se s črko"),
         ("allowed characters", "dovoljeni znaki"),
-        ("id_change_tip", "Dovoljeni znaki so a-z, A-Z (brez šumnikov), 0-9 in _. Prvi znak mora biti črka, dolžina od 6 do 16 znakov."),
+        ("id_change_tip", "Dovoljeni znaki so a-z, A-Z (brez šumnikov), 0-9, - (dash) in _. Prvi znak mora biti črka, dolžina od 6 do 16 znakov."),
         ("Website", "Spletna stran"),
         ("About", "O programu"),
         ("Slogan_tip", ""),
@@ -656,5 +656,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", "Osveži odjemalčevo odložišče"),
         ("Untagged", "Neoznačeno"),
         ("new-version-of-{}-tip", "Na voljo je nova različica {}"),
+        ("Accessible devices", ""),
+        ("View camera", "Pogled kamere"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Prosimo, nadgradite RustDesk odjemalec na različico {} ali novejšo na oddaljeni strani."),
+        ("view_camera_unsupported_tip", ""),
+        ("Enable camera", ""),
+        ("No cameras", ""),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }

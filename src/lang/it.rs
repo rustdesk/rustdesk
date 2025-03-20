@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "lunghezza da %min% a %max%"),
         ("starts with a letter", "inizia con una lettera"),
         ("allowed characters", "caratteri consentiti"),
-        ("id_change_tip", "Puoi usare solo i caratteri a-z, A-Z, 0-9 e _ (sottolineato).\nIl primo carattere deve essere a-z o A-Z.\nLa lunghezza deve essere fra 6 e 16 caratteri."),
+        ("id_change_tip", "Puoi usare solo i caratteri a-z, A-Z, 0-9, - (dash) e _ (sottolineato).\nIl primo carattere deve essere a-z o A-Z.\nLa lunghezza deve essere fra 6 e 16 caratteri."),
         ("Website", "Sito web programma"),
         ("About", "Info programma"),
         ("Slogan_tip", "Realizzato con il cuore in questo mondo caotico!"),
@@ -656,5 +656,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", "Aggiorna appunti client"),
         ("Untagged", "Senza tag"),
         ("new-version-of-{}-tip", "È disponibile una nuova versione di {}"),
+        ("Accessible devices", "Dispositivi accessibili"),
+        ("View camera", "Visualizza telecamera"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Aggiorna il client RustDesk remoto alla versione {} o successiva!"),
+        ("view_camera_unsupported_tip", "Il dispositivo remoto non supporta la visualizzazione della camera."),
+        ("Enable camera", "Abilita camera"),
+        ("No cameras", "Nessuna camera"),
+        ("d3d_render_tip", "Quando è abilitato il rendering D3D, in alcuni computer la schermata del telecomando potrebbe essere nera."),
+        ("Use D3D rendering", "Usa rendering D3D"),
     ].iter().cloned().collect();
 }

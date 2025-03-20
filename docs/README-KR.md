@@ -148,6 +148,10 @@ target/release/rustdesk
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: 모바일용 Flutter 코드
 - **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Flutter 웹 클라이언트용 자바스크립트
 
+> [!주의]
+> **오용에 대한 면책 조항:** <br>
+> RustDesk의 개발자들은 이 소프트웨어의 비윤리적이거나 불법적인 사용을 용인하거나 지원하지 않습니다. 무단 접근, 제어 또는 개인정보 침해와 같은 오용은 우리의 지침을 엄격히 위반하는 것입니다. 개발자들은 애플리케이션의 오용에 대해 책임을 지지 않습니다.
+
 ## 스냅샷
 
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)

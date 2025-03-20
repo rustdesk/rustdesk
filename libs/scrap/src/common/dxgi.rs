@@ -70,22 +70,29 @@ impl TraitCapturer for Capturer {
 
 pub struct PixelBuffer<'a> {
     data: &'a [u8],
+    pixfmt: Pixfmt,
     width: usize,
     height: usize,
     stride: Vec<usize>,
 }
 
 impl<'a> PixelBuffer<'a> {
-    pub fn new(data: &'a [u8], width: usize, height: usize) -> Self {
+    pub fn new(data: &'a [u8], pixfmt: Pixfmt, width: usize, height: usize) -> Self {
         let stride0 = data.len() / height;
         let mut stride = Vec::new();
         stride.push(stride0);
         PixelBuffer {
             data,
+            pixfmt,
             width,
             height,
             stride,
         }
+    }
+
+    #[allow(non_snake_case)]
+    pub fn with_BGRA(data: &'a [u8], width: usize, height: usize) -> Self {
+        Self::new(data, Pixfmt::BGRA, width, height)
     }
 }
 
@@ -107,7 +114,7 @@ impl<'a> crate::TraitPixelBuffer for PixelBuffer<'a> {
     }
 
     fn pixfmt(&self) -> Pixfmt {
-        Pixfmt::BGRA
+        self.pixfmt
     }
 }
 
@@ -232,7 +239,7 @@ impl CapturerMag {
 impl TraitCapturer for CapturerMag {
     fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> io::Result<Frame<'a>> {
         self.inner.frame(&mut self.data)?;
-        Ok(Frame::PixelBuffer(PixelBuffer::new(
+        Ok(Frame::PixelBuffer(PixelBuffer::with_BGRA(
             &self.data,
             self.inner.get_rect().1,
             self.inner.get_rect().2,

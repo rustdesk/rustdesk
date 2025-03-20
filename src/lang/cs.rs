@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "délka mezi %min% a %max%"),
         ("starts with a letter", "začíná písmenem"),
         ("allowed characters", "povolené znaky"),
-        ("id_change_tip", "Použít je možné pouze znaky a-z, A-Z, 0-9 a _ (podtržítko). Dále je třeba aby začínalo písmenem a-z, A-Z. Délka mezi 6 a 16 znaky."),
+        ("id_change_tip", "Použít je možné pouze znaky a-z, A-Z, 0-9, - (dash) a _ (podtržítko). Dále je třeba aby začínalo písmenem a-z, A-Z. Délka mezi 6 a 16 znaky."),
         ("Website", "Webové stránky"),
         ("About", "O aplikaci"),
         ("Slogan_tip", "Vytvořeno srdcem v tomto chaotickém světě!"),
@@ -656,5 +656,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
+        ("View camera", "Zobrazit kameru"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Upgradujte prosím klienta RustDesk na verzi {} nebo novější na vzdálené straně!"),
+        ("view_camera_unsupported_tip", ""),
+        ("Enable camera", ""),
+        ("No cameras", ""),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }

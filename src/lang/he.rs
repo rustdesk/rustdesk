@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", ""),
         ("starts with a letter", ""),
         ("allowed characters", ""),
-        ("id_change_tip", "מותרים רק תווים a-z, A-Z, 0-9 ו_ (קו תחתון). האות הראשונה חייבת להיות a-z, A-Z. אורך בין 6 ל-16."),
+        ("id_change_tip", "מותרים רק תווים a-z, A-Z, 0-9, - (dash) ו_ (קו תחתון). האות הראשונה חייבת להיות a-z, A-Z. אורך בין 6 ל-16."),
         ("Website", "דף הבית"),
         ("About", "אודות"),
         ("Slogan_tip", "נוצר בלב בעולם הזה הכאוטי!"),
@@ -656,5 +656,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
+        ("View camera", ""),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "אנא שדרג את לקוח RustDesk לגרסה {} או חדשה יותר בצד המרוחק!"),
+        ("view_camera_unsupported_tip", ""),
+        ("Enable camera", ""),
+        ("No cameras", ""),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }

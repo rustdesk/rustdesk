@@ -41,7 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("length %min% to %max%", "дължина %min% до %max%"),
         ("starts with a letter", "започва с буква"),
         ("allowed characters", "разрешени знаци"),
-        ("id_change_tip", "Само a-z, A-Z, 0-9 и _ (долна черта) са сред позволени. Първа буква следва да е a-z, A-Z. С дължина мержу 6 и 16."),
+        ("id_change_tip", "Само a-z, A-Z, 0-9, - (dash) и _ (долна черта) са сред позволени. Първа буква следва да е a-z, A-Z. С дължина мержу 6 и 16."),
         ("Website", "Уебсайт"),
         ("About", "Относно"),
         ("Slogan_tip", "Направено от сърце в този хаотичен свят!"),
@@ -656,5 +656,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Update client clipboard", ""),
         ("Untagged", ""),
         ("new-version-of-{}-tip", ""),
+        ("Accessible devices", ""),
+        ("View camera", "Преглед на камерата"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Моля, надстройте клиента RustDesk до версия {} или по-нова от отдалечената страна!"),
+        ("view_camera_unsupported_tip", ""),
+        ("Enable camera", ""),
+        ("No cameras", ""),
+        ("d3d_render_tip", ""),
+        ("Use D3D rendering", ""),
     ].iter().cloned().collect();
 }

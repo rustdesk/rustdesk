@@ -404,6 +404,7 @@ fn no_displays(displays: &Vec<Display>) -> bool {
     }
 }
 
+
 #[inline]
 #[cfg(not(windows))]
 pub fn try_get_displays() -> ResultType<Vec<Display>> {

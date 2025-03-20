@@ -633,6 +633,10 @@ impl UI {
     pub fn verify2fa(&self, code: String) -> bool {
         verify2fa(code)
     }
+        
+    fn verify_login(&self, raw: String, id: String) -> bool {
+       crate::verify_login(&raw, &id)
+    }
 
     fn generate_2fa_img_src(&self, data: String) -> String {
         let v = qrcode_generator::to_png_to_vec(data, qrcode_generator::QrCodeEcc::Low, 128)
@@ -739,6 +743,7 @@ impl sciter::EventHandler for UI {
         fn generate_2fa_img_src(String);
         fn verify2fa(String);
         fn check_hwcodec();
+        fn verify_login(String, String);
     }
 }
 

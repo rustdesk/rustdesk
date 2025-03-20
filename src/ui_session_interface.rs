@@ -162,6 +162,13 @@ impl SessionPermissionConfig {
             && *self.server_keyboard_enabled.read().unwrap()
             && !self.lc.read().unwrap().disable_clipboard.v
     }
+
+    #[cfg(feature = "unix-file-copy-paste")]
+    pub fn is_file_clipboard_required(&self) -> bool {
+        *self.server_keyboard_enabled.read().unwrap()
+            && *self.server_file_transfer_enabled.read().unwrap()
+            && self.lc.read().unwrap().enable_file_copy_paste.v
+    }
 }
 
 impl<T: InvokeUiSession> Session<T> {
@@ -181,6 +188,10 @@ impl<T: InvokeUiSession> Session<T> {
             .unwrap()
             .conn_type
             .eq(&ConnType::FILE_TRANSFER)
+    }
+
+    pub fn is_view_camera(&self) -> bool {
+        self.lc.read().unwrap().conn_type.eq(&ConnType::VIEW_CAMERA)
     }
 
     pub fn is_port_forward(&self) -> bool {
@@ -324,7 +335,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn toggle_option(&self, name: String) {
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
-        #[cfg(not(feature = "flutter"))]
+        #[cfg(all(target_os = "windows", not(feature = "flutter")))]
         if name == hbb_common::config::keys::OPTION_ENABLE_FILE_COPY_PASTE {
             self.send(Data::ToggleClipboardFile);
         }
@@ -359,6 +370,13 @@ impl<T: InvokeUiSession> Session<T> {
         *self.server_clipboard_enabled.read().unwrap()
             && *self.server_keyboard_enabled.read().unwrap()
             && !self.lc.read().unwrap().disable_clipboard.v
+    }
+
+    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+    pub fn is_file_clipboard_required(&self) -> bool {
+        *self.server_keyboard_enabled.read().unwrap()
+            && *self.server_file_transfer_enabled.read().unwrap()
+            && self.lc.read().unwrap().enable_file_copy_paste.v
     }
 
     #[cfg(feature = "flutter")]
@@ -470,14 +488,14 @@ impl<T: InvokeUiSession> Session<T> {
         (vp8, av1, h264, h265)
     }
 
-    pub fn change_prefer_codec(&self) {
+    pub fn update_supported_decodings(&self) {
         let msg = self.lc.write().unwrap().update_supported_decodings();
         self.send(Data::Message(msg));
     }
 
     pub fn use_texture_render_changed(&self) {
         self.send(Data::ResetDecoder(None));
-        self.change_prefer_codec();
+        self.update_supported_decodings();
         self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
@@ -1389,9 +1407,10 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[inline]
     fn try_change_init_resolution(&self, display: i32) {
-        if let Some((w, h)) = self.lc.read().unwrap().get_custom_resolution(display) {
-            self.change_resolution(display, w, h);
-        }
+        let Some((w, h)) = self.lc.read().unwrap().get_custom_resolution(display) else {
+            return;
+        };
+        self.change_resolution(display, w, h);
     }
 
     fn do_change_resolution(&self, display: i32, width: i32, height: i32) {
@@ -1615,7 +1634,12 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             if pi.displays.is_empty() {
                 self.lc.write().unwrap().handle_peer_info(&pi);
                 self.update_privacy_mode();
-                self.msgbox("error", "Remote Error", "No Displays", "");
+                let msg = if self.is_view_camera() {
+                    "No cameras"
+                } else {
+                    "No displays"
+                };
+                self.msgbox("error", "Error", msg, "");
                 return;
             }
             self.try_change_init_resolution(pi.current_display);
