@@ -352,7 +352,7 @@ class ChatModel with ChangeNotifier {
     }
     if (text.isEmpty) return;
     if (desktopType == DesktopType.cm) {
-      await showCmWindow();
+      //await showCmWindow();
     }
     String? peerId;
     if (id == clientModeID) {
