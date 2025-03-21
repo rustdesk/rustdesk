@@ -389,6 +389,7 @@ jobs:
   publish-release:
     name: Publish Nightly Release
     needs: [build-for-windows-flutter, build-for-windows-sciter]
+    if: env.UPLOAD_ARTIFACT == 'true'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -426,7 +427,6 @@ jobs:
 
       - name: Publish Release
         uses: softprops/action-gh-release@v1
-        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
