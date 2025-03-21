@@ -825,9 +825,18 @@ class InputModel {
     _pointerMovedAfterEnter = false;
 
     // Fix status
-    if (!enter) {
+   //if (!enter) {
       resetModifiers();
-    }
+    //}
+    // Frigjør alle modifikatortaster lokalt via FFI.
+    // if (!enter) {
+    //   platformFFI.releaseLocalModifiers();
+    // }
+
+   if (enter) {
+    platformFFI.startGrabLoop();
+   }
+    
     _flingTimer?.cancel();
     if (!isInputSourceFlutter) {
       bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);

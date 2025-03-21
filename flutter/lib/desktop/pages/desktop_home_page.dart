@@ -59,15 +59,62 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
-    return _buildBlock(
-        child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        buildLeftPane(context),
-        if (!isIncomingOnly) const VerticalDivider(width: 1),
-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+        _buildBlock(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              buildLeftPane(context),
+              if (!isIncomingOnly) const VerticalDivider(width: 1),
+              if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+            ],
+          ),
+        ),
+        // Ny knapp "Hva er gjort" – plassert nederst til høyre
+        Positioned(
+          bottom: 20,
+          right: 20,
+          child: ElevatedButton(
+            onPressed: _showWhatIsDoneDialog,
+            child: Text("Hva er gjort"),
+          ),
+        ),
       ],
-    ));
+    );
+  }
+
+  // Dialogfunksjonen som viser moddinfo
+  void _showWhatIsDoneDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Kristoffers RustMod"),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Endret:", style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text("- Implementert override-modus for Alt+Tab i Rust-koden"),
+              Text("- Fikset nullsitlling av modifier keys ved bytting av vindu til rustdesk"),
+              Text("- Lagt til FFI-bindinger i Dart  for start_grab_loop_ffi, og utvidet PlatformFFI med metode startGrabLoop() men den ser ikke ut til å starte som forventet"),
+              SizedBox(height: 10),
+              Text("Må testes:", style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text("Modifiers skal alltid bli nullstillt etter bytting av vindu til RustDesk"),
+              Text("At ingen bugs kan oppstå ved Alt+Tab "),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text("Lukk"),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBlock({required Widget child}) {
@@ -455,7 +502,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         });
       } else if (bind.mainIsInstalledLowerVersion()) {
         return buildInstallCard(
-            "Status", "Your installation is lower version.", "Click to upgrade",
+            "Status", "Your installation is Kristoffers special  super version.", "No reason to click here",
             () async {
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainUpdateMe();
@@ -489,22 +536,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainIsInstalledDaemon(prompt: true);
         });
       }
-      //// Disable microphone configuration for macOS. We will request the permission when needed.
-      // else if ((await osxCanRecordAudio() !=
-      //     PermissionAuthorizeType.authorized)) {
-      //   return buildInstallCard("Permissions", "config_microphone", "Configure",
-      //       () async {
-      //     osxRequestAudio();
-      //     watchIsCanRecordAudio = true;
-      //   });
-      // }
+      // Disable microphone configuration for macOS.
     } else if (isLinux) {
       if (bind.isOutgoingOnly()) {
         return Container();
       }
       final LinuxCards = <Widget>[];
       if (bind.isSelinuxEnforcing()) {
-        // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
         final keyShowSelinuxHelpTip = "show-selinux-help-tip";
         if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
           LinuxCards.add(buildInstallCard(
@@ -545,8 +583,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         alignment: Alignment.centerRight,
         child: OutlinedButton(
           onPressed: () {
-            SystemNavigator.pop(); // Close the application
-            // https://github.com/flutter/flutter/issues/66631
+            SystemNavigator.pop();
             if (isWindows) {
               exit(0);
             }
@@ -709,10 +746,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (watchIsInputMonitoring) {
         if (bind.mainIsCanInputMonitoring(prompt: false)) {
           watchIsInputMonitoring = false;
-          // Do not notify for now.
-          // Monitoring may not take effect until the process is restarted.
-          // rustDeskWinManager.call(
-          //     WindowType.RemoteDesktop, kWindowDisableGrabKeyboard, '');
           setState(() {});
         }
       }
@@ -1013,3 +1046,4 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     );
   });
 }
+

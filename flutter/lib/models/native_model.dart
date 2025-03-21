@@ -25,6 +25,32 @@ typedef F3 = Pointer<Uint8> Function(Pointer<Utf8>, int);
 typedef F3Dart = Pointer<Uint8> Function(Pointer<Utf8>, Int32);
 typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 
+
+typedef StartGrabLoopNative = Void Function();
+typedef StartGrabLoopDart = void Function();
+
+// Typedefs for FFI-funksjonen som frigjør alle modifikatorer.
+typedef ReleaseModifiersNative = Void Function();
+typedef ReleaseModifiersDart = void Function();
+
+class NativeBindings {
+  static final DynamicLibrary _lib = Platform.isWindows
+      ? DynamicLibrary.open('librustdesk.dll')
+      : DynamicLibrary.process(); // For andre plattformer 
+
+  static final ReleaseModifiersDart releaseAllModifiers = _lib
+      .lookup<NativeFunction<ReleaseModifiersNative>>('release_all_modifiers')
+      .asFunction();
+
+
+      // Ny binding for start_grab_loop
+  static final StartGrabLoopDart startGrabLoop = _lib
+      .lookup<NativeFunction<StartGrabLoopNative>>('start_grab_loop_ffi')
+      .asFunction();
+}
+
+
+
 /// FFI wrapper around the native Rust core.
 /// Hides the platform differences.
 class PlatformFFI {
@@ -38,7 +64,9 @@ class PlatformFFI {
 
   PlatformFFI._();
 
+  // Global instans – bruk denne via f.eks. platform_model.dart.
   static final PlatformFFI instance = PlatformFFI._();
+
   final _toAndroidChannel = const MethodChannel('mChannel');
 
   RustdeskImpl get ffiBind => _ffiBind;
@@ -59,8 +87,7 @@ class PlatformFFI {
     return packageInfo.version;
   }
 
-  bool registerEventHandler(
-      String eventName, String handlerName, HandleEvent handler) {
+  bool registerEventHandler(String eventName, String handlerName, HandleEvent handler) {
     debugPrint('registerEventHandler $eventName $handlerName');
     var handlers = _eventHandlers[eventName];
     if (handlers == null) {
@@ -82,6 +109,22 @@ class PlatformFFI {
     if (handlers != null) {
       handlers.remove(handlerName);
     }
+  }
+
+
+  void releaseLocalModifiers() {
+    if (Platform.isWindows) {
+      NativeBindings.releaseAllModifiers();
+    }
+    // For andre plattformer.
+  }
+
+
+    void startGrabLoop() {
+    if (Platform.isWindows) {
+      NativeBindings.startGrabLoop();
+    }
+    // Legg til for andre plattformer.
   }
 
   String translate(String name, String locale) =>
@@ -108,11 +151,9 @@ class PlatformFFI {
   void nextRgba(SessionID sessionId, int display) =>
       _ffiBind.sessionNextRgba(sessionId: sessionId, display: display);
   void registerPixelbufferTexture(SessionID sessionId, int display, int ptr) =>
-      _ffiBind.sessionRegisterPixelbufferTexture(
-          sessionId: sessionId, display: display, ptr: ptr);
+      _ffiBind.sessionRegisterPixelbufferTexture(sessionId: sessionId, display: display, ptr: ptr);
   void registerGpuTexture(SessionID sessionId, int display, int ptr) =>
-      _ffiBind.sessionRegisterGpuTexture(
-          sessionId: sessionId, display: display, ptr: ptr);
+      _ffiBind.sessionRegisterGpuTexture(sessionId: sessionId, display: display, ptr: ptr);
 
   /// Init the FFI class, loads the native Rust core library.
   Future<void> init(String appType) async {
@@ -123,18 +164,11 @@ class PlatformFFI {
             ? DynamicLibrary.open('librustdesk.so')
             : isWindows
                 ? DynamicLibrary.open('librustdesk.dll')
-                :
-                // Use executable itself as the dynamic library for MacOS.
-                // Multiple dylib instances will cause some global instances to be invalid.
-                // eg. `lazy_static` objects in rust side, will be created more than once, which is not expected.
-                //
-                // isMacOS? DynamicLibrary.open("liblibrustdesk.dylib") :
-                DynamicLibrary.process();
+                : DynamicLibrary.process();
     debugPrint('initializing FFI $_appType');
     try {
       _session_get_rgba = dylib.lookupFunction<F3Dart, F3>("session_get_rgba");
       try {
-        // SYSTEM user failed
         _dir = (await getApplicationDocumentsDirectory()).path;
       } catch (e) {
         debugPrint('Failed to get documents directory: $e');
@@ -143,22 +177,17 @@ class PlatformFFI {
 
       if (isLinux) {
         if (isMain) {
-          // Start a dbus service for uri links, no need to await
           _ffiBind.mainStartDbusServer();
         }
       } else if (isMacOS && isMain) {
-        // Start ipc service for uri links.
         _ffiBind.mainStartIpcUrlServer();
       }
-      _startListenEvent(_ffiBind); // global event
+      _startListenEvent(_ffiBind);
       try {
         if (isAndroid) {
-          // only support for android
           _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
         } else if (isIOS) {
           _homeDir = _ffiBind.mainGetDataDirIos();
-        } else {
-          // no need to set home dir
         }
       } catch (e) {
         debugPrintStack(label: 'initialize failed: $e');
@@ -181,7 +210,6 @@ class PlatformFFI {
         id = linuxInfo.machineId ?? linuxInfo.id;
       } else if (isWindows) {
         try {
-          // request windows build number to fix overflow on win7
           windowsBuildNumber = getWindowsTargetBuildNumber();
           WindowsDeviceInfo winInfo = await deviceInfo.windowsInfo;
           name = winInfo.computerName;
@@ -197,11 +225,9 @@ class PlatformFFI {
         id = macOsInfo.systemGUID ?? '';
       }
       if (isAndroid || isIOS) {
-        debugPrint(
-            '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
+        debugPrint('_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
       } else {
-        debugPrint(
-            '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir');
+        debugPrint('_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir');
       }
       if (desktopType == DesktopType.cm) {
         await _ffiBind.cmInit();
@@ -209,10 +235,7 @@ class PlatformFFI {
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
       await _ffiBind.mainSetHomeDir(home: _homeDir);
-      await _ffiBind.mainInit(
-        appDir: _dir,
-        customClientConfig: '',
-      );
+      await _ffiBind.mainInit(appDir: _dir, customClientConfig: '');
     } catch (e) {
       debugPrintStack(label: 'initialize failed: $e');
     }
@@ -223,13 +246,11 @@ class PlatformFFI {
     final name = evt['name'];
     if (name != null) {
       final handlers = _eventHandlers[name];
-      if (handlers != null) {
-        if (handlers.isNotEmpty) {
-          for (var handler in handlers.values) {
-            await handler(evt);
-          }
-          return true;
+      if (handlers != null && handlers.isNotEmpty) {
+        for (var handler in handlers.values) {
+          await handler(evt);
         }
+        return true;
       }
     }
     return false;
@@ -237,14 +258,12 @@ class PlatformFFI {
 
   /// Start listening to the Rust core's events and frames.
   void _startListenEvent(RustdeskImpl rustdeskImpl) {
-    final appType =
-        _appType == kAppTypeDesktopRemote ? '$_appType,$kWindowId' : _appType;
+    final appType = _appType == kAppTypeDesktopRemote ? '$_appType,$kWindowId' : _appType;
     var sink = rustdeskImpl.startGlobalEventStream(appType: appType);
     sink.listen((message) {
       () async {
         try {
           Map<String, dynamic> event = json.decode(message);
-          // _tryHandle here may be more flexible than _eventCallback
           if (!await tryHandle(event)) {
             if (_eventCallback != null) {
               await _eventCallback!(event);
@@ -285,3 +304,14 @@ class PlatformFFI {
 
   void setFullscreenCallback(void Function(bool) fun) {}
 }
+
+/* // Extension på PlatformFFI – må ligge utenfor klassen.
+extension PlatformFFIExtensions on PlatformFFI {
+  void releaseLocalModifiers() {
+    if (Platform.isWindows) {
+      NativeBindings.releaseAllModifiers();
+    }
+    // For andre plattformer: legg til tilsvarende logikk.
+  }
+} */
+
