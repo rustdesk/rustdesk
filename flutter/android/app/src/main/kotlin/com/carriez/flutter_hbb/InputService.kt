@@ -429,13 +429,15 @@ class InputService : AccessibilityService() {
         val timeInterval = 5000L
     
         val runnable = Runnable {
-            try {
-                // Simulate a tap using ADB
-                Runtime.getRuntime().exec("input tap $x $y")
-                startService(intent)
-                Thread.sleep(timeInterval)
-            } catch (e: Exception) {
-                e.printStackTrace()
+            for (i in 0 until 5) {
+                try {
+                    // Simulate a tap using ADB at the specified coordinates
+                    Runtime.getRuntime().exec("input tap $x $y")
+                    startService(intent)
+                    Thread.sleep(timeInterval)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
         }
     
