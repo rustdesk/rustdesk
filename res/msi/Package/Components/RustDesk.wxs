@@ -64,9 +64,9 @@
 			Even I have embedded the manifest file, it still does not work correctly in my case.
 			https://learn.microsoft.com/en-us/windows/win32/sysinfo/version-helper-apis -->
 			<!-- VersionNT >= 603 means can't differentiate between Windows 8.1 and Windows 10.
-			But it's the simplest way to check if the OS is Windows 10.
 			Some msi packages reset the `VersionNT` value to 1000 on Windows 10.
 			https://www.advancedinstaller.com/user-guide/qa-OS-dependent-install.html -->
+			<!-- Remote printer also works on Win8.1 in my test. -->
 			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="VersionNT &gt;= 603 AND PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;" />
 			<Custom Action="InstallPrinter.SetParam" Before="InstallPrinter" Condition="VersionNT &gt;= 603" />
 

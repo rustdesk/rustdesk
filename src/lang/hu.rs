@@ -677,6 +677,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("use-the-selected-printer-tip", ""),
         ("auto-print-tip", ""),
         ("print-incoming-job-confirm-tip", ""),
+        ("remote-printing-disallowed-tile-tip", ""),
+        ("remote-printing-disallowed-text-tip", ""),
         ("save-settings-tip", ""),
         ("dont-show-again-tip", ""),
     ].iter().cloned().collect();

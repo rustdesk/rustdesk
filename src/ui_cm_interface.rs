@@ -785,6 +785,7 @@ async fn handle_fs(
             // dummy remote, show_hidden, is_remote
             let mut job = fs::TransferJob::new_write(
                 id,
+                fs::JobType::Generic,
                 "".to_string(),
                 path,
                 file_num,

@@ -41,8 +41,6 @@ use hbb_common::{
 };
 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
-#[cfg(all(target_os = "windows", feature = "flutter"))]
-use remote_printer::printer_job::PrinterJob;
 use scrap::CodecFormat;
 use std::{
     collections::HashMap,
@@ -78,8 +76,6 @@ pub struct Remote<T: InvokeUiSession> {
     video_threads: HashMap<usize, VideoThread>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
-    #[cfg(all(target_os = "windows", feature = "flutter"))]
-    printer_jobs: HashMap<i32, PrinterJob>,
 }
 
 #[derive(Default)]
@@ -127,8 +123,6 @@ impl<T: InvokeUiSession> Remote<T> {
             video_threads: Default::default(),
             chroma: Default::default(),
             last_record_state: false,
-            #[cfg(all(target_os = "windows", feature = "flutter"))]
-            printer_jobs: Default::default(),
         }
     }
 
@@ -555,13 +549,14 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 allow_err!(peer.send(&msg).await);
             }
-            Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
+            Data::SendFiles((id, r#type, path, to, file_num, include_hidden, is_remote)) => {
                 log::info!("send files, is remote {}", is_remote);
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs.push(fs::TransferJob::new_write(
                         id,
+                        r#type,
                         path.clone(),
                         to,
                         file_num,
@@ -571,12 +566,13 @@ impl<T: InvokeUiSession> Remote<T> {
                         od,
                     ));
                     allow_err!(
-                        peer.send(&fs::new_send(id, path, file_num, include_hidden))
+                        peer.send(&fs::new_send(id, r#type, path, file_num, include_hidden))
                             .await
                     );
                 } else {
                     match fs::TransferJob::new_read(
                         id,
+                        r#type,
                         to.clone(),
                         path.clone(),
                         file_num,
@@ -622,7 +618,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
             }
-            Data::AddJob((id, path, to, file_num, include_hidden, is_remote)) => {
+            Data::AddJob((id, r#type, path, to, file_num, include_hidden, is_remote)) => {
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
                     log::debug!(
@@ -633,6 +629,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     );
                     let mut job = fs::TransferJob::new_write(
                         id,
+                        r#type,
                         path.clone(),
                         to,
                         file_num,
@@ -646,6 +643,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 } else {
                     match fs::TransferJob::new_read(
                         id,
+                        r#type,
                         to.clone(),
                         path.clone(),
                         file_num,
@@ -685,6 +683,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         allow_err!(
                             peer.send(&fs::new_send(
                                 id,
+                                fs::JobType::Generic,
                                 job.remote.clone(),
                                 job.file_num,
                                 job.show_hidden
@@ -1505,23 +1504,62 @@ impl<T: InvokeUiSession> Remote<T> {
                                 if let Err(_err) = job.write(block).await {
                                     // to-do: add "skip" for writing job
                                 }
-                                self.update_jobs_status();
+                                if job.r#type == fs::JobType::Generic {
+                                    self.update_jobs_status();
+                                }
                             }
                         }
                         Some(file_response::Union::Done(d)) => {
                             let mut err: Option<String> = None;
+                            let mut job_type = fs::JobType::Generic;
+                            let mut path = None;
                             if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
                                 job.modify_time();
                                 err = job.job_error();
+                                job_type = job.r#type;
+                                path = Some(job.path.clone());
                                 fs::remove_job(d.id, &mut self.write_jobs);
                             }
-                            self.handle_job_status(d.id, d.file_num, err);
+                            match job_type {
+                                fs::JobType::Generic => {
+                                    self.handle_job_status(d.id, d.file_num, err);
+                                }
+                                fs::JobType::Printer =>
+                                {
+                                    #[cfg(all(target_os = "windows", feature = "flutter"))]
+                                    if let Some(path) = path {
+                                        if path.exists() {
+                                            let path = path.to_string_lossy().to_string();
+                                            let printer_name = self
+                                                .handler
+                                                .printer_names
+                                                .write()
+                                                .unwrap()
+                                                .remove(&d.id);
+                                            crate::platform::send_file_to_printer(
+                                                printer_name,
+                                                &path,
+                                            )
+                                            .ok();
+                                        }
+                                    }
+                                }
+                            }
                         }
                         Some(file_response::Union::Error(e)) => {
-                            if let Some(_job) = fs::get_job(e.id, &mut self.write_jobs) {
+                            let mut job_type = fs::JobType::Generic;
+                            if let Some(job) = fs::get_job(e.id, &mut self.write_jobs) {
+                                job_type = job.r#type;
                                 fs::remove_job(e.id, &mut self.write_jobs);
                             }
-                            self.handle_job_status(e.id, e.file_num, Some(e.error));
+                            match job_type {
+                                fs::JobType::Generic => {
+                                    self.handle_job_status(e.id, e.file_num, Some(e.error));
+                                }
+                                fs::JobType::Printer => {
+                                    log::error!("Printer job error: {}", e.error);
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -1745,6 +1783,31 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::FileAction(action)) => match action.union {
+                    Some(file_action::Union::Send(_s)) => match _s.file_type.enum_value() {
+                        #[cfg(all(target_os = "windows", feature = "flutter"))]
+                        Ok(file_transfer_send_request::FileType::Printer) => {
+                            let action = LocalConfig::get_option(
+                                config::keys::OPTION_PRINTER_INCOMING_JOB_ACTION,
+                            );
+                            if action == "dismiss" {
+                                // Just ignore the incoming print job.
+                            } else {
+                                let id = fs::get_next_job_id();
+                                let allow_auto_print = LocalConfig::get_bool_option(
+                                    config::keys::OPTION_PRINTER_ALLOW_AUTO_PRINT,
+                                );
+                                if allow_auto_print {
+                                    let printer_name = LocalConfig::get_option(
+                                        config::keys::OPTION_PRINTER_SELECTED_NAME,
+                                    );
+                                    self.handler.printer_response(id, _s.path, printer_name);
+                                } else {
+                                    self.handler.printer_request(id, _s.path);
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
                     Some(file_action::Union::SendConfirm(c)) => {
                         if let Some(job) = fs::get_job(c.id, &mut self.read_jobs) {
                             job.confirm(&c);
@@ -1795,68 +1858,6 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler.set_displays(&pi.displays);
                     self.handler.set_platform_additions(&pi.platform_additions);
                 }
-                #[cfg(all(target_os = "windows", feature = "flutter"))]
-                Some(message::Union::Printer(p)) => match p.union {
-                    Some(printer::Union::PrinterRequest(pr)) => {
-                        let action = LocalConfig::get_option(
-                            config::keys::OPTION_PRINTER_INCOMING_JOB_ACTION,
-                        );
-                        if action == "dismiss" {
-                            self.handler.printer_response(pr.id, false, "".to_string());
-                        } else {
-                            let allow_auto_print = LocalConfig::get_bool_option(
-                                config::keys::OPTION_PRINTER_ALLOW_AUTO_PRINT,
-                            );
-                            if allow_auto_print {
-                                let printer_name = LocalConfig::get_option(
-                                    config::keys::OPTION_PRINTER_SELECTED_NAME,
-                                );
-                                self.handler.printer_response(pr.id, true, printer_name);
-                            } else {
-                                self.handler.printer_request(pr.id);
-                            }
-                        }
-                    }
-                    #[cfg(all(target_os = "windows", feature = "flutter"))]
-                    Some(printer::Union::PrinterBlock(b)) => {
-                        if !self.printer_jobs.contains_key(&b.id) {
-                            match PrinterJob::new_write(b.id).await {
-                                Ok(job) => {
-                                    self.printer_jobs.insert(b.id, job);
-                                }
-                                Err(e) => {
-                                    log::error!("Failed to create printer job: {}", e);
-                                }
-                            }
-                        }
-                        if let Some(job) = self.printer_jobs.get_mut(&b.id) {
-                            log::info!("write printer block: {:?}", b.data.len());
-                            if let Err(e) = job.write_block(b).await {
-                                log::error!("Failed to write printer block: {}", e);
-                                // todo
-                            }
-                        }
-                    }
-                    #[cfg(all(target_os = "windows", feature = "flutter"))]
-                    Some(printer::Union::PrinterDone(d)) => {
-                        if let Some(job) = self.printer_jobs.remove(&d.id) {
-                            let path = job.path();
-                            drop(job);
-                            if path.exists() {
-                                let path = path.to_string_lossy().to_string();
-                                let printer_name =
-                                    self.handler.printer_names.write().unwrap().remove(&d.id);
-                                crate::platform::send_file_to_printer(printer_name, &path).ok();
-                            }
-                        }
-                    }
-                    #[cfg(all(target_os = "windows", feature = "flutter"))]
-                    Some(printer::Union::PrinterError(e)) => {
-                        log::error!("Failed to print: {}", e);
-                        let _ = self.printer_jobs.remove(&e.id);
-                    }
-                    _ => {}
-                },
                 _ => {}
             }
         }

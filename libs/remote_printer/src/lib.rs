@@ -1,4 +1,3 @@
-pub mod printer_job;
 mod setup;
 pub use setup::{
     is_rd_printer_installed,

@@ -624,7 +624,15 @@ pub fn session_send_files(
     _is_dir: bool,
 ) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.send_files(act_id, path, to, file_num, include_hidden, is_remote);
+        session.send_files(
+            act_id,
+            fs::JobType::Generic.into(),
+            path,
+            to,
+            file_num,
+            include_hidden,
+            is_remote,
+        );
     }
 }
 
@@ -749,7 +757,15 @@ pub fn session_add_job(
     is_remote: bool,
 ) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.add_job(act_id, path, to, file_num, include_hidden, is_remote);
+        session.add_job(
+            act_id,
+            fs::JobType::Generic.into(),
+            path,
+            to,
+            file_num,
+            include_hidden,
+            is_remote,
+        );
     }
 }
 
@@ -1671,11 +1687,11 @@ pub fn session_toggle_virtual_display(session_id: SessionID, index: i32, on: boo
 pub fn session_printer_response(
     session_id: SessionID,
     id: i32,
-    accepted: bool,
+    path: String,
     printer_name: String,
 ) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.printer_response(id, accepted, printer_name);
+        session.printer_response(id, path, printer_name);
     }
 }
 
@@ -2399,6 +2415,8 @@ pub fn main_get_common(key: String) -> String {
         return crate::platform::is_win_10_or_greater().to_string();
         #[cfg(not(target_os = "windows"))]
         return false.to_string();
+    } else if key == "transfer-job-id" {
+        return hbb_common::fs::get_next_job_id().to_string();
     } else {
         "".to_owned()
     }

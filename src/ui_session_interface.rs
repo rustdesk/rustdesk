@@ -1508,19 +1508,18 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     #[cfg(feature = "flutter")]
-    pub fn printer_response(&self, id: i32, accepted: bool, printer_name: String) {
-        if accepted {
-            self.printer_names.write().unwrap().insert(id, printer_name);
-        }
-        let mut printer = Printer::new();
-        printer.set_printer_response(PrinterResponse {
+    pub fn printer_response(&self, id: i32, path: String, printer_name: String) {
+        self.printer_names.write().unwrap().insert(id, printer_name);
+        let to = std::env::temp_dir().join(format!("rustdesk_printer_{id}"));
+        self.send(Data::SendFiles((
             id,
-            accepted,
-            ..Default::default()
-        });
-        let mut msg = Message::new();
-        msg.set_printer(printer);
-        self.send(Data::Message(msg));
+            hbb_common::fs::JobType::Printer,
+            path,
+            to.to_string_lossy().to_string(),
+            0,
+            false,
+            true,
+        )));
     }
 }
 
@@ -1588,7 +1587,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_record_status(&self, start: bool);
     fn update_empty_dirs(&self, _res: ReadEmptyDirsResponse) {}
     #[cfg(feature = "flutter")]
-    fn printer_request(&self, id: i32);
+    fn printer_request(&self, id: i32, path: String);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

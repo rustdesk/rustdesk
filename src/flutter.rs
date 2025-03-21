@@ -1060,8 +1060,12 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event("record_status", &[("start", &start.to_string())], &[]);
     }
 
-    fn printer_request(&self, id: i32) {
-        self.push_event("printer_request", &[("id", id)], &[]);
+    fn printer_request(&self, id: i32, path: String) {
+        self.push_event(
+            "printer_request",
+            &[("id", json!(id)), ("path", json!(path))],
+            &[],
+        );
     }
 }
 

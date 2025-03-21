@@ -491,6 +491,8 @@ impl sciter::EventHandler for SciterSession {
         fn get_chatbox();
         fn get_icon();
         fn get_home_dir();
+        fn get_next_job_id();
+        fn update_next_job_id(i32);
         fn read_dir(String, bool);
         fn remove_dir(i32, String, bool);
         fn create_dir(i32, String, bool);
@@ -502,8 +504,8 @@ impl sciter::EventHandler for SciterSession {
         fn confirm_delete_files(i32, i32);
         fn set_no_confirm(i32);
         fn cancel_job(i32);
-        fn send_files(i32, String, String, i32, bool, bool);
-        fn add_job(i32, String, String, i32, bool, bool);
+        fn send_files(i32, i32, String, String, i32, bool, bool);
+        fn add_job(i32, i32, String, String, i32, bool, bool);
         fn resume_job(i32, bool);
         fn get_platform(bool);
         fn get_path_sep(bool);

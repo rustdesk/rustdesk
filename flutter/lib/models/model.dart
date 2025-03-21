@@ -423,6 +423,7 @@ class FfiModel with ChangeNotifier {
   _handlePrinterRequest(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     final id = evt['id'];
+    final path = evt['path'];
     final dialogManager = parent.target!.dialogManager;
     dialogManager.show((setState, close, context) {
       PrinterOptions printerOptions = PrinterOptions.load();
@@ -446,11 +447,8 @@ class FfiModel with ChangeNotifier {
             ? ''
             : selectedPrinterName.value;
         bind.sessionPrinterResponse(
-            sessionId: sessionId,
-            id: id,
-            accepted: true,
-            printerName: printerName);
-        if (saveSettings.value) {
+            sessionId: sessionId, id: id, path: path, printerName: printerName);
+        if (saveSettings.value || dontShowAgain.value) {
           bind.mainSetLocalOption(key: kKeyPrinterSelected, value: printerName);
           bind.mainSetLocalOption(
               key: kKeyPrinterIncommingJobAction,
@@ -463,8 +461,6 @@ class FfiModel with ChangeNotifier {
       }
 
       onCancel() {
-        bind.sessionPrinterResponse(
-            sessionId: sessionId, id: id, accepted: false, printerName: '');
         if (dontShowAgain.value) {
           bind.mainSetLocalOption(
               key: kKeyPrinterIncommingJobAction,

@@ -677,6 +677,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("use-the-selected-printer-tip", "使用选择的打印机执行"),
         ("auto-print-tip", "使用选择的打印机自动执行"),
         ("print-incoming-job-confirm-tip", "您收到一个远程打印任务，您想在本地执行它吗？"),
+        ("remote-printing-disallowed-tile-tip", "不允许远程打印"),
+        ("remote-printing-disallowed-text-tip", "被控端的权限设置拒绝了远程打印。"),
         ("save-settings-tip", "保存设置"),
         ("dont-show-again-tip", "不再显示此信息"),
     ].iter().cloned().collect();

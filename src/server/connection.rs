@@ -28,7 +28,7 @@ use hbb_common::platform::linux::run_cmds;
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
     config::{self, keys, Config, TrustedDevice},
-    fs::{self, can_enable_overwrite_detection},
+    fs::{self, can_enable_overwrite_detection, JobType},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
@@ -42,8 +42,6 @@ use hbb_common::{
     },
     tokio_util::codec::{BytesCodec, Framed},
 };
-#[cfg(all(target_os = "windows", feature = "flutter"))]
-use remote_printer::printer_job::PrinterJob;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::{call_main_service_key_event, call_main_service_pointer_input};
 use scrap::camera;
@@ -173,14 +171,6 @@ pub enum AuthConnType {
     ViewCamera,
 }
 
-#[cfg(all(target_os = "windows", feature = "flutter"))]
-#[derive(Default)]
-struct RemotePrinterJobs {
-    printer_file_id: i32,
-    printer_jobs: Vec<PrinterJob>,
-    printer_waiting_confirm: HashMap<i32, String>,
-}
-
 pub struct Connection {
     inner: ConnInner,
     display_idx: usize,
@@ -257,7 +247,7 @@ pub struct Connection {
     multi_ui_session: bool,
     tx_from_authed: mpsc::UnboundedSender<ipc::Data>,
     #[cfg(all(target_os = "windows", feature = "flutter"))]
-    remote_printer_jobs: RemotePrinterJobs,
+    printer_files: Vec<(Instant, String)>,
 }
 
 impl ConnInner {
@@ -412,7 +402,7 @@ impl Connection {
             retina: Retina::default(),
             tx_from_authed,
             #[cfg(all(target_os = "windows", feature = "flutter"))]
-            remote_printer_jobs: Default::default(),
+            printer_files: Vec::new(),
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -695,22 +685,7 @@ impl Connection {
                             }
                         }
                     } else {
-                        #[cfg(not(all(target_os = "windows", feature = "flutter")))]
-                        let update_file_timer = true;
-                        #[cfg(all(target_os = "windows", feature = "flutter"))]
-                        let update_file_timer = conn.remote_printer_jobs.printer_jobs.is_empty();
-                        #[cfg(all(target_os = "windows", feature = "flutter"))]
-                        if !update_file_timer {
-                            let mut remove = true;
-                            conn.remote_printer_jobs.printer_jobs[0].read(&mut conn.stream, &mut remove).await.ok();
-                            if remove {
-                                conn.remote_printer_jobs.printer_jobs.remove(0);
-                            }
-                        }
-
-                        if update_file_timer {
-                            conn.file_timer = crate::rustdesk_interval(time::interval_at(Instant::now() + SEC30, SEC30));
-                        }
+                        conn.file_timer = crate::rustdesk_interval(time::interval_at(Instant::now() + SEC30, SEC30));
                     }
                 }
                 Ok(conns) = hbbs_rx.recv() => {
@@ -794,7 +769,11 @@ impl Connection {
                     match data {
                         #[cfg(all(target_os = "windows", feature = "flutter"))]
                         ipc::Data::PrinterDriver(file) => {
-                            conn.send_printer_file(file).await;
+                            if config::Config::get_bool_option(config::keys::OPTION_ENABLE_REMOTE_PRINTER) {
+                                conn.send_printer_file(file).await;
+                            } else {
+                                conn.send_remote_printing_disallowed().await;
+                            }
                         }
                         _ => {}
                     }
@@ -1143,6 +1122,22 @@ impl Connection {
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
         });
+    }
+
+    fn get_files_for_audit(job_type: fs::JobType, mut files: Vec<FileEntry>) -> Vec<(String, i64)> {
+        files
+            .drain(..)
+            .map(|f| {
+                (
+                    if job_type == fs::JobType::Printer {
+                        "Remote print".to_owned()
+                    } else {
+                        f.name
+                    },
+                    f.size as _,
+                )
+            })
+            .collect()
     }
 
     fn post_file_audit(
@@ -2361,7 +2356,15 @@ impl Connection {
                     }
                 }
                 Some(message::Union::FileAction(fa)) => {
-                    if self.file_transfer.is_some() {
+                    let mut handle_fa = self.file_transfer.is_some();
+                    if !handle_fa {
+                        if let Some(file_action::Union::Send(s)) = fa.union.as_ref() {
+                            if JobType::from_proto(s.file_type) == JobType::Printer {
+                                handle_fa = true;
+                            }
+                        }
+                    }
+                    if handle_fa {
                         if self.delayed_read_dir.is_some() {
                             if let Some(file_action::Union::ReadDir(rd)) = fa.union {
                                 self.delayed_read_dir = Some((rd.path, rd.include_hidden));
@@ -2418,8 +2421,14 @@ impl Connection {
                                     &self.lr.version,
                                 ));
                                 let path = s.path.clone();
+                                let r#type = JobType::from_proto(s.file_type);
+                                if r#type == JobType::Printer {
+                                    #[cfg(all(target_os = "windows", feature = "flutter"))]
+                                    self.printer_files.retain(|f| f.1 != path);
+                                }
                                 match fs::TransferJob::new_read(
                                     id,
+                                    r#type,
                                     "".to_string(),
                                     path.clone(),
                                     s.file_num,
@@ -2433,19 +2442,21 @@ impl Connection {
                                     Ok(mut job) => {
                                         self.send(fs::new_dir(id, path, job.files().to_vec()))
                                             .await;
-                                        let mut files = job.files().to_owned();
+                                        let files = job.files().to_owned();
                                         job.is_remote = true;
                                         job.conn_id = self.inner.id();
+                                        let job_type = job.r#type;
                                         self.read_jobs.push(job);
                                         self.file_timer =
                                             crate::rustdesk_interval(time::interval(MILLI1));
                                         self.post_file_audit(
                                             FileAuditType::RemoteSend,
-                                            &s.path,
-                                            files
-                                                .drain(..)
-                                                .map(|f| (f.name, f.size as _))
-                                                .collect(),
+                                            if job_type == fs::JobType::Printer {
+                                                "Remote print"
+                                            } else {
+                                                &s.path
+                                            },
+                                            Self::get_files_for_audit(job_type, files),
                                             json!({}),
                                         );
                                     }
@@ -2476,11 +2487,7 @@ impl Connection {
                                 self.post_file_audit(
                                     FileAuditType::RemoteReceive,
                                     &r.path,
-                                    r.files
-                                        .to_vec()
-                                        .drain(..)
-                                        .map(|f| (f.name, f.size as _))
-                                        .collect(),
+                                    Self::get_files_for_audit(fs::JobType::Generic, r.files),
                                     json!({}),
                                 );
                                 self.file_transferred = true;
@@ -2776,28 +2783,6 @@ impl Connection {
                 Some(message::Union::VoiceCallResponse(_response)) => {
                     // TODO: Maybe we can do a voice call from cm directly.
                 }
-                #[cfg(all(target_os = "windows", feature = "flutter"))]
-                Some(message::Union::Printer(p)) => match p.union {
-                    Some(printer::Union::PrinterResponse(pr)) => {
-                        if let Some(path) = self
-                            .remote_printer_jobs
-                            .printer_waiting_confirm
-                            .remove(&pr.id)
-                        {
-                            if pr.accepted {
-                                match PrinterJob::new_read(pr.id, path).await {
-                                    Ok(job) => {
-                                        self.remote_printer_jobs.printer_jobs.push(job);
-                                        self.file_timer =
-                                            crate::rustdesk_interval(time::interval(MILLI1));
-                                    }
-                                    Err(e) => log::error!("Failed to send printer file: {}", e),
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                },
                 _ => {}
             }
         }
@@ -3703,19 +3688,25 @@ impl Connection {
 
     #[cfg(all(target_os = "windows", feature = "flutter"))]
     async fn send_printer_file(&mut self, path: String) {
-        let id = self.remote_printer_jobs.printer_file_id;
-        self.remote_printer_jobs.printer_file_id += 1;
-        self.remote_printer_jobs
-            .printer_waiting_confirm
-            .insert(id, path);
-        let mut msg = Message::new();
-        let mut printer = Printer::new();
-        printer.set_printer_request(PrinterRequest {
-            id,
-            ..Default::default()
-        });
-        msg.set_printer(printer);
+        let msg = fs::new_send(0, fs::JobType::Printer, path.clone(), 1, false);
         self.send(msg).await;
+        self.printer_files
+            .retain(|(t, _)| t.elapsed().as_secs() < 60);
+        self.printer_files.push((Instant::now(), path));
+    }
+
+    #[cfg(all(target_os = "windows", feature = "flutter"))]
+    async fn send_remote_printing_disallowed(&mut self) {
+        let mut msg_out = Message::new();
+        let res = MessageBox {
+            msgtype: "nook-nocancel-hasclose".to_owned(),
+            title: "remote-printing-disallowed-tile-tip".to_owned(),
+            text: "remote-printing-disallowed-text-tip".to_owned(),
+            link: "".to_owned(),
+            ..Default::default()
+        };
+        msg_out.set_message_box(res);
+        self.send(msg_out).await;
     }
 }
 
