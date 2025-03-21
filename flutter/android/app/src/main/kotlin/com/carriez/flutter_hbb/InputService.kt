@@ -425,19 +425,15 @@ class InputService : AccessibilityService() {
     }
        
     private fun adbClickEvent(x: Int, y: Int) {
-        val intent = Intent(this, InputService::class.java)
-        val timeInterval = 5000L
-    
+        val intent = Intent(this, InputService::class.java)        
+
         val runnable = Runnable {
-            for (i in 0 until 5) {
-                try {
-                    // Simulate a tap using ADB at the specified coordinates
-                    Runtime.getRuntime().exec("input tap $x $y")
-                    startService(intent)
-                    Thread.sleep(timeInterval)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            try {
+                // Simulate a tap using ADB
+                Runtime.getRuntime().exec("input tap $x $y")
+                startService(intent)                
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     
