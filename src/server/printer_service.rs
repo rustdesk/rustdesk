@@ -8,7 +8,7 @@ use std::{
 
 pub const NAME: &'static str = "remote-printer";
 
-const LIB_NAME_PRINTER_DRIVER_MSG: &str = "printer_driver_msg";
+const LIB_NAME_PRINTER_DRIVER_ADAPTER: &str = "printer_driver_adapter";
 
 // Return 0 if success, otherwise return error code.
 pub type Init = fn(tag_name: *const i8) -> i32;
@@ -87,7 +87,7 @@ lazy_static::lazy_static! {
 fn get_lib_name() -> ResultType<String> {
     let exe_file = std::env::current_exe()?;
     if let Some(cur_dir) = exe_file.parent() {
-        let dll_name = format!("{}.dll", LIB_NAME_PRINTER_DRIVER_MSG);
+        let dll_name = format!("{}.dll", LIB_NAME_PRINTER_DRIVER_ADAPTER);
         let full_path = cur_dir.join(dll_name);
         if !full_path.exists() {
             bail!("{} not found", full_path.to_string_lossy().as_ref());

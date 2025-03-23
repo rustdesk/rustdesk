@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
+[target.'cfg(target_os = "windows")'.dependencies]
 hbb_common = { version = "0.1.0", path = "../hbb_common" }
 winapi = { version = "0.3" }
 windows-strings = "0.3.1"
