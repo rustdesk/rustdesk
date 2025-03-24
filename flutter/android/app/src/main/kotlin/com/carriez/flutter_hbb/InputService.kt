@@ -89,6 +89,7 @@ class InputService : AccessibilityService() {
 
     private var lastX = 0
     private var lastY = 0
+    private var isSwiping: Boolean = false
 
     private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
@@ -324,12 +325,30 @@ class InputService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun doDispatchGesture(x: Int, y: Int, willContinue: Boolean) {
-        // Simulate a tap using adbClickEvent
-        adbClickEvent(x, y)
-
-        // Log the event
-        Log.d(logTag, "Simulated tap at x:$x y:$y")
+        if (willContinue) {
+            // This is part of a swipe gesture
+            if (!isSwiping) {
+                // First point of the swipe
+                lastX = x
+                lastY = y
+                isSwiping = true
+            } else {
+                // Continuing swipe - send ADB swipe command
+                adbSwipeEvent(lastX, lastY, x, y)
+                lastX = x
+                lastY = y
+            }
+        } else {
+            // This is a tap gesture
+            if (isSwiping) {
+                // If we were swiping, send final swipe point
+                adbSwipeEvent(lastX, lastY, x, y)
+                isSwiping = false
+            }
+            adbClickEvent(x, y)
+        }
     }
+    
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun continueGesture(x: Int, y: Int) {
@@ -423,23 +442,44 @@ class InputService : AccessibilityService() {
             }
         }
     }
-       
-    private fun adbClickEvent(x: Int, y: Int) {
-        val intent = Intent(this, InputService::class.java)        
 
+    private fun executeAdbCommand(command: String) {
+        val intent = Intent(this, InputService::class.java)
         val runnable = Runnable {
             try {
-                // Simulate a tap using ADB
-                Runtime.getRuntime().exec("input tap $x $y")
-                startService(intent)                
+                Runtime.getRuntime().exec(command)
+                startService(intent)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(logTag, "ADB command failed: $command", e)
             }
         }
-    
-        val thread = Thread(runnable)
-        thread.start()
+        Thread(runnable).start()
     }
+
+    private fun adbClickEvent(x: Int, y: Int) {
+        executeAdbCommand("input tap $x $y")
+    }
+    
+    private fun adbSwipeEvent(startX: Int, startY: Int, endX: Int, endY: Int, duration: Long = 100) {
+        executeAdbCommand("input swipe $startX $startY $endX $endY $duration")
+    }
+       
+    // private fun adbClickEvent(x: Int, y: Int) {
+    //     val intent = Intent(this, InputService::class.java)        
+
+    //     val runnable = Runnable {
+    //         try {
+    //             // Simulate a tap using ADB
+    //             Runtime.getRuntime().exec("input tap $x $y")
+    //             startService(intent)                
+    //         } catch (e: Exception) {
+    //             e.printStackTrace()
+    //         }
+    //     }
+    
+    //     val thread = Thread(runnable)
+    //     thread.start()
+    // }
 
     private fun tryHandleVolumeKeyEvent(event: KeyEventAndroid): Boolean {
         when (event.keyCode) {
