@@ -182,6 +182,16 @@ pub mod client {
         *lock = true;
     }
 
+
+    #[no_mangle]
+    pub extern "C" fn start_grab_loop_ffi() {
+        //start_grab_loop();
+        let mut lock = IS_GRAB_STARTED.lock().unwrap();
+           
+            super::start_grab_loop();
+            *lock = true;
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn change_grab_status(state: GrabState, keyboard_mode: &str) {
         #[cfg(feature = "flutter")]
@@ -386,9 +396,10 @@ fn start_grab_loop() {
             if key == Key::CapsLock || key == Key::NumLock {
                 return Some(event);
             }
+            LOCAL_OVERRIDE.store(false, Ordering::SeqCst);
         
             // Hvis vi oppdager Alt+Tab (Tab med Alt/AltGr ned)
-            if key == Key::Tab && (rdev::get_modifier(Key::Alt) || rdev::get_modifier(Key::AltGr)) {
+            if key == Key::Tab && (rdev::get_modifier(Key::Alt)) {// || rdev::get_modifier(Key::AltGr)) {
                 #[cfg(target_os = "windows")]
                 {
                     if is_press {
@@ -504,6 +515,8 @@ fn start_grab_loop() {
     };
 }
 
+
+
 // #[allow(dead_code)] is ok here. No need to stop grabbing loop.
 #[allow(dead_code)]
 fn stop_grab_loop() -> Result<(), rdev::GrabError> {
@@ -543,6 +556,40 @@ pub fn release_remote_keys(keyboard_mode: &str) {
             client::process_event(keyboard_mode, &event, None);
             event.event_type = EventType::KeyRelease(key);
             client::process_event(keyboard_mode, &event, None);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn release_all_modifiers() {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use winapi::um::winuser::{
+            SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+            VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN,
+        };
+        use std::mem::{size_of, zeroed};
+
+        // Liste over tastvk-koder for modifier-taster
+        let modifiers = [VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN];
+
+        let mut inputs: Vec<INPUT> = Vec::with_capacity(modifiers.len());
+        for &vk in modifiers.iter() {
+            let mut input: INPUT = zeroed();
+            input.type_ = INPUT_KEYBOARD;
+            *input.u.ki_mut() = KEYBDINPUT {
+                wVk: vk as u16,
+                wScan: 0,
+                dwFlags: KEYEVENTF_KEYUP,
+                time: 0,
+                dwExtraInfo: 0,
+            };
+            inputs.push(input);
+        }
+        let sent = SendInput(inputs.len() as u32, inputs.as_mut_ptr(), size_of::<INPUT>() as i32);
+        if sent != inputs.len() as u32 {
+            // Loggfør feilen dersom ikke alle tastene ble sendt
+            log::error!("release_all_modifiers: SendInput sendte ikke alle modifier-tastene, sendte {}", sent);
         }
     }
 }
