@@ -812,7 +812,7 @@ pub mod client {
                                                                         .lock()
                                                                         .unwrap()
                                                                         .iter()
-                                                                        .filter(|c| c.1 == crate::server::AuthConnType::Remote)
+                                                                        .filter(|c| c.conn_type == crate::server::AuthConnType::Remote)
                                                                         .count();
                                                                     stream.send(&Data::DataPortableService(ConnCount(Some(remote_count)))).await.ok();
                                                                 }

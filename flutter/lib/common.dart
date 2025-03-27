@@ -3789,3 +3789,29 @@ void updateTextAndPreserveSelection(
         baseOffset: 0, extentOffset: controller.value.text.length);
   }
 }
+
+List<String> getPrinterNames() {
+  final printerNamesJson = bind.mainGetPrinterNames();
+  if (printerNamesJson.isEmpty) {
+    return [];
+  }
+  try {
+    final List<dynamic> printerNamesList = jsonDecode(printerNamesJson);
+    final appPrinterName = '$appName Printer';
+    return printerNamesList
+        .map((e) => e.toString())
+        .where((name) => name != appPrinterName)
+        .toList();
+  } catch (e) {
+    debugPrint('failed to parse printer names, err: $e');
+    return [];
+  }
+}
+
+String _appName = '';
+String get appName {
+  if (_appName.isEmpty) {
+    _appName = bind.mainGetAppNameSync();
+  }
+  return _appName;
+}
