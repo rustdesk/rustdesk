@@ -7,6 +7,14 @@ pub trait FileManager: Interface {
         fs::get_home_as_string()
     }
 
+    fn get_next_job_id(&self) -> i32 {
+        fs::get_next_job_id()
+    }
+
+    fn update_next_job_id(&self, id: i32) {
+        fs::update_next_job_id(id);
+    }
+
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
@@ -98,6 +106,7 @@ pub trait FileManager: Interface {
     fn send_files(
         &self,
         id: i32,
+        r#type: i32,
         path: String,
         to: String,
         file_num: i32,
@@ -106,6 +115,7 @@ pub trait FileManager: Interface {
     ) {
         self.send(Data::SendFiles((
             id,
+            r#type.into(),
             path,
             to,
             file_num,
@@ -117,6 +127,7 @@ pub trait FileManager: Interface {
     fn add_job(
         &self,
         id: i32,
+        r#type: i32,
         path: String,
         to: String,
         file_num: i32,
@@ -125,6 +136,7 @@ pub trait FileManager: Interface {
     ) {
         self.send(Data::AddJob((
             id,
+            r#type.into(),
             path,
             to,
             file_num,

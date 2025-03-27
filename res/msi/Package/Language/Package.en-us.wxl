@@ -51,5 +51,6 @@ This file contains the declaration of all the localizable strings.
 
 	<String Id="MyInstallDirDlgDesktopShortcuts" Value="Create desktop icon" />
 	<String Id="MyInstallDirDlgStartMenuShortcuts" Value="Create start menu shortcuts" />
+	<String Id="MyInstallDirDlgPrinter" Value="Install RustDesk Printer" />
 
 </WixLocalization>
