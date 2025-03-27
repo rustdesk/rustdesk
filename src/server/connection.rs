@@ -2427,13 +2427,15 @@ impl Connection {
                                             fs::DataSource::FilePath(PathBuf::from(&path));
                                     }
                                     JobType::Printer => {
-                                        if let Some(pd) =
-                                            self.printer_data.iter().find(|(_, p, _)| *p == path)
+                                        if let Some((_, _, data)) = self
+                                            .printer_data
+                                            .iter()
+                                            .position(|(_, p, _)| *p == path)
+                                            .map(|index| self.printer_data.remove(index))
                                         {
                                             data_source = fs::DataSource::MemoryCursor(
-                                                std::io::Cursor::new(pd.2.clone()),
+                                                std::io::Cursor::new(data),
                                             );
-                                            self.printer_data.retain(|f| f.1 != path);
                                         } else {
                                             // Ignore this message if the printer data is not found
                                             return true;

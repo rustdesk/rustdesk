@@ -1550,21 +1550,28 @@ impl<T: InvokeUiSession> Remote<T> {
                                 fs::JobType::Generic => {
                                     self.handle_job_status(d.id, d.file_num, err);
                                 }
-                                fs::JobType::Printer =>
-                                {
-                                    #[cfg(target_os = "windows")]
-                                    if let Some(data) = printer_data {
-                                        let printer_name = self
-                                            .handler
-                                            .printer_names
-                                            .write()
-                                            .unwrap()
-                                            .remove(&d.id);
-                                        crate::platform::send_raw_data_to_printer(
-                                            printer_name,
-                                            data,
-                                        )
-                                        .ok();
+                                fs::JobType::Printer => {
+                                    if let Some(err) = err {
+                                        log::error!("Received printer job failed, error {err}");
+                                    } else {
+                                        log::info!(
+                                            "Received printer job done, data len: {:?}",
+                                            printer_data.as_ref().map(|d| d.len()).unwrap_or(0)
+                                        );
+                                        #[cfg(target_os = "windows")]
+                                        if let Some(data) = printer_data {
+                                            let printer_name = self
+                                                .handler
+                                                .printer_names
+                                                .write()
+                                                .unwrap()
+                                                .remove(&d.id);
+                                            crate::platform::send_raw_data_to_printer(
+                                                printer_name,
+                                                data,
+                                            )
+                                            .ok();
+                                        }
                                     }
                                 }
                             }
