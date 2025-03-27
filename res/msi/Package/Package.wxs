@@ -51,6 +51,8 @@
 			<ComponentRef Id="Product.Registry.PersistedStartMenuShortcutProperties0" />
 			<ComponentRef Id="Product.Registry.PersistedDesktopShortcutProperties1" />
 			<ComponentRef Id="Product.Registry.PersistedDesktopShortcutProperties0" />
+			<ComponentRef Id="Product.Registry.PersistedPrinterProperties1" />
+			<ComponentRef Id="Product.Registry.PersistedPrinterProperties0" />
 		</Feature>
 
 		<!--https://wixtoolset.org/docs/tools/wixext/wixui/#customizing-a-dialog-set-->

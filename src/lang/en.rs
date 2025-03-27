@@ -241,5 +241,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("upgrade_remote_rustdesk_client_to_{}_tip", "Please upgrade the RustDesk client to version {} or newer on the remote side!"),
         ("view_camera_unsupported_tip", "The remote device does not support viewing the camera."),
         ("d3d_render_tip", "When D3D rendering is enabled, the remote control screen may be black on some machines."),
+        ("printer-requires-installed-{}-client-tip", "In order to use remote printing, {} needs to be installed on this device."),
+        ("printer-os-requirement-tip", "The printer outgoing function requires Windows 10 or higher."),
+        ("printer-{}-not-installed-tip", "The {} Printer is not installed."),
+        ("printer-{}-ready-tip", "The {} Printer is installed and ready to use."),
+        ("auto-print-tip", "Print automatically using the selected printer."),
+        ("print-incoming-job-confirm-tip", "You received a print job from remote. Do you want to execute it at your side?"),
+        ("use-the-default-printer-tip", "Use the default printer"),
+        ("use-the-selected-printer-tip", "Use the selected printer"),
+        ("remote-printing-disallowed-tile-tip", "Remote Printing disallowed"),
+        ("remote-printing-disallowed-text-tip", "The permission settings of the controlled side deny Remote Printing."),
+        ("save-settings-tip", "Save settings"),
+        ("dont-show-again-tip", "Don't show this again"),
     ].iter().cloned().collect();
 }

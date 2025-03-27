@@ -1,0 +1,41 @@
+include "sciter:reactor.tis";
+
+handler.printerRequest = function(id, path) {
+    show_printer_selector(id, path);
+};
+
+function show_printer_selector(id, path)
+{
+    var names = handler.get_printer_names();
+    msgbox("remote-printer-selector", "Incoming Print Job", <PrinterComponent names={names} />, "", function(res=null) {
+        if (res && res.name) {
+            handler.on_printer_selected(id, path, res.name);
+        }
+    }, 180);
+}
+
+class PrinterComponent extends Reactor.Component {
+    this var names = [];
+    this var jobTip = translate("print-incoming-job-confirm-tip");
+
+    function this(params) {
+        if (params && params.names) {
+            this.names = params.names;
+        }
+    }
+
+    function render() {
+        return <div>
+            <div>{translate("print-incoming-job-confirm-tip")}</div>
+            <div style="margin-top: 1em;" />
+            <div>
+                <select style="width: 450; margin: 1em 0; font-size: 1.15em;">
+                    {this.names.map(function(name) {
+                        return <option value={name}>{name}</option>;
+                    })}
+                </select>
+            </div>
+            <div style="margin-top: 1em;" />
+        </div>;
+    }
+}
