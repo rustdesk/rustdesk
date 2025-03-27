@@ -1566,11 +1566,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 .write()
                                                 .unwrap()
                                                 .remove(&d.id);
-                                            crate::platform::send_raw_data_to_printer(
-                                                printer_name,
-                                                data,
-                                            )
-                                            .ok();
+                                            // Spawn a new thread to handle the print job.
+                                            // Or print job will block the ui thread.
+                                            std::thread::spawn(move || {
+                                                crate::platform::send_raw_data_to_printer(
+                                                    printer_name,
+                                                    data,
+                                                )
+                                                .ok();
+                                            });
                                         }
                                     }
                                 }
