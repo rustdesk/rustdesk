@@ -2862,19 +2862,15 @@ pub fn send_raw_data_to_printer(printer_name: Option<String>, data: Vec<u8>) -> 
             if !names.contains(&printer_name) {
                 // Don't set the first printer as current printer.
                 // It may not be the desired printer.
-                log::error!(
-                    "Printer name \"{}\" not found, ignore the print job",
-                    printer_name
-                );
                 bail!("Printer name \"{}\" not found", &printer_name);
             }
         }
     }
     if printer_name.is_empty() {
-        log::error!("Failed to get printer name");
         return Err(anyhow!("Failed to get printer name"));
     }
 
+    log::info!("Sending data to printer: {}", &printer_name);
     let printer_name = wide_string(&printer_name);
     unsafe {
         let res = PrintXPSRawData(
@@ -2883,7 +2879,9 @@ pub fn send_raw_data_to_printer(printer_name: Option<String>, data: Vec<u8>) -> 
             data.len() as c_ulong,
         );
         if res != 0 {
-            bail!("Failed to send file to printer, see logs in C:\\Windows\\temp\\test_rustdesk.log for more details.");
+            bail!("Failed to send data to the printer, see logs in C:\\Windows\\temp\\test_rustdesk.log for more details.");
+        } else {
+            log::info!("Successfully sent data to the printer");
         }
     }
 
