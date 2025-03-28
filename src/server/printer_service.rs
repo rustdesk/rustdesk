@@ -17,6 +17,8 @@ pub type Uninit = fn();
 // data: The raw prn data, xps format.
 // data_len: The length of the raw prn data.
 pub type GetPrnData = fn(dur_mills: u32, data: *mut *mut i8, data_len: *mut u32);
+// Free the prn data allocated by GetPrnData().
+pub type FreePrnData = fn(data: *mut i8);
 
 macro_rules! make_lib_wrapper {
     ($($field:ident : $tp:ty),+) => {
@@ -78,7 +80,8 @@ macro_rules! make_lib_wrapper {
 make_lib_wrapper!(
     init: Init,
     uninit: Uninit,
-    get_prn_data: GetPrnData
+    get_prn_data: GetPrnData,
+    free_prn_data: FreePrnData
 );
 
 lazy_static::lazy_static! {
@@ -135,9 +138,7 @@ fn get_prn_data(dur_mills: u32) -> ResultType<Vec<u8>> {
         }
         let bytes =
             Vec::from(unsafe { std::slice::from_raw_parts(data as *const u8, data_len as usize) });
-        unsafe {
-            hbb_common::libc::free(data as *mut std::ffi::c_void);
-        }
+        lib_wrapper.free_prn_data.map(|f| f(data));
         Ok(bytes)
     } else {
         bail!("Failed to load func get_prn_file");

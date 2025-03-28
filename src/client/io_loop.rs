@@ -1544,7 +1544,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                 job.modify_time();
                                 err = job.job_error();
                                 job_type = job.r#type;
-                                printer_data = job.get_buf_data();
+                                printer_data = match job.get_buf_data().await {
+                                    Ok(d) => d,
+                                    Err(e) => {
+                                        log::error!("Failed to get the printer data: {}", e);
+                                        None
+                                    }
+                                };
                             }
                             match job_type {
                                 fs::JobType::Generic => {
@@ -1552,10 +1558,10 @@ impl<T: InvokeUiSession> Remote<T> {
                                 }
                                 fs::JobType::Printer => {
                                     if let Some(err) = err {
-                                        log::error!("Received printer job failed, error {err}");
+                                        log::error!("Receive print job failed, error {err}");
                                     } else {
                                         log::info!(
-                                            "Received printer job done, data len: {:?}",
+                                            "Receive print job done, data len: {:?}",
                                             printer_data.as_ref().map(|d| d.len()).unwrap_or(0)
                                         );
                                         #[cfg(target_os = "windows")]
