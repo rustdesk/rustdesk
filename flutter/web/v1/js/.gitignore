@@ -1,9 +1,0 @@
-node_modules
-.DS_Store
-dist
-dist-ssr
-*.local
-*log
-ogvjs
-.vscode
-.yarn

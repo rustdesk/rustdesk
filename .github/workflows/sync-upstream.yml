@@ -1,0 +1,62 @@
+name: Sync with Upstream and Preserve Custom File
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # 每天午夜运行一次
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取完整的提交历史
+
+      - name: Backup custom file
+        run: |
+          # 将自定义文件备份到临时位置
+          if [ -f "libs/hbb_common/src/config.rs" ]; then
+            cp libs/hbb_common/src/config.rs /tmp/config.rs
+            echo "已备份自定义文件 config.rs"
+          else
+            echo "未找到自定义文件 config.rs"
+          fi
+
+      - name: Add upstream remote
+        run: |
+          # 添加原仓库作为 upstream
+          git remote add upstream https://github.com/rustdesk/rustdesk.git || true
+          git fetch upstream
+
+      - name: Reset to upstream/main
+        run: |
+          # 重置当前分支到 upstream/main，覆盖所有文件
+          git checkout main
+          git reset --hard upstream/main
+
+      - name: Restore custom file
+        run: |
+          # 恢复备份的自定义文件
+          if [ -f "/tmp/config.rs" ]; then
+            cp /tmp/config.rs libs/hbb_common/src/config.rs
+            echo "已恢复自定义文件 config.rs"
+          else
+            echo "未找到备份文件 config.rs，无需恢复"
+          fi
+
+      - name: Commit changes if any
+        run: |
+          # 检查是否有更改（即自定义文件是否被修改）
+          git add libs/hbb_common/src/config.rs
+          if git diff --staged --quiet; then
+            echo "没有更改需要提交"
+          else
+            git commit -m "恢复自定义文件 config.rs 后同步 upstream"
+          fi
+
+      - name: Push to origin
+        run: |
+          # 推送更新到您的远程仓库
+          git push origin main --force
