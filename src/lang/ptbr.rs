@@ -648,7 +648,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "A transferência de arquivos unidirecional está ativada no dispositivo controlado."),
         ("Authentication Required", "Autenticação necessária"),
         ("Authenticate", "Autenticar"),
-        ("web_id_input_tip", "Você pode inserir um ID no mesmo servidor; o cliente web não suporta acesso por endereço IP.\nSe desejar acessar um dispositivo em outro servidor, adicione o endereço do servidor (<id>@<endereço_servidor>?key=<valor_chave>), por exemplo:\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe desejar acessar um dispositivo em um servidor público, insira « <id>@public » (a chave não é necessária para o servidor público)."),
+        ("web_id_input_tip", "Você pode inserir um ID no mesmo servidor; o acesso direto por IP não é suportado no cliente web.\nSe desejar acessar um dispositivo em outro servidor, por favor, adicione o endereço do servidor (<id>@<endereço_servidor>?key=<valor_chave>), por exemplo,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe desejar acessar um dispositivo em um servidor público, por favor, insira \"<id>@public\", a chave não é necessária para servidores públicos."),
         ("Download", "Baixar"),
         ("Upload folder", "Carregar pasta"),
         ("Upload files", "Carregar arquivos"),
