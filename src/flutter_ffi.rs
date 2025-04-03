@@ -21,11 +21,12 @@ use hbb_common::{
 };
 use std::{
     collections::HashMap,
+    path::PathBuf,
     sync::{
         atomic::{AtomicI32, Ordering},
         Arc,
     },
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 pub type SessionID = uuid::Uuid;
@@ -1974,7 +1975,7 @@ pub fn install_install_path() -> SyncReturn<String> {
 }
 
 pub fn install_install_options() -> SyncReturn<String> {
-    SyncReturn(install_options())
+    SyncReturn(serde_json::to_string(&install_options()).unwrap_or("{}".to_owned()))
 }
 
 pub fn main_account_auth(op: String, remember_me: bool) {
@@ -2417,13 +2418,38 @@ pub fn main_get_common(key: String) -> String {
         return false.to_string();
     } else if key == "transfer-job-id" {
         return hbb_common::fs::get_next_job_id().to_string();
+    } else if key == "is-msi-installed" {
+        #[cfg(target_os = "windows")]
+        {
+            return match crate::platform::windows::is_msi_installed() {
+                Ok(r) => r.to_string(),
+                Err(e) => e.to_string(),
+            };
+        }
+        #[cfg(not(target_os = "windows"))]
+        return false.to_string();
     } else {
-        "".to_owned()
+        if key.starts_with("download-data-") {
+            let id = key.replace("download-data-", "");
+            match crate::hbbs_http::downloader::get_download_data(&id) {
+                Ok(data) => serde_json::to_string(&data).unwrap_or_default(),
+                Err(e) => {
+                    format!("error:{}", e)
+                }
+            }
+        } else {
+            "".to_owned()
+        }
     }
 }
 
 pub fn main_get_common_sync(key: String) -> SyncReturn<String> {
     SyncReturn(main_get_common(key))
+}
+
+#[cfg(target_os = "windows")]
+fn get_download_file() -> PathBuf {
+    std::env::temp_dir().join(format!("{}.exe", crate::get_app_name()))
 }
 
 pub fn main_set_common(_key: String, _value: String) {
@@ -2448,6 +2474,38 @@ pub fn main_set_common(_key: String, _value: String) {
                 serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
             );
         });
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if _key == "download-new-version" {
+            let download_file = get_download_file();
+            let download_url = _value.clone();
+            let event_key = "download-new-version".to_owned();
+            std::fs::remove_file(&download_file).ok();
+            let data = match crate::hbbs_http::downloader::download_file(
+                download_url,
+                Some(download_file),
+                Some(Duration::from_secs(3)),
+            ) {
+                Ok(id) => HashMap::from([("name", event_key), ("id", id)]),
+                Err(e) => HashMap::from([("name", event_key), ("error", e.to_string())]),
+            };
+            let _res = flutter::push_global_event(
+                flutter::APP_TYPE_MAIN,
+                serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+            );
+        } else if _key == "upgrade-me" {
+            let new_version_file = get_download_file().to_string_lossy().to_string();
+            // 1.3.9 does not support "--upgrade"
+            // But we can assume that the new version will support it.
+            let _ = crate::platform::run_exe_as_user(&new_version_file, vec!["--upgrade"]);
+        }
+    }
+
+    if _key == "remove-downloader" {
+        crate::hbbs_http::downloader::remove(&_value);
+    } else if _key == "cancel-downloader" {
+        crate::hbbs_http::downloader::cancel(&_value);
     }
 }
 

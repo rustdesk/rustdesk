@@ -253,5 +253,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "The permission settings of the controlled side deny Remote Printing."),
         ("save-settings-tip", "Save settings"),
         ("dont-show-again-tip", "Don't show this again"),
+        ("{}-to-upgrade-tip", "{} will close now and install the new version."),
+        ("download-new-veresion-failed-tip", "Download failed. Please click the View button to manually download from the release page and upgrade.")
     ].iter().cloned().collect();
 }

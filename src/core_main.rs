@@ -182,6 +182,29 @@ pub fn core_main() -> Option<Vec<String>> {
                     log::error!("Failed to uninstall: {}", err);
                 }
                 return None;
+            } else if args[0] == "--upgrade" {
+                use crate::ui_interface::{directly_install_options, install_path};
+                // Simply call install_me to upgrade, it may break something.
+                // If the user does not install the printer driver on installation,
+                // but the printer driver is installed later manually in the settings page.
+                // The upgrade will uninstall the printer driver and not install it again.
+                let res =
+                    platform::install_me(&directly_install_options(), install_path(), false, false);
+                let text = match res {
+                    Ok(_) => translate("Installation Successful!".to_string()),
+                    Err(err) => {
+                        println!("Failed with error: {err}");
+                        translate("Installation failed!".to_string())
+                    }
+                };
+                Toast::new(Toast::POWERSHELL_APP_ID)
+                    .title(&config::APP_NAME.read().unwrap())
+                    .text1(&text)
+                    .sound(Some(Sound::Default))
+                    .duration(Duration::Short)
+                    .show()
+                    .ok();
+                return None;
             } else if args[0] == "--after-install" {
                 if let Err(err) = platform::run_after_install() {
                     log::error!("Failed to after-install: {}", err);
@@ -589,7 +612,8 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     let mut param_array = vec![];
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward" | "--rdp" => {
+            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward"
+            | "--rdp" => {
                 authority = Some((&arg.to_string()[2..]).to_owned());
                 id = args.next();
             }

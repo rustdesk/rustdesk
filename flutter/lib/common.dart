@@ -1273,7 +1273,7 @@ Widget msgboxContent(String type, String title, String text) {
       text = words.join(': ');
     } else {
       List<String> words = text.split(' ');
-      if (words.length > 1 && words[0].endsWith('_tip')) {
+      if (words.length > 1 && (words[0].endsWith('_tip') || words[0].endsWith('-tip'))) {
         words[0] = translate(words[0]);
         final rest = text.substring(words[0].length + 1);
         text = '${words[0]} ${translate(rest)}';

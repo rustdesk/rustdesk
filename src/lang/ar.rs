@@ -681,5 +681,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "الطباعة عن بُعد غير مسموح بها على هذا الجهاز"),
         ("save-settings-tip", "حفظ الإعدادات"),
         ("dont-show-again-tip", "لا تظهر هذا مرة أخرى"),
+        ("Downloading {}", ""),
+        ("{} Upgrade", ""),
+        ("{}-to-upgrade-tip", ""),
+        ("download-new-veresion-failed-tip", ""),
     ].iter().cloned().collect();
 }

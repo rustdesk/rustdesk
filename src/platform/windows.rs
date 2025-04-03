@@ -677,11 +677,11 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
 }
 
 pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
-    let cmd = format!(
-        "\"{}\" {}",
-        std::env::current_exe()?.to_str().unwrap_or(""),
-        arg.join(" "),
-    );
+    run_exe_as_user(std::env::current_exe()?.to_str().unwrap_or(""), arg)
+}
+
+pub fn run_exe_as_user(exe: &str, arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
+    let cmd = format!("\"{}\" {}", exe, arg.join(" "),);
     let Some(session_id) = get_current_process_session_id() else {
         bail!("Failed to get current process session id");
     };
@@ -1002,7 +1002,7 @@ fn get_valid_subkey() -> String {
 }
 
 // Return install options other than InstallLocation.
-pub fn get_install_options() -> String {
+pub fn get_install_options() -> HashMap<&'static str, String> {
     let app_name = crate::get_app_name();
     let subkey = format!(".{}", app_name.to_lowercase());
     let mut opts = HashMap::new();
@@ -1019,7 +1019,22 @@ pub fn get_install_options() -> String {
     if let Some(printer) = printer {
         opts.insert(REG_NAME_INSTALL_PRINTER, printer);
     }
-    serde_json::to_string(&opts).unwrap_or("{}".to_owned())
+    opts
+}
+
+pub fn get_directly_install_options() -> String {
+    let mut opts = "".to_owned();
+    let map_opts = get_install_options();
+    if map_opts.get(REG_NAME_INSTALL_STARTMENUSHORTCUTS) != Some(&"0".to_owned()) {
+        opts.push_str(" startmenu");
+    }
+    if map_opts.get(REG_NAME_INSTALL_DESKTOPSHORTCUTS) != Some(&"0".to_owned()) {
+        opts.push_str(" desktopicon");
+    }
+    if map_opts.get(REG_NAME_INSTALL_PRINTER) != Some(&"0".to_owned()) {
+        opts.push_str(" printer");
+    }
+    opts
 }
 
 // This function return Option<String>, because some registry value may be empty.
@@ -2886,4 +2901,13 @@ pub fn send_raw_data_to_printer(printer_name: Option<String>, data: Vec<u8>) -> 
     }
 
     Ok(())
+}
+
+pub fn is_msi_installed() -> std::io::Result<bool> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let uninstall_key = hklm.open_subkey(format!(
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
+        crate::get_app_name()
+    ))?;
+    Ok(1 == uninstall_key.get_value::<u32, _>("WindowsInstaller")?)
 }
