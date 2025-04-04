@@ -4,12 +4,53 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+void handleUpgrade(String releasePageUrl) {
+  String downloadUrl = releasePageUrl.replaceAll('tag', 'download');
+  String version = downloadUrl.substring(downloadUrl.lastIndexOf('/') + 1);
+  if (isWindows) {
+    downloadUrl = '$downloadUrl/rustdesk-$version-x86_64.exe';
+  }
+  SimpleWrapper downloadId = SimpleWrapper('');
+  SimpleWrapper<VoidCallback> onCanceled = SimpleWrapper(() {});
+  gFFI.dialogManager.dismissAll();
+  gFFI.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+        title: Text(translate('Downloading {$appName}')),
+        content:
+            UpgradeProgress(releasePageUrl, downloadUrl, downloadId, onCanceled)
+                .marginSymmetric(horizontal: 8)
+                .paddingOnly(top: 12),
+        actions: [
+          dialogButton(translate('Cancel'), onPressed: () async {
+            onCanceled.value();
+            await bind.mainSetCommon(
+                key: 'cancel-downloader', value: downloadId.value);
+            // Wait for the downloader to be removed.
+            for (int i = 0; i < 10; i++) {
+              await Future.delayed(const Duration(milliseconds: 300));
+              final isCanceled = 'error:Downloader not found' ==
+                  await bind.mainGetCommon(
+                      key: 'download-data-${downloadId.value}');
+              if (isCanceled) {
+                break;
+              }
+            }
+            close();
+          }, isOutline: true),
+        ]);
+  });
+}
 
 class UpgradeProgress extends StatefulWidget {
   final String releasePageUrl;
   final String downloadUrl;
   final SimpleWrapper downloadId;
-  UpgradeProgress(this.releasePageUrl, this.downloadUrl, this.downloadId,
+  final SimpleWrapper onCanceled;
+  UpgradeProgress(
+      this.releasePageUrl, this.downloadUrl, this.downloadId, this.onCanceled,
       {Key? key})
       : super(key: key);
 
@@ -19,28 +60,35 @@ class UpgradeProgress extends StatefulWidget {
 
 class UpgradeProgressState extends State<UpgradeProgress> {
   Timer? _timer;
-  String get downloadUrl => widget.downloadUrl;
-  int? totalSize;
-  int downloadedSize = 0;
-  String error = '';
-  int getDataFailedCount = 0;
+  int? _totalSize;
+  int _downloadedSize = 0;
+  String _error = '';
+  int _getDataFailedCount = 0;
   final String _eventKeyDownloadNewVersion = 'download-new-version';
 
   @override
   void initState() {
     super.initState();
+    widget.onCanceled.value = () {
+      cancelQueryTimer();
+    };
     platformFFI.registerEventHandler(_eventKeyDownloadNewVersion,
         _eventKeyDownloadNewVersion, handleDownloadNewVersion,
         replace: true);
-    bind.mainSetCommon(key: 'download-new-version', value: downloadUrl);
+    bind.mainSetCommon(key: 'download-new-version', value: widget.downloadUrl);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    cancelQueryTimer();
     platformFFI.unregisterEventHandler(
         _eventKeyDownloadNewVersion, _eventKeyDownloadNewVersion);
     super.dispose();
+  }
+
+  void cancelQueryTimer() {
+    _timer?.cancel();
+    _timer = null;
   }
 
   Future<void> handleDownloadNewVersion(Map<String, dynamic> evt) async {
@@ -60,50 +108,82 @@ class UpgradeProgressState extends State<UpgradeProgress> {
   }
 
   void _onError(String error) {
-    msgBox(
-        gFFI.sessionId,
-        'custom-nocancel',
-        'Error',
-        'download-new-veresion-failed-tip',
-        widget.releasePageUrl,
-        gFFI.dialogManager);
+    cancelQueryTimer();
+
+    debugPrint('Download new version error: $error');
+    final msgBoxType = 'custom-nocancel-hasclose';
+    final msgBoxTitle = 'Error';
+    final msgBoxText = 'download-new-veresion-failed-tip';
+    final dialogManager = gFFI.dialogManager;
+
+    close() {
+      dialogManager.dismissAll();
+    }
+
+    jumplink() {
+      launchUrl(Uri.parse(widget.releasePageUrl));
+      dialogManager.dismissAll();
+    }
+
+    retry() {
+      dialogManager.dismissAll();
+      handleUpgrade(widget.releasePageUrl);
+    }
+
+    final List<Widget> buttons = [
+      dialogButton('JumpLink', onPressed: jumplink),
+      dialogButton('Retry', onPressed: retry),
+      dialogButton('Close', onPressed: close),
+    ];
+    dialogManager.dismissAll();
+    dialogManager.show(
+      (setState, close, context) => CustomAlertDialog(
+        title: null,
+        content: SelectionArea(
+            child: msgboxContent(msgBoxType, msgBoxTitle, msgBoxText)),
+        actions: buttons,
+      ),
+      tag: '$msgBoxType-$msgBoxTitle-$msgBoxTitle',
+    );
   }
 
   void _updateDownloadData() {
-    String downloadData = bind.mainGetCommonSync(key: 'download-data-${widget.downloadId.value}');
+    String downloadData =
+        bind.mainGetCommonSync(key: 'download-data-${widget.downloadId.value}');
     if (downloadData.startsWith('error:')) {
-      error = downloadData.substring('error:'.length);
+      _error = downloadData.substring('error:'.length);
     } else {
       try {
         jsonDecode(downloadData).forEach((key, value) {
           if (key == 'total_size') {
             if (value != null && value is int) {
-              totalSize = value;
+              _totalSize = value;
             }
           } else if (key == 'downloaded_size') {
-            downloadedSize = value as int;
+            _downloadedSize = value as int;
           } else if (key == 'error') {
             if (value != null) {
-              error = value.toString();
+              _error = value.toString();
             }
           }
         });
       } catch (e) {
-        getDataFailedCount += 1;
-        debugPrint('Failed to get download data $downloadUrl, error $e');
-        if (getDataFailedCount > 3) {
-          error = e.toString();
+        _getDataFailedCount += 1;
+        debugPrint(
+            'Failed to get download data ${widget.downloadUrl}, error $e');
+        if (_getDataFailedCount > 3) {
+          _error = e.toString();
         }
       }
     }
-    if (error != '') {
-      _onError(error);
+    if (_error != '') {
+      _onError(_error);
     } else {
-      if (totalSize != null && downloadedSize >= totalSize!) {
-        _timer?.cancel();
-        _timer = null;
-        bind.mainSetCommon(key: 'remove-downloader', value: widget.downloadId.value);
-        if (totalSize == 0) {
+      if (_totalSize != null && _downloadedSize >= _totalSize!) {
+        cancelQueryTimer();
+        bind.mainSetCommon(
+            key: 'remove-downloader', value: widget.downloadId.value);
+        if (_totalSize == 0) {
           _onError('The download file size is 0.');
         } else {
           setState(() {});
@@ -127,9 +207,9 @@ class UpgradeProgressState extends State<UpgradeProgress> {
   }
 
   Widget onDownloading(BuildContext context) {
-    final value = totalSize == null
+    final value = _totalSize == null
         ? 0.0
-        : (totalSize == 0 ? 1.0 : downloadedSize / totalSize!);
+        : (_totalSize == 0 ? 1.0 : _downloadedSize / _totalSize!);
     return LinearProgressIndicator(
       value: value,
       minHeight: 20,

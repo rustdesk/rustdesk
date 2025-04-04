@@ -582,30 +582,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return Container();
   }
 
-  void handleUpgrade(String updateUrl) {
-    String downloadUrl = updateUrl.replaceAll('tag', 'download');
-    String version = downloadUrl.substring(downloadUrl.lastIndexOf('/') + 1);
-    if (isWindows) {
-      downloadUrl = '$downloadUrl/rustdesk-$version-x86_64.exe';
-    }
-    SimpleWrapper downloadId = SimpleWrapper('');
-    gFFI.dialogManager.dismissAll();
-    gFFI.dialogManager.show((setState, close, context) {
-      return CustomAlertDialog(
-          title: Text(translate('Downloading {$appName}')),
-          content: UpgradeProgress(updateUrl, downloadUrl, downloadId)
-              .marginSymmetric(horizontal: 8)
-              .paddingOnly(top: 12),
-          actions: [
-            dialogButton(translate('Cancel'), onPressed: () {
-              close();
-              bind.mainSetCommon(
-                  key: 'cancel-downloader', value: downloadId.value);
-            }, isOutline: true),
-          ]);
-    });
-  }
-
   Widget buildInstallCard(String title, String content, String btnText,
       GestureTapCallback onPressed,
       {double marginTop = 20.0,

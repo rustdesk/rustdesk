@@ -183,18 +183,15 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
                 return None;
             } else if args[0] == "--upgrade" {
-                use crate::ui_interface::{directly_install_options, install_path};
-                // Simply call install_me to upgrade, it may break something.
-                // If the user does not install the printer driver on installation,
-                // but the printer driver is installed later manually in the settings page.
-                // The upgrade will uninstall the printer driver and not install it again.
-                let res =
-                    platform::install_me(&directly_install_options(), install_path(), false, false);
+                if config::is_disable_installation() {
+                    return None;
+                }
+                let res = platform::upgrade_me(false);
                 let text = match res {
-                    Ok(_) => translate("Installation Successful!".to_string()),
+                    Ok(_) => translate("Upgrade successfully!".to_string()),
                     Err(err) => {
                         println!("Failed with error: {err}");
-                        translate("Installation failed!".to_string())
+                        translate("Upgrade failed!".to_string())
                     }
                 };
                 Toast::new(Toast::POWERSHELL_APP_ID)

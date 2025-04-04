@@ -27,7 +27,11 @@ pub mod linux_desktop_manager;
 pub mod gtk_sudo;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::{message_proto::CursorData, ResultType};
+use hbb_common::{
+    message_proto::CursorData,
+    sysinfo::{Pid, System},
+    ResultType,
+};
 use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 pub const SERVICE_INTERVAL: u64 = 300;
@@ -135,6 +139,40 @@ impl Drop for InstallingService {
 #[inline]
 pub fn is_prelogin() -> bool {
     false
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    args: &[S2],
+) -> Vec<Pid> {
+    let name = name.as_ref().to_lowercase();
+    let mut system = System::new_all();
+    system.refresh_processes();
+    system
+        .processes()
+        .iter()
+        .filter(|(_, process)| {
+            process.name().to_lowercase() == name
+                && process.cmd().len() == args.len() + 1
+                && args
+                    .iter()
+                    .enumerate()
+                    .all(|(i, arg)| process.cmd()[i + 1] == arg.as_ref())
+        })
+        .map(|(&pid, _)| pid)
+        .collect()
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn kill_process_by_pid(pid: Pid) -> ResultType<()> {
+    let s = System::new_all();
+    if let Some(process) = s.process(pid) {
+        process.kill();
+        Ok(())
+    } else {
+        hbb_common::bail!("Process with PID {} not found", pid)
+    }
 }
 
 #[cfg(test)]

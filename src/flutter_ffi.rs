@@ -1975,7 +1975,7 @@ pub fn install_install_path() -> SyncReturn<String> {
 }
 
 pub fn install_install_options() -> SyncReturn<String> {
-    SyncReturn(serde_json::to_string(&install_options()).unwrap_or("{}".to_owned()))
+    SyncReturn(install_options())
 }
 
 pub fn main_account_auth(op: String, remember_me: bool) {
@@ -2448,7 +2448,7 @@ pub fn main_get_common_sync(key: String) -> SyncReturn<String> {
 }
 
 #[cfg(target_os = "windows")]
-fn get_download_file() -> PathBuf {
+fn get_new_version_download_file() -> PathBuf {
     std::env::temp_dir().join(format!("{}.exe", crate::get_app_name()))
 }
 
@@ -2478,7 +2478,7 @@ pub fn main_set_common(_key: String, _value: String) {
     #[cfg(target_os = "windows")]
     {
         if _key == "download-new-version" {
-            let download_file = get_download_file();
+            let download_file = get_new_version_download_file();
             let download_url = _value.clone();
             let event_key = "download-new-version".to_owned();
             std::fs::remove_file(&download_file).ok();
@@ -2495,7 +2495,9 @@ pub fn main_set_common(_key: String, _value: String) {
                 serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
             );
         } else if _key == "upgrade-me" {
-            let new_version_file = get_download_file().to_string_lossy().to_string();
+            let new_version_file = get_new_version_download_file()
+                .to_string_lossy()
+                .to_string();
             // 1.3.9 does not support "--upgrade"
             // But we can assume that the new version will support it.
             let _ = crate::platform::run_exe_as_user(&new_version_file, vec!["--upgrade"]);

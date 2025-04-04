@@ -441,19 +441,11 @@ pub fn install_path() -> String {
 }
 
 #[inline]
-pub fn install_options() -> HashMap<&'static str, String> {
+pub fn install_options() -> String {
     #[cfg(windows)]
     return crate::platform::windows::get_install_options();
     #[cfg(not(windows))]
-    return HashMap::new();
-}
-
-#[inline]
-pub fn directly_install_options() -> String {
-    #[cfg(windows)]
-    return crate::platform::windows::get_directly_install_options();
-    #[cfg(not(windows))]
-    return "".to_owned();
+    return "{}".to_owned();
 }
 
 #[inline]

@@ -1002,7 +1002,7 @@ fn get_valid_subkey() -> String {
 }
 
 // Return install options other than InstallLocation.
-pub fn get_install_options() -> HashMap<&'static str, String> {
+pub fn get_install_options() -> String {
     let app_name = crate::get_app_name();
     let subkey = format!(".{}", app_name.to_lowercase());
     let mut opts = HashMap::new();
@@ -1019,22 +1019,7 @@ pub fn get_install_options() -> HashMap<&'static str, String> {
     if let Some(printer) = printer {
         opts.insert(REG_NAME_INSTALL_PRINTER, printer);
     }
-    opts
-}
-
-pub fn get_directly_install_options() -> String {
-    let mut opts = "".to_owned();
-    let map_opts = get_install_options();
-    if map_opts.get(REG_NAME_INSTALL_STARTMENUSHORTCUTS) != Some(&"0".to_owned()) {
-        opts.push_str(" startmenu");
-    }
-    if map_opts.get(REG_NAME_INSTALL_DESKTOPSHORTCUTS) != Some(&"0".to_owned()) {
-        opts.push_str(" desktopicon");
-    }
-    if map_opts.get(REG_NAME_INSTALL_PRINTER) != Some(&"0".to_owned()) {
-        opts.push_str(" printer");
-    }
-    opts
+    serde_json::to_string(&opts).unwrap_or("{}".to_owned())
 }
 
 // This function return Option<String>, because some registry value may be empty.
@@ -1216,16 +1201,12 @@ fn get_after_install(
     ", create_service=get_create_service(&exe))
 }
 
-pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall(false);
-    let mut path = path.trim_end_matches('\\').to_owned();
-    let (subkey, _path, start_menu, exe) = get_default_install_info();
-    let mut exe = exe;
-    if path.is_empty() {
-        path = _path;
-    } else {
-        exe = exe.replace(&_path, &path);
-    }
+fn get_install_reg_subkey_cmd(
+    subkey: &str,
+    app_name: &str,
+    exe: &str,
+    path: &str,
+) -> ResultType<String> {
     let mut version_major = "0";
     let mut version_minor = "0";
     let mut version_build = "0";
@@ -1238,6 +1219,40 @@ pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> Res
     }
     if versions.len() > 2 {
         version_build = versions[2];
+    }
+    let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
+    let size = meta.len() / 1024;
+    let cmd = format!(
+        "
+reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
+reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
+reg add {subkey} /f /v DisplayVersion /t REG_SZ /d \"{version}\"
+reg add {subkey} /f /v Version /t REG_SZ /d \"{version}\"
+reg add {subkey} /f /v BuildDate /t REG_SZ /d \"{build_date}\"
+reg add {subkey} /f /v InstallLocation /t REG_SZ /d \"{path}\"
+reg add {subkey} /f /v Publisher /t REG_SZ /d \"{app_name}\"
+reg add {subkey} /f /v VersionMajor /t REG_DWORD /d {version_major}
+reg add {subkey} /f /v VersionMinor /t REG_DWORD /d {version_minor}
+reg add {subkey} /f /v VersionBuild /t REG_DWORD /d {version_build}
+reg add {subkey} /f /v UninstallString /t REG_SZ /d \"\\\"{exe}\\\" --uninstall\"
+reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
+reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
+    ",
+        version = crate::VERSION.replace("-", "."),
+        build_date = crate::BUILD_DATE,
+    );
+    Ok(cmd)
+}
+
+pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
+    let uninstall_str = get_uninstall(false);
+    let mut path = path.trim_end_matches('\\').to_owned();
+    let (subkey, _path, start_menu, exe) = get_default_install_info();
+    let mut exe = exe;
+    if path.is_empty() {
+        path = _path;
+    } else {
+        exe = exe.replace(&_path, &path);
     }
     let app_name = crate::get_app_name();
 
@@ -1306,8 +1321,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
         reg_value_printer = "1".to_owned();
     }
 
-    let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
-    let size = meta.len() / 1024;
     // https://docs.microsoft.com/zh-cn/windows/win32/msi/uninstall-registry-key?redirectedfrom=MSDNa
     // https://www.windowscentral.com/how-edit-registry-using-command-prompt-windows-10
     // https://www.tenforums.com/tutorials/70903-add-remove-allowed-apps-through-windows-firewall-windows-10-a.html
@@ -1340,6 +1353,7 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
 ")
     };
 
+    let install_reg_subkey_cmd = get_install_reg_subkey_cmd(&subkey, &app_name, &exe, &path)?;
     let cmds = format!(
         "
 {uninstall_str}
@@ -1347,19 +1361,7 @@ chcp 65001
 md \"{path}\"
 {copy_exe}
 reg add {subkey} /f
-reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
-reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
-reg add {subkey} /f /v DisplayVersion /t REG_SZ /d \"{version}\"
-reg add {subkey} /f /v Version /t REG_SZ /d \"{version}\"
-reg add {subkey} /f /v BuildDate /t REG_SZ /d \"{build_date}\"
-reg add {subkey} /f /v InstallLocation /t REG_SZ /d \"{path}\"
-reg add {subkey} /f /v Publisher /t REG_SZ /d \"{app_name}\"
-reg add {subkey} /f /v VersionMajor /t REG_DWORD /d {version_major}
-reg add {subkey} /f /v VersionMinor /t REG_DWORD /d {version_minor}
-reg add {subkey} /f /v VersionBuild /t REG_DWORD /d {version_build}
-reg add {subkey} /f /v UninstallString /t REG_SZ /d \"\\\"{exe}\\\" --uninstall\"
-reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
-reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
+{install_reg_subkey_cmd}
 cscript \"{mk_shortcut}\"
 cscript \"{uninstall_shortcut}\"
 {tray_shortcuts}
@@ -1370,8 +1372,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {after_install}
 {sleep}
     ",
-        version = crate::VERSION.replace("-", "."),
-        build_date = crate::BUILD_DATE,
         after_install = get_after_install(
             &exe,
             Some(reg_value_start_menu_shortcuts),
@@ -2327,6 +2327,76 @@ if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
     }
     run_after_run_cmds(false);
     std::process::exit(0);
+}
+
+pub fn upgrade_me(debug: bool) -> ResultType<()> {
+    let src_exe = std::env::current_exe()?.to_string_lossy().to_string();
+    let (subkey, path, _, exe) = get_install_info();
+    let is_installed = std::fs::metadata(&exe).is_ok();
+    if !is_installed {
+        bail!("RustDesk is not installed.");
+    }
+
+    let app_name = crate::get_app_name();
+    let main_window_pids = crate::platform::get_pids_of_process_with_args::<_, &str>(
+        &format!("{}.exe", &app_name),
+        &[],
+    );
+    let is_main_window_running = !main_window_pids.is_empty();
+    for pid in main_window_pids {
+        let _ = crate::platform::kill_process_by_pid(pid);
+    }
+    let tray_pids =
+        crate::platform::get_pids_of_process_with_args(&format!("{}.exe", &app_name), &["--tray"]);
+    let is_tray_running = !tray_pids.is_empty();
+    for pid in tray_pids {
+        let _ = crate::platform::kill_process_by_pid(pid);
+    }
+    let is_service_running = is_self_service_running();
+
+    let install_reg_cmd = get_install_reg_subkey_cmd(&subkey, &app_name, &exe, &path)?;
+
+    let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
+    let restore_service_cmd = if is_service_running {
+        format!("sc start {}", &app_name)
+    } else {
+        "".to_owned()
+    };
+    // We need `taskkill` because:
+    // 1. There may be some other processes like `rustdesk --connect` are running.
+    // 2. Sometimes, the main window and the tray icon are showing
+    // while I cannot find them by `tasklist` or the methods above.
+    // There's should be 4 processes running: service, server, tray and main window.
+    // But only 2 processes are shown in the tasklist.
+    let cmds = format!(
+        "
+chcp 65001
+sc stop {app_name}
+taskkill /F /IM {app_name}.exe{filter}
+{install_reg_cmd}
+{copy_exe}
+{restore_service_cmd}
+{sleep}
+    ",
+        app_name = app_name,
+        copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
+        sleep = if debug { "timeout 300" } else { "" },
+    );
+
+    run_cmds(cmds, debug, "upgrade")?;
+
+    if is_tray_running {
+        allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
+    }
+    if is_main_window_running {
+        allow_err!(std::process::Command::new("cmd")
+            .args(&["/c", "timeout", "/t", "2", "&", &format!("{exe}")])
+            .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
+            .spawn());
+    }
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    Ok(())
 }
 
 pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
