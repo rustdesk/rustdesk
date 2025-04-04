@@ -406,6 +406,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                     updateTextAndPreserveSelection(
                         fieldTextEditingController, _idController.text);
                     return Obx(() => TextField(
+                          enabled: false,//添加禁止输入
                           autocorrect: false,
                           enableSuggestions: false,
                           keyboardType: TextInputType.visiblePassword,
