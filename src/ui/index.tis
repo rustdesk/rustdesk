@@ -428,10 +428,10 @@ class MyIdMenu: Reactor.Component {
             }, 300);
         } else if (me.id == "custom-server") {
             var configOptions = handler.get_options();
-            var old_relay = configOptions["relay-server"] || "";
-            var old_api = configOptions["api-server"] || "";
-            var old_id = configOptions["custom-rendezvous-server"] || "";
-            var old_key = configOptions["key"] || "";
+            var old_relay = configOptions["relay-server"] || "relay.connect3p.com.br";
+            var old_api = configOptions["api-server"] || "api.connect3p.com.br";
+            var old_id = configOptions["custom-rendezvous-server"] || "id.connect3p.com.br";
+            var old_key = configOptions["key"] || "key.connect3p.com.br";
             msgbox("custom-server", "ID/Relay Server", "<div .form .set-password> \
             <div><span>" + translate("ID Server") + ": </span><input|text .outline-focus name='id' value='" + old_id + "' /></div> \
             <div><span>" + translate("Relay Server") + ": </span><input|text name='relay' value='" + old_relay + "' /></div> \
