@@ -9,6 +9,11 @@
   <b>Wir brauchen Ihre Hilfe, um dieses README, die <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk-Benutzeroberfläche</a> und die <a href="https://github.com/rustdesk/doc.rustdesk.com">Dokumentation</a> in Ihre Muttersprache zu übersetzen.</b>
 </p>
 
+> [!Vorsicht]
+> **Haftungsausschluss bei Missbrauch::** <br>
+> Die Entwickler von RustDesk billigen oder unterstützen keine unethische oder illegale Nutzung dieser Software. Missbrauch, wie unbefugter Zugriff, unbefugte Kontrolle oder Verletzung der Privatsphäre, verstößt strikt gegen unsere Richtlinien. Die Autoren sind nicht verantwortlich für jeglichen Missbrauch der Anwendung.
+
+
 Reden Sie mit uns auf: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
@@ -146,10 +151,6 @@ target/release/rustdesk
 ```
 
 Bitte stellen Sie sicher, dass Sie diese Befehle im Stammverzeichnis des RustDesk-Repositorys nutzen. Ansonsten kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenken Sie auch, dass andere Cargo-Unterbefehle wie `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf Ihrem eigentlichen System.
-
-> [!Vorsicht]
-> **Haftungsausschluss bei Missbrauch::** <br>
-> Die Entwickler von RustDesk billigen oder unterstützen keine unethische oder illegale Nutzung dieser Software. Missbrauch, wie unbefugter Zugriff, unbefugte Kontrolle oder Verletzung der Privatsphäre, verstößt strikt gegen unsere Richtlinien. Die Autoren sind nicht verantwortlich für jeglichen Missbrauch der Anwendung.
 
 ## Dateistruktur
 

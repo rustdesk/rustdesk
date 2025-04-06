@@ -78,6 +78,7 @@ const String kOptionScrollStyle = "scroll_style";
 const String kOptionImageQuality = "image_quality";
 const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionTextureRender = "use-texture-render";
+const String kOptionD3DRender = "allow-d3d-render";
 const String kOptionOpenInTabs = "allow-open-in-tabs";
 const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
@@ -97,6 +98,7 @@ const String kOptionVideoSaveDirectory = "video-save-directory";
 const String kOptionAccessMode = "access-mode";
 const String kOptionEnableKeyboard = "enable-keyboard";
 // "Settings -> Security -> Permissions"
+const String kOptionEnableRemotePrinter = "enable-remote-printer";
 const String kOptionEnableClipboard = "enable-clipboard";
 const String kOptionEnableFileTransfer = "enable-file-transfer";
 const String kOptionEnableAudio = "enable-audio";
@@ -217,6 +219,14 @@ const double kMinQuality = 10;
 const double kDefaultQuality = 50;
 const double kMaxQuality = 100;
 const double kMaxMoreQuality = 2000;
+
+const String kKeyPrinterIncommingJobAction = 'printer-incomming-job-action';
+const String kValuePrinterIncomingJobDismiss = 'dismiss';
+const String kValuePrinterIncomingJobDefault = '';
+const String kValuePrinterIncomingJobSelected = 'selected';
+const String kKeyPrinterSelected = 'printer-selected-name';
+const String kKeyPrinterSave = 'allow-printer-dialog-save';
+const String kKeyPrinterAllowAutoPrint = 'allow-printer-auto-print';
 
 double kNewWindowOffset = isWindows
     ? 56.0
