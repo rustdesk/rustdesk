@@ -1789,7 +1789,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.8.4",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -3643,7 +3643,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if 1.0.0",
- "windows-targets 0.52.5",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -4189,7 +4189,7 @@ dependencies = [
 [[package]]
 name = "nokhwa"
 version = "0.10.7"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#3e2512074bc57d5df011363a26a8ee8959dc7969"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
 dependencies = [
  "flume",
  "image 0.25.1",
@@ -4204,7 +4204,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-linux"
 version = "0.1.1"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#3e2512074bc57d5df011363a26a8ee8959dc7969"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
 dependencies = [
  "nokhwa-core",
  "v4l",
@@ -4213,7 +4213,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-macos"
 version = "0.2.2"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#3e2512074bc57d5df011363a26a8ee8959dc7969"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
 dependencies = [
  "block",
  "cocoa-foundation",
@@ -4229,8 +4229,10 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-windows"
 version = "0.4.2"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#3e2512074bc57d5df011363a26a8ee8959dc7969"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
 dependencies = [
+ "dlopen",
+ "lazy_static",
  "nokhwa-core",
  "once_cell",
  "windows 0.43.0",
@@ -4239,7 +4241,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-core"
 version = "0.1.5"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#3e2512074bc57d5df011363a26a8ee8959dc7969"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
 dependencies = [
  "bytes",
  "image 0.25.1",

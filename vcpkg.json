@@ -49,6 +49,16 @@
       "host": false
     },
     {
+      "name": "mfx-dispatch",
+      "host": true,
+      "platform": "((x86 | x64) & (android | linux)) | (windows & !uwp)"
+    },
+    {
+      "name": "mfx-dispatch",
+      "host": false,
+      "platform": "((x86 | x64) & (android | linux)) | (windows & !uwp)"
+    },
+    {
       "name": "ffmpeg",
       "host": true,
       "features": [
@@ -90,10 +100,6 @@
     {
       "name": "amd-amf",
       "version": "1.4.35"
-    },
-    {
-      "name": "mfx-dispatch",
-      "version": "1.35.1"
     }
   ]
 }
