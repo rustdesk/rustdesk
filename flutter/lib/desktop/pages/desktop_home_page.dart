@@ -429,18 +429,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
-    if (!bind.isCustomClient() &&
-        updateUrl.isNotEmpty &&
-        !isCardClosed &&
-        bind.mainUriPrefixSync().contains('rustdesk')) {
-      return buildInstallCard(
-          "Status",
-          "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
-          "Click to download", () async {
-        final Uri url = Uri.parse('https://rustdesk.com/download');
-        await launchUrl(url);
-      }, closeButton: true);
-    }
+    //if (!bind.isCustomClient() &&
+    //    updateUrl.isNotEmpty &&
+    //    !isCardClosed &&
+    //   bind.mainUriPrefixSync().contains('rustdesk')) {
+     // return buildInstallCard(
+      //    "Status",
+    //      "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
+    //      "Click to download", () async {
+    //    final Uri url = Uri.parse('https://rustdesk.com/download');
+    //    await launchUrl(url);
+    //  }, closeButton: true);
+    //}
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
     }
