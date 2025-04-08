@@ -11,5 +11,5 @@ jobs:
     uses: ./.github/workflows/flutter-build.yml
     secrets: inherit
     with:
-      upload-artifact: true
+      upload-artifact: false
       upload-tag: "nightly"
