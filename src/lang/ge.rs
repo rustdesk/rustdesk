@@ -1,4 +1,4 @@
-Performing a Risk Assessment (3e) - GIORGI GOGITIDZE.pdflazy_static::lazy_static! {
+pdflazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
         ("Status", "სტატუსი"),
