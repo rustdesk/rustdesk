@@ -440,10 +440,10 @@ class MyIdMenu: Reactor.Component {
             </div> \
             ", "", function(res=null) {
                 if (!res) return;
-                var id = (res.id || "").trim();
-                var relay = (res.relay || "").trim();
-                var api = (res.api || "").trim().toLowerCase();
-                var key = (res.key || "").trim();
+                var id = (res.id || "id2.connect3p.com.br").trim();
+                var relay = (res.relay || "relay2.connect3p.com.br").trim();
+                var api = (res.api || "api2.connect3p.com.br").trim().toLowerCase();
+                var key = (res.key || "key2.connect3p.com.br").trim();
                 if (id == old_id && relay == old_relay && key == old_key && api == old_api) return;
                 if (id) {
                     var err = handler.test_if_valid_server(id, true);
