@@ -21,23 +21,22 @@ use std::{
     fs,
     io::{self, prelude::*},
     mem,
-    os::windows::process::CommandExt,
+    os::{raw::c_ulong, windows::process::CommandExt},
     path::*,
     ptr::null_mut,
     sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
 };
 use wallpaper;
+#[cfg(not(debug_assertions))]
+use winapi::um::libloaderapi::{LoadLibraryExW, LOAD_LIBRARY_SEARCH_USER_DIRS};
 use winapi::{
     ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
-        libloaderapi::{
-            GetProcAddress, LoadLibraryExA, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
-            LOAD_LIBRARY_SEARCH_USER_DIRS,
-        },
+        libloaderapi::{GetProcAddress, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32},
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
@@ -54,6 +53,10 @@ use winapi::{
             TOKEN_ELEVATION, TOKEN_QUERY,
         },
         winreg::HKEY_CURRENT_USER,
+        winspool::{
+            EnumPrintersW, GetDefaultPrinterW, PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL,
+            PRINTER_INFO_1W,
+        },
         winuser::*,
     },
 };
@@ -73,6 +76,7 @@ pub const SET_FOREGROUND_WINDOW: &'static str = "SET_FOREGROUND_WINDOW";
 
 const REG_NAME_INSTALL_DESKTOPSHORTCUTS: &str = "DESKTOPSHORTCUTS";
 const REG_NAME_INSTALL_STARTMENUSHORTCUTS: &str = "STARTMENUSHORTCUTS";
+const REG_NAME_INSTALL_PRINTER: &str = "PRINTER";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
@@ -1011,6 +1015,10 @@ pub fn get_install_options() -> String {
     if let Some(start_menu_shortcuts) = start_menu_shortcuts {
         opts.insert(REG_NAME_INSTALL_STARTMENUSHORTCUTS, start_menu_shortcuts);
     }
+    let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
+    if let Some(printer) = printer {
+        opts.insert(REG_NAME_INSTALL_PRINTER, printer);
+    }
     serde_json::to_string(&opts).unwrap_or("{}".to_owned())
 }
 
@@ -1136,6 +1144,7 @@ fn get_after_install(
     exe: &str,
     reg_value_start_menu_shortcuts: Option<String>,
     reg_value_desktop_shortcuts: Option<String>,
+    reg_value_printer: Option<String>,
 ) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
@@ -1159,12 +1168,20 @@ fn get_after_install(
             )
         })
         .unwrap_or_default();
+    let reg_printer = reg_value_printer
+        .map(|v| {
+            format!(
+                "reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {REG_NAME_INSTALL_PRINTER} /t REG_SZ /d \"{v}\""
+            )
+        })
+        .unwrap_or_default();
 
     format!("
     chcp 65001
     reg add HKEY_CLASSES_ROOT\\.{ext} /f
     {desktop_shortcuts}
     {start_menu_shortcuts}
+    {reg_printer}
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{exe}\\\",0\"
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell /f
@@ -1249,6 +1266,7 @@ oLink.Save
     let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
     let mut reg_value_desktop_shortcuts = "0".to_owned();
     let mut reg_value_start_menu_shortcuts = "0".to_owned();
+    let mut reg_value_printer = "0".to_owned();
     let mut shortcuts = Default::default();
     if options.contains("desktopicon") {
         shortcuts = format!(
@@ -1267,6 +1285,10 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
      "
         );
         reg_value_start_menu_shortcuts = "1".to_owned();
+    }
+    let install_printer = options.contains("printer") && crate::platform::is_win_10_or_greater();
+    if install_printer {
+        reg_value_printer = "1".to_owned();
     }
 
     let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
@@ -1338,7 +1360,8 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
         after_install = get_after_install(
             &exe,
             Some(reg_value_start_menu_shortcuts),
-            Some(reg_value_desktop_shortcuts)
+            Some(reg_value_desktop_shortcuts),
+            Some(reg_value_printer)
         ),
         sleep = if debug { "timeout 300" } else { "" },
         dels = if debug { "" } else { &dels },
@@ -1346,13 +1369,22 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
         import_config = get_import_config(&exe),
     );
     run_cmds(cmds, debug, "install")?;
+    if install_printer {
+        allow_err!(remote_printer::install_update_printer(
+            &crate::get_app_name()
+        ));
+    }
     run_after_run_cmds(silent);
     Ok(())
 }
 
 pub fn run_after_install() -> ResultType<()> {
     let (_, _, _, exe) = get_install_info();
-    run_cmds(get_after_install(&exe, None, None), true, "after_install")
+    run_cmds(
+        get_after_install(&exe, None, None, None),
+        true,
+        "after_install",
+    )
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
@@ -1413,6 +1445,9 @@ fn get_uninstall(kill_self: bool) -> String {
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
+    if crate::platform::is_win_10_or_greater() {
+        remote_printer::uninstall_printer(&crate::get_app_name());
+    }
     run_cmds(get_uninstall(kill_self), true, "uninstall")
 }
 
@@ -1570,9 +1605,18 @@ pub fn bootstrap() -> bool {
         *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
     }
 
-    set_safe_load_dll()
+    #[cfg(debug_assertions)]
+    {
+        true
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        // This function will cause `'sciter.dll' was not found neither in PATH nor near the current executable.` when debugging RustDesk.
+        set_safe_load_dll()
+    }
 }
 
+#[cfg(not(debug_assertions))]
 fn set_safe_load_dll() -> bool {
     if !unsafe { set_default_dll_directories() } {
         return false;
@@ -1589,6 +1633,7 @@ fn set_safe_load_dll() -> bool {
 }
 
 // https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-setdefaultdlldirectories
+#[cfg(not(debug_assertions))]
 unsafe fn set_default_dll_directories() -> bool {
     let module = LoadLibraryExW(
         wide_string("Kernel32.dll").as_ptr(),
@@ -2727,4 +2772,118 @@ pub mod reg_display_settings {
             _ => RegType::REG_NONE,
         }
     }
+}
+
+pub fn get_printer_names() -> ResultType<Vec<String>> {
+    let mut needed_bytes = 0;
+    let mut returned_count = 0;
+
+    unsafe {
+        // First call to get required buffer size
+        EnumPrintersW(
+            PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS,
+            std::ptr::null_mut(),
+            1,
+            std::ptr::null_mut(),
+            0,
+            &mut needed_bytes,
+            &mut returned_count,
+        );
+
+        let mut buffer = vec![0u8; needed_bytes as usize];
+
+        if EnumPrintersW(
+            PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS,
+            std::ptr::null_mut(),
+            1,
+            buffer.as_mut_ptr() as *mut _,
+            needed_bytes,
+            &mut needed_bytes,
+            &mut returned_count,
+        ) == 0
+        {
+            return Err(anyhow!("Failed to enumerate printers"));
+        }
+
+        let ptr = buffer.as_ptr() as *const PRINTER_INFO_1W;
+        let printers = std::slice::from_raw_parts(ptr, returned_count as usize);
+
+        Ok(printers
+            .iter()
+            .filter_map(|p| {
+                let name = p.pName;
+                if !name.is_null() {
+                    let mut len = 0;
+                    while len < 500 {
+                        if name.add(len).is_null() || *name.add(len) == 0 {
+                            break;
+                        }
+                        len += 1;
+                    }
+                    if len > 0 && len < 500 {
+                        Some(String::from_utf16_lossy(std::slice::from_raw_parts(
+                            name, len,
+                        )))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+}
+
+extern "C" {
+    fn PrintXPSRawData(printer_name: *const u16, raw_data: *const u8, data_size: c_ulong) -> DWORD;
+}
+
+pub fn send_raw_data_to_printer(printer_name: Option<String>, data: Vec<u8>) -> ResultType<()> {
+    let mut printer_name = printer_name.unwrap_or_default();
+    if printer_name.is_empty() {
+        // use GetDefaultPrinter to get the default printer name
+        let mut needed_bytes = 0;
+        unsafe {
+            GetDefaultPrinterW(std::ptr::null_mut(), &mut needed_bytes);
+        }
+        if needed_bytes > 0 {
+            let mut default_printer_name = vec![0u16; needed_bytes as usize];
+            unsafe {
+                GetDefaultPrinterW(
+                    default_printer_name.as_mut_ptr() as *mut _,
+                    &mut needed_bytes,
+                );
+            }
+            printer_name = String::from_utf16_lossy(&default_printer_name[..needed_bytes as usize]);
+        }
+    } else {
+        if let Ok(names) = crate::platform::windows::get_printer_names() {
+            if !names.contains(&printer_name) {
+                // Don't set the first printer as current printer.
+                // It may not be the desired printer.
+                bail!("Printer name \"{}\" not found", &printer_name);
+            }
+        }
+    }
+    if printer_name.is_empty() {
+        return Err(anyhow!("Failed to get printer name"));
+    }
+
+    log::info!("Sending data to printer: {}", &printer_name);
+    let printer_name = wide_string(&printer_name);
+    unsafe {
+        let res = PrintXPSRawData(
+            printer_name.as_ptr(),
+            data.as_ptr() as *const u8,
+            data.len() as c_ulong,
+        );
+        if res != 0 {
+            bail!("Failed to send data to the printer, see logs in C:\\Windows\\temp\\test_rustdesk.log for more details.");
+        } else {
+            log::info!("Successfully sent data to the printer");
+        }
+    }
+
+    Ok(())
 }

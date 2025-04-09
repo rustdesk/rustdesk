@@ -1,6 +1,8 @@
 #include <windows.h>
 #include <wtsapi32.h>
 #include <tlhelp32.h>
+#include <comdef.h>
+#include <xpsprint.h>
 #include <cstdio>
 #include <cstdint>
 #include <intrin.h>
@@ -11,6 +13,7 @@
 #include <versionhelpers.h>
 #include <vector>
 #include <sddl.h>
+#include <memory>
 
 extern "C" uint32_t get_session_user_info(PWSTR bufin, uint32_t nin, uint32_t id);
 
@@ -860,3 +863,113 @@ extern "C"
         return isRunning;
     }
 } // end of extern "C"
+
+// Remote printing 
+extern "C"
+{
+#pragma comment(lib, "XpsPrint.lib")
+#pragma warning(push)
+#pragma warning(disable : 4995)
+
+#define PRINT_XPS_CHECK_HR(hr, msg)                      \
+    if (FAILED(hr))                                      \
+    {                                                    \
+        _com_error err(hr);                              \
+        flog("%s Error: %s\n", msg, err.ErrorMessage()); \
+        return -1;                                       \
+    }
+
+    int PrintXPSRawData(LPWSTR printerName, BYTE *rawData, ULONG dataSize)
+    {
+        BOOL isCoInitializeOk = FALSE;
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (hr == RPC_E_CHANGED_MODE)
+        {
+            hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        }
+        if (hr == S_OK)
+        {
+            isCoInitializeOk = TRUE;
+        }
+        std::shared_ptr<int> coInitGuard(nullptr, [isCoInitializeOk](int *) {
+            if (isCoInitializeOk) CoUninitialize();
+        });
+
+        IXpsOMObjectFactory *xpsFactory = nullptr;
+        hr = CoCreateInstance(
+            __uuidof(XpsOMObjectFactory),
+            nullptr,
+            CLSCTX_INPROC_SERVER,
+            __uuidof(IXpsOMObjectFactory),
+            reinterpret_cast<LPVOID *>(&xpsFactory));
+        PRINT_XPS_CHECK_HR(hr, "Failed to create XPS object factory.");
+        std::shared_ptr<IXpsOMObjectFactory> xpsFactoryGuard(
+            xpsFactory,
+            [](IXpsOMObjectFactory *xpsFactory) {
+                xpsFactory->Release();
+        });
+
+        HANDLE completionEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        if (completionEvent == nullptr)
+        {
+            flog("Failed to create completion event. Last error: %d\n", GetLastError());
+            return -1;
+        }
+        std::shared_ptr<HANDLE> completionEventGuard(
+            &completionEvent,
+            [](HANDLE *completionEvent) {
+                CloseHandle(*completionEvent);
+        });
+
+        IXpsPrintJob *job = nullptr;
+        IXpsPrintJobStream *jobStream = nullptr;
+        // `StartXpsPrintJob()` is deprecated, but we still use it for compatibility.
+        // We may change to use the `Print Document Package API` in the future.
+        // https://learn.microsoft.com/en-us/windows/win32/printdocs/xpsprint-functions
+        hr = StartXpsPrintJob(
+            printerName,
+            L"Print Job 1",
+            nullptr,
+            nullptr,
+            completionEvent,
+            nullptr,
+            0,
+            &job,
+            &jobStream,
+            nullptr);
+        PRINT_XPS_CHECK_HR(hr, "Failed to start XPS print job.");
+
+        std::shared_ptr<IXpsPrintJobStream> jobStreamGuard(jobStream, [](IXpsPrintJobStream *jobStream) {
+                jobStream->Release();
+        });
+        BOOL jobOk = FALSE;
+        std::shared_ptr<IXpsPrintJob> jobGuard(job, [&jobOk](IXpsPrintJob* job) {
+            if (jobOk == FALSE)
+            {
+                job->Cancel();
+            }
+            job->Release();
+        });
+
+        DWORD bytesWritten = 0;
+        hr = jobStream->Write(rawData, dataSize, &bytesWritten);
+        PRINT_XPS_CHECK_HR(hr, "Failed to write data to print job stream.");
+
+        hr = jobStream->Close();
+        PRINT_XPS_CHECK_HR(hr, "Failed to close print job stream.");
+
+        // Wait about 5 minutes for the print job to complete.
+        DWORD waitMillis = 300 * 1000;
+        DWORD waitResult = WaitForSingleObject(completionEvent, waitMillis);
+        if (waitResult != WAIT_OBJECT_0)
+        {
+            flog("Wait for print job completion failed. Last error: %d\n", GetLastError());
+            return -1;
+        }
+        jobOk = TRUE;
+
+        return 0;
+    }
+
+#pragma warning(pop)
+}

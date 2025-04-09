@@ -317,6 +317,9 @@ class MsgboxComponent: Reactor.Component {
         if (this.type == "multiple-sessions-nocancel") {
             values.sid = (this.$$(select))[0].value;
         }
+        if (this.type == "remote-printer-selector") {
+            values.name = (this.$$(select))[0].value;
+        }
         return values;
     }
     

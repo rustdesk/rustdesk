@@ -58,6 +58,7 @@ pub struct Session<T: InvokeUiSession> {
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
     pub connection_round_state: Arc<Mutex<ConnectionRoundState>>,
+    pub printer_names: Arc<RwLock<HashMap<i32, String>>>,
 }
 
 #[derive(Clone)]
@@ -1505,6 +1506,20 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn get_conn_token(&self) -> Option<String> {
         self.lc.read().unwrap().get_conn_token()
     }
+
+    pub fn printer_response(&self, id: i32, path: String, printer_name: String) {
+        self.printer_names.write().unwrap().insert(id, printer_name);
+        let to = std::env::temp_dir().join(format!("rustdesk_printer_{id}"));
+        self.send(Data::SendFiles((
+            id,
+            hbb_common::fs::JobType::Printer,
+            path,
+            to.to_string_lossy().to_string(),
+            0,
+            false,
+            true,
+        )));
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
@@ -1570,6 +1585,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn is_multi_ui_session(&self) -> bool;
     fn update_record_status(&self, start: bool);
     fn update_empty_dirs(&self, _res: ReadEmptyDirsResponse) {}
+    fn printer_request(&self, id: i32, path: String);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
