@@ -12,7 +12,6 @@ on:
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
-#
 # It does NOT read build steps, however, so please fix 'flutter/build_fdroid.sh
 # whenever you add changes to Android CI build action ('build-rustdesk-android')
 # in this file!
