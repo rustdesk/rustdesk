@@ -274,6 +274,8 @@ pub enum Data {
     ClearTrustedDevices,
     #[cfg(all(target_os = "windows", feature = "flutter"))]
     PrinterData(Vec<u8>),
+    #[cfg(feature = "flutter")]
+    ControllingSessionCount(usize),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -597,6 +599,11 @@ async fn handle(data: Data, stream: &mut Connection) {
                     ))
                     .await
             );
+        }
+        #[cfg(feature = "flutter")]
+        Data::ControllingSessionCount(_count) => {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            crate::updater::update_controlling_session_count(_count);
         }
         #[cfg(feature = "hwcodec")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1260,6 +1267,14 @@ pub async fn clear_wayland_screencast_restore_token(key: String) -> ResultType<b
         return Ok(v.is_empty());
     }
     return Ok(false);
+}
+
+#[cfg(feature = "flutter")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn update_controlling_session_count(count: usize) -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::ControllingSessionCount(count)).await?;
+    Ok(())
 }
 
 async fn handle_wayland_screencast_restore_token(

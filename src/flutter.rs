@@ -1996,7 +1996,9 @@ pub mod sessions {
                 None => {}
             }
         }
-        SESSIONS.write().unwrap().remove(&remove_peer_key?)
+        let s = SESSIONS.write().unwrap().remove(&remove_peer_key?);
+        update_session_count_to_server();
+        s
     }
 
     fn check_remove_unused_displays(
@@ -2098,6 +2100,12 @@ pub mod sessions {
             .write()
             .unwrap()
             .insert(session_id, Default::default());
+        update_session_count_to_server();
+    }
+
+    #[inline]
+    fn update_session_count_to_server() {
+        crate::ipc::update_controlling_session_count(SESSIONS.read().unwrap().len()).ok();
     }
 
     #[inline]
