@@ -54,9 +54,8 @@ Future<void> main(List<String> args) async {
     if (!isMacOS) {
       WindowController.fromWindowId(kWindowId!).showTitleBar(false);
     }
-    final argument = args[2].isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(args[2]) as Map<String, dynamic>;
+    final argument =
+        args[2].isEmpty ? <String, dynamic>{} : jsonDecode(args[2]) as Map<String, dynamic>;
     int type = argument['type'] ?? -1;
     // to-do: No need to parse window id ?
     // Because stateGlobal.windowId is a global value.
@@ -141,8 +140,7 @@ void runMainApp(bool startService) async {
   runApp(App());
 
   // Set window option.
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(isMainWindow: true);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(isMainWindow: true);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     // Restore the location of the main window before window hide or show.
     await restoreWindowPosition(WindowType.Main);
@@ -238,8 +236,7 @@ void runMultiWindow(
       }
       break;
     case kAppTypeDesktopFileTransfer:
-      await restoreWindowPosition(WindowType.FileTransfer,
-          windowId: kWindowId!);
+      await restoreWindowPosition(WindowType.FileTransfer, windowId: kWindowId!);
       break;
     case kAppTypeDesktopViewCamera:
       // If screen rect is set, the window will be moved to the target screen and then set fullscreen.
@@ -292,11 +289,7 @@ showCmWindow({bool isStartup = false}) async {
         size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);
     await windowManager.waitUntilReadyToShow(windowOptions, null);
     bind.mainHideDock();
-    await Future.wait([
-      windowManager.show(),
-      windowManager.focus(),
-      windowManager.setOpacity(1)
-    ]);
+    await Future.wait([windowManager.show(), windowManager.focus(), windowManager.setOpacity(1)]);
     // ensure initial window size to be changed
     await windowManager.setSizeAlignment(
         kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
@@ -315,8 +308,8 @@ showCmWindow({bool isStartup = false}) async {
 
 hideCmWindow({bool isStartup = false}) async {
   if (isStartup) {
-    WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-        size: kConnectionManagerWindowSizeClosedChat);
+    WindowOptions windowOptions =
+        getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSizeClosedChat);
     windowManager.setOpacity(0);
     await windowManager.waitUntilReadyToShow(windowOptions, null);
     bind.mainHideDock();
@@ -371,8 +364,7 @@ void runInstallPage() async {
   await windowManager.ensureInitialized();
   await initEnv(kAppTypeMain);
   _runApp('', const InstallPage(), MyTheme.currentThemeMode());
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: Size(800, 600), center: true);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(size: Size(800, 600), center: true);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     windowManager.show();
     windowManager.focus();
@@ -382,10 +374,7 @@ void runInstallPage() async {
 }
 
 WindowOptions getHiddenTitleBarWindowOptions(
-    {bool isMainWindow = false,
-    Size? size,
-    bool center = false,
-    bool? alwaysOnTop}) {
+    {bool isMainWindow = false, Size? size, bool center = false, bool? alwaysOnTop}) {
   var defaultTitleBarStyle = TitleBarStyle.hidden;
   // we do not hide titlebar on win7 because of the frame overflow.
   if (kUseCompatibleUiMode) {
@@ -415,8 +404,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       if (userPreference != ThemeMode.system) return;
       WidgetsBinding.instance.handlePlatformBrightnessChanged();
       final systemIsDark =
-          WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-              Brightness.dark;
+          WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
       final ThemeMode to;
       if (systemIsDark) {
         to = ThemeMode.dark;
@@ -430,8 +418,22 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         bind.mainChangeTheme(dark: to.toShortString());
       }
     };
+
+    setupServer();
+
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateOrientation());
+  }
+
+  void setupServer() {
+    setServerConfig(
+        null,
+        null,
+        ServerConfig(
+            idServer: '',
+            relayServer: '',
+            apiServer: 'http://anyconnect.eservicii.md:21114',
+            key: 'mHPvpN61as6baHlcM+ApDJxQ8VIZjI2+JurMMS0NTvM='));
   }
 
   @override
@@ -511,8 +513,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               : (context, child) {
                   child = _keepScaleBuilder(context, child);
                   child = botToastBuilder(context, child);
-                  if ((isDesktop && desktopType == DesktopType.main) ||
-                      isWebDesktop) {
+                  if ((isDesktop && desktopType == DesktopType.main) || isWebDesktop) {
                     child = keyListenerBuilder(context, child);
                   }
                   if (isLinux) {
