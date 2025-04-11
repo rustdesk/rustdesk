@@ -484,6 +484,7 @@ extern "C" {
         cmd: *const u16,
         session_id: DWORD,
         as_user: BOOL,
+        show: BOOL,
         token_pid: &mut DWORD,
     ) -> HANDLE;
     fn GetSessionUserTokenWin(
@@ -669,6 +670,10 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
         "\"{}\" --server",
         std::env::current_exe()?.to_str().unwrap_or("")
     );
+    launch_privileged_process(session_id, &cmd)
+}
+
+pub fn launch_privileged_process(session_id: DWORD, cmd: &str) -> ResultType<HANDLE> {
     use std::os::windows::ffi::OsStrExt;
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
@@ -676,9 +681,12 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
         .collect();
     let wstr = wstr.as_ptr();
     let mut token_pid = 0;
-    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE, &mut token_pid) };
+    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE, FALSE, &mut token_pid) };
     if h.is_null() {
-        log::error!("Failed to launch server: {}", io::Error::last_os_error());
+        log::error!(
+            "Failed to launch privileged process: {}",
+            io::Error::last_os_error()
+        );
         if token_pid == 0 {
             log::error!("No process winlogon.exe");
         }
@@ -687,22 +695,43 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
 }
 
 pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
-    let cmd = format!(
-        "\"{}\" {}",
-        std::env::current_exe()?.to_str().unwrap_or(""),
-        arg.join(" "),
-    );
+    run_exe_in_cur_session(std::env::current_exe()?.to_str().unwrap_or(""), arg, false)
+}
+
+pub fn run_exe_in_cur_session(
+    exe: &str,
+    arg: Vec<&str>,
+    show: bool,
+) -> ResultType<Option<std::process::Child>> {
     let Some(session_id) = get_current_process_session_id() else {
         bail!("Failed to get current process session id");
     };
+    run_exe_in_session(exe, arg, session_id, show)
+}
+
+pub fn run_exe_in_session(
+    exe: &str,
+    arg: Vec<&str>,
+    session_id: DWORD,
+    show: bool,
+) -> ResultType<Option<std::process::Child>> {
     use std::os::windows::ffi::OsStrExt;
+    let cmd = format!("\"{}\" {}", exe, arg.join(" "),);
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect();
     let wstr = wstr.as_ptr();
     let mut token_pid = 0;
-    let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE, &mut token_pid) };
+    let h = unsafe {
+        LaunchProcessWin(
+            wstr,
+            session_id,
+            TRUE,
+            if show { TRUE } else { FALSE },
+            &mut token_pid,
+        )
+    };
     if h.is_null() {
         if token_pid == 0 {
             bail!(
@@ -800,8 +829,12 @@ pub fn set_share_rdp(enable: bool) {
 }
 
 pub fn get_current_process_session_id() -> Option<u32> {
+    get_session_id_of_process(unsafe { GetCurrentProcessId() })
+}
+
+pub fn get_session_id_of_process(pid: DWORD) -> Option<u32> {
     let mut sid = 0;
-    if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut sid) == TRUE } {
+    if unsafe { ProcessIdToSessionId(pid, &mut sid) == TRUE } {
         Some(sid)
     } else {
         None
@@ -1224,16 +1257,13 @@ fn get_after_install(
     ", create_service=get_create_service(&exe))
 }
 
-pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall(false);
-    let mut path = path.trim_end_matches('\\').to_owned();
-    let (subkey, _path, start_menu, exe) = get_default_install_info();
-    let mut exe = exe;
-    if path.is_empty() {
-        path = _path;
-    } else {
-        exe = exe.replace(&_path, &path);
-    }
+fn get_install_reg_subkey_cmd(
+    subkey: &str,
+    app_name: &str,
+    exe: &str,
+    path: &str,
+    is_install: bool,
+) -> ResultType<String> {
     let mut version_major = "0";
     let mut version_minor = "0";
     let mut version_build = "0";
@@ -1246,6 +1276,50 @@ pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> Res
     }
     if versions.len() > 2 {
         version_build = versions[2];
+    }
+    let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
+    let size = meta.len() / 1024;
+
+    let reg_install_values = if is_install {
+        format!(
+            "
+reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
+reg add {subkey} /f /v InstallLocation /t REG_SZ /d \"{path}\"
+reg add {subkey} /f /v Publisher /t REG_SZ /d \"{app_name}\"
+reg add {subkey} /f /v UninstallString /t REG_SZ /d \"\\\"{exe}\\\" --uninstall\"
+reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
+            "
+        )
+    } else {
+        "".to_owned()
+    };
+    let cmd = format!(
+        "
+reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
+{reg_install_values}
+reg add {subkey} /f /v DisplayVersion /t REG_SZ /d \"{version}\"
+reg add {subkey} /f /v Version /t REG_SZ /d \"{version}\"
+reg add {subkey} /f /v BuildDate /t REG_SZ /d \"{build_date}\"
+reg add {subkey} /f /v VersionMajor /t REG_DWORD /d {version_major}
+reg add {subkey} /f /v VersionMinor /t REG_DWORD /d {version_minor}
+reg add {subkey} /f /v VersionBuild /t REG_DWORD /d {version_build}
+reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
+    ",
+        version = crate::VERSION.replace("-", "."),
+        build_date = crate::BUILD_DATE,
+    );
+    Ok(cmd)
+}
+
+pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
+    let uninstall_str = get_uninstall(false);
+    let mut path = path.trim_end_matches('\\').to_owned();
+    let (subkey, _path, start_menu, exe) = get_default_install_info();
+    let mut exe = exe;
+    if path.is_empty() {
+        path = _path;
+    } else {
+        exe = exe.replace(&_path, &path);
     }
     let app_name = crate::get_app_name();
 
@@ -1314,8 +1388,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
         reg_value_printer = "1".to_owned();
     }
 
-    let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
-    let size = meta.len() / 1024;
     // https://docs.microsoft.com/zh-cn/windows/win32/msi/uninstall-registry-key?redirectedfrom=MSDNa
     // https://www.windowscentral.com/how-edit-registry-using-command-prompt-windows-10
     // https://www.tenforums.com/tutorials/70903-add-remove-allowed-apps-through-windows-firewall-windows-10-a.html
@@ -1348,6 +1420,7 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
 ")
     };
 
+    let install_reg_subkey_cmd = get_install_reg_subkey_cmd(&subkey, &app_name, &exe, &path, true)?;
     let cmds = format!(
         "
 {uninstall_str}
@@ -1355,19 +1428,7 @@ chcp 65001
 md \"{path}\"
 {copy_exe}
 reg add {subkey} /f
-reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
-reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
-reg add {subkey} /f /v DisplayVersion /t REG_SZ /d \"{version}\"
-reg add {subkey} /f /v Version /t REG_SZ /d \"{version}\"
-reg add {subkey} /f /v BuildDate /t REG_SZ /d \"{build_date}\"
-reg add {subkey} /f /v InstallLocation /t REG_SZ /d \"{path}\"
-reg add {subkey} /f /v Publisher /t REG_SZ /d \"{app_name}\"
-reg add {subkey} /f /v VersionMajor /t REG_DWORD /d {version_major}
-reg add {subkey} /f /v VersionMinor /t REG_DWORD /d {version_minor}
-reg add {subkey} /f /v VersionBuild /t REG_DWORD /d {version_build}
-reg add {subkey} /f /v UninstallString /t REG_SZ /d \"\\\"{exe}\\\" --uninstall\"
-reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
-reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
+{install_reg_subkey_cmd}
 cscript \"{mk_shortcut}\"
 cscript \"{uninstall_shortcut}\"
 {tray_shortcuts}
@@ -1378,8 +1439,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {after_install}
 {sleep}
     ",
-        version = crate::VERSION.replace("-", "."),
-        build_date = crate::BUILD_DATE,
         after_install = get_after_install(
             &exe,
             Some(reg_value_start_menu_shortcuts),
@@ -2366,6 +2425,102 @@ if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
     std::process::exit(0);
 }
 
+pub fn update_me(debug: bool) -> ResultType<()> {
+    let src_exe = std::env::current_exe()?.to_string_lossy().to_string();
+    let (subkey, path, _, exe) = get_install_info();
+    let is_installed = std::fs::metadata(&exe).is_ok();
+    if !is_installed {
+        bail!("RustDesk is not installed.");
+    }
+
+    let app_name = crate::get_app_name();
+    let main_window_pids = crate::platform::get_pids_of_process_with_args::<_, &str>(
+        &format!("{}.exe", &app_name),
+        &[],
+    );
+    let main_window_sessions = main_window_pids
+        .iter()
+        .map(|pid| get_session_id_of_process(pid.as_u32()))
+        .flatten()
+        .collect::<Vec<_>>();
+    for pid in main_window_pids {
+        let _ = crate::platform::kill_process_by_pid(pid);
+    }
+    let tray_pids =
+        crate::platform::get_pids_of_process_with_args(&format!("{}.exe", &app_name), &["--tray"]);
+    let tray_sessions = tray_pids
+        .iter()
+        .map(|pid| get_session_id_of_process(pid.as_u32()))
+        .flatten()
+        .collect::<Vec<_>>();
+    for pid in tray_pids {
+        let _ = crate::platform::kill_process_by_pid(pid);
+    }
+    let is_service_running = is_self_service_running();
+
+    let install_reg_cmd = get_install_reg_subkey_cmd(&subkey, &app_name, &exe, &path, false)?;
+
+    let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
+    let restore_service_cmd = if is_service_running {
+        format!("sc start {}", &app_name)
+    } else {
+        "".to_owned()
+    };
+    // We need `taskkill` because:
+    // 1. There may be some other processes like `rustdesk --connect` are running.
+    // 2. Sometimes, the main window and the tray icon are showing
+    // while I cannot find them by `tasklist` or the methods above.
+    // There's should be 4 processes running: service, server, tray and main window.
+    // But only 2 processes are shown in the tasklist.
+    let cmds = format!(
+        "
+chcp 65001
+sc stop {app_name}
+taskkill /F /IM {app_name}.exe{filter}
+{install_reg_cmd}
+{copy_exe}
+{restore_service_cmd}
+{sleep}
+    ",
+        app_name = app_name,
+        copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
+        sleep = if debug { "timeout 300" } else { "" },
+    );
+
+    run_cmds(cmds, debug, "update")?;
+
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+    if tray_sessions.is_empty() {
+        log::info!("No tray process found.");
+    } else {
+        log::info!("Try to restore the tray process...");
+        log::info!(
+            "Try to restore the tray process..., sessions: {:?}",
+            &tray_sessions
+        );
+        for s in tray_sessions {
+            if s != 0 {
+                allow_err!(run_exe_in_session(&exe, vec!["--tray"], s, true));
+            }
+        }
+    }
+    if main_window_sessions.is_empty() {
+        log::info!("No main window process found.");
+    } else {
+        log::info!("Try to restore the main window process...");
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        for s in main_window_sessions {
+            if s != 0 {
+                allow_err!(run_exe_in_session(&exe, vec![], s, true));
+            }
+        }
+    }
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    log::info!("Update completed.");
+
+    Ok(())
+}
+
 pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
     Ok(write_cmds(
         format!(
@@ -2973,4 +3128,13 @@ fn get_pids<S: AsRef<str>>(name: S) -> ResultType<Vec<u32>> {
     }
 
     Ok(pids)
+}
+
+pub fn is_msi_installed() -> std::io::Result<bool> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let uninstall_key = hklm.open_subkey(format!(
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
+        crate::get_app_name()
+    ))?;
+    Ok(1 == uninstall_key.get_value::<u32, _>("WindowsInstaller")?)
 }
