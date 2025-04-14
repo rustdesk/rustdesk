@@ -3100,7 +3100,7 @@ dependencies = [
  "socket2 0.3.19",
  "sodiumoxide",
  "sysinfo",
- "thiserror 2.0.11",
+ "thiserror 1.0.61",
  "tokio",
  "tokio-native-tls",
  "tokio-rustls 0.26.0",
