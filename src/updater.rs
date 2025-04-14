@@ -98,10 +98,8 @@ fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
 
 fn check_update(manually: bool) -> ResultType<()> {
     #[cfg(target_os = "windows")]
-    let is_win_msi = crate::platform::is_msi_installed()?;
-    #[cfg(not(target_os = "windows"))]
-    let is_win_msi = false;
-    if is_custom_client() || !crate::platform::is_installed() || is_win_msi {
+    let is_msi = crate::platform::is_msi_installed()?;
+    if is_custom_client() || !crate::platform::is_installed() {
         return Ok(());
     }
     if manually || config::Config::get_bool_option(config::keys::OPTION_ALLOW_AUTO_UPDATE) {
@@ -113,91 +111,121 @@ fn check_update(manually: bool) -> ResultType<()> {
                 let download_url = update_url.replace("tag", "download");
                 let version = download_url.split('/').last().unwrap_or_default();
                 #[cfg(target_os = "windows")]
-                let download_url = format!("{}/rustdesk-{}-x86_64.exe", download_url, version);
+                let download_url = format!(
+                    "{}/rustdesk-{}-x86_64.{}",
+                    download_url,
+                    version,
+                    if is_msi { "msi" } else { "exe" }
+                );
                 log::debug!("New version available: {}", &version);
                 let client = create_http_client();
                 let Some(file_path) = get_download_file_from_url(&download_url) else {
                     bail!("Failed to get the file path from the URL: {}", download_url);
                 };
-                let mut is_file_exists = false;
-                if file_path.exists() {
-                    // Check if the file size is the same as the server file size
-                    // If the file size is the same, we don't need to download it again.
-                    let file_size = std::fs::metadata(&file_path)?.len();
-                    let response = client.head(&download_url).send()?;
-                    if !response.status().is_success() {
-                        bail!("Failed to get the file size: {}", response.status());
-                    }
-                    let total_size = response
-                        .headers()
-                        .get(reqwest::header::CONTENT_LENGTH)
-                        .and_then(|ct_len| ct_len.to_str().ok())
-                        .and_then(|ct_len| ct_len.parse::<u64>().ok());
-                    let Some(total_size) = total_size else {
-                        bail!("Failed to get content length");
-                    };
-                    if file_size == total_size {
-                        is_file_exists = true;
-                    } else {
-                        std::fs::remove_file(&file_path)?;
-                    }
-                }
-                if !is_file_exists {
-                    let response = client.get(&download_url).send()?;
-                    if !response.status().is_success() {
-                        bail!(
-                            "Failed to download the new version file: {}",
-                            response.status()
-                        );
-                    }
-                    let file_data = response.bytes()?;
-                    let mut file = std::fs::File::create(&file_path)?;
-                    file.write_all(&file_data)?;
-                }
+                // let mut is_file_exists = false;
+                // if file_path.exists() {
+                //     // Check if the file size is the same as the server file size
+                //     // If the file size is the same, we don't need to download it again.
+                //     let file_size = std::fs::metadata(&file_path)?.len();
+                //     let response = client.head(&download_url).send()?;
+                //     if !response.status().is_success() {
+                //         bail!("Failed to get the file size: {}", response.status());
+                //     }
+                //     let total_size = response
+                //         .headers()
+                //         .get(reqwest::header::CONTENT_LENGTH)
+                //         .and_then(|ct_len| ct_len.to_str().ok())
+                //         .and_then(|ct_len| ct_len.parse::<u64>().ok());
+                //     let Some(total_size) = total_size else {
+                //         bail!("Failed to get content length");
+                //     };
+                //     if file_size == total_size {
+                //         is_file_exists = true;
+                //     } else {
+                //         std::fs::remove_file(&file_path)?;
+                //     }
+                // }
+                // if !is_file_exists {
+                //     let response = client.get(&download_url).send()?;
+                //     if !response.status().is_success() {
+                //         bail!(
+                //             "Failed to download the new version file: {}",
+                //             response.status()
+                //         );
+                //     }
+                //     let file_data = response.bytes()?;
+                //     let mut file = std::fs::File::create(&file_path)?;
+                //     file.write_all(&file_data)?;
+                // }
                 // We have checked if the `conns`` is empty before, but we need to check again.
                 // No need to care about the downloaded file here, because it's rare case that the `conns` are empty
                 // before the download, but not empty after the download.
                 if has_no_active_conns() {
                     #[cfg(target_os = "windows")]
-                    if let Some(p) = file_path.to_str() {
-                        if let Some(session_id) = crate::platform::get_current_process_session_id()
-                        {
-                            match crate::platform::launch_privileged_process(
-                                session_id,
-                                &format!("{} --update", p),
-                            ) {
-                                Ok(h) => {
-                                    if h.is_null() {
-                                        log::error!(
-                                            "Failed to update to the new version: {}",
-                                            version
-                                        );
-                                    } else {
-                                        log::debug!("New version \"{}\" updated.", version);
-                                    }
-                                }
-                                Err(e) => {
-                                    log::error!("Failed to run the new version: {}", e);
-                                }
-                            }
-                        } else {
-                            log::error!(
-                                "Failed to get the current process session id, Error {}",
-                                io::Error::last_os_error()
-                            );
-                        }
-                    } else {
-                        // unreachable!()
-                        log::error!(
-                            "Failed to convert the file path to string: {}",
-                            file_path.display()
-                        );
-                    }
+                    update_new_version(is_msi, &version, &file_path);
                 }
             }
         }
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn update_new_version(is_msi: bool, version: &str, file_path: &PathBuf) {
+    if let Some(p) = file_path.to_str() {
+        if let Some(session_id) = crate::platform::get_current_process_session_id() {
+            if is_msi {
+                //     let cmds = format!(
+                //         "
+                // chcp 65001
+                // msiexec /i \"{}\" /qn
+                //     ",
+                //         p,
+                //     );
+                //     run_cmds(cmds, false, "update_install_option")?;
+
+                match crate::platform::update_me_msi(p) {
+                    Ok(_) => {
+                        log::debug!("New version \"{}\" updated.", version);
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to install the new msi version  \"{}\": {}",
+                            version,
+                            e
+                        );
+                    }
+                }
+            } else {
+                match crate::platform::launch_privileged_process(
+                    session_id,
+                    &format!("{} --update", p),
+                ) {
+                    Ok(h) => {
+                        if h.is_null() {
+                            log::error!("Failed to update to the new version: {}", version);
+                        } else {
+                            log::debug!("New version \"{}\" updated.", version);
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to run the new version: {}", e);
+                    }
+                }
+            }
+        } else {
+            log::error!(
+                "Failed to get the current process session id, Error {}",
+                io::Error::last_os_error()
+            );
+        }
+    } else {
+        // unreachable!()
+        log::error!(
+            "Failed to convert the file path to string: {}",
+            file_path.display()
+        );
+    }
 }
 
 pub fn get_download_file_from_url(url: &str) -> Option<PathBuf> {

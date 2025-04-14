@@ -11,7 +11,19 @@ void handleUpdate(String releasePageUrl) {
   String downloadUrl = releasePageUrl.replaceAll('tag', 'download');
   String version = downloadUrl.substring(downloadUrl.lastIndexOf('/') + 1);
   if (isWindows) {
-    downloadUrl = '$downloadUrl/rustdesk-$version-x86_64.exe';
+    final String isMsiInstalled =
+        bind.mainGetCommonSync(key: 'is-msi-installed');
+    if (isMsiInstalled == 'true') {
+      downloadUrl = '$downloadUrl/rustdesk-$version-x86_64.msi';
+    } else if (isMsiInstalled == 'false') {
+      downloadUrl = '$downloadUrl/rustdesk-$version-x86_64.exe';
+    } else {
+      debugPrint(
+          'Failed to check if is installed MSI package, error: $isMsiInstalled');
+      msgBox(gFFI.sessionId, 'custom-nocancel-hasclose', 'Error',
+          'update-failed-check-msi-tip', releasePageUrl, gFFI.dialogManager);
+      return;
+    }
   }
   SimpleWrapper downloadId = SimpleWrapper('');
   SimpleWrapper<VoidCallback> onCanceled = SimpleWrapper(() {});

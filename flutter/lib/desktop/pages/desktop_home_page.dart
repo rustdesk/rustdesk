@@ -435,17 +435,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         !isCardClosed &&
         bind.mainUriPrefixSync().contains('rustdesk')) {
       String btnText = "Click to download";
-      var isToUpdate = false;
-      if (isWindows && bind.mainIsInstalled()) {
-        final String isMsiInstalled =
-            bind.mainGetCommonSync(key: 'is-msi-installed');
-        if ('false' == isMsiInstalled) {
-          isToUpdate = true;
-        } else if ('true' != isMsiInstalled) {
-          debugPrint(
-              "isMsiInstalled is not true or false, error: $isMsiInstalled");
-        }
-      }
+      var isToUpdate = isWindows && bind.mainIsInstalled();
       if (isToUpdate) {
         btnText = "Click to update";
       }

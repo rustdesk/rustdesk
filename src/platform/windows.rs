@@ -2521,6 +2521,17 @@ taskkill /F /IM {app_name}.exe{filter}
     Ok(())
 }
 
+pub fn update_me_msi(msi: &str) -> ResultType<()> {
+    let output = std::process::Command::new("msiexec")
+        .args(&["/i", msi, "/qn", "/norestart"])
+        .output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        bail!("{}", String::from_utf8_lossy(&output.stderr))
+    }
+}
+
 pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
     Ok(write_cmds(
         format!(
