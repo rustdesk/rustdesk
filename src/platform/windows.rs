@@ -2521,15 +2521,25 @@ taskkill /F /IM {app_name}.exe{filter}
     Ok(())
 }
 
+// Don't launch tray app when updating msi.
+// 1. Because `/qn` requires administrator permission and the tray app should be launched with user permission.
+//   Or launching the main window from the tray app will cause the main window to be launched with administrator permission.
+// 2. We are not able to launch the tray app if the UI is in the login screen.
+// `fn update_me()` can handle the above cases, but for msi update, we need to do more work to handle the above cases.
+//    1. Record the tray app session ids
+//    2. Do the update
+//    3. Restore the tray app sessions.
+//    `1` and `3` must be done in custom actions.
+//    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str) -> ResultType<()> {
-    let output = std::process::Command::new("msiexec")
-        .args(&["/i", msi, "/qn", "/norestart"])
-        .output()?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        bail!("{}", String::from_utf8_lossy(&output.stderr))
-    }
+    let cmds = format!(
+        "
+    chcp 65001
+    msiexec /i {msi} /qn LAUNCH_TRAY_APP=N
+    "
+    );
+    run_cmds(cmds, false, "update-msi")?;
+    Ok(())
 }
 
 pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
@@ -3148,4 +3158,127 @@ pub fn is_msi_installed() -> std::io::Result<bool> {
         crate::get_app_name()
     ))?;
     Ok(1 == uninstall_key.get_value::<u32, _>("WindowsInstaller")?)
+}
+
+// Note the args are not compared strictly, only check if the args are contained in the command line.
+// If we want to check the args strictly, we need to parse the command line and compare each arg.
+// Maybe we have to introduce some external crate like `shell_words` to do this.
+#[cfg(not(target_pointer_width = "64"))]
+pub(super) fn get_pids_of_process_with_args_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    args: &[S2],
+) -> Vec<hbb_common::sysinfo::Pid> {
+    let name = name.as_ref().to_lowercase();
+    std::process::Command::new("wmic.exe")
+        .args([
+            "process",
+            "where",
+            &format!("name='{}'", name),
+            "get",
+            "commandline,processid",
+            "/value",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map(|output| {
+            let output = String::from_utf8_lossy(&output.stdout);
+            // CommandLine=
+            // ProcessId=33796
+            //
+            // CommandLine=
+            // ProcessId=34668
+            //
+            // CommandLine="C:\Program Files\RustDesk\RustDesk.exe" --tray
+            // ProcessId=13728
+            //
+            // CommandLine="C:\Program Files\RustDesk\RustDesk.exe"
+            // ProcessId=10136
+            let mut pids = Vec::new();
+            let mut proc_found = false;
+            for line in output.lines() {
+                if line.starts_with("ProcessId=") {
+                    if proc_found {
+                        if let Ok(pid) = line["ProcessId=".len()..].trim().parse::<u32>() {
+                            pids.push(hbb_common::sysinfo::Pid::from_u32(pid));
+                        }
+                        proc_found = false;
+                    }
+                } else if line.starts_with("CommandLine=") {
+                    proc_found = false;
+                    let cmd = line["CommandLine=".len()..].trim().to_lowercase();
+                    if args.is_empty() {
+                        if cmd.ends_with(&name) || cmd.ends_with(&format!("{}\"", &name)) {
+                            proc_found = true;
+                        }
+                    } else {
+                        proc_found = args.iter().all(|arg| cmd.contains(arg.as_ref()));
+                    }
+                }
+            }
+            pids
+        })
+        .unwrap_or_default()
+}
+
+// Note the args are not compared strictly, only check if the args are contained in the command line.
+// If we want to check the args strictly, we need to parse the command line and compare each arg.
+// Maybe we have to introduce some external crate like `shell_words` to do this.
+#[cfg(not(target_pointer_width = "64"))]
+pub(super) fn get_pids_of_process_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    arg: S2,
+) -> Vec<hbb_common::sysinfo::Pid> {
+    let name = name.as_ref().to_lowercase();
+    let arg = arg.as_ref().to_lowercase();
+    std::process::Command::new("wmic.exe")
+        .args([
+            "process",
+            "where",
+            &format!("name='{}'", name),
+            "get",
+            "commandline,processid",
+            "/value",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map(|output| {
+            let output = String::from_utf8_lossy(&output.stdout);
+            let mut pids = Vec::new();
+            let mut proc_found = false;
+            for line in output.lines() {
+                if line.starts_with("ProcessId=") {
+                    if proc_found {
+                        if let Ok(pid) = line["ProcessId=".len()..].trim().parse::<u32>() {
+                            pids.push(hbb_common::sysinfo::Pid::from_u32(pid));
+                        }
+                        proc_found = false;
+                    }
+                } else if line.starts_with("CommandLine=") {
+                    proc_found = false;
+                    let cmd = line["CommandLine=".len()..].trim().to_lowercase();
+                    if cmd.is_empty() {
+                        continue;
+                    }
+                    if !arg.is_empty() && cmd.starts_with(&arg) {
+                        proc_found = true;
+                    } else {
+                        for x in [&format!("{}\"", &name), &format!("{}", &name)] {
+                            if cmd.contains(x) {
+                                let cmd = cmd.split(x).collect::<Vec<_>>()[1..].join("");
+                                if arg.is_empty() {
+                                    if cmd.trim().is_empty() {
+                                        proc_found = true;
+                                    }
+                                } else if cmd.trim().starts_with(&arg) {
+                                    proc_found = true;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            pids
+        })
+        .unwrap_or_default()
 }

@@ -470,10 +470,8 @@ class _GeneralState extends State<_General> {
   }
 
   Widget other() {
-    final showAutoUpdate = isWindows &&
-        'false' == bind.mainGetCommonSync(key: 'is-msi-installed') &&
-        bind.mainIsInstalled() &&
-        !bind.isCustomClient();
+    final showAutoUpdate =
+        isWindows && bind.mainIsInstalled() && !bind.isCustomClient();
     final children = <Widget>[
       if (!isWeb && !bind.isIncomingOnly())
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',

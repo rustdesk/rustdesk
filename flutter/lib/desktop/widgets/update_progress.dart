@@ -20,7 +20,7 @@ void handleUpdate(String releasePageUrl) {
     } else {
       debugPrint(
           'Failed to check if is installed MSI package, error: $isMsiInstalled');
-      msgBox(gFFI.sessionId, 'custom-nocancel-hasclose', 'Error',
+      msgBox(gFFI.sessionId, 'custom-nocancel-nook-hasclose', 'Error',
           'update-failed-check-msi-tip', releasePageUrl, gFFI.dialogManager);
       return;
     }
@@ -122,7 +122,7 @@ class UpdateProgressState extends State<UpdateProgress> {
     cancelQueryTimer();
 
     debugPrint('Download new version error: $error');
-    final msgBoxType = 'custom-nocancel-hasclose';
+    final msgBoxType = 'custom-nocancel-nook-hasclose';
     final msgBoxTitle = 'Error';
     final msgBoxText = 'download-new-veresion-failed-tip';
     final dialogManager = gFFI.dialogManager;

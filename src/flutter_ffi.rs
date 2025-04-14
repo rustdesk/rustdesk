@@ -2508,13 +2508,19 @@ pub fn main_set_common(_key: String, _value: String) {
             );
         } else if _key == "update-me" {
             if let Some(new_version_file) = get_download_file_from_url(&_value) {
-                // 1.3.9 does not support "--update"
-                // But we can assume that the new version will support it.
                 if let Some(f) = new_version_file.to_str() {
                     if f.ends_with(".exe") {
-                        let _ = crate::platform::run_exe_in_cur_session(f, vec!["--update"], false);
+                        // 1.3.9 does not support "--update"
+                        // But we can assume that the new version supports it.
+                        if let Err(e) =
+                            crate::platform::run_exe_in_cur_session(f, vec!["--update"], false)
+                        {
+                            log::error!("Failed to run the update exe: {}", e);
+                        }
                     } else if f.ends_with(".msi") {
-                        let _ = crate::platform::update_me_msi(f);
+                        if let Err(e) = crate::platform::update_me_msi(f) {
+                            log::error!("Failed to run the update msi: {}", e);
+                        }
                     } else {
                         // unreachable!()
                     }

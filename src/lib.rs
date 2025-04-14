@@ -55,10 +55,7 @@ pub mod plugin;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod tray;
 
-#[cfg(all(
-    feature = "flutter",
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod updater;
 
 mod ui_cm_interface;

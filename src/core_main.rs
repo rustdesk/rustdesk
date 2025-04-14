@@ -190,7 +190,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 let text = match res {
                     Ok(_) => translate("Update successfully!".to_string()),
                     Err(err) => {
-                        println!("Failed with error: {err}");
+                        log::error!("Failed with error: {err}");
                         translate("Update failed!".to_string())
                     }
                 };
