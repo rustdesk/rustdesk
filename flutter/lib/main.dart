@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:bot_toast/bot_toast.dart';
@@ -37,78 +38,82 @@ WindowType? kWindowType;
 late List<String> kBootArgs;
 
 Future<void> main(List<String> args) async {
-  earlyAssert();
-  WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(() async {
+    earlyAssert();
+    WidgetsFlutterBinding.ensureInitialized();
 
-  debugPrint("launch args: $args");
-  kBootArgs = List.from(args);
+    debugPrint("launch args: $args");
+    kBootArgs = List.from(args);
 
-  if (!isDesktop) {
-    runMobileApp();
-    return;
-  }
-  // main window
-  if (args.isNotEmpty && args.first == 'multi_window') {
-    kWindowId = int.parse(args[1]);
-    stateGlobal.setWindowId(kWindowId!);
-    if (!isMacOS) {
-      WindowController.fromWindowId(kWindowId!).showTitleBar(false);
+    if (!isDesktop) {
+      runMobileApp();
+      return;
     }
-    final argument =
-        args[2].isEmpty ? <String, dynamic>{} : jsonDecode(args[2]) as Map<String, dynamic>;
-    int type = argument['type'] ?? -1;
-    // to-do: No need to parse window id ?
-    // Because stateGlobal.windowId is a global value.
-    argument['windowId'] = kWindowId;
-    kWindowType = type.windowType;
-    switch (kWindowType) {
-      case WindowType.RemoteDesktop:
-        desktopType = DesktopType.remote;
-        runMultiWindow(
-          argument,
-          kAppTypeDesktopRemote,
-        );
-        break;
-      case WindowType.FileTransfer:
-        desktopType = DesktopType.fileTransfer;
-        runMultiWindow(
-          argument,
-          kAppTypeDesktopFileTransfer,
-        );
-        break;
-      case WindowType.ViewCamera:
-        desktopType = DesktopType.viewCamera;
-        runMultiWindow(
-          argument,
-          kAppTypeDesktopViewCamera,
-        );
-        break;
-      case WindowType.PortForward:
-        desktopType = DesktopType.portForward;
-        runMultiWindow(
-          argument,
-          kAppTypeDesktopPortForward,
-        );
-        break;
-      default:
-        break;
+    // main window
+    if (args.isNotEmpty && args.first == 'multi_window') {
+      kWindowId = int.parse(args[1]);
+      stateGlobal.setWindowId(kWindowId!);
+      if (!isMacOS) {
+        WindowController.fromWindowId(kWindowId!).showTitleBar(false);
+      }
+      final argument =
+          args[2].isEmpty ? <String, dynamic>{} : jsonDecode(args[2]) as Map<String, dynamic>;
+      int type = argument['type'] ?? -1;
+      // to-do: No need to parse window id ?
+      // Because stateGlobal.windowId is a global value.
+      argument['windowId'] = kWindowId;
+      kWindowType = type.windowType;
+      switch (kWindowType) {
+        case WindowType.RemoteDesktop:
+          desktopType = DesktopType.remote;
+          runMultiWindow(
+            argument,
+            kAppTypeDesktopRemote,
+          );
+          break;
+        case WindowType.FileTransfer:
+          desktopType = DesktopType.fileTransfer;
+          runMultiWindow(
+            argument,
+            kAppTypeDesktopFileTransfer,
+          );
+          break;
+        case WindowType.ViewCamera:
+          desktopType = DesktopType.viewCamera;
+          runMultiWindow(
+            argument,
+            kAppTypeDesktopViewCamera,
+          );
+          break;
+        case WindowType.PortForward:
+          desktopType = DesktopType.portForward;
+          runMultiWindow(
+            argument,
+            kAppTypeDesktopPortForward,
+          );
+          break;
+        default:
+          break;
+      }
+    } else if (args.isNotEmpty && args.first == '--cm') {
+      debugPrint("--cm started");
+      desktopType = DesktopType.cm;
+      await windowManager.ensureInitialized();
+      runConnectionManagerScreen();
+    } else if (args.contains('--install')) {
+      runInstallPage();
+    } else {
+      desktopType = DesktopType.main;
+      await windowManager.ensureInitialized();
+      windowManager.setPreventClose(true);
+      if (isMacOS) {
+        disableWindowMovable(kWindowId);
+      }
+      runMainApp(true);
     }
-  } else if (args.isNotEmpty && args.first == '--cm') {
-    debugPrint("--cm started");
-    desktopType = DesktopType.cm;
-    await windowManager.ensureInitialized();
-    runConnectionManagerScreen();
-  } else if (args.contains('--install')) {
-    runInstallPage();
-  } else {
-    desktopType = DesktopType.main;
-    await windowManager.ensureInitialized();
-    windowManager.setPreventClose(true);
-    if (isMacOS) {
-      disableWindowMovable(kWindowId);
-    }
-    runMainApp(true);
-  }
+  }, (e, s) {
+    log(e.toString(), stackTrace: s, name: 'ZoneGuarded');
+  });
 }
 
 Future<void> initEnv(String appType) async {
@@ -479,7 +484,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         ],
         child: GetMaterialApp(
           navigatorKey: globalKey,
-          debugShowCheckedModeBanner: false,
+          // debugShowCheckedModeBanner: false,
           title: isWeb
               ? '${bind.mainGetAppNameSync()} Web Client V2 (Preview)'
               : bind.mainGetAppNameSync(),

@@ -64,12 +64,25 @@ jobs:
       fail-fast: false
       matrix:
         job:
-
+          - {
+            arch: aarch64,
+            target: aarch64-linux-android,
+            os: ubuntu-20.04,
+            reltype: release,
+            suffix: "",
+          }
           - {
             arch: armv7,
             target: armv7-linux-androideabi,
             os: ubuntu-20.04,
-            reltype: debug,
+            reltype: release,
+            suffix: "",
+          }
+          - {
+            arch: x86_64,
+            target: x86_64-linux-android,
+            os: ubuntu-20.04,
+            reltype: release,
             suffix: "",
           }
     steps:
