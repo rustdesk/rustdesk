@@ -37,7 +37,6 @@
 app.*.symbols
 # Obfuscation related
 app.*.map.json
-jniLibs
 .vscode
 
 # flutter rust bridge

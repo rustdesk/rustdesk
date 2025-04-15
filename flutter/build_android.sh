@@ -7,4 +7,4 @@ flutter build apk --split-per-abi --target-platform android-arm64,android-arm --
 flutter build appbundle --target-platform  android-arm64,android-arm --${MODE} --obfuscate --split-debug-info ./split-debug-info
 
 # build in linux
-# $ANDROID_NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip android/app/src/main/jniLibs/arm64-v8a/*
+# $ANDROID_NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip android/app/src/main/jniLibsDebug/arm64-v8a/*

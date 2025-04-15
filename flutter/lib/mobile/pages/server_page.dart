@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -65,31 +66,27 @@ class _DropDownAction extends StatelessWidget {
             const PopupMenuDivider(),
             PopupMenuItem(
               value: 'AcceptSessionsViaPassword',
-              child: listTile(
-                  'Accept sessions via password', approveMode == 'password'),
+              child: listTile('Accept sessions via password', approveMode == 'password'),
               enabled: !isApproveModeFixed,
             ),
             PopupMenuItem(
               value: 'AcceptSessionsViaClick',
-              child:
-                  listTile('Accept sessions via click', approveMode == 'click'),
+              child: listTile('Accept sessions via click', approveMode == 'click'),
               enabled: !isApproveModeFixed,
             ),
             PopupMenuItem(
               value: "AcceptSessionsViaBoth",
-              child: listTile("Accept sessions via both",
-                  approveMode != 'password' && approveMode != 'click'),
+              child: listTile(
+                  "Accept sessions via both", approveMode != 'password' && approveMode != 'click'),
               enabled: !isApproveModeFixed,
             ),
             if (showPasswordOption) const PopupMenuDivider(),
-            if (showPasswordOption &&
-                verificationMethod != kUseTemporaryPassword)
+            if (showPasswordOption && verificationMethod != kUseTemporaryPassword)
               PopupMenuItem(
                 value: "setPermanentPassword",
                 child: Text(translate("Set permanent password")),
               ),
-            if (showPasswordOption &&
-                verificationMethod != kUsePermanentPassword)
+            if (showPasswordOption && verificationMethod != kUsePermanentPassword)
               PopupMenuItem(
                 value: "setTemporaryPasswordLength",
                 child: Text(translate("One-time password length")),
@@ -98,14 +95,14 @@ class _DropDownAction extends StatelessWidget {
             if (showPasswordOption)
               PopupMenuItem(
                 value: kUseTemporaryPassword,
-                child: listTile('Use one-time password',
-                    verificationMethod == kUseTemporaryPassword),
+                child:
+                    listTile('Use one-time password', verificationMethod == kUseTemporaryPassword),
               ),
             if (showPasswordOption)
               PopupMenuItem(
                 value: kUsePermanentPassword,
-                child: listTile('Use permanent password',
-                    verificationMethod == kUsePermanentPassword),
+                child:
+                    listTile('Use permanent password', verificationMethod == kUsePermanentPassword),
               ),
             if (showPasswordOption)
               PopupMenuItem(
@@ -132,8 +129,7 @@ class _DropDownAction extends StatelessWidget {
               gFFI.serverModel.updatePasswordModel();
             }
 
-            if (value == kUsePermanentPassword &&
-                (await bind.mainGetPermanentPassword()).isEmpty) {
+            if (value == kUsePermanentPassword && (await bind.mainGetPermanentPassword()).isEmpty) {
               setPasswordDialog(notEmptyCallback: callback);
             } else {
               callback();
@@ -188,9 +184,7 @@ class _ServerPageState extends State<ServerPage> {
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         buildPresetPasswordWarningMobile(),
-                        gFFI.serverModel.isStart
-                            ? ServerInfo()
-                            : ServiceNotRunningNotification(),
+                        gFFI.serverModel.isStart ? ServerInfo() : ServiceNotRunningNotification(),
                         const ConnectionManager(),
                         const PermissionChecker(),
                         SizedBox.fromSize(size: const Size(0, 15.0)),
@@ -205,8 +199,8 @@ void checkService() async {
   gFFI.invokeMethod("check_service");
   // for Android 10/11, request MANAGE_EXTERNAL_STORAGE permission from system setting page
   if (AndroidPermissionManager.isWaitingFile() && !gFFI.serverModel.fileOk) {
-    AndroidPermissionManager.complete(kManageExternalStorage,
-        await AndroidPermissionManager.check(kManageExternalStorage));
+    AndroidPermissionManager.complete(
+        kManageExternalStorage, await AndroidPermissionManager.check(kManageExternalStorage));
     debugPrint("file permission finished");
   }
 }
@@ -220,25 +214,32 @@ class ServiceNotRunningNotification extends StatelessWidget {
 
     return PaddingCard(
         title: translate("Service is not running"),
-        titleIcon:
-            const Icon(Icons.warning_amber_sharp, color: Colors.redAccent),
+        titleIcon: const Icon(Icons.warning_amber_sharp, color: Colors.redAccent),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(translate("android_start_service_tip"),
-                    style:
-                        const TextStyle(fontSize: 12, color: MyTheme.darkGray))
+                    style: const TextStyle(fontSize: 12, color: MyTheme.darkGray))
                 .marginOnly(bottom: 8),
             ElevatedButton.icon(
                 icon: const Icon(Icons.play_arrow),
-                onPressed: () {
-                  if (gFFI.userModel.userName.value.isEmpty &&
-                      bind.mainGetLocalOption(key: "show-scam-warning") !=
-                          "N") {
-                    showScamWarning(context, serverModel);
-                  } else {
-                    serverModel.toggleService();
+                onPressed: () async {
+                  // if (gFFI.userModel.userName.value.isEmpty &&
+                  //     bind.mainGetLocalOption(key: "show-scam-warning") != "N") {
+                  //   showScamWarning(context, serverModel);
+                  // } else {
+                  if (!serverModel.inputOk) {
+                    if (serverModel.parent.target != null) {
+                      await showInputWarnAlert(serverModel.parent.target!);
+                    }
                   }
+
+                  if (!serverModel.inputOk) {
+                    return;
+                  }
+
+                  serverModel.toggleService();
+                  //   }
                 },
                 label: Text(translate("Start service")))
           ],
@@ -385,8 +386,7 @@ class ScamWarningDialogState extends State<ScamWarningDialog> {
                                 Navigator.of(context).pop();
                                 _serverModel.toggleService();
                                 if (show_warning) {
-                                  bind.mainSetLocalOption(
-                                      key: "show-scam-warning", value: "N");
+                                  bind.mainSetLocalOption(key: "show-scam-warning", value: "N");
                                 }
                               },
                         style: ElevatedButton.styleFrom(
@@ -452,10 +452,9 @@ class ServerInfo extends StatelessWidget {
     const Color colorNegative = Colors.red;
     const double iconMarginRight = 15;
     const double iconSize = 24;
-    const TextStyle textStyleHeading = TextStyle(
-        fontSize: 16.0, fontWeight: FontWeight.bold, color: Colors.grey);
-    const TextStyle textStyleValue =
-        TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold);
+    const TextStyle textStyleHeading =
+        TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold, color: Colors.grey);
+    const TextStyle textStyleValue = TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold);
 
     void copyToClipboard(String value) {
       Clipboard.setData(ClipboardData(text: value));
@@ -465,8 +464,7 @@ class ServerInfo extends StatelessWidget {
     Widget ConnectionStateNotification() {
       if (serverModel.connectStatus == -1) {
         return Row(children: [
-          const Icon(Icons.warning_amber_sharp,
-                  color: colorNegative, size: iconSize)
+          const Icon(Icons.warning_amber_sharp, color: colorNegative, size: iconSize)
               .marginOnly(right: iconMarginRight),
           Expanded(child: Text(translate('not_ready_status')))
         ]);
@@ -493,8 +491,7 @@ class ServerInfo extends StatelessWidget {
           // ID
           children: [
             Row(children: [
-              const Icon(Icons.perm_identity,
-                      color: Colors.grey, size: iconSize)
+              const Icon(Icons.perm_identity, color: Colors.grey, size: iconSize)
                   .marginOnly(right: iconMarginRight),
               Text(
                 translate('ID'),
@@ -538,8 +535,7 @@ class ServerInfo extends StatelessWidget {
                           visualDensity: VisualDensity.compact,
                           icon: Icon(Icons.copy_outlined),
                           onPressed: () {
-                            copyToClipboard(
-                                model.serverPasswd.value.text.trim());
+                            copyToClipboard(model.serverPasswd.value.text.trim());
                           })
                     ])
             ]).marginOnly(left: 40, bottom: 15),
@@ -560,35 +556,34 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
+
+    log(serverModel.inputOk.toString(), name: 'InputPermission');
+
     final hasAudioPermission = androidVersion >= 30;
     return PaddingCard(
         title: translate("Permissions"),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           serverModel.mediaOk
               ? ElevatedButton.icon(
-                      style: ButtonStyle(
-                          backgroundColor:
-                              MaterialStateProperty.all(Colors.red)),
+                      style: ButtonStyle(backgroundColor: MaterialStateProperty.all(Colors.red)),
                       icon: const Icon(Icons.stop),
                       onPressed: serverModel.toggleService,
                       label: Text(translate("Stop service")))
                   .marginOnly(bottom: 8)
               : SizedBox.shrink(),
-          PermissionRow(
-              translate("Screen Capture"),
-              serverModel.mediaOk,
-              !serverModel.mediaOk &&
-                      gFFI.userModel.userName.value.isEmpty &&
-                      bind.mainGetLocalOption(key: "show-scam-warning") != "N"
-                  ? () => showScamWarning(context, serverModel)
-                  : serverModel.toggleService),
-          PermissionRow(translate("Input Control"), serverModel.inputOk,
-              serverModel.toggleInput),
-          PermissionRow(translate("Transfer file"), serverModel.fileOk,
-              serverModel.toggleFile),
+          // PermissionRow(
+          //     translate("Screen Capture"),
+          //     serverModel.mediaOk,
+          //     !serverModel.mediaOk &&
+          //             gFFI.userModel.userName.value.isEmpty &&
+          //             bind.mainGetLocalOption(key: "show-scam-warning") != "N"
+          //         ? () => showScamWarning(context, serverModel)
+          //         : serverModel.toggleService),
+          PermissionRow(translate("Input Control"), serverModel.inputOk, serverModel.toggleInput),
+          PermissionRow(translate("Transfer file"), serverModel.fileOk, serverModel.toggleFile),
           hasAudioPermission
-              ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
-                  serverModel.toggleAudio)
+              ? PermissionRow(
+                  translate("Audio Capture"), serverModel.audioOk, serverModel.toggleAudio)
               : Row(children: [
                   Icon(Icons.info_outline).marginOnly(right: 15),
                   Expanded(
@@ -597,15 +592,14 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                     style: const TextStyle(color: MyTheme.darkGray),
                   ))
                 ]),
-          PermissionRow(translate("Enable clipboard"), serverModel.clipboardOk,
-              serverModel.toggleClipboard),
+          PermissionRow(
+              translate("Enable clipboard"), serverModel.clipboardOk, serverModel.toggleClipboard),
         ]));
   }
 }
 
 class PermissionRow extends StatelessWidget {
-  const PermissionRow(this.name, this.isOk, this.onPressed, {Key? key})
-      : super(key: key);
+  const PermissionRow(this.name, this.isOk, this.onPressed, {Key? key}) : super(key: key);
 
   final String name;
   final bool isOk;
@@ -633,9 +627,7 @@ class ConnectionManager extends StatelessWidget {
     return Column(
         children: serverModel.clients
             .map((client) => PaddingCard(
-                title: translate(client.isFileTransfer
-                    ? "File Connection"
-                    : "Screen Connection"),
+                title: translate(client.isFileTransfer ? "File Connection" : "Screen Connection"),
                 titleIcon: client.isFileTransfer
                     ? Icon(Icons.folder_outlined)
                     : Icon(Icons.mobile_screen_share),
@@ -650,16 +642,15 @@ class ConnectionManager extends StatelessWidget {
                               ? const SizedBox.shrink()
                               : IconButton(
                                   onPressed: () {
-                                    gFFI.chatModel.changeCurrentKey(
-                                        MessageKey(client.peerId, client.id));
+                                    gFFI.chatModel
+                                        .changeCurrentKey(MessageKey(client.peerId, client.id));
                                     final bar = navigationBarKey.currentWidget;
                                     if (bar != null) {
                                       bar as BottomNavigationBar;
                                       bar.onTap!(1);
                                     }
                                   },
-                                  icon: unreadTopRightBuilder(
-                                      client.unreadChatMessageCount)))
+                                  icon: unreadTopRightBuilder(client.unreadChatMessageCount)))
                     ],
                   ),
                   client.authorized
@@ -692,8 +683,7 @@ class ConnectionManager extends StatelessWidget {
       buttons.insert(
         0,
         ElevatedButton.icon(
-          style: ButtonStyle(
-              backgroundColor: MaterialStatePropertyAll(Colors.red)),
+          style: ButtonStyle(backgroundColor: MaterialStatePropertyAll(Colors.red)),
           icon: const Icon(Icons.phone),
           label: Text(translate("Stop")),
           onPressed: () {
@@ -760,8 +750,7 @@ class ConnectionManager extends StatelessWidget {
 }
 
 class PaddingCard extends StatelessWidget {
-  const PaddingCard({Key? key, required this.child, this.title, this.titleIcon})
-      : super(key: key);
+  const PaddingCard({Key? key, required this.child, this.title, this.titleIcon}) : super(key: key);
 
   final String? title;
   final Icon? titleIcon;
@@ -796,8 +785,7 @@ class PaddingCard extends StatelessWidget {
           ),
           margin: const EdgeInsets.fromLTRB(12.0, 10.0, 12.0, 0),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(vertical: 15.0, horizontal: 20.0),
+            padding: const EdgeInsets.symmetric(vertical: 15.0, horizontal: 20.0),
             child: Column(
               children: children,
             ),
@@ -808,6 +796,7 @@ class PaddingCard extends StatelessWidget {
 
 class ClientInfo extends StatelessWidget {
   final Client client;
+
   ClientInfo(this.client);
 
   @override
@@ -822,20 +811,15 @@ class ClientInfo extends StatelessWidget {
                   child: Padding(
                       padding: const EdgeInsets.only(right: 12),
                       child: CircleAvatar(
-                          backgroundColor: str2color(
-                              client.name,
-                              Theme.of(context).brightness == Brightness.light
-                                  ? 255
-                                  : 150),
+                          backgroundColor: str2color(client.name,
+                              Theme.of(context).brightness == Brightness.light ? 255 : 150),
                           child: Text(client.name[0])))),
               Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(client.name, style: const TextStyle(fontSize: 18)),
-                    const SizedBox(width: 8),
-                    Text(client.peerId, style: const TextStyle(fontSize: 10))
-                  ]))
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(client.name, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 8),
+                Text(client.peerId, style: const TextStyle(fontSize: 10))
+              ]))
             ],
           ),
         ]));
@@ -884,8 +868,7 @@ void androidChannelInit() {
           }
         case "stop_service":
           {
-            print(
-                "stop_service by kotlin, isStart:${gFFI.serverModel.isStart}");
+            print("stop_service by kotlin, isStart:${gFFI.serverModel.isStart}");
             if (gFFI.serverModel.isStart) {
               gFFI.serverModel.stopService();
             }

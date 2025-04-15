@@ -1,4 +1,4 @@
-name: Flutter Nightly Build
+name: ConnectBuild
 
 on:
   workflow_dispatch:
@@ -9,4 +9,4 @@ jobs:
     secrets: inherit
     with:
       upload-artifact: true
-      upload-tag: "nightly"
+      upload-tag: "md-edi"
