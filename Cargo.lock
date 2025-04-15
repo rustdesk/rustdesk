@@ -2205,17 +2205,20 @@ dependencies = [
 
 [[package]]
 name = "flexi_logger"
-version = "0.30.1"
+version = "0.27.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcd71620581c99445892ad71e2c2e0d6f62edf2e22822556f0d2ee9f8508af29"
+checksum = "469e584c031833564840fb0cdbce99bdfe946fd45480a188545e73a76f45461c"
 dependencies = [
  "chrono",
  "crossbeam-channel",
  "crossbeam-queue",
+ "glob",
+ "is-terminal",
+ "lazy_static",
  "log",
  "nu-ansi-term",
  "regex",
- "thiserror 2.0.11",
+ "thiserror 1.0.61",
 ]
 
 [[package]]
@@ -3097,7 +3100,7 @@ dependencies = [
  "socket2 0.3.19",
  "sodiumoxide",
  "sysinfo",
- "thiserror 2.0.11",
+ "thiserror 1.0.61",
  "tokio",
  "tokio-native-tls",
  "tokio-rustls 0.26.0",
@@ -3152,6 +3155,12 @@ name = "hermit-abi"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbf6a919d6cf397374f7dfeeea91d974c7c0a7221d0d0f4f20d859d329e53fcc"
+
+[[package]]
+name = "hermit-abi"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbd780fe5cc30f81464441920d82ac8740e2e46b29a6fad543ddd075229ce37e"
 
 [[package]]
 name = "hex"
@@ -3462,6 +3471,17 @@ name = "ipnet"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
+
+[[package]]
+name = "is-terminal"
+version = "0.4.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
+dependencies = [
+ "hermit-abi 0.5.0",
+ "libc",
+ "windows-sys 0.52.0",
+]
 
 [[package]]
 name = "is_debug"
@@ -4313,11 +4333,11 @@ dependencies = [
 
 [[package]]
 name = "nu-ansi-term"
-version = "0.50.1"
+version = "0.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4a28e057d01f97e61255210fcff094d74ed0466038633e95017f5beb68e4399"
+checksum = "c073d3c1930d0751774acf49e66653acecb416c3a54c6ec095a9b11caddb5a68"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
