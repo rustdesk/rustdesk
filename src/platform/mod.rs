@@ -150,7 +150,7 @@ fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
 ) -> Vec<Pid> {
     #[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
     {
-        return windows::get_pids_of_process_with_args_by_wmic(name, args);
+        return windows::get_pids_with_args_by_wmic(name, args);
     }
     #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
     {
@@ -181,7 +181,7 @@ pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
 ) -> Vec<Pid> {
     #[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
     {
-        return windows::get_pids_of_process_with_first_arg_by_wmic(name, arg);
+        return windows::get_pids_with_first_arg_by_wmic(name, arg);
     }
     #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
     {
