@@ -1401,7 +1401,7 @@ jobs:
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
               distro: ubuntu18.04,
-              on: ubuntu-20.04,
+              on: ubuntu-22.04,
               deb_arch: amd64,
               vcpkg-triplet: x64-linux,
             }
@@ -1736,7 +1736,7 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              on: ubuntu-20.04,
+              on: ubuntu-22.04,
               distro: ubuntu18.04,
               deb_arch: amd64,
               sciter_arch: x64,
@@ -2007,14 +2007,14 @@ jobs:
           - {
               target: x86_64-unknown-linux-gnu,
               distro: ubuntu18.04,
-              on: ubuntu-20.04,
+              on: ubuntu-22.04,
               arch: x86_64,
               suffix: "",
             }
           - {
               target: x86_64-unknown-linux-gnu,
               distro: ubuntu18.04,
-              on: ubuntu-20.04,
+              on: ubuntu-22.04,
               arch: x86_64,
               suffix: "-sciter",
             }
