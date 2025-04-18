@@ -20,7 +20,7 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04,
+              os: ubuntu-22.04,
               extra-build-args: "",
             }
     steps:
