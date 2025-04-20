@@ -1,56 +1,55 @@
 ﻿<!--
 This file contains the declaration of all the localizable strings.
 -->
-<WixLocalization Culture="en-us" Codepage="1252"
-	xmlns="http://wixtoolset.org/schemas/v4/wxl">
+<wixlocalization culture="en-us" codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
 
-	<String Id="SummaryCodepage" Value="1252" />
-	<String Id="ProductLanguage" Value="1033" />
+	<string id="SummaryCodepage" value="1252" />
+	<string id="ProductLanguage" value="1033" />
 
 	<!-- General strings -->
-	<String Id="DowngradeError" Value="A newer version of [ProductName] is already installed." />
+	<string id="DowngradeError" value="Версия новее [ProductName] уже установлена." />
 
-	<String Id="AR_Comment" Value="RustDesk" />
+	<string id="AR_Comment" value="RustDesk" />
 
-	<String Id="F_App" Value="RustDesk" />
-	<String Id="F_App_Desc" Value="RustDesk - Main programs installations." />
+	<string id="F_App" value="RustDesk" />
+	<string id="F_App_Desc" value="RustDesk - Установки главных программ." />
 
-	<String Id="SC_Uninstall" Value="Uninstall RustDesk" />
-	<String Id="SC_Uninstall_Desc" Value="Removes RustDesk or parts of it from the computer" />
+	<string id="SC_Uninstall" value="Удалить RustDesk" />
+	<string id="SC_Uninstall_Desc" value="Удаляет RustDesk или его части из этого компьютера" />
 
 	<!-- Client related strings -->
-	<String Id="F_Client" Value="Client" />
-	<String Id="F_Client_Desc" Value="The user interface. Plays media files." />
-	<String Id="F_Client_Plugins" Value="Plugins" />
-	<String Id="F_Client_Plugins_Desc" Value="Plugins for the client." />
-	<String Id="F_LAVFilters" Value="LAV Filters" />
-	<String Id="F_LAVFilters_Desc" Value="Recommended directshow filters for best audio and video playback experience." />
+	<string id="F_Client" value="Клиент" />
+	<string id="F_Client_Desc" value="Интерфейс пользователя. Проигрывает медиа файлы." />
+	<string id="F_Client_Plugins" value="Дополнения" />
+	<string id="F_Client_Plugins_Desc" value="Плагины для клиента." />
+	<string id="F_LAVFilters" value="Фильтры LAV" />
+	<string id="F_LAVFilters_Desc" value="Рекомендуемые фильтры DirectShow для лучшего воспроизведения аудио и видео." />
 
-	<String Id="SC_Client" Value="RustDesk" />
-	<String Id="SC_Client_Desc" Value="Start RustDesk." />
+	<string id="SC_Client" value="RustDesk" />
+	<string id="SC_Client_Desc" value="Запустить RustDesk." />
 
-	<String Id="SC_Client_Tray" Value="RustDesk Tray" />
-	<String Id="SC_Client_Tray_Desc" Value="Start RustDesk tray." />
+	<string id="SC_Client_Tray" value="Трэй RustDesk" />
+	<string id="SC_Client_Tray_Desc" value="Запускать RustDesk в системном трэе." />
 
 	<!-- Server related strings -->
-	<String Id="F_Server" Value="Server" />
-	<String Id="F_Server_Desc" Value="The server part of RustDesk. Provides the MediaLibrary and other services." />
-	<String Id="F_Server_Plugins" Value="Plugins" />
-	<String Id="F_Server_Plugins_Desc" Value="Plugins for the server." />
+	<string id="F_Server" value="Сервер" />
+	<string id="F_Server_Desc" value="Этот сервер часть от RustDesk. Предоставляет MediaLibrary и другие службы." />
+	<string id="F_Server_Plugins" value="Дополнения" />
+	<string id="F_Server_Plugins_Desc" value="Плагины для сервера." />
 
-	<String Id="Service_DisplayName" Value="RustDesk Service" />
-	<String Id="Service_Description" Value="This service runs the RustDesk Server." />
+	<string id="Service_DisplayName" value="Служба RustDesk" />
+	<string id="Service_Description" value="Этот сервис запускает Сервер RustDesk." />
 
 	<!-- Launch Conditions -->
-	<String Id="LC_OS" Value="[ProductName] requires minimum Windows 7 / 2008 R2 as operating system." />
-	<String Id="LC_ADMIN" Value="You need to be an administrator to install [ProductName]." />
+	<string id="LC_OS" value="[ProductName] требует минимум Windows 7 / 2008 R2 как операционную систему." />
+	<string id="LC_ADMIN" value="Вам нужно быть администратором чтобы установить [ProductName]." />
 
 	<!-- User Interfaces -->
-	<String Id="AnotherAppDialogTitle" Value="Cancel installation."/>
-	<String Id="AnotherAppDialogDescription" Value="The application is installed by self-installation method, please uninstall it first."/>
+	<string id="AnotherAppDialogTitle" value="Отменить установку." />
+	<string id="AnotherAppDialogDescription" value="Приложение установлено самостоятельно вручную, пожалуйста, удалите его сначала." />
 
-	<String Id="MyInstallDirDlgDesktopShortcuts" Value="Create desktop icon" />
-	<String Id="MyInstallDirDlgStartMenuShortcuts" Value="Create start menu shortcuts" />
-	<String Id="MyInstallDirDlgPrinter" Value="Install RustDesk Printer" />
+	<string id="MyInstallDirDlgDesktopShortcuts" value="Создать ярлык на экране" />
+	<string id="MyInstallDirDlgStartMenuShortcuts" value="Добавить ярлыки в меню «Пуск»" />
+	<string id="MyInstallDirDlgPrinter" value="Установить Принтер RustDesk" />
 
-</WixLocalization>
+</wixlocalization>
