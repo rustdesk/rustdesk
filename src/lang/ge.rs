@@ -681,6 +681,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "მართულ მხარეზე უფლებების პარამეტრები კრძალავს დისტანციურ ბეჭდვას."),
         ("save-settings-tip", "პარამეტრების შენახვა"),
         ("dont-show-again-tip", "აღარ აჩვენოთ"),
+        ("Enable remote printer", ""),
         ("Downloading {}", ""),
         ("{} Update", ""),
         ("{}-to-update-tip", ""),
