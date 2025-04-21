@@ -681,5 +681,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "被控端的權限設置拒絕了遠端列印。"),
         ("save-settings-tip", "儲存設定"),
         ("dont-show-again-tip", "不再顯示此訊息"),
+        ("Enable remote printer", ""),
     ].iter().cloned().collect();
 }

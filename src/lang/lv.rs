@@ -681,5 +681,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "Kontrolētās puses atļauju iestatījumi liedz attālo drukāšanu."),
         ("save-settings-tip", "Saglabāt iestatījumus"),
         ("dont-show-again-tip", "Nerādīt šo vēlreiz"),
+        ("Enable remote printer", ""),
     ].iter().cloned().collect();
 }

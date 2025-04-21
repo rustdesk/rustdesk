@@ -681,5 +681,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "A távoli nyomtatás nincs engedélyezve"),
         ("save-settings-tip", "Beállítások mentése"),
         ("dont-show-again-tip", "Ne jelenítse meg újra"),
+        ("Enable remote printer", ""),
     ].iter().cloned().collect();
 }
