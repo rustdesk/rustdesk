@@ -119,9 +119,11 @@ async fn start_hbbs_sync_async() {
                                 Ok(x)  => {
                                     sysinfo_ver = x.clone();
                                     x == ver
+                                    *PRO.lock().unwrap() = true;
                                 }
                                 _ => {
-                                    true // if failed to get sysinfo_ver, we assume it's the same version
+                                    false // to make sure Pro can be assigned in below post for old
+                                          // hbbs pro not supporting sysinfo_ver
                                 }
                             };
                             if samever {
