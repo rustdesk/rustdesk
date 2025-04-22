@@ -115,15 +115,16 @@ async fn start_hbbs_sync_async() {
                         let old_hash = config::Status::get("sysinfo_hash");
                         let ver = config::Status::get("sysinfo_ver"); // sysinfo_ver is the version of sysinfo on server's side
                         if hash == old_hash {
+                            // When the api doesn't exist, Ok("") will be returned in test.
                             let samever = match crate::post_request(url.replace("heartbeat", "sysinfo_ver"), "".to_owned(), "").await {
                                 Ok(x)  => {
                                     sysinfo_ver = x.clone();
-                                    x == ver
                                     *PRO.lock().unwrap() = true;
+                                    x == ver
                                 }
                                 _ => {
                                     false // to make sure Pro can be assigned in below post for old
-                                          // hbbs pro not supporting sysinfo_ver
+                                          // hbbs pro not supporting sysinfo_ver, use false for ensuring
                                 }
                             };
                             if samever {
