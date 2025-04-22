@@ -65,6 +65,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   late final TextEditingController controller;
   final RxBool startmenu = true.obs;
   final RxBool desktopicon = true.obs;
+  final RxBool printer = true.obs;
   final RxBool showProgress = false.obs;
   final RxBool btnEnabled = true.obs;
 
@@ -79,6 +80,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     final installOptions = jsonDecode(bind.installInstallOptions());
     startmenu.value = installOptions['STARTMENUSHORTCUTS'] != '0';
     desktopicon.value = installOptions['DESKTOPSHORTCUTS'] != '0';
+    printer.value = installOptions['PRINTER'] != '0';
   }
 
   @override
@@ -161,7 +163,9 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               ).marginSymmetric(vertical: 2 * em),
               Option(startmenu, label: 'Create start menu shortcuts')
                   .marginOnly(bottom: 7),
-              Option(desktopicon, label: 'Create desktop icon'),
+              Option(desktopicon, label: 'Create desktop icon')
+                  .marginOnly(bottom: 7),
+              Option(printer, label: 'Install {$appName} Printer'),
               Container(
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -253,6 +257,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
       String args = '';
       if (startmenu.value) args += ' startmenu';
       if (desktopicon.value) args += ' desktopicon';
+      if (printer.value) args += ' printer';
       bind.installInstallMe(options: args, path: controller.text);
     }
 

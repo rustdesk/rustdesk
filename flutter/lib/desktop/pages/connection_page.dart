@@ -2,10 +2,12 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -17,7 +19,7 @@ import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
-import '../widgets/button.dart';
+import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 
 class OnlineStatusWidget extends StatefulWidget {
   const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
@@ -203,12 +205,16 @@ class _ConnectionPageState extends State<ConnectionPage>
   final FocusNode _idFocusNode = FocusNode();
   final TextEditingController _idEditingController = TextEditingController();
 
+  String selectedConnectionType = 'Connect';
+
   bool isWindowMinimized = false;
 
   final AllPeersLoader _allPeersLoader = AllPeersLoader();
 
   // https://github.com/flutter/flutter/issues/157244
   Iterable<Peer> _autocompleteOpts = [];
+
+  final _menuOpen = false.obs;
 
   @override
   void initState() {
@@ -321,9 +327,10 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   /// Callback for the connect button.
   /// Connects to the selected peer.
-  void onConnect({bool isFileTransfer = false}) {
+  void onConnect({bool isFileTransfer = false, bool isViewCamera = false}) {
     var id = _idController.id;
-    connect(context, id, isFileTransfer: isFileTransfer);
+    connect(context, id,
+        isFileTransfer: isFileTransfer, isViewCamera: isViewCamera);
   }
 
   /// UI for the remote ID TextField.
@@ -501,21 +508,87 @@ class _ConnectionPageState extends State<ConnectionPage>
             ),
             Padding(
               padding: const EdgeInsets.only(top: 13.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Button(
-                    isOutline: true,
-                    onTap: () => onConnect(isFileTransfer: true),
-                    text: "Transfer file",
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                SizedBox(
+                  height: 28.0,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      onConnect();
+                    },
+                    child: Text(translate("Connect")),
                   ),
-                  const SizedBox(
-                    width: 17,
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  height: 28.0,
+                  width: 28.0,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  Button(onTap: onConnect, text: "Connect"),
-                ],
-              ),
-            )
+                  child: Center(
+                    child: Obx(() {
+                      var offset = Offset(0, 0);
+                      return InkWell(
+                        child: _menuOpen.value
+                            ? Transform.rotate(
+                                angle: pi,
+                                child: Icon(IconFont.more, size: 14),
+                              )
+                            : Icon(IconFont.more, size: 14),
+                        onTapDown: (e) {
+                          offset = e.globalPosition;
+                        },
+                        onTap: () async {
+                          _menuOpen.value = true;
+                          final x = offset.dx;
+                          final y = offset.dy;
+                          await mod_menu
+                              .showMenu(
+                            context: context,
+                            position: RelativeRect.fromLTRB(x, y, x, y),
+                            items: [
+                              (
+                                'Transfer file',
+                                () => onConnect(isFileTransfer: true)
+                              ),
+                              (
+                                'View camera',
+                                () => onConnect(isViewCamera: true)
+                              ),
+                            ]
+                                .map((e) => MenuEntryButton<String>(
+                                      childBuilder: (TextStyle? style) => Text(
+                                        translate(e.$1),
+                                        style: style,
+                                      ),
+                                      proc: () => e.$2(),
+                                      padding: EdgeInsets.symmetric(
+                                          horizontal: kDesktopMenuPadding.left),
+                                      dismissOnClicked: true,
+                                    ))
+                                .map((e) => e.build(
+                                    context,
+                                    const MenuConfig(
+                                        commonColor:
+                                            CustomPopupMenuTheme.commonColor,
+                                        height: CustomPopupMenuTheme.height,
+                                        dividerHeight: CustomPopupMenuTheme
+                                            .dividerHeight)))
+                                .expand((i) => i)
+                                .toList(),
+                            elevation: 8,
+                          )
+                              .then((_) {
+                            _menuOpen.value = false;
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                ),
+              ]),
+            ),
           ],
         ),
       ),

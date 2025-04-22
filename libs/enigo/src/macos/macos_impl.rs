@@ -142,7 +142,8 @@ impl Enigo {
     }
 
     fn post(&self, event: CGEvent) {
-        if !self.ignore_flags {
+        // event.set_flags(CGEventFlags::CGEventFlagNull); will cause `F11` not working. no idea why.
+        if !self.ignore_flags && self.flags != CGEventFlags::CGEventFlagNull {
             event.set_flags(self.flags);
         }
         event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, ENIGO_INPUT_EXTRA_VALUE);

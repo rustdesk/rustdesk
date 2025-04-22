@@ -47,6 +47,7 @@ pub struct Client {
     pub authorized: bool,
     pub disconnected: bool,
     pub is_file_transfer: bool,
+    pub is_view_camera: bool,
     pub port_forward: String,
     pub name: String,
     pub peer_id: String,
@@ -128,6 +129,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         &self,
         id: i32,
         is_file_transfer: bool,
+        is_view_camera: bool,
         port_forward: String,
         peer_id: String,
         name: String,
@@ -147,6 +149,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             authorized,
             disconnected: false,
             is_file_transfer,
+            is_view_camera,
             port_forward,
             name: name.clone(),
             peer_id: peer_id.clone(),
@@ -402,9 +405,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
+                                Data::Login{id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(target_os = "windows")]
                                     {
@@ -672,6 +675,7 @@ pub async fn start_listen<T: InvokeUiCM>(
             Some(Data::Login {
                 id,
                 is_file_transfer,
+                is_view_camera,
                 port_forward,
                 peer_id,
                 name,
@@ -690,6 +694,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 cm.add_connection(
                     id,
                     is_file_transfer,
+                    is_view_camera,
                     port_forward,
                     peer_id,
                     name,
@@ -739,6 +744,8 @@ async fn handle_fs(
     tx: &UnboundedSender<Data>,
     tx_log: Option<&UnboundedSender<String>>,
 ) {
+    use std::path::PathBuf;
+
     use hbb_common::fs::serialize_transfer_job;
 
     match fs {
@@ -780,8 +787,9 @@ async fn handle_fs(
             // dummy remote, show_hidden, is_remote
             let mut job = fs::TransferJob::new_write(
                 id,
+                fs::JobType::Generic,
                 "".to_string(),
-                path,
+                fs::DataSource::FilePath(PathBuf::from(&path)),
                 file_num,
                 false,
                 false,
@@ -800,27 +808,24 @@ async fn handle_fs(
             write_jobs.push(job);
         }
         ipc::FS::CancelWrite { id } => {
-            if let Some(job) = fs::get_job(id, write_jobs) {
+            if let Some(job) = fs::remove_job(id, write_jobs) {
                 job.remove_download_file();
                 tx_log.map(|tx: &UnboundedSender<String>| {
-                    tx.send(serialize_transfer_job(job, false, true, ""))
+                    tx.send(serialize_transfer_job(&job, false, true, ""))
                 });
-                fs::remove_job(id, write_jobs);
             }
         }
         ipc::FS::WriteDone { id, file_num } => {
-            if let Some(job) = fs::get_job(id, write_jobs) {
+            if let Some(job) = fs::remove_job(id, write_jobs) {
                 job.modify_time();
                 send_raw(fs::new_done(id, file_num), tx);
-                tx_log.map(|tx| tx.send(serialize_transfer_job(job, true, false, "")));
-                fs::remove_job(id, write_jobs);
+                tx_log.map(|tx| tx.send(serialize_transfer_job(&job, true, false, "")));
             }
         }
         ipc::FS::WriteError { id, file_num, err } => {
-            if let Some(job) = fs::get_job(id, write_jobs) {
-                tx_log.map(|tx| tx.send(serialize_transfer_job(job, false, false, &err)));
+            if let Some(job) = fs::remove_job(id, write_jobs) {
+                tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, false, &err)));
                 send_raw(fs::new_error(job.id(), err, file_num), tx);
-                fs::remove_job(job.id(), write_jobs);
             }
         }
         ipc::FS::WriteBlock {
@@ -866,32 +871,34 @@ async fn handle_fs(
                     ..Default::default()
                 };
                 if let Some(file) = job.files().get(file_num as usize) {
-                    let path = get_string(&job.join(&file.name));
-                    match is_write_need_confirmation(&path, &digest) {
-                        Ok(digest_result) => {
-                            match digest_result {
-                                DigestCheckResult::IsSame => {
-                                    req.set_skip(true);
-                                    let msg_out = new_send_confirm(req);
-                                    send_raw(msg_out, &tx);
-                                }
-                                DigestCheckResult::NeedConfirm(mut digest) => {
-                                    // upload to server, but server has the same file, request
-                                    digest.is_upload = is_upload;
-                                    let mut msg_out = Message::new();
-                                    let mut fr = FileResponse::new();
-                                    fr.set_digest(digest);
-                                    msg_out.set_file_response(fr);
-                                    send_raw(msg_out, &tx);
-                                }
-                                DigestCheckResult::NoSuchFile => {
-                                    let msg_out = new_send_confirm(req);
-                                    send_raw(msg_out, &tx);
+                    if let fs::DataSource::FilePath(p) = &job.data_source {
+                        let path = get_string(&fs::TransferJob::join(p, &file.name));
+                        match is_write_need_confirmation(&path, &digest) {
+                            Ok(digest_result) => {
+                                match digest_result {
+                                    DigestCheckResult::IsSame => {
+                                        req.set_skip(true);
+                                        let msg_out = new_send_confirm(req);
+                                        send_raw(msg_out, &tx);
+                                    }
+                                    DigestCheckResult::NeedConfirm(mut digest) => {
+                                        // upload to server, but server has the same file, request
+                                        digest.is_upload = is_upload;
+                                        let mut msg_out = Message::new();
+                                        let mut fr = FileResponse::new();
+                                        fr.set_digest(digest);
+                                        msg_out.set_file_response(fr);
+                                        send_raw(msg_out, &tx);
+                                    }
+                                    DigestCheckResult::NoSuchFile => {
+                                        let msg_out = new_send_confirm(req);
+                                        send_raw(msg_out, &tx);
+                                    }
                                 }
                             }
-                        }
-                        Err(err) => {
-                            send_raw(fs::new_error(id, err, file_num), &tx);
+                            Err(err) => {
+                                send_raw(fs::new_error(id, err, file_num), &tx);
+                            }
                         }
                     }
                 }

@@ -25,7 +25,8 @@ pub struct RecorderContext {
     pub server: bool,
     pub id: String,
     pub dir: String,
-    pub display: usize,
+    pub display_idx: usize,
+    pub camera: bool,
     pub tx: Option<Sender<RecordState>>,
 }
 
@@ -46,7 +47,11 @@ impl RecorderContext2 {
             + "_"
             + &ctx.id.clone()
             + &chrono::Local::now().format("_%Y%m%d%H%M%S%3f_").to_string()
-            + &format!("display{}_", ctx.display)
+            + &format!(
+                "{}{}_",
+                if ctx.camera { "camera" } else { "display" },
+                ctx.display_idx
+            )
             + &self.format.to_string().to_lowercase()
             + if self.format == CodecFormat::VP9
                 || self.format == CodecFormat::VP8

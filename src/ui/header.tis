@@ -415,7 +415,7 @@ class Header: Reactor.Component {
                 adaptDisplay();
             } else if (type == "codec-preference") {
                 handler.set_option("codec-preference", me.id);
-                handler.change_prefer_codec();
+                handler.update_supported_decodings();
             }
             toggleMenuState();
         }
@@ -587,7 +587,7 @@ function toggleQualityMonitor(name) {
 
 function toggleI444(name) {
     handler.toggle_option(name);
-    handler.change_prefer_codec();
+    handler.update_supported_decodings();
     toggleMenuState();
 }
 

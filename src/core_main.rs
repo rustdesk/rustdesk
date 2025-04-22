@@ -53,6 +53,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 "--connect",
                 "--play",
                 "--file-transfer",
+                "--view-camera",
                 "--port-forward",
                 "--rdp",
             ]
@@ -99,7 +100,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     #[cfg(windows)]
-    if args.contains(&"--connect".to_string()) {
+    if args.contains(&"--connect".to_string()) || args.contains(&"--view-camera".to_string()) {
         hbb_common::platform::windows::start_cpu_performance_monitor();
     }
     #[cfg(feature = "flutter")]
@@ -195,12 +196,11 @@ pub fn core_main() -> Option<Vec<String>> {
                 if config::is_disable_installation() {
                     return None;
                 }
-                let res = platform::install_me(
-                    "desktopicon startmenu",
-                    "".to_owned(),
-                    true,
-                    args.len() > 1,
-                );
+                #[cfg(not(windows))]
+                let options = "desktopicon startmenu";
+                #[cfg(windows)]
+                let options = "desktopicon startmenu printer";
+                let res = platform::install_me(options, "".to_owned(), true, args.len() > 1);
                 let text = match res {
                     Ok(_) => translate("Installation Successful!".to_string()),
                     Err(err) => {
@@ -589,7 +589,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     let mut param_array = vec![];
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--connect" | "--play" | "--file-transfer" | "--port-forward" | "--rdp" => {
+            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward" | "--rdp" => {
                 authority = Some((&arg.to_string()[2..]).to_owned());
                 id = args.next();
             }
