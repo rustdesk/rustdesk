@@ -1,55 +1,39 @@
 ﻿<!--
 This file contains the declaration of all the localizable strings.
 -->
-<wixlocalization culture="en-us" codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+<WixLocalization Culture="ru-ru" Codepage="1251" xmlns="http://wixtoolset.org/schemas/v4/wxl">
 
-	<string id="SummaryCodepage" value="1252" />
-	<string id="ProductLanguage" value="1033" />
+	<String Id="SummaryCodepage" Value="1251" />
+	<String Id="ProductLanguage" Value="1049" />
 
 	<!-- General strings -->
-	<string id="DowngradeError" value="Версия новее [ProductName] уже установлена." />
+	<String Id="DowngradeError" Value="Версия новее [ProductName] уже установлена." />
 
-	<string id="AR_Comment" value="RustDesk" />
+	<String Id="AR_Comment" Value="RustDesk" />
 
-	<string id="F_App" value="RustDesk" />
-	<string id="F_App_Desc" value="RustDesk - Установки главных программ." />
+	<String Id="F_App" Value="RustDesk" />
+	<String Id="F_App_Desc" Value="RustDesk - Установки главных программ." />
 
-	<string id="SC_Uninstall" value="Удалить RustDesk" />
-	<string id="SC_Uninstall_Desc" value="Удаляет RustDesk или его части из этого компьютера" />
+	<String Id="SC_Uninstall" Value="Удалить RustDesk" />
+	<String Id="SC_Uninstall_Desc" Value="Удаляет RustDesk или его части из этого компьютера" />
 
 	<!-- Client related strings -->
-	<string id="F_Client" value="Клиент" />
-	<string id="F_Client_Desc" value="Интерфейс пользователя. Проигрывает медиа файлы." />
-	<string id="F_Client_Plugins" value="Дополнения" />
-	<string id="F_Client_Plugins_Desc" value="Плагины для клиента." />
-	<string id="F_LAVFilters" value="Фильтры LAV" />
-	<string id="F_LAVFilters_Desc" value="Рекомендуемые фильтры DirectShow для лучшего воспроизведения аудио и видео." />
+	<String Id="SC_Client" Value="RustDesk" />
+	<String Id="SC_Client_Desc" Value="Запустить RustDesk." />
 
-	<string id="SC_Client" value="RustDesk" />
-	<string id="SC_Client_Desc" value="Запустить RustDesk." />
-
-	<string id="SC_Client_Tray" value="Трэй RustDesk" />
-	<string id="SC_Client_Tray_Desc" value="Запускать RustDesk в системном трэе." />
+	<String Id="SC_Client_Tray" Value="Трэй RustDesk" />
+	<String Id="SC_Client_Tray_Desc" Value="Запускать RustDesk в системном трэе." />
 
 	<!-- Server related strings -->
-	<string id="F_Server" value="Сервер" />
-	<string id="F_Server_Desc" value="Этот сервер часть от RustDesk. Предоставляет MediaLibrary и другие службы." />
-	<string id="F_Server_Plugins" value="Дополнения" />
-	<string id="F_Server_Plugins_Desc" value="Плагины для сервера." />
-
-	<string id="Service_DisplayName" value="Служба RustDesk" />
-	<string id="Service_Description" value="Этот сервис запускает Сервер RustDesk." />
-
-	<!-- Launch Conditions -->
-	<string id="LC_OS" value="[ProductName] требует минимум Windows 7 / 2008 R2 как операционную систему." />
-	<string id="LC_ADMIN" value="Вам нужно быть администратором чтобы установить [ProductName]." />
+	<String Id="Service_DisplayName" Value="Служба RustDesk" />
+	<String Id="Service_Description" Value="Этот сервис запускает Сервер RustDesk." />
 
 	<!-- User Interfaces -->
-	<string id="AnotherAppDialogTitle" value="Отменить установку." />
-	<string id="AnotherAppDialogDescription" value="Приложение установлено самостоятельно вручную, пожалуйста, удалите его сначала." />
+	<String Id="AnotherAppDialogTitle" Value="Отменить установку." />
+	<String Id="AnotherAppDialogDescription" Value="Приложение установлено самостоятельно вручную, пожалуйста, удалите его сначала." />
 
-	<string id="MyInstallDirDlgDesktopShortcuts" value="Создать ярлык на экране" />
-	<string id="MyInstallDirDlgStartMenuShortcuts" value="Добавить ярлыки в меню «Пуск»" />
-	<string id="MyInstallDirDlgPrinter" value="Установить Принтер RustDesk" />
+	<String Id="MyInstallDirDlgDesktopShortcuts" Value="Создать ярлык на экране" />
+	<String Id="MyInstallDirDlgStartMenuShortcuts" Value="Добавить ярлыки в меню «Пуск»" />
+	<String Id="MyInstallDirDlgPrinter" Value="Установить Принтер RustDesk" />
 
-</wixlocalization>
+</WixLocalization>
