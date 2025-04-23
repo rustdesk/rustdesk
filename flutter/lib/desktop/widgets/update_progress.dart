@@ -199,13 +199,19 @@ class UpdateProgressState extends State<UpdateProgress> {
           _onError('The download file size is 0.');
         } else {
           setState(() {});
-          Future.delayed(const Duration(milliseconds: 500), () {
-            msgBox(gFFI.sessionId, 'custom-nocancel', '{$appName} Update',
-                '{$appName}-to-update-tip', '', gFFI.dialogManager);
-            Future.delayed(const Duration(milliseconds: 1000), () {
+          msgBox(
+            gFFI.sessionId,
+            'custom-nocancel',
+            '{$appName} Update',
+            '{$appName}-to-update-tip',
+            '',
+            gFFI.dialogManager,
+            onSubmit: () {
+              debugPrint('Downloaded, update to new version now');
               bind.mainSetCommon(key: 'update-me', value: widget.downloadUrl);
-            });
-          });
+            },
+            submitTimeout: 5,
+          );
         }
       } else {
         setState(() {});

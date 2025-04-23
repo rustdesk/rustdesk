@@ -2480,7 +2480,7 @@ pub fn main_set_common(_key: String, _value: String) {
             );
         });
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         use crate::updater::get_download_file_from_url;
         if _key == "download-new-version" {
@@ -2509,9 +2509,10 @@ pub fn main_set_common(_key: String, _value: String) {
         } else if _key == "update-me" {
             if let Some(new_version_file) = get_download_file_from_url(&_value) {
                 if let Some(f) = new_version_file.to_str() {
+                    // 1.3.9 does not support "--update"
+                    // But we can assume that the new version supports it.
+                    #[cfg(target_os = "windows")]
                     if f.ends_with(".exe") {
-                        // 1.3.9 does not support "--update"
-                        // But we can assume that the new version supports it.
                         if let Err(e) =
                             crate::platform::run_exe_in_cur_session(f, vec!["--update"], false)
                         {
@@ -2524,6 +2525,16 @@ pub fn main_set_common(_key: String, _value: String) {
                     } else {
                         // unreachable!()
                     }
+                    #[cfg(target_os = "macos")]
+                    match crate::platform::update_to(f) {
+                        Ok(_) => {
+                            log::info!("Update successfully!");
+                        }
+                        Err(e) => {
+                            log::error!("Failed to update to new version, {}", e);
+                        }
+                    }
+                    fs::remove_file(f).ok();
                 }
             }
         }

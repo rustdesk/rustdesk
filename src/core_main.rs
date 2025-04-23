@@ -1,4 +1,4 @@
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use crate::client::translate;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -260,6 +260,21 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(
                     crate::virtual_display_manager::amyuni_idd::uninstall_driver()
                 );
+                return None;
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            use crate::platform;
+            if args[0] == "--update" {
+                let _text = match platform::update_me() {
+                    Ok(_) => {
+                        log::info!("{}", translate("Update successfully!".to_string()));
+                    }
+                    Err(err) => {
+                        log::error!("Update failed with error: {err}");
+                    }
+                };
                 return None;
             }
         }

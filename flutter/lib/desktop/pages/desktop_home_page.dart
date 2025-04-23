@@ -24,6 +24,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
+import '../../common.dart';
 import '../widgets/button.dart';
 
 class DesktopHomePage extends StatefulWidget {
@@ -434,7 +435,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         updateUrl.isNotEmpty &&
         !isCardClosed &&
         bind.mainUriPrefixSync().contains('rustdesk')) {
-      final isToUpdate = isWindows && bind.mainIsInstalled();
+      final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
       String btnText = isToUpdate ? 'Click to update' : 'Click to download';
       GestureTapCallback onPressed = () async {
         final Uri url = Uri.parse('https://rustdesk.com/download');
