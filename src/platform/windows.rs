@@ -1613,12 +1613,8 @@ pub fn check_update_printer_option() {
 pub fn update_install_option(k: &str, v: &str) -> ResultType<()> {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
-    let cmds = format!(
-        "
-chcp 65001
-reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {k} /t REG_SZ /d \"{v}\"
-    "
-    );
+    let cmds =
+        format!("chcp 65001 && reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {k} /t REG_SZ /d \"{v}\"");
     run_cmds(cmds, false, "update_install_option")?;
     Ok(())
 }
