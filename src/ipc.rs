@@ -675,7 +675,10 @@ async fn handle(data: Data, stream: &mut Connection) {
                     );
                 }
             }
-            None => {}
+            None => {
+                // `None` is usually used to get values.
+                // This branch is left blank for unification and further use.
+            }
         },
         _ => {}
     }
