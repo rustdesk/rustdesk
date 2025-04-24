@@ -623,6 +623,23 @@ pub fn is_prelogin() -> bool {
     n < 4 && n > 1
 }
 
+// Check "Lock".
+// "Switch user" can't be checked, because `get_values_of_seat0(&[0])` does not return the session.
+// The logged in session is "online" not "active".
+// And the "Switch user" screen is usually Wayland login session, which we do not support.
+pub fn is_locked() -> bool {
+    if is_prelogin() {
+        return false;
+    }
+
+    let values = get_values_of_seat0(&[0]);
+    let session = &values[0];
+    if session.is_empty() {
+        return false;
+    }
+    is_session_locked(session)
+}
+
 pub fn is_root() -> bool {
     crate::username() == "root"
 }

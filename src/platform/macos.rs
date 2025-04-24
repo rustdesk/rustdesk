@@ -491,6 +491,34 @@ pub fn is_prelogin() -> bool {
     get_active_userid() == "0"
 }
 
+// https://stackoverflow.com/questions/11505255/osx-check-if-the-screen-is-locked
+// No "CGSSessionScreenIsLocked" can be found when macOS is not locked.
+//
+// `ioreg -n Root -d1` returns `"CGSSessionScreenIsLocked"=Yes`
+// `ioreg -n Root -d1 -a` returns
+// ```
+// ...
+//    <key>CGSSessionScreenIsLocked</key>
+//    <true/>
+// ...
+// ```
+pub fn is_locked() -> bool {
+    if let Ok(output) = std::process::Command::new("ioreg")
+        .arg("-n")
+        .arg("Root")
+        .arg("-d1")
+        .output()
+    {
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        // Although `"CGSSessionScreenIsLocked"=Yes` was printed on my macOS,
+        // I also check `"CGSSessionScreenIsLocked"=true` for better compability.
+        output_str.contains("\"CGSSessionScreenIsLocked\"=Yes")
+            || output_str.contains("\"CGSSessionScreenIsLocked\"=true")
+    } else {
+        false
+    }
+}
+
 pub fn is_root() -> bool {
     crate::username() == "root"
 }
