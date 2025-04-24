@@ -124,7 +124,7 @@ class UpdateProgressState extends State<UpdateProgress> {
     debugPrint('Download new version error: $error');
     final msgBoxType = 'custom-nocancel-nook-hasclose';
     final msgBoxTitle = 'Error';
-    final msgBoxText = 'download-new-veresion-failed-tip';
+    final msgBoxText = 'download-new-version-failed-tip';
     final dialogManager = gFFI.dialogManager;
 
     close() {

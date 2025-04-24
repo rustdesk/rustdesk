@@ -141,13 +141,17 @@ pub fn is_prelogin() -> bool {
     false
 }
 
-// Note: This function does not work when the process is 32-bit and the OS is 64-bit Windows,
-// `process.cmd()` always returns [] in this case.
+// Note: This method is inefficient on Windows. It will get all the processes.
+// It should only be called when performance is not critical.
+// If we wanted to get the command line ourselves, there would be a lot of new code.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
     name: S1,
     args: &[S2],
 ) -> Vec<Pid> {
+    // This function does not work when the process is 32-bit and the OS is 64-bit Windows,
+    // `process.cmd()` always returns [] in this case.
+    // So we use `windows::get_pids_with_args_by_wmic()` instead.
     #[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
     {
         return windows::get_pids_with_args_by_wmic(name, args);
@@ -155,8 +159,7 @@ fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
     #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
     {
         let name = name.as_ref().to_lowercase();
-        let mut system = System::new_all();
-        system.refresh_processes();
+        let system = System::new_all();
         system
             .processes()
             .iter()
@@ -172,13 +175,16 @@ fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
     }
 }
 
-// Note: This function does not work when the process is 32-bit and the OS is 64-bit Windows,
-// `process.cmd()` always returns [] in this case.
+// Note: This method is inefficient on Windows. It will get all the processes.
+// It should only be called when performance is not critical.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
     name: S1,
     arg: S2,
 ) -> Vec<Pid> {
+    // This function does not work when the process is 32-bit and the OS is 64-bit Windows,
+    // `process.cmd()` always returns [] in this case.
+    // So we use `windows::get_pids_with_first_arg_by_wmic()` instead.
     #[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
     {
         return windows::get_pids_with_first_arg_by_wmic(name, arg);
@@ -186,8 +192,7 @@ pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
     #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
     {
         let name = name.as_ref().to_lowercase();
-        let mut system = System::new_all();
-        system.refresh_processes();
+        let system = System::new_all();
         system
             .processes()
             .iter()
@@ -198,17 +203,6 @@ pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
             })
             .map(|(&pid, _)| pid)
             .collect()
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn kill_process_by_pid(pid: Pid) -> ResultType<()> {
-    let s = System::new_all();
-    if let Some(process) = s.process(pid) {
-        process.kill();
-        Ok(())
-    } else {
-        hbb_common::bail!("Process with PID {} not found", pid)
     }
 }
 

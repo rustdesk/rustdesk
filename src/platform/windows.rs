@@ -13,7 +13,9 @@ use hbb_common::{
     libc::{c_int, wchar_t},
     log,
     message_proto::{DisplayInfo, Resolution, WindowsSession},
-    sleep, timeout, tokio,
+    sleep,
+    sysinfo::{Pid, System},
+    timeout, tokio,
 };
 use std::{
     collections::HashMap,
@@ -2434,28 +2436,22 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     }
 
     let app_name = crate::get_app_name();
-    let main_window_pids = crate::platform::get_pids_of_process_with_args::<_, &str>(
-        &format!("{}.exe", &app_name),
-        &[],
-    );
+    let app_exe_name = &format!("{}.exe", &app_name);
+    let main_window_pids =
+        crate::platform::get_pids_of_process_with_args::<_, &str>(&app_exe_name, &[]);
     let main_window_sessions = main_window_pids
         .iter()
         .map(|pid| get_session_id_of_process(pid.as_u32()))
         .flatten()
         .collect::<Vec<_>>();
-    for pid in main_window_pids {
-        let _ = crate::platform::kill_process_by_pid(pid);
-    }
-    let tray_pids =
-        crate::platform::get_pids_of_process_with_args(&format!("{}.exe", &app_name), &["--tray"]);
+    kill_process_by_pids(&app_exe_name, main_window_pids)?;
+    let tray_pids = crate::platform::get_pids_of_process_with_args(&app_exe_name, &["--tray"]);
     let tray_sessions = tray_pids
         .iter()
         .map(|pid| get_session_id_of_process(pid.as_u32()))
         .flatten()
         .collect::<Vec<_>>();
-    for pid in tray_pids {
-        let _ = crate::platform::kill_process_by_pid(pid);
-    }
+    kill_process_by_pids(&app_exe_name, tray_pids)?;
     let is_service_running = is_self_service_running();
 
     let install_reg_cmd = get_install_reg_subkey_cmd(&subkey, &app_name, &exe, &path, false)?;
@@ -2466,6 +2462,12 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     } else {
         "".to_owned()
     };
+    // We do not try to remove all files in the old version.
+    // Because I don't know whether additional files will be installed here after installation, such as drivers.
+    // Just copy files to the installation directory works fine.
+    //if exist \"{path}\" rd /s /q \"{path}\"
+    // md \"{path}\"
+    //
     // We need `taskkill` because:
     // 1. There may be some other processes like `rustdesk --connect` are running.
     // 2. Sometimes, the main window and the tray icon are showing
@@ -2521,6 +2523,27 @@ taskkill /F /IM {app_name}.exe{filter}
     Ok(())
 }
 
+// Double confirm the process name
+fn kill_process_by_pids(name: &str, pids: Vec<Pid>) -> ResultType<()> {
+    let name = name.to_lowercase();
+    let s = System::new_all();
+    // No need to check all names of `pids` first, and kill them then.
+    // It's rare case that they're not matched.
+    for pid in pids {
+        if let Some(process) = s.process(pid) {
+            if process.name().to_lowercase() != name {
+                bail!("Failed to kill the process, the names are mismatched.");
+            }
+            if !process.kill() {
+                bail!("Failed to kill the process");
+            }
+        } else {
+            bail!("Failed to kill the process, the pid is not found");
+        }
+    }
+    Ok(())
+}
+
 // Don't launch tray app when updating msi.
 // 1. Because `/qn` requires administrator permission and the tray app should be launched with user permission.
 //   Or launching the main window from the tray app will cause the main window to be launched with administrator permission.
@@ -2532,12 +2555,7 @@ taskkill /F /IM {app_name}.exe{filter}
 //    `1` and `3` must be done in custom actions.
 //    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str) -> ResultType<()> {
-    let cmds = format!(
-        "
-    chcp 65001
-    msiexec /i {msi} /qn LAUNCH_TRAY_APP=N
-    "
-    );
+    let cmds = format!("chcp 65001 && msiexec /i {msi} /qn LAUNCH_TRAY_APP=N",);
     run_cmds(cmds, false, "update-msi")?;
     Ok(())
 }

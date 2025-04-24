@@ -206,6 +206,7 @@ async fn do_download(
                     }
                     Ok(None) => {
                         is_all_downloaded = true;
+                        break;
                     },
                     Err(e) => {
                         log::error!("Download {} failed: {}", id, e);

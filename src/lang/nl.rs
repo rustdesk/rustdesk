@@ -685,7 +685,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Downloading {}", ""),
         ("{} Update", ""),
         ("{}-to-update-tip", ""),
-        ("download-new-veresion-failed-tip", ""),
+        ("download-new-version-failed-tip", ""),
         ("Auto update", ""),
         ("update-failed-check-msi-tip", ""),
     ].iter().cloned().collect();

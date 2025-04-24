@@ -254,7 +254,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("save-settings-tip", "Save settings"),
         ("dont-show-again-tip", "Don't show this again"),
         ("{}-to-update-tip", "{} will close now and install the new version."),
-        ("download-new-veresion-failed-tip", "Download failed. You can try again or click the View button to download from the release page and upgrade manually."),
+        ("download-new-version-failed-tip", "Download failed. You can try again or click the View button to download from the release page and upgrade manually."),
         ("update-failed-check-msi-tip", "Installation method check failed. Please click the View button to download from the release page and upgrade manually.")
     ].iter().cloned().collect();
 }

@@ -275,7 +275,6 @@ pub enum Data {
     #[cfg(all(target_os = "windows", feature = "flutter"))]
     PrinterData(Vec<u8>),
     InstallOption(Option<(String, String)>),
-    #[cfg(feature = "flutter")]
     #[cfg(all(
         feature = "flutter",
         not(any(target_os = "android", target_os = "ios"))
