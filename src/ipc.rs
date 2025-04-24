@@ -494,7 +494,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                         None
                     };
                 } else if name == "hide_cm" {
-                    value = if crate::hbbs_http::sync::is_pro() {
+                    value = if crate::hbbs_http::sync::is_pro() || crate::common::is_custom_client() {
                         Some(hbb_common::password_security::hide_cm().to_string())
                     } else {
                         None
