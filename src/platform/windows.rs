@@ -21,7 +21,10 @@ use std::{
     fs,
     io::{self, prelude::*},
     mem,
-    os::{raw::c_ulong, windows::process::CommandExt},
+    os::{
+        raw::c_ulong,
+        windows::{ffi::OsStringExt, process::CommandExt},
+    },
     path::*,
     ptr::null_mut,
     sync::{atomic::Ordering, Arc, Mutex},
@@ -58,6 +61,13 @@ use winapi::{
             PRINTER_INFO_1W,
         },
         winuser::*,
+    },
+};
+use windows::Win32::{
+    Foundation::{CloseHandle as WinCloseHandle, HANDLE as WinHANDLE},
+    System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
     },
 };
 use windows_service::{
@@ -954,6 +964,19 @@ pub fn is_prelogin() -> bool {
         return false;
     };
     username.is_empty() || username == "SYSTEM"
+}
+
+// `is_logon_ui()` is regardless of multiple sessions now.
+// It only check if "LogonUI.exe" exists.
+//
+// If there're mulitple sessions (logged in users),
+// some are in the login screen, while the others are not.
+// Then this function may not work fine if the session we want to handle(connect) is not in the login screen.
+// But it's a rare case and cannot be simply handled, so it will not be dealt with for the time being.
+#[inline]
+pub fn is_logon_ui() -> ResultType<bool> {
+    let pids = get_pids("LogonUI.exe")?;
+    Ok(!pids.is_empty())
 }
 
 pub fn is_root() -> bool {
@@ -2915,4 +2938,39 @@ pub fn send_raw_data_to_printer(printer_name: Option<String>, data: Vec<u8>) -> 
     }
 
     Ok(())
+}
+
+fn get_pids<S: AsRef<str>>(name: S) -> ResultType<Vec<u32>> {
+    let name = name.as_ref().to_lowercase();
+    let mut pids = Vec::new();
+
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)?;
+        if snapshot == WinHANDLE::default() {
+            return Ok(pids);
+        }
+
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+
+        if Process32FirstW(snapshot, &mut entry).is_ok() {
+            loop {
+                let proc_name = OsString::from_wide(&entry.szExeFile)
+                    .to_string_lossy()
+                    .to_lowercase();
+
+                if proc_name.contains(&name) {
+                    pids.push(entry.th32ProcessID);
+                }
+
+                if !Process32NextW(snapshot, &mut entry).is_ok() {
+                    break;
+                }
+            }
+        }
+
+        let _ = WinCloseHandle(snapshot);
+    }
+
+    Ok(pids)
 }

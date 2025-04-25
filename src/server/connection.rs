@@ -1946,6 +1946,27 @@ impl Connection {
                 return true;
             }
 
+            // https://github.com/rustdesk/rustdesk-server-pro/discussions/646
+            // `is_logon` is used to check login with `OPTION_ALLOW_LOGON_SCREEN_PASSWORD` == "Y".
+            // `is_logon_ui()` is used on Windows, because there's no good way to detect `is_locked()`.
+            // Detecting `is_logon_ui()` (if `LogonUI.exe` running) is a workaround.
+            #[cfg(target_os = "windows")]
+            let is_logon = || {
+                crate::platform::is_prelogin() || {
+                    match crate::platform::is_logon_ui() {
+                        Ok(result) => result,
+                        Err(e) => {
+                            log::error!("Failed to detect logon UI: {:?}", e);
+                            false
+                        }
+                    }
+                }
+            };
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            let is_logon = || crate::platform::is_prelogin() || crate::platform::is_locked();
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            let is_logon = || crate::platform::is_prelogin();
+
             if !hbb_common::is_ip_str(&lr.username)
                 && !hbb_common::is_domain_port_str(&lr.username)
                 && lr.username != Config::get_id()
@@ -1954,8 +1975,8 @@ impl Connection {
                     .await;
                 return false;
             } else if (password::approve_mode() == ApproveMode::Click
-                && !(crate::platform::is_prelogin()
-                    && crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"))
+                && !(crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
+                    && is_logon()))
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
