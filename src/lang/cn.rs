@@ -653,7 +653,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "上传文件夹"),
         ("Upload files", "上传文件"),
         ("Clipboard is synchronized", "剪贴板已同步"),
-        ("Update client clipboard", "更新客户端的粘贴板"),
+        ("Update client clipboard", "更新客户端的剪贴板"),
         ("Untagged", "无标签"),
         ("new-version-of-{}-tip", "{} 版本更新"),
         ("Accessible devices", "可访问的设备"),
@@ -681,5 +681,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "被控端的权限设置拒绝了远程打印。"),
         ("save-settings-tip", "保存设置"),
         ("dont-show-again-tip", "不再显示此信息"),
+        ("Take screenshot", "截屏"),
+        ("screenshot-merged-screen-not-supported-tip", "当前不支持多个屏幕的合并截屏，请切换到单个屏幕重试。"),
+        ("screenshot-action-tip", "请选择如何继续截屏。"),
+        ("Save as", "另存为"),
+        ("Copy to clipboard", "复制到剪贴板"),
     ].iter().cloned().collect();
 }

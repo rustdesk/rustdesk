@@ -412,6 +412,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::RecordScreen(start));
     }
 
+    pub fn is_screenshot_supported(&self) -> bool {
+        crate::common::is_support_screenshot_num(self.lc.read().unwrap().version)
+    }
+
+    pub fn take_screenshot(&self, display: i32, sid: String) {
+        self.send(Data::TakeScreenshot((display, sid)));
+    }
+
     pub fn is_recording(&self) -> bool {
         self.lc.read().unwrap().record_state
     }
@@ -1586,6 +1594,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_record_status(&self, start: bool);
     fn update_empty_dirs(&self, _res: ReadEmptyDirsResponse) {}
     fn printer_request(&self, id: i32, path: String);
+    fn handle_screenshot_resp(&self, sid: String, msg: String);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

@@ -49,7 +49,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, Display, EncodeInput, TraitCapturer,
+    CodecFormat, Display, EncodeInput, TraitCapturer, TraitPixelBuffer,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -70,6 +70,12 @@ lazy_static::lazy_static! {
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
+    static ref SCREENSHOTS: Mutex<HashMap<usize, Screenshot>> = Default::default();
+}
+
+struct Screenshot {
+    sid: String,
+    tx: Sender,
 }
 
 #[inline]
@@ -639,6 +645,17 @@ fn run(vs: VideoService) -> ResultType<()> {
             Ok(frame) => {
                 repeat_encode_counter = 0;
                 if frame.valid() {
+                    let screenshot = SCREENSHOTS.lock().unwrap().remove(&display_idx);
+                    if let Some(screenshot) = screenshot {
+                        let (msg, data) = match &frame {
+                            scrap::Frame::PixelBuffer(f) => ("".to_owned(), f.data().into()),
+                            _ => ("Please change the Codec and try again.".to_owned(), vec![]),
+                        };
+                        std::thread::spawn(move || {
+                            handle_screenshot(screenshot, msg, capture_width, capture_height, data);
+                        });
+                    }
+
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
                     let send_conn_ids = handle_one_frame(
                         display_idx,
@@ -1205,4 +1222,52 @@ fn check_qos(
     }
     drop(video_qos);
     Ok(())
+}
+
+pub fn set_take_screenshot(display_idx: usize, sid: String, tx: Sender) {
+    SCREENSHOTS
+        .lock()
+        .unwrap()
+        .insert(display_idx, Screenshot { sid, tx });
+}
+
+fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, data: Vec<u8>) {
+    let mut response = ScreenshotResponse::new();
+    response.sid = screenshot.sid;
+    if msg.is_empty() {
+        if data.is_empty() {
+            response.msg = "Failed to take screenshot, please try again later.".to_owned();
+        } else {
+            fn encode_png(width: usize, height: usize, bgra: Vec<u8>) -> ResultType<Vec<u8>> {
+                let pixbuf = scrap::PixelBuffer::new(&bgra, scrap::Pixfmt::BGRA, width, height);
+                let mut rgba = Vec::new();
+                scrap::convert::convert(&pixbuf, scrap::Pixfmt::RGBA, &mut rgba)?;
+
+                let mut png = Vec::new();
+                let mut encoder =
+                    repng::Options::smallest(width as _, height as _).build(&mut png)?;
+                encoder.write(&rgba)?;
+                encoder.finish()?;
+                Ok(png)
+            }
+            match encode_png(w as _, h as _, data) {
+                Ok(png) => {
+                    response.data = png.into();
+                }
+                Err(e) => {
+                    response.msg = format!("Error encoding png: {}", e);
+                }
+            }
+        }
+    } else {
+        response.msg = msg;
+    }
+    let mut msg_out = Message::new();
+    msg_out.set_screenshot_response(response);
+    if let Err(e) = screenshot
+        .tx
+        .send((hbb_common::tokio::time::Instant::now(), Arc::new(msg_out)))
+    {
+        log::error!("Failed to send screenshot, {}", e);
+    }
 }

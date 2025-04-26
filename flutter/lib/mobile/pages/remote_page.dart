@@ -695,9 +695,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       );
       if (index != null) {
         if (index < mobileActionMenus.length) {
-          mobileActionMenus[index].onPressed.call();
+          mobileActionMenus[index].onPressed?.call();
         } else if (index < mobileActionMenus.length + more.length) {
-          menus[index - mobileActionMenus.length].onPressed.call();
+          menus[index - mobileActionMenus.length].onPressed?.call();
         }
       }
     }();
@@ -770,7 +770,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         elevation: 8,
       );
       if (index != null && index < menus.length) {
-        menus[index].onPressed.call();
+        menus[index].onPressed?.call();
       }
     });
   }
@@ -1267,7 +1267,7 @@ void showOptions(
         title: resolution.child,
         onTap: () {
           close();
-          resolution.onPressed();
+          resolution.onPressed?.call();
         },
       ));
     }
@@ -1279,7 +1279,7 @@ void showOptions(
         title: virtualDisplayMenu.child,
         onTap: () {
           close();
-          virtualDisplayMenu.onPressed();
+          virtualDisplayMenu.onPressed?.call();
         },
       ));
     }

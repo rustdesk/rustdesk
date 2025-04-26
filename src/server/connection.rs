@@ -2819,6 +2819,25 @@ impl Connection {
                 Some(message::Union::VoiceCallResponse(_response)) => {
                     // TODO: Maybe we can do a voice call from cm directly.
                 }
+                Some(message::Union::ScreenshotRequest(request)) => {
+                    if let Some(tx) = self.inner.tx.clone() {
+                        crate::video_service::set_take_screenshot(
+                            request.display as _,
+                            request.sid.clone(),
+                            tx,
+                        );
+                        self.refresh_video_display(Some(request.display as usize));
+                    } else {
+                        let mut msg_out = Message::new();
+                        msg_out.set_screenshot_response(ScreenshotResponse {
+                            msg: "Unable to capture display at this time, please try again later."
+                                .to_owned(),
+                            sid: request.sid,
+                            ..Default::default()
+                        });
+                        self.send(msg_out).await;
+                    }
+                }
                 _ => {}
             }
         }

@@ -681,5 +681,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "Sas impostatziones de sos permissos de s'ala controllada negant s'imprenta remota."),
         ("save-settings-tip", "Sarva sas impostatziones"),
         ("dont-show-again-tip", "Non mustres prus custu messàgiu"),
+        ("Take screenshot", ""),
+        ("screenshot-merged-screen-not-supported-tip", ""),
+        ("screenshot-action-tip", ""),
+        ("Save as", ""),
+        ("Copy to clipboard", ""),
     ].iter().cloned().collect();
 }

@@ -478,9 +478,9 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       );
       if (index != null) {
         if (index < mobileActionMenus.length) {
-          mobileActionMenus[index].onPressed.call();
+          mobileActionMenus[index].onPressed?.call();
         } else if (index < mobileActionMenus.length + more.length) {
-          menus[index - mobileActionMenus.length].onPressed.call();
+          menus[index - mobileActionMenus.length].onPressed?.call();
         }
       }
     }();
@@ -553,7 +553,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
         elevation: 8,
       );
       if (index != null && index < menus.length) {
-        menus[index].onPressed.call();
+        menus[index].onPressed?.call();
       }
     });
   }
