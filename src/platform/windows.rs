@@ -2544,18 +2544,21 @@ fn kill_process_by_pids(name: &str, pids: Vec<Pid>) -> ResultType<()> {
     Ok(())
 }
 
-// Don't launch tray app when updating msi.
+// Don't launch tray app when running with `\qn`.
 // 1. Because `/qn` requires administrator permission and the tray app should be launched with user permission.
 //   Or launching the main window from the tray app will cause the main window to be launched with administrator permission.
 // 2. We are not able to launch the tray app if the UI is in the login screen.
 // `fn update_me()` can handle the above cases, but for msi update, we need to do more work to handle the above cases.
-//    1. Record the tray app session ids
-//    2. Do the update
+//    1. Record the tray app session ids.
+//    2. Do the update.
 //    3. Restore the tray app sessions.
 //    `1` and `3` must be done in custom actions.
 //    We need also to handle the command line parsing to find the tray processes.
-pub fn update_me_msi(msi: &str) -> ResultType<()> {
-    let cmds = format!("chcp 65001 && msiexec /i {msi} /qn LAUNCH_TRAY_APP=N",);
+pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
+    let cmds = format!(
+        "chcp 65001 && msiexec /i {msi} {}",
+        if quiet { "/qn LAUNCH_TRAY_APP=N" } else { "" }
+    );
     run_cmds(cmds, false, "update-msi")?;
     Ok(())
 }

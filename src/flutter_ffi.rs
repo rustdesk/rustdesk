@@ -2519,7 +2519,7 @@ pub fn main_set_common(_key: String, _value: String) {
                             log::error!("Failed to run the update exe: {}", e);
                         }
                     } else if f.ends_with(".msi") {
-                        if let Err(e) = crate::platform::update_me_msi(f) {
+                        if let Err(e) = crate::platform::update_me_msi(f, false) {
                             log::error!("Failed to run the update msi: {}", e);
                         }
                     } else {

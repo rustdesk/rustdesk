@@ -202,7 +202,7 @@ fn update_new_version(is_msi: bool, version: &str, file_path: &PathBuf) {
     if let Some(p) = file_path.to_str() {
         if let Some(session_id) = crate::platform::get_current_process_session_id() {
             if is_msi {
-                match crate::platform::update_me_msi(p) {
+                match crate::platform::update_me_msi(p, true) {
                     Ok(_) => {
                         log::debug!("New version \"{}\" updated.", version);
                     }
