@@ -3108,6 +3108,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "toml 0.7.8",
+ "tungstenite",
  "url",
  "uuid",
  "winapi 0.3.9",
