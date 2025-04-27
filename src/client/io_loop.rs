@@ -351,7 +351,7 @@ impl<T: InvokeUiSession> Remote<T> {
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     async fn handle_local_clipboard_msg(
         &self,
-        peer: &mut crate::client::FramedStream,
+        peer: &mut Stream,
         msg: Option<clipboard::ClipboardFile>,
     ) {
         match msg {
