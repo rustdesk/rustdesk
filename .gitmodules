@@ -1,0 +1,3 @@
+[submodule "hbb_common"]
+	path = hbb_common
+	url = https://github.com/to-alan/hbb_common.git
