@@ -242,7 +242,7 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-linux-android,
-              os: ubuntu-20.04,
+              os: ubuntu-22.04,
               openssl-arch: android-arm64,
               ref: master, # latest
             }
