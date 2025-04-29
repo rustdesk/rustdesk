@@ -976,6 +976,7 @@ jobs:
                libasound2-dev \
                libc6-dev \
                libclang-dev \
+               libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -1245,6 +1246,7 @@ jobs:
                libasound2-dev \
                libc6-dev \
                libclang-dev \
+               libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
