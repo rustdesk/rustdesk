@@ -2317,6 +2317,17 @@ impl LoginConfigHandler {
         if display_name.is_empty() {
             display_name = crate::username();
         }
+        let display_name = display_name
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                if i == 0 {
+                    c.to_uppercase().to_string()
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect::<String>();
         #[cfg(not(target_os = "android"))]
         let my_platform = whoami::platform().to_string();
         #[cfg(target_os = "android")]
