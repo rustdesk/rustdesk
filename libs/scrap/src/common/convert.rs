@@ -200,6 +200,11 @@ pub fn convert_to_yuv(
 
 #[cfg(not(target_os = "ios"))]
 pub fn convert(captured: &PixelBuffer, pixfmt: crate::Pixfmt, dst: &mut Vec<u8>) -> ResultType<()> {
+    if captured.pixfmt() == pixfmt {
+        dst.extend_from_slice(captured.data());
+        return Ok(());
+    }
+
     let src = captured.data();
     let src_stride = captured.stride();
     let src_pixfmt = captured.pixfmt();
