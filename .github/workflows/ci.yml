@@ -4,9 +4,8 @@ env:
 #   MIN_SUPPORTED_RUST_VERSION: "1.46.0"
 #   CICD_INTERMEDIATES_DIR: "_cicd-intermediates"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2024.11.16
   # for multiarch gcc compatibility
-  VCPKG_COMMIT_ID: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
+  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
 
 on:
   workflow_dispatch:
@@ -82,7 +81,7 @@ jobs:
           # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
           # - { target: x86_64-pc-windows-msvc      , os: windows-2022                  }
-          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-20.04                  }
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-22.04                  }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
     - name: Export GitHub Actions cache environment variables
@@ -112,6 +111,7 @@ jobs:
                g++ \
                libpam0g-dev \
                libasound2-dev \
+               libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \

@@ -20,7 +20,7 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04,
+              os: ubuntu-22.04,
               extra-build-args: "",
             }
     steps:
@@ -40,9 +40,9 @@ jobs:
             gcc \
             git \
             g++ \
-            libclang-10-dev \
+            libclang-11-dev \
             libgtk-3-dev \
-            llvm-10-dev \
+            llvm-11-dev \
             nasm \
             ninja-build \
             pkg-config \

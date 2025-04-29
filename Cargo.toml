@@ -118,6 +118,13 @@ winapi = { version = "0.3", features = [
     "ioapiset",
     "winspool",
 ] }
+windows = { version = "0.61.1", features = [
+    "Win32",
+    "Win32_System",
+    "Win32_System_Diagnostics",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
+] }
 winreg = "0.11"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display" }
@@ -215,7 +222,3 @@ panic = 'abort'
 strip = true
 #opt-level = 'z' # only have smaller size after strip
 rpath = true
-
-[profile.dev]
-split-debuginfo = '...'  # Platform-specific.
-#strip = "debuginfo" 
