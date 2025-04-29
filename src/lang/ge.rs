@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", "პრინტერი {} დაინსტალირებულია და მზად არის გამოსაყენებლად."),
         ("Install {} Printer", "დააინსტალირეთ პრინტერი {}"),
         ("Outgoing Print Jobs", "გამავალი ბეჭდვის დავალება"),
-        ("Incomming Print Jobs", "შემომავალი ბეჭდვის დავალება"),
+        ("Incoming Print Jobs", "შემომავალი ბეჭდვის დავალება"),
         ("Incoming Print Job", "შემომავალი ბეჭდვის დავალება"),
         ("use-the-default-printer-tip", "ნაგულისხმევი პრინტერის გამოყენება"),
         ("use-the-selected-printer-tip", "არჩეული პრინტერის გამოყენება"),

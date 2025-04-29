@@ -525,7 +525,7 @@ class FfiModel with ChangeNotifier {
         if (saveSettings.value || dontShowAgain.value) {
           bind.mainSetLocalOption(key: kKeyPrinterSelected, value: printerName);
           bind.mainSetLocalOption(
-              key: kKeyPrinterIncommingJobAction,
+              key: kKeyPrinterIncomingJobAction,
               value: defaultOrSelectedGroupValue.value);
         }
         if (dontShowAgain.value) {
@@ -537,7 +537,7 @@ class FfiModel with ChangeNotifier {
       onCancel() {
         if (dontShowAgain.value) {
           bind.mainSetLocalOption(
-              key: kKeyPrinterIncommingJobAction,
+              key: kKeyPrinterIncomingJobAction,
               value: kValuePrinterIncomingJobDismiss);
         }
         close();

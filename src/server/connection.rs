@@ -2827,15 +2827,6 @@ impl Connection {
                             tx,
                         );
                         self.refresh_video_display(Some(request.display as usize));
-                    } else {
-                        let mut msg_out = Message::new();
-                        msg_out.set_screenshot_response(ScreenshotResponse {
-                            msg: "Unable to capture display at this time, please try again later."
-                                .to_owned(),
-                            sid: request.sid,
-                            ..Default::default()
-                        });
-                        self.send(msg_out).await;
                     }
                 }
                 _ => {}

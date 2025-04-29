@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", "La stampante {} è installata e pronta all'uso."),
         ("Install {} Printer", "Installa la stampante {}"),
         ("Outgoing Print Jobs", "Lavori di stampa in uscita"),
-        ("Incomming Print Jobs", "Lavori di stampa in entrata"),
+        ("Incoming Print Jobs", "Lavori di stampa in entrata"),
         ("Incoming Print Job", "Lavoro di stampa in entrata"),
         ("use-the-default-printer-tip", "Usa la stampante predefinita"),
         ("use-the-selected-printer-tip", "Usa la stampante selezionata"),

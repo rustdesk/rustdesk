@@ -1,3 +1,4 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::{update_clipboard, ClipboardSide};
 use hbb_common::{message_proto::*, ResultType};
 use std::sync::Mutex;
@@ -72,13 +73,16 @@ impl Screenshot {
                 std::fs::write(p, data)?;
             }
             ScreenshotAction::CopyToClipboard => {
-                let clips = vec![Clipboard {
-                    compress: false,
-                    content: data,
-                    format: ClipboardFormat::ImagePng.into(),
-                    ..Default::default()
-                }];
-                update_clipboard(clips, ClipboardSide::Client);
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                {
+                    let clips = vec![Clipboard {
+                        compress: false,
+                        content: data,
+                        format: ClipboardFormat::ImagePng.into(),
+                        ..Default::default()
+                    }];
+                    update_clipboard(clips, ClipboardSide::Client);
+                }
             }
             ScreenshotAction::Discard => {}
         }

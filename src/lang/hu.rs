@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", "A(z) {} nyomtató készen áll"),
         ("Install {} Printer", "A(z) {} nyomtató nyomtató telepítése"),
         ("Outgoing Print Jobs", "Kimenő nyomtatási feladatok"),
-        ("Incomming Print Jobs", "Bejövő nyomtatási feladatok"),
+        ("Incoming Print Jobs", "Bejövő nyomtatási feladatok"),
         ("Incoming Print Job", "Bejövő nyomtatási feladat"),
         ("use-the-default-printer-tip", "Alapértelmezett nyomtató használata"),
         ("use-the-selected-printer-tip", "Kiválasztott nyomtató használata"),

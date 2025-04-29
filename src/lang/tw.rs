@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", "{} 印表機已安裝，您可以使用列印功能了。"),
         ("Install {} Printer", "安裝 {} 印表機"),
         ("Outgoing Print Jobs", "傳出的列印任務"),
-        ("Incomming Print Jobs", "傳入的列印任務"),
+        ("Incoming Print Jobs", "傳入的列印任務"),
         ("Incoming Print Job", "傳入的列印任務"),
         ("use-the-default-printer-tip", "使用預設的印表機"),
         ("use-the-selected-printer-tip", "使用選取的印表機"),

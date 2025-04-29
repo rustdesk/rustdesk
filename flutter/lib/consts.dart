@@ -220,7 +220,8 @@ const double kDefaultQuality = 50;
 const double kMaxQuality = 100;
 const double kMaxMoreQuality = 2000;
 
-const String kKeyPrinterIncommingJobAction = 'printer-incomming-job-action';
+// incomming (should be incoming) is kept, because change it will break the previous setting.
+const String kKeyPrinterIncomingJobAction = 'printer-incomming-job-action';
 const String kValuePrinterIncomingJobDismiss = 'dismiss';
 const String kValuePrinterIncomingJobDefault = '';
 const String kValuePrinterIncomingJobSelected = 'selected';

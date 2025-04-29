@@ -1908,7 +1908,7 @@ class __PrinterState extends State<_Printer> {
     final scrollController = ScrollController();
     return ListView(controller: scrollController, children: [
       outgoing(context),
-      incomming(context),
+      incoming(context),
     ]).marginOnly(bottom: _kListViewBottomMargin);
   }
 
@@ -1995,15 +1995,15 @@ class __PrinterState extends State<_Printer> {
     return _Card(title: 'Outgoing Print Jobs', children: children);
   }
 
-  Widget incomming(BuildContext context) {
+  Widget incoming(BuildContext context) {
     onRadioChanged(String value) async {
       await bind.mainSetLocalOption(
-          key: kKeyPrinterIncommingJobAction, value: value);
+          key: kKeyPrinterIncomingJobAction, value: value);
       setState(() {});
     }
 
     PrinterOptions printerOptions = PrinterOptions.load();
-    return _Card(title: 'Incomming Print Jobs', children: [
+    return _Card(title: 'Incoming Print Jobs', children: [
       _Radio(context,
           value: kValuePrinterIncomingJobDismiss,
           groupValue: printerOptions.action,
