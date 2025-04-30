@@ -154,7 +154,7 @@ pub fn is_support_screenshot(ver: &str) -> bool {
 
 #[inline]
 pub fn is_support_screenshot_num(ver: i64) -> bool {
-    ver >= hbb_common::get_version_number("1.3.10")
+    ver >= hbb_common::get_version_number("1.4.0")
 }
 
 // is server process, with "--server" args
