@@ -5947,7 +5947,6 @@ dependencies = [
  "uuid",
  "virtual_display",
  "wallpaper",
- "whoami",
  "winapi 0.3.9",
  "windows 0.61.1",
  "windows-service",

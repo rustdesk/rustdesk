@@ -7,6 +7,8 @@ use std::{
 
 use serde_json::{json, Map, Value};
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::whoami;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},

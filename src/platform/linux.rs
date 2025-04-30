@@ -1089,7 +1089,7 @@ mod desktop {
             }
             self.display = self
                 .display
-                .replace(&whoami::hostname(), "")
+                .replace(&hbb_common::whoami::hostname(), "")
                 .replace("localhost", "");
         }
 
