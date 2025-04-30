@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", "La stampante {} è installata e pronta all'uso."),
         ("Install {} Printer", "Installa la stampante {}"),
         ("Outgoing Print Jobs", "Lavori di stampa in uscita"),
-        ("Incomming Print Jobs", "Lavori di stampa in entrata"),
+        ("Incoming Print Jobs", "Lavori di stampa in entrata"),
         ("Incoming Print Job", "Lavoro di stampa in entrata"),
         ("use-the-default-printer-tip", "Usa la stampante predefinita"),
         ("use-the-selected-printer-tip", "Usa la stampante selezionata"),
@@ -681,5 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "Le impostazioni di autorizzazione del lato controllato negano la stampa remota."),
         ("save-settings-tip", "Salva impostazioni"),
         ("dont-show-again-tip", "Non visualizzare più questo messaggio"),
+        ("Take screenshot", ""),
+        ("Taking screenshot", ""),
+        ("screenshot-merged-screen-not-supported-tip", ""),
+        ("screenshot-action-tip", ""),
+        ("Save as", ""),
+        ("Copy to clipboard", ""),
     ].iter().cloned().collect();
 }

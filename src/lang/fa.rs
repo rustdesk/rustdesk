@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", "چاپگر {} آماده است"),
         ("Install {} Printer", "نصب چاپگر {}"),
         ("Outgoing Print Jobs", "وظایف چاپ خروجی"),
-        ("Incomming Print Jobs", "وظایف چاپ ورودی"),
+        ("Incoming Print Jobs", "وظایف چاپ ورودی"),
         ("Incoming Print Job", "وظیفه چاپ ورودی"),
         ("use-the-default-printer-tip", "از چاپگر پیش‌فرض استفاده کنید"),
         ("use-the-selected-printer-tip", "از چاپگر انتخاب‌شده استفاده کنید"),
@@ -681,5 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "شما مجوز لازم برای چاپ از راه دور را ندارید"),
         ("save-settings-tip", "تنظیمات را ذخیره کنید"),
         ("dont-show-again-tip", "دیگر نمایش داده نشود"),
+        ("Take screenshot", ""),
+        ("Taking screenshot", ""),
+        ("screenshot-merged-screen-not-supported-tip", ""),
+        ("screenshot-action-tip", ""),
+        ("Save as", ""),
+        ("Copy to clipboard", ""),
     ].iter().cloned().collect();
 }

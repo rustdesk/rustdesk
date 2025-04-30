@@ -250,6 +250,16 @@ pub fn session_refresh(session_id: SessionID, display: usize) {
     }
 }
 
+pub fn session_take_screenshot(session_id: SessionID, display: usize) {
+    if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        s.take_screenshot(display as _, session_id.to_string());
+    }
+}
+
+pub fn session_handle_screenshot(session_id: SessionID, action: String) -> String {
+    crate::client::screenshot::handle_screenshot(action)
+}
+
 pub fn session_is_multi_ui_session(session_id: SessionID) -> SyncReturn<bool> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         SyncReturn(session.is_multi_ui_session())
@@ -2438,6 +2448,16 @@ pub fn main_set_common(_key: String, _value: String) {
                     (false, err)
                 }
             };
+            if success {
+                // Use `ipc` to notify the server process to update the install option in the registry.
+                // Because `install_update_printer()` may prompt for permissions, there is no need to prompt again here.
+                if let Err(e) = crate::ipc::set_install_option(
+                    crate::platform::REG_NAME_INSTALL_PRINTER.to_string(),
+                    "1".to_string(),
+                ) {
+                    log::error!("Failed to set install printer option: {}", e);
+                }
+            }
             let data = HashMap::from([
                 ("name", serde_json::json!("install-printer-res")),
                 ("success", serde_json::json!(success)),
@@ -2448,6 +2468,27 @@ pub fn main_set_common(_key: String, _value: String) {
                 serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
             );
         });
+    }
+}
+
+pub fn session_get_common_sync(
+    session_id: SessionID,
+    key: String,
+    param: String,
+) -> SyncReturn<Option<String>> {
+    SyncReturn(session_get_common(session_id, key, param))
+}
+
+pub fn session_get_common(session_id: SessionID, key: String, param: String) -> Option<String> {
+    if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        let v = if key == "is_screenshot_supported" {
+            s.is_screenshot_supported().to_string()
+        } else {
+            "".to_owned()
+        };
+        Some(v)
+    } else {
+        None
     }
 }
 

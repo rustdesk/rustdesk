@@ -1908,7 +1908,7 @@ class __PrinterState extends State<_Printer> {
     final scrollController = ScrollController();
     return ListView(controller: scrollController, children: [
       outgoing(context),
-      incomming(context),
+      incoming(context),
     ]).marginOnly(bottom: _kListViewBottomMargin);
   }
 
@@ -1979,7 +1979,7 @@ class __PrinterState extends State<_Printer> {
     final installed = bind.mainIsInstalled();
     // `is-printer-installed` may fail, but it's rare case.
     // Add additional error message here if it's really needed.
-    final driver_installed =
+    final isPrinterInstalled =
         bind.mainGetCommonSync(key: 'is-printer-installed') == 'true';
 
     final List<Widget> children = [];
@@ -1988,22 +1988,22 @@ class __PrinterState extends State<_Printer> {
     } else {
       children.addAll([
         if (!installed) tipClientNotInstalled(),
-        if (installed && !driver_installed) tipPrinterNotInstalled(),
-        if (installed && driver_installed) tipReady()
+        if (installed && !isPrinterInstalled) tipPrinterNotInstalled(),
+        if (installed && isPrinterInstalled) tipReady()
       ]);
     }
     return _Card(title: 'Outgoing Print Jobs', children: children);
   }
 
-  Widget incomming(BuildContext context) {
+  Widget incoming(BuildContext context) {
     onRadioChanged(String value) async {
       await bind.mainSetLocalOption(
-          key: kKeyPrinterIncommingJobAction, value: value);
+          key: kKeyPrinterIncomingJobAction, value: value);
       setState(() {});
     }
 
     PrinterOptions printerOptions = PrinterOptions.load();
-    return _Card(title: 'Incomming Print Jobs', children: [
+    return _Card(title: 'Incoming Print Jobs', children: [
       _Radio(context,
           value: kValuePrinterIncomingJobDismiss,
           groupValue: printerOptions.action,

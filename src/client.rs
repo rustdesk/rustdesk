@@ -58,7 +58,6 @@ use hbb_common::{
     sha2::{Digest, Sha256},
     socket_client::{connect_tcp, connect_tcp_local, ipv4_to_ipv6},
     sodiumoxide::{base64, crypto::sign},
-    tcp::FramedStream,
     timeout,
     tokio::{
         self,
@@ -86,6 +85,7 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
+pub mod screenshot;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
@@ -2318,6 +2318,22 @@ impl LoginConfigHandler {
         if display_name.is_empty() {
             display_name = crate::username();
         }
+        let display_name = display_name
+            .split_whitespace()
+            .map(|word| {
+                word.chars()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        if i == 0 {
+                            c.to_uppercase().to_string()
+                        } else {
+                            c.to_string()
+                        }
+                    })
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
         #[cfg(not(target_os = "android"))]
         let my_platform = whoami::platform().to_string();
         #[cfg(target_os = "android")]
@@ -3321,6 +3337,7 @@ pub enum Data {
     CloseVoiceCall,
     ResetDecoder(Option<usize>),
     RenameFile((i32, String, String, bool)),
+    TakeScreenshot((i32, String)),
 }
 
 /// Keycode for key events.
@@ -3557,8 +3574,7 @@ pub mod peer_online {
         rendezvous_proto::*,
         sleep,
         socket_client::connect_tcp,
-        tcp::FramedStream,
-        ResultType,
+        ResultType, Stream,
     };
 
     pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
@@ -3581,7 +3597,7 @@ pub mod peer_online {
         }
     }
 
-    async fn create_online_stream() -> ResultType<FramedStream> {
+    async fn create_online_stream() -> ResultType<Stream> {
         let (rendezvous_server, _servers, _contained) =
             crate::get_rendezvous_server(READ_TIMEOUT).await;
         let tmp: Vec<&str> = rendezvous_server.split(":").collect();

@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", ""),
         ("Install {} Printer", ""),
         ("Outgoing Print Jobs", ""),
-        ("Incomming Print Jobs", ""),
+        ("Incoming Print Jobs", ""),
         ("Incoming Print Job", ""),
         ("use-the-default-printer-tip", ""),
         ("use-the-selected-printer-tip", ""),
@@ -681,5 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", ""),
         ("save-settings-tip", ""),
         ("dont-show-again-tip", ""),
+        ("Take screenshot", ""),
+        ("Taking screenshot", ""),
+        ("screenshot-merged-screen-not-supported-tip", ""),
+        ("screenshot-action-tip", ""),
+        ("Save as", ""),
+        ("Copy to clipboard", ""),
     ].iter().cloned().collect();
 }

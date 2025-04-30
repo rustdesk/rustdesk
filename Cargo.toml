@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.3.9"
+version = "1.4.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -117,6 +117,13 @@ winapi = { version = "0.3", features = [
     "cfgmgr32",
     "ioapiset",
     "winspool",
+] }
+windows = { version = "0.61.1", features = [
+    "Win32",
+    "Win32_System",
+    "Win32_System_Diagnostics",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
 ] }
 winreg = "0.11"
 windows-service = "0.6"

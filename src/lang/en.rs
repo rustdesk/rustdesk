@@ -253,5 +253,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "The permission settings of the controlled side deny Remote Printing."),
         ("save-settings-tip", "Save settings"),
         ("dont-show-again-tip", "Don't show this again"),
+        ("screenshot-merged-screen-not-supported-tip", "Merging screenshots of multiple displays is currently not supported. Please switch to a single display and try again."),
+        ("screenshot-action-tip", "Please select how to continue with the screenshot."),
     ].iter().cloned().collect();
 }
