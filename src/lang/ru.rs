@@ -681,11 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "Настройки разрешений на управляемой стороне запрещают удалённую печать."),
         ("save-settings-tip", "Сохранить настройки"),
         ("dont-show-again-tip", "Больше не показывать"),
-        ("Take screenshot", ""),
-        ("Taking screenshot", ""),
-        ("screenshot-merged-screen-not-supported-tip", ""),
-        ("screenshot-action-tip", ""),
-        ("Save as", ""),
-        ("Copy to clipboard", ""),
+        ("Take screenshot", "Сделать снимок экрана"),
+        ("Taking screenshot", "Получение снимка экрана"),
+        ("screenshot-merged-screen-not-supported-tip", "Объединение снимков экранов с нескольких дисплеев в настоящее время не поддерживается. Переключитесь на один дисплей и повторите действие."),
+        ("screenshot-action-tip", "Выберите, что делать с полученным снимком экрана."),
+        ("Save as", "Сохранить в файл"),
+        ("Copy to clipboard", "Копировать в буфер обмена"),
     ].iter().cloned().collect();
 }
