@@ -29,7 +29,7 @@ use hbb_common::{
         sync::mpsc,
         time::{Duration as TokioDuration, Instant},
     },
-    Stream,
+    whoami, Stream,
 };
 
 use crate::client::io_loop::Remote;
