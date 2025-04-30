@@ -3111,6 +3111,7 @@ dependencies = [
  "tungstenite",
  "url",
  "uuid",
+ "whoami",
  "winapi 0.3.9",
  "zstd 0.13.1",
 ]
