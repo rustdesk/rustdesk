@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", "{} 印表機已安裝，您可以使用列印功能了。"),
         ("Install {} Printer", "安裝 {} 印表機"),
         ("Outgoing Print Jobs", "傳出的列印任務"),
-        ("Incomming Print Jobs", "傳入的列印任務"),
+        ("Incoming Print Jobs", "傳入的列印任務"),
         ("Incoming Print Job", "傳入的列印任務"),
         ("use-the-default-printer-tip", "使用預設的印表機"),
         ("use-the-selected-printer-tip", "使用選取的印表機"),
@@ -681,5 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "被控端的權限設置拒絕了遠端列印。"),
         ("save-settings-tip", "儲存設定"),
         ("dont-show-again-tip", "不再顯示此訊息"),
+        ("Take screenshot", ""),
+        ("Taking screenshot", ""),
+        ("screenshot-merged-screen-not-supported-tip", ""),
+        ("screenshot-action-tip", ""),
+        ("Save as", ""),
+        ("Copy to clipboard", ""),
     ].iter().cloned().collect();
 }

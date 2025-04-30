@@ -147,6 +147,16 @@ pub fn is_support_file_paste_if_macos(ver: &str) -> bool {
     hbb_common::get_version_number(ver) >= hbb_common::get_version_number("1.3.9")
 }
 
+#[inline]
+pub fn is_support_screenshot(ver: &str) -> bool {
+    is_support_multi_ui_session_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+pub fn is_support_screenshot_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.4.0")
+}
+
 // is server process, with "--server" args
 #[inline]
 pub fn is_server() -> bool {

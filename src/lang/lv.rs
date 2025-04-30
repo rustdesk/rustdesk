@@ -671,7 +671,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("printer-{}-ready-tip", "Printeris {} ir instalēts un gatavs lietošanai."),
         ("Install {} Printer", "Instalēt {} printeri"),
         ("Outgoing Print Jobs", "Izejošie drukas darbi"),
-        ("Incomming Print Jobs", "Ienākošie drukas darbi"),
+        ("Incoming Print Jobs", "Ienākošie drukas darbi"),
         ("Incoming Print Job", "Ienākošais drukas darbs"),
         ("use-the-default-printer-tip", "Izmantot noklusējuma printeri"),
         ("use-the-selected-printer-tip", "Izmantot atlasīto printeri"),
@@ -681,5 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "Kontrolētās puses atļauju iestatījumi liedz attālo drukāšanu."),
         ("save-settings-tip", "Saglabāt iestatījumus"),
         ("dont-show-again-tip", "Nerādīt šo vēlreiz"),
+        ("Take screenshot", ""),
+        ("Taking screenshot", ""),
+        ("screenshot-merged-screen-not-supported-tip", ""),
+        ("screenshot-action-tip", ""),
+        ("Save as", ""),
+        ("Copy to clipboard", ""),
     ].iter().cloned().collect();
 }

@@ -85,6 +85,7 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
+pub mod screenshot;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
@@ -3336,6 +3337,7 @@ pub enum Data {
     CloseVoiceCall,
     ResetDecoder(Option<usize>),
     RenameFile((i32, String, String, bool)),
+    TakeScreenshot((i32, String)),
 }
 
 /// Keycode for key events.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,7 @@ bool isEditOsPassword = false;
 
 class TTextMenu {
   final Widget child;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   Widget? trailingIcon;
   bool divider;
   TTextMenu(
@@ -293,6 +294,41 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           ],
         ),
         onPressed: () => ffi.recordingModel.toggle()));
+  }
+
+  // to-do:
+  // 1. Web desktop
+  // 2. Mobile, copy the image to the clipboard
+  if (isDesktop) {
+    final isScreenshotSupported = bind.sessionGetCommonSync(
+        sessionId: sessionId, key: 'is_screenshot_supported', param: '');
+    if ('true' == isScreenshotSupported) {
+      v.add(TTextMenu(
+        child: Text(ffi.ffiModel.timerScreenshot != null
+            ? '${translate('Taking screenshot')} ...'
+            : translate('Take screenshot')),
+        onPressed: ffi.ffiModel.timerScreenshot != null
+            ? null
+            : () {
+                if (pi.currentDisplay == kAllDisplayValue) {
+                  msgBox(
+                      sessionId,
+                      'custom-nook-nocancel-hasclose-info',
+                      'Take screenshot',
+                      'screenshot-merged-screen-not-supported-tip',
+                      '',
+                      ffi.dialogManager);
+                } else {
+                  bind.sessionTakeScreenshot(
+                      sessionId: sessionId, display: pi.currentDisplay);
+                  ffi.ffiModel.timerScreenshot =
+                      Timer(Duration(seconds: 30), () {
+                    ffi.ffiModel.timerScreenshot = null;
+                  });
+                }
+              },
+      ));
+    }
   }
   // fingerprint
   if (!(isDesktop || isWebDesktop)) {
