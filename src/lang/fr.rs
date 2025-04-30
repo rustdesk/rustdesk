@@ -682,6 +682,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("save-settings-tip", "Enregistrer les paramètres"),
         ("dont-show-again-tip", "Ne plus afficher"),
         ("Take screenshot", ""),
+        ("Taking screenshot", ""),
         ("screenshot-merged-screen-not-supported-tip", ""),
         ("screenshot-action-tip", ""),
         ("Save as", ""),

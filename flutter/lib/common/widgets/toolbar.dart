@@ -304,7 +304,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         sessionId: sessionId, key: 'is_screenshot_supported', param: '');
     if ('true' == isScreenshotSupported) {
       v.add(TTextMenu(
-        child: Text(translate('Take screenshot')),
+        child: Text(ffi.ffiModel.timerScreenshot != null
+            ? '${translate('Taking screenshot')}...'
+            : translate('Take screenshot')),
         onPressed: ffi.ffiModel.timerScreenshot != null
             ? null
             : () {
