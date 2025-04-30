@@ -49,7 +49,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, Display, EncodeInput, TraitCapturer,
+    CodecFormat, Display, EncodeInput, TraitCapturer, TraitPixelBuffer,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -649,26 +649,28 @@ fn run(vs: VideoService) -> ResultType<()> {
                     let screenshot = SCREENSHOTS.lock().unwrap().remove(&display_idx);
                     if let Some(mut screenshot) = screenshot {
                         let restore_vram = screenshot.restore_vram;
-                        let (msg, data) = match &frame {
-                            scrap::Frame::PixelBuffer(f) => {
-                                let mut rgba = Vec::new();
-                                match scrap::convert::convert(&f, scrap::Pixfmt::RGBA, &mut rgba) {
-                                    Ok(()) => ("".to_owned(), rgba),
-                                    Err(e) => {
-                                        let serr = e.to_string();
-                                        log::error!(
-                                            "Failed to convert the pix format into rgba, {}",
-                                            &serr
-                                        );
-                                        (format!("Convert pixfmt: {}", serr), vec![])
-                                    }
+                        let (msg, w, h, data) = match &frame {
+                            scrap::Frame::PixelBuffer(f) => match get_rgba_from_pixelbuf(f) {
+                                Ok(rgba) => ("".to_owned(), f.width(), f.height(), rgba),
+                                Err(e) => {
+                                    let serr = e.to_string();
+                                    log::error!(
+                                        "Failed to convert the pix format into rgba, {}",
+                                        &serr
+                                    );
+                                    (format!("Convert pixfmt: {}", serr), 0, 0, vec![])
                                 }
-                            }
+                            },
                             scrap::Frame::Texture(_) => {
                                 if restore_vram {
                                     // Already set one time, just ignore to break infinite loop.
                                     // Though it's unreachable, this branch is kept to avoid infinite loop.
-                                    ("Please change codec and try again.".to_owned(), vec![])
+                                    (
+                                        "Please change codec and try again.".to_owned(),
+                                        0,
+                                        0,
+                                        vec![],
+                                    )
                                 } else {
                                     #[cfg(all(windows, feature = "vram"))]
                                     VRamEncoder::set_not_use(sp.name(), true);
@@ -680,7 +682,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             }
                         };
                         std::thread::spawn(move || {
-                            handle_screenshot(screenshot, msg, capture_width, capture_height, data);
+                            handle_screenshot(screenshot, msg, w, h, data);
                         });
                         if restore_vram {
                             bail!("SWITCH");
@@ -1272,6 +1274,32 @@ pub fn set_take_screenshot(display_idx: usize, sid: String, tx: Sender) {
             restore_vram: false,
         },
     );
+}
+
+// We need to this function, because the `stride` may be larger than `width * 4`.
+fn get_rgba_from_pixelbuf<'a>(pixbuf: &scrap::PixelBuffer<'a>) -> ResultType<Vec<u8>> {
+    let w = pixbuf.width();
+    let h = pixbuf.height();
+    let stride = pixbuf.stride();
+    let Some(s) = stride.get(0) else {
+        bail!("Invalid pixel buf stride.")
+    };
+
+    if *s == w * 4 {
+        let mut rgba = vec![];
+        scrap::convert(pixbuf, scrap::Pixfmt::RGBA, &mut rgba)?;
+        Ok(rgba)
+    } else {
+        let bgra = pixbuf.data();
+        let mut bit_flipped = Vec::with_capacity(w * h * 4);
+        for y in 0..h {
+            for x in 0..w {
+                let i = s * y + 4 * x;
+                bit_flipped.extend_from_slice(&[bgra[i + 2], bgra[i + 1], bgra[i], bgra[i + 3]]);
+            }
+        }
+        Ok(bit_flipped)
+    }
 }
 
 fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, data: Vec<u8>) {
