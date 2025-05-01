@@ -681,11 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "被控端的權限設置拒絕了遠端列印。"),
         ("save-settings-tip", "儲存設定"),
         ("dont-show-again-tip", "不再顯示此訊息"),
-        ("Take screenshot", ""),
-        ("Taking screenshot", ""),
-        ("screenshot-merged-screen-not-supported-tip", ""),
-        ("screenshot-action-tip", ""),
-        ("Save as", ""),
-        ("Copy to clipboard", ""),
+        ("Take screenshot", "擷取畫面"),
+        ("Taking screenshot", "正在擷取畫面"),
+        ("screenshot-merged-screen-not-supported-tip", "目前不支援合併多個螢幕的截圖。請切換至單一螢幕後再試。"),
+        ("screenshot-action-tip", "請選擇要如何處理這張截圖。"),
+        ("Save as", "另存為"),
+        ("Copy to clipboard", "複製到剪貼簿"),
     ].iter().cloned().collect();
 }
