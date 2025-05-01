@@ -681,11 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "Die Berechtigungseinstellungen der kontrollierten Seite verweigern den entfernten Druck."),
         ("save-settings-tip", "Einstellungen speichern"),
         ("dont-show-again-tip", "Nicht mehr anzeigen"),
-        ("Take screenshot", ""),
-        ("Taking screenshot", ""),
-        ("screenshot-merged-screen-not-supported-tip", ""),
-        ("screenshot-action-tip", ""),
-        ("Save as", ""),
-        ("Copy to clipboard", ""),
+        ("Take screenshot", "Screenshot aufnehmen"),
+        ("Taking screenshot", "Screenshot aufnehmen …"),
+        ("screenshot-merged-screen-not-supported-tip", "Das Zusammenführen von Screenshots von mehreren Bildschirmen wird derzeit nicht unterstützt. Bitte wechseln Sie zu einem einzelnen Bildschirm und versuchen Sie es erneut."),
+        ("screenshot-action-tip", "Bitte wählen Sie aus, wie Sie mit dem Screenshot fortfahren möchten."),
+        ("Save as", "Speichern unter"),
+        ("Copy to clipboard", "In Zwischenablage kopieren"),
     ].iter().cloned().collect();
 }
