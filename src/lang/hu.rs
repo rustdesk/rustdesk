@@ -681,11 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "A távoli nyomtatás nincs engedélyezve"),
         ("save-settings-tip", "Beállítások mentése"),
         ("dont-show-again-tip", "Ne jelenítse meg újra"),
-        ("Take screenshot", ""),
-        ("Taking screenshot", ""),
-        ("screenshot-merged-screen-not-supported-tip", ""),
-        ("screenshot-action-tip", ""),
-        ("Save as", ""),
-        ("Copy to clipboard", ""),
+        ("Take screenshot", "Képernyőkép készítése"),
+        ("Taking screenshot", "Képernyőkép készítése..."),
+        ("screenshot-merged-screen-not-supported-tip", "A képernyőképek egyesítése nem támogatott"),
+        ("screenshot-action-tip", "Képernyőkép művelet"),
+        ("Save as", "Mentés másként"),
+        ("Copy to clipboard", "Másolás a vágólapra"),
     ].iter().cloned().collect();
 }
