@@ -23,7 +23,6 @@ use hbb_common::{
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    tcp::FramedStream,
     timeout,
     tokio::{
         self,
@@ -1230,7 +1229,31 @@ pub async fn get_next_nonkeyexchange_msg(
     None
 }
 
+#[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
+pub fn check_process(arg: &str, same_session_id: bool) -> bool {
+    let mut path = std::env::current_exe().unwrap_or_default();
+    if let Ok(linked) = path.read_link() {
+        path = linked;
+    }
+    let Some(filename) = path.file_name() else {
+        return false;
+    };
+    let filename = filename.to_string_lossy().to_string();
+    match crate::platform::windows::get_pids_with_first_arg_check_session(
+        &filename,
+        arg,
+        same_session_id,
+    ) {
+        Ok(pids) => !pids.is_empty(),
+        Err(e) => {
+            log::error!("Failed to check process with arg: \"{}\", {}", arg, e);
+            false
+        }
+    }
+}
+
 #[allow(unused_mut)]
+#[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     #[cfg(target_os = "macos")]

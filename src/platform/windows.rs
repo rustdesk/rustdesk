@@ -2450,23 +2450,6 @@ pub fn try_kill_broker() {
         .spawn());
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_uninstall_cert() {
-        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
-    }
-
-    #[test]
-    fn test_get_unicode_char_by_vk() {
-        let chr = get_char_from_vk(0x41); // VK_A
-        assert_eq!(chr, Some('a'));
-        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
-        assert_eq!(chr, None)
-    }
-}
-
 pub fn message_box(text: &str) {
     let mut text = text.to_owned();
     let nodialog = std::env::var("NO_DIALOG").unwrap_or_default() == "Y";
@@ -2973,4 +2956,210 @@ fn get_pids<S: AsRef<str>>(name: S) -> ResultType<Vec<u32>> {
     }
 
     Ok(pids)
+}
+
+#[cfg(not(target_pointer_width = "64"))]
+pub fn get_pids_with_first_arg_check_session<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    arg: S2,
+    same_session_id: bool,
+) -> ResultType<Vec<hbb_common::sysinfo::Pid>> {
+    // Though `wmic` can return the sessionId, for simplicity we only return processid.
+    let pids = get_pids_with_first_arg_by_wmic(name, arg);
+    if !same_session_id {
+        return Ok(pids);
+    }
+    let Some(cur_sid) = get_current_process_session_id() else {
+        bail!("Can't get current process session id");
+    };
+    let mut same_session_pids = vec![];
+    for pid in pids.into_iter() {
+        let mut sid = 0;
+        if unsafe { ProcessIdToSessionId(pid.as_u32(), &mut sid) == TRUE } {
+            if sid == cur_sid {
+                same_session_pids.push(pid);
+            }
+        } else {
+            // Only log here, because this call almost never fails.
+            log::warn!(
+                "Failed to get session id of the process id, error: {:?}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+    Ok(same_session_pids)
+}
+
+#[cfg(not(target_pointer_width = "64"))]
+fn get_pids_with_first_arg_from_wmic_output(
+    output: std::borrow::Cow<'_, str>,
+    name: &str,
+    arg: &str,
+) -> Vec<hbb_common::sysinfo::Pid> {
+    let mut pids = Vec::new();
+    let mut proc_found = false;
+    for line in output.lines() {
+        if line.starts_with("ProcessId=") {
+            if proc_found {
+                if let Ok(pid) = line["ProcessId=".len()..].trim().parse::<u32>() {
+                    pids.push(hbb_common::sysinfo::Pid::from_u32(pid));
+                }
+                proc_found = false;
+            }
+        } else if line.starts_with("CommandLine=") {
+            proc_found = false;
+            let cmd = line["CommandLine=".len()..].trim().to_lowercase();
+            if cmd.is_empty() {
+                continue;
+            }
+            if !arg.is_empty() && cmd.starts_with(arg) {
+                proc_found = true;
+            } else {
+                for x in [&format!("{}\"", name), &format!("{}", name)] {
+                    if cmd.contains(x) {
+                        let cmd = cmd.split(x).collect::<Vec<_>>()[1..].join("");
+                        if arg.is_empty() {
+                            if cmd.trim().is_empty() {
+                                proc_found = true;
+                            }
+                        } else if cmd.trim().starts_with(arg) {
+                            proc_found = true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    pids
+}
+
+// Note the args are not compared strictly, only check if the args are contained in the command line.
+// If we want to check the args strictly, we need to parse the command line and compare each arg.
+// Maybe we have to introduce some external crate like `shell_words` to do this.
+#[cfg(not(target_pointer_width = "64"))]
+pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    arg: S2,
+) -> Vec<hbb_common::sysinfo::Pid> {
+    let name = name.as_ref().to_lowercase();
+    let arg = arg.as_ref().to_lowercase();
+    std::process::Command::new("wmic.exe")
+        .args([
+            "process",
+            "where",
+            &format!("name='{}'", name),
+            "get",
+            "commandline,processid",
+            "/value",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map(|output| {
+            get_pids_with_first_arg_from_wmic_output(
+                String::from_utf8_lossy(&output.stdout),
+                &name,
+                &arg,
+            )
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_uninstall_cert() {
+        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
+    }
+
+    #[test]
+    fn test_get_unicode_char_by_vk() {
+        let chr = get_char_from_vk(0x41); // VK_A
+        assert_eq!(chr, Some('a'));
+        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
+        assert_eq!(chr, None)
+    }
+
+    #[cfg(not(target_pointer_width = "64"))]
+    #[test]
+    fn test_get_pids_with_args_from_wmic_output() {
+        let output = r#"
+CommandLine=
+ProcessId=33796
+CommandLine=
+ProcessId=34668
+CommandLine="C:\Program Files\testapp\TestApp.exe" --tray
+ProcessId=13728
+CommandLine="C:\Program Files\testapp\TestApp.exe"
+ProcessId=10136
+"#;
+        let name = "testapp.exe";
+        let args = vec!["--tray"];
+        let pids = super::get_pids_with_args_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            &args,
+        );
+        assert_eq!(pids.len(), 1);
+        assert_eq!(pids[0].as_u32(), 13728);
+
+        let args: Vec<&str> = vec![];
+        let pids = super::get_pids_with_args_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            &args,
+        );
+        assert_eq!(pids.len(), 1);
+        assert_eq!(pids[0].as_u32(), 10136);
+
+        let args = vec!["--other"];
+        let pids = super::get_pids_with_args_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            &args,
+        );
+        assert_eq!(pids.len(), 0);
+    }
+
+    #[cfg(not(target_pointer_width = "64"))]
+    #[test]
+    fn test_get_pids_with_first_arg_from_wmic_output() {
+        let output = r#"
+CommandLine=
+ProcessId=33796
+CommandLine=
+ProcessId=34668
+CommandLine="C:\Program Files\testapp\TestApp.exe" --tray
+ProcessId=13728
+CommandLine="C:\Program Files\testapp\TestApp.exe"
+ProcessId=10136
+    "#;
+        let name = "testapp.exe";
+        let arg = "--tray";
+        let pids = super::get_pids_with_first_arg_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            arg,
+        );
+        assert_eq!(pids.len(), 1);
+        assert_eq!(pids[0].as_u32(), 13728);
+
+        let arg = "";
+        let pids = super::get_pids_with_first_arg_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            arg,
+        );
+        assert_eq!(pids.len(), 1);
+        assert_eq!(pids[0].as_u32(), 10136);
+
+        let arg = "--other";
+        let pids = super::get_pids_with_first_arg_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            arg,
+        );
+        assert_eq!(pids.len(), 0);
+    }
 }
