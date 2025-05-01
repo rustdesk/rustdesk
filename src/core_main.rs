@@ -259,7 +259,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
         } else if args[0] == "--tray" {
             if !crate::check_process("--tray", true) {
-                crate::tray::start_tray();
+                crate::tray::start_tray(false);
             }
             return None;
         } else if args[0] == "--install-service" {
@@ -295,7 +295,7 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "macos")]
             {
                 let handler = std::thread::spawn(move || crate::start_server(true, false));
-                crate::tray::start_tray();
+                crate::tray::start_tray(true);
                 // prevent server exit when encountering errors from tray
                 hbb_common::allow_err!(handler.join());
             }

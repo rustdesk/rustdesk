@@ -1244,7 +1244,10 @@ pub fn check_process(arg: &str, same_session_id: bool) -> bool {
         arg,
         same_session_id,
     ) {
-        Ok(pids) => !pids.is_empty(),
+        Ok(pids) => {
+            let self_pid = hbb_common::sysinfo::Pid::from_u32(std::process::id());
+            pids.into_iter().filter(|pid| *pid != self_pid).count() > 0
+        }
         Err(e) => {
             log::error!("Failed to check process with arg: \"{}\", {}", arg, e);
             false

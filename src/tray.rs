@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 #[cfg(windows)]
 use std::time::Duration;
 
-pub fn start_tray() {
+pub fn start_tray(in_server_process: bool) {
     if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
         #[cfg(target_os = "macos")]
         {
@@ -21,10 +21,10 @@ pub fn start_tray() {
             return;
         }
     }
-    allow_err!(make_tray());
+    allow_err!(make_tray(in_server_process));
 }
 
-fn make_tray() -> hbb_common::ResultType<()> {
+fn make_tray(in_server_process: bool) -> hbb_common::ResultType<()> {
     // https://github.com/tauri-apps/tray-icon/blob/dev/examples/tao.rs
     use hbb_common::anyhow::Context;
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
@@ -56,9 +56,16 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let mut event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
-    let quit_i = MenuItem::new(translate("Exit".to_owned()), true, None);
+    let stop_service_i = MenuItem::new(translate("Stop service".to_owned()), true, None);
+    let quit_i = MenuItem::new(translate("Exit tray".to_owned()), true, None);
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
-    tray_menu.append_items(&[&open_i, &quit_i]).ok();
+    if in_server_process {
+        tray_menu.append_items(&[&open_i, &stop_service_i]).ok();
+    } else {
+        tray_menu
+            .append_items(&[&open_i, &quit_i, &stop_service_i])
+            .ok();
+    };
     let tooltip = |count: usize| {
         if count == 0 {
             format!(
@@ -150,16 +157,22 @@ fn make_tray() -> hbb_common::ResultType<()> {
         }
 
         if let Ok(event) = menu_channel.try_recv() {
-            if event.id == quit_i.id() {
-                /* failed in windows, seems no permission to check system process
-                if !crate::check_process("--server", false) {
+            if event.id == stop_service_i.id() {
+                // Stopping the service should also exit the tray icon. Otherwise the tooltip will be more complicated.
+                // Starting the service should be called in the main window.
+                #[cfg(target_os = "windows")]
+                let is_service_running = crate::platform::is_self_service_running();
+                #[cfg(not(target_os = "windows"))]
+                let is_service_running = crate::check_process("--server", false);
+                if !is_service_running {
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
-                */
                 if !crate::platform::uninstall_service(false, false) {
                     *control_flow = ControlFlow::Exit;
                 }
+            } else if event.id == quit_i.id() {
+                *control_flow = ControlFlow::Exit;
             } else if event.id == open_i.id() {
                 open_func();
             }
