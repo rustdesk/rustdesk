@@ -681,11 +681,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "Le impostazioni di autorizzazione del lato controllato negano la stampa remota."),
         ("save-settings-tip", "Salva impostazioni"),
         ("dont-show-again-tip", "Non visualizzare più questo messaggio"),
-        ("Take screenshot", ""),
-        ("Taking screenshot", ""),
-        ("screenshot-merged-screen-not-supported-tip", ""),
-        ("screenshot-action-tip", ""),
-        ("Save as", ""),
-        ("Copy to clipboard", ""),
+        ("Take screenshot", "Cattura schermata"),
+        ("Taking screenshot", "Cattura schermata"),
+        ("screenshot-merged-screen-not-supported-tip", "L'unione della cattura di schermate di più display non è attualmente supportata.\nPassa ad un singolo display e riprova."),
+        ("screenshot-action-tip", "Seleziona come continuare con la schermata."),
+        ("Save as", "Salva come"),
+        ("Copy to clipboard", "Copia negli appunti"),
     ].iter().cloned().collect();
 }
