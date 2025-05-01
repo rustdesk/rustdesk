@@ -683,7 +683,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("dont-show-again-tip", "Ne jelenítse meg újra"),
         ("Take screenshot", "Képernyőkép készítése"),
         ("Taking screenshot", "Képernyőkép készítése…"),
-        ("screenshot-merged-screen-not-supported-tip", "Osztott képernyőről nem támogatott a képernyőkép készítése"),
+        ("screenshot-merged-screen-not-supported-tip", "Egyesített képernyőről nem támogatott a képernyőkép készítése"),
         ("screenshot-action-tip", "Képernyőkép-művelet"),
         ("Save as", "Mentés másként"),
         ("Copy to clipboard", "Másolás a vágólapra"),
