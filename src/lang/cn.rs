@@ -687,5 +687,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-action-tip", "请选择如何继续截屏。"),
         ("Save as", "另存为"),
         ("Copy to clipboard", "复制到剪贴板"),
+        ("Enable remote printer", "启用远程打印机"),
+        ("Downloading {}", "正在下载 {}"),
+        ("{} Update", "{} 更新"),
+        ("{}-to-update-tip", "即将关闭 {} ，并安装新版本。"),
+        ("download-new-version-failed-tip", "下载失败，您可以重试或者点击\"下载\"按钮，从发布网址下载，并手动升级。"),
+        ("Auto update", ""),
+        ("update-failed-check-msi-tip", "安装方式检测失败。请点击\"下载\"按钮，从发布网址下载，并手动升级。"),
     ].iter().cloned().collect();
 }

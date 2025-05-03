@@ -255,5 +255,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("dont-show-again-tip", "Don't show this again"),
         ("screenshot-merged-screen-not-supported-tip", "Merging screenshots of multiple displays is currently not supported. Please switch to a single display and try again."),
         ("screenshot-action-tip", "Please select how to continue with the screenshot."),
+        ("{}-to-update-tip", "{} will close now and install the new version."),
+        ("download-new-version-failed-tip", "Download failed. You can try again or click the \"Download\" button to download from the release page and upgrade manually."),
+        ("update-failed-check-msi-tip", "Installation method check failed. Please click the \"Download\" button to download from the release page and upgrade manually.")
     ].iter().cloned().collect();
 }
