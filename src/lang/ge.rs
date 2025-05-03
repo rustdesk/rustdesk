@@ -658,7 +658,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("new-version-of-{}-tip", "ხელმისაწვდომია ახალი ვერსია {}"),
         ("Accessible devices", "ხელმისაწვდომი მოწყობილობები"),
         ("View camera", "კამერის ნახვა"),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", ""),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "განაახლეთ RustDesk კლიენტი ვერსიამდე {} ან უფრო ახალი დისტანციურ მხარეზე!"),
         ("view_camera_unsupported_tip", "დისტანციური მოწყობილობა არ უჭერს მხარს კამერის ნახვას."),
         ("Enable camera", "კამერის ჩართვა"),
         ("No cameras", "კამერა არ არის"),
@@ -687,5 +687,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-action-tip", ""),
         ("Save as", ""),
         ("Copy to clipboard", ""),
+        ("Enable remote printer", ""),
+        ("Downloading {}", ""),
+        ("{} Update", ""),
+        ("{}-to-update-tip", ""),
+        ("download-new-version-failed-tip", ""),
+        ("Auto update", ""),
+        ("update-failed-check-msi-tip", ""),
     ].iter().cloned().collect();
 }
