@@ -3171,6 +3171,38 @@ pub fn is_msi_installed() -> std::io::Result<bool> {
 }
 
 #[cfg(not(target_pointer_width = "64"))]
+pub fn get_pids_with_first_arg_check_session<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    arg: S2,
+    same_session_id: bool,
+) -> ResultType<Vec<hbb_common::sysinfo::Pid>> {
+    // Though `wmic` can return the sessionId, for simplicity we only return processid.
+    let pids = get_pids_with_first_arg_by_wmic(name, arg);
+    if !same_session_id {
+        return Ok(pids);
+    }
+    let Some(cur_sid) = get_current_process_session_id() else {
+        bail!("Can't get current process session id");
+    };
+    let mut same_session_pids = vec![];
+    for pid in pids.into_iter() {
+        let mut sid = 0;
+        if unsafe { ProcessIdToSessionId(pid.as_u32(), &mut sid) == TRUE } {
+            if sid == cur_sid {
+                same_session_pids.push(pid);
+            }
+        } else {
+            // Only log here, because this call almost never fails.
+            log::warn!(
+                "Failed to get session id of the process id, error: {:?}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+    Ok(same_session_pids)
+}
+
+#[cfg(not(target_pointer_width = "64"))]
 fn get_pids_with_args_from_wmic_output<S2: AsRef<str>>(
     output: std::borrow::Cow<'_, str>,
     name: &str,
