@@ -116,6 +116,26 @@ fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
     }
 }
 
+fn retry_http(
+    frb: impl Fn() -> reqwest::blocking::RequestBuilder,
+    count: u32,
+) -> reqwest::Result<reqwest::blocking::Response> {
+    let http_timeout = Duration::from_secs(30);
+    let mut i = 1;
+    let mut resp = frb().timeout(http_timeout).send();
+    while i < (count + 1) {
+        match &resp {
+            Ok(_) => break,
+            Err(e) => {
+                log::debug!("Failed to get the header of the download url, {}", e);
+            }
+        }
+        i += 1;
+        resp = frb().timeout(http_timeout * i).send();
+    }
+    resp
+}
+
 fn check_update(manually: bool) -> ResultType<()> {
     #[cfg(target_os = "windows")]
     let is_msi = crate::platform::is_msi_installed()?;
@@ -154,7 +174,9 @@ fn check_update(manually: bool) -> ResultType<()> {
             // Check if the file size is the same as the server file size
             // If the file size is the same, we don't need to download it again.
             let file_size = std::fs::metadata(&file_path)?.len();
-            let response = client.head(&download_url).send()?;
+            // Though we have will retry after `30 mins` in `start_auto_update_check_()`,
+            // we also can retry immediately here, because the error in `client.head(&download_url)` is probably a temporary network problem.
+            let response = retry_http(|| client.head(&download_url), 3)?;
             if !response.status().is_success() {
                 bail!("Failed to get the file size: {}", response.status());
             }
@@ -173,13 +195,18 @@ fn check_update(manually: bool) -> ResultType<()> {
             }
         }
         if !is_file_exists {
-            let response = client.get(&download_url).send()?;
+            let response = retry_http(|| client.get(&download_url), 3)?;
             if !response.status().is_success() {
                 bail!(
                     "Failed to download the new version file: {}",
                     response.status()
                 );
             }
+            // "error decoding response body: operation timed out" may be thrown here,
+            // The timeout is inherited from the previous call in `retry_http()`.
+            // We can only throw the error, because:
+            // 1. There's no way set the timeout of the response.
+            // 2. We can't retry because `bytes()` moves the instance.
             let file_data = response.bytes()?;
             let mut file = std::fs::File::create(&file_path)?;
             file.write_all(&file_data)?;
@@ -197,7 +224,10 @@ fn check_update(manually: bool) -> ResultType<()> {
 
 #[cfg(target_os = "windows")]
 fn update_new_version(is_msi: bool, version: &str, file_path: &PathBuf) {
-    log::debug!("New version is downloaded, update begin, is msi: {is_msi}, version: {version}, file: {:?}", file_path.to_str());
+    log::debug!(
+        "New version is downloaded, update begin, is msi: {is_msi}, version: {version}, file: {:?}",
+        file_path.to_str()
+    );
     if let Some(p) = file_path.to_str() {
         if let Some(session_id) = crate::platform::get_current_process_session_id() {
             if is_msi {
