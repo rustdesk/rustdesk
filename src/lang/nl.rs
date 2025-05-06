@@ -690,9 +690,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable remote printer", "Printer op afstand inschakelen"),
         ("Downloading {}", "Downloaden {}"),
         ("{} Update", "{} Updaten"),
-        ("{}-to-update-tip", ""),
-        ("download-new-version-failed-tip", ""),
+        ("{}-to-update-tip", "{} zal sluiten en de nieuwe versie installeren."),
+        ("download-new-version-failed-tip", "Fout bij het downloaden. Je kunt het opnieuw proberen of op de knop Downloaden klikken om de applicatie van de officiële website te downloaden en handmatig bij te werken."),
         ("Auto update", "Automatisch updaten"),
-        ("update-failed-check-msi-tip", ""),
+        ("update-failed-check-msi-tip", "Kan de installatiemethode niet bepalen. Klik op “Downloaden” om de applicatie van de officiële website te downloaden en handmatig bij te werken."),
     ].iter().cloned().collect();
 }
