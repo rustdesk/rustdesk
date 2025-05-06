@@ -14,7 +14,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail, base64,
     bytes::Bytes,
-    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT},
+    config::{self, use_ws, Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT},
     futures::future::join_all,
     futures_util::future::poll_fn,
     get_version_number, log,
@@ -504,6 +504,27 @@ audio_rechannel!(audio_rechannel_8_5, 8, 5);
 audio_rechannel!(audio_rechannel_8_6, 8, 6);
 audio_rechannel!(audio_rechannel_8_7, 8, 7);
 
+pub struct CheckTestNatType {
+    is_direct: bool,
+}
+
+impl CheckTestNatType {
+    pub fn new() -> Self {
+        Self {
+            is_direct: Config::get_socks().is_none() && !config::use_ws(),
+        }
+    }
+}
+
+impl Drop for CheckTestNatType {
+    fn drop(&mut self) {
+        let is_direct = Config::get_socks().is_none() && !config::use_ws();
+        if self.is_direct != is_direct {
+            test_nat_type();
+        }
+    }
+}
+
 pub fn test_nat_type() {
     use std::sync::atomic::{AtomicBool, Ordering};
     std::thread::spawn(move || {
@@ -514,9 +535,8 @@ pub fn test_nat_type() {
         IS_RUNNING.store(true, Ordering::SeqCst);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let is_direct = crate::ipc::get_socks().is_none(); // sync socks BTW
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        let is_direct = Config::get_socks().is_none(); // sync socks BTW
+        crate::ipc::get_socks_ws();
+        let is_direct = Config::get_socks().is_none() && !config::use_ws();
         if !is_direct {
             Config::set_nat_type(NatType::SYMMETRIC as _);
             IS_RUNNING.store(false, Ordering::SeqCst);
@@ -1319,6 +1339,13 @@ pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
 }
 
 pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
+    // Skip additional encryption when using WebSocket connections (wss://)
+    // as WebSocket Secure (wss://) already provides transport layer encryption.
+    // This doesn't affect the end-to-end encryption between clients,
+    // it only avoids redundant encryption between client and server.
+    if use_ws() {
+        return Ok(());
+    }
     let rs_pk = get_rs_pk(key);
     let Some(rs_pk) = rs_pk else {
         bail!("Handshake failed: invalid public key from rendezvous server");

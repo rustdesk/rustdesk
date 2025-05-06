@@ -694,5 +694,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("download-new-version-failed-tip", "Download non riuscito.\nÈ possibile riprovare o selezionare 'Download' per scaricare e aggiornarlo manualmente."),
         ("Auto update", "Aggiornamento automatico"),
         ("update-failed-check-msi-tip", "Controllo metodo installazione non riuscito.\nSeleziona 'Download' per scaricare il programma e aggiornarlo manualmente."),
+        ("websocket_tip", ""),
+        ("Use WebSocket", ""),
     ].iter().cloned().collect();
 }

@@ -147,9 +147,13 @@ const String kOptionDirectxCapture = "enable-directx-capture";
 const String kOptionAllowRemoteCmModification = "allow-remote-cm-modification";
 const String kOptionEnableTrustedDevices = "enable-trusted-devices";
 
+// network options
+const String kOptionAllowWebSocket = "allow-websocket";
+
 // buildin opitons
 const String kOptionHideServerSetting = "hide-server-settings";
 const String kOptionHideProxySetting = "hide-proxy-settings";
+const String kOptionHideWebSocketSetting = "hide-websocket-settings";
 const String kOptionHideRemotePrinterSetting = "hide-remote-printer-settings";
 const String kOptionHideSecuritySetting = "hide-security-settings";
 const String kOptionHideNetworkSetting = "hide-network-settings";

@@ -891,7 +891,10 @@ pub fn main_set_option(key: String, value: String) {
         );
     }
 
-    if key.eq("custom-rendezvous-server") {
+    if key.eq("custom-rendezvous-server")
+        || key.eq(config::keys::OPTION_ALLOW_WEBSOCKET)
+        || key.eq("api-server")
+    {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
         crate::rendezvous_mediator::RendezvousMediator::restart();
@@ -2533,7 +2536,10 @@ pub fn main_set_common(_key: String, _value: String) {
             );
         } else if _key == "update-me" {
             if let Some(new_version_file) = get_download_file_from_url(&_value) {
-                log::debug!("New version file is downloaed, update begin, {:?}", new_version_file.to_str());
+                log::debug!(
+                    "New version file is downloaed, update begin, {:?}",
+                    new_version_file.to_str()
+                );
                 if let Some(f) = new_version_file.to_str() {
                     // 1.4.0 does not support "--update"
                     // But we can assume that the new version supports it.

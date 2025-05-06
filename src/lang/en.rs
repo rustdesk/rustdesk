@@ -257,6 +257,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-action-tip", "Please select how to continue with the screenshot."),
         ("{}-to-update-tip", "{} will close now and install the new version."),
         ("download-new-version-failed-tip", "Download failed. You can try again or click the \"Download\" button to download from the release page and upgrade manually."),
-        ("update-failed-check-msi-tip", "Installation method check failed. Please click the \"Download\" button to download from the release page and upgrade manually.")
+        ("update-failed-check-msi-tip", "Installation method check failed. Please click the \"Download\" button to download from the release page and upgrade manually."),
+        ("websocket_tip", "When using WebSocket, only relay connections are supported."),
     ].iter().cloned().collect();
 }
