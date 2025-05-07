@@ -76,7 +76,7 @@ class DesktopSettingPage extends StatefulWidget {
     if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
       SettingsTabKey.plugin,
     if (!bind.isDisableAccount()) SettingsTabKey.account,
-    if (isWindows) SettingsTabKey.printer,
+    if (isWindows && bind.mainGetBuildinOption(key: kOptionHideRemotePrinterSetting) != 'Y') SettingsTabKey.printer,
     SettingsTabKey.about,
   ];
 

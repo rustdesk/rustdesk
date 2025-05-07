@@ -150,6 +150,7 @@ const String kOptionEnableTrustedDevices = "enable-trusted-devices";
 // buildin opitons
 const String kOptionHideServerSetting = "hide-server-settings";
 const String kOptionHideProxySetting = "hide-proxy-settings";
+const String kOptionHideRemotePrinterSetting = "hide-remote-printer-settings";
 const String kOptionHideSecuritySetting = "hide-security-settings";
 const String kOptionHideNetworkSetting = "hide-network-settings";
 const String kOptionRemovePresetPasswordWarning =
