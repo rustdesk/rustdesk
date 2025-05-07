@@ -573,7 +573,11 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
             let current_active_session = unsafe { get_current_session(share_rdp()) };
             if session_id != current_active_session {
                 session_id = current_active_session;
-                h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+                // https://github.com/rustdesk/rustdesk/discussions/10039
+                let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
+                if count == 0 {
+                    h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+                }
             }
         }
         let res = timeout(super::SERVICE_INTERVAL, incoming.next()).await;
@@ -622,8 +626,11 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                     if tmp != session_id && stored_usid != Some(session_id) {
                         log::info!("session changed from {} to {}", session_id, tmp);
                         session_id = tmp;
-                        send_close_async("").await.ok();
-                        close_sent = true;
+                        let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
+                        if count == 0 {
+                            send_close_async("").await.ok();
+                            close_sent = true;
+                        }
                     }
                     let mut exit_code: DWORD = 0;
                     if h_process.is_null()
