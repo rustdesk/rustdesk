@@ -505,41 +505,52 @@ audio_rechannel!(audio_rechannel_8_6, 8, 6);
 audio_rechannel!(audio_rechannel_8_7, 8, 7);
 
 pub fn test_nat_type() {
-    let mut i = 0;
-    std::thread::spawn(move || loop {
-        if i == 0 {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            let is_direct = crate::ipc::get_socks().is_none(); // sync socks BTW
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            let is_direct = Config::get_socks().is_none(); // sync socks BTW
-            if !is_direct {
-                Config::set_nat_type(NatType::SYMMETRIC as _);
+    use std::sync::atomic::{AtomicBool, Ordering};
+    std::thread::spawn(move || {
+        static IS_RUNNING: AtomicBool = AtomicBool::new(false);
+        if IS_RUNNING.load(Ordering::SeqCst) {
+            return;
+        }
+        IS_RUNNING.store(true, Ordering::SeqCst);
+
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let is_direct = crate::ipc::get_socks().is_none(); // sync socks BTW
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let is_direct = Config::get_socks().is_none(); // sync socks BTW
+        if !is_direct {
+            Config::set_nat_type(NatType::SYMMETRIC as _);
+            IS_RUNNING.store(false, Ordering::SeqCst);
+            return;
+        }
+
+        let mut i = 0;
+        let (rendezvous_server, _, _) = get_rendezvous_server_sync(1_000);
+        loop {
+            match test_nat_type_(&rendezvous_server) {
+                Ok(true) => break,
+                Err(err) => {
+                    log::error!("test nat: {}", err);
+                }
+                _ => {}
+            }
+            if Config::get_nat_type() != 0 {
                 break;
             }
-        }
-        match test_nat_type_() {
-            Ok(true) => break,
-            Err(err) => {
-                log::error!("test nat: {}", err);
+            i = i * 2 + 1;
+            if i > 300 {
+                i = 300;
             }
-            _ => {}
+            std::thread::sleep(std::time::Duration::from_secs(i));
         }
-        if Config::get_nat_type() != 0 {
-            break;
-        }
-        i = i * 2 + 1;
-        if i > 300 {
-            i = 300;
-        }
-        std::thread::sleep(std::time::Duration::from_secs(i));
+
+        IS_RUNNING.store(false, Ordering::SeqCst);
     });
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn test_nat_type_() -> ResultType<bool> {
+async fn test_nat_type_(rendezvous_server: &str) -> ResultType<bool> {
     log::info!("Testing nat ...");
     let start = std::time::Instant::now();
-    let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;
     let server2 = crate::increase_port(&server1, -1);
     let mut msg_out = RendezvousMessage::new();
@@ -595,6 +606,11 @@ async fn test_nat_type_() -> ResultType<bool> {
         log::info!("Tested nat type: {:?} in {:?}", t, start.elapsed());
     }
     Ok(ok)
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn get_rendezvous_server_sync(ms_timeout: u64) -> (String, Vec<String>, bool) {
+    get_rendezvous_server(ms_timeout).await
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
