@@ -248,3 +248,76 @@ List<(String, String)> otherDefaultSettings() {
 
   return v;
 }
+
+class TrackpadSpeedWidget extends StatefulWidget {
+  final SimpleWrapper<double> value;
+
+  TrackpadSpeedWidget({Key? key, required this.value});
+
+  @override
+  TrackpadSpeedWidgetState createState() => TrackpadSpeedWidgetState();
+}
+
+class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
+  final TextEditingController _controller = TextEditingController();
+
+  set value(double v) => widget.value.value = v;
+  double get value => widget.value.value;
+
+  void updateValue(double newValue) {
+    setState(() {
+      value = newValue.clamp(kMinTrackpadSpeed, kMaxTrackpadSpeed);
+      _controller.text = ((value * 100.0).round()).toString();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_controller.text.isEmpty) {
+      _controller.text = ((value * 100.0).round()).toString();
+    }
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: Slider(
+            value: value,
+            min: kMinTrackpadSpeed,
+            max: kMaxTrackpadSpeed,
+            divisions: ((kMaxTrackpadSpeed - kMinTrackpadSpeed) / 0.1).round(),
+            onChanged: (double v) => updateValue(v),
+          ),
+        ),
+        Expanded(
+            flex: 1,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 56,
+                  child: TextField(
+                    controller: _controller,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    onSubmitted: (text) {
+                      int? v = int.tryParse(text);
+                      if (v != null) {
+                        updateValue(v.toDouble() / 100.0);
+                      }
+                    },
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      contentPadding:
+                          EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+                    ),
+                  ),
+                ).marginOnly(right: 8.0),
+                Text(
+                  '%',
+                  style: const TextStyle(fontSize: 15),
+                )
+              ],
+            )),
+      ],
+    );
+  }
+}

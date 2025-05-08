@@ -2991,6 +2991,10 @@ class FFI {
       textureModel.updateCurrentDisplay(display ?? 0);
     }
 
+    if (isDesktop) {
+      inputModel.updateTrackpadSpeed();
+    }
+
     // CAUTION: `sessionStart()` and `sessionStartWithDisplays()` are an async functions.
     // Though the stream is returned immediately, the stream may not be ready.
     // Any operations that depend on the stream should be carefully handled.

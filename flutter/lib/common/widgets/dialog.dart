@@ -1623,6 +1623,43 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 
+trackpadSpeedDialog(SessionID sessionId, FFI ffi) async {
+  final speed = await bind.sessionGetFlutterOption(
+      sessionId: sessionId, k: kKeyTrackpadSpeed);
+  var initSpeed = kDefaultTrackpadSpeed;
+  if (speed != null && speed.isNotEmpty) {
+    try {
+      initSpeed = double.parse(speed);
+    } catch (e) {
+      debugPrint('Failed to parse the trackpad speed, "$speed": $e');
+    }
+  }
+  if (initSpeed < kMinTrackpadSpeed || initSpeed > kMaxTrackpadSpeed) {
+    initSpeed = kDefaultTrackpadSpeed;
+  }
+
+  final curSpeed = SimpleWrapper(initSpeed);
+  final btnClose = dialogButton('Close', onPressed: () async {
+    if (curSpeed.value <= kMaxTrackpadSpeed &&
+        curSpeed.value >= kMinTrackpadSpeed &&
+        (curSpeed.value - initSpeed).abs() > 0.01) {
+      await bind.sessionSetFlutterOption(
+          sessionId: sessionId,
+          k: kKeyTrackpadSpeed,
+          v: curSpeed.value.toString());
+      await ffi.inputModel.updateTrackpadSpeed();
+    }
+    ffi.dialogManager.dismissAll();
+  });
+  msgBoxCommon(
+      ffi.dialogManager,
+      'Trackpad speed',
+      TrackpadSpeedWidget(
+        value: curSpeed,
+      ),
+      [btnClose]);
+}
+
 void deleteConfirmDialog(Function onSubmit, String title) async {
   gFFI.dialogManager.show(
     (setState, close, context) {
