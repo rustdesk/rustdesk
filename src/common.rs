@@ -524,9 +524,8 @@ pub fn test_nat_type() {
         }
 
         let mut i = 0;
-        let (rendezvous_server, _, _) = get_rendezvous_server_sync(1_000);
         loop {
-            match test_nat_type_(&rendezvous_server) {
+            match test_nat_type_() {
                 Ok(true) => break,
                 Err(err) => {
                     log::error!("test nat: {}", err);
@@ -548,10 +547,10 @@ pub fn test_nat_type() {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn test_nat_type_(rendezvous_server: &str) -> ResultType<bool> {
+async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
     let start = std::time::Instant::now();
-    let server1 = rendezvous_server;
+    let server1 = Config::get_rendezvous_server();
     let server2 = crate::increase_port(&server1, -1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
@@ -606,11 +605,6 @@ async fn test_nat_type_(rendezvous_server: &str) -> ResultType<bool> {
         log::info!("Tested nat type: {:?} in {:?}", t, start.elapsed());
     }
     Ok(ok)
-}
-
-#[tokio::main(flavor = "current_thread")]
-async fn get_rendezvous_server_sync(ms_timeout: u64) -> (String, Vec<String>, bool) {
-    get_rendezvous_server(ms_timeout).await
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
