@@ -507,6 +507,16 @@ audio_rechannel!(audio_rechannel_8_7, 8, 7);
 pub fn test_nat_type() {
     let mut i = 0;
     std::thread::spawn(move || loop {
+        if i == 0 {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            let is_direct = crate::ipc::get_socks().is_none(); // sync socks BTW
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            let is_direct = Config::get_socks().is_none(); // sync socks BTW
+            if !is_direct {
+                Config::set_nat_type(NatType::SYMMETRIC as _);
+                break;
+            }
+        }
         match test_nat_type_() {
             Ok(true) => break,
             Err(err) => {
@@ -528,14 +538,6 @@ pub fn test_nat_type() {
 #[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    let is_direct = Config::get_socks().is_none(); // sync socks BTW
-    if !is_direct {
-        Config::set_nat_type(NatType::SYMMETRIC as _);
-        return Ok(true);
-    }
     let start = std::time::Instant::now();
     let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;

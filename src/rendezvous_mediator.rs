@@ -65,13 +65,9 @@ impl RendezvousMediator {
         if crate::platform::is_installed() && !crate::is_custom_client() {
             crate::updater::start_auto_update();
         }
-        let mut nat_tested = false;
         check_zombie();
         let server = new_server();
-        if Config::get_nat_type() == NatType::UNKNOWN_NAT as i32 {
-            crate::test_nat_type();
-            nat_tested = true;
-        }
+        crate::test_nat_type();
         if config::option2bool("stop-service", &Config::get_option("stop-service")) {
             crate::test_rendezvous_server();
         }
@@ -100,10 +96,6 @@ impl RendezvousMediator {
             if !config::option2bool("stop-service", &Config::get_option("stop-service"))
                 && !crate::platform::installing_service()
             {
-                if !nat_tested {
-                    crate::test_nat_type();
-                    nat_tested = true;
-                }
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
                 SHOULD_EXIT.store(false, Ordering::SeqCst);
