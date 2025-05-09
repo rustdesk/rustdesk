@@ -46,6 +46,7 @@ env:
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
 
+
 jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
@@ -926,7 +927,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libc6-dev \
-               libclang-10-dev \
+               libclang-${LLVM_VERSION}-dev \ \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -939,7 +940,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-10-dev \
+               llvm-${LLVM_VERSION}-dev \
                nasm \
                ninja-build \
                openjdk-17-jdk-headless \
@@ -1203,7 +1204,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libc6-dev \
-               libclang-10-dev \
+               libclang-${LLVM_VERSION}-dev \ \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -1216,7 +1217,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-10-dev \
+               llvm-${LLVM_VERSION}-dev \
                nasm \
                ninja-build \
                openjdk-17-jdk-headless \
@@ -1493,7 +1494,7 @@ jobs:
                g++ \
                libayatana-appindicator3-dev \
                libasound2-dev \
-               libclang-10-dev \
+               libclang-${LLVM_VERSION}-dev \ \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -1506,7 +1507,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-10-dev \
+               llvm-${LLVM_VERSION}-dev \
                nasm \
                ninja-build \
                pkg-config \
