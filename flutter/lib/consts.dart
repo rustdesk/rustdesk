@@ -226,6 +226,12 @@ const double kDefaultQuality = 50;
 const double kMaxQuality = 100;
 const double kMaxMoreQuality = 2000;
 
+// trackpad speed
+const String kKeyTrackpadSpeed = 'trackpad-speed';
+const int kMinTrackpadSpeed = 10;
+const int kDefaultTrackpadSpeed = 100;
+const int kMaxTrackpadSpeed = 1000;
+
 // incomming (should be incoming) is kept, because change it will break the previous setting.
 const String kKeyPrinterIncomingJobAction = 'printer-incomming-job-action';
 const String kValuePrinterIncomingJobDismiss = 'dismiss';
