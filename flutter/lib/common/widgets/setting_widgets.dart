@@ -267,6 +267,7 @@ class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
   void updateValue(double newValue) {
     setState(() {
       value = newValue.clamp(kMinTrackpadSpeed, kMaxTrackpadSpeed);
+      // Scale the trackpad speed value to a percentage for display purposes.
       _controller.text = ((value * 100.0).round()).toString();
     });
   }

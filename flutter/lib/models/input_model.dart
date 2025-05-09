@@ -387,6 +387,19 @@ class InputModel {
     }
   }
 
+  /// Updates the trackpad speed based on the session option value.
+  /// 
+  /// This function retrieves the trackpad speed setting from the session
+  /// using `sessionGetFlutterOption`. The expected format of the retrieved
+  /// value is a string that can be parsed into a double. If parsing fails
+  /// or the value is out of bounds (less than `kMinTrackpadSpeed` or greater
+  /// than `kMaxTrackpadSpeed`), the trackpad speed is reset to the default
+  /// value (`kDefaultTrackpadSpeed`).
+  /// 
+  /// Bounds:
+  /// - Minimum: `kMinTrackpadSpeed`
+  /// - Maximum: `kMaxTrackpadSpeed`
+  /// - Default: `kDefaultTrackpadSpeed`
   Future<void> updateTrackpadSpeed() async {
     final speed = await bind.sessionGetFlutterOption(
         sessionId: sessionId, k: kKeyTrackpadSpeed);
