@@ -22,12 +22,16 @@ jobs:
               os: ubuntu-22.04,
               extra-build-args: "",
             }
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
       - name: Install prerequisites
         run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 10
           sudo apt-get install ca-certificates -y
           sudo apt-get update -y
           sudo apt-get install -y \
