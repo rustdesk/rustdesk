@@ -60,7 +60,8 @@ class RustdeskImpl {
     throw UnimplementedError("hostStopSystemKeyPropagate");
   }
 
-  int peerGetDefaultSessionsCount({required String id, dynamic hint}) {
+  int peerGetSessionsCount(
+      {required String id, required int connType, dynamic hint}) {
     return 0;
   }
 
@@ -68,6 +69,7 @@ class RustdeskImpl {
       {required String id,
       required UuidValue sessionId,
       required Int32List displays,
+      required bool isViewCamera,
       dynamic hint}) {
     return '';
   }
@@ -76,6 +78,7 @@ class RustdeskImpl {
       {required UuidValue sessionId,
       required String id,
       required bool isFileTransfer,
+      required bool isViewCamera,
       required bool isPortForward,
       required bool isRdp,
       required String switchUuid,
@@ -90,7 +93,8 @@ class RustdeskImpl {
         'id': id,
         'password': password,
         'is_shared_password': isSharedPassword,
-        'isFileTransfer': isFileTransfer
+        'isFileTransfer': isFileTransfer,
+        'isViewCamera': isViewCamera
       })
     ]);
   }
@@ -1846,6 +1850,50 @@ class RustdeskImpl {
 
   String? sessionGetConnToken({required UuidValue sessionId, dynamic hint}) {
     throw UnimplementedError("sessionGetConnToken");
+  }
+
+  String mainGetPrinterNames({dynamic hint}) {
+    return '';
+  }
+
+  Future<void> sessionPrinterResponse(
+      {required UuidValue sessionId,
+      required int id,
+      required String path,
+      required String printerName,
+      dynamic hint}) {
+    throw UnimplementedError("sessionPrinterResponse");
+  }
+
+  Future<String> mainGetCommon({required String key, dynamic hint}) {
+    throw UnimplementedError("mainGetCommon");
+  }
+
+  String mainGetCommonSync({required String key, dynamic hint}) {
+    throw UnimplementedError("mainGetCommonSync");
+  }
+
+  Future<void> mainSetCommon(
+      {required String key, required String value, dynamic hint}) {
+    throw UnimplementedError("mainSetCommon");
+  }
+
+  Future<String> sessionHandleScreenshot(
+      {required UuidValue sessionId, required String action, dynamic hint}) {
+    throw UnimplementedError("sessionHandleScreenshot");
+  }
+
+  String? sessionGetCommonSync(
+      {required UuidValue sessionId,
+      required String key,
+      required String param,
+      dynamic hint}) {
+    throw UnimplementedError("sessionGetCommonSync");
+  }
+
+  Future<void> sessionTakeScreenshot(
+      {required UuidValue sessionId, required int display, dynamic hint}) {
+    throw UnimplementedError("sessionTakeScreenshot");
   }
 
   void dispose() {}

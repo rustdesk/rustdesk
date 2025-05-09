@@ -27,7 +27,11 @@ pub mod linux_desktop_manager;
 pub mod gtk_sudo;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::{message_proto::CursorData, ResultType};
+use hbb_common::{
+    message_proto::CursorData,
+    sysinfo::{Pid, System},
+    ResultType,
+};
 use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 pub const SERVICE_INTERVAL: u64 = 300;
@@ -135,6 +139,71 @@ impl Drop for InstallingService {
 #[inline]
 pub fn is_prelogin() -> bool {
     false
+}
+
+// Note: This method is inefficient on Windows. It will get all the processes.
+// It should only be called when performance is not critical.
+// If we wanted to get the command line ourselves, there would be a lot of new code.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    args: &[S2],
+) -> Vec<Pid> {
+    // This function does not work when the process is 32-bit and the OS is 64-bit Windows,
+    // `process.cmd()` always returns [] in this case.
+    // So we use `windows::get_pids_with_args_by_wmic()` instead.
+    #[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
+    {
+        return windows::get_pids_with_args_by_wmic(name, args);
+    }
+    #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
+    {
+        let name = name.as_ref().to_lowercase();
+        let system = System::new_all();
+        system
+            .processes()
+            .iter()
+            .filter(|(_, process)| {
+                process.name().to_lowercase() == name
+                    && process.cmd().len() == args.len() + 1
+                    && args.iter().enumerate().all(|(i, arg)| {
+                        process.cmd()[i + 1].to_lowercase() == arg.as_ref().to_lowercase()
+                    })
+            })
+            .map(|(&pid, _)| pid)
+            .collect()
+    }
+}
+
+// Note: This method is inefficient on Windows. It will get all the processes.
+// It should only be called when performance is not critical.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    arg: S2,
+) -> Vec<Pid> {
+    // This function does not work when the process is 32-bit and the OS is 64-bit Windows,
+    // `process.cmd()` always returns [] in this case.
+    // So we use `windows::get_pids_with_first_arg_by_wmic()` instead.
+    #[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
+    {
+        return windows::get_pids_with_first_arg_by_wmic(name, arg);
+    }
+    #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
+    {
+        let name = name.as_ref().to_lowercase();
+        let system = System::new_all();
+        system
+            .processes()
+            .iter()
+            .filter(|(_, process)| {
+                process.name().to_lowercase() == name
+                    && process.cmd().len() >= 2
+                    && process.cmd()[1].to_lowercase() == arg.as_ref().to_lowercase()
+            })
+            .map(|(&pid, _)| pid)
+            .collect()
+    }
 }
 
 #[cfg(test)]

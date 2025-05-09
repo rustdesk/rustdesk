@@ -33,8 +33,8 @@ class PeerTabPage extends StatefulWidget {
 
 class _TabEntry {
   final Widget widget;
-  final Function({dynamic hint}) load;
-  _TabEntry(this.widget, this.load);
+  final Function({dynamic hint})? load;
+  _TabEntry(this.widget, [this.load]);
 }
 
 EdgeInsets? _menuPadding() {
@@ -44,21 +44,15 @@ EdgeInsets? _menuPadding() {
 class _PeerTabPageState extends State<PeerTabPage>
     with SingleTickerProviderStateMixin {
   final List<_TabEntry> entries = [
-    _TabEntry(
-        RecentPeersView(
-          menuPadding: _menuPadding(),
-        ),
-        bind.mainLoadRecentPeers),
-    _TabEntry(
-        FavoritePeersView(
-          menuPadding: _menuPadding(),
-        ),
-        bind.mainLoadFavPeers),
-    _TabEntry(
-        DiscoveredPeersView(
-          menuPadding: _menuPadding(),
-        ),
-        bind.mainDiscover),
+    _TabEntry(RecentPeersView(
+      menuPadding: _menuPadding(),
+    )),
+    _TabEntry(FavoritePeersView(
+      menuPadding: _menuPadding(),
+    )),
+    _TabEntry(DiscoveredPeersView(
+      menuPadding: _menuPadding(),
+    )),
     _TabEntry(
         AddressBook(
           menuPadding: _menuPadding(),
@@ -100,7 +94,7 @@ class _PeerTabPageState extends State<PeerTabPage>
         gFFI.peerTabModel.setCurrentTabCachedPeers([]);
       }
       gFFI.peerTabModel.setCurrentTab(tabIndex);
-      entries[tabIndex].load(hint: false);
+      entries[tabIndex].load?.call(hint: false);
     }
   }
 
@@ -225,7 +219,7 @@ class _PeerTabPageState extends State<PeerTabPage>
         child: RefreshWidget(
             onPressed: () {
               if (gFFI.peerTabModel.currentTab < entries.length) {
-                entries[gFFI.peerTabModel.currentTab].load();
+                entries[gFFI.peerTabModel.currentTab].load?.call();
               }
             },
             spinning: loading,
@@ -404,7 +398,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                 for (var p in peers) {
                   await bind.mainRemovePeer(id: p.id);
                 }
-                await bind.mainLoadRecentPeers();
+                bind.mainLoadRecentPeers();
                 break;
               case 1:
                 final favs = (await bind.mainGetFav()).toList();
@@ -412,13 +406,13 @@ class _PeerTabPageState extends State<PeerTabPage>
                   favs.remove(p.id);
                 }).toList();
                 await bind.mainStoreFav(favs: favs);
-                await bind.mainLoadFavPeers();
+                bind.mainLoadFavPeers();
                 break;
               case 2:
                 for (var p in peers) {
                   await bind.mainRemoveDiscovered(id: p.id);
                 }
-                await bind.mainLoadLanPeers();
+                bind.mainLoadLanPeers();
                 break;
               case 3:
                 await gFFI.abModel.deletePeers(peers.map((p) => p.id).toList());

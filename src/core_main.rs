@@ -1,4 +1,4 @@
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use crate::client::translate;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -31,7 +31,10 @@ macro_rules! my_println{
 pub fn core_main() -> Option<Vec<String>> {
     crate::load_custom_client();
     #[cfg(windows)]
-    crate::platform::windows::bootstrap();
+    if !crate::platform::windows::bootstrap() {
+        // return None to terminate the process
+        return None;
+    }
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
@@ -50,6 +53,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 "--connect",
                 "--play",
                 "--file-transfer",
+                "--view-camera",
                 "--port-forward",
                 "--rdp",
             ]
@@ -73,7 +77,14 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     if args.is_empty() {
-        if crate::check_process("--server", false) && !crate::check_process("--tray", true) {
+        #[cfg(target_os = "linux")]
+        let is_server_running = crate::check_process("--server", false);
+        // We can use `crate::check_process("--server", false)` on Windows.
+        // Because `--server` process is the System user's process. We can't get the arguments in `check_process()`.
+        // We can assume that self service running means the server is also running on Windows.
+        #[cfg(target_os = "windows")]
+        let is_server_running = crate::platform::is_self_service_running();
+        if is_server_running && !crate::check_process("--tray", true) {
             #[cfg(target_os = "linux")]
             hbb_common::allow_err!(crate::platform::check_autostart_config());
             hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
@@ -96,7 +107,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     #[cfg(windows)]
-    if args.contains(&"--connect".to_string()) {
+    if args.contains(&"--connect".to_string()) || args.contains(&"--view-camera".to_string()) {
         hbb_common::platform::windows::start_cpu_performance_monitor();
     }
     #[cfg(feature = "flutter")]
@@ -166,6 +177,8 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     init_plugins(&args);
     if args.is_empty() || crate::common::is_empty_uni_link(&args[0]) {
+        #[cfg(windows)]
+        hbb_common::config::PeerConfig::preload_peers();
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
         #[cfg(windows)]
@@ -175,6 +188,26 @@ pub fn core_main() -> Option<Vec<String>> {
                 if let Err(err) = platform::uninstall_me(true) {
                     log::error!("Failed to uninstall: {}", err);
                 }
+                return None;
+            } else if args[0] == "--update" {
+                if config::is_disable_installation() {
+                    return None;
+                }
+                let res = platform::update_me(false);
+                let text = match res {
+                    Ok(_) => translate("Update successfully!".to_string()),
+                    Err(err) => {
+                        log::error!("Failed with error: {err}");
+                        translate("Update failed!".to_string())
+                    }
+                };
+                Toast::new(Toast::POWERSHELL_APP_ID)
+                    .title(&config::APP_NAME.read().unwrap())
+                    .text1(&text)
+                    .sound(Some(Sound::Default))
+                    .duration(Duration::Short)
+                    .show()
+                    .ok();
                 return None;
             } else if args[0] == "--after-install" {
                 if let Err(err) = platform::run_after_install() {
@@ -190,12 +223,11 @@ pub fn core_main() -> Option<Vec<String>> {
                 if config::is_disable_installation() {
                     return None;
                 }
-                let res = platform::install_me(
-                    "desktopicon startmenu",
-                    "".to_owned(),
-                    true,
-                    args.len() > 1,
-                );
+                #[cfg(not(windows))]
+                let options = "desktopicon startmenu";
+                #[cfg(windows)]
+                let options = "desktopicon startmenu printer";
+                let res = platform::install_me(options, "".to_owned(), true, args.len() > 1);
                 let text = match res {
                     Ok(_) => translate("Installation Successful!".to_string()),
                     Err(err) => {
@@ -238,6 +270,21 @@ pub fn core_main() -> Option<Vec<String>> {
                 return None;
             }
         }
+        #[cfg(target_os = "macos")]
+        {
+            use crate::platform;
+            if args[0] == "--update" {
+                let _text = match platform::update_me() {
+                    Ok(_) => {
+                        log::info!("{}", translate("Update successfully!".to_string()));
+                    }
+                    Err(err) => {
+                        log::error!("Update failed with error: {err}");
+                    }
+                };
+                return None;
+            }
+        }
         if args[0] == "--remove" {
             if args.len() == 2 {
                 // sleep a while so that process of removed exe exit
@@ -272,11 +319,7 @@ pub fn core_main() -> Option<Vec<String>> {
                     .arg(&format!("{} --tray", crate::get_app_name().to_lowercase()))
                     .status()
                     .ok();
-                hbb_common::allow_err!(crate::platform::run_as_user(
-                    vec!["--tray"],
-                    None,
-                    None::<(&str, &str)>,
-                ));
+                hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
             }
             #[cfg(windows)]
             crate::privacy_mode::restore_reg_connectivity(true);
@@ -424,15 +467,26 @@ pub fn core_main() -> Option<Vec<String>> {
                     if pos < max {
                         address_book_tag = Some(args[pos + 1].to_owned());
                     }
+                    let mut device_group_name = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--device_group_name")
+                        .unwrap_or(max);
+                    if pos < max {
+                        device_group_name = Some(args[pos + 1].to_owned());
+                    }
                     let mut body = serde_json::json!({
                         "id": id,
                         "uuid": uuid,
                     });
                     let header = "Authorization: Bearer ".to_owned() + &token;
-                    if user_name.is_none() && strategy_name.is_none() && address_book_name.is_none()
+                    if user_name.is_none()
+                        && strategy_name.is_none()
+                        && address_book_name.is_none()
+                        && device_group_name.is_none()
                     {
                         println!(
-                            "--user_name or --strategy_name or --address_book_name is required!"
+                            "--user_name or --strategy_name or --address_book_name or --device_group_name is required!"
                         );
                     } else {
                         if let Some(name) = user_name {
@@ -446,6 +500,9 @@ pub fn core_main() -> Option<Vec<String>> {
                             if let Some(name) = address_book_tag {
                                 body["address_book_tag"] = serde_json::json!(name);
                             }
+                        }
+                        if let Some(name) = device_group_name {
+                            body["device_group_name"] = serde_json::json!(name);
                         }
                         let url = crate::ui_interface::get_api_server() + "/api/devices/cli";
                         match crate::post_request_sync(url, body.to_string(), &header) {
@@ -570,7 +627,8 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     let mut param_array = vec![];
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--connect" | "--play" | "--file-transfer" | "--port-forward" | "--rdp" => {
+            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward"
+            | "--rdp" => {
                 authority = Some((&arg.to_string()[2..]).to_owned());
                 id = args.next();
             }

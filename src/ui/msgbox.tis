@@ -132,6 +132,17 @@ class MsgboxComponent: Reactor.Component {
         return this.type.indexOf("skip") >= 0;
     }
 
+    function getScreenshotButtons() {
+        var isScreenshot = this.type.indexOf("take-screenshot") >= 0;
+        return isScreenshot 
+            ? <div>
+                <button .button #screenshotSaveAs .outline>{translate('Save as')}...</button>
+                <button .button #screenshotCopyToClip .outline>{translate('Copy to clipboard')}</button>
+                <button .button #screenshotCancel .outline>{translate('Cancel')}</button>
+            </div>
+            : "";
+    }
+
     function render() {
         this.set_outline_focus();
         var color = this.getColor();
@@ -170,6 +181,7 @@ class MsgboxComponent: Reactor.Component {
                     {hasOk || this.hasRetry ? <button .button #submit>{translate(this.hasRetry ? "Retry" : "OK")}</button> : ""}
                     {hasLink ? <button .button #jumplink .outline>{translate('JumpLink')}</button> : ""}
                     {hasClose ? <button .button #cancel .outline>{translate('Close')}</button> : ""}
+                    {this.getScreenshotButtons()}
                 </div>
             </div>
             </div>
@@ -245,6 +257,39 @@ class MsgboxComponent: Reactor.Component {
             this.close();
         }
     }
+
+    event click $(button#screenshotSaveAs) {
+        this.close();
+
+        handler.leave(handler.get_keyboard_mode());
+        const filter = "Png file (*.png)";
+        const defaultExt = "png";
+        const initialPath = System.path(#USER_DOCUMENTS, "screenshot");
+        const caption = "Save as";
+        var url = view.selectFile(#save, filter, defaultExt, initialPath, caption);
+        handler.enter(handler.get_keyboard_mode());
+        if(url) {
+            var res = handler.handle_screenshot("0:" + URL.toPath(url));
+            if (res) {
+                msgbox("custom-error-nocancel-nook-hasclose", "Take screenshot", res, "", function() {});
+            }
+        } else {
+            handler.handle_screenshot("2");
+        }
+    }
+
+    event click $(button#screenshotCopyToClip) {
+        this.close();
+        var res = handler.handle_screenshot("1");
+        if (res) {
+            msgbox("custom-error-nocancel-nook-hasclose", "Take screenshot", res, "", function() {});
+        }
+    }
+
+    event click $(button#screenshotCancel) {
+        this.close();
+        handler.handle_screenshot("2");
+    }
     
     event keydown (evt) {
         if (!evt.shortcutKey) {
@@ -316,6 +361,9 @@ class MsgboxComponent: Reactor.Component {
         }
         if (this.type == "multiple-sessions-nocancel") {
             values.sid = (this.$$(select))[0].value;
+        }
+        if (this.type == "remote-printer-selector") {
+            values.name = (this.$$(select))[0].value;
         }
         return values;
     }

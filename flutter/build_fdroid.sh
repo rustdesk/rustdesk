@@ -150,6 +150,10 @@ prebuild)
 
 	# Flutter used to compile Flutter<->Rust bridge files
 
+	CARGO_EXPAND_VERSION="$(yq -r \
+		.env.CARGO_EXPAND_VERSION \
+		.github/workflows/bridge.yml)"
+
 	FLUTTER_BRIDGE_VERSION="$(yq -r \
 		.env.FLUTTER_VERSION \
 		.github/workflows/bridge.yml)"
@@ -239,6 +243,7 @@ prebuild)
 
 	cargo install \
 		cargo-expand \
+		--version "${CARGO_EXPAND_VERSION}" \
 		--locked
 	cargo install flutter_rust_bridge_codegen \
 		--version "${FLUTTER_RUST_BRIDGE_VERSION}" \

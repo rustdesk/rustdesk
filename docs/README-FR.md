@@ -137,6 +137,10 @@ Veuillez vous assurer que vous exécutez ces commandes à partir de la racine du
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)** : Communiquer avec [rustdesk-server](https://github.com/rustdesk/rustdesk-server), attendre une connexion distante directe (TCP hole punching) ou relayée.
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)** : code spécifique à la plateforme
 
+> [!Attention]
+> **Avertissement contre l'utilisation abusive:** <br>
+> Les développeurs de RustDesk ne cautionnent ni ne soutiennent aucune utilisation non éthique ou illégale de ce logiciel. Toute utilisation abusive, telle que l'accès non autorisé, le contrôle ou l'invasion de la vie privée, est strictement contraire à nos directives. Les auteurs ne sont pas responsables de toute utilisation abusive de l'application.
+
 ## Images
 
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)

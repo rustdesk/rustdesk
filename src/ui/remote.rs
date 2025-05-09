@@ -66,6 +66,39 @@ impl SciterHandler {
         }
         displays_value
     }
+
+    fn make_platform_additions(data: &str) -> Option<Value> {
+        if let Ok(v2) = serde_json::from_str::<HashMap<String, serde_json::Value>>(data) {
+            let mut value = Value::map();
+            for (k, v) in v2 {
+                match v {
+                    serde_json::Value::String(s) => {
+                        value.set_item(k, s);
+                    }
+                    serde_json::Value::Number(n) => {
+                        if let Some(n) = n.as_i64() {
+                            value.set_item(k, n as i32);
+                        } else if let Some(n) = n.as_f64() {
+                            value.set_item(k, n);
+                        }
+                    }
+                    serde_json::Value::Bool(b) => {
+                        value.set_item(k, b);
+                    }
+                    _ => {
+                        // ignore for now
+                    }
+                }
+            }
+            if value.len() > 0 {
+                return Some(value);
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
 impl InvokeUiSession for SciterHandler {
@@ -245,6 +278,9 @@ impl InvokeUiSession for SciterHandler {
         pi_sciter.set_item("displays", Self::make_displays_array(&pi.displays));
         pi_sciter.set_item("current_display", pi.current_display);
         pi_sciter.set_item("version", pi.version.clone());
+        if let Some(v) = Self::make_platform_additions(&pi.platform_additions) {
+            pi_sciter.set_item("platform_additions", v);
+        }
         self.call("updatePi", &make_args!(pi_sciter));
     }
 
@@ -280,9 +316,13 @@ impl InvokeUiSession for SciterHandler {
             ConnType::RDP => {}
             ConnType::PORT_FORWARD => {}
             ConnType::FILE_TRANSFER => {}
+            ConnType::VIEW_CAMERA => {}
             ConnType::DEFAULT_CONN => {
                 crate::keyboard::client::start_grab_loop();
             }
+            // Left empty code from compilation.
+            // Please replace the code in the PR.
+            ConnType::VIEW_CAMERA => {}
         }
     }
 
@@ -338,6 +378,14 @@ impl InvokeUiSession for SciterHandler {
 
     fn update_record_status(&self, start: bool) {
         self.call("updateRecordStatus", &make_args!(start));
+    }
+
+    fn printer_request(&self, id: i32, path: String) {
+        self.call("printerRequest", &make_args!(id, path));
+    }
+
+    fn handle_screenshot_resp(&self, _sid: String, msg: String) {
+        self.call("screenshot", &make_args!(msg));
     }
 }
 
@@ -451,6 +499,8 @@ impl sciter::EventHandler for SciterSession {
         fn get_chatbox();
         fn get_icon();
         fn get_home_dir();
+        fn get_next_job_id();
+        fn update_next_job_id(i32);
         fn read_dir(String, bool);
         fn remove_dir(i32, String, bool);
         fn create_dir(i32, String, bool);
@@ -462,8 +512,8 @@ impl sciter::EventHandler for SciterSession {
         fn confirm_delete_files(i32, i32);
         fn set_no_confirm(i32);
         fn cancel_job(i32);
-        fn send_files(i32, String, String, i32, bool, bool);
-        fn add_job(i32, String, String, i32, bool, bool);
+        fn send_files(i32, i32, String, String, i32, bool, bool);
+        fn add_job(i32, i32, String, String, i32, bool, bool);
         fn resume_job(i32, bool);
         fn get_platform(bool);
         fn get_path_sep(bool);
@@ -483,6 +533,9 @@ impl sciter::EventHandler for SciterSession {
         fn save_custom_image_quality(i32);
         fn refresh_video(i32);
         fn record_screen(bool);
+        fn is_screenshot_supported();
+        fn take_screenshot(i32, String);
+        fn handle_screenshot(String);
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
         fn toggle_option(String);
@@ -493,13 +546,16 @@ impl sciter::EventHandler for SciterSession {
         fn is_keyboard_mode_supported(String);
         fn save_keyboard_mode(String);
         fn alternative_codecs();
-        fn change_prefer_codec();
+        fn update_supported_decodings();
         fn restart_remote_device();
         fn request_voice_call();
         fn close_voice_call();
         fn version_cmp(String, String);
         fn set_selected_windows_session_id(String);
         fn is_recording();
+        fn has_file_clipboard();
+        fn get_printer_names();
+        fn on_printer_selected(i32, String, String);
     }
 }
 
@@ -517,6 +573,8 @@ impl SciterSession {
 
         let conn_type = if cmd.eq("--file-transfer") {
             ConnType::FILE_TRANSFER
+        } else if cmd.eq("--view-camera") {
+            ConnType::VIEW_CAMERA
         } else if cmd.eq("--port-forward") {
             ConnType::PORT_FORWARD
         } else if cmd.eq("--rdp") {
@@ -605,6 +663,10 @@ impl SciterSession {
 
     fn set_selected_windows_session_id(&mut self, u_sid: String) {
         self.send_selected_session_id(u_sid);
+    }
+
+    fn has_file_clipboard(&self) -> bool {
+        cfg!(any(target_os = "windows", feature = "unix-file-copy-paste"))
     }
 
     fn get_port_forwards(&mut self) -> Value {
@@ -794,6 +856,26 @@ impl SciterSession {
 
     fn version_cmp(&self, v1: String, v2: String) -> i32 {
         (hbb_common::get_version_number(&v1) - hbb_common::get_version_number(&v2)) as i32
+    }
+
+    fn get_printer_names(&self) -> Value {
+        #[cfg(target_os = "windows")]
+        let printer_names = crate::platform::windows::get_printer_names().unwrap_or_default();
+        #[cfg(not(target_os = "windows"))]
+        let printer_names: Vec<String> = vec![];
+        let mut v = Value::array(0);
+        for name in printer_names {
+            v.push(name);
+        }
+        v
+    }
+
+    fn on_printer_selected(&self, id: i32, path: String, printer_name: String) {
+        self.printer_response(id, path, printer_name);
+    }
+
+    fn handle_screenshot(&self, action: String) -> String {
+        crate::client::screenshot::handle_screenshot(action)
     }
 }
 

@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -71,7 +70,7 @@ void changeIdDialog() {
   final rules = [
     RegexValidationRule('starts with a letter', RegExp(r'^[a-zA-Z]')),
     LengthRangeValidationRule(6, 16),
-    RegexValidationRule('allowed characters', RegExp(r'^\w*$'))
+    RegexValidationRule('allowed characters', RegExp(r'^[\w-]*$'))
   ];
 
   gFFI.dialogManager.show((setState, close, context) {
@@ -412,24 +411,38 @@ class DialogTextField extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: TextField(
-            decoration: InputDecoration(
-              labelText: title,
-              hintText: hintText,
-              prefixIcon: prefixIcon,
-              suffixIcon: suffixIcon,
-              helperText: helperText,
-              helperMaxLines: 8,
-              errorText: errorText,
-              errorMaxLines: 8,
-            ),
-            controller: controller,
-            focusNode: focusNode,
-            autofocus: true,
-            obscureText: obscureText,
-            keyboardType: keyboardType,
-            inputFormatters: inputFormatters,
-            maxLength: maxLength,
+          child: Column(
+            children: [
+              TextField(
+                decoration: InputDecoration(
+                  labelText: title,
+                  hintText: hintText,
+                  prefixIcon: prefixIcon,
+                  suffixIcon: suffixIcon,
+                  helperText: helperText,
+                  helperMaxLines: 8,
+                ),
+                controller: controller,
+                focusNode: focusNode,
+                autofocus: true,
+                obscureText: obscureText,
+                keyboardType: keyboardType,
+                inputFormatters: inputFormatters,
+                maxLength: maxLength,
+              ),
+              if (errorText != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SelectableText(
+                    errorText!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.left,
+                  ).paddingOnly(top: 8, left: 12),
+                ),
+            ],
           ).workaroundFreezeLinuxMint(),
         ),
       ],
@@ -1608,6 +1621,28 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
       showFps: !hideFps,
       showMoreQuality: !hideMoreQuality);
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
+}
+
+trackpadSpeedDialog(SessionID sessionId, FFI ffi) async {
+  int initSpeed = ffi.inputModel.trackpadSpeed;
+  final curSpeed = SimpleWrapper(initSpeed);
+  final btnClose = dialogButton('Close', onPressed: () async {
+    if (curSpeed.value <= kMaxTrackpadSpeed &&
+        curSpeed.value >= kMinTrackpadSpeed &&
+        curSpeed.value != initSpeed) {
+      await bind.sessionSetTrackpadSpeed(
+          sessionId: sessionId, value: curSpeed.value);
+      await ffi.inputModel.updateTrackpadSpeed();
+    }
+    ffi.dialogManager.dismissAll();
+  });
+  msgBoxCommon(
+      ffi.dialogManager,
+      'Trackpad speed',
+      TrackpadSpeedWidget(
+        value: curSpeed,
+      ),
+      [btnClose]);
 }
 
 void deleteConfirmDialog(Function onSubmit, String title) async {

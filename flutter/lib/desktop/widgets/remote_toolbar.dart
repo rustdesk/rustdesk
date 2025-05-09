@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -478,7 +479,10 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       state: widget.state,
       setFullscreen: _setFullscreen,
     ));
-    toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
+    // Do not show keyboard for camera connection type.
+    if (widget.ffi.connType == ConnType.defaultConn) {
+      toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
+    }
     toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
     if (!isWeb) {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
@@ -1043,23 +1047,26 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         scrollStyle(),
         imageQuality(),
         codec(),
-        _ResolutionsMenu(
-          id: widget.id,
-          ffi: widget.ffi,
-          screenAdjustor: _screenAdjustor,
-        ),
-        if (showVirtualDisplayMenu(ffi))
+        if (ffi.connType == ConnType.defaultConn)
+          _ResolutionsMenu(
+            id: widget.id,
+            ffi: widget.ffi,
+            screenAdjustor: _screenAdjustor,
+          ),
+        if (showVirtualDisplayMenu(ffi) && ffi.connType == ConnType.defaultConn)
           _SubmenuButton(
             ffi: widget.ffi,
             menuChildren: getVirtualDisplayMenuChildren(ffi, id, null),
             child: Text(translate("Virtual display")),
           ),
-        cursorToggles(),
+        if (ffi.connType == ConnType.defaultConn) cursorToggles(),
         Divider(),
         toggles(),
       ];
       // privacy mode
-      if (ffiModel.keyboard && pi.features.privacyMode) {
+      if (ffi.connType == ConnType.defaultConn &&
+          ffiModel.keyboard &&
+          pi.features.privacyMode) {
         final privacyModeState = PrivacyModeState.find(id);
         final privacyModeList =
             toolbarPrivacyMode(privacyModeState, context, id, ffi);
@@ -1085,7 +1092,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           ]);
         }
       }
-      menuChildren.add(widget.pluginItem);
+      if (ffi.connType == ConnType.defaultConn) {
+        menuChildren.add(widget.pluginItem);
+      }
       return menuChildren;
     }
 
@@ -1586,8 +1595,26 @@ class _KeyboardMenu extends StatelessWidget {
               viewMode(),
               Divider(),
               ...toolbarToggles(),
+              ...mouseSpeed(),
               ...mobileActions(),
             ]);
+  }
+
+  mouseSpeed() {
+    final speedWidgets = [];
+    final sessionId = ffi.sessionId;
+    if (isDesktop) {
+      if (ffi.ffiModel.keyboard) {
+        final enabled = !ffi.ffiModel.viewOnly;
+        final trackpad = MenuButton(
+          child: Text(translate('Trackpad speed')).paddingOnly(left: 26.0),
+          onPressed: enabled ? () => trackpadSpeedDialog(sessionId, ffi) : null,
+          ffi: ffi,
+        );
+        speedWidgets.add(trackpad);
+      }
+    }
+    return speedWidgets;
   }
 
   keyboardMode() {

@@ -7,12 +7,14 @@ use std::{
 
 use serde_json::{json, Map, Value};
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::whoami;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail, base64,
     bytes::Bytes,
-    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT},
+    config::{self, use_ws, Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT},
     futures::future::join_all,
     futures_util::future::poll_fn,
     get_version_number, log,
@@ -27,7 +29,7 @@ use hbb_common::{
         self,
         time::{Duration, Instant, Interval},
     },
-    ResultType,
+    ResultType, Stream,
 };
 
 use crate::{
@@ -89,7 +91,7 @@ lazy_static::lazy_static! {
 
 pub struct SimpleCallOnReturn {
     pub b: bool,
-    pub f: Box<dyn Fn() + 'static>,
+    pub f: Box<dyn Fn() + Send + 'static>,
 }
 
 impl Drop for SimpleCallOnReturn {
@@ -125,6 +127,36 @@ pub fn is_support_multi_ui_session(ver: &str) -> bool {
 #[inline]
 pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number(MIN_VER_MULTI_UI_SESSION)
+}
+
+#[inline]
+#[cfg(feature = "unix-file-copy-paste")]
+pub fn is_support_file_copy_paste(ver: &str) -> bool {
+    is_support_file_copy_paste_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+#[cfg(feature = "unix-file-copy-paste")]
+pub fn is_support_file_copy_paste_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.3.8")
+}
+
+pub fn is_support_remote_print(ver: &str) -> bool {
+    hbb_common::get_version_number(ver) >= hbb_common::get_version_number("1.3.9")
+}
+
+pub fn is_support_file_paste_if_macos(ver: &str) -> bool {
+    hbb_common::get_version_number(ver) >= hbb_common::get_version_number("1.3.9")
+}
+
+#[inline]
+pub fn is_support_screenshot(ver: &str) -> bool {
+    is_support_multi_ui_session_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+pub fn is_support_screenshot_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.4.0")
 }
 
 // is server process, with "--server" args
@@ -472,41 +504,73 @@ audio_rechannel!(audio_rechannel_8_5, 8, 5);
 audio_rechannel!(audio_rechannel_8_6, 8, 6);
 audio_rechannel!(audio_rechannel_8_7, 8, 7);
 
+pub struct CheckTestNatType {
+    is_direct: bool,
+}
+
+impl CheckTestNatType {
+    pub fn new() -> Self {
+        Self {
+            is_direct: Config::get_socks().is_none() && !config::use_ws(),
+        }
+    }
+}
+
+impl Drop for CheckTestNatType {
+    fn drop(&mut self) {
+        let is_direct = Config::get_socks().is_none() && !config::use_ws();
+        if self.is_direct != is_direct {
+            test_nat_type();
+        }
+    }
+}
+
 pub fn test_nat_type() {
-    let mut i = 0;
-    std::thread::spawn(move || loop {
-        match test_nat_type_() {
-            Ok(true) => break,
-            Err(err) => {
-                log::error!("test nat: {}", err);
+    use std::sync::atomic::{AtomicBool, Ordering};
+    std::thread::spawn(move || {
+        static IS_RUNNING: AtomicBool = AtomicBool::new(false);
+        if IS_RUNNING.load(Ordering::SeqCst) {
+            return;
+        }
+        IS_RUNNING.store(true, Ordering::SeqCst);
+
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        crate::ipc::get_socks_ws();
+        let is_direct = Config::get_socks().is_none() && !config::use_ws();
+        if !is_direct {
+            Config::set_nat_type(NatType::SYMMETRIC as _);
+            IS_RUNNING.store(false, Ordering::SeqCst);
+            return;
+        }
+
+        let mut i = 0;
+        loop {
+            match test_nat_type_() {
+                Ok(true) => break,
+                Err(err) => {
+                    log::error!("test nat: {}", err);
+                }
+                _ => {}
             }
-            _ => {}
+            if Config::get_nat_type() != 0 {
+                break;
+            }
+            i = i * 2 + 1;
+            if i > 300 {
+                i = 300;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(i));
         }
-        if Config::get_nat_type() != 0 {
-            break;
-        }
-        i = i * 2 + 1;
-        if i > 300 {
-            i = 300;
-        }
-        std::thread::sleep(std::time::Duration::from_secs(i));
+
+        IS_RUNNING.store(false, Ordering::SeqCst);
     });
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    let is_direct = Config::get_socks().is_none(); // sync socks BTW
-    if !is_direct {
-        Config::set_nat_type(NatType::SYMMETRIC as _);
-        return Ok(true);
-    }
     let start = std::time::Instant::now();
-    let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
-    let server1 = rendezvous_server;
+    let server1 = Config::get_rendezvous_server();
     let server2 = crate::increase_port(&server1, -1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
@@ -751,7 +815,6 @@ pub fn get_sysinfo() -> serde_json::Value {
         os = format!("{os} - {}", system.os_version().unwrap_or_default());
     }
     let hostname = hostname(); // sys.hostname() return localhost on android in my test
-    use serde_json::json;
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let out;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -811,21 +874,28 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 }
 
 pub fn check_software_update() {
-    std::thread::spawn(move || allow_err!(check_software_update_()));
+    if is_custom_client() {
+        return;
+    }
+    let opt = config::LocalConfig::get_option(config::keys::OPTION_ENABLE_CHECK_UPDATE);
+    if config::option2bool(config::keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
+        std::thread::spawn(move || allow_err!(do_check_software_update()));
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn check_software_update_() -> hbb_common::ResultType<()> {
-    let url = "https://github.com/rustdesk/rustdesk/releases/latest";
-    let latest_release_response = create_http_client_async().get(url).send().await?;
-    let latest_release_version = latest_release_response
-        .url()
-        .path()
-        .rsplit('/')
-        .next()
-        .unwrap_or_default();
-
-    let response_url = latest_release_response.url().to_string();
+pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
+    let (request, url) =
+        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    let latest_release_response = create_http_client_async()
+        .post(url)
+        .json(&request)
+        .send()
+        .await?;
+    let bytes = latest_release_response.bytes().await?;
+    let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
+    let response_url = resp.url;
+    let latest_release_version = response_url.rsplit('/').next().unwrap_or_default();
 
     if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
         #[cfg(feature = "flutter")]
@@ -838,6 +908,8 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
             }
         }
         *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
+    } else {
+        *SOFTWARE_UPDATE_URL.lock().unwrap() = "".to_string();
     }
     Ok(())
 }
@@ -886,7 +958,16 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
     "".to_owned()
 }
 
+#[inline]
 pub fn get_api_server(api: String, custom: String) -> String {
+    let res = get_api_server_(api, custom);
+    if res.starts_with("https") && res.ends_with(":21114") {
+        return res.replace(":21114", "");
+    }
+    res
+}
+
+fn get_api_server_(api: String, custom: String) -> String {
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.api.is_empty() {
@@ -1056,7 +1137,6 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
 }
 
 pub fn _make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Map<String, Value> {
-    use serde_json::json;
     let mut fd_json = serde_json::Map::new();
     fd_json.insert("id".into(), json!(id));
     fd_json.insert("path".into(), json!(path));
@@ -1162,7 +1242,7 @@ pub fn pk_to_fingerprint(pk: Vec<u8>) -> String {
 
 #[inline]
 pub async fn get_next_nonkeyexchange_msg(
-    conn: &mut FramedStream,
+    conn: &mut Stream,
     timeout: Option<u64>,
 ) -> Option<RendezvousMessage> {
     let timeout = timeout.unwrap_or(READ_TIMEOUT);
@@ -1184,7 +1264,34 @@ pub async fn get_next_nonkeyexchange_msg(
     None
 }
 
+#[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
+pub fn check_process(arg: &str, same_session_id: bool) -> bool {
+    let mut path = std::env::current_exe().unwrap_or_default();
+    if let Ok(linked) = path.read_link() {
+        path = linked;
+    }
+    let Some(filename) = path.file_name() else {
+        return false;
+    };
+    let filename = filename.to_string_lossy().to_string();
+    match crate::platform::windows::get_pids_with_first_arg_check_session(
+        &filename,
+        arg,
+        same_session_id,
+    ) {
+        Ok(pids) => {
+            let self_pid = hbb_common::sysinfo::Pid::from_u32(std::process::id());
+            pids.into_iter().filter(|pid| *pid != self_pid).count() > 0
+        }
+        Err(e) => {
+            log::error!("Failed to check process with arg: \"{}\", {}", arg, e);
+            false
+        }
+    }
+}
+
 #[allow(unused_mut)]
+#[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     #[cfg(target_os = "macos")]
@@ -1231,7 +1338,14 @@ pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     false
 }
 
-pub async fn secure_tcp(conn: &mut FramedStream, key: &str) -> ResultType<()> {
+pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
+    // Skip additional encryption when using WebSocket connections (wss://)
+    // as WebSocket Secure (wss://) already provides transport layer encryption.
+    // This doesn't affect the end-to-end encryption between clients,
+    // it only avoids redundant encryption between client and server.
+    if use_ws() {
+        return Ok(());
+    }
     let rs_pk = get_rs_pk(key);
     let Some(rs_pk) = rs_pk else {
         bail!("Handshake failed: invalid public key from rendezvous server");
@@ -1541,7 +1655,7 @@ pub fn is_empty_uni_link(arg: &str) -> bool {
 }
 
 pub fn get_hwid() -> Bytes {
-    use sha2::{Digest, Sha256};
+    use hbb_common::sha2::{Digest, Sha256};
 
     let uuid = hbb_common::get_uuid();
     let mut hasher = Sha256::new();
@@ -1699,4 +1813,36 @@ pub fn get_builtin_option(key: &str) -> String {
         .get(key)
         .cloned()
         .unwrap_or_default()
+}
+
+#[inline]
+pub fn is_custom_client() -> bool {
+    get_app_name() != "RustDesk"
+}
+
+pub fn verify_login(raw: &str, id: &str) -> bool {
+    true
+    /*
+    if is_custom_client() {
+        return true;
+    }
+    #[cfg(debug_assertions)]
+    return true;
+    let Ok(pk) = crate::decode64("IycjQd4TmWvjjLnYd796Rd+XkK+KG+7GU1Ia7u4+vSw=") else {
+        return false;
+    };
+    let Some(key) = get_pk(&pk).map(|x| sign::PublicKey(x)) else {
+        return false;
+    };
+    let Ok(v) = crate::decode64(raw) else {
+        return false;
+    };
+    let raw = sign::verify(&v, &key).unwrap_or_default();
+    let v_str = std::str::from_utf8(&raw)
+        .unwrap_or_default()
+        .split(":")
+        .next()
+        .unwrap_or_default();
+    v_str == id
+    */
 }

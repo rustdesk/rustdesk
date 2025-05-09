@@ -30,6 +30,7 @@
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
 		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
+		<CustomAction Id="InstallPrinter.SetParam" Return="check" Property="InstallPrinter" Value="[INSTALLFOLDER_INNER]" />
 		<InstallExecuteSequence>
 
 			<Custom Action="SetPropertyIsServiceRunning" After="InstallInitialize" Condition="Installed" />
@@ -53,8 +54,21 @@
 			<Custom Action="TryDeleteStartupShortcut.SetParam" Before="SetPropertyIsServiceRunning" Condition="STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
 
 			<!-- Launch ClientLauncher if installing or already installed and not uninstalling -->
-			<Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
-			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)"/>
+			<!-- https://learn.microsoft.com/en-us/windows/win32/msi/uilevel -->
+			<Custom Action="LaunchApp" After="InstallFinalize" Condition="(NOT UILevel=2) AND (NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) "/>
+			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="(LAUNCH_TRAY_APP=&quot;Y&quot; OR LAUNCH_TRAY_APP=&quot;1&quot;) AND (NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)"/>
+
+			<!-- https://learn.microsoft.com/en-us/windows/win32/msi/operating-system-property-values -->
+			<!-- We have to use `VersionNT` to instead of `IsWindows10OrGreater()` in the custom action.
+			Because `IsWindows10OrGreater()` requires the manifest file to be embedded in the executable/dll file.
+			Even I have embedded the manifest file, it still does not work correctly in my case.
+			https://learn.microsoft.com/en-us/windows/win32/sysinfo/version-helper-apis -->
+			<!-- VersionNT >= 603 means can't differentiate between Windows 8.1 and Windows 10.
+			Some msi packages reset the `VersionNT` value to 1000 on Windows 10.
+			https://www.advancedinstaller.com/user-guide/qa-OS-dependent-install.html -->
+			<!-- Remote printer also works on Win8.1 in my test. -->
+			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="VersionNT &gt;= 603 AND PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;" />
+			<Custom Action="InstallPrinter.SetParam" Before="InstallPrinter" Condition="VersionNT &gt;= 603" />
 
 			<!--Workaround of "fire:FirewallException". If Outbound="Yes" or Outbound="true", the following error occurs.-->
 			<!--ExecFirewallExceptions: Error 0x80070057: failed to add app to the authorized apps list-->
@@ -70,6 +84,8 @@
 
 			<Custom Action="RemoveFirewallRules" Before="RemoveFiles"/>
 			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFirewallRules"/>
+
+			<Custom Action="UninstallPrinter" Before="RemoveInstallFolder" Condition="VersionNT &gt;= 603" />
 
 			<Custom Action="TerminateProcesses" Before="RemoveInstallFolder"/>
 			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>

@@ -13,30 +13,35 @@ use hbb_common::{
     libc::{c_int, wchar_t},
     log,
     message_proto::{DisplayInfo, Resolution, WindowsSession},
-    sleep, timeout, tokio,
+    sleep,
+    sysinfo::{Pid, System},
+    timeout, tokio,
 };
 use std::{
     collections::HashMap,
     ffi::{CString, OsString},
-    fs, io,
-    io::prelude::*,
+    fs,
+    io::{self, prelude::*},
     mem,
-    os::windows::process::CommandExt,
+    os::{
+        raw::c_ulong,
+        windows::{ffi::OsStringExt, process::CommandExt},
+    },
     path::*,
-    process::{Command, Stdio},
     ptr::null_mut,
     sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
 };
 use wallpaper;
+#[cfg(not(debug_assertions))]
+use winapi::um::libloaderapi::{LoadLibraryExW, LOAD_LIBRARY_SEARCH_USER_DIRS};
 use winapi::{
     ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
-    um::sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
-        libloaderapi::{GetProcAddress, LoadLibraryA},
+        libloaderapi::{GetProcAddress, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32},
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
@@ -44,6 +49,7 @@ use winapi::{
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
+        sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
         winbase::*,
         wingdi::*,
         winnt::{
@@ -52,7 +58,18 @@ use winapi::{
             TOKEN_ELEVATION, TOKEN_QUERY,
         },
         winreg::HKEY_CURRENT_USER,
+        winspool::{
+            EnumPrintersW, GetDefaultPrinterW, PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL,
+            PRINTER_INFO_1W,
+        },
         winuser::*,
+    },
+};
+use windows::Win32::{
+    Foundation::{CloseHandle as WinCloseHandle, HANDLE as WinHANDLE},
+    System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
     },
 };
 use windows_service::{
@@ -71,6 +88,7 @@ pub const SET_FOREGROUND_WINDOW: &'static str = "SET_FOREGROUND_WINDOW";
 
 const REG_NAME_INSTALL_DESKTOPSHORTCUTS: &str = "DESKTOPSHORTCUTS";
 const REG_NAME_INSTALL_STARTMENUSHORTCUTS: &str = "STARTMENUSHORTCUTS";
+pub const REG_NAME_INSTALL_PRINTER: &str = "PRINTER";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
@@ -468,6 +486,7 @@ extern "C" {
         cmd: *const u16,
         session_id: DWORD,
         as_user: BOOL,
+        show: BOOL,
         token_pid: &mut DWORD,
     ) -> HANDLE;
     fn GetSessionUserTokenWin(
@@ -554,7 +573,11 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
             let current_active_session = unsafe { get_current_session(share_rdp()) };
             if session_id != current_active_session {
                 session_id = current_active_session;
-                h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+                // https://github.com/rustdesk/rustdesk/discussions/10039
+                let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
+                if count == 0 {
+                    h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+                }
             }
         }
         let res = timeout(super::SERVICE_INTERVAL, incoming.next()).await;
@@ -603,8 +626,11 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                     if tmp != session_id && stored_usid != Some(session_id) {
                         log::info!("session changed from {} to {}", session_id, tmp);
                         session_id = tmp;
-                        send_close_async("").await.ok();
-                        close_sent = true;
+                        let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
+                        if count == 0 {
+                            send_close_async("").await.ok();
+                            close_sent = true;
+                        }
                     }
                     let mut exit_code: DWORD = 0;
                     if h_process.is_null()
@@ -653,6 +679,10 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
         "\"{}\" --server",
         std::env::current_exe()?.to_str().unwrap_or("")
     );
+    launch_privileged_process(session_id, &cmd)
+}
+
+pub fn launch_privileged_process(session_id: DWORD, cmd: &str) -> ResultType<HANDLE> {
     use std::os::windows::ffi::OsStrExt;
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
@@ -660,9 +690,12 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
         .collect();
     let wstr = wstr.as_ptr();
     let mut token_pid = 0;
-    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE, &mut token_pid) };
+    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE, FALSE, &mut token_pid) };
     if h.is_null() {
-        log::error!("Failed to launch server: {}", io::Error::last_os_error());
+        log::error!(
+            "Failed to launch privileged process: {}",
+            io::Error::last_os_error()
+        );
         if token_pid == 0 {
             log::error!("No process winlogon.exe");
         }
@@ -671,22 +704,43 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
 }
 
 pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
-    let cmd = format!(
-        "\"{}\" {}",
-        std::env::current_exe()?.to_str().unwrap_or(""),
-        arg.join(" "),
-    );
+    run_exe_in_cur_session(std::env::current_exe()?.to_str().unwrap_or(""), arg, false)
+}
+
+pub fn run_exe_in_cur_session(
+    exe: &str,
+    arg: Vec<&str>,
+    show: bool,
+) -> ResultType<Option<std::process::Child>> {
     let Some(session_id) = get_current_process_session_id() else {
         bail!("Failed to get current process session id");
     };
+    run_exe_in_session(exe, arg, session_id, show)
+}
+
+pub fn run_exe_in_session(
+    exe: &str,
+    arg: Vec<&str>,
+    session_id: DWORD,
+    show: bool,
+) -> ResultType<Option<std::process::Child>> {
     use std::os::windows::ffi::OsStrExt;
+    let cmd = format!("\"{}\" {}", exe, arg.join(" "),);
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect();
     let wstr = wstr.as_ptr();
     let mut token_pid = 0;
-    let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE, &mut token_pid) };
+    let h = unsafe {
+        LaunchProcessWin(
+            wstr,
+            session_id,
+            TRUE,
+            if show { TRUE } else { FALSE },
+            &mut token_pid,
+        )
+    };
     if h.is_null() {
         if token_pid == 0 {
             bail!(
@@ -784,8 +838,12 @@ pub fn set_share_rdp(enable: bool) {
 }
 
 pub fn get_current_process_session_id() -> Option<u32> {
+    get_session_id_of_process(unsafe { GetCurrentProcessId() })
+}
+
+pub fn get_session_id_of_process(pid: DWORD) -> Option<u32> {
     let mut sid = 0;
-    if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut sid) == TRUE } {
+    if unsafe { ProcessIdToSessionId(pid, &mut sid) == TRUE } {
         Some(sid)
     } else {
         None
@@ -950,6 +1008,19 @@ pub fn is_prelogin() -> bool {
     username.is_empty() || username == "SYSTEM"
 }
 
+// `is_logon_ui()` is regardless of multiple sessions now.
+// It only check if "LogonUI.exe" exists.
+//
+// If there're mulitple sessions (logged in users),
+// some are in the login screen, while the others are not.
+// Then this function may not work fine if the session we want to handle(connect) is not in the login screen.
+// But it's a rare case and cannot be simply handled, so it will not be dealt with for the time being.
+#[inline]
+pub fn is_logon_ui() -> ResultType<bool> {
+    let pids = get_pids("LogonUI.exe")?;
+    Ok(!pids.is_empty())
+}
+
 pub fn is_root() -> bool {
     // https://stackoverflow.com/questions/4023586/correct-way-to-find-out-if-a-service-is-running-as-the-system-user
     unsafe { is_local_system() == TRUE }
@@ -1008,6 +1079,10 @@ pub fn get_install_options() -> String {
     let start_menu_shortcuts = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_STARTMENUSHORTCUTS);
     if let Some(start_menu_shortcuts) = start_menu_shortcuts {
         opts.insert(REG_NAME_INSTALL_STARTMENUSHORTCUTS, start_menu_shortcuts);
+    }
+    let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
+    if let Some(printer) = printer {
+        opts.insert(REG_NAME_INSTALL_PRINTER, printer);
     }
     serde_json::to_string(&opts).unwrap_or("{}".to_owned())
 }
@@ -1134,6 +1209,7 @@ fn get_after_install(
     exe: &str,
     reg_value_start_menu_shortcuts: Option<String>,
     reg_value_desktop_shortcuts: Option<String>,
+    reg_value_printer: Option<String>,
 ) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
@@ -1157,12 +1233,20 @@ fn get_after_install(
             )
         })
         .unwrap_or_default();
+    let reg_printer = reg_value_printer
+        .map(|v| {
+            format!(
+                "reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {REG_NAME_INSTALL_PRINTER} /t REG_SZ /d \"{v}\""
+            )
+        })
+        .unwrap_or_default();
 
     format!("
     chcp 65001
     reg add HKEY_CLASSES_ROOT\\.{ext} /f
     {desktop_shortcuts}
     {start_menu_shortcuts}
+    {reg_printer}
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{exe}\\\",0\"
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell /f
@@ -1247,6 +1331,7 @@ oLink.Save
     let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
     let mut reg_value_desktop_shortcuts = "0".to_owned();
     let mut reg_value_start_menu_shortcuts = "0".to_owned();
+    let mut reg_value_printer = "0".to_owned();
     let mut shortcuts = Default::default();
     if options.contains("desktopicon") {
         shortcuts = format!(
@@ -1265,6 +1350,10 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
      "
         );
         reg_value_start_menu_shortcuts = "1".to_owned();
+    }
+    let install_printer = options.contains("printer") && crate::platform::is_win_10_or_greater();
+    if install_printer {
+        reg_value_printer = "1".to_owned();
     }
 
     let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
@@ -1301,6 +1390,9 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
 ")
     };
 
+    // Remember to check if `update_me` need to be changed if changing the `cmds`.
+    // No need to merge the existing dup code, because the code in these two functions are too critical.
+    // New code should be written in a common function.
     let cmds = format!(
         "
 {uninstall_str}
@@ -1336,7 +1428,8 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
         after_install = get_after_install(
             &exe,
             Some(reg_value_start_menu_shortcuts),
-            Some(reg_value_desktop_shortcuts)
+            Some(reg_value_desktop_shortcuts),
+            Some(reg_value_printer)
         ),
         sleep = if debug { "timeout 300" } else { "" },
         dels = if debug { "" } else { &dels },
@@ -1344,13 +1437,22 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
         import_config = get_import_config(&exe),
     );
     run_cmds(cmds, debug, "install")?;
+    if install_printer {
+        allow_err!(remote_printer::install_update_printer(
+            &crate::get_app_name()
+        ));
+    }
     run_after_run_cmds(silent);
     Ok(())
 }
 
 pub fn run_after_install() -> ResultType<()> {
     let (_, _, _, exe) = get_install_info();
-    run_cmds(get_after_install(&exe, None, None), true, "after_install")
+    run_cmds(
+        get_after_install(&exe, None, None, None),
+        true,
+        "after_install",
+    )
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
@@ -1411,6 +1513,9 @@ fn get_uninstall(kill_self: bool) -> String {
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
+    if crate::platform::is_win_10_or_greater() {
+        remote_printer::uninstall_printer(&crate::get_app_name());
+    }
     run_cmds(get_uninstall(kill_self), true, "uninstall")
 }
 
@@ -1553,6 +1658,35 @@ pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
     get_custom_server_from_string(&exe)
 }
 
+pub fn check_update_printer_option() {
+    if !is_installed() {
+        return;
+    }
+    let app_name = crate::get_app_name();
+    if let Ok(b) = remote_printer::is_rd_printer_installed(&app_name) {
+        let v = if b { "1" } else { "0" };
+        if let Err(e) = update_install_option(REG_NAME_INSTALL_PRINTER, v) {
+            log::error!(
+                "Failed to update printer option \"{}\" to \"{}\", error: {}",
+                REG_NAME_INSTALL_PRINTER,
+                v,
+                e
+            );
+        }
+    }
+}
+
+// We can't directly use `RegKey::set_value` to update the registry value, because it will fail with `ERROR_ACCESS_DENIED`
+// So we have to use `run_cmds` to update the registry value.
+pub fn update_install_option(k: &str, v: &str) -> ResultType<()> {
+    let app_name = crate::get_app_name();
+    let ext = app_name.to_lowercase();
+    let cmds =
+        format!("chcp 65001 && reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {k} /t REG_SZ /d \"{v}\"");
+    run_cmds(cmds, false, "update_install_option")?;
+    Ok(())
+}
+
 #[inline]
 pub fn is_win_server() -> bool {
     unsafe { is_windows_server() > 0 }
@@ -1563,10 +1697,73 @@ pub fn is_win_10_or_greater() -> bool {
     unsafe { is_windows_10_or_greater() > 0 }
 }
 
-pub fn bootstrap() {
+pub fn bootstrap() -> bool {
     if let Ok(lic) = get_license_from_exe_name() {
         *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
     }
+
+    #[cfg(debug_assertions)]
+    {
+        true
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        // This function will cause `'sciter.dll' was not found neither in PATH nor near the current executable.` when debugging RustDesk.
+        set_safe_load_dll()
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn set_safe_load_dll() -> bool {
+    if !unsafe { set_default_dll_directories() } {
+        return false;
+    }
+
+    // `SetDllDirectoryW` should never fail.
+    // https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setdlldirectoryw
+    if unsafe { SetDllDirectoryW(wide_string("").as_ptr()) == FALSE } {
+        eprintln!("SetDllDirectoryW failed: {}", io::Error::last_os_error());
+        return false;
+    }
+
+    true
+}
+
+// https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-setdefaultdlldirectories
+#[cfg(not(debug_assertions))]
+unsafe fn set_default_dll_directories() -> bool {
+    let module = LoadLibraryExW(
+        wide_string("Kernel32.dll").as_ptr(),
+        0 as _,
+        LOAD_LIBRARY_SEARCH_SYSTEM32,
+    );
+    if module.is_null() {
+        return false;
+    }
+
+    match CString::new("SetDefaultDllDirectories") {
+        Err(e) => {
+            eprintln!("CString::new failed: {}", e);
+            return false;
+        }
+        Ok(func_name) => {
+            let func = GetProcAddress(module, func_name.as_ptr());
+            if func.is_null() {
+                eprintln!("GetProcAddress failed: {}", io::Error::last_os_error());
+                return false;
+            }
+            type SetDefaultDllDirectories = unsafe extern "system" fn(DWORD) -> BOOL;
+            let func: SetDefaultDllDirectories = std::mem::transmute(func);
+            if func(LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_USER_DIRS) == FALSE {
+                eprintln!(
+                    "SetDefaultDllDirectories failed: {}",
+                    io::Error::last_os_error()
+                );
+                return false;
+            }
+        }
+    }
+    true
 }
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
@@ -2214,6 +2411,171 @@ if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
     std::process::exit(0);
 }
 
+pub fn update_me(debug: bool) -> ResultType<()> {
+    let app_name = crate::get_app_name();
+    let src_exe = std::env::current_exe()?.to_string_lossy().to_string();
+    let (subkey, path, _, exe) = get_install_info();
+    let is_installed = std::fs::metadata(&exe).is_ok();
+    if !is_installed {
+        bail!("{} is not installed.", &app_name);
+    }
+
+    let app_exe_name = &format!("{}.exe", &app_name);
+    let main_window_pids =
+        crate::platform::get_pids_of_process_with_args::<_, &str>(&app_exe_name, &[]);
+    let main_window_sessions = main_window_pids
+        .iter()
+        .map(|pid| get_session_id_of_process(pid.as_u32()))
+        .flatten()
+        .collect::<Vec<_>>();
+    kill_process_by_pids(&app_exe_name, main_window_pids)?;
+    let tray_pids = crate::platform::get_pids_of_process_with_args(&app_exe_name, &["--tray"]);
+    let tray_sessions = tray_pids
+        .iter()
+        .map(|pid| get_session_id_of_process(pid.as_u32()))
+        .flatten()
+        .collect::<Vec<_>>();
+    kill_process_by_pids(&app_exe_name, tray_pids)?;
+    let is_service_running = is_self_service_running();
+
+    let mut version_major = "0";
+    let mut version_minor = "0";
+    let mut version_build = "0";
+    let versions: Vec<&str> = crate::VERSION.split(".").collect();
+    if versions.len() > 0 {
+        version_major = versions[0];
+    }
+    if versions.len() > 1 {
+        version_minor = versions[1];
+    }
+    if versions.len() > 2 {
+        version_build = versions[2];
+    }
+    let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
+    let size = meta.len() / 1024;
+
+    let reg_cmd = format!(
+        "
+reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
+reg add {subkey} /f /v DisplayVersion /t REG_SZ /d \"{version}\"
+reg add {subkey} /f /v Version /t REG_SZ /d \"{version}\"
+reg add {subkey} /f /v BuildDate /t REG_SZ /d \"{build_date}\"
+reg add {subkey} /f /v VersionMajor /t REG_DWORD /d {version_major}
+reg add {subkey} /f /v VersionMinor /t REG_DWORD /d {version_minor}
+reg add {subkey} /f /v VersionBuild /t REG_DWORD /d {version_build}
+reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
+    ",
+        version = crate::VERSION.replace("-", "."),
+        build_date = crate::BUILD_DATE,
+    );
+
+    let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
+    let restore_service_cmd = if is_service_running {
+        format!("sc start {}", &app_name)
+    } else {
+        "".to_owned()
+    };
+    // We do not try to remove all files in the old version.
+    // Because I don't know whether additional files will be installed here after installation, such as drivers.
+    // Just copy files to the installation directory works fine.
+    //if exist \"{path}\" rd /s /q \"{path}\"
+    // md \"{path}\"
+    //
+    // We need `taskkill` because:
+    // 1. There may be some other processes like `rustdesk --connect` are running.
+    // 2. Sometimes, the main window and the tray icon are showing
+    // while I cannot find them by `tasklist` or the methods above.
+    // There's should be 4 processes running: service, server, tray and main window.
+    // But only 2 processes are shown in the tasklist.
+    let cmds = format!(
+        "
+chcp 65001
+sc stop {app_name}
+taskkill /F /IM {app_name}.exe{filter}
+{reg_cmd}
+{copy_exe}
+{restore_service_cmd}
+{sleep}
+    ",
+        app_name = app_name,
+        copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
+        sleep = if debug { "timeout 300" } else { "" },
+    );
+
+    run_cmds(cmds, debug, "update")?;
+
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+    if tray_sessions.is_empty() {
+        log::info!("No tray process found.");
+    } else {
+        log::info!("Try to restore the tray process...");
+        log::info!(
+            "Try to restore the tray process..., sessions: {:?}",
+            &tray_sessions
+        );
+        for s in tray_sessions {
+            if s != 0 {
+                allow_err!(run_exe_in_session(&exe, vec!["--tray"], s, true));
+            }
+        }
+    }
+    if main_window_sessions.is_empty() {
+        log::info!("No main window process found.");
+    } else {
+        log::info!("Try to restore the main window process...");
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        for s in main_window_sessions {
+            if s != 0 {
+                allow_err!(run_exe_in_session(&exe, vec![], s, true));
+            }
+        }
+    }
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    log::info!("Update completed.");
+
+    Ok(())
+}
+
+// Double confirm the process name
+fn kill_process_by_pids(name: &str, pids: Vec<Pid>) -> ResultType<()> {
+    let name = name.to_lowercase();
+    let s = System::new_all();
+    // No need to check all names of `pids` first, and kill them then.
+    // It's rare case that they're not matched.
+    for pid in pids {
+        if let Some(process) = s.process(pid) {
+            if process.name().to_lowercase() != name {
+                bail!("Failed to kill the process, the names are mismatched.");
+            }
+            if !process.kill() {
+                bail!("Failed to kill the process");
+            }
+        } else {
+            bail!("Failed to kill the process, the pid is not found");
+        }
+    }
+    Ok(())
+}
+
+// Don't launch tray app when running with `\qn`.
+// 1. Because `/qn` requires administrator permission and the tray app should be launched with user permission.
+//   Or launching the main window from the tray app will cause the main window to be launched with administrator permission.
+// 2. We are not able to launch the tray app if the UI is in the login screen.
+// `fn update_me()` can handle the above cases, but for msi update, we need to do more work to handle the above cases.
+//    1. Record the tray app session ids.
+//    2. Do the update.
+//    3. Restore the tray app sessions.
+//    `1` and `3` must be done in custom actions.
+//    We need also to handle the command line parsing to find the tray processes.
+pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
+    let cmds = format!(
+        "chcp 65001 && msiexec /i {msi} {}",
+        if quiet { "/qn LAUNCH_TRAY_APP=N" } else { "" }
+    );
+    run_cmds(cmds, false, "update-msi")?;
+    Ok(())
+}
+
 pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
     Ok(write_cmds(
         format!(
@@ -2296,23 +2658,6 @@ pub fn try_kill_broker() {
         ))
         .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
         .spawn());
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_uninstall_cert() {
-        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
-    }
-
-    #[test]
-    fn test_get_unicode_char_by_vk() {
-        let chr = get_char_from_vk(0x41); // VK_A
-        assert_eq!(chr, Some('a'));
-        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
-        assert_eq!(chr, None)
-    }
 }
 
 pub fn message_box(text: &str) {
@@ -2530,7 +2875,11 @@ pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
 fn nt_terminate_process(process_id: DWORD) -> ResultType<()> {
     type NtTerminateProcess = unsafe extern "system" fn(HANDLE, DWORD) -> DWORD;
     unsafe {
-        let h_module = LoadLibraryA(CString::new("ntdll.dll")?.as_ptr());
+        let h_module = LoadLibraryExA(
+            CString::new("ntdll.dll")?.as_ptr(),
+            std::ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_SYSTEM32,
+        );
         if !h_module.is_null() {
             let f_nt_terminate_process: NtTerminateProcess = std::mem::transmute(GetProcAddress(
                 h_module,
@@ -2667,5 +3016,447 @@ pub mod reg_display_settings {
             11 => RegType::REG_QWORD,
             _ => RegType::REG_NONE,
         }
+    }
+}
+
+pub fn get_printer_names() -> ResultType<Vec<String>> {
+    let mut needed_bytes = 0;
+    let mut returned_count = 0;
+
+    unsafe {
+        // First call to get required buffer size
+        EnumPrintersW(
+            PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS,
+            std::ptr::null_mut(),
+            1,
+            std::ptr::null_mut(),
+            0,
+            &mut needed_bytes,
+            &mut returned_count,
+        );
+
+        let mut buffer = vec![0u8; needed_bytes as usize];
+
+        if EnumPrintersW(
+            PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS,
+            std::ptr::null_mut(),
+            1,
+            buffer.as_mut_ptr() as *mut _,
+            needed_bytes,
+            &mut needed_bytes,
+            &mut returned_count,
+        ) == 0
+        {
+            return Err(anyhow!("Failed to enumerate printers"));
+        }
+
+        let ptr = buffer.as_ptr() as *const PRINTER_INFO_1W;
+        let printers = std::slice::from_raw_parts(ptr, returned_count as usize);
+
+        Ok(printers
+            .iter()
+            .filter_map(|p| {
+                let name = p.pName;
+                if !name.is_null() {
+                    let mut len = 0;
+                    while len < 500 {
+                        if name.add(len).is_null() || *name.add(len) == 0 {
+                            break;
+                        }
+                        len += 1;
+                    }
+                    if len > 0 && len < 500 {
+                        Some(String::from_utf16_lossy(std::slice::from_raw_parts(
+                            name, len,
+                        )))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+}
+
+extern "C" {
+    fn PrintXPSRawData(printer_name: *const u16, raw_data: *const u8, data_size: c_ulong) -> DWORD;
+}
+
+pub fn send_raw_data_to_printer(printer_name: Option<String>, data: Vec<u8>) -> ResultType<()> {
+    let mut printer_name = printer_name.unwrap_or_default();
+    if printer_name.is_empty() {
+        // use GetDefaultPrinter to get the default printer name
+        let mut needed_bytes = 0;
+        unsafe {
+            GetDefaultPrinterW(std::ptr::null_mut(), &mut needed_bytes);
+        }
+        if needed_bytes > 0 {
+            let mut default_printer_name = vec![0u16; needed_bytes as usize];
+            unsafe {
+                GetDefaultPrinterW(
+                    default_printer_name.as_mut_ptr() as *mut _,
+                    &mut needed_bytes,
+                );
+            }
+            printer_name = String::from_utf16_lossy(&default_printer_name[..needed_bytes as usize]);
+        }
+    } else {
+        if let Ok(names) = crate::platform::windows::get_printer_names() {
+            if !names.contains(&printer_name) {
+                // Don't set the first printer as current printer.
+                // It may not be the desired printer.
+                bail!("Printer name \"{}\" not found", &printer_name);
+            }
+        }
+    }
+    if printer_name.is_empty() {
+        return Err(anyhow!("Failed to get printer name"));
+    }
+
+    log::info!("Sending data to printer: {}", &printer_name);
+    let printer_name = wide_string(&printer_name);
+    unsafe {
+        let res = PrintXPSRawData(
+            printer_name.as_ptr(),
+            data.as_ptr() as *const u8,
+            data.len() as c_ulong,
+        );
+        if res != 0 {
+            bail!("Failed to send data to the printer, see logs in C:\\Windows\\temp\\test_rustdesk.log for more details.");
+        } else {
+            log::info!("Successfully sent data to the printer");
+        }
+    }
+
+    Ok(())
+}
+
+fn get_pids<S: AsRef<str>>(name: S) -> ResultType<Vec<u32>> {
+    let name = name.as_ref().to_lowercase();
+    let mut pids = Vec::new();
+
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)?;
+        if snapshot == WinHANDLE::default() {
+            return Ok(pids);
+        }
+
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+
+        if Process32FirstW(snapshot, &mut entry).is_ok() {
+            loop {
+                let proc_name = OsString::from_wide(&entry.szExeFile)
+                    .to_string_lossy()
+                    .to_lowercase();
+
+                if proc_name.contains(&name) {
+                    pids.push(entry.th32ProcessID);
+                }
+
+                if !Process32NextW(snapshot, &mut entry).is_ok() {
+                    break;
+                }
+            }
+        }
+
+        let _ = WinCloseHandle(snapshot);
+    }
+
+    Ok(pids)
+}
+
+pub fn is_msi_installed() -> std::io::Result<bool> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let uninstall_key = hklm.open_subkey(format!(
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
+        crate::get_app_name()
+    ))?;
+    Ok(1 == uninstall_key.get_value::<u32, _>("WindowsInstaller")?)
+}
+
+#[cfg(not(target_pointer_width = "64"))]
+pub fn get_pids_with_first_arg_check_session<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    arg: S2,
+    same_session_id: bool,
+) -> ResultType<Vec<hbb_common::sysinfo::Pid>> {
+    // Though `wmic` can return the sessionId, for simplicity we only return processid.
+    let pids = get_pids_with_first_arg_by_wmic(name, arg);
+    if !same_session_id {
+        return Ok(pids);
+    }
+    let Some(cur_sid) = get_current_process_session_id() else {
+        bail!("Can't get current process session id");
+    };
+    let mut same_session_pids = vec![];
+    for pid in pids.into_iter() {
+        let mut sid = 0;
+        if unsafe { ProcessIdToSessionId(pid.as_u32(), &mut sid) == TRUE } {
+            if sid == cur_sid {
+                same_session_pids.push(pid);
+            }
+        } else {
+            // Only log here, because this call almost never fails.
+            log::warn!(
+                "Failed to get session id of the process id, error: {:?}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+    Ok(same_session_pids)
+}
+
+#[cfg(not(target_pointer_width = "64"))]
+fn get_pids_with_args_from_wmic_output<S2: AsRef<str>>(
+    output: std::borrow::Cow<'_, str>,
+    name: &str,
+    args: &[S2],
+) -> Vec<hbb_common::sysinfo::Pid> {
+    // CommandLine=
+    // ProcessId=33796
+    //
+    // CommandLine=
+    // ProcessId=34668
+    //
+    // CommandLine="C:\Program Files\RustDesk\RustDesk.exe" --tray
+    // ProcessId=13728
+    //
+    // CommandLine="C:\Program Files\RustDesk\RustDesk.exe"
+    // ProcessId=10136
+    let mut pids = Vec::new();
+    let mut proc_found = false;
+    for line in output.lines() {
+        if line.starts_with("ProcessId=") {
+            if proc_found {
+                if let Ok(pid) = line["ProcessId=".len()..].trim().parse::<u32>() {
+                    pids.push(hbb_common::sysinfo::Pid::from_u32(pid));
+                }
+                proc_found = false;
+            }
+        } else if line.starts_with("CommandLine=") {
+            proc_found = false;
+            let cmd = line["CommandLine=".len()..].trim().to_lowercase();
+            if args.is_empty() {
+                if cmd.ends_with(&name) || cmd.ends_with(&format!("{}\"", &name)) {
+                    proc_found = true;
+                }
+            } else {
+                proc_found = args.iter().all(|arg| cmd.contains(arg.as_ref()));
+            }
+        }
+    }
+    pids
+}
+
+// Note the args are not compared strictly, only check if the args are contained in the command line.
+// If we want to check the args strictly, we need to parse the command line and compare each arg.
+// Maybe we have to introduce some external crate like `shell_words` to do this.
+#[cfg(not(target_pointer_width = "64"))]
+pub(super) fn get_pids_with_args_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    args: &[S2],
+) -> Vec<hbb_common::sysinfo::Pid> {
+    let name = name.as_ref().to_lowercase();
+    std::process::Command::new("wmic.exe")
+        .args([
+            "process",
+            "where",
+            &format!("name='{}'", name),
+            "get",
+            "commandline,processid",
+            "/value",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map(|output| {
+            get_pids_with_args_from_wmic_output::<S2>(
+                String::from_utf8_lossy(&output.stdout),
+                &name,
+                args,
+            )
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(not(target_pointer_width = "64"))]
+fn get_pids_with_first_arg_from_wmic_output(
+    output: std::borrow::Cow<'_, str>,
+    name: &str,
+    arg: &str,
+) -> Vec<hbb_common::sysinfo::Pid> {
+    let mut pids = Vec::new();
+    let mut proc_found = false;
+    for line in output.lines() {
+        if line.starts_with("ProcessId=") {
+            if proc_found {
+                if let Ok(pid) = line["ProcessId=".len()..].trim().parse::<u32>() {
+                    pids.push(hbb_common::sysinfo::Pid::from_u32(pid));
+                }
+                proc_found = false;
+            }
+        } else if line.starts_with("CommandLine=") {
+            proc_found = false;
+            let cmd = line["CommandLine=".len()..].trim().to_lowercase();
+            if cmd.is_empty() {
+                continue;
+            }
+            if !arg.is_empty() && cmd.starts_with(arg) {
+                proc_found = true;
+            } else {
+                for x in [&format!("{}\"", name), &format!("{}", name)] {
+                    if cmd.contains(x) {
+                        let cmd = cmd.split(x).collect::<Vec<_>>()[1..].join("");
+                        if arg.is_empty() {
+                            if cmd.trim().is_empty() {
+                                proc_found = true;
+                            }
+                        } else if cmd.trim().starts_with(arg) {
+                            proc_found = true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    pids
+}
+
+// Note the args are not compared strictly, only check if the args are contained in the command line.
+// If we want to check the args strictly, we need to parse the command line and compare each arg.
+// Maybe we have to introduce some external crate like `shell_words` to do this.
+#[cfg(not(target_pointer_width = "64"))]
+pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
+    name: S1,
+    arg: S2,
+) -> Vec<hbb_common::sysinfo::Pid> {
+    let name = name.as_ref().to_lowercase();
+    let arg = arg.as_ref().to_lowercase();
+    std::process::Command::new("wmic.exe")
+        .args([
+            "process",
+            "where",
+            &format!("name='{}'", name),
+            "get",
+            "commandline,processid",
+            "/value",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map(|output| {
+            get_pids_with_first_arg_from_wmic_output(
+                String::from_utf8_lossy(&output.stdout),
+                &name,
+                &arg,
+            )
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_uninstall_cert() {
+        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
+    }
+
+    #[test]
+    fn test_get_unicode_char_by_vk() {
+        let chr = get_char_from_vk(0x41); // VK_A
+        assert_eq!(chr, Some('a'));
+        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
+        assert_eq!(chr, None)
+    }
+
+    #[cfg(not(target_pointer_width = "64"))]
+    #[test]
+    fn test_get_pids_with_args_from_wmic_output() {
+        let output = r#"
+CommandLine=
+ProcessId=33796
+
+CommandLine=
+ProcessId=34668
+
+CommandLine="C:\Program Files\testapp\TestApp.exe" --tray
+ProcessId=13728
+
+CommandLine="C:\Program Files\testapp\TestApp.exe"
+ProcessId=10136
+"#;
+        let name = "testapp.exe";
+        let args = vec!["--tray"];
+        let pids = super::get_pids_with_args_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            &args,
+        );
+        assert_eq!(pids.len(), 1);
+        assert_eq!(pids[0].as_u32(), 13728);
+
+        let args: Vec<&str> = vec![];
+        let pids = super::get_pids_with_args_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            &args,
+        );
+        assert_eq!(pids.len(), 1);
+        assert_eq!(pids[0].as_u32(), 10136);
+
+        let args = vec!["--other"];
+        let pids = super::get_pids_with_args_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            &args,
+        );
+        assert_eq!(pids.len(), 0);
+    }
+
+    #[cfg(not(target_pointer_width = "64"))]
+    #[test]
+    fn test_get_pids_with_first_arg_from_wmic_output() {
+        let output = r#"
+CommandLine=
+ProcessId=33796
+
+CommandLine=
+ProcessId=34668
+
+CommandLine="C:\Program Files\testapp\TestApp.exe" --tray
+ProcessId=13728
+
+CommandLine="C:\Program Files\testapp\TestApp.exe"
+ProcessId=10136
+    "#;
+        let name = "testapp.exe";
+        let arg = "--tray";
+        let pids = super::get_pids_with_first_arg_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            arg,
+        );
+        assert_eq!(pids.len(), 1);
+        assert_eq!(pids[0].as_u32(), 13728);
+
+        let arg = "";
+        let pids = super::get_pids_with_first_arg_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            arg,
+        );
+        assert_eq!(pids.len(), 1);
+        assert_eq!(pids[0].as_u32(), 10136);
+
+        let arg = "--other";
+        let pids = super::get_pids_with_first_arg_from_wmic_output(
+            String::from_utf8_lossy(output.as_bytes()),
+            name,
+            arg,
+        );
+        assert_eq!(pids.len(), 0);
     }
 }

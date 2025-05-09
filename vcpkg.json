@@ -49,6 +49,16 @@
       "host": false
     },
     {
+      "name": "mfx-dispatch",
+      "host": true,
+      "platform": "((x86 | x64) & (android | linux)) | (windows & !uwp)"
+    },
+    {
+      "name": "mfx-dispatch",
+      "host": false,
+      "platform": "((x86 | x64) & (android | linux)) | (windows & !uwp)"
+    },
+    {
       "name": "ffmpeg",
       "host": true,
       "features": [
@@ -76,7 +86,7 @@
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "builtin",
-      "baseline": "f7423ee180c4b7f40d43402c2feb3859161ef625"
+      "baseline": "6f29f12e82a8293156836ad81cc9bf5af41fe836"
     },
     "overlay-ports": [
       "./res/vcpkg"
@@ -90,10 +100,6 @@
     {
       "name": "amd-amf",
       "version": "1.4.35"
-    },
-    {
-      "name": "mfx-dispatch",
-      "version": "1.35.1"
     }
   ]
 }
