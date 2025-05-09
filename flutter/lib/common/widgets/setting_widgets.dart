@@ -250,9 +250,11 @@ List<(String, String)> otherDefaultSettings() {
 }
 
 class TrackpadSpeedWidget extends StatefulWidget {
-  final SimpleWrapper<double> value;
+  final SimpleWrapper<int> value;
+  // If null, no debouncer will be applied.
+  final Function(int)? onDebouncer;
 
-  TrackpadSpeedWidget({Key? key, required this.value});
+  TrackpadSpeedWidget({Key? key, required this.value, this.onDebouncer});
 
   @override
   TrackpadSpeedWidgetState createState() => TrackpadSpeedWidgetState();
@@ -260,33 +262,47 @@ class TrackpadSpeedWidget extends StatefulWidget {
 
 class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
   final TextEditingController _controller = TextEditingController();
+  late final Debouncer<int> debouncerSpeed;
 
-  set value(double v) => widget.value.value = v;
-  double get value => widget.value.value;
+  set value(int v) => widget.value.value = v;
+  int get value => widget.value.value;
 
-  void updateValue(double newValue) {
+  void updateValue(int newValue) {
     setState(() {
       value = newValue.clamp(kMinTrackpadSpeed, kMaxTrackpadSpeed);
       // Scale the trackpad speed value to a percentage for display purposes.
-      _controller.text = ((value * 100.0).round()).toString();
+      _controller.text = value.toString();
+      if (widget.onDebouncer != null) {
+        debouncerSpeed.setValue(value);
+      }
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    debouncerSpeed = Debouncer<int>(
+      Duration(milliseconds: 1000),
+      onChanged: widget.onDebouncer,
+      initialValue: widget.value.value,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_controller.text.isEmpty) {
-      _controller.text = ((value * 100.0).round()).toString();
+      _controller.text = value.toString();
     }
     return Row(
       children: [
         Expanded(
           flex: 3,
           child: Slider(
-            value: value,
-            min: kMinTrackpadSpeed,
-            max: kMaxTrackpadSpeed,
-            divisions: ((kMaxTrackpadSpeed - kMinTrackpadSpeed) / 0.1).round(),
-            onChanged: (double v) => updateValue(v),
+            value: value.toDouble(),
+            min: kMinTrackpadSpeed.toDouble(),
+            max: kMaxTrackpadSpeed.toDouble(),
+            divisions: ((kMaxTrackpadSpeed - kMinTrackpadSpeed) / 10).round(),
+            onChanged: (double v) => updateValue(v.round()),
           ),
         ),
         Expanded(
@@ -302,7 +318,7 @@ class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
                     onSubmitted: (text) {
                       int? v = int.tryParse(text);
                       if (v != null) {
-                        updateValue(v.toDouble() / 100.0);
+                        updateValue(v);
                       }
                     },
                     style: const TextStyle(fontSize: 13),

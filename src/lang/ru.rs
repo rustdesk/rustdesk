@@ -696,5 +696,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("update-failed-check-msi-tip", "Невозможно определить метод установки. Нажмите кнопку \"Скачать\", чтобы скачать приложение с официального сайта и обновить его вручную."),
         ("websocket_tip", ""),
         ("Use WebSocket", ""),
+        ("Trackpad speed", ""),
+        ("Default trackpad speed", ""),
     ].iter().cloned().collect();
 }

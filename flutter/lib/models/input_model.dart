@@ -348,7 +348,8 @@ class InputModel {
   final _trackpadAdjustPeerLinux = 0.06;
   // This is an experience value.
   final _trackpadAdjustMacToWin = 2.50;
-  double _trackpadSpeed = kDefaultTrackpadSpeed;
+  int _trackpadSpeed = kDefaultTrackpadSpeed;
+  double _trackpadSpeedInner = kDefaultTrackpadSpeed / 100.0;
   var _trackpadScrollUnsent = Offset.zero;
 
   var _lastScale = 1.0;
@@ -372,6 +373,7 @@ class InputModel {
   bool get isViewOnly => parent.target!.ffiModel.viewOnly;
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
   bool get isViewCamera => parent.target!.connType == ConnType.viewCamera;
+  int get trackpadSpeed => _trackpadSpeed;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
@@ -387,33 +389,26 @@ class InputModel {
     }
   }
 
-  /// Updates the trackpad speed based on the session option value.
-  /// 
-  /// This function retrieves the trackpad speed setting from the session
-  /// using `sessionGetFlutterOption`. The expected format of the retrieved
-  /// value is a string that can be parsed into a double. If parsing fails
-  /// or the value is out of bounds (less than `kMinTrackpadSpeed` or greater
+  /// Updates the trackpad speed based on the session value.
+  ///
+  /// The expected format of the retrieved value is a string that can be parsed into a double.
+  /// If parsing fails or the value is out of bounds (less than `kMinTrackpadSpeed` or greater
   /// than `kMaxTrackpadSpeed`), the trackpad speed is reset to the default
   /// value (`kDefaultTrackpadSpeed`).
-  /// 
+  ///
   /// Bounds:
   /// - Minimum: `kMinTrackpadSpeed`
   /// - Maximum: `kMaxTrackpadSpeed`
   /// - Default: `kDefaultTrackpadSpeed`
   Future<void> updateTrackpadSpeed() async {
-    final speed = await bind.sessionGetFlutterOption(
-        sessionId: sessionId, k: kKeyTrackpadSpeed);
-    if (speed != null && speed.isNotEmpty) {
-      try {
-        _trackpadSpeed = double.parse(speed);
-      } catch (e) {
-        debugPrint('Failed to parse the trackpad speed, "$speed": $e');
-      }
-    }
+    _trackpadSpeed =
+        (await bind.sessionGetTrackpadSpeed(sessionId: sessionId) ??
+            kDefaultTrackpadSpeed);
     if (_trackpadSpeed < kMinTrackpadSpeed ||
         _trackpadSpeed > kMaxTrackpadSpeed) {
       _trackpadSpeed = kDefaultTrackpadSpeed;
     }
+    _trackpadSpeedInner = _trackpadSpeed / 100.0;
   }
 
   void handleKeyDownEventModifiers(KeyEvent e) {
@@ -919,7 +914,7 @@ class InputModel {
       }
     }
 
-    var delta = e.panDelta * _trackpadSpeed;
+    var delta = e.panDelta * _trackpadSpeedInner;
     if (isMacOS && peerPlatform == kPeerPlatformWindows) {
       delta *= _trackpadAdjustMacToWin;
     }
@@ -1023,7 +1018,7 @@ class InputModel {
     _stopFling = false;
 
     // 2.0 is an experience value
-    double minFlingValue = 2.0 * _trackpadSpeed;
+    double minFlingValue = 2.0 * _trackpadSpeedInner;
     if (isMacOS && peerPlatform == kPeerPlatformWindows) {
       minFlingValue *= _trackpadAdjustMacToWin;
     }

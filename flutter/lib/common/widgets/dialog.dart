@@ -1624,29 +1624,14 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
 }
 
 trackpadSpeedDialog(SessionID sessionId, FFI ffi) async {
-  final speed = await bind.sessionGetFlutterOption(
-      sessionId: sessionId, k: kKeyTrackpadSpeed);
-  var initSpeed = kDefaultTrackpadSpeed;
-  if (speed != null && speed.isNotEmpty) {
-    try {
-      initSpeed = double.parse(speed);
-    } catch (e) {
-      debugPrint('Failed to parse the trackpad speed, "$speed": $e');
-    }
-  }
-  if (initSpeed < kMinTrackpadSpeed || initSpeed > kMaxTrackpadSpeed) {
-    initSpeed = kDefaultTrackpadSpeed;
-  }
-
+  int initSpeed = ffi.inputModel.trackpadSpeed;
   final curSpeed = SimpleWrapper(initSpeed);
   final btnClose = dialogButton('Close', onPressed: () async {
     if (curSpeed.value <= kMaxTrackpadSpeed &&
         curSpeed.value >= kMinTrackpadSpeed &&
-        (curSpeed.value - initSpeed).abs() > 0.01) {
-      await bind.sessionSetFlutterOption(
-          sessionId: sessionId,
-          k: kKeyTrackpadSpeed,
-          v: curSpeed.value.toString());
+        curSpeed.value != initSpeed) {
+      await bind.sessionSetTrackpadSpeed(
+          sessionId: sessionId, value: curSpeed.value);
       await ffi.inputModel.updateTrackpadSpeed();
     }
     ffi.dialogManager.dismissAll();
