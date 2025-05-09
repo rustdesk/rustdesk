@@ -248,3 +248,93 @@ List<(String, String)> otherDefaultSettings() {
 
   return v;
 }
+
+class TrackpadSpeedWidget extends StatefulWidget {
+  final SimpleWrapper<int> value;
+  // If null, no debouncer will be applied.
+  final Function(int)? onDebouncer;
+
+  TrackpadSpeedWidget({Key? key, required this.value, this.onDebouncer});
+
+  @override
+  TrackpadSpeedWidgetState createState() => TrackpadSpeedWidgetState();
+}
+
+class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
+  final TextEditingController _controller = TextEditingController();
+  late final Debouncer<int> debouncerSpeed;
+
+  set value(int v) => widget.value.value = v;
+  int get value => widget.value.value;
+
+  void updateValue(int newValue) {
+    setState(() {
+      value = newValue.clamp(kMinTrackpadSpeed, kMaxTrackpadSpeed);
+      // Scale the trackpad speed value to a percentage for display purposes.
+      _controller.text = value.toString();
+      if (widget.onDebouncer != null) {
+        debouncerSpeed.setValue(value);
+      }
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    debouncerSpeed = Debouncer<int>(
+      Duration(milliseconds: 1000),
+      onChanged: widget.onDebouncer,
+      initialValue: widget.value.value,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_controller.text.isEmpty) {
+      _controller.text = value.toString();
+    }
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: Slider(
+            value: value.toDouble(),
+            min: kMinTrackpadSpeed.toDouble(),
+            max: kMaxTrackpadSpeed.toDouble(),
+            divisions: ((kMaxTrackpadSpeed - kMinTrackpadSpeed) / 10).round(),
+            onChanged: (double v) => updateValue(v.round()),
+          ),
+        ),
+        Expanded(
+            flex: 1,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 56,
+                  child: TextField(
+                    controller: _controller,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    onSubmitted: (text) {
+                      int? v = int.tryParse(text);
+                      if (v != null) {
+                        updateValue(v);
+                      }
+                    },
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      contentPadding:
+                          EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+                    ),
+                  ),
+                ).marginOnly(right: 8.0),
+                Text(
+                  '%',
+                  style: const TextStyle(fontSize: 15),
+                )
+              ],
+            )),
+      ],
+    );
+  }
+}

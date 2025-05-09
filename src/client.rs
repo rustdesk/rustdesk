@@ -2105,6 +2105,12 @@ impl LoginConfigHandler {
         res
     }
 
+    pub fn save_trackpad_speed(&mut self, speed: i32) {
+        let mut config = self.load_config();
+        config.trackpad_speed = speed;
+        self.save_config(config);
+    }
+
     /// Create a [`Message`] for saving custom fps.
     ///
     /// # Arguments
