@@ -1475,9 +1475,68 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
     final hideProxy =
         isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
+    // final hideWebSocket = isWeb ||
+    //     bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y';
+    final hideWebSocket = true;
 
-    if (hideServer && hideProxy) {
+    if (hideServer && hideProxy && hideWebSocket) {
       return Offstage();
+    }
+
+    // Helper function to create network setting ListTiles
+    Widget listTile({
+      required IconData icon,
+      required String title,
+      VoidCallback? onTap,
+      Widget? trailing,
+      bool showTooltip = false,
+      String tooltipMessage = '',
+    }) {
+      final titleWidget = showTooltip
+          ? Row(
+              children: [
+                Tooltip(
+                  waitDuration: Duration(milliseconds: 1000),
+                  message: translate(tooltipMessage),
+                  child: Row(
+                    children: [
+                      Text(
+                        translate(title),
+                        style: TextStyle(fontSize: _kContentFontSize),
+                      ),
+                      SizedBox(width: 5),
+                      Icon(
+                        Icons.help_outline,
+                        size: 14,
+                        color: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.color
+                            ?.withOpacity(0.7),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : Text(
+              translate(title),
+              style: TextStyle(fontSize: _kContentFontSize),
+            );
+
+      return ListTile(
+        leading: Icon(icon, color: _accentColor),
+        title: titleWidget,
+        enabled: !locked,
+        onTap: onTap,
+        trailing: trailing,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16),
+        minLeadingWidth: 0,
+        horizontalTitleGap: 10,
+      );
     }
 
     return _Card(
@@ -1488,39 +1547,36 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (!hideServer)
-                ListTile(
-                  leading: Icon(Icons.dns_outlined, color: _accentColor),
-                  title: Text(
-                    translate('ID/Relay Server'),
-                    style: TextStyle(fontSize: _kContentFontSize),
-                  ),
-                  enabled: !locked,
+                listTile(
+                  icon: Icons.dns_outlined,
+                  title: 'ID/Relay Server',
                   onTap: () => showServerSettings(gFFI.dialogManager),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                  minLeadingWidth: 0,
-                  horizontalTitleGap: 10,
                 ),
-              if (!hideServer && !hideProxy)
+              if (!hideServer && (!hideProxy || !hideWebSocket))
                 Divider(height: 1, indent: 16, endIndent: 16),
               if (!hideProxy)
-                ListTile(
-                  leading:
-                      Icon(Icons.network_ping_outlined, color: _accentColor),
-                  title: Text(
-                    translate('Socks5/Http(s) Proxy'),
-                    style: TextStyle(fontSize: _kContentFontSize),
-                  ),
-                  enabled: !locked,
+                listTile(
+                  icon: Icons.network_ping_outlined,
+                  title: 'Socks5/Http(s) Proxy',
                   onTap: changeSocks5Proxy,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                ),
+              if (!hideProxy && !hideWebSocket)
+                Divider(height: 1, indent: 16, endIndent: 16),
+              if (!hideWebSocket)
+                listTile(
+                  icon: Icons.web_asset_outlined,
+                  title: 'Use WebSocket',
+                  showTooltip: true,
+                  tooltipMessage: 'websocket_tip',
+                  trailing: Switch(
+                    value: mainGetBoolOptionSync(kOptionAllowWebSocket),
+                    onChanged: locked
+                        ? null
+                        : (value) {
+                            mainSetBoolOption(kOptionAllowWebSocket, value);
+                            setState(() {});
+                          },
                   ),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                  minLeadingWidth: 0,
-                  horizontalTitleGap: 10,
                 ),
             ],
           ),

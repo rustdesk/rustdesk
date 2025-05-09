@@ -1852,5 +1852,49 @@ class RustdeskImpl {
     throw UnimplementedError("sessionGetConnToken");
   }
 
+  String mainGetPrinterNames({dynamic hint}) {
+    return '';
+  }
+
+  Future<void> sessionPrinterResponse(
+      {required UuidValue sessionId,
+      required int id,
+      required String path,
+      required String printerName,
+      dynamic hint}) {
+    throw UnimplementedError("sessionPrinterResponse");
+  }
+
+  Future<String> mainGetCommon({required String key, dynamic hint}) {
+    throw UnimplementedError("mainGetCommon");
+  }
+
+  String mainGetCommonSync({required String key, dynamic hint}) {
+    throw UnimplementedError("mainGetCommonSync");
+  }
+
+  Future<void> mainSetCommon(
+      {required String key, required String value, dynamic hint}) {
+    throw UnimplementedError("mainSetCommon");
+  }
+
+  Future<String> sessionHandleScreenshot(
+      {required UuidValue sessionId, required String action, dynamic hint}) {
+    throw UnimplementedError("sessionHandleScreenshot");
+  }
+
+  String? sessionGetCommonSync(
+      {required UuidValue sessionId,
+      required String key,
+      required String param,
+      dynamic hint}) {
+    throw UnimplementedError("sessionGetCommonSync");
+  }
+
+  Future<void> sessionTakeScreenshot(
+      {required UuidValue sessionId, required int display, dynamic hint}) {
+    throw UnimplementedError("sessionTakeScreenshot");
+  }
+
   void dispose() {}
 }

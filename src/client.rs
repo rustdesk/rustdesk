@@ -46,7 +46,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        self, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT,
+        self, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT,
         READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
     fs::JobType,
@@ -216,7 +216,8 @@ impl Client {
         if hbb_common::is_ip_str(peer) {
             return Ok((
                 (
-                    connect_tcp(check_port(peer, RELAY_PORT + 1), CONNECT_TIMEOUT).await?,
+                    connect_tcp_local(check_port(peer, RELAY_PORT + 1), None, CONNECT_TIMEOUT)
+                        .await?,
                     true,
                     None,
                 ),
@@ -226,7 +227,11 @@ impl Client {
         // Allow connect to {domain}:{port}
         if hbb_common::is_domain_port_str(peer) {
             return Ok((
-                (connect_tcp(peer, CONNECT_TIMEOUT).await?, true, None),
+                (
+                    connect_tcp_local(peer, None, CONNECT_TIMEOUT).await?,
+                    true,
+                    None,
+                ),
                 (0, "".to_owned()),
             ));
         }
@@ -291,7 +296,7 @@ impl Client {
             log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
             let mut msg_out = RendezvousMessage::new();
             use hbb_common::protobuf::Enum;
-            let nat_type = if interface.is_force_relay() {
+            let nat_type = if interface.is_force_relay() || use_ws() || Config::is_proxy() {
                 NatType::SYMMETRIC
             } else {
                 NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
