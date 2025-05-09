@@ -944,7 +944,7 @@ jobs:
                libasound2-dev \
                libc6-dev \
                libclang-14-dev \
-               libunwind-dev \ # <--- 添加这一行
+               libunwind-dev \ 
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -1227,7 +1227,7 @@ jobs:
                libasound2-dev \
                libc6-dev \
                libclang-14-dev \
-               libunwind-dev \ # <--- 添加这一行
+               libunwind-dev \ 
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -1388,17 +1388,15 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu22.04, # <--- 修改：从 ubuntu18.04 改为 ubuntu22.04
-              on: ubuntu-22.04,    # GitHub Hosted Runner 本身已经是 22.04
+              distro: ubuntu22.04,
+              on: ubuntu-22.04,
               deb_arch: amd64,
               vcpkg-triplet: x64-linux,
             }
           - {
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
-              distro: ubuntu22.04, # <--- 修改：如果自托管的 ARM64 runner 基础环境也是较新的，可以考虑改为 22.04
-                                   # 否则，如果自托管环境是 18.04，这里保持 18.04 或根据实际情况调整
-                                   # 假设也改为 22.04
+              distro: ubuntu22.04,
               on: [self-hosted, Linux, ARM64],
               deb_arch: arm64,
               vcpkg-triplet: arm64-linux,
@@ -1525,7 +1523,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libclang-14-dev \
-               libunwind-dev \ # <--- 添加这一行
+               libunwind-dev \ 
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -1741,7 +1739,7 @@ jobs:
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
               on: ubuntu-22.04,
-              distro: ubuntu18.04, # <--- 注意：由于 python3.7 和 gcc-8 的依赖，暂时保留 18.04。
+              distro: ubuntu18.04,
                                    # 如果要升级到 22.04，需要解决这些旧版本依赖的安装问题。
               deb_arch: amd64,
               sciter_arch: x64,
@@ -1752,7 +1750,7 @@ jobs:
               arch: armv7,
               target: armv7-unknown-linux-gnueabihf,
               on: [self-hosted, Linux, ARM64], # 假设自托管 ARM64 runner 可以运行 armv7 (qemu 或多架构)
-              distro: ubuntu18.04-rustdesk, # <--- 注意：同上，armv7 对旧版 gcc/cmake/python 依赖更强，保留 18.04 基础。
+              distro: ubuntu18.04-rustdesk,
               deb_arch: armhf,
               sciter_arch: arm32,
               vcpkg-triplet: arm-linux,
@@ -2025,14 +2023,14 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu22.04, # <--- 修改：从 ubuntu18.04 改为 ubuntu22.04
+              distro: ubuntu22.04,
               on: ubuntu-22.04,    # GitHub Hosted Runner 本身已经是 22.04
               arch: x86_64,
               suffix: "",
             }
           - {
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu22.04, # <--- 修改：从 ubuntu18.04 改为 ubuntu22.04 (针对 Sciter 的 Flatpak)
+              distro: ubuntu22.04,
               on: ubuntu-22.04,
               arch: x86_64,
               suffix: "-sciter",
