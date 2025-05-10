@@ -8,6 +8,7 @@ import 'dart:html';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_hbb/common/widgets/login.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 
 import 'package:flutter_hbb/web/bridge.dart';
@@ -112,6 +113,13 @@ class PlatformFFI {
     Completer completer = Completer();
     context["onInitFinished"] = () {
       completer.complete();
+    };
+    context['loginDialog'] = () {
+      loginDialog();
+    };
+    context['closeConnection'] = () {
+      gFFI.dialogManager.dismissAll();
+      closeConnection();
     };
     context.callMethod('init');
     version = getByName('version');
