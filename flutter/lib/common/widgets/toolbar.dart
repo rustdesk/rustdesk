@@ -867,6 +867,22 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
         onChanged: enabled ? onChanged : null,
         child: Text(translate('swap-left-right-mouse'))));
   }
+
+  if (isMobile && ffiModel.keyboard) {
+    final value = mainGetLocalBoolOptionSync(kOptionTwoFingerVertically);
+    onChanged(bool? value) async {
+      if (value == null) return;
+      await mainSetLocalBoolOption(kOptionTwoFingerVertically, value);
+      ffi.inputModel.updateTwoFingerVertically();
+    }
+
+    final enabled = !ffi.ffiModel.viewOnly;
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: enabled ? onChanged : null,
+        child: Text(translate('Two-finger vertically'))));
+  }
+
   return v;
 }
 

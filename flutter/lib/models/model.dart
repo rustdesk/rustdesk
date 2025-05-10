@@ -2994,6 +2994,9 @@ class FFI {
     if (isDesktop) {
       inputModel.updateTrackpadSpeed();
     }
+    if (isMobile) {
+      inputModel.updateTwoFingerVertically();
+    }
 
     // CAUTION: `sessionStart()` and `sessionStartWithDisplays()` are an async functions.
     // Though the stream is returned immediately, the stream may not be ready.

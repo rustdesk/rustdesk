@@ -392,12 +392,27 @@ class _RawTouchGestureDetectorRegionState
                     .toJson()));
       }
     } else {
-      // mobile
-      ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
-      _scale = d.scale;
-      ffi.canvasModel.panX(d.focalPointDelta.dx);
-      ffi.canvasModel.panY(d.focalPointDelta.dy);
+      if (ffi.inputModel.twoFingerVertically) {
+        mobileScrollVertical(d.focalPointDelta);
+      } else {
+        mobilePanUpdate(d.focalPointDelta);
+      }
+      final scaleUpdate =
+          !ffi.inputModel.twoFingerVertically || (d.scale - 1.0).abs() > 0.1;
+      if (scaleUpdate) {
+        mobileScaleUpdate(d);
+      }
     }
+  }
+
+  mobileScaleUpdate(ScaleUpdateDetails d) {
+    ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
+    _scale = d.scale;
+  }
+
+  mobilePanUpdate(Offset delta) {
+    ffi.canvasModel.panX(delta.dx);
+    ffi.canvasModel.panY(delta.dy);
   }
 
   onTwoFingerScaleEnd(ScaleEndDetails d) async {
@@ -422,16 +437,24 @@ class _RawTouchGestureDetectorRegionState
   get onHoldDragCancel => null;
   get onThreeFingerVerticalDragUpdate => ffi.ffiModel.isPeerAndroid
       ? null
-      : (d) {
-          _mouseScrollIntegral += d.delta.dy / 4;
-          if (_mouseScrollIntegral > 1) {
-            inputModel.scroll(1);
-            _mouseScrollIntegral = 0;
-          } else if (_mouseScrollIntegral < -1) {
-            inputModel.scroll(-1);
-            _mouseScrollIntegral = 0;
+      : (DragUpdateDetails d) {
+          if (ffi.inputModel.twoFingerVertically) {
+            mobilePanUpdate(d.delta);
+          } else {
+            mobileScrollVertical(d.delta);
           }
         };
+
+  mobileScrollVertical(Offset delta) {
+    _mouseScrollIntegral += delta.dy / 4;
+    if (_mouseScrollIntegral > 1) {
+      inputModel.scroll(1);
+      _mouseScrollIntegral = 0;
+    } else if (_mouseScrollIntegral < -1) {
+      inputModel.scroll(-1);
+      _mouseScrollIntegral = 0;
+    }
+  }
 
   makeGestures(BuildContext context) {
     return <Type, GestureRecognizerFactory>{

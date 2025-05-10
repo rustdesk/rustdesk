@@ -356,6 +356,9 @@ class InputModel {
 
   bool _pointerMovedAfterEnter = false;
 
+  // Mobile only
+  bool _twoFingerVertically = false;
+
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
@@ -374,6 +377,7 @@ class InputModel {
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
   bool get isViewCamera => parent.target!.connType == ConnType.viewCamera;
   int get trackpadSpeed => _trackpadSpeed;
+  bool get twoFingerVertically => _twoFingerVertically;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
@@ -409,6 +413,11 @@ class InputModel {
       _trackpadSpeed = kDefaultTrackpadSpeed;
     }
     _trackpadSpeedInner = _trackpadSpeed / 100.0;
+  }
+
+  // Mobile only
+  void updateTwoFingerVertically() {
+    _twoFingerVertically = mainGetLocalBoolOptionSync(kOptionTwoFingerVertically);
   }
 
   void handleKeyDownEventModifiers(KeyEvent e) {
