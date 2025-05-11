@@ -694,9 +694,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("download-new-version-failed-tip", "Download non riuscito.\nÈ possibile riprovare o selezionare 'Download' per scaricare e aggiornarlo manualmente."),
         ("Auto update", "Aggiornamento automatico"),
         ("update-failed-check-msi-tip", "Controllo metodo installazione non riuscito.\nSeleziona 'Download' per scaricare il programma e aggiornarlo manualmente."),
-        ("websocket_tip", ""),
-        ("Use WebSocket", ""),
-        ("Trackpad speed", ""),
-        ("Default trackpad speed", ""),
+        ("websocket_tip", "Quando usi WebSocket, sono supportate solo le connessioni relay."),
+        ("Use WebSocket", "Usa WebSocket"),
+        ("Trackpad speed", "Velocità trackpad"),
+        ("Default trackpad speed", "Velocità predefinita trackpad"),
     ].iter().cloned().collect();
 }
