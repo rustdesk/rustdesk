@@ -1016,7 +1016,7 @@ mod desktop {
         pub sid: String,
         pub username: String,
         pub uid: String,
-        pub protocal: String,
+        pub protocol: String,
         pub display: String,
         pub xauth: String,
         pub home: String,
@@ -1027,12 +1027,12 @@ mod desktop {
     impl Desktop {
         #[inline]
         pub fn is_wayland(&self) -> bool {
-            self.protocal == DISPLAY_SERVER_WAYLAND
+            self.protocol == DISPLAY_SERVER_WAYLAND
         }
 
         #[inline]
         pub fn is_login_wayland(&self) -> bool {
-            super::is_gdm_user(&self.username) && self.protocal == DISPLAY_SERVER_WAYLAND
+            super::is_gdm_user(&self.username) && self.protocol == DISPLAY_SERVER_WAYLAND
         }
 
         #[inline]
@@ -1271,7 +1271,7 @@ mod desktop {
             self.sid = seat0_values[0].clone();
             self.uid = seat0_values[1].clone();
             self.username = seat0_values[2].clone();
-            self.protocal = get_display_server_of_session(&self.sid).into();
+            self.protocol = get_display_server_of_session(&self.sid).into();
             if self.is_login_wayland() {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
