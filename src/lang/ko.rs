@@ -691,7 +691,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Downloading {}", "{} 다운로드 중"),
         ("{} Update", "{} 업데이트"),
         ("{}-to-update-tip", "{}가 지금 닫히고 새 버전을 설치합니다."),
-        ("download-new-version-failed-tip", "다운로드에 실패했습니다. 다시 시도하거나 \“다운로드\” 버튼을 클릭하여 릴리스 페이지에서 다운로드하고 수동으로 업그레이드할 수 있습니다."),
+        ("download-new-version-failed-tip", "다운로드에 실패했습니다. 다시 시도하거나 \"다운로드\" 버튼을 클릭하여 릴리스 페이지에서 다운로드하고 수동으로 업그레이드할 수 있습니다."),
         ("Auto update", "자동 업데이트"),
         ("update-failed-check-msi-tip", "설치 방법 확인에 실패했습니다. \"다운로드\" 버튼을 클릭하여 릴리스 페이지에서 다운로드하고 수동으로 업그레이드하세요."),
         ("websocket_tip", "WebSocket을 사용할 때는 릴레이 연결만 지원됩니다."),
