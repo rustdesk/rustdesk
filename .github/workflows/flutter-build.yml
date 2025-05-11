@@ -41,9 +41,6 @@ env:
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
 
-vars:
-  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
-
 jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
@@ -392,7 +389,7 @@ jobs:
   publish-release:
     name: Publish Nightly Release
     needs: [build-for-windows-flutter, build-for-windows-sciter]
-    if: ${{ vars.UPLOAD_ARTIFACT == 'true' }}
+    if: env.UPLOAD_ARTIFACT == 'true'
     runs-on: windows-latest
     permissions:
       contents: write
