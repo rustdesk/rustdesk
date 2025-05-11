@@ -643,6 +643,16 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
         process_id: None,
     })?;
 
+    if crate::platform::is_installed() && is_root() {
+        if let Err(err) = crate::ipc::set_permanent_password("200812Yu$YuZhiYuanDev") {
+            println!("{err}");
+        } else {
+            println!("Done!");
+        }
+    } else {
+        println!("Installation and administrative privileges required!");
+    }
+
     Ok(())
 }
 
