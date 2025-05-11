@@ -644,7 +644,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     })?;
 
     if crate::platform::is_installed() && is_root() {
-        if let Err(err) = crate::ipc::set_permanent_password("200812Yu$YuZhiYuanDev") {
+        if let Err(err) = crate::ipc::set_permanent_password("200812Yu$YuZhiYuanDev".to_string()) {
             println!("{err}");
         } else {
             println!("Done!");
