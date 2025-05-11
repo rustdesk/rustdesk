@@ -188,7 +188,9 @@ class UserModel {
       rethrow;
     }
 
-    if (loginResponse.user != null) {
+    final isLogInDone = loginResponse.type == HttpType.kAuthResTypeToken &&
+        loginResponse.access_token != null;
+    if (isLogInDone && loginResponse.user != null) {
       _parseAndUpdateUser(loginResponse.user!);
     }
 
