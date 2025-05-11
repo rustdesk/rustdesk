@@ -13,6 +13,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 
 import 'package:flutter_hbb/web/bridge.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:uuid/uuid.dart';
 
 final List<StreamSubscription<MouseEvent>> mouseListeners = [];
 final List<StreamSubscription<KeyboardEvent>> keyListeners = [];
@@ -113,6 +114,10 @@ class PlatformFFI {
     Completer completer = Completer();
     context["onInitFinished"] = () {
       completer.complete();
+    };
+    context['dialog'] = (type, title, text) {
+      final uuid = Uuid();
+      msgBox(SessionID(uuid.v4()), type, title, text, '', gFFI.dialogManager);
     };
     context['loginDialog'] = () {
       loginDialog();
