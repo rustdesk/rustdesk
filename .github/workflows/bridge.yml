@@ -1,14 +1,14 @@
 # This yaml shares the build bridge steps with ci and nightly.
 name: Build flutter-rust-bridge
 # 2023-11-23 18:00:00+00:00
+
 on:
   workflow_call:
 
 env:
   FLUTTER_VERSION: "3.22.3"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
-  RUST_VERSION: "1.77"  # 更新至稳定版本
-  LLVM_VERSION: "14"    # 新增 LLVM 版本变量
+  RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
 
 jobs:
   generate_bridge:
@@ -19,46 +19,31 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-22.04,
+              os: ubuntu-20.04,
               extra-build-args: "",
             }
-
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Add Microsoft repository
-        run: |
-          # 添加微软软件源
-          curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/microsoft.list
-
       - name: Install prerequisites
         run: |
+          sudo apt-get install ca-certificates -y
           sudo apt-get update -y
-          # 使用 LLVM 14+ 版本
           sudo apt-get install -y \
-            clang-${LLVM_VERSION} \
-            clang-tools-${LLVM_VERSION} \
-            libclang-${LLVM_VERSION}-dev \
-            llvm-${LLVM_VERSION}-dev \
-            llvm-${LLVM_VERSION}-runtime \
+            clang \
             cmake \
-            ninja-build \
+            curl \
             gcc \
+            git \
             g++ \
+            libclang-10-dev \
             libgtk-3-dev \
+            llvm-10-dev \
             nasm \
-            pkg-config
-
-          # 设置符号链接
-          sudo ln -sf /usr/bin/llvm-config-${LLVM_VERSION} /usr/bin/llvm-config
-          sudo ln -sf /usr/bin/clang-${LLVM_VERSION} /usr/bin/clang
-
-      - name: Setup LLVM environment
-        run: |
-          echo "LLVM_SYS_${LLVM_VERSION}0_PREFIX=/usr/lib/llvm-${LLVM_VERSION}" >> $GITHUB_ENV
-          echo "LIBCLANG_PATH=/usr/lib/llvm-${LLVM_VERSION}/lib" >> $GITHUB_ENV
+            ninja-build \
+            pkg-config \
+            wget
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
@@ -88,7 +73,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
           pushd flutter && sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml && flutter pub get && popd
 
       - name: Run flutter rust bridge

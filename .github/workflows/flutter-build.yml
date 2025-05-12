@@ -40,12 +40,10 @@ env:
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
   # To make a custom build with your own servers set the below secret values
   RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}"
-  RS_PASSWORD: "${{ secrets.RS_PASSWORD }}"
   RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
   API_SERVER: "${{ secrets.API_SERVER }}"
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
-
 
 jobs:
   generate-bridge:
@@ -115,7 +113,7 @@ jobs:
           flutter precache --windows
           Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
           Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
-          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Patch flutter
         shell: bash
@@ -250,7 +248,6 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
-  # 针对 Flutter 版本的备选方案，我们为 32 位 Windows 使用 Sciter。
   build-for-windows-sciter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
@@ -393,7 +390,6 @@ jobs:
 
   build-for-macOS-arm64-selfhost:
     # use build-for-macOS instead
-    # 使用 build-for-macOS 任务替代
     if: false
     runs-on: [self-hosted, macOS, ARM64]
     needs: [generate-bridge]
@@ -555,7 +551,6 @@ jobs:
           pushd flutter
           # flutter build ipa --release --obfuscate --split-debug-info=./split-debug-info --no-codesign
           # for easy debugging
-          # 为了方便调试
           flutter build ipa --release --no-codesign
 
       # - name: Upload Artifacts
@@ -606,14 +601,12 @@ jobs:
 
       - name: Build rustdesk
         # ios sdk not installed on this machine, I will install it later after I am back home
-        # 此机器未安装 iOS SDK，回家后安装
         if: false
         shell: bash
         run: |
           pushd flutter
           # flutter build ipa --release --obfuscate --split-debug-info=./split-debug-info --no-codesign
           # for easy debugging
-          # 为了方便调试
           flutter build ipa --release --no-codesign
 
       # - name: Upload Artifacts
@@ -643,7 +636,6 @@ jobs:
           - {
               target: x86_64-apple-darwin,
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
-                            # macos-latest 或 macos-14 现在使用 M1 芯片
               extra-build-args: "",
               arch: x86_64,
             }
@@ -651,7 +643,6 @@ jobs:
               target: aarch64-apple-darwin,
               os: macos-latest,
               # extra-build-args: "--disable-flutter-texture-render", # disable this for mac, because we see a lot of users reporting flickering both on arm and x64, and we can not confirm if texture rendering has better performance if htere is no vram, https://github.com/rustdesk/rustdesk/issues/6296
-                                                                    # 禁用 mac 上的此选项，因为我们看到很多用户报告 arm 和 x64 上都有闪烁问题，并且我们无法确认在没有 vram 的情况下纹理渲染是否具有更好的性能
               extra-build-args: "--screencapturekit",
               arch: aarch64,
             }
@@ -703,7 +694,6 @@ jobs:
         run: |
           brew install llvm create-dmg nasm cmake gcc wget ninja
           # pkg-config is handled in a separate step, because it may be already installed by `macos-latest`(14.7.1) runner
-          # pkg-config 单独处理，因为它可能已经被 `macos-latest`(14.7.1) runner 安装
           if command -v pkg-config &>/dev/null; then
               echo "pkg-config is already installed"
           else
@@ -802,28 +792,23 @@ jobs:
         with:
           name: rustdesk-unsigned-macos-${{ matrix.job.arch }}
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg # can not upload the directory directly or tar.gz, which destroy the link structure, causing the codesign failed
-                                                                      # 不能直接上传目录或 tar.gz 文件，这会破坏链接结构，导致代码签名失败
 
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
         run: |
           # Patch create-dmg to give more attempts to unmount image
-          # 修补 create-dmg 以增加卸载镜像的尝试次数
           CREATE_DMG="$(command -v create-dmg)"
           CREATE_DMG="$(readlink -f "$CREATE_DMG")"
           sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
           # Unlock keychain
-          # 解锁钥匙串
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
           # start sign the rustdesk.app and dmg
-          # 开始对 rustdesk.app 和 dmg进行签名
           rm -rf *.dmg || true
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/RustDesk.app -vvv
           create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-${{ env.VERSION }}.dmg -vvv
           # notarize the rustdesk-${{ env.VERSION }}.dmg
-          # 公证 rustdesk-${{ env.VERSION }}.dmg
           rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
@@ -846,7 +831,7 @@ jobs:
     needs:
       - build-for-macOS
       - build-for-windows-flutter
-    runs-on: ubuntu-latest # 这里已经是 ubuntu-latest，通常是 22.04 或更新
+    runs-on: ubuntu-latest
     if: ${{ inputs.upload-artifact }}
     steps:
       - name: Download artifacts
@@ -881,7 +866,7 @@ jobs:
   build-rustdesk-android:
     needs: [generate-bridge]
     name: build rustdesk android apk ${{ matrix.job.target }}
-    runs-on: ${{ matrix.job.os }} # 这里的 matrix.job.os 已经是 ubuntu-22.04
+    runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -889,21 +874,21 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-linux-android,
-              os: ubuntu-22.04, # 确认已经是 22.04
+              os: ubuntu-20.04,
               reltype: release,
               suffix: "",
             }
           - {
               arch: armv7,
               target: armv7-linux-androideabi,
-              os: ubuntu-22.04, # 确认已经是 22.04
+              os: ubuntu-20.04,
               reltype: release,
               suffix: "",
             }
           - {
               arch: x86_64,
               target: x86_64-linux-android,
-              os: ubuntu-22.04, # 确认已经是 22.04
+              os: ubuntu-20.04,
               reltype: release,
               suffix: "",
             }
@@ -927,9 +912,6 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Install dependencies
-        # 这些依赖在 Ubuntu 22.04 上应该仍然可用或有等效包
-        # libclang-14-dev 和 llvm-14-dev 在 Ubuntu 22.04 是默认提供的 Clang/LLVM 版本之一
-        # openjdk-17-jdk-headless 在 Ubuntu 22.04 中也可用
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -943,8 +925,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libc6-dev \
-               libclang-14-dev \
-               libunwind-dev \
+               libclang-10-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -957,7 +938,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-14-dev \
+               llvm-10-dev \
                nasm \
                ninja-build \
                openjdk-17-jdk-headless \
@@ -987,13 +968,11 @@ jobs:
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgDirectory: /opt/artifacts/vcpkg # 路径保持一致，因为这是 GitHub Actions runner 上的路径
+          vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
       - name: Install vcpkg dependencies
-        # flutter/build_android_deps.sh 脚本内部可能需要检查与 Ubuntu 22.04 的兼容性
-        # 但通常 vcpkg 的 triplet 配置会处理好底层依赖
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
@@ -1050,11 +1029,11 @@ jobs:
 
       - name: Build rustdesk lib
         env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }} # NDK 路径由 setup-ndk action 提供，与 OS 版本无关
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           rustup target add ${{ matrix.job.target }}
-          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
+          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }}
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
               ./flutter/ndk_arm64.sh
@@ -1087,11 +1066,10 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64 # Ubuntu 22.04 上 openjdk-17 的标准路径之一，应保持有效
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
-          # 临时使用调试签名配置
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
@@ -1155,7 +1133,6 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
         env:
           # env.ANDROID_SIGN_TOOL_VERSION is set by Step "Setup sign tool version variable"
-          # env.ANDROID_SIGN_TOOL_VERSION 由步骤 "Setup sign tool version variable" 设置
           BUILD_TOOLS_VERSION: ${{ env.ANDROID_SIGN_TOOL_VERSION }}
 
       - name: Upload Artifacts
@@ -1187,7 +1164,7 @@ jobs:
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
     if: ${{ inputs.upload-artifact }}
-    runs-on: ubuntu-22.04 # 已经是 22.04
+    runs-on: ubuntu-20.04
     env:
       reltype: release
       x86_target: "" # can be ",android-x86"
@@ -1212,7 +1189,6 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Install dependencies
-        # 依赖与 build-rustdesk-android 任务一致，在 22.04 上应可用
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -1226,8 +1202,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libc6-dev \
-               libclang-14-dev \
-               libunwind-dev \
+               libclang-10-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -1240,7 +1215,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-14-dev \
+               llvm-10-dev \
                nasm \
                ninja-build \
                openjdk-17-jdk-headless \
@@ -1305,11 +1280,10 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64 # 路径在 22.04 上应保持有效
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
-          # 临时使用调试签名配置
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           mv ./flutter/android/app/src/main/jniLibs/arm64-v8a/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
@@ -1348,14 +1322,13 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
         env:
           # env.ANDROID_SIGN_TOOL_VERSION is set by Step "Setup sign tool version variable"
-          # env.ANDROID_SIGN_TOOL_VERSION 由步骤 "Setup sign tool version variable" 设置
           BUILD_TOOLS_VERSION: ${{ env.ANDROID_SIGN_TOOL_VERSION }}
 
       - name: Upload Artifacts
         if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@master
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk # 注意：这里的 matrix.job.arch 实际不存在于此任务，可能需要调整为固定值或删除
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
           path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
       - name: Publish signed apk package
@@ -1379,7 +1352,7 @@ jobs:
   build-rustdesk-linux:
     needs: [generate-bridge]
     name: build rustdesk linux ${{ matrix.job.target }}
-    runs-on: ${{ matrix.job.on }} # x86_64 是 ubuntu-22.04, aarch64 是自托管
+    runs-on: ${{ matrix.job.on }}
     strategy:
       fail-fast: false
       matrix:
@@ -1388,15 +1361,15 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu22.04,
-              on: ubuntu-22.04,
+              distro: ubuntu18.04,
+              on: ubuntu-20.04,
               deb_arch: amd64,
               vcpkg-triplet: x64-linux,
             }
           - {
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
-              distro: ubuntu22.04,
+              distro: ubuntu18.04,
               on: [self-hosted, Linux, ARM64],
               deb_arch: arm64,
               vcpkg-triplet: arm64-linux,
@@ -1448,7 +1421,6 @@ jobs:
       - name: Disable rust bridge build
         run: |
           # only build cdylib
-          # 只构建 cdylib
           sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
 
       - name: Restore bridge files
@@ -1469,7 +1441,7 @@ jobs:
       - name: Install vcpkg dependencies
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         run: |
-          sudo apt install -y libva-dev libvdpau-dev # 这些应该在 22.04 上可用
+          sudo apt install -y libva-dev libvdpau-dev
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet ${{ matrix.job.vcpkg-triplet }} \
@@ -1485,20 +1457,20 @@ jobs:
           fi
         shell: bash
 
-      # - name: Restore bridge files # 重复的步骤，上面已经有了，注释掉
-      #   if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: bridge-artifact
-      #     path: ./
+      - name: Restore bridge files
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk
-        id: vcpkg # id 可能不唯一，如果其他地方也用了 vcpkg 作为 id，考虑修改
+        id: vcpkg
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ${{ matrix.job.distro }} # 使用 matrix 中的 distro (已改为 ubuntu22.04)
+          distro: ${{ matrix.job.distro }}
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -1510,8 +1482,6 @@ jobs:
           install: |
             apt-get update -y
             echo -e "installing deps"
-            # 检查这些依赖在 Ubuntu 22.04 容器中的可用性
-            # libclang-14-dev 和 llvm-14-dev 在 22.04 中是常见的，其他也大多是标准包
             apt-get install -y \
                build-essential \
                clang \
@@ -1522,8 +1492,7 @@ jobs:
                g++ \
                libayatana-appindicator3-dev \
                libasound2-dev \
-               libclang-14-dev \
-               libunwind-dev \
+               libclang-10-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -1536,7 +1505,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-14-dev \
+               llvm-10-dev \
                nasm \
                ninja-build \
                pkg-config \
@@ -1547,25 +1516,21 @@ jobs:
                wget \
                xz-utils
             # we have libopus compiled by us.
-            # 我们自己编译了 libopus
             apt-get remove -y libopus-dev || true
             # output devs
             ls -l ./
             tree -L 3 /opt/artifacts/vcpkg/installed
           run: |
             # disable git safe.directory
-            # 禁用 git safe.directory
             git config --global --add safe.directory "*"
             # rust
             pushd /opt
             # do not use rustup, because memory overflow in qemu
-            # 不要使用 rustup，因为在 qemu 中会导致内存溢出
             wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}.tar.gz
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
             cd rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }} && ./install.sh
             rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}
             # edit config
-            # 编辑配置
             mkdir -p ~/.cargo/
             echo """
               [source.crates-io]
@@ -1573,7 +1538,6 @@ jobs:
             """ > ~/.cargo/config
             cat ~/.cargo/config
             # start build
-            # 开始构建
             pushd /workspace
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
@@ -1587,7 +1551,6 @@ jobs:
             rm -rf ~/.cargo
 
             # Setup Flutter
-            # 设置 Flutter
             # disable git safe.directory
             git config --global --add safe.directory "*"
             pushd /workspace
@@ -1608,11 +1571,10 @@ jobs:
             case ${{ matrix.job.arch }} in
               aarch64)
                 # clone repo and reset to flutter ${{ env.FLUTTER_VERSION }}
-                # 克隆仓库并重置到 flutter ${{ env.FLUTTER_VERSION }}
                 git clone https://github.com/sony/flutter-elinux.git || true
                 pushd flutter-elinux
                   git fetch
-                  git reset --hard ${{ env.FLUTTER_VERSION }} # 注意：这里是 FLUTTER_ELINUX_VERSION 还是 FLUTTER_VERSION? 原文是 FLUTTER_VERSION，保持一致
+                  git reset --hard ${{ env.FLUTTER_VERSION }}
                   bin/flutter-elinux doctor -v
                   bin/flutter-elinux precache --linux
                 popd
@@ -1638,7 +1600,6 @@ jobs:
             fi
 
             # build flutter
-            # 构建 flutter
             pushd /workspace
             export CARGO_INCREMENTAL=0
             export DEB_ARCH=${{ matrix.job.deb_arch }}
@@ -1648,7 +1609,6 @@ jobs:
             done
 
             # rpm package
-            # rpm 包
             echo -e "start packaging fedora package"
             pushd /workspace
             case ${{ matrix.job.arch }} in
@@ -1663,7 +1623,6 @@ jobs:
             done
 
             # rpm suse package
-            # rpm suse 包
             echo -e "start packaging suse package"
             pushd /workspace
             case ${{ matrix.job.arch }} in
@@ -1697,14 +1656,11 @@ jobs:
       # only x86_64 for arch since we can not find newest arm64 docker image to build
       # old arch image does not make sense for arch since it is "arch" which always update to date
       # and failed to makepkg arm64 on x86_64
-      # Arch Linux 仅构建 x86_64，因为找不到最新的 arm64 docker 镜像来构建
-      # 旧的 arch 镜像对于 arch 来说没有意义，因为它总是更新到最新
-      # 并且在 x86_64 上构建 arm64 的 makepkg 失败
       - name: Patch archlinux PKGBUILD
         if: matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true'
         run: |
           sed -i "s/x86_64/${{ matrix.job.arch }}/g" res/PKGBUILD
-          if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then # 尽管上面说只构建 x86_64，但代码里有这个 if，保留
+          if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
             sed -i "s/x86_64/aarch64/g" ./res/PKGBUILD
           fi
 
@@ -1727,8 +1683,8 @@ jobs:
 
   build-rustdesk-linux-sciter:
     if: ${{ inputs.upload-artifact }}
-    needs: build-rustdesk-linux # not for dep, just make it run later for parallelism, 不是依赖，只是为了并行时使其稍后运行
-    runs-on: ${{ matrix.job.on }} # x86_64 是 ubuntu-22.04, armv7 使用自托管 ARM64 runner
+    needs: build-rustdesk-linux # not for dep, just make it run later for parallelism
+    runs-on: ${{ matrix.job.on }}
     name: build-rustdesk-linux-sciter ${{ matrix.job.target }}
     strategy:
       fail-fast: false
@@ -1738,9 +1694,8 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              on: ubuntu-22.04,
+              on: ubuntu-20.04,
               distro: ubuntu18.04,
-                                   # 如果要升级到 22.04，需要解决这些旧版本依赖的安装问题。
               deb_arch: amd64,
               sciter_arch: x64,
               vcpkg-triplet: x64-linux,
@@ -1749,7 +1704,7 @@ jobs:
           - {
               arch: armv7,
               target: armv7-unknown-linux-gnueabihf,
-              on: [self-hosted, Linux, ARM64], # 假设自托管 ARM64 runner 可以运行 armv7 (qemu 或多架构)
+              on: [self-hosted, Linux, ARM64],
               distro: ubuntu18.04-rustdesk,
               deb_arch: armhf,
               sciter_arch: arm32,
@@ -1786,10 +1741,10 @@ jobs:
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
-        id: vcpkg-sciter # id 修改以避免与上面任务的 id 冲突
+        id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ${{ matrix.job.distro }} # 使用 matrix 中的 distro (当前为 ubuntu18.04/ubuntu18.04-rustdesk)
+          distro: ${{ matrix.job.distro }}
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -1798,8 +1753,6 @@ jobs:
           shell: /bin/bash
           install: |
             apt-get update
-            # 对于 ubuntu18.04 容器，这些依赖是合适的
-            # 如果未来 distro 改为 22.04，需要仔细检查 python3.7 和 gcc-8 等
             apt-get install -y \
                build-essential \
                clang \
@@ -1836,13 +1789,10 @@ jobs:
                zip
             # arm-linux needs CMake and vcokg built from source as there
             # are no prebuilts available from Kitware and Microsoft
-            # arm-linux 需要从源码构建 CMake 和 vcpkg，因为 Kitware 和 Microsoft 没有提供预构建版本
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
               # install gcc/g++ 8 for vcpkg and OpenSSL headers for CMake
-              # 为 vcpkg 安装 gcc/g++ 8，为 CMake 安装 OpenSSL 头文件
               apt-get install -y gcc-8 g++-8 libssl-dev
               # bootstrap CMake amd add it to PATH
-              # 引导 CMake 并将其添加到 PATH
               git clone --depth 1 https://github.com/kitware/cmake -b "v${{ env.SCITER_ARMV7_CMAKE_VERSION }}" /tmp/cmake
               pushd /tmp/cmake
               ./bootstrap --generator='Unix Makefiles' "--prefix=/opt/cmake-${{ env.SCITER_ARMV7_CMAKE_VERSION }}-linux-armhf"
@@ -1852,7 +1802,6 @@ jobs:
               export PATH="/opt/cmake-${{ env.SCITER_ARMV7_CMAKE_VERSION }}-linux-armhf/bin:$PATH"
             fi
             # bootstrap vcpkg and set VCPKG_ROOT
-            # 引导 vcpkg 并设置 VCPKG_ROOT
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             mkdir -p /opt/artifacts
             pushd /opt/artifacts
@@ -1861,7 +1810,6 @@ jobs:
             pushd vcpkg
             git reset --hard ${{ env.VCPKG_COMMIT_ID }}
             # build vcpkg helper executable with gcc-8 for arm-linux but use prebuilt one on x64-linux
-            # 使用 gcc-8 为 arm-linux 构建 vcpkg 辅助可执行文件，但在 x64-linux 上使用预构建版本
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
               CC=/usr/bin/gcc-8 CXX=/usr/bin/g++-8 sh bootstrap-vcpkg.sh -disableMetrics
             else
@@ -1872,7 +1820,6 @@ jobs:
             # rust
             pushd /opt
             # do not use rustup, because memory overflow in qemu
-            # 不要使用 rustup，因为在 qemu 中会导致内存溢出
             wget --output-document rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}.tar.gz
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
             pushd rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}
@@ -1881,25 +1828,20 @@ jobs:
             rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}
             popd
             # install newer nasm for aom
-            # 为 aom 安装较新版本的 nasm
             wget --output-document nasm.deb "http://ftp.us.debian.org/debian/pool/main/n/nasm/nasm_${{ env.SCITER_NASM_DEBVERSION }}_${{ matrix.job.deb_arch }}.deb"
             dpkg -i nasm.deb
             rm -f nasm.deb
           run: |
             # disable git safe.directory
-            # 禁用 git safe.directory
             git config --global --add safe.directory "*"
             # set python3.7 as default python3
-            # 将 python3.7 设置为默认 python3
             update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
             # add built CMake to PATH and set VCPKG_FORCE_SYSTEM_BINARIES Afor arm-linux
-            # 将构建的 CMake 添加到 PATH，并为 arm-linux 设置 VCPKG_FORCE_SYSTEM_BINARIES
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
               export PATH="/opt/cmake-${{ env.SCITER_ARMV7_CMAKE_VERSION }}-linux-armhf/bin:$PATH"
               export VCPKG_FORCE_SYSTEM_BINARIES=1
             fi
             # edit cargo config
-            # 编辑 cargo 配置
             mkdir -p ~/.cargo/
             echo """
               [source.crates-io]
@@ -1907,7 +1849,6 @@ jobs:
             """ > ~/.cargo/config
             cat ~/.cargo/config
             # install dependencies from vcpkg
-            # 从 vcpkg 安装依赖
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             if ! $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"; then
               find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
@@ -1920,12 +1861,10 @@ jobs:
               exit 1
             fi
             # build rustdesk
-            # 构建 rustdesk
             python3 ./res/inline-sciter.py
             export CARGO_INCREMENTAL=0
             cargo build --features inline${{ matrix.job.extra_features }} --release --bins --jobs 1
             # make debian package
-            # 制作 debian 包
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk
             wget -O ./Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/${{ matrix.job.sciter_arch }}/libsciter-gtk.so
@@ -1937,7 +1876,6 @@ jobs:
         run: |
           for name in rustdesk*??.deb; do
               # use cp to duplicate deb files to fit other packages.
-              # 使用 cp 复制 deb 文件以适应其他包格式
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}-sciter.deb"
           done
 
@@ -1960,7 +1898,7 @@ jobs:
   build-appimage:
     name: Build appimage ${{ matrix.job.target }}
     needs: [build-rustdesk-linux]
-    runs-on: ubuntu-22.04 # 已经是 22.04
+    runs-on: ubuntu-20.04
     if: ${{ inputs.upload-artifact }}
     strategy:
       fail-fast: false
@@ -1986,18 +1924,15 @@ jobs:
         shell: bash
         run: |
           # install libarchive-tools for bsdtar command used in AppImageBuilder.yml
-          # 安装 libarchive-tools 以便在 AppImageBuilder.yml 中使用 bsdtar 命令
           sudo apt-get update -y
-          sudo apt-get install -y libarchive-tools # 在 Ubuntu 22.04 上可用
+          sudo apt-get install -y libarchive-tools
           # set-up appimage-builder
-          # 设置 appimage-builder
           pushd /tmp
           wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
           chmod +x appimage-builder-x86_64.AppImage
           sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
           popd
           # run appimage-builder
-          # 运行 appimage-builder
           pushd appimage
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
 
@@ -2015,7 +1950,7 @@ jobs:
     needs:
       - build-rustdesk-linux
       - build-rustdesk-linux-sciter
-    runs-on: ${{ matrix.job.on }} # x86_64 是 ubuntu-22.04, aarch64 是自托管
+    runs-on: ${{ matrix.job.on }}
     if: ${{ inputs.upload-artifact }}
     strategy:
       fail-fast: false
@@ -2023,23 +1958,22 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu22.04,
-              on: ubuntu-22.04,    # GitHub Hosted Runner 本身已经是 22.04
+              distro: ubuntu18.04,
+              on: ubuntu-20.04,
               arch: x86_64,
               suffix: "",
             }
           - {
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu22.04,
-              on: ubuntu-22.04,
+              distro: ubuntu18.04,
+              on: ubuntu-20.04,
               arch: x86_64,
               suffix: "-sciter",
             }
           - {
               target: aarch64-unknown-linux-gnu,
               # try out newer flatpak since error of "error: Nothing matches org.freedesktop.Platform in remote flathub"
-              # 尝试使用较新的 flatpak，因为出现 "error: Nothing matches org.freedesktop.Platform in remote flathub" 错误
-              distro: ubuntu22.04, # 原来已经是 22.04，保持
+              distro: ubuntu22.04,
               on: [self-hosted, Linux, ARM64],
               arch: aarch64,
               suffix: "",
@@ -2060,10 +1994,10 @@ jobs:
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
-        id: flatpak # id 可能不唯一，如果其他地方也用了 flatpak作为 id，考虑修改
+        id: flatpak
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ${{ matrix.job.distro }} # 使用 matrix 中的 distro (已改为 ubuntu22.04)
+          distro: ${{ matrix.job.distro }}
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -2072,7 +2006,6 @@ jobs:
           shell: /bin/bash
           install: |
             apt-get update -y
-            # 这些依赖在 Ubuntu 22.04 容器中应该可用
             apt-get install -y \
                curl \
                git \
@@ -2080,13 +2013,10 @@ jobs:
                wget
           run: |
             # disable git safe.directory
-            # 禁用 git safe.directory
             git config --global --add safe.directory "*"
             pushd /workspace
             # install
-            # 安装
             apt-get update -y
-            # 这些依赖在 Ubuntu 22.04 容器中应该可用
             apt-get install -y \
                cmake \
                curl \
@@ -2099,12 +2029,10 @@ jobs:
                nasm \
                wget
             # flatpak deps
-            # flatpak 依赖
             flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-            flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/23.08 # SDK 版本保持
-            flatpak --user install -y flathub org.freedesktop.Sdk/${{ matrix.job.arch }}/23.08    # SDK 版本保持
+            flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/23.08
+            flatpak --user install -y flathub org.freedesktop.Sdk/${{ matrix.job.arch }}/23.08
             # package
-            # 打包
             pushd flatpak
             git clone https://github.com/flathub/shared-modules.git --depth=1
             flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
@@ -2119,9 +2047,9 @@ jobs:
             flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak
 
   build-rustdesk-web:
-    if: False # 此任务当前被禁用
+    if: False
     name: build-rustdesk-web
-    runs-on: ubuntu-22.04 # 已经是 22.04
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
     env:
@@ -2133,7 +2061,7 @@ jobs:
       - name: Prepare env
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y wget npm # npm 在 Ubuntu 22.04 上可用
+          sudo apt-get install -y wget npm
 
       - name: Install flutter
         uses: subosito/flutter-action@v2.12.0 #https://github.com/subosito/flutter-action/issues/277
@@ -2156,10 +2084,8 @@ jobs:
           npm install typescript -g
           npm install protoc -g
           # Install protoc first, see: https://google.github.io/proto-lens/installing-protoc.html
-          # 首先安装 protoc
           npm install ts-proto
           # Only works with vite <= 2.8, see: https://github.com/vitejs/vite/blob/main/docs/guide/build.md#chunking-strategy
-          # 仅适用于 vite <= 2.8
           npm install vite@2.8
           yarn install && yarn build
           popd
@@ -2174,7 +2100,6 @@ jobs:
           cd build
           cp ../web/README.md web
           # TODO: Remove the following line when the web is almost complete.
-          # 当 web 版本基本完成时移除以下行
           echo -e "\n\nThis build is for preview and not full functionality." >> web/README.md
           dir_name="rustdesk-${{ env.VERSION }}-${{ env.RELEASE_NAME }}"
           mv web "${dir_name}" && tar czf "${dir_name}".tar.gz "${dir_name}"
