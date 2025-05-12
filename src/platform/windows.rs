@@ -3177,6 +3177,20 @@ pub fn is_msi_installed() -> std::io::Result<bool> {
     Ok(1 == uninstall_key.get_value::<u32, _>("WindowsInstaller")?)
 }
 
+pub fn is_cur_exe_the_installed() -> bool {
+    let (_, _, _, exe) = get_install_info();
+    // Check if is installed, because `exe` is the default path if is not installed.
+    if !std::fs::metadata(&exe).is_ok() {
+        return false;
+    }
+    let mut path = std::env::current_exe().unwrap_or_default();
+    if let Ok(linked) = path.read_link() {
+        path = linked;
+    }
+    let path = path.to_string_lossy().to_lowercase();
+    path == exe.to_lowercase()
+}
+
 #[cfg(not(target_pointer_width = "64"))]
 pub fn get_pids_with_first_arg_check_session<S1: AsRef<str>, S2: AsRef<str>>(
     name: S1,
