@@ -993,9 +993,19 @@ fn get_api_server_(api: String, custom: String) -> String {
     "https://admin.rustdesk.com".to_owned()
 }
 
+#[inline]
+pub fn is_public(url: &str) -> bool {
+    url.contains("rustdesk.com")
+}
+
+#[inline]
+pub fn is_selfhost(url: &str) -> bool {
+    !is_public(url)
+}
+
 pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
     let url = get_api_server(api, custom);
-    if url.is_empty() || url.contains("rustdesk.com") {
+    if url.is_empty() || is_public(&url) {
         return "".to_owned();
     }
     format!("{}/api/audit/{}", url, typ)

@@ -106,40 +106,45 @@ async fn start_hbbs_sync_async() {
                             v[keys::OPTION_PRESET_DEVICE_GROUP_NAME] = json!(device_group_name);
                         }
                         let v = v.to_string();
-                        use sha2::{Digest, Sha256};
-                        let mut hasher = Sha256::new();
-                        hasher.update(url.as_bytes());
-                        hasher.update(&v.as_bytes());
-                        let res = hasher.finalize();
-                        let hash = hbb_common::base64::encode(&res[..]);
-                        let old_hash = config::Status::get("sysinfo_hash");
-                        let ver = config::Status::get("sysinfo_ver"); // sysinfo_ver is the version of sysinfo on server's side
-                        if hash == old_hash {
-                            // When the api doesn't exist, Ok("") will be returned in test.
-                            let samever = match crate::post_request(url.replace("heartbeat", "sysinfo_ver"), "".to_owned(), "").await {
-                                Ok(x)  => {
-                                    sysinfo_ver = x.clone();
-                                    *PRO.lock().unwrap() = true;
-                                    x == ver
-                                }
-                                _ => {
-                                    false // to make sure Pro can be assigned in below post for old
-                                          // hbbs pro not supporting sysinfo_ver, use false for ensuring
-                                }
-                            };
-                            if samever {
-                                info_uploaded = (true, url.clone(), None, id.clone());
-                                log::info!("sysinfo not changed, skip upload");
-                                continue;
-                            }
+                        let mut hash = "".to_owned();
+                        if crate::is_selfhost(&url) {
+                           use sha2::{Digest, Sha256};
+                           let mut hasher = Sha256::new();
+                           hasher.update(url.as_bytes());
+                           hasher.update(&v.as_bytes());
+                           let res = hasher.finalize();
+                           hash = hbb_common::base64::encode(&res[..]);
+                           let old_hash = config::Status::get("sysinfo_hash");
+                           let ver = config::Status::get("sysinfo_ver"); // sysinfo_ver is the version of sysinfo on server's side
+                           if hash == old_hash {
+                               // When the api doesn't exist, Ok("") will be returned in test.
+                               let samever = match crate::post_request(url.replace("heartbeat", "sysinfo_ver"), "".to_owned(), "").await {
+                                   Ok(x)  => {
+                                       sysinfo_ver = x.clone();
+                                       *PRO.lock().unwrap() = true;
+                                       x == ver
+                                   }
+                                   _ => {
+                                       false // to make sure Pro can be assigned in below post for old
+                                             // hbbs pro not supporting sysinfo_ver, use false for ensuring
+                                   }
+                               };
+                               if samever {
+                                   info_uploaded = (true, url.clone(), None, id.clone());
+                                   log::info!("sysinfo not changed, skip upload");
+                                   continue;
+                               }
+                           }
                         }
                         match crate::post_request(url.replace("heartbeat", "sysinfo"), v, "").await {
                             Ok(x)  => {
                                 if x == "SYSINFO_UPDATED" {
                                     info_uploaded = (true, url.clone(), None, id.clone());
                                     log::info!("sysinfo updated");
-                                    config::Status::set("sysinfo_hash", hash);
-                                    config::Status::set("sysinfo_ver", sysinfo_ver.clone());
+                                    if !hash.is_empty() {
+                                        config::Status::set("sysinfo_hash", hash);
+                                        config::Status::set("sysinfo_ver", sysinfo_ver.clone());
+                                    }
                                     *PRO.lock().unwrap() = true;
                                 } else if x == "ID_NOT_FOUND" {
                                     info_uploaded.2 = None; // next heartbeat will upload sysinfo again
