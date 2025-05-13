@@ -1390,6 +1390,16 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
 ")
     };
 
+    let install_remote_printer = if install_printer {
+        // No need to use `|| true` here.
+        // The script will not exit even if `--install-remote-printer` panics.
+        format!("\"{}\" --install-remote-printer", &src_exe)
+    } else if crate::platform::is_win_10_or_greater() {
+        format!("\"{}\" --uninstall-remote-printer", &src_exe)
+    } else {
+        "".to_owned()
+    };
+
     // Remember to check if `update_me` need to be changed if changing the `cmds`.
     // No need to merge the existing dup code, because the code in these two functions are too critical.
     // New code should be written in a common function.
@@ -1418,6 +1428,7 @@ cscript \"{uninstall_shortcut}\"
 {tray_shortcuts}
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
+{install_remote_printer}
 {dels}
 {import_config}
 {after_install}
@@ -1437,11 +1448,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
         import_config = get_import_config(&exe),
     );
     run_cmds(cmds, debug, "install")?;
-    if install_printer {
-        allow_err!(remote_printer::install_update_printer(
-            &crate::get_app_name()
-        ));
-    }
     run_after_run_cmds(silent);
     Ok(())
 }
