@@ -1658,27 +1658,13 @@ pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
     get_custom_server_from_string(&exe)
 }
 
-pub fn check_update_printer_option() {
-    if !is_installed() {
-        return;
-    }
-    let app_name = crate::get_app_name();
-    if let Ok(b) = remote_printer::is_rd_printer_installed(&app_name) {
-        let v = if b { "1" } else { "0" };
-        if let Err(e) = update_install_option(REG_NAME_INSTALL_PRINTER, v) {
-            log::error!(
-                "Failed to update printer option \"{}\" to \"{}\", error: {}",
-                REG_NAME_INSTALL_PRINTER,
-                v,
-                e
-            );
-        }
-    }
-}
-
 // We can't directly use `RegKey::set_value` to update the registry value, because it will fail with `ERROR_ACCESS_DENIED`
 // So we have to use `run_cmds` to update the registry value.
 pub fn update_install_option(k: &str, v: &str) -> ResultType<()> {
+    // Don't update registry if not installed or not server process.
+    if !is_installed() || !crate::is_server() {
+        return Ok(());
+    }
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
     let cmds =
