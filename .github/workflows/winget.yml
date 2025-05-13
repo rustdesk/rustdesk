@@ -2,6 +2,9 @@ name: Publish to WinGet
 on:
   release:
     types: [released]
+  workflow_dispatch:
+env:
+  VERSION: "1.4.0"
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -9,5 +12,5 @@ jobs:
       - uses: vedantmgoyal9/winget-releaser@main
         with:
           identifier: RustDesk.RustDesk
-          version: ${{ github.event.release.tag_name }}
+          version: ${{ env.VERSION }}
           token: ${{ secrets.WINGET_TOKEN }}
