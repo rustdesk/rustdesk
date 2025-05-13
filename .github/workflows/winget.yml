@@ -11,4 +11,5 @@ jobs:
         with:
           identifier: RustDesk.RustDesk
           version: "1.4.0"
+          release-tag: "1.4.0"
           token: ${{ secrets.WINGET_TOKEN }}
