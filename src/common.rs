@@ -960,7 +960,10 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
 
 #[inline]
 pub fn get_api_server(api: String, custom: String) -> String {
-    let res = get_api_server_(api, custom);
+    let mut res = get_api_server_(api, custom);
+    if res.ends_with('/') {
+        res.pop();
+    }
     if res.starts_with("https") && res.ends_with(":21114") {
         return res.replace(":21114", "");
     }
@@ -996,11 +999,6 @@ fn get_api_server_(api: String, custom: String) -> String {
 #[inline]
 pub fn is_public(url: &str) -> bool {
     url.contains("rustdesk.com")
-}
-
-#[inline]
-pub fn is_selfhost(url: &str) -> bool {
-    !is_public(url)
 }
 
 pub fn get_audit_server(api: String, custom: String, typ: String) -> String {

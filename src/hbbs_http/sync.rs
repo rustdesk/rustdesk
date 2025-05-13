@@ -107,7 +107,7 @@ async fn start_hbbs_sync_async() {
                         }
                         let v = v.to_string();
                         let mut hash = "".to_owned();
-                        if crate::is_selfhost(&url) {
+                        if crate::is_public(&url) {
                            use sha2::{Digest, Sha256};
                            let mut hasher = Sha256::new();
                            hasher.update(url.as_bytes());
