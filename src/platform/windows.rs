@@ -1267,7 +1267,7 @@ fn get_after_install(
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall(false);
+    let uninstall_str = get_uninstall(false, false);
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
     let mut exe = exe;
@@ -1428,10 +1428,10 @@ cscript \"{uninstall_shortcut}\"
 {tray_shortcuts}
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
-{install_remote_printer}
 {dels}
 {import_config}
 {after_install}
+{install_remote_printer}
 {sleep}
     ",
         version = crate::VERSION.replace("-", "."),
@@ -1488,22 +1488,39 @@ fn get_before_uninstall(kill_self: bool) -> String {
     )
 }
 
-fn get_uninstall(kill_self: bool) -> String {
+/// Constructs the uninstall command string for the application.
+///
+/// # Parameters
+/// - `kill_self`: The command will kill the process of current app name. If `true`, it will kill
+///   the current process as well. If `false`, it will exclude the current process from the kill
+///   command.
+/// - `uninstall_printer`: If `true`, includes commands to uninstall the remote printer.
+///
+/// # Details
+/// The `uninstall_printer` parameter determines whether the command to uninstall the remote printer
+/// is included in the generated uninstall script. If `uninstall_printer` is `false`, the printer
+/// related command is omitted from the script.
+fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
     let reg_uninstall_string = get_reg("UninstallString");
     if reg_uninstall_string.to_lowercase().contains("msiexec.exe") {
         return reg_uninstall_string;
     }
 
     let mut uninstall_cert_cmd = "".to_string();
+    let mut uninstall_printer_cmd = "".to_string();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_path) = exe.to_str() {
             uninstall_cert_cmd = format!("\"{}\" --uninstall-cert", exe_path);
+            if uninstall_printer {
+                uninstall_printer_cmd = format!("\"{}\" --uninstall-remote-printer", &exe_path);
+            }
         }
     }
     let (subkey, path, start_menu, _) = get_install_info();
     format!(
         "
     {before_uninstall}
+    {uninstall_printer_cmd}
     {uninstall_cert_cmd}
     reg delete {subkey} /f
     {uninstall_amyuni_idd}
@@ -1519,10 +1536,7 @@ fn get_uninstall(kill_self: bool) -> String {
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
-    if crate::platform::is_win_10_or_greater() {
-        remote_printer::uninstall_printer(&crate::get_app_name());
-    }
-    run_cmds(get_uninstall(kill_self), true, "uninstall")
+    run_cmds(get_uninstall(kill_self, true), true, "uninstall")
 }
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
@@ -2467,6 +2481,19 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     } else {
         "".to_owned()
     };
+
+    // No need to check the install option here, `is_rd_printer_installed` rarely fails.
+    let is_printer_installed = remote_printer::is_rd_printer_installed(&app_name).unwrap_or(false);
+    // Do nothing if the printer is not installed or failed to query if the printer is installed.
+    let (uninstall_printer_cmd, install_printer_cmd) = if is_printer_installed {
+        (
+            format!("\"{}\" --uninstall-remote-printer", &src_exe),
+            format!("\"{}\" --install-remote-printer", &src_exe),
+        )
+    } else {
+        ("".to_owned(), "".to_owned())
+    };
+
     // We do not try to remove all files in the old version.
     // Because I don't know whether additional files will be installed here after installation, such as drivers.
     // Just copy files to the installation directory works fine.
@@ -2487,6 +2514,8 @@ taskkill /F /IM {app_name}.exe{filter}
 {reg_cmd}
 {copy_exe}
 {restore_service_cmd}
+{uninstall_printer_cmd}
+{install_printer_cmd}
 {sleep}
     ",
         app_name = app_name,
