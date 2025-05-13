@@ -2467,6 +2467,10 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     } else {
         "".to_owned()
     };
+
+    let uninstall_printer_cmd = format!("\"{}\" --uninstall-remote-printer", &src_exe);
+    let install_printer_cmd = format!("\"{}\" --install-remote-printer", &src_exe);
+
     // We do not try to remove all files in the old version.
     // Because I don't know whether additional files will be installed here after installation, such as drivers.
     // Just copy files to the installation directory works fine.
@@ -2484,9 +2488,11 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 chcp 65001
 sc stop {app_name}
 taskkill /F /IM {app_name}.exe{filter}
+{uninstall_printer_cmd}
 {reg_cmd}
 {copy_exe}
 {restore_service_cmd}
+{install_printer_cmd}
 {sleep}
     ",
         app_name = app_name,
