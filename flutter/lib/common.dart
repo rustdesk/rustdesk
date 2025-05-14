@@ -2878,6 +2878,7 @@ Future<bool> canBeBlocked() async {
   return access_mode == 'view' || (access_mode.isEmpty && !option);
 }
 
+// to-do: web not implemented
 Future<void> shouldBeBlocked(RxBool block, WhetherUseRemoteBlock? use) async {
   if (use != null && !await use()) {
     block.value = false;
