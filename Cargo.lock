@@ -4254,7 +4254,7 @@ dependencies = [
 [[package]]
 name = "nokhwa"
 version = "0.10.7"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#f37cb2299908ec3294d5a1e868a0d8a38cfe22bd"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "flume",
  "image 0.25.1",
@@ -4269,7 +4269,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-linux"
 version = "0.1.1"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#f37cb2299908ec3294d5a1e868a0d8a38cfe22bd"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "nokhwa-core",
  "v4l",
@@ -4278,7 +4278,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-macos"
 version = "0.2.2"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#f37cb2299908ec3294d5a1e868a0d8a38cfe22bd"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "block",
  "cocoa-foundation",
@@ -4294,7 +4294,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-windows"
 version = "0.4.2"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#f37cb2299908ec3294d5a1e868a0d8a38cfe22bd"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "dlopen",
  "lazy_static",
@@ -4306,7 +4306,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-core"
 version = "0.1.5"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#f37cb2299908ec3294d5a1e868a0d8a38cfe22bd"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "bytes",
  "image 0.25.1",
