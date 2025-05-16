@@ -389,7 +389,7 @@ jobs:
   publish-release:
     name: Publish Nightly Release
     needs: [build-for-windows-flutter, build-for-windows-sciter]
-    if: ${{ inputs.upload-artifact == 'true' }}
+    if: ${{ inputs.upload-artifact }}
     runs-on: windows-latest
     permissions:
       contents: write
