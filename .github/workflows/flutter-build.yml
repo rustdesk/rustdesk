@@ -151,16 +151,17 @@ jobs:
             vcpkg-dl-${{ runner.os }}-
 
       - name: Restore binary cache 
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ${{ env.VCPKG_ROOT }}/installed
             ${{ env.VCPKG_ROOT }}/packages
             ~/.cache/vcpkg/archives
           # 动态生成缓存键（包含系统类型和 vcpkg.json 的哈希）
-          key: ${{ runner.os }}-${{ matrix.job.vcpkg-triplet }}-vcpkg-${{ hashFiles('**/vcpkg.json', '**/vcpkg-configuration.json') }}-${{ hashFiles('CMakeLists.txt') }}
+          key: ${{ runner.os }}-${{ matrix.job.vcpkg-triplet }}-vcpkg-${{ hashFiles('**/vcpkg.json', '**/vcpkg-configuration.json') }}
           # 缓存回退策略
           restore-keys: |
+            ${{ runner.os }}-${{ matrix.job.vcpkg-triplet }}-vcpkg-${{ hashFiles('**/vcpkg.json', '**/vcpkg-configuration.json') }}
             ${{ runner.os }}-${{ matrix.job.vcpkg-triplet }}-vcpkg-
 
       - name: Install vcpkg dependencies
@@ -363,16 +364,17 @@ jobs:
             vcpkg-dl-${{ runner.os }}-
 
       - name: Restore binary cache 
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ${{ env.VCPKG_ROOT }}/installed
             ${{ env.VCPKG_ROOT }}/packages
             ~/.cache/vcpkg/archives
           # 动态生成缓存键（包含系统类型和 vcpkg.json 的哈希）
-          key: ${{ runner.os }}-${{ matrix.job.vcpkg-triplet }}-vcpkg-${{ hashFiles('**/vcpkg.json', '**/vcpkg-configuration.json') }}-${{ hashFiles('CMakeLists.txt') }}
+          key: ${{ runner.os }}-${{ matrix.job.vcpkg-triplet }}-vcpkg-${{ hashFiles('**/vcpkg.json', '**/vcpkg-configuration.json') }}
           # 缓存回退策略
           restore-keys: |
+            ${{ runner.os }}-${{ matrix.job.vcpkg-triplet }}-vcpkg-${{ hashFiles('**/vcpkg.json', '**/vcpkg-configuration.json') }}
             ${{ runner.os }}-${{ matrix.job.vcpkg-triplet }}-vcpkg-
 
       - name: Install vcpkg dependencies
