@@ -459,21 +459,21 @@ jobs:
       - name: Generate Release Notes
         id: gen_notes
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B | sed ':a;N;$!ba;s/\n/<br>/g')  # 处理多行提交信息
-          echo "notes=| 项目                | 值                                  |
+          COMMIT_MSG=$(git log -1 --pretty=%B | sed ':a;N;$!ba;s/\n/<br>/g')
+          cat << EOF >> $GITHUB_OUTPUT
+          notes<<EOF_OUTER
+          | 项目                | 值                                  |
           |---------------------|-------------------------------------|
-          | **构建类型**        | \`${{ matrix.job.target }}\`        |
-          | **架构**            | \`${{ matrix.job.arch }}\`          |
-          | **触发分支**        | \`${{ github.ref_name }}\`          |
-          | **提交哈希**        | \`${{ github.sha }}\`               |
+          | **触发分支**        | `${{ github.ref_name }}`            |
+          | **提交哈希**        | `${{ github.sha }}`                 |
           | **提交信息**        | ${COMMIT_MSG}                       |
-          | **构建时间 (UTC)**  | $(date -u '+%Y-%m-%d %H:%M:%S')     |
+          | **构建时间 (UTC)**  | $(Get-Date -Format "yyyy-MM-dd HH:mm:ss") UTC     |
           | **工作流运行**      | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
-          | **构建日志**    | [View Raw Logs](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}/checks) |
-          | **Rust 版本**       | \`${{ env.RUST_VERSION }}\`         |
-          | **Flutter 版本**    | \`${{ env.FLUTTER_VERSION }}\`      |
-          | **VCPKG 提交**      | \`${{ env.VCPKG_COMMIT_ID }}\`      |
-          " >> $GITHUB_OUTPUT
+          | **Rust 版本**       | `${{ env.RUST_VERSION }}`           |
+          | **Flutter 版本**    | `${{ env.FLUTTER_VERSION }}`        |
+          | **VCPKG 提交**      | `${{ env.VCPKG_COMMIT_ID }}`        |
+          EOF_OUTER
+          EOF
         shell: bash
 
       - name: Publish Release
