@@ -244,13 +244,50 @@ impl LockModesHandler {
                 .as_ref()
                 .map_or(false, |input| input.capslock_down)
         };
+        let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
         if event_caps_enabled && !local_caps_enabled {
-            press_capslock();
+            Self::change_capslock(&EventType::KeyPress(caps_key));
         } else if !event_caps_enabled && local_caps_enabled {
-            release_capslock();
+            Self::change_capslock(&EventType::KeyRelease(caps_key));
         }
-
         Self {}
+    }
+
+    // We need to sleep here to ensure the capslock state is applied.
+    // If we don't sleep or sleep too short, the capslock state may be wrong.
+    // Sleep for 8ms is enough in my tests, but we sleep 12ms to be safe.
+    #[inline]
+    #[cfg(target_os = "macos")]
+    fn sleep_to_ensure_caps() {
+        // Don't use `std::thread::sleep(Duration::from_millis(12))` here.
+        // https://www.reddit.com/r/rustdesk/comments/1kn1w5x/typing_lags_when_connecting_to_macos_clients/
+        //
+        // There's a strange bug when using `launchctl load -w /Library/LaunchAgents/abc.plist`
+        // `std::thread::sleep(Duration::from_millis(20));` may sleep 90ms or more.
+        // Though `/Applications/RustDesk.app/Contents/MacOS/rustdesk --server` in terminal is ok.
+        //
+        let now = Instant::now();
+        while now.elapsed() < Duration::from_millis(12) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    #[inline]
+    #[cfg(target_os = "macos")]
+    fn change_capslock(event: &EventType) {
+        let mut caps_changed = false;
+        unsafe {
+            let _lock = VIRTUAL_INPUT_MTX.lock();
+            if let Some(input) = &mut VIRTUAL_INPUT_STATE {
+                if input.simulate(event).is_ok() {
+                    input.capslock_down = matches!(event, &EventType::KeyPress(_));
+                    caps_changed = true;
+                }
+            }
+        }
+        if caps_changed {
+            Self::sleep_to_ensure_caps();
+        }
     }
 }
 
@@ -662,22 +699,6 @@ fn modifier_sleep() {
 #[cfg(not(target_os = "macos"))]
 fn is_pressed(key: &Key, en: &mut Enigo) -> bool {
     get_modifier_state(key.clone(), en)
-}
-
-#[inline]
-#[cfg(target_os = "macos")]
-fn key_sleep() {
-    // https://www.reddit.com/r/rustdesk/comments/1kn1w5x/typing_lags_when_connecting_to_macos_clients/
-    //
-    // There's a strange bug when running by `launchctl load -w /Library/LaunchAgents/abc.plist`
-    // `std::thread::sleep(Duration::from_millis(20));` may sleep 90ms or more.
-    // Though `/Applications/RustDesk.app/Contents/MacOS/rustdesk --server` in terminal is ok.
-    let now = Instant::now();
-    // This workaround results `21~24ms` sleep time in my tests.
-    // But it works well in my tests.
-    while now.elapsed() < Duration::from_millis(12) {
-        std::thread::sleep(Duration::from_millis(1));
-    }
 }
 
 #[inline]
@@ -1201,7 +1222,6 @@ pub fn handle_key(evt: &KeyEvent) {
     // having GUI, run main GUI thread, otherwise crash
     let evt = evt.clone();
     QUEUE.exec_async(move || handle_key_(&evt));
-    key_sleep();
 }
 
 #[cfg(target_os = "macos")]
@@ -1259,36 +1279,6 @@ fn simulate_(event_type: &EventType) {
         let _lock = VIRTUAL_INPUT_MTX.lock();
         if let Some(input) = &VIRTUAL_INPUT_STATE {
             let _ = input.simulate(&event_type);
-        }
-    }
-}
-
-#[inline]
-#[cfg(target_os = "macos")]
-fn press_capslock() {
-    let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
-    unsafe {
-        let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(input) = &mut VIRTUAL_INPUT_STATE {
-            if input.simulate(&EventType::KeyPress(caps_key)).is_ok() {
-                input.capslock_down = true;
-                key_sleep();
-            }
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-#[inline]
-fn release_capslock() {
-    let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
-    unsafe {
-        let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(input) = &mut VIRTUAL_INPUT_STATE {
-            if input.simulate(&EventType::KeyRelease(caps_key)).is_ok() {
-                input.capslock_down = false;
-                key_sleep();
-            }
         }
     }
 }
