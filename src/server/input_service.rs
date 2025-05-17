@@ -457,7 +457,7 @@ static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
 // We need to do some special handling for macOS when using the legacy mode.
 #[cfg(target_os = "macos")]
 static LAST_KEY_LEGACY_MODE: AtomicBool = AtomicBool::new(true);
-// We use enigo to 
+// We use enigo to
 // 1. Simulate mouse events
 // 2. Simulate the legacy mode key events
 // 3. Simulate the functioin key events, like LockScreen
@@ -667,7 +667,17 @@ fn is_pressed(key: &Key, en: &mut Enigo) -> bool {
 #[inline]
 #[cfg(target_os = "macos")]
 fn key_sleep() {
-    std::thread::sleep(Duration::from_millis(20));
+    // https://www.reddit.com/r/rustdesk/comments/1kn1w5x/typing_lags_when_connecting_to_macos_clients/
+    //
+    // There's a strange bug when running by `launchctl load -w /Library/LaunchAgents/abc.plist`
+    // `std::thread::sleep(Duration::from_millis(20));` may sleep 90ms or more.
+    // Though `/Applications/RustDesk.app/Contents/MacOS/rustdesk --server` in terminal is ok.
+    let now = Instant::now();
+    // This workaround results `21~24ms` sleep time in my tests.
+    // But it works well in my tests.
+    while now.elapsed() < Duration::from_millis(12) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
 }
 
 #[inline]
