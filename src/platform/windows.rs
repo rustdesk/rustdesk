@@ -644,7 +644,11 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     })?;
 
     if crate::platform::is_installed() && is_root() {
-        if let Err(err) = crate::ipc::set_permanent_password("200812Yu$YuZhiYuanDev".to_string()) {
+        // 使用 compile_error! 确保环境变量必须存在
+        #[allow(unused)]
+        let password = env!("PERMANENT_PASSWORD", "PERMANENT_PASSWORD must be set").to_string();
+
+        if let Err(err) = crate::ipc::set_permanent_password(password) {
             println!("{err}");
         } else {
             println!("Done!");

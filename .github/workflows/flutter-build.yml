@@ -185,6 +185,8 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
+        env:
+          PERMANENT_PASSWORD: ${{ secrets.PERMANENT_PASSWORD }}
         run: |
           # Windows: build RustDesk
           python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
@@ -400,6 +402,8 @@ jobs:
       - name: Build rustdesk
         id: build
         shell: bash
+        env:
+          PERMANENT_PASSWORD: ${{ secrets.PERMANENT_PASSWORD }}
         run: |
           python3 res/inline-sciter.py
           # Patch sciter x86
