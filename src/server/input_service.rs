@@ -1199,6 +1199,8 @@ pub fn handle_key(evt: &KeyEvent) {
 #[cfg(target_os = "macos")]
 pub fn handle_key(evt: &KeyEvent) {
     // having GUI, run main GUI thread, otherwise crash
+    // Remove check `!is_server()`, because `--server` also has UI.
+    // https://github.com/rustdesk/rustdesk/pull/7878
     let evt = evt.clone();
     QUEUE.exec_async(move || handle_key_(&evt));
     key_sleep();
