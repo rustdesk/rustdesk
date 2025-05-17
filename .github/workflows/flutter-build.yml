@@ -140,43 +140,26 @@ jobs:
         with:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-
-      - name: Cache vcpkg dependencies
-        uses: actions/cache@v3
-        id: vcpkg-cache
-        env:
-          cache-name: vcpkg-cache
-        with:
-          path: |
-            ${{ matrix.job.os == 'windows-2022' && 'C:\vcpkg\installed' || '$VCPKG_ROOT/installed' }}
-          key: ${{ matrix.job.os }}-vcpkg-${{ matrix.job.vcpkg-triplet }}-${{ hashFiles('**/vcpkg.json') }}
-          restore-keys: |
-            ${{ matrix.job.os }}-vcpkg-${{ matrix.job.vcpkg-triplet }}-
-            ${{ matrix.job.os }}-vcpkg-
+          doNotCache: false
 
       - name: Install vcpkg dependencies
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
-          # Only run install if cache miss
-          if [[ "${{ steps.vcpkg-cache.outputs.cache-hit }}" != 'true' ]]; then
-            if ! $VCPKG_ROOT/vcpkg \
-              install \
-              --triplet ${{ matrix.job.vcpkg-triplet }} \
-              --x-install-root="$VCPKG_ROOT/installed"; then
-              find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
-                echo "$_1:"
-                echo "======"
-                cat "$_1"
-                echo "======"
-                echo ""
-              done
-              exit 1
-            fi
-            head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
-          else
-            echo "vcpkg dependencies cache hit, skipping installation."
+          if ! $VCPKG_ROOT/vcpkg \
+            install \
+            --triplet ${{ matrix.job.vcpkg-triplet }} \
+            --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
           fi
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
       - name: Build rustdesk
@@ -348,43 +331,26 @@ jobs:
         with:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-
-      - name: Cache vcpkg dependencies
-        uses: actions/cache@v3
-        id: vcpkg-cache
-        env:
-          cache-name: vcpkg-cache
-        with:
-          path: |
-            ${{ matrix.job.os == 'windows-2022' && 'C:\vcpkg\installed' || '$VCPKG_ROOT/installed' }}
-          key: ${{ matrix.job.os }}-vcpkg-${{ matrix.job.vcpkg-triplet }}-${{ hashFiles('**/vcpkg.json') }}
-          restore-keys: |
-            ${{ matrix.job.os }}-vcpkg-${{ matrix.job.vcpkg-triplet }}-
-            ${{ matrix.job.os }}-vcpkg-
+          doNotCache: false
 
       - name: Install vcpkg dependencies
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
-          # Only run install if cache miss
-          if [[ "${{ steps.vcpkg-cache.outputs.cache-hit }}" != 'true' ]]; then
-            if ! $VCPKG_ROOT/vcpkg \
-              install \
-              --triplet ${{ matrix.job.vcpkg-triplet }} \
-              --x-install-root="$VCPKG_ROOT/installed"; then
-              find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
-                echo "$_1:"
-                echo "======"
-                cat "$_1"
-                echo "======"
-                echo ""
-              done
-              exit 1
-            fi
-            head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
-          else
-            echo "vcpkg dependencies cache hit, skipping installation."
+          if ! $VCPKG_ROOT/vcpkg \
+            install \
+            --triplet ${{ matrix.job.vcpkg-triplet }} \
+            --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
           fi
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
       - name: Build rustdesk
