@@ -86,7 +86,7 @@ jobs:
         run: |
           # 使用 PowerShell 获取 ISO 8601 格式的 UTC 时间
           $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-          echo "timestamp=$timestamp" >> $env:GITHUB_OUTPUT
+          echo "timestamp=$timestamp" >> $GITHUB_OUTPUT
         shell: pwsh  # 强制使用 PowerShell
 
       - name: Export GitHub Actions cache environment variables
@@ -559,31 +559,43 @@ jobs:
 
       - name: Collect and extract build outputs
         run: |
-          # 创建目标目录
           New-Item -ItemType Directory -Path combined_artifacts -Force
-          # 递归查找所有子目录中的文件
+          
+          # 遍历所有构件（包括子目录中的文件）
           Get-ChildItem -Path artifacts -Filter "windows-*" -Recurse | ForEach-Object {
             if ($_.Extension -eq ".zip") {
-              # 解压到 combined_artifacts
-              Expand-Archive -Path $_.FullName -DestinationPath combined_artifacts -Force
-              # 展平目录：移动所有文件到根目录
-              Get-ChildItem -Path "$combined_artifacts/*" -Recurse | Where-Object { $_.PSIsContainer -eq $false } | Move-Item -Destination $combined_artifacts -Force
-              # 清理空子目录
-              Get-ChildItem -Path $combined_artifacts -Directory | Remove-Item -Recurse -Force
+              # 创建临时目录用于解压
+              $tempDir = New-Item -ItemType Directory -Path "$env:TEMP\$(New-Guid)"
+              
+              # 解压到临时目录
+              Expand-Archive -Path $_.FullName -DestinationPath $tempDir -Force
+              
+              # 移动所有文件到 combined_artifacts（强制覆盖）
+              Get-ChildItem -Path $tempDir -Recurse | Move-Item -Destination combined_artifacts -Force
+              
+              # 删除临时目录
+              Remove-Item -Path $tempDir -Recurse -Force
             } else {
+              # 直接复制非 ZIP 文件
               Copy-Item -Path $_.FullName -Destination combined_artifacts -Force
             }
           }
+          
+          # 二次清理空目录（防御性操作）
+          Get-ChildItem -Path combined_artifacts -Directory | Remove-Item -Recurse -Force
         shell: pwsh
 
-      - name: Show combined_artifacts structure
-        run: tree /f combined_artifacts
+      - name: Show flattened structure
+        run: |
+          Write-Output "Final combined_artifacts structure:"
+          tree /f combined_artifacts
         shell: cmd
 
       - name: Generate Release Notes
         id: gen_notes
         run: |
-          RAW_TIME="${{ needs.init-job.outputs.build_timestamp }}"
+          RAW_TIME="${{ needs.build-for-windows-flutter.outputs.timestamp }}"
+          # 将 ISO 8601 格式的时间转换为可读格式
           TIMESTAMP=$(echo "$RAW_TIME" | sed 's/T/ /; s/Z//')
           # 获取最新的提交信息
           COMMIT_MSG=$(git log -1 --pretty=%B | sed ':a;N;$!ba;s/\n/<br>/g')
@@ -611,4 +623,4 @@ jobs:
           name: "${{ env.TAG_NAME }} Build ${{ steps.gen_notes.outputs.timestamp }}"
           body: ${{ steps.gen_notes.outputs.notes }}
           files: |
-            combined_artifacts/**/*
+            combined_artifacts/*
