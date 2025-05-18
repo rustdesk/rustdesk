@@ -65,6 +65,8 @@ jobs:
     name: ${{ matrix.job.target }}
     needs: [build-RustDeskTempTopMostWindow, generate-bridge]
     runs-on: ${{ matrix.job.os }}
+    outputs:
+      timestamp: ${{ steps.get_time.outputs.timestamp }}
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +81,14 @@ jobs:
             }
           # - { target: aarch64-pc-windows-msvc, os: windows-2022, arch: aarch64 }
     steps:
+      - name: Get Current UTC Time
+        id: get_time
+        run: |
+          # 使用 PowerShell 获取 ISO 8601 格式的 UTC 时间
+          $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          echo "timestamp=$timestamp" >> $env:GITHUB_OUTPUT
+        shell: pwsh  # 强制使用 PowerShell
+
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
         with:
@@ -183,6 +193,33 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Flutter
+        uses: actions/cache@v4
+        with:
+          path: |
+            flutter/bin/cache
+            flutter/.pub-cache
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+
+      - name: Cache external files
+        uses: actions/cache@v4
+        with:
+          path: |
+            usbmmidd_v2.zip
+            rustdesk_printer_driver_v4.zip
+            printer_driver_adapter.zip
+            sha256sums
+          key: ${{ runner.os }}-external-files
 
       - name: Build rustdesk
         env:
@@ -399,6 +436,31 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
+      - name: Cache Rust x86 build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-x86-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('Cargo.toml') }}-inline-vram-hwcodec
+          restore-keys: |
+            ${{ runner.os }}-x86-
+
+      - name: Cache Sciter
+        uses: actions/cache@v4
+        with:
+          path: ./Release/sciter.dll
+          key: ${{ runner.os }}-sciter-v4.4.8.3-x86
+
+      - name: Cache USBMMIDD
+        uses: actions/cache@v4
+        with:
+          path: |
+            usbmmidd_v2.zip
+            usbmmidd_v2/
+          key: ${{ runner.os }}-usbmmidd-v2-x86
+
       - name: Build rustdesk
         id: build
         shell: bash
@@ -408,17 +470,25 @@ jobs:
           python3 res/inline-sciter.py
           # Patch sciter x86
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
+          # 启用并行编译
+          export CARGO_BUILD_JOBS=$(nproc)
           cargo build --features inline,vram,hwcodec --release --bins
           mkdir -p ./Release
           mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
-          curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+          # 如果缓存未命中才下载 sciter.dll
+          if [ ! -f "./Release/sciter.dll" ]; then
+            curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+          fi
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
-          curl -LJ -o ./usbmmidd_v2.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
-          unzip usbmmidd_v2.zip
-          # Do not remove x64 files, because the user may run the 32bit version on a 64bit system.
-          # Do not remove ./usbmmidd_v2/deviceinstaller64.exe, as x86 exe cannot install and uninstall drivers when running on x64,
-          # we need the x64 exe to install and uninstall the driver.
-          rm -rf ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
+          # 如果缓存未命中才下载 USBMMIDD
+          if [ ! -f "usbmmidd_v2.zip" ]; then
+            curl -LJ -o ./usbmmidd_v2.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
+            unzip usbmmidd_v2.zip
+            # Do not remove x64 files, because the user may run the 32bit version on a 64bit system.
+            # Do not remove ./usbmmidd_v2/deviceinstaller64.exe, as x86 exe cannot install and uninstall drivers when running on x64,
+            # we need the x64 exe to install and uninstall the driver.
+            rm -rf ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
+          fi
           mv ./usbmmidd_v2 ./Release || true
 
       - name: find Runner.res
@@ -510,23 +580,11 @@ jobs:
         run: tree /f combined_artifacts
         shell: cmd
 
-      - name: Generate Timestamp
-        id: timestamp
-        run: |
-          # 解析 ISO 8601 时间戳
-          $runDate = [datetime]::ParseExact(
-            "${{ github.run_started_at }}",
-            "yyyy-MM-ddTHH:mm:ssZ",
-            [System.Globalization.CultureInfo]::InvariantCulture
-          )
-          $TIMESTAMP = $runDate.ToString("yyyy-MM-dd HH:mm:ss")
-          echo "timestamp=$TIMESTAMP" >> $env:GITHUB_OUTPUT
-        shell: pwsh
-
       - name: Generate Release Notes
         id: gen_notes
         run: |
-          TIMESTAMP="${{ steps.timestamp.outputs.timestamp }}"
+          RAW_TIME="${{ needs.init-job.outputs.build_timestamp }}"
+          TIMESTAMP=$(echo "$RAW_TIME" | sed 's/T/ /; s/Z//')
           # 获取最新的提交信息
           COMMIT_MSG=$(git log -1 --pretty=%B | sed ':a;N;$!ba;s/\n/<br>/g')
           # 使用单引号包裹每行内容
@@ -542,6 +600,7 @@ jobs:
           echo '| **Flutter 版本**    | `'"${{ env.FLUTTER_VERSION }}"'`    |' >> $GITHUB_OUTPUT
           echo '| **VCPKG 提交**      | `'"${{ env.VCPKG_COMMIT_ID }}"'`    |' >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Publish Release
@@ -549,7 +608,7 @@ jobs:
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
-          name: "${{ env.TAG_NAME }} Build ${{ steps.timestamp.outputs.timestamp }}"
+          name: "${{ env.TAG_NAME }} Build ${{ steps.gen_notes.outputs.timestamp }}"
           body: ${{ steps.gen_notes.outputs.notes }}
           files: |
             combined_artifacts/**/*
