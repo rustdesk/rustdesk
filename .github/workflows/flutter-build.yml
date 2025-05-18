@@ -510,11 +510,24 @@ jobs:
         run: tree /f combined_artifacts
         shell: cmd
 
+      - name: Generate Timestamp
+        id: timestamp
+        run: |
+          # 解析 ISO 8601 时间戳
+          $runDate = [datetime]::ParseExact(
+            "${{ github.run_started_at }}",
+            "yyyy-MM-ddTHH:mm:ssZ",
+            [System.Globalization.CultureInfo]::InvariantCulture
+          )
+          $TIMESTAMP = $runDate.ToString("yyyy-MM-dd HH:mm:ss")
+          echo "timestamp=$TIMESTAMP" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
       - name: Generate Release Notes
         id: gen_notes
         run: |
-          RAW_TIME="${{ github.run_started_at }}"
-          TIMESTAMP=$(echo "$RAW_TIME" | sed 's/T/ /; s/Z//')  # 输出示例：2025-05-18 08:45:30
+          TIMESTAMP="${{ steps.timestamp.outputs.timestamp }}"
+          # 获取最新的提交信息
           COMMIT_MSG=$(git log -1 --pretty=%B | sed ':a;N;$!ba;s/\n/<br>/g')
           # 使用单引号包裹每行内容
           echo "notes<<EOF" >> $GITHUB_OUTPUT
@@ -529,7 +542,6 @@ jobs:
           echo '| **Flutter 版本**    | `'"${{ env.FLUTTER_VERSION }}"'`    |' >> $GITHUB_OUTPUT
           echo '| **VCPKG 提交**      | `'"${{ env.VCPKG_COMMIT_ID }}"'`    |' >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT  # 传递时间戳给后续步骤
         shell: bash
 
       - name: Publish Release
@@ -537,7 +549,7 @@ jobs:
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
-          name: "${{ env.TAG_NAME }} Build ${{ steps.gen_notes.outputs.timestamp }}"
+          name: "${{ env.TAG_NAME }} Build ${{ steps.timestamp.outputs.timestamp }}"
           body: ${{ steps.gen_notes.outputs.notes }}
           files: |
             combined_artifacts/**/*
