@@ -494,12 +494,21 @@ jobs:
           # 递归查找所有子目录中的文件
           Get-ChildItem -Path artifacts -Filter "windows-*" -Recurse | ForEach-Object {
             if ($_.Extension -eq ".zip") {
-              Expand-Archive -Path $_.FullName -DestinationPath combined_artifacts
+              # 解压到 combined_artifacts
+              Expand-Archive -Path $_.FullName -DestinationPath combined_artifacts -Force
+              # 展平目录：移动所有文件到根目录
+              Get-ChildItem -Path "$combined_artifacts/*" -Recurse | Where-Object { $_.PSIsContainer -eq $false } | Move-Item -Destination $combined_artifacts -Force
+              # 清理空子目录
+              Get-ChildItem -Path $combined_artifacts -Directory | Remove-Item -Recurse -Force
             } else {
-              Copy-Item -Path $_.FullName -Destination combined_artifacts
+              Copy-Item -Path $_.FullName -Destination combined_artifacts -Force
             }
           }
         shell: pwsh
+
+      - name: Show combined_artifacts structure
+        run: tree /f combined_artifacts
+        shell: cmd
 
       - name: Generate Release Notes
         id: gen_notes
@@ -522,12 +531,6 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT  # 传递时间戳给后续步骤
         shell: bash
-
-      - name: Validate Artifact Files
-        run: |
-          Write-Output "Checking combined_artifacts contents:"
-          Get-ChildItem -Path combined_artifacts -Recurse -File | Format-List FullName
-        shell: pwsh
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
