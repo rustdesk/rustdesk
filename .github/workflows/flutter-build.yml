@@ -536,7 +536,7 @@ jobs:
           echo '| **触发分支**        | `'"${{ github.ref_name }}"'`         |' >> $GITHUB_OUTPUT
           echo '| **提交哈希**        | `'"${{ github.sha }}"'`              |' >> $GITHUB_OUTPUT
           echo '| **提交信息**        | '"${COMMIT_MSG}"'                    |' >> $GITHUB_OUTPUT
-          echo '| **构建时间 (UTC)**  | '"${TIMESTAMP}"'                     |' >> $GITHUB_OUTPUT
+          echo '| **构建时间**  | '"${TIMESTAMP}"'                           |' >> $GITHUB_OUTPUT
           echo '| **工作流运行**      | [#'"${{ github.run_number }}"']('"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"') |' >> $GITHUB_OUTPUT
           echo '| **Rust 版本**       | `'"${{ env.RUST_VERSION }}"'`       |' >> $GITHUB_OUTPUT
           echo '| **Flutter 版本**    | `'"${{ env.FLUTTER_VERSION }}"'`    |' >> $GITHUB_OUTPUT
