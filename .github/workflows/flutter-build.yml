@@ -491,14 +491,11 @@ jobs:
         run: |
           # 创建目标目录
           New-Item -ItemType Directory -Path combined_artifacts -Force
-
-          # 处理所有以 windows- 开头的文件
-          Get-ChildItem -Path artifacts -Filter "windows-*" | ForEach-Object {
+          # 递归查找所有子目录中的文件
+          Get-ChildItem -Path artifacts -Filter "windows-*" -Recurse | ForEach-Object {
             if ($_.Extension -eq ".zip") {
-              # 解压 ZIP 文件到目标目录
               Expand-Archive -Path $_.FullName -DestinationPath combined_artifacts
             } else {
-              # 直接复制非 ZIP 文件
               Copy-Item -Path $_.FullName -Destination combined_artifacts
             }
           }
@@ -507,8 +504,8 @@ jobs:
       - name: Generate Release Notes
         id: gen_notes
         run: |
-          # 转换时间戳格式（示例：2025-05-18 08:45:30）
-          TIMESTAMP=$(date -u -d "${{ github.run_started_at }}" '+%Y-%m-%d %H:%M:%S')
+          RAW_TIME="${{ github.run_started_at }}"
+          TIMESTAMP=$(echo "$RAW_TIME" | sed 's/T/ /; s/Z//')  # 输出示例：2025-05-18 08:45:30
           COMMIT_MSG=$(git log -1 --pretty=%B | sed ':a;N;$!ba;s/\n/<br>/g')
           # 使用单引号包裹每行内容
           echo "notes<<EOF" >> $GITHUB_OUTPUT
@@ -525,6 +522,12 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT  # 传递时间戳给后续步骤
         shell: bash
+
+      - name: Validate Artifact Files
+        run: |
+          Write-Output "Checking combined_artifacts contents:"
+          Get-ChildItem -Path combined_artifacts -Recurse -File | Format-List FullName
+        shell: pwsh
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
