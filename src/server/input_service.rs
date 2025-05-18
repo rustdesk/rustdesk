@@ -664,6 +664,8 @@ fn is_pressed(key: &Key, en: &mut Enigo) -> bool {
     get_modifier_state(key.clone(), en)
 }
 
+// Sleep for 8ms is enough in my tests, but we sleep 12ms to be safe.
+// sleep 12ms In my test, the characters are already output in real time.
 #[inline]
 #[cfg(target_os = "macos")]
 fn key_sleep() {
@@ -673,8 +675,6 @@ fn key_sleep() {
     // `std::thread::sleep(Duration::from_millis(20));` may sleep 90ms or more.
     // Though `/Applications/RustDesk.app/Contents/MacOS/rustdesk --server` in terminal is ok.
     let now = Instant::now();
-    // This workaround results `21~24ms` sleep time in my tests.
-    // But it works well in my tests.
     while now.elapsed() < Duration::from_millis(12) {
         std::thread::sleep(Duration::from_millis(1));
     }
@@ -1201,6 +1201,13 @@ pub fn handle_key(evt: &KeyEvent) {
     // having GUI, run main GUI thread, otherwise crash
     let evt = evt.clone();
     QUEUE.exec_async(move || handle_key_(&evt));
+    // Key sleep is required for macOS.
+    // If we don't sleep, the key press/release events may not take effect.
+    //
+    // For example, the controlled side osx `12.7.6` or `15.1.1`
+    // If we input characters quickly and continuously, and press or release "Shift" for a short period of time, 
+    // it is possible that after releasing "Shift", the controlled side will still print uppercase characters.
+    // Though it is not very easy to reproduce.
     key_sleep();
 }
 
