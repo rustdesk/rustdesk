@@ -1165,17 +1165,17 @@ pub async fn lock_screen() {
     } else if #[cfg(target_os = "macos")] {
         // CGSession -suspend not real lock screen, it is user switch
         std::thread::spawn(|| {
-            let mut key_event = KeyEvent::new();
+            // Don't use the legacy mode to simulate `Command + Control + Q` to lock the screen.
+            // macOS system may use the previous event flag to generate the next event.
+            // Only found this issue when locking the screen.
+            // When we use enigo to lock the screen, the next key/mouse events will also
+            // have the flag `CGEventFlagControl | CGEventFlagCommand | 0x20000000`.
+            // Then we can't input the password in the lock screen.
 
-            key_event.set_chr('q' as _);
-            key_event.modifiers.push(ControlKey::Meta.into());
-            key_event.modifiers.push(ControlKey::Control.into());
-            key_event.mode = KeyboardMode::Legacy.into();
-
-            key_event.down = true;
-            handle_key(&key_event);
-            key_event.down = false;
-            handle_key(&key_event);
+            std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to keystroke \"q\" using {control down, command down}")
+            .status().ok();
         });
     } else {
     crate::platform::lock_screen();
@@ -1205,7 +1205,7 @@ pub fn handle_key(evt: &KeyEvent) {
     // If we don't sleep, the key press/release events may not take effect.
     //
     // For example, the controlled side osx `12.7.6` or `15.1.1`
-    // If we input characters quickly and continuously, and press or release "Shift" for a short period of time, 
+    // If we input characters quickly and continuously, and press or release "Shift" for a short period of time,
     // it is possible that after releasing "Shift", the controlled side will still print uppercase characters.
     // Though it is not very easy to reproduce.
     key_sleep();

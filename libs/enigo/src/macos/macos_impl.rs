@@ -142,7 +142,9 @@ impl Enigo {
     }
 
     fn post(&self, event: CGEvent) {
-        // event.set_flags(CGEventFlags::CGEventFlagNull); will cause `F11` not working. no idea why.
+        // Some key events require the flags to work.
+        // We can't simply set the flag to `CGEventFlags::CGEventFlagNull`.
+        // eg. `F11` requires flags `CGEventFlags::CGEventFlagSecondaryFn | 0x20000000` to work.
         if !self.ignore_flags && self.flags != CGEventFlags::CGEventFlagNull {
             event.set_flags(self.flags);
         }
