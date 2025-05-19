@@ -1205,7 +1205,7 @@ pub fn handle_key(evt: &KeyEvent) {
     // If we don't sleep, the key press/release events may not take effect.
     //
     // For example, the controlled side osx `12.7.6` or `15.1.1`
-    // If we input characters quickly and continuously, and press or release "Shift" for a short period of time, 
+    // If we input characters quickly and continuously, and press or release "Shift" for a short period of time,
     // it is possible that after releasing "Shift", the controlled side will still print uppercase characters.
     // Though it is not very easy to reproduce.
     key_sleep();
