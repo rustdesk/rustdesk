@@ -141,9 +141,27 @@ impl Enigo {
         self.flags |= flag;
     }
 
-    fn post(&self, event: CGEvent) {
-        // event.set_flags(CGEventFlags::CGEventFlagNull); will cause `F11` not working. no idea why.
-        if !self.ignore_flags && self.flags != CGEventFlags::CGEventFlagNull {
+    // Just check F11 for minimal changes.
+    // Since enigo (legacy mode) is deprecated, it is currently in maintenance only.
+    fn post(&self, event: CGEvent, keycode: Option<u16>) {
+        if keycode == Some(kVK_F11) {
+            // Some key events require the flags to work.
+            // We can't simply set the flag to `CGEventFlags::CGEventFlagNull`.
+            // eg. `F11` requires flags `CGEventFlags::CGEventFlagSecondaryFn | 0x20000000` to work.
+            self.post_event(event, false);
+        } else {
+            // macOS system may use the previous event flag to generate the next event.
+            // Only found this issue when locking the screen.
+            // When we use enigo to lock the screen, the next mouse event will have the flag
+            // `CGEventFlagControl | CGEventFlagCommand | 0x20000000`.
+            // The key event will also have the flag `CGEventFlagControl | CGEventFlagCommand | 0x20000000`.
+            // Therefore, we need to set the flag to `event.set_flags(self.flags)` to avoid this.
+            self.post_event(event, true);
+        }
+    }
+
+    fn post_event(&self, event: CGEvent, force_flags: bool) {
+        if !self.ignore_flags && (force_flags || self.flags != CGEventFlags::CGEventFlagNull) {
             event.set_flags(self.flags);
         }
         event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, ENIGO_INPUT_EXTRA_VALUE);
@@ -205,7 +223,7 @@ impl MouseControllable for Enigo {
             if let Ok(event) =
                 CGEvent::new_mouse_event(src.clone(), event_type, dest, CGMouseButton::Left)
             {
-                self.post(event);
+                self.post(event, None);
             }
         }
     }
@@ -270,7 +288,7 @@ impl MouseControllable for Enigo {
                 if let Some(v) = btn_value {
                     event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
-                self.post(event);
+                self.post(event, None);
             }
         }
         Ok(())
@@ -309,7 +327,7 @@ impl MouseControllable for Enigo {
                 if let Some(v) = btn_value {
                     event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
-                self.post(event);
+                self.post(event, None);
             }
         }
     }
@@ -395,7 +413,7 @@ impl KeyboardControllable for Enigo {
             if let Some(src) = self.event_source.as_ref() {
                 if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), 0, true) {
                     event.set_string(cluster);
-                    self.post(event);
+                    self.post(event, None);
                 }
             }
         }
@@ -409,11 +427,11 @@ impl KeyboardControllable for Enigo {
 
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), keycode, true) {
-                self.post(event);
+                self.post(event, Some(keycode));
             }
 
             if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), keycode, false) {
-                self.post(event);
+                self.post(event, Some(keycode));
             }
         }
     }
@@ -425,18 +443,17 @@ impl KeyboardControllable for Enigo {
         }
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), code, true) {
-                self.post(event);
+                self.post(event, Some(code));
             }
         }
         Ok(())
     }
 
     fn key_up(&mut self, key: Key) {
+        let code = self.key_to_keycode(key);
         if let Some(src) = self.event_source.as_ref() {
-            if let Ok(event) =
-                CGEvent::new_keyboard_event(src.clone(), self.key_to_keycode(key), false)
-            {
-                self.post(event);
+            if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), code, false) {
+                self.post(event, Some(code));
             }
         }
     }
