@@ -1,0 +1,774 @@
+RustDesk 升级屏蔽修改日志 - 20250519_191408
+根目录: E:/dev/rustdesk
+================================================================================
+
+文件: src\updater.rs
+修改位置: 第 119 行 至 第 196 行
+--------------------------------------------------
+原始代码:
+fn check_update(manually: bool) -> ResultType<()> {
+    #[cfg(target_os = "windows")]
+    let is_msi = crate::platform::is_msi_installed()?;
+    if !(manually || config::Config::get_bool_option(config::keys::OPTION_ALLOW_AUTO_UPDATE)) {
+        return Ok(());
+    }
+    if !do_check_software_update().is_ok() {
+        // ignore
+        return Ok(());
+    }
+
+    let update_url = crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone();
+    if update_url.is_empty() {
+        log::debug!("No update available.");
+    } else {
+        let download_url = update_url.replace("tag", "download");
+        let version = download_url.split('/').last().unwrap_or_default();
+        #[cfg(target_os = "windows")]
+        let download_url = if cfg!(feature = "flutter") {
+            format!(
+                "{}/rustdesk-{}-x86_64.{}",
+                download_url,
+                version,
+                if is_msi { "msi" } else { "exe" }
+            )
+        } else {
+            format!("{}/rustdesk-{}-x86-sciter.exe", download_url, version)
+        };
+        log::debug!("New version available: {}", &version);
+        let client = create_http_client();
+        let Some(file_path) = get_download_file_from_url(&download_url) else {
+            bail!("Failed to get the file path from the URL: {}", download_url);
+        };
+        let mut is_file_exists = false;
+        if file_path.exists() {
+            // Check if the file size is the same as the server file size
+            // If the file size is the same, we don't need to download it again.
+            let file_size = std::fs::metadata(&file_path)?.len();
+            let response = client.head(&download_url).send()?;
+            if !response.status().is_success() {
+                bail!("Failed to get the file size: {}", response.status());
+            }
+            let total_size = response
+                .headers()
+                .get(reqwest::header::CONTENT_LENGTH)
+                .and_then(|ct_len| ct_len.to_str().ok())
+                .and_then(|ct_len| ct_len.parse::<u64>().ok());
+            let Some(total_size) = total_size else {
+                bail!("Failed to get content length");
+            };
+            if file_size == total_size {
+                is_file_exists = true;
+            } else {
+                std::fs::remove_file(&file_path)?;
+            }
+        }
+        if !is_file_exists {
+            let response = client.get(&download_url).send()?;
+            if !response.status().is_success() {
+                bail!(
+                    "Failed to download the new version file: {}",
+                    response.status()
+                );
+            }
+            let file_data = response.bytes()?;
+            let mut file = std::fs::File::create(&file_path)?;
+            file.write_all(&file_data)?;
+        }
+        // We have checked if the `conns`` is empty before, but we need to check again.
+        // No need to care about the downloaded file here, because it's rare case that the `conns` are empty
+        // before the download, but not empty after the download.
+        if has_no_active_conns() {
+            #[cfg(target_os = "windows")]
+            update_new_version(is_msi, &version, &file_path);
+        }
+    }
+    Ok(())
+}
+--------------------------------------------------
+修改后代码:
+// ---------- [DISABLE UPDATE] Start ----------
+// fn check_update(manually: bool) -> ResultType<()> {
+// #[cfg(target_os = "windows")]
+// let is_msi = crate::platform::is_msi_installed()?;
+// if !(manually || config::Config::get_bool_option(config::keys::OPTION_ALLOW_AUTO_UPDATE)) {
+// return Ok(());
+// }
+// if !do_check_software_update().is_ok() {
+// // ignore
+// return Ok(());
+// }
+// 
+// let update_url = crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone();
+// if update_url.is_empty() {
+// log::debug!("No update available.");
+// } else {
+// let download_url = update_url.replace("tag", "download");
+// let version = download_url.split('/').last().unwrap_or_default();
+// #[cfg(target_os = "windows")]
+// let download_url = if cfg!(feature = "flutter") {
+// format!(
+// "{}/rustdesk-{}-x86_64.{}",
+// download_url,
+// version,
+// if is_msi { "msi" } else { "exe" }
+// )
+// } else {
+// format!("{}/rustdesk-{}-x86-sciter.exe", download_url, version)
+// };
+// log::debug!("New version available: {}", &version);
+// let client = create_http_client();
+// let Some(file_path) = get_download_file_from_url(&download_url) else {
+// bail!("Failed to get the file path from the URL: {}", download_url);
+// };
+// let mut is_file_exists = false;
+// if file_path.exists() {
+// // Check if the file size is the same as the server file size
+// // If the file size is the same, we don't need to download it again.
+// let file_size = std::fs::metadata(&file_path)?.len();
+// let response = client.head(&download_url).send()?;
+// if !response.status().is_success() {
+// bail!("Failed to get the file size: {}", response.status());
+// }
+// let total_size = response
+// .headers()
+// .get(reqwest::header::CONTENT_LENGTH)
+// .and_then(|ct_len| ct_len.to_str().ok())
+// .and_then(|ct_len| ct_len.parse::<u64>().ok());
+// let Some(total_size) = total_size else {
+// bail!("Failed to get content length");
+// };
+// if file_size == total_size {
+// is_file_exists = true;
+// } else {
+// std::fs::remove_file(&file_path)?;
+// }
+// }
+// if !is_file_exists {
+// let response = client.get(&download_url).send()?;
+// if !response.status().is_success() {
+// bail!(
+// "Failed to download the new version file: {}",
+// response.status()
+// );
+// }
+// let file_data = response.bytes()?;
+// let mut file = std::fs::File::create(&file_path)?;
+// file.write_all(&file_data)?;
+// }
+// // We have checked if the `conns`` is empty before, but we need to check again.
+// // No need to care about the downloaded file here, because it's rare case that the `conns` are empty
+// // before the download, but not empty after the download.
+// if has_no_active_conns() {
+// #[cfg(target_os = "windows")]
+// update_new_version(is_msi, &version, &file_path);
+// }
+// }
+// Ok(())
+// }
+return Ok(());
+}
+// ---------- [DISABLE UPDATE] End ----------
+================================================================================
+
+文件: src\updater.rs
+修改位置: 第 36 行 至 第 40 行
+--------------------------------------------------
+原始代码:
+pub fn manually_check_update() -> ResultType<()> {
+    let sender = TX_MSG.lock().unwrap();
+    sender.send(UpdateMsg::CheckUpdate)?;
+    Ok(())
+}
+--------------------------------------------------
+修改后代码:
+// ---------- [DISABLE UPDATE] Start ----------
+// pub fn manually_check_update() -> ResultType<()> {
+// let sender = TX_MSG.lock().unwrap();
+// sender.send(UpdateMsg::CheckUpdate)?;
+// Ok(())
+// }
+return Ok(());
+}
+// ---------- [DISABLE UPDATE] End ----------
+================================================================================
+
+文件: src\common.rs
+修改位置: 第 887 行 至 第 915 行
+--------------------------------------------------
+原始代码:
+pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
+    let (request, url) =
+        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    let latest_release_response = create_http_client_async()
+        .post(url)
+        .json(&request)
+        .send()
+        .await?;
+    let bytes = latest_release_response.bytes().await?;
+    let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
+    let response_url = resp.url;
+    let latest_release_version = response_url.rsplit('/').next().unwrap_or_default();
+
+    if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
+        #[cfg(feature = "flutter")]
+        {
+            let mut m = HashMap::new();
+            m.insert("name", "check_software_update_finish");
+            m.insert("url", &response_url);
+            if let Ok(data) = serde_json::to_string(&m) {
+                let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
+            }
+        }
+        *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
+    } else {
+        *SOFTWARE_UPDATE_URL.lock().unwrap() = "".to_string();
+    }
+    Ok(())
+}
+--------------------------------------------------
+修改后代码:
+// ---------- [DISABLE UPDATE] Start ----------
+// pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
+// let (request, url) =
+// hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+// let latest_release_response = create_http_client_async()
+// .post(url)
+// .json(&request)
+// .send()
+// .await?;
+// let bytes = latest_release_response.bytes().await?;
+// let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
+// let response_url = resp.url;
+// let latest_release_version = response_url.rsplit('/').next().unwrap_or_default();
+// 
+// if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
+// #[cfg(feature = "flutter")]
+// {
+// let mut m = HashMap::new();
+// m.insert("name", "check_software_update_finish");
+// m.insert("url", &response_url);
+// if let Ok(data) = serde_json::to_string(&m) {
+// let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
+// }
+// }
+// *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
+// } else {
+// *SOFTWARE_UPDATE_URL.lock().unwrap() = "".to_string();
+// }
+// Ok(())
+// }
+return Ok(());
+}
+// ---------- [DISABLE UPDATE] End ----------
+================================================================================
+
+文件: flutter\lib\desktop\pages\desktop_home_page.dart
+修改位置: 第 431 行 至 第 569 行
+--------------------------------------------------
+原始代码:
+  Widget buildHelpCards(String updateUrl) {
+    if (!bind.isCustomClient() &&
+        updateUrl.isNotEmpty &&
+        !isCardClosed &&
+        bind.mainUriPrefixSync().contains('rustdesk')) {
+      final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
+      String btnText = isToUpdate ? 'Click to update' : 'Click to download';
+      GestureTapCallback onPressed = () async {
+        final Uri url = Uri.parse('https://rustdesk.com/download');
+        await launchUrl(url);
+      };
+      if (isToUpdate) {
+        onPressed = () {
+          handleUpdate(updateUrl);
+        };
+      }
+      return buildInstallCard(
+          "Status",
+          "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
+          btnText,
+          onPressed,
+          closeButton: true);
+    }
+    if (systemError.isNotEmpty) {
+      return buildInstallCard("", systemError, "", () {});
+    }
+
+    if (isWindows && !bind.isDisableInstallation()) {
+      if (!bind.mainIsInstalled()) {
+        return buildInstallCard(
+            "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",
+            () async {
+          await rustDeskWinManager.closeAllSubWindows();
+          bind.mainGotoInstall();
+        });
+      } else if (bind.mainIsInstalledLowerVersion()) {
+        return buildInstallCard(
+            "Status", "Your installation is lower version.", "Click to upgrade",
+            () async {
+          await rustDeskWinManager.closeAllSubWindows();
+          bind.mainUpdateMe();
+        });
+      }
+    } else if (isMacOS) {
+      final isOutgoingOnly = bind.isOutgoingOnly();
+      if (!(isOutgoingOnly || bind.mainIsCanScreenRecording(prompt: false))) {
+        return buildInstallCard("Permissions", "config_screen", "Configure",
+            () async {
+          bind.mainIsCanScreenRecording(prompt: true);
+          watchIsCanScreenRecording = true;
+        }, help: 'Help', link: translate("doc_mac_permission"));
+      } else if (!isOutgoingOnly && !bind.mainIsProcessTrusted(prompt: false)) {
+        return buildInstallCard("Permissions", "config_acc", "Configure",
+            () async {
+          bind.mainIsProcessTrusted(prompt: true);
+          watchIsProcessTrust = true;
+        }, help: 'Help', link: translate("doc_mac_permission"));
+      } else if (!bind.mainIsCanInputMonitoring(prompt: false)) {
+        return buildInstallCard("Permissions", "config_input", "Configure",
+            () async {
+          bind.mainIsCanInputMonitoring(prompt: true);
+          watchIsInputMonitoring = true;
+        }, help: 'Help', link: translate("doc_mac_permission"));
+      } else if (!isOutgoingOnly &&
+          !svcStopped.value &&
+          bind.mainIsInstalled() &&
+          !bind.mainIsInstalledDaemon(prompt: false)) {
+        return buildInstallCard("", "install_daemon_tip", "Install", () async {
+          bind.mainIsInstalledDaemon(prompt: true);
+        });
+      }
+      //// Disable microphone configuration for macOS. We will request the permission when needed.
+      // else if ((await osxCanRecordAudio() !=
+      //     PermissionAuthorizeType.authorized)) {
+      //   return buildInstallCard("Permissions", "config_microphone", "Configure",
+      //       () async {
+      //     osxRequestAudio();
+      //     watchIsCanRecordAudio = true;
+      //   });
+      // }
+    } else if (isLinux) {
+      if (bind.isOutgoingOnly()) {
+        return Container();
+      }
+      final LinuxCards = <Widget>[];
+      if (bind.isSelinuxEnforcing()) {
+        // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
+        final keyShowSelinuxHelpTip = "show-selinux-help-tip";
+        if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
+          LinuxCards.add(buildInstallCard(
+            "Warning",
+            "selinux_tip",
+            "",
+            () async {},
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+            help: 'Help',
+            link:
+                'https://rustdesk.com/docs/en/client/linux/#permissions-issue',
+            closeButton: true,
+            closeOption: keyShowSelinuxHelpTip,
+          ));
+        }
+      }
+      if (bind.mainCurrentIsWayland()) {
+        LinuxCards.add(buildInstallCard(
+            "Warning", "wayland_experiment_tip", "", () async {},
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+            help: 'Help',
+            link: 'https://rustdesk.com/docs/en/client/linux/#x11-required'));
+      } else if (bind.mainIsLoginWayland()) {
+        LinuxCards.add(buildInstallCard("Warning",
+            "Login screen using Wayland is not supported", "", () async {},
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+            help: 'Help',
+            link: 'https://rustdesk.com/docs/en/client/linux/#login-screen'));
+      }
+      if (LinuxCards.isNotEmpty) {
+        return Column(
+          children: LinuxCards,
+        );
+      }
+    }
+    if (bind.isIncomingOnly()) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: OutlinedButton(
+          onPressed: () {
+            SystemNavigator.pop(); // Close the application
+            // https://github.com/flutter/flutter/issues/66631
+            if (isWindows) {
+              exit(0);
+            }
+          },
+          child: Text(translate('Quit')),
+        ),
+      ).marginAll(14);
+    }
+    return Container();
+  }
+--------------------------------------------------
+修改后代码:
+  // ---------- [DISABLE UPDATE] Start ----------
+  // Widget buildHelpCards(String updateUrl) {
+  // if (!bind.isCustomClient() &&
+  // updateUrl.isNotEmpty &&
+  // !isCardClosed &&
+  // bind.mainUriPrefixSync().contains('rustdesk')) {
+  // final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
+  // String btnText = isToUpdate ? 'Click to update' : 'Click to download';
+  // GestureTapCallback onPressed = () async {
+  // final Uri url = Uri.parse('https://rustdesk.com/download');
+  // await launchUrl(url);
+  // };
+  // if (isToUpdate) {
+  // onPressed = () {
+  // handleUpdate(updateUrl);
+  // };
+  // }
+  // return buildInstallCard(
+  // "Status",
+  // "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
+  // btnText,
+  // onPressed,
+  // closeButton: true);
+  // }
+  // if (systemError.isNotEmpty) {
+  // return buildInstallCard("", systemError, "", () {});
+  // }
+  // 
+  // if (isWindows && !bind.isDisableInstallation()) {
+  // if (!bind.mainIsInstalled()) {
+  // return buildInstallCard(
+  // "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",
+  // () async {
+  // await rustDeskWinManager.closeAllSubWindows();
+  // bind.mainGotoInstall();
+  // });
+  // } else if (bind.mainIsInstalledLowerVersion()) {
+  // return buildInstallCard(
+  // "Status", "Your installation is lower version.", "Click to upgrade",
+  // () async {
+  // await rustDeskWinManager.closeAllSubWindows();
+  // bind.mainUpdateMe();
+  // });
+  // }
+  // } else if (isMacOS) {
+  // final isOutgoingOnly = bind.isOutgoingOnly();
+  // if (!(isOutgoingOnly || bind.mainIsCanScreenRecording(prompt: false))) {
+  // return buildInstallCard("Permissions", "config_screen", "Configure",
+  // () async {
+  // bind.mainIsCanScreenRecording(prompt: true);
+  // watchIsCanScreenRecording = true;
+  // }, help: 'Help', link: translate("doc_mac_permission"));
+  // } else if (!isOutgoingOnly && !bind.mainIsProcessTrusted(prompt: false)) {
+  // return buildInstallCard("Permissions", "config_acc", "Configure",
+  // () async {
+  // bind.mainIsProcessTrusted(prompt: true);
+  // watchIsProcessTrust = true;
+  // }, help: 'Help', link: translate("doc_mac_permission"));
+  // } else if (!bind.mainIsCanInputMonitoring(prompt: false)) {
+  // return buildInstallCard("Permissions", "config_input", "Configure",
+  // () async {
+  // bind.mainIsCanInputMonitoring(prompt: true);
+  // watchIsInputMonitoring = true;
+  // }, help: 'Help', link: translate("doc_mac_permission"));
+  // } else if (!isOutgoingOnly &&
+  // !svcStopped.value &&
+  // bind.mainIsInstalled() &&
+  // !bind.mainIsInstalledDaemon(prompt: false)) {
+  // return buildInstallCard("", "install_daemon_tip", "Install", () async {
+  // bind.mainIsInstalledDaemon(prompt: true);
+  // });
+  // }
+  // //// Disable microphone configuration for macOS. We will request the permission when needed.
+  // // else if ((await osxCanRecordAudio() !=
+  // //     PermissionAuthorizeType.authorized)) {
+  // //   return buildInstallCard("Permissions", "config_microphone", "Configure",
+  // //       () async {
+  // //     osxRequestAudio();
+  // //     watchIsCanRecordAudio = true;
+  // //   });
+  // // }
+  // } else if (isLinux) {
+  // if (bind.isOutgoingOnly()) {
+  // return Container();
+  // }
+  // final LinuxCards = <Widget>[];
+  // if (bind.isSelinuxEnforcing()) {
+  // // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
+  // final keyShowSelinuxHelpTip = "show-selinux-help-tip";
+  // if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
+  // LinuxCards.add(buildInstallCard(
+  // "Warning",
+  // "selinux_tip",
+  // "",
+  // () async {},
+  // marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+  // help: 'Help',
+  // link:
+  // 'https://rustdesk.com/docs/en/client/linux/#permissions-issue',
+  // closeButton: true,
+  // closeOption: keyShowSelinuxHelpTip,
+  // ));
+  // }
+  // }
+  // if (bind.mainCurrentIsWayland()) {
+  // LinuxCards.add(buildInstallCard(
+  // "Warning", "wayland_experiment_tip", "", () async {},
+  // marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+  // help: 'Help',
+  // link: 'https://rustdesk.com/docs/en/client/linux/#x11-required'));
+  // } else if (bind.mainIsLoginWayland()) {
+  // LinuxCards.add(buildInstallCard("Warning",
+  // "Login screen using Wayland is not supported", "", () async {},
+  // marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+  // help: 'Help',
+  // link: 'https://rustdesk.com/docs/en/client/linux/#login-screen'));
+  // }
+  // if (LinuxCards.isNotEmpty) {
+  // return Column(
+  // children: LinuxCards,
+  // );
+  // }
+  // }
+  // if (bind.isIncomingOnly()) {
+  // return Align(
+  // alignment: Alignment.centerRight,
+  // child: OutlinedButton(
+  // onPressed: () {
+  // SystemNavigator.pop(); // Close the application
+  // // https://github.com/flutter/flutter/issues/66631
+  // if (isWindows) {
+  // exit(0);
+  // }
+  // },
+  // child: Text(translate('Quit')),
+  // ),
+  // ).marginAll(14);
+  // }
+  // return Container();
+  // }
+  return Container();
+  }
+  // ---------- [DISABLE UPDATE] End ----------
+================================================================================
+
+文件: src\flutter_ffi.rs
+修改位置: 第 2492 行 至 第 2594 行
+--------------------------------------------------
+原始代码:
+pub fn main_set_common(_key: String, _value: String) {
+    #[cfg(target_os = "windows")]
+    if _key == "install-printer" && crate::platform::is_win_10_or_greater() {
+        std::thread::spawn(move || {
+            let (success, msg) = match remote_printer::install_update_printer(&get_app_name()) {
+                Ok(_) => (true, "".to_owned()),
+                Err(e) => {
+                    let err = e.to_string();
+                    log::error!("Failed to install/update rd printer: {}", &err);
+                    (false, err)
+                }
+            };
+            if success {
+                // Use `ipc` to notify the server process to update the install option in the registry.
+                // Because `install_update_printer()` may prompt for permissions, there is no need to prompt again here.
+                if let Err(e) = crate::ipc::set_install_option(
+                    crate::platform::REG_NAME_INSTALL_PRINTER.to_string(),
+                    "1".to_string(),
+                ) {
+                    log::error!("Failed to set install printer option: {}", e);
+                }
+            }
+            let data = HashMap::from([
+                ("name", serde_json::json!("install-printer-res")),
+                ("success", serde_json::json!(success)),
+                ("msg", serde_json::json!(msg)),
+            ]);
+            let _res = flutter::push_global_event(
+                flutter::APP_TYPE_MAIN,
+                serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+            );
+        });
+    }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        use crate::updater::get_download_file_from_url;
+        if _key == "download-new-version" {
+            let download_url = _value.clone();
+            let event_key = "download-new-version".to_owned();
+            let data = if let Some(download_file) = get_download_file_from_url(&download_url) {
+                std::fs::remove_file(&download_file).ok();
+                match crate::hbbs_http::downloader::download_file(
+                    download_url,
+                    Some(PathBuf::from(download_file)),
+                    Some(Duration::from_secs(3)),
+                ) {
+                    Ok(id) => HashMap::from([("name", event_key), ("id", id)]),
+                    Err(e) => HashMap::from([("name", event_key), ("error", e.to_string())]),
+                }
+            } else {
+                HashMap::from([
+                    ("name", event_key),
+                    ("error", "Invalid download url".to_string()),
+                ])
+            };
+            let _res = flutter::push_global_event(
+                flutter::APP_TYPE_MAIN,
+                serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+            );
+        } else if _key == "update-me" {
+            if let Some(new_version_file) = get_download_file_from_url(&_value) {
+                log::debug!(
+                    "New version file is downloaed, update begin, {:?}",
+                    new_version_file.to_str()
+                );
+                if let Some(f) = new_version_file.to_str() {
+                    // 1.4.0 does not support "--update"
+                    // But we can assume that the new version supports it.
+                    #[cfg(target_os = "windows")]
+                    if f.ends_with(".exe") {
+                        if let Err(e) =
+                            crate::platform::run_exe_in_cur_session(f, vec!["--update"], false)
+                        {
+                            log::error!("Failed to run the update exe: {}", e);
+                        }
+                    } else if f.ends_with(".msi") {
+                        if let Err(e) = crate::platform::update_me_msi(f, false) {
+                            log::error!("Failed to run the update msi: {}", e);
+                        }
+                    } else {
+                        // unreachable!()
+                    }
+                    #[cfg(target_os = "macos")]
+                    match crate::platform::update_to(f) {
+                        Ok(_) => {
+                            log::info!("Update successfully!");
+                        }
+                        Err(e) => {
+                            log::error!("Failed to update to new version, {}", e);
+                        }
+                    }
+                    fs::remove_file(f).ok();
+                }
+            }
+        }
+    }
+
+    if _key == "remove-downloader" {
+        crate::hbbs_http::downloader::remove(&_value);
+    } else if _key == "cancel-downloader" {
+        crate::hbbs_http::downloader::cancel(&_value);
+    }
+}
+--------------------------------------------------
+修改后代码:
+// ---------- [DISABLE UPDATE] Start ----------
+// pub fn main_set_common(_key: String, _value: String) {
+// #[cfg(target_os = "windows")]
+// if _key == "install-printer" && crate::platform::is_win_10_or_greater() {
+// std::thread::spawn(move || {
+// let (success, msg) = match remote_printer::install_update_printer(&get_app_name()) {
+// Ok(_) => (true, "".to_owned()),
+// Err(e) => {
+// let err = e.to_string();
+// log::error!("Failed to install/update rd printer: {}", &err);
+// (false, err)
+// }
+// };
+// if success {
+// // Use `ipc` to notify the server process to update the install option in the registry.
+// // Because `install_update_printer()` may prompt for permissions, there is no need to prompt again here.
+// if let Err(e) = crate::ipc::set_install_option(
+// crate::platform::REG_NAME_INSTALL_PRINTER.to_string(),
+// "1".to_string(),
+// ) {
+// log::error!("Failed to set install printer option: {}", e);
+// }
+// }
+// let data = HashMap::from([
+// ("name", serde_json::json!("install-printer-res")),
+// ("success", serde_json::json!(success)),
+// ("msg", serde_json::json!(msg)),
+// ]);
+// let _res = flutter::push_global_event(
+// flutter::APP_TYPE_MAIN,
+// serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+// );
+// });
+// }
+// #[cfg(any(target_os = "windows", target_os = "macos"))]
+// {
+// use crate::updater::get_download_file_from_url;
+// if _key == "download-new-version" {
+// let download_url = _value.clone();
+// let event_key = "download-new-version".to_owned();
+// let data = if let Some(download_file) = get_download_file_from_url(&download_url) {
+// std::fs::remove_file(&download_file).ok();
+// match crate::hbbs_http::downloader::download_file(
+// download_url,
+// Some(PathBuf::from(download_file)),
+// Some(Duration::from_secs(3)),
+// ) {
+// Ok(id) => HashMap::from([("name", event_key), ("id", id)]),
+// Err(e) => HashMap::from([("name", event_key), ("error", e.to_string())]),
+// }
+// } else {
+// HashMap::from([
+// ("name", event_key),
+// ("error", "Invalid download url".to_string()),
+// ])
+// };
+// let _res = flutter::push_global_event(
+// flutter::APP_TYPE_MAIN,
+// serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+// );
+// } else if _key == "update-me" {
+// if let Some(new_version_file) = get_download_file_from_url(&_value) {
+// log::debug!(
+// "New version file is downloaed, update begin, {:?}",
+// new_version_file.to_str()
+// );
+// if let Some(f) = new_version_file.to_str() {
+// // 1.4.0 does not support "--update"
+// // But we can assume that the new version supports it.
+// #[cfg(target_os = "windows")]
+// if f.ends_with(".exe") {
+// if let Err(e) =
+// crate::platform::run_exe_in_cur_session(f, vec!["--update"], false)
+// {
+// log::error!("Failed to run the update exe: {}", e);
+// }
+// } else if f.ends_with(".msi") {
+// if let Err(e) = crate::platform::update_me_msi(f, false) {
+// log::error!("Failed to run the update msi: {}", e);
+// }
+// } else {
+// // unreachable!()
+// }
+// #[cfg(target_os = "macos")]
+// match crate::platform::update_to(f) {
+// Ok(_) => {
+// log::info!("Update successfully!");
+// }
+// Err(e) => {
+// log::error!("Failed to update to new version, {}", e);
+// }
+// }
+// fs::remove_file(f).ok();
+// }
+// }
+// }
+// }
+// 
+// if _key == "remove-downloader" {
+// crate::hbbs_http::downloader::remove(&_value);
+// } else if _key == "cancel-downloader" {
+// crate::hbbs_http::downloader::cancel(&_value);
+// }
+// }
+if _key == "download-new-version" || _key == "update-me" {
+    return;
+}
+}
+// ---------- [DISABLE UPDATE] End ----------
+================================================================================
+
