@@ -885,37 +885,9 @@ pub fn check_software_update() {
 
 #[tokio::main(flavor = "current_thread")]
 // ---------- [DISABLE UPDATE] Start ----------
-// pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
-    // let (request, url) =
-        // hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
-    // let latest_release_response = create_http_client_async()
-        // .post(url)
-        // .json(&request)
-        // .send()
-        // .await?;
-    // let bytes = latest_release_response.bytes().await?;
-    // let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
-    // let response_url = resp.url;
-    // let latest_release_version = response_url.rsplit('/').next().unwrap_or_default();
-
-// 
-    // if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
-        // #[cfg(feature = "flutter")]
-        // {
-            // let mut m = HashMap::new();
-            // m.insert("name", "check_software_update_finish");
-            // m.insert("url", &response_url);
-            // if let Ok(data) = serde_json::to_string(&m) {
-                // let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
-            // }
-        // }
-        // *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
-    // } else {
-        // *SOFTWARE_UPDATE_URL.lock().unwrap() = "".to_string();
-    // }
-    // Ok(())
-// }
-return Ok(());
+pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
+    // 禁用更新检查
+    Ok(())
 }
 // ---------- [DISABLE UPDATE] End ----------
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
