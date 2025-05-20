@@ -44,7 +44,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_change_tip", "מותרים רק תווים a-z, A-Z, 0-9, מקף (-) וקו תחתון (_). התו הראשון חייב להיות אות (a-z, A-Z). אורך בין 6 ל-16 תווים."),
         ("Website", "דף הבית"),
         ("About", "אודות"),
-        ("Slogan_tip", "נוצר בלב בעולם הכאוטי הזה!"),
+        ("Slogan_tip", "נוצר באהבה בעולם הכאוטי הזה!"),
         ("Privacy Statement", "הצהרת פרטיות"),
         ("Mute", "השתק"),
         ("Build Date", "תאריך בנייה"),
@@ -389,7 +389,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This PC", "מחשב זה"),
         ("or", "או"),
         ("Continue with", "המשך עם"),
-        ("Elevate", "הפעל הרשאות מורחבות")
+        ("Elevate", "הפעל הרשאות מורחבות"),
         ("Zoom cursor", "הגדל סמן"),
         ("Accept sessions via password", "קבל הפעלות באמצעות סיסמה"),
         ("Accept sessions via click", "קבל הפעלות באמצעות לחיצה"),
@@ -401,7 +401,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "בקשת גישה למכשיר שלך"),
         ("Hide connection management window", "הסתר חלון ניהול חיבורים"),
         ("hide_cm_tip", "אפשר הסתרה רק אם מקבלים הפעלות דרך סיסמה ומשתמשים בסיסמה קבועה"),
-        ("wayland_experiment_tip", "תמיכה ב-Wayland נמצאת בשלב ניסיוני, אנא השתמש ב-X11 אם אתה זקוק לגישה ללא ליווי מהצד המרוחק")
+        ("wayland_experiment_tip", "תמיכה ב-Wayland נמצאת בשלב ניסיוני, אנא השתמש ב-X11 אם אתה זקוק לגישה ללא ליווי מהצד המרוחק"),
         ("Right click to select tabs", "לחץ לחיצה ימנית כדי לבחור לשוניות"),
         ("Skipped", "דולג"),
         ("Add to address book", "הוסף לספר הכתובות"),
@@ -414,16 +414,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Always use software rendering", "השתמש תמיד בעיבוד תוכנה"),
         ("config_input", "כדי לשלוט בשולחן העבודה המרוחק באמצעות מקלדת, עליך להעניק ל-RustDesk הרשאות \"מעקב קלט\"."),
         ("config_microphone", "כדי לדבר מרחוק, עליך להעניק ל-RustDesk הרשאות \"הקלטת שמע\"."),
-        ("request_elevation_tip", "אם יש מישהו בצד המרוחק, ניתן לבקש העלאת הרשאות")
+        ("request_elevation_tip", "אם יש מישהו בצד המרוחק, ניתן לבקש העלאת הרשאות"),
         ("Wait", "המתן"),
         ("Elevation Error", "שגיאת העלאת הרשאות"),
         ("Ask the remote user for authentication", "בקש מהמשתמש המרוחק אימות"),
         ("Choose this if the remote account is administrator", "בחר זאת אם החשבון המרוחק הוא מנהל מערכת"),
         ("Transmit the username and password of administrator", "שלח את שם המשתמש והסיסמה של מנהל המערכת"),
-        ("still_click_uac_tip", "עדיין נדרש מהמשתמש המרוחק לאשר את חלון ה-UAC של RustDesk")
+        ("still_click_uac_tip", "עדיין נדרש מהמשתמש המרוחק לאשר את חלון ה-UAC של RustDesk"),
         ("Request Elevation", "בקש העלאת הרשאות"),
-        ("wait_accept_uac_tip", "אנא המתן שהמשתמש המרוחק יאשר את חלון ה-UAC")
-        ("Elevate successfully", "ההרשאות הורחבו בהצלחה")
+        ("wait_accept_uac_tip", "אנא המתן שהמשתמש המרוחק יאשר את חלון ה-UAC"),
+        ("Elevate successfully", "ההרשאות הורחבו בהצלחה"),
         ("uppercase", "אותיות גדולות"),
         ("lowercase", "אותיות קטנות"),
         ("digit", "ספרה"),
@@ -433,7 +433,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Medium", "בינוני"),
         ("Strong", "חזק"),
         ("Switch Sides", "החלף צדדים"),
-        ("Please confirm if you want to share your desktop?", "האם לשתף את שולחן העבודה שלך?")
+        ("Please confirm if you want to share your desktop?", "האם לשתף את שולחן העבודה שלך?"),
         ("Display", "תצוגה"),
         ("Default View Style", "סגנון תצוגה ברירת מחדל"),
         ("Default Scroll Style", "סגנון גלילה ברירת מחדל"),
@@ -446,7 +446,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "שיחה קולית"),
         ("Text chat", "שיחת טקסט"),
         ("Stop voice call", "הפסק שיחה קולית"),
-        ("relay_hint_tip", "ייתכן שלא ניתן להתחבר ישירות. נסה להתחבר דרך ממסר. כדי להשתמש בממסר כבר מהניסיון הראשון, הוסף את הסיומת /r למזהה או בחר \"התחבר תמיד דרך ממסר\" בכרטיס ההפעלות האחרונות, אם קיים.")
+        ("relay_hint_tip", "ייתכן שלא ניתן להתחבר ישירות. נסה להתחבר דרך ממסר. כדי להשתמש בממסר כבר מהניסיון הראשון, הוסף את הסיומת /r למזהה או בחר \"התחבר תמיד דרך ממסר\" בכרטיס ההפעלות האחרונות, אם קיים."),
         ("Reconnect", "התחברות מחדש"),
         ("Codec", "קודק"),
         ("Resolution", "רזולוציה"),
@@ -473,7 +473,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("login_linux_tip", "עליך להתחבר לחשבון Linux מרוחק כדי לאפשר פעילות שולחן עבודה X"),
         ("verify_rustdesk_password_tip", "אמת סיסמת RustDesk"),
         ("remember_account_tip", "זכור חשבון זה"),
-        ("os_account_desk_tip", "חשבון זה משמש להתחברות למערכת ההפעלה המרוחקת ולהפעלת שולחן עבודה במצב לא מקוון")
+        ("os_account_desk_tip", "חשבון זה משמש להתחברות למערכת ההפעלה המרוחקת ולהפעלת שולחן עבודה במצב לא מקוון"),
         ("OS Account", "חשבון מערכת הפעלה"),
         ("another_user_login_title_tip", "משתמש אחר כבר התחבר"),
         ("another_user_login_text_tip", "נתק"),
@@ -501,7 +501,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_custom_tip", "רזולוציה מותאמת אישית"),
         ("Collapse toolbar", "מזער סרגל כלים"),
         ("Accept and Elevate", "אשר והפעל הרשאות מורחבות"),
-        ("accept_and_elevate_btn_tooltip", "קבל את החיבור והפעל הרשאות מורחבות (UAC)")
+        ("accept_and_elevate_btn_tooltip", "קבל את החיבור והפעל הרשאות מורחבות (UAC)"),
         ("clipboard_wait_response_timeout_tip", "המתנה לתגובת העתקה הסתיימה בזמן."),
         ("Incoming connection", "חיבור נכנס"),
         ("Outgoing connection", "חיבור יוצא"),
