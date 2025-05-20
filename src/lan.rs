@@ -1,7 +1,7 @@
-use hbb_common::config::Config;
 use hbb_common::{
     allow_err,
     anyhow::bail,
+    config::Config,
     config::{self, RENDEZVOUS_PORT},
     log,
     protobuf::Message as _,
@@ -10,7 +10,7 @@ use hbb_common::{
         self,
         sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     },
-    ResultType,
+    whoami, ResultType,
 };
 
 use std::{

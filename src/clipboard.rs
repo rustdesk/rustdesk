@@ -463,7 +463,7 @@ pub fn is_support_multi_clipboard(peer_version: &str, peer_platform: &str) -> bo
     if get_version_number(peer_version) < get_version_number("1.3.0") {
         return false;
     }
-    if ["", &whoami::Platform::Ios.to_string()].contains(&peer_platform) {
+    if ["", &hbb_common::whoami::Platform::Ios.to_string()].contains(&peer_platform) {
         return false;
     }
     if "Android" == peer_platform && get_version_number(peer_version) < get_version_number("1.3.3")

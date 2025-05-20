@@ -325,6 +325,7 @@ class MyIdMenu: Reactor.Component {
                 <li #custom-server>{translate('ID/Relay Server')}</li>
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
+                { false && <li #allow-websocket><span>{svg_checkmark}</span>{translate('Use WebSocket')}</li> }
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
                 {is_win && handler.is_installed() ? <ShareRdp /> : ""}
@@ -338,6 +339,7 @@ class MyIdMenu: Reactor.Component {
                 <div .separator />
                 <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <Languages />
+                <li #allow-auto-update><span>{svg_checkmark}</span>{translate('Auto update')}</li> 
                 <li #about>{translate('About')} {" "}{handler.get_app_name()}</li>
             </menu>
         </popup>;

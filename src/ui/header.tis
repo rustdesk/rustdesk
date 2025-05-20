@@ -178,7 +178,7 @@ class Header: Reactor.Component {
         if (handler.version_cmp(pi.version, '1.2.4') < 0) {
             is_file_copy_paste_supported = is_win && pi.platform == "Windows";
         } else {
-            is_file_copy_paste_supported = handler.has_file_clipboard() && pi.platform_additions.has_file_clipboard;
+            is_file_copy_paste_supported = handler.has_file_clipboard() && pi.platform_additions?.has_file_clipboard;
         }
 
         return <popup>
@@ -230,6 +230,7 @@ class Header: Reactor.Component {
                 {restart_enabled && (pi.platform == "Linux" || pi.platform == "Windows" || pi.platform == "Mac OS") ? <li #restart_remote_device>{translate('Restart remote device')}</li> : ""}
                 {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
                 {keyboard_enabled && pi.platform == "Windows" && pi.sas_enabled ? <li #block-input>{translate("Block user input")}</li> : ""}
+                {handler.is_screenshot_supported() ? <li #take-screenshot>{translate('Take screenshot')}</li> : "" }
                 <li #refresh>{translate('Refresh')}</li>
             </menu>
         </popup>;
@@ -375,6 +376,10 @@ class Header: Reactor.Component {
 
     event click $(#lock-screen) {
         handler.lock_screen();
+    }
+
+    event click $(#take-screenshot) {
+        handler.take_screenshot(pi.current_display, "");
     }
     
     event click $(#refresh) {
@@ -543,6 +548,26 @@ handler.setCurrentDisplay = function(v) {
     header.update();
     if (is_port_forward) {
         view.windowState = View.WINDOW_MINIMIZED;
+    }
+}
+
+handler.screenshot = function(msg) {
+    if (msg) {
+        msgbox(
+            "custom-nocancel-nook-hasclose-error",
+            translate("Take screenshot"),
+            msg,
+            "",
+            function() {}
+        );
+    } else {
+        msgbox(
+            "custom-take-screenshot-nocancel-nook",
+            translate("Take screenshot"),
+            translate("screenshot-action-tip"),
+            "",
+            function() {}
+        );
     }
 }
 

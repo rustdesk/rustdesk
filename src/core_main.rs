@@ -1,4 +1,4 @@
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use crate::client::translate;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -78,13 +78,14 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     if args.is_empty() {
         #[cfg(target_os = "linux")]
-        let is_server_running = crate::check_process("--server", false);
+        let should_check_start_tray = crate::check_process("--server", false);
         // We can use `crate::check_process("--server", false)` on Windows.
         // Because `--server` process is the System user's process. We can't get the arguments in `check_process()`.
         // We can assume that self service running means the server is also running on Windows.
         #[cfg(target_os = "windows")]
-        let is_server_running = crate::platform::is_self_service_running();
-        if is_server_running && !crate::check_process("--tray", true) {
+        let should_check_start_tray = crate::platform::is_self_service_running()
+            && crate::platform::is_cur_exe_the_installed();
+        if should_check_start_tray && !crate::check_process("--tray", true) {
             #[cfg(target_os = "linux")]
             hbb_common::allow_err!(crate::platform::check_autostart_config());
             hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
@@ -189,6 +190,26 @@ pub fn core_main() -> Option<Vec<String>> {
                     log::error!("Failed to uninstall: {}", err);
                 }
                 return None;
+            } else if args[0] == "--update" {
+                if config::is_disable_installation() {
+                    return None;
+                }
+                let res = platform::update_me(false);
+                let text = match res {
+                    Ok(_) => translate("Update successfully!".to_string()),
+                    Err(err) => {
+                        log::error!("Failed with error: {err}");
+                        translate("Update failed!".to_string())
+                    }
+                };
+                Toast::new(Toast::POWERSHELL_APP_ID)
+                    .title(&config::APP_NAME.read().unwrap())
+                    .text1(&text)
+                    .sound(Some(Sound::Default))
+                    .duration(Duration::Short)
+                    .show()
+                    .ok();
+                return None;
             } else if args[0] == "--after-install" {
                 if let Err(err) = platform::run_after_install() {
                     log::error!("Failed to after-install: {}", err);
@@ -247,6 +268,43 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(
                     crate::virtual_display_manager::amyuni_idd::uninstall_driver()
                 );
+                return None;
+            } else if args[0] == "--install-remote-printer" {
+                #[cfg(windows)]
+                if crate::platform::is_win_10_or_greater() {
+                    match remote_printer::install_update_printer(&crate::get_app_name()) {
+                        Ok(_) => {
+                            log::info!("Remote printer installed/updated successfully");
+                        }
+                        Err(e) => {
+                            log::error!("Failed to install/update the remote printer: {}", e);
+                        }
+                    }
+                } else {
+                    log::error!("Win10 or greater required!");
+                }
+                return None;
+            } else if args[0] == "--uninstall-remote-printer" {
+                #[cfg(windows)]
+                if crate::platform::is_win_10_or_greater() {
+                    remote_printer::uninstall_printer(&crate::get_app_name());
+                    log::info!("Remote printer uninstalled");
+                }
+                return None;
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            use crate::platform;
+            if args[0] == "--update" {
+                let _text = match platform::update_me() {
+                    Ok(_) => {
+                        log::info!("{}", translate("Update successfully!".to_string()));
+                    }
+                    Err(err) => {
+                        log::error!("Update failed with error: {err}");
+                    }
+                };
                 return None;
             }
         }
@@ -432,6 +490,14 @@ pub fn core_main() -> Option<Vec<String>> {
                     if pos < max {
                         address_book_tag = Some(args[pos + 1].to_owned());
                     }
+                    let mut address_book_alias = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--address_book_alias")
+                        .unwrap_or(max);
+                    if pos < max {
+                        address_book_alias = Some(args[pos + 1].to_owned());
+                    }
                     let mut device_group_name = None;
                     let pos = args
                         .iter()
@@ -464,6 +530,9 @@ pub fn core_main() -> Option<Vec<String>> {
                             body["address_book_name"] = serde_json::json!(name);
                             if let Some(name) = address_book_tag {
                                 body["address_book_tag"] = serde_json::json!(name);
+                            }
+                            if let Some(name) = address_book_alias {
+                                body["address_book_alias"] = serde_json::json!(name);
                             }
                         }
                         if let Some(name) = device_group_name {
@@ -592,7 +661,8 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     let mut param_array = vec![];
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward" | "--rdp" => {
+            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward"
+            | "--rdp" => {
                 authority = Some((&arg.to_string()[2..]).to_owned());
                 id = args.next();
             }

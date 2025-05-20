@@ -34,6 +34,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../common.dart';
 import '../utils/image.dart' as img;
@@ -118,6 +119,8 @@ class FfiModel with ChangeNotifier {
   Timer? waitForImageTimer;
   RxBool waitForFirstImage = true.obs;
   bool isRefreshing = false;
+
+  Timer? timerScreenshot;
 
   Rect? get rect => _rect;
   bool get isOriginalResolutionSet =>
@@ -216,6 +219,7 @@ class FfiModel with ChangeNotifier {
     _timer = null;
     clearPermissions();
     waitForImageTimer?.cancel();
+    timerScreenshot?.cancel();
   }
 
   setConnectionType(String peerId, bool secure, bool direct) {
@@ -414,10 +418,80 @@ class FfiModel with ChangeNotifier {
         }
       } else if (name == "printer_request") {
         _handlePrinterRequest(evt, sessionId, peerId);
+      } else if (name == 'screenshot') {
+        _handleScreenshot(evt, sessionId, peerId);
       } else {
         debugPrint('Event is not handled in the fixed branch: $name');
       }
     };
+  }
+
+  _handleScreenshot(
+      Map<String, dynamic> evt, SessionID sessionId, String peerId) {
+    timerScreenshot?.cancel();
+    timerScreenshot = null;
+    final msg = evt['msg'] ?? '';
+    final msgBoxType = 'custom-nook-nocancel-hasclose';
+    final msgBoxTitle = 'Take screenshot';
+    final dialogManager = parent.target!.dialogManager;
+    if (msg.isNotEmpty) {
+      msgBox(sessionId, msgBoxType, msgBoxTitle, msg, '', dialogManager);
+    } else {
+      final msgBoxText = 'screenshot-action-tip';
+
+      close() {
+        dialogManager.dismissAll();
+      }
+
+      saveAs() {
+        close();
+        Future.delayed(Duration.zero, () async {
+          final ts = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          String? outputFile = await FilePicker.platform.saveFile(
+            dialogTitle: '${translate('Save as')}...',
+            fileName: 'screenshot_$ts.png',
+            allowedExtensions: ['png'],
+            type: FileType.custom,
+          );
+          if (outputFile == null) {
+            bind.sessionHandleScreenshot(sessionId: sessionId, action: '2');
+          } else {
+            final res = await bind.sessionHandleScreenshot(
+                sessionId: sessionId, action: '0:$outputFile');
+            if (res.isNotEmpty) {
+              msgBox(sessionId, 'custom-nook-nocancel-hasclose-error',
+                  'Take screenshot', res, '', dialogManager);
+            }
+          }
+        });
+      }
+
+      copyToClipboard() {
+        bind.sessionHandleScreenshot(sessionId: sessionId, action: '1');
+        close();
+      }
+
+      cancel() {
+        bind.sessionHandleScreenshot(sessionId: sessionId, action: '2');
+        close();
+      }
+
+      final List<Widget> buttons = [
+        dialogButton('${translate('Save as')}...', onPressed: saveAs),
+        dialogButton('Copy to clipboard', onPressed: copyToClipboard),
+        dialogButton('Cancel', onPressed: cancel),
+      ];
+      dialogManager.dismissAll();
+      dialogManager.show(
+        (setState, close, context) => CustomAlertDialog(
+          title: null,
+          content: SelectionArea(
+              child: msgboxContent(msgBoxType, msgBoxTitle, msgBoxText)),
+          actions: buttons,
+        ),
+        tag: '$msgBoxType-$msgBoxTitle-$msgBoxTitle',
+      );
+    }
   }
 
   _handlePrinterRequest(
@@ -451,7 +525,7 @@ class FfiModel with ChangeNotifier {
         if (saveSettings.value || dontShowAgain.value) {
           bind.mainSetLocalOption(key: kKeyPrinterSelected, value: printerName);
           bind.mainSetLocalOption(
-              key: kKeyPrinterIncommingJobAction,
+              key: kKeyPrinterIncomingJobAction,
               value: defaultOrSelectedGroupValue.value);
         }
         if (dontShowAgain.value) {
@@ -463,7 +537,7 @@ class FfiModel with ChangeNotifier {
       onCancel() {
         if (dontShowAgain.value) {
           bind.mainSetLocalOption(
-              key: kKeyPrinterIncommingJobAction,
+              key: kKeyPrinterIncomingJobAction,
               value: kValuePrinterIncomingJobDismiss);
         }
         close();
@@ -2915,6 +2989,10 @@ class FFI {
     if (isDesktop && connType == ConnType.viewCamera) {
       // FIXME: currently the default 0 is not used.
       textureModel.updateCurrentDisplay(display ?? 0);
+    }
+
+    if (isDesktop) {
+      inputModel.updateTrackpadSpeed();
     }
 
     // CAUTION: `sessionStart()` and `sessionStartWithDisplays()` are an async functions.

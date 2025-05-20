@@ -139,6 +139,7 @@ const String kOptionCurrentAbName = "current-ab-name";
 const String kOptionEnableConfirmClosingTabs = "enable-confirm-closing-tabs";
 const String kOptionAllowAlwaysSoftwareRender = "allow-always-software-render";
 const String kOptionEnableCheckUpdate = "enable-check-update";
+const String kOptionAllowAutoUpdate = "allow-auto-update";
 const String kOptionAllowLinuxHeadless = "allow-linux-headless";
 const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
 const String kOptionStopService = "stop-service";
@@ -146,9 +147,14 @@ const String kOptionDirectxCapture = "enable-directx-capture";
 const String kOptionAllowRemoteCmModification = "allow-remote-cm-modification";
 const String kOptionEnableTrustedDevices = "enable-trusted-devices";
 
+// network options
+const String kOptionAllowWebSocket = "allow-websocket";
+
 // buildin opitons
 const String kOptionHideServerSetting = "hide-server-settings";
 const String kOptionHideProxySetting = "hide-proxy-settings";
+const String kOptionHideWebSocketSetting = "hide-websocket-settings";
+const String kOptionHideRemotePrinterSetting = "hide-remote-printer-settings";
 const String kOptionHideSecuritySetting = "hide-security-settings";
 const String kOptionHideNetworkSetting = "hide-network-settings";
 const String kOptionRemovePresetPasswordWarning =
@@ -220,7 +226,14 @@ const double kDefaultQuality = 50;
 const double kMaxQuality = 100;
 const double kMaxMoreQuality = 2000;
 
-const String kKeyPrinterIncommingJobAction = 'printer-incomming-job-action';
+// trackpad speed
+const String kKeyTrackpadSpeed = 'trackpad-speed';
+const int kMinTrackpadSpeed = 10;
+const int kDefaultTrackpadSpeed = 100;
+const int kMaxTrackpadSpeed = 1000;
+
+// incomming (should be incoming) is kept, because change it will break the previous setting.
+const String kKeyPrinterIncomingJobAction = 'printer-incomming-job-action';
 const String kValuePrinterIncomingJobDismiss = 'dismiss';
 const String kValuePrinterIncomingJobDefault = '';
 const String kValuePrinterIncomingJobSelected = 'selected';

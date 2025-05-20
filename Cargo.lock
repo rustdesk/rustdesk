@@ -3111,6 +3111,7 @@ dependencies = [
  "tungstenite",
  "url",
  "uuid",
+ "whoami",
  "winapi 0.3.9",
  "zstd 0.13.1",
 ]
@@ -4253,7 +4254,7 @@ dependencies = [
 [[package]]
 name = "nokhwa"
 version = "0.10.7"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "flume",
  "image 0.25.1",
@@ -4268,7 +4269,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-linux"
 version = "0.1.1"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "nokhwa-core",
  "v4l",
@@ -4277,7 +4278,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-macos"
 version = "0.2.2"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "block",
  "cocoa-foundation",
@@ -4293,7 +4294,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-windows"
 version = "0.4.2"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "dlopen",
  "lazy_static",
@@ -4305,7 +4306,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-core"
 version = "0.1.5"
-source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#48963f514bb7f1ee5db44d38dfc88027029de5e6"
+source = "git+https://github.com/rustdesk-org/nokhwa.git?branch=fix_from_raw_parts#744dea9d277dfb18954cef389973c622dd15a85e"
 dependencies = [
  "bytes",
  "image 0.25.1",
@@ -5723,7 +5724,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots",
+ "webpki-roots 0.25.4",
  "winreg 0.50.0",
 ]
 
@@ -5857,7 +5858,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.3.9"
+version = "1.4.0"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -5946,7 +5947,6 @@ dependencies = [
  "uuid",
  "virtual_display",
  "wallpaper",
- "whoami",
  "winapi 0.3.9",
  "windows 0.61.1",
  "windows-service",
@@ -5960,7 +5960,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.3.9"
+version = "1.4.0"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
@@ -7051,8 +7051,15 @@ checksum = "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
 dependencies = [
  "futures-util",
  "log",
+ "native-tls",
+ "rustls 0.23.26",
+ "rustls-native-certs 0.8.1",
+ "rustls-pki-types",
  "tokio",
+ "tokio-native-tls",
+ "tokio-rustls 0.26.0",
  "tungstenite",
+ "webpki-roots 0.26.9",
 ]
 
 [[package]]
@@ -7253,10 +7260,15 @@ dependencies = [
  "http 1.3.1",
  "httparse",
  "log",
+ "native-tls",
  "rand 0.9.0",
+ "rustls 0.23.26",
+ "rustls-native-certs 0.8.1",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.11",
  "utf-8",
+ "webpki-roots 0.26.9",
 ]
 
 [[package]]
@@ -7754,6 +7766,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
+name = "webpki-roots"
+version = "0.26.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29aad86cec885cafd03e8305fd727c418e970a521322c91688414d5b8efba16b"
+dependencies = [
+ "rustls-pki-types",
+]
+
+[[package]]
 name = "weezl"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7773,11 +7794,11 @@ dependencies = [
 
 [[package]]
 name = "whoami"
-version = "1.5.1"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a44ab49fad634e88f55bf8f9bb3abd2f27d7204172a112c7c9987e01c1c94ea9"
+checksum = "6994d13118ab492c3c80c1f81928718159254c53c472bf9ce36f8dae4add02a7"
 dependencies = [
- "redox_syscall 0.4.1",
+ "redox_syscall 0.5.2",
  "wasite",
  "web-sys",
 ]

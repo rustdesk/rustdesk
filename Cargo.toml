@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.3.9"
+version = "1.4.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -46,7 +46,6 @@ screencapturekit = ["cpal/screencapturekit"]
 
 [dependencies]
 async-trait = "0.1"
-whoami = "1.5.0"
 scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common" }
 serde_derive = "1.0"
@@ -95,7 +94,7 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-# arboard = { version = "3.4.0", features = ["wayland-data-control"] }
+# arboard = { version = "3.4", features = ["wayland-data-control"] }
 arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
 clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
 
@@ -118,7 +117,7 @@ winapi = { version = "0.3", features = [
     "ioapiset",
     "winspool",
 ] }
-windows = { version = "0.61.1", features = [
+windows = { version = "0.61", features = [
     "Win32",
     "Win32_System",
     "Win32_System_Diagnostics",
@@ -131,7 +130,7 @@ virtual_display = { path = "libs/virtual_display" }
 remote_printer = { path = "libs/remote_printer" }
 impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system" }
 shared_memory = "0.12"
-tauri-winrt-notification = "0.1.2"
+tauri-winrt-notification = "0.1"
 runas = "1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]

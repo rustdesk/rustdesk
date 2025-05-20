@@ -43,7 +43,7 @@ mod th;
 mod tr;
 mod tw;
 mod uk;
-mod vn;
+mod vi;
 mod ta;
 mod ge;
 
@@ -70,7 +70,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("da", "Dansk"),
     ("eo", "Esperanto"),
     ("tr", "Türkçe"),
-    ("vn", "Tiếng Việt"),
+    ("vi", "Tiếng Việt"),
     ("pl", "Polski"),
     ("ja", "日本語"),
     ("ko", "한국어"),
@@ -145,7 +145,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "cs" => cs::T.deref(),
         "da" => da::T.deref(),
         "sk" => sk::T.deref(),
-        "vn" => vn::T.deref(),
+        "vi" => vi::T.deref(),
         "pl" => pl::T.deref(),
         "ja" => ja::T.deref(),
         "ko" => ko::T.deref(),

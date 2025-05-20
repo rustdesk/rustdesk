@@ -544,17 +544,45 @@ impl FlutterHandler {
     where
         V: Sized + Serialize + Clone,
     {
+        self.push_event_(name, event, &[], excludes);
+    }
+
+    pub fn push_event_to<V>(&self, name: &str, event: &[(&str, V)], include: &[&SessionID])
+    where
+        V: Sized + Serialize + Clone,
+    {
+        self.push_event_(name, event, include, &[]);
+    }
+
+    pub fn push_event_<V>(
+        &self,
+        name: &str,
+        event: &[(&str, V)],
+        includes: &[&SessionID],
+        excludes: &[&SessionID],
+    ) where
+        V: Sized + Serialize + Clone,
+    {
         let mut h: HashMap<&str, serde_json::Value> =
             event.iter().map(|(k, v)| (*k, json!(*v))).collect();
         debug_assert!(h.get("name").is_none());
         h.insert("name", json!(name));
         let out = serde_json::ser::to_string(&h).unwrap_or("".to_owned());
         for (sid, session) in self.session_handlers.read().unwrap().iter() {
-            if excludes.contains(&sid) {
-                continue;
+            let mut push = false;
+            if includes.is_empty() {
+                if !excludes.contains(&sid) {
+                    push = true;
+                }
+            } else {
+                if includes.contains(&sid) {
+                    push = true;
+                }
             }
-            if let Some(stream) = &session.event_stream {
-                stream.add(EventToUI::Event(out.clone()));
+            if push {
+                if let Some(stream) = &session.event_stream {
+                    stream.add(EventToUI::Event(out.clone()));
+                }
             }
         }
     }
@@ -1066,6 +1094,16 @@ impl InvokeUiSession for FlutterHandler {
             &[("id", json!(id)), ("path", json!(path))],
             &[],
         );
+    }
+
+    fn handle_screenshot_resp(&self, sid: String, msg: String) {
+        match SessionID::from_str(&sid) {
+            Ok(sid) => self.push_event_to("screenshot", &[("msg", json!(msg))], &[&sid]),
+            Err(e) => {
+                // Unreachable!
+                log::error!("Failed to parse sid \"{}\", {}", sid, e);
+            }
+        }
     }
 }
 
@@ -1996,7 +2034,10 @@ pub mod sessions {
                 None => {}
             }
         }
-        SESSIONS.write().unwrap().remove(&remove_peer_key?)
+        let s = SESSIONS.write().unwrap().remove(&remove_peer_key?);
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        update_session_count_to_server();
+        s
     }
 
     fn check_remove_unused_displays(
@@ -2098,6 +2139,14 @@ pub mod sessions {
             .write()
             .unwrap()
             .insert(session_id, Default::default());
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        update_session_count_to_server();
+    }
+
+    #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn update_session_count_to_server() {
+        crate::ipc::update_controlling_session_count(SESSIONS.read().unwrap().len()).ok();
     }
 
     #[inline]

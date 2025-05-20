@@ -29,7 +29,7 @@ use hbb_common::{
         sync::mpsc,
         time::{Duration as TokioDuration, Instant},
     },
-    Stream,
+    whoami, Stream,
 };
 
 use crate::client::io_loop::Remote;
@@ -230,6 +230,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().version.clone()
     }
 
+    pub fn get_trackpad_speed(&self) -> i32 {
+        self.lc.read().unwrap().trackpad_speed
+    }
+
     pub fn fallback_keyboard_mode(&self) -> String {
         let peer_version = self.get_peer_version();
         let platform = self.peer_platform();
@@ -412,6 +416,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::RecordScreen(start));
     }
 
+    pub fn is_screenshot_supported(&self) -> bool {
+        crate::common::is_support_screenshot_num(self.lc.read().unwrap().version)
+    }
+
+    pub fn take_screenshot(&self, display: i32, sid: String) {
+        self.send(Data::TakeScreenshot((display, sid)));
+    }
+
     pub fn is_recording(&self) -> bool {
         self.lc.read().unwrap().record_state
     }
@@ -438,6 +450,10 @@ impl<T: InvokeUiSession> Session<T> {
                 self.send(Data::Message(msg));
             }
         }
+    }
+
+    pub fn save_trackpad_speed(&self, trackpad_speed: i32) {
+        self.lc.write().unwrap().save_trackpad_speed(trackpad_speed);
     }
 
     pub fn set_custom_fps(&self, custom_fps: i32) {
@@ -1586,6 +1602,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_record_status(&self, start: bool);
     fn update_empty_dirs(&self, _res: ReadEmptyDirsResponse) {}
     fn printer_request(&self, id: i32, path: String);
+    fn handle_screenshot_resp(&self, sid: String, msg: String);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

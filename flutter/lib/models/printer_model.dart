@@ -13,7 +13,7 @@ class PrinterOptions {
       required this.printerName});
 
   static PrinterOptions load() {
-    var action = bind.mainGetLocalOption(key: kKeyPrinterIncommingJobAction);
+    var action = bind.mainGetLocalOption(key: kKeyPrinterIncomingJobAction);
     if (![
       kValuePrinterIncomingJobDismiss,
       kValuePrinterIncomingJobDefault,
@@ -28,7 +28,7 @@ class PrinterOptions {
       if (action == kValuePrinterIncomingJobSelected) {
         action = kValuePrinterIncomingJobDefault;
         bind.mainSetLocalOption(
-            key: kKeyPrinterIncommingJobAction,
+            key: kKeyPrinterIncomingJobAction,
             value: kValuePrinterIncomingJobDefault);
         if (printerNames.isEmpty) {
           selectedPrinterName = '';

@@ -46,7 +46,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        self, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT,
+        self, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT,
         READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
     fs::JobType,
@@ -85,6 +85,7 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
+pub mod screenshot;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
@@ -215,7 +216,8 @@ impl Client {
         if hbb_common::is_ip_str(peer) {
             return Ok((
                 (
-                    connect_tcp(check_port(peer, RELAY_PORT + 1), CONNECT_TIMEOUT).await?,
+                    connect_tcp_local(check_port(peer, RELAY_PORT + 1), None, CONNECT_TIMEOUT)
+                        .await?,
                     true,
                     None,
                 ),
@@ -225,7 +227,11 @@ impl Client {
         // Allow connect to {domain}:{port}
         if hbb_common::is_domain_port_str(peer) {
             return Ok((
-                (connect_tcp(peer, CONNECT_TIMEOUT).await?, true, None),
+                (
+                    connect_tcp_local(peer, None, CONNECT_TIMEOUT).await?,
+                    true,
+                    None,
+                ),
                 (0, "".to_owned()),
             ));
         }
@@ -290,7 +296,7 @@ impl Client {
             log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
             let mut msg_out = RendezvousMessage::new();
             use hbb_common::protobuf::Enum;
-            let nat_type = if interface.is_force_relay() {
+            let nat_type = if interface.is_force_relay() || use_ws() || Config::is_proxy() {
                 NatType::SYMMETRIC
             } else {
                 NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
@@ -2099,6 +2105,12 @@ impl LoginConfigHandler {
         res
     }
 
+    pub fn save_trackpad_speed(&mut self, speed: i32) {
+        let mut config = self.load_config();
+        config.trackpad_speed = speed;
+        self.save_config(config);
+    }
+
     /// Create a [`Message`] for saving custom fps.
     ///
     /// # Arguments
@@ -2317,8 +2329,24 @@ impl LoginConfigHandler {
         if display_name.is_empty() {
             display_name = crate::username();
         }
+        let display_name = display_name
+            .split_whitespace()
+            .map(|word| {
+                word.chars()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        if i == 0 {
+                            c.to_uppercase().to_string()
+                        } else {
+                            c.to_string()
+                        }
+                    })
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
         #[cfg(not(target_os = "android"))]
-        let my_platform = whoami::platform().to_string();
+        let my_platform = hbb_common::whoami::platform().to_string();
         #[cfg(target_os = "android")]
         let my_platform = "Android".into();
         let hwid = if self.get_option("trust-this-device") == "Y" {
@@ -3320,6 +3348,7 @@ pub enum Data {
     CloseVoiceCall,
     ResetDecoder(Option<usize>),
     RenameFile((i32, String, String, bool)),
+    TakeScreenshot((i32, String)),
 }
 
 /// Keycode for key events.

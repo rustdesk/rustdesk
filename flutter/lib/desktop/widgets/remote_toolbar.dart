@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -1594,8 +1595,26 @@ class _KeyboardMenu extends StatelessWidget {
               viewMode(),
               Divider(),
               ...toolbarToggles(),
+              ...mouseSpeed(),
               ...mobileActions(),
             ]);
+  }
+
+  mouseSpeed() {
+    final speedWidgets = [];
+    final sessionId = ffi.sessionId;
+    if (isDesktop) {
+      if (ffi.ffiModel.keyboard) {
+        final enabled = !ffi.ffiModel.viewOnly;
+        final trackpad = MenuButton(
+          child: Text(translate('Trackpad speed')).paddingOnly(left: 26.0),
+          onPressed: enabled ? () => trackpadSpeedDialog(sessionId, ffi) : null,
+          ffi: ffi,
+        );
+        speedWidgets.add(trackpad);
+      }
+    }
+    return speedWidgets;
   }
 
   keyboardMode() {

@@ -1152,15 +1152,23 @@ Widget createDialogContent(String text) {
 
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
-    {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
+    {bool? hasCancel,
+    ReconnectHandle? reconnect,
+    int? reconnectTimeout,
+    VoidCallback? onSubmit,
+    int? submitTimeout}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
   submit() {
     dialogManager.dismissAll();
-    // https://github.com/rustdesk/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
-    if (!type.contains("custom") && desktopType != DesktopType.portForward) {
-      closeConnection();
+    if (onSubmit != null) {
+      onSubmit.call();
+    } else {
+      // https://github.com/rustdesk/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
+      if (!type.contains("custom") && desktopType != DesktopType.portForward) {
+        closeConnection();
+      }
     }
   }
 
@@ -1176,7 +1184,18 @@ void msgBox(SessionID sessionId, String type, String title, String text,
 
   if (type != "connecting" && type != "success" && !type.contains("nook")) {
     hasOk = true;
-    buttons.insert(0, dialogButton('OK', onPressed: submit));
+    late final Widget btn;
+    if (submitTimeout != null) {
+      btn = _CountDownButton(
+        text: 'OK',
+        second: submitTimeout,
+        onPressed: submit,
+        submitOnTimeout: true,
+      );
+    } else {
+      btn = dialogButton('OK', onPressed: submit);
+    }
+    buttons.insert(0, btn);
   }
   hasCancel ??= !type.contains("error") &&
       !type.contains("nocancel") &&
@@ -1197,7 +1216,8 @@ void msgBox(SessionID sessionId, String type, String title, String text,
       reconnectTimeout != null) {
     // `enabled` is used to disable the dialog button once the button is clicked.
     final enabled = true.obs;
-    final button = Obx(() => _ReconnectCountDownButton(
+    final button = Obx(() => _CountDownButton(
+          text: 'Reconnect',
           second: reconnectTimeout,
           onPressed: enabled.isTrue
               ? () {
@@ -2297,7 +2317,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   if (isMobile) {
     if (id != null) {
       final forceRelay = queryParameters["relay"] != null;
-      connect(Get.context!, id, forceRelay: forceRelay);
+      connect(Get.context!, id, forceRelay: forceRelay, password: queryParameters["password"]);
       return null;
     }
   }
@@ -2858,6 +2878,7 @@ Future<bool> canBeBlocked() async {
   return access_mode == 'view' || (access_mode.isEmpty && !option);
 }
 
+// to-do: web not implemented
 Future<void> shouldBeBlocked(RxBool block, WhetherUseRemoteBlock? use) async {
   if (use != null && !await use()) {
     block.value = false;
@@ -3183,21 +3204,24 @@ parseParamScreenRect(Map<String, dynamic> params) {
 
 get isInputSourceFlutter => stateGlobal.getInputSource() == "Input source 2";
 
-class _ReconnectCountDownButton extends StatefulWidget {
-  _ReconnectCountDownButton({
+class _CountDownButton extends StatefulWidget {
+  _CountDownButton({
     Key? key,
+    required this.text,
     required this.second,
     required this.onPressed,
+    this.submitOnTimeout = false,
   }) : super(key: key);
+  final String text;
   final VoidCallback? onPressed;
   final int second;
+  final bool submitOnTimeout;
 
   @override
-  State<_ReconnectCountDownButton> createState() =>
-      _ReconnectCountDownButtonState();
+  State<_CountDownButton> createState() => _CountDownButtonState();
 }
 
-class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
+class _CountDownButtonState extends State<_CountDownButton> {
   late int _countdownSeconds = widget.second;
 
   Timer? _timer;
@@ -3218,6 +3242,9 @@ class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (_countdownSeconds <= 0) {
         timer.cancel();
+        if (widget.submitOnTimeout) {
+          widget.onPressed?.call();
+        }
       } else {
         setState(() {
           _countdownSeconds--;
@@ -3229,7 +3256,7 @@ class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
   @override
   Widget build(BuildContext context) {
     return dialogButton(
-      '${translate('Reconnect')} (${_countdownSeconds}s)',
+      '${translate(widget.text)} (${_countdownSeconds}s)',
       onPressed: widget.onPressed,
       isOutline: true,
     );
