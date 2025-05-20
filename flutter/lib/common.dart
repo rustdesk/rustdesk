@@ -2317,7 +2317,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   if (isMobile) {
     if (id != null) {
       final forceRelay = queryParameters["relay"] != null;
-      connect(Get.context!, id, forceRelay: forceRelay);
+      connect(Get.context!, id, forceRelay: forceRelay, password: queryParameters["password"]);
       return null;
     }
   }
