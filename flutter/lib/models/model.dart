@@ -3212,7 +3212,8 @@ class Display {
       originalWidth == kVirtualDisplayResolutionValue &&
       originalHeight == kVirtualDisplayResolutionValue;
   bool get isOriginalResolution =>
-      width == originalWidth && height == originalHeight;
+      width == (originalWidth * scale).round() &&
+      height == (originalHeight * scale).round();
 }
 
 class Resolution {
