@@ -1762,7 +1762,7 @@ impl LoginConfigHandler {
     ///
     // It's Ok to check the option empty in this function.
     // `toggle_option()` is only called in a session.
-    // Custom client advanced settings will not affact this function.
+    // Custom client advanced settings will not effect this function.
     pub fn toggle_option(&mut self, name: String) -> Option<Message> {
         let mut option = OptionMessage::default();
         let mut config = self.load_config();
@@ -2006,7 +2006,7 @@ impl LoginConfigHandler {
     ///
     // It's Ok to check the option empty in this function.
     // `get_toggle_option()` is only called in a session.
-    // Custom client advanced settings will not affact this function.
+    // Custom client advanced settings will not effect this function.
     pub fn get_toggle_option(&self, name: &str) -> bool {
         if name == "show-remote-cursor" {
             self.config.show_remote_cursor.v
