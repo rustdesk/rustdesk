@@ -540,6 +540,12 @@ class _GeneralState extends State<_General> {
             'Capture screen using DirectX',
             kOptionDirectxCapture,
           ),
+      _OptionCheckBox(
+        context,
+        'Enable Local Address Book Mode',
+        kOptionLocalAddressBookMode,
+        isServer: false, // This is a local client option
+      ),
       ],
     ];
     if (!isWeb && bind.mainShowOption(key: kOptionAllowLinuxHeadless)) {

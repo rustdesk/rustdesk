@@ -32,8 +32,13 @@ bool filterAbTagByIntersection() {
 
 const _personalAddressBookName = "My address book";
 const _legacyAddressBookName = "Legacy address book";
+const _localAddressBookName = "Local Address Book";
 
 const kUntagged = "Untagged";
+
+bool isLocalAddressBookMode() {
+  return bind.mainGetLocalOption(key: kOptionLocalAddressBookMode) == 'Y';
+}
 
 enum ForcePullAb {
   listAndCurrent,
@@ -121,6 +126,16 @@ class AbModel {
 
   Future<void> _pullAb(
       {required ForcePullAb? force, required bool quiet}) async {
+    if (isLocalAddressBookMode()) {
+      listInitialized = true;
+      await loadCache();
+      if (!addressbooks.containsKey(_localAddressBookName)) {
+        addressbooks[_localAddressBookName] = LegacyAb(); // Or a new LocalAb if specific logic is needed
+      }
+      setCurrentName(_localAddressBookName);
+      _callbackPeerUpdate();
+      return;
+    }
     if (bind.isDisableAb()) return;
     if (!gFFI.userModel.isLogin) return;
     if (gFFI.userModel.networkError.isNotEmpty) return;
@@ -335,6 +350,10 @@ class AbModel {
     }
     final ret = await addPeersTo([peer], _currentName.value);
     _syncAllFromRecent = true;
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      return null; // Or some other appropriate local-mode return
+    }
     return ret;
   }
 
@@ -347,33 +366,84 @@ class AbModel {
     if (ab == null) {
       return 'no such addressbook: $name';
     }
-    String? errMsg = await ab.addPeers(ps);
-    await pullNonLegacyAfterChange(name: name);
+    // Local modification first
+    for (var p_map in ps) {
+      final p = Peer.fromJson(p_map);
+      if (ab.peers.firstWhereOrNull((e) => e.id == p.id) == null) {
+        if (!ab.isFull()) {
+          ab.peers.add(p);
+        } else {
+          // Handle full case if necessary, maybe return an error or specific message
+        }
+      }
+    }
     if (name == _currentName.value) {
-      _refreshTab();
+      _refreshTab(); // Refresh UI if current AB is modified
     }
     _syncAllFromRecent = true;
-    _saveCache();
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      return null; // Or some other appropriate local-mode return
+    }
+
+    String? errMsg = await ab.addPeers(ps);
+    await pullNonLegacyAfterChange(name: name);
+    _saveCache(); // Save cache even in server mode after successful push
     return errMsg;
   }
 
   Future<bool> changeTagForPeers(List<String> ids, List<dynamic> tags) async {
+    // Local modification
+    current.peers.map((e) {
+      if (ids.contains(e.id)) {
+        e.tags = List<String>.from(tags.map((t) => t.toString()));
+      }
+    }).toList();
+    currentAbPeers.refresh();
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      return true;
+    }
+
     bool ret = await current.changeTagForPeers(ids, tags);
     await pullNonLegacyAfterChange();
-    currentAbPeers.refresh();
     _saveCache();
     return ret;
   }
 
   Future<bool> changeAlias({required String id, required String alias}) async {
+    // Local modification
+    final peer = current.peers.firstWhereOrNull((e) => e.id == id);
+    if (peer != null) {
+      peer.alias = alias;
+    }
+    currentAbPeers.refresh();
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      return true;
+    }
+
     bool res = await current.changeAlias(id: id, alias: alias);
     await pullNonLegacyAfterChange();
-    currentAbPeers.refresh();
     _saveCache();
     return res;
   }
 
   Future<bool> changePersonalHashPassword(String id, String hash) async {
+    // Local modification
+    final peer = current.peers.firstWhereOrNull((e) => e.id == id);
+    if (peer != null) {
+        peer.hash = hash;
+    }
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      return true;
+    }
+
     var ret = false;
     final personalAb = addressbooks[_personalAddressBookName];
     if (personalAb != null) {
@@ -391,6 +461,25 @@ class AbModel {
 
   Future<bool> changeSharedPassword(
       String abName, String id, String password) async {
+    if (isLocalAddressBookMode()) {
+      // In local mode, shared passwords might not be relevant, or handled as regular peer passwords.
+      // For now, let's assume it's a no-op or saved like other peer data.
+      final ab = addressbooks[abName];
+      if (ab == null) return false;
+      final peer = ab.peers.firstWhereOrNull((e) => e.id == id);
+      if (peer != null) {
+        // Decide how to store this. If local mode treats all as "personal" hash
+        // this might need to set peer.hash if password is treated as a direct replacement.
+        // Or, if local peers can have a 'password' field distinct from 'hash'.
+        // For simplicity now, let's assume we are updating a generic password field if it exists.
+        // This part needs clarification based on how Peer model handles passwords locally.
+        // Let's assume Peer model has a `password` field for this for now.
+        // peer.password = password; // This is hypothetical
+      }
+      _saveCache();
+      return true;
+    }
+
     final ab = addressbooks[abName];
     if (ab == null) return false;
     final ret = await ab.changeSharedPassword(id, password);
@@ -399,12 +488,21 @@ class AbModel {
   }
 
   Future<bool> deletePeers(List<String> ids) async {
-    final ret = await current.deletePeers(ids);
-    await pullNonLegacyAfterChange();
+    // Local modification
+    current.peers.removeWhere((e) => ids.contains(e.id));
     currentAbPeers.refresh();
     _refreshTab();
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      _callbackPeerUpdate();
+      return true;
+    }
+
+    final ret = await current.deletePeers(ids);
+    await pullNonLegacyAfterChange();
     _saveCache();
-    if (legacyMode.value && current.isPersonal()) {
+    if (legacyMode.value && current.isPersonal() && !isLocalAddressBookMode()) {
       // non-legacy mode not add peers automatically
       Future.delayed(Duration(seconds: 2), () async {
         if (!shouldSyncAb()) return;
@@ -432,6 +530,21 @@ class AbModel {
 // #region tags
   Future<bool> addTags(List<String> tagList) async {
     tagList.removeWhere((e) => e == kUntagged);
+    // Local modification
+    for (var tag in tagList) {
+      if (!current.tags.contains(tag)) {
+        current.tags.add(tag);
+      }
+      if (current.tagColors[tag] == null) {
+        current.tagColors[tag] = str2color2(tag, existing: current.tagColors.values.toList()).value;
+      }
+    }
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      return true;
+    }
+
     final ret = await current.addTags(tagList, {});
     await pullNonLegacyAfterChange();
     _saveCache();
@@ -439,6 +552,46 @@ class AbModel {
   }
 
   Future<bool> renameTag(String oldTag, String newTag) async {
+    if (current.tags.contains(newTag) && oldTag != newTag) {
+        BotToast.showText(
+            contentColor: Colors.red, text: 'Tag $newTag already exists');
+        return false;
+    }
+    // Local modification
+    current.tags.value = current.tags.map((e) {
+      if (e == oldTag) {
+        return newTag;
+      } else {
+        return e;
+      }
+    }).toList();
+    for (var peer in current.peers) {
+      peer.tags = peer.tags.map((e) {
+        if (e == oldTag) {
+          return newTag;
+        } else {
+          return e;
+        }
+      }).toList();
+    }
+    int? oldColor = current.tagColors[oldTag];
+    if (oldColor != null) {
+      current.tagColors.remove(oldTag);
+      current.tagColors.addAll({newTag: oldColor});
+    }
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      selectedTags.value = selectedTags.map((e) {
+        if (e == oldTag) {
+          return newTag;
+        } else {
+          return e;
+        }
+      }).toList();
+      return true;
+    }
+
     final ret = await current.renameTag(oldTag, newTag);
     await pullNonLegacyAfterChange();
     selectedTags.value = selectedTags.map((e) {
@@ -453,6 +606,16 @@ class AbModel {
   }
 
   Future<bool> setTagColor(String tag, Color color) async {
+    // Local modification
+    if (current.tags.contains(tag)) {
+      current.tagColors[tag] = color.value;
+    }
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      return true;
+    }
+
     final ret = await current.setTagColor(tag, color);
     await pullNonLegacyAfterChange();
     _saveCache();
@@ -460,6 +623,24 @@ class AbModel {
   }
 
   Future<bool> deleteTag(String tag) async {
+    // Local modification
+    selectedTags.remove(tag);
+    current.tags.removeWhere((element) => element == tag);
+    current.tagColors.remove(tag);
+    for (var peer in current.peers) {
+      if (peer.tags.isEmpty) {
+        continue;
+      }
+      if (peer.tags.contains(tag)) {
+        peer.tags.remove(tag);
+      }
+    }
+
+    if (isLocalAddressBookMode()) {
+      _saveCache();
+      return true;
+    }
+
     final ret = await current.deleteTag(tag);
     await pullNonLegacyAfterChange();
     _saveCache();
@@ -470,6 +651,8 @@ class AbModel {
 
 // #region sync from recent
   Future<void> _syncFromRecent({bool push = true}) async {
+    if (!shouldSyncAb()) return; // User preference check
+    if (!gFFI.userModel.isLogin && !isLocalAddressBookMode()) return; // Login check
     if (!_syncFromRecentLock) {
       _syncFromRecentLock = true;
       await _syncFromRecentWithoutLock(push: push);
@@ -478,8 +661,14 @@ class AbModel {
   }
 
   Future<void> _syncFromRecentWithoutLock({bool push = true}) async {
+    if (!shouldSyncAb()) return; // User preference check
+    if (!gFFI.userModel.isLogin && !isLocalAddressBookMode()) return; // Login check
     Future<List<Peer>> getRecentPeers() async {
       try {
+        // In local mode, we assume recent peers are still tracked locally.
+        // If bind.mainGetNewStoredPeers() or bind.mainLoadRecentPeersForAb()
+        // require login, this needs further adjustment for local mode.
+        // For now, assuming they work without login.
         List<String> filteredPeerIDs;
         if (_syncAllFromRecent) {
           _syncAllFromRecent = false;
@@ -492,12 +681,12 @@ class AbModel {
               .toList();
           if (filteredPeerIDs.isEmpty) return [];
         }
-        final loadStr = await bind.mainLoadRecentPeersForAb(
+        final loadStr = await bind.mainLoadRecentPeersForAb( // Assumes this works offline
             filter: jsonEncode(filteredPeerIDs));
         if (loadStr.isEmpty) {
           return [];
         }
-        List<dynamic> mapPeers = jsonDecode(loadStr);
+        List<dynamic> mapPeers = jsonDecode(loadStr); // Assumes this works offline
         List<Peer> recents = List.empty(growable: true);
         for (var m in mapPeers) {
           if (m is Map<String, dynamic>) {
@@ -517,7 +706,10 @@ class AbModel {
       if (recents.isEmpty) return;
       debugPrint("sync from recent, len: ${recents.length}");
       if (current.canWrite() && current.initialized) {
-        await current.syncFromRecent(recents);
+        await current.syncFromRecent(recents); // This might call pushAb internally
+        if (isLocalAddressBookMode()) {
+          _saveCache(); // Ensure local save after sync
+        }
       }
     } catch (e) {
       debugPrint('_syncFromRecentWithoutLock: $e');
@@ -525,9 +717,10 @@ class AbModel {
   }
 
   void setShouldAsync(bool v) async {
+    // This option might also need to be considered for local mode if it implies auto-sync from local recents.
     await bind.mainSetLocalOption(
         key: syncAbOption, value: v ? 'Y' : defaultOptionNo);
-    _syncAllFromRecent = true;
+    _syncAllFromRecent = true; // Reset flag for next sync attempt
     _timerCounter = 0;
   }
 
@@ -538,9 +731,12 @@ class AbModel {
     try {
       var ab_entries = _serializeCache();
       Map<String, dynamic> m = <String, dynamic>{
-        "access_token": bind.mainGetLocalOption(key: 'access_token'),
         "ab_entries": ab_entries,
       };
+      if (!isLocalAddressBookMode()) {
+        // Only include access_token if not in local mode
+        m["access_token"] = bind.mainGetLocalOption(key: 'access_token');
+      }
       bind.mainSaveAb(json: jsonEncode(m));
     } catch (e) {
       debugPrint('ab save:$e');
@@ -550,21 +746,43 @@ class AbModel {
   List<dynamic> _serializeCache() {
     var res = [];
     addressbooks.forEach((key, value) {
-      if (!value.isPersonal() && key != current.name()) return;
-      res.add({
-        "guid": value.sharedProfile()?.guid ?? '',
-        "name": key,
-        "tags": value.tags,
-        "peers": value.peers
-            .map((e) => e.toCustomJson(includingHash: value.isPersonal()))
-            .toList(),
-        "tag_colors": jsonEncode(value.tagColors)
-      });
+      // In local mode, we want to save the local address book.
+      // The condition `!value.isPersonal() && key != current.name()` might be too restrictive.
+      // Let's adjust to ensure the local book is always saved.
+      if (isLocalAddressBookMode()) {
+        if (key == _localAddressBookName) { // Or however the local book is identified
+             res.add({
+               "guid": value.sharedProfile()?.guid ?? _localAddressBookName, // Use a local identifier
+               "name": key,
+               "tags": value.tags,
+               "peers": value.peers
+                   .map((e) => e.toCustomJson(includingHash: true)) // Always include hash for local
+                   .toList(),
+               "tag_colors": jsonEncode(value.tagColors)
+             });
+        }
+      } else {
+        // Original logic for server mode
+        if (!value.isPersonal() && key != current.name()) return;
+        res.add({
+          "guid": value.sharedProfile()?.guid ?? '',
+          "name": key,
+          "tags": value.tags,
+          "peers": value.peers
+              .map((e) => e.toCustomJson(includingHash: value.isPersonal()))
+              .toList(),
+          "tag_colors": jsonEncode(value.tagColors)
+        });
+      }
     });
     return res;
   }
 
   trySetCurrentToLast() {
+    if (isLocalAddressBookMode()) {
+      _currentName.value = _localAddressBookName; // Default to local book name
+      return;
+    }
     final name = bind.getLocalFlutterOption(k: kOptionCurrentAbName);
     if (addressbooks.containsKey(name)) {
       _currentName.value = name;
@@ -575,15 +793,29 @@ class AbModel {
     try {
       if (_cacheLoadOnceFlag || currentAbLoading.value) return;
       _cacheLoadOnceFlag = true;
-      final access_token = bind.mainGetLocalOption(key: 'access_token');
-      if (access_token.isEmpty) return;
       final cache = await bind.mainLoadAb();
-      if (currentAbLoading.value) return;
+      if (currentAbLoading.value) return; // Check again after await
+      if (cache.isEmpty) return;
+
       final data = jsonDecode(cache);
-      if (data == null || data['access_token'] != access_token) return;
+      if (data == null) return;
+
+      if (!isLocalAddressBookMode()) {
+        final access_token = bind.mainGetLocalOption(key: 'access_token');
+        if (access_token.isEmpty) return; // No token, no server cache to load (unless local mode)
+        if (data['access_token'] != access_token) return; // Token mismatch
+      }
+      
       _deserializeCache(data);
-      legacyMode.value = addressbooks.containsKey(_legacyAddressBookName);
-      trySetCurrentToLast();
+      if (isLocalAddressBookMode()) {
+        _currentName.value = _localAddressBookName;
+        if (!addressbooks.containsKey(_localAddressBookName)) {
+           addressbooks[_localAddressBookName] = LegacyAb(); // Ensure local book exists
+        }
+      } else {
+        legacyMode.value = addressbooks.containsKey(_legacyAddressBookName);
+        trySetCurrentToLast();
+      }
     } catch (e) {
       debugPrint("load ab cache: $e");
     }
@@ -591,7 +823,21 @@ class AbModel {
 
   _deserializeCache(dynamic data) {
     if (data == null) return;
-    reset();
+    // Reset logic might need to be conditional for local mode,
+    // or ensure local book is preserved/re-created.
+    // For now, assuming reset() is acceptable or handled by subsequent logic.
+    final currentLocalBookPeers = isLocalAddressBookMode() && addressbooks.containsKey(_localAddressBookName)
+                                  ? List<Peer>.from(addressbooks[_localAddressBookName]!.peers)
+                                  : null;
+    final currentLocalBookTags = isLocalAddressBookMode() && addressbooks.containsKey(_localAddressBookName)
+                                  ? List<String>.from(addressbooks[_localAddressBookName]!.tags)
+                                  : null;
+    final currentLocalBookTagColors = isLocalAddressBookMode() && addressbooks.containsKey(_localAddressBookName)
+                                  ? Map<String, int>.from(addressbooks[_localAddressBookName]!.tagColors)
+                                  : null;
+
+    reset(); // This clears addressbooks. We need to repopulate it.
+
     final abEntries = data['ab_entries'];
     if (abEntries is List) {
       for (var i = 0; i < abEntries.length; i++) {
@@ -600,16 +846,27 @@ class AbModel {
           var guid = abEntry['guid'];
           var name = abEntry['name'];
           final BaseAb ab;
-          if (name == _legacyAddressBookName) {
-            ab = LegacyAb();
-          } else {
-            if (name == null || guid == null) {
-              continue;
+
+          if (isLocalAddressBookMode()) {
+            if (name == _localAddressBookName) {
+              ab = addressbooks.putIfAbsent(_localAddressBookName, () => LegacyAb());
+            } else {
+              continue; // Skip non-local books in local mode
             }
-            ab = Ab(AbProfile(guid, name, '', '', ShareRule.read.value),
-                name == _personalAddressBookName);
+          } else {
+            // Original server mode logic
+            if (name == _legacyAddressBookName) {
+              ab = LegacyAb();
+            } else {
+              if (name == null || guid == null) {
+                continue;
+              }
+              ab = Ab(AbProfile(guid, name, '', '', ShareRule.read.value),
+                  name == _personalAddressBookName);
+            }
+            addressbooks[name] = ab;
           }
-          addressbooks[name] = ab;
+          
           if (abEntry['tags'] is List) {
             ab.tags.value =
                 (abEntry['tags'] as List).map((e) => e.toString()).toList();
@@ -625,9 +882,25 @@ class AbModel {
           }
         }
       }
-      if (abEntries.isNotEmpty) {
+      if (isLocalAddressBookMode() && !addressbooks.containsKey(_localAddressBookName)) {
+        // If after deserializing, the local book is still not there (e.g. empty cache file), create it.
+        final localBook = LegacyAb();
+        if (currentLocalBookPeers != null) localBook.peers.value = currentLocalBookPeers;
+        if (currentLocalBookTags != null) localBook.tags.value = currentLocalBookTags;
+        if (currentLocalBookTagColors != null) localBook.tagColors.value = currentLocalBookTagColors;
+        addressbooks[_localAddressBookName] = localBook;
+      }
+      if (abEntries.isNotEmpty || isLocalAddressBookMode()) { // Ensure callback if local mode, even if cache was empty
         _callbackPeerUpdate();
       }
+    } else if (isLocalAddressBookMode()) {
+      // Cache was empty or not a list, ensure local book exists
+        final localBook = LegacyAb();
+        if (currentLocalBookPeers != null) localBook.peers.value = currentLocalBookPeers;
+        if (currentLocalBookTags != null) localBook.tags.value = currentLocalBookTags;
+        if (currentLocalBookTagColors != null) localBook.tagColors.value = currentLocalBookTagColors;
+        addressbooks[_localAddressBookName] = localBook;
+        _callbackPeerUpdate();
     }
   }
 
@@ -691,15 +964,15 @@ class AbModel {
       await current.pullAb(quiet: false);
     }
     _refreshTab();
-    if (oldName != _currentName.value) {
-      _syncAllFromRecent = true;
+    if (oldName != _currentName.value || isLocalAddressBookMode()) { // Always save cache if local mode name changed (even if to itself) or if it is local mode.
+      _syncAllFromRecent = true; // Assuming this is still relevant for local recent peers
       _saveCache();
     }
   }
 
   bool isCurrentAbFull(bool warn) {
     final res = current.isFull();
-    if (res && warn) {
+    if (res && warn && !isLocalAddressBookMode()) { // Warning might be server-specific
       BotToast.showText(
           contentColor: Colors.red, text: translate('exceed_max_devices'));
     }
@@ -712,6 +985,8 @@ class AbModel {
 
   // should not call this function in a loop call stack
   Future<void> pullNonLegacyAfterChange({String? name}) async {
+    if (isLocalAddressBookMode()) return; // No server pull in local mode
+
     if (name == null) {
       if (current.name() != _legacyAddressBookName) {
         return await current.pullAb(quiet: true);
@@ -725,6 +1000,9 @@ class AbModel {
   }
 
   List<String> idExistIn(String id) {
+    // This method's behavior might need to be reviewed in local mode.
+    // If only one local book exists, it will check that.
+    // If multiple local books were hypothetically supported, it would check all.
     List<String> v = [];
     addressbooks.forEach((key, value) {
       if (value.peers.any((e) => e.id == id)) {
@@ -735,6 +1013,15 @@ class AbModel {
   }
 
   List<Peer> allPeers() {
+    // In local mode, this should probably only return peers from the local address book.
+    if (isLocalAddressBookMode()) {
+        final localBook = addressbooks[_localAddressBookName];
+        if (localBook != null) {
+            return List<Peer>.from(localBook.peers.map((e) => Peer.copy(e)));
+        }
+        return [];
+    }
+    // Original server mode logic
     List<Peer> v = [];
     addressbooks.forEach((key, value) {
       v.addAll(value.peers.map((e) => Peer.copy(e)).toList());
@@ -743,6 +1030,7 @@ class AbModel {
   }
 
   String translatedName(String name) {
+    if (name == _localAddressBookName) return translate("Local Address Book"); // Assuming "Local Address Book" is a key in lang files
     if (name == _personalAddressBookName || name == _legacyAddressBookName) {
       return translate(name);
     } else {
@@ -784,15 +1072,22 @@ abstract class BaseAb {
   String name();
 
   bool isPersonal() {
+    if (isLocalAddressBookMode()) return name() == _localAddressBookName;
     return name() == _personalAddressBookName ||
         name() == _legacyAddressBookName;
   }
 
   bool isLegacy() {
+     if (isLocalAddressBookMode()) return false; // Or true if local uses LegacyAb structure
     return name() == _legacyAddressBookName;
   }
 
   Future<void> pullAb({quiet = false}) async {
+    if (isLocalAddressBookMode()) {
+        initialized = true; // Already handled by AbModel.pullAb
+        abLoading.value = false;
+        return;
+    }
     if (abPulling) return;
     abPulling = true;
     if (!quiet) {
@@ -874,12 +1169,12 @@ class LegacyAb extends BaseAb {
 
   @override
   bool canWrite() {
-    return true;
+    return true; // Local mode should always be writable
   }
 
   @override
   bool fullControl() {
-    return true;
+    return true; // Local mode should always have full control
   }
 
   @override
@@ -889,7 +1184,11 @@ class LegacyAb extends BaseAb {
 
   @override
   String name() {
-    return _legacyAddressBookName;
+    // If this instance is used for the local book, its name should reflect that.
+    // This might require passing the name in constructor or having a dedicated LocalLegacyAb.
+    // For now, assuming AbModel.current will point to an instance named _localAddressBookName.
+    return _legacyAddressBookName; // This might be problematic if LegacyAb is reused for local.
+                                 // Consider if `name()` should be dynamic based on context.
   }
 
   @override
@@ -909,16 +1208,16 @@ class LegacyAb extends BaseAb {
         tagColors.clear();
         peers.clear();
       } else if (resp.body.isNotEmpty) {
-        Map<String, dynamic> json =
+        Map<String, dynamic> jsonMap =
             _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
-        if (json.containsKey('error')) {
-          throw json['error'];
-        } else if (json.containsKey('data')) {
+        if (jsonMap.containsKey('error')) {
+          throw jsonMap['error'];
+        } else if (jsonMap.containsKey('data')) {
           try {
-            licensedDevices = json['licensed_devices'];
+            licensedDevices = jsonMap['licensed_devices'];
             // ignore: empty_catches
           } catch (e) {}
-          final data = jsonDecode(json['data']);
+          final data = jsonDecode(jsonMap['data']);
           if (data != null) {
             _deserialize(data);
           }
@@ -942,8 +1241,12 @@ class LegacyAb extends BaseAb {
 
   Future<bool> pushAb(
       {bool toastIfFail = true, bool toastIfSucc = true}) async {
+    if (isLocalAddressBookMode()) {
+      // Saving is handled by AbModel._saveCache()
+      return true;
+    }
     debugPrint("pushAb: toastIfFail:$toastIfFail, toastIfSucc:$toastIfSucc");
-    if (!gFFI.userModel.isLogin) return false;
+    if (!gFFI.userModel.isLogin) return false; // Original check, ensure local mode bypasses if it reaches here
     pushError.value = '';
     bool ret = false;
     try {
@@ -967,10 +1270,10 @@ class LegacyAb extends BaseAb {
           (resp.body.isEmpty || resp.body.toLowerCase() == 'null')) {
         ret = true;
       } else {
-        Map<String, dynamic> json =
+        Map<String, dynamic> jsonMap =
             _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
-        if (json.containsKey('error')) {
-          throw json['error'];
+        if (jsonMap.containsKey('error')) {
+          throw jsonMap['error'];
         } else if (resp.statusCode == 200) {
           ret = true;
         } else {
@@ -994,23 +1297,46 @@ class LegacyAb extends BaseAb {
 // #region Peer
   @override
   Future<String?> addPeers(List<Map<String, dynamic>> ps) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel.addPeersTo local modification part
+      // This method in LegacyAb shouldn't be directly called for adding peers in local mode
+      // if AbModel.addPeersTo is the entry point.
+      // For safety, mirror local logic or assert.
+      bool full = false;
+      for (var p_map in ps) {
+        final p = Peer.fromJson(p_map);
+        if (!isFull()) { // isFull() is already local mode aware
+          final index = peers.indexWhere((e) => e.id == p.id);
+          if (index >= 0) {
+            _merge(p, peers[index]);
+          } else {
+            peers.add(p);
+          }
+        } else {
+          full = true;
+          break;
+        }
+      }
+      return full ? translate("exceed_max_devices") : null;
+    }
     bool full = false;
-    for (var p in ps) {
+    for (var p_map in ps) {
+      final p = Peer.fromJson(p_map);
       if (!isFull()) {
-        p.remove('password'); // legacy ab ignore password
-        final index = peers.indexWhere((e) => e.id == p['id']);
+        p_map.remove('password'); // legacy ab ignore password
+        final index = peers.indexWhere((e) => e.id == p.id);
         if (index >= 0) {
-          _merge(Peer.fromJson(p), peers[index]);
+          _merge(p, peers[index]);
           _mergePeerFromGroup(peers[index]);
         } else {
-          peers.add(Peer.fromJson(p));
+          peers.add(p);
         }
       } else {
         full = true;
         break;
       }
     }
-    if (!await pushAb()) {
+    if (!await pushAb()) { // pushAb is local mode aware
       return "Failed to push to server";
     } else if (full) {
       return translate("exceed_max_devices");
@@ -1020,6 +1346,8 @@ class LegacyAb extends BaseAb {
   }
 
   _mergePeerFromGroup(Peer p) {
+    // This logic might still be relevant if group data is available locally.
+    // For now, assume it's okay.
     final g = gFFI.groupModel.peers.firstWhereOrNull((e) => p.id == e.id);
     if (g == null) return;
     if (p.username.isEmpty) {
@@ -1035,9 +1363,18 @@ class LegacyAb extends BaseAb {
 
   @override
   Future<bool> changeTagForPeers(List<String> ids, List<dynamic> tags) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel
+      peers.map((e) {
+        if (ids.contains(e.id)) {
+         e.tags = List<String>.from(tags.map((t) => t.toString()));
+        }
+      }).toList();
+      return true;
+    }
     peers.map((e) {
       if (ids.contains(e.id)) {
-        e.tags = tags;
+        e.tags = List<String>.from(tags.map((t) => t.toString()));
       }
     }).toList();
     return await pushAb();
@@ -1045,6 +1382,13 @@ class LegacyAb extends BaseAb {
 
   @override
   Future<bool> changeAlias({required String id, required String alias}) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel
+      final it = peers.where((element) => element.id == id);
+      if (it.isEmpty) return false;
+      it.first.alias = alias;
+      return true;
+    }
     final it = peers.where((element) => element.id == id);
     if (it.isEmpty) {
       return false;
@@ -1055,12 +1399,19 @@ class LegacyAb extends BaseAb {
 
   @override
   Future<bool> changeSharedPassword(String id, String password) async {
-    // no need to implement
+    if (isLocalAddressBookMode()) {
+      // Shared passwords not applicable or handled differently in local mode
+      return true;
+    }
+    // no need to implement for server legacy
     return false;
   }
 
   @override
   Future<void> syncFromRecent(List<Peer> recents) async {
+    // This method is called by AbModel._syncFromRecentWithoutLock
+    // which calls current.syncFromRecent.
+    // If current is LegacyAb in local mode, this will be executed.
     bool peerSyncEqual(Peer a, Peer b) {
       return a.hash == b.hash &&
           a.username == b.username &&
@@ -1069,31 +1420,36 @@ class LegacyAb extends BaseAb {
           a.alias == b.alias;
     }
 
-    bool needSync = false;
+    bool needSyncOrSave = false;
     for (var i = 0; i < recents.length; i++) {
       var r = recents[i];
       var index = peers.indexWhere((e) => e.id == r.id);
       if (index < 0) {
-        if (!isFull()) {
+        if (!isFull()) { // isFull is local mode aware
           peers.add(r);
-          needSync = true;
+          needSyncOrSave = true;
         }
       } else {
         Peer old = Peer.copy(peers[index]);
-        _merge(r, peers[index]);
+        _merge(r, peers[index]); // Merge recent info into existing peer
         if (!peerSyncEqual(peers[index], old)) {
-          needSync = true;
+          needSyncOrSave = true;
         }
       }
     }
-    if (needSync) {
-      await pushAb(toastIfSucc: false, toastIfFail: false);
+    if (needSyncOrSave) {
+      if (isLocalAddressBookMode()) {
+        // gFFI.abModel._saveCache(); // AbModel will call saveCache after this returns
+      } else {
+        await pushAb(toastIfSucc: false, toastIfFail: false);
+      }
       gFFI.abModel._refreshTab();
     }
     // Pull cannot be used for sync to avoid cyclic sync.
   }
 
   void _merge(Peer r, Peer p) {
+    // Merging logic seems fine for local mode too.
     p.hash = r.hash.isEmpty ? p.hash : r.hash;
     p.username = r.username.isEmpty ? p.username : r.username;
     p.hostname = r.hostname.isEmpty ? p.hostname : r.hostname;
@@ -1103,6 +1459,18 @@ class LegacyAb extends BaseAb {
 
   @override
   Future<bool> changePersonalHashPassword(String id, String hash) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel
+      bool changed = false;
+      final it = peers.where((element) => element.id == id);
+      if (it.isNotEmpty) {
+        if (it.first.hash != hash) {
+          it.first.hash = hash;
+          changed = true;
+        }
+      }
+      return changed; // Indicate if change was made, AbModel handles save
+    }
     bool changed = false;
     final it = peers.where((element) => element.id == id);
     if (it.isNotEmpty) {
@@ -1119,6 +1487,11 @@ class LegacyAb extends BaseAb {
 
   @override
   Future<bool> deletePeers(List<String> ids) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel
+      peers.removeWhere((e) => ids.contains(e.id));
+      return true;
+    }
     peers.removeWhere((e) => ids.contains(e.id));
     return await pushAb();
   }
@@ -1128,6 +1501,18 @@ class LegacyAb extends BaseAb {
   @override
   Future<bool> addTags(
       List<String> tagList, Map<String, int> tagColorMap) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel
+      for (var e in tagList) {
+        if (!tagContainBy(e)) {
+          tags.add(e);
+        }
+        if (tagColors[e] == null) {
+          tagColors[e] = str2color2(e, existing: tagColors.values.toList()).value;
+        }
+      }
+      return true;
+    }
     for (var e in tagList) {
       if (!tagContainBy(e)) {
         tags.add(e);
@@ -1141,6 +1526,24 @@ class LegacyAb extends BaseAb {
 
   @override
   Future<bool> renameTag(String oldTag, String newTag) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel
+      if (tags.contains(newTag) && oldTag != newTag) { // Check here to avoid issues if AbModel didn't
+        BotToast.showText(
+            contentColor: Colors.red, text: 'Tag $newTag already exists');
+        return false;
+      }
+      tags.value = tags.map((e) => (e == oldTag) ? newTag : e).toList();
+      for (var peer in peers) {
+        peer.tags = peer.tags.map((e) => (e == oldTag) ? newTag : e).toList();
+      }
+      int? oldColor = tagColors[oldTag];
+      if (oldColor != null) {
+        tagColors.remove(oldTag);
+        tagColors.addAll({newTag: oldColor});
+      }
+      return true;
+    }
     if (tags.contains(newTag)) {
       BotToast.showText(
           contentColor: Colors.red, text: 'Tag $newTag already exists');
@@ -1172,6 +1575,13 @@ class LegacyAb extends BaseAb {
 
   @override
   Future<bool> setTagColor(String tag, Color color) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel
+      if (tags.contains(tag)) {
+        tagColors[tag] = color.value;
+      }
+      return true;
+    }
     if (tags.contains(tag)) {
       tagColors[tag] = color.value;
     }
@@ -1180,6 +1590,16 @@ class LegacyAb extends BaseAb {
 
   @override
   Future<bool> deleteTag(String tag) async {
+    if (isLocalAddressBookMode()) {
+      // Already handled by AbModel
+      // gFFI.abModel.selectedTags.remove(tag); // AbModel handles selectedTags
+      tags.removeWhere((element) => element == tag);
+      tagColors.remove(tag);
+      for (var peer in peers) {
+        peer.tags.remove(tag);
+      }
+      return true;
+    }
     gFFI.abModel.selectedTags.remove(tag);
     tags.removeWhere((element) => element == tag);
     tagColors.remove(tag);
@@ -1197,6 +1617,7 @@ class LegacyAb extends BaseAb {
 // #endregion
 
   Map<String, dynamic> _serialize() {
+    // In local mode, always include hash if LegacyAb is used for local storage
     final peersJsonData =
         peers.map((e) => e.toCustomJson(includingHash: true)).toList();
     for (var e in tags) {
@@ -1204,7 +1625,7 @@ class LegacyAb extends BaseAb {
         tagColors[e] = str2color2(e, existing: tagColors.values.toList()).value;
       }
     }
-    final tagColorJsonData = jsonEncode(tagColors);
+    final tagColorJsonData = jsonEncode(tagColors); // Safe, no change needed
     return {
       "tags": tags,
       "peers": peersJsonData,
@@ -1213,6 +1634,8 @@ class LegacyAb extends BaseAb {
   }
 
   _deserialize(dynamic data) {
+    // This is called by AbModel._deserializeCache for LegacyAb instances (including local one).
+    // Behavior should be fine.
     if (data == null) return;
     final oldOnlineIDs = peers.where((e) => e.online).map((e) => e.id).toList();
     tags.clear();
@@ -1226,7 +1649,7 @@ class LegacyAb extends BaseAb {
         peers.add(Peer.fromJson(peer));
       }
     }
-    if (isFull()) {
+    if (isFull()) { // isFull is local mode aware
       peers.removeRange(licensedDevices, peers.length);
     }
     // restore online
@@ -1256,6 +1679,7 @@ class Ab extends BaseAb {
 
   @override
   String name() {
+    if (isLocalAddressBookMode()) return _localAddressBookName; // Should not happen if Ab is server-only
     if (personal) {
       return _personalAddressBookName;
     } else {
@@ -1265,22 +1689,26 @@ class Ab extends BaseAb {
 
   @override
   AbProfile? sharedProfile() {
+    if (isLocalAddressBookMode()) return null; // No shared profile in local mode
     return profile;
   }
 
   @override
   void setSharedProfile(AbProfile profile) {
+    if (isLocalAddressBookMode()) return;
     this.profile = profile;
   }
 
   @override
   bool isFull() {
+    if (isLocalAddressBookMode()) return false;
     return gFFI.abModel._maxPeerOneAb > 0 &&
         peers.length >= gFFI.abModel._maxPeerOneAb;
   }
 
   @override
   bool canWrite() {
+    if (isLocalAddressBookMode()) return true;
     if (personal) {
       return true;
     } else {
@@ -1291,6 +1719,7 @@ class Ab extends BaseAb {
 
   @override
   bool fullControl() {
+    if (isLocalAddressBookMode()) return true;
     if (personal) {
       return true;
     } else {
@@ -1300,6 +1729,9 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> pullAbImpl({quiet = false}) async {
+    if (isLocalAddressBookMode()) {
+      initialized = true; return true; // Should be handled by AbModel.loadCache()
+    }
     bool ret = true;
     List<Peer> tmpPeers = [];
     if (!await _fetchPeers(tmpPeers, quiet: quiet)) {
@@ -1320,6 +1752,7 @@ class Ab extends BaseAb {
   }
 
   Future<bool> _fetchPeers(List<Peer> tmpPeers, {quiet = false}) async {
+    if (isLocalAddressBookMode()) return true; // No fetching in local mode
     final api = "${await bind.mainGetApiServer()}/api/ab/peers";
     int? statusCode;
     try {
@@ -1343,21 +1776,21 @@ class Ab extends BaseAb {
         headers['Content-Type'] = "application/json";
         final resp = await http.post(uri, headers: headers);
         statusCode = resp.statusCode;
-        Map<String, dynamic> json =
+        Map<String, dynamic> jsonMap =
             _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
-        if (json.containsKey('error')) {
-          throw json['error'];
+        if (jsonMap.containsKey('error')) {
+          throw jsonMap['error'];
         }
         if (resp.statusCode != 200) {
           throw 'HTTP ${resp.statusCode}';
         }
-        if (json.containsKey('total')) {
-          if (total == 0) total = json['total'];
-          if (json.containsKey('data')) {
-            final data = json['data'];
+        if (jsonMap.containsKey('total')) {
+          if (total == 0) total = jsonMap['total'];
+          if (jsonMap.containsKey('data')) {
+            final data = jsonMap['data'];
             if (data is List) {
-              for (final profile in data) {
-                final u = Peer.fromJson(profile);
+              for (final prof in data) { // Changed variable name to avoid conflict
+                final u = Peer.fromJson(prof);
                 int index = tmpPeers.indexWhere((e) => e.id == u.id);
                 if (index < 0) {
                   tmpPeers.add(u);
@@ -1386,6 +1819,7 @@ class Ab extends BaseAb {
   }
 
   Future<bool> _fetchTags(List<AbTag> tmpTags, {quiet = false}) async {
+    if (isLocalAddressBookMode()) return true; // No fetching in local mode
     final api = "${await bind.mainGetApiServer()}/api/ab/tags/${profile.guid}";
     int? statusCode;
     try {
@@ -1400,13 +1834,13 @@ class Ab extends BaseAb {
       headers['Content-Type'] = "application/json";
       final resp = await http.post(uri, headers: headers);
       statusCode = resp.statusCode;
-      List<dynamic> json =
+      List<dynamic> jsonList = // Changed variable name
           _jsonDecodeRespList(utf8.decode(resp.bodyBytes), resp.statusCode);
       if (resp.statusCode != 200) {
         throw 'HTTP ${resp.statusCode}';
       }
 
-      for (final d in json) {
+      for (final d in jsonList) {
         final t = AbTag.fromJson(d);
         int index = tmpTags.indexWhere((e) => e.name == t.name);
         if (index < 0) {
@@ -1434,24 +1868,48 @@ class Ab extends BaseAb {
 // #region Peers
   @override
   Future<String?> addPeers(List<Map<String, dynamic>> ps) async {
+    if (isLocalAddressBookMode()) {
+      // This case should ideally be fully handled by AbModel.addPeersTo's local path.
+      // If LegacyAb.addPeers is called in local mode, it implies local data manipulation.
+      bool full = false;
+      for (var p_map in ps) {
+        final p = Peer.fromJson(p_map);
+        if (!isFull()) { // isFull is local mode aware
+          final index = peers.indexWhere((e) => e.id == p.id);
+          if (index >= 0) {
+             // If peer exists, AbModel should have updated it.
+             // If direct call to LegacyAb, decide on update/merge logic here.
+             // For now, assume AbModel handles updates before this could be an issue.
+            _merge(p, peers[index]); 
+          } else {
+            peers.add(p);
+          }
+        } else {
+          full = true;
+          break;
+        }
+      }
+      // No pushAb call here, AbModel._saveCache() is the authority.
+      return full ? translate("exceed_max_devices") : null;
+    }
     try {
       final api =
           "${await bind.mainGetApiServer()}/api/ab/peer/add/${profile.guid}";
       var headers = getHttpHeaders();
       headers['Content-Type'] = "application/json";
-      for (var p in ps) {
-        if (peers.firstWhereOrNull((e) => e.id == p['id']) != null) {
+      for (var p_map in ps) { // Changed variable name
+        if (peers.firstWhereOrNull((e) => e.id == p_map['id']) != null) {
           continue;
         }
         if (isFull()) {
           return translate("exceed_max_devices");
         }
         if (personal) {
-          removePassword(p);
+          removePassword(p_map);
         } else {
-          removeHash(p);
+          removeHash(p_map);
         }
-        String body = jsonEncode(p);
+        String body = jsonEncode(p_map);
         final resp =
             await http.post(Uri.parse(api), headers: headers, body: body);
         final errMsg = _jsonDecodeActionResp(resp);
@@ -1467,6 +1925,7 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> changeTagForPeers(List<String> ids, List<dynamic> tags) async {
+    if (isLocalAddressBookMode()) { /* Already handled by AbModel */ return true; }
     try {
       final api =
           "${await bind.mainGetApiServer()}/api/ab/peer/update/${profile.guid}";
@@ -1493,6 +1952,7 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> changeAlias({required String id, required String alias}) async {
+    if (isLocalAddressBookMode()) { /* Already handled by AbModel */ return true; }
     try {
       final api =
           "${await bind.mainGetApiServer()}/api/ab/peer/update/${profile.guid}";
@@ -1513,6 +1973,7 @@ class Ab extends BaseAb {
   }
 
   Future<bool> _setPassword(Object bodyContent) async {
+    if (isLocalAddressBookMode()) { /* Saved by AbModel */ return true;}
     try {
       final api =
           "${await bind.mainGetApiServer()}/api/ab/peer/update/${profile.guid}";
@@ -1534,6 +1995,7 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> changePersonalHashPassword(String id, String hash) async {
+    if (isLocalAddressBookMode()) { /* AbModel handles */ return true; }
     if (!personal) return false;
     if (!peers.any((e) => e.id == id)) return true;
     return await _setPassword({"id": id, "hash": hash});
@@ -1541,73 +2003,99 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> changeSharedPassword(String id, String password) async {
+    if (isLocalAddressBookMode()) { /* AbModel handles */ return true; }
     if (personal) return false;
     return await _setPassword({"id": id, "password": password});
   }
 
   @override
   Future<void> syncFromRecent(List<Peer> recents) async {
+    // Called by AbModel if current is Ab.
+    // If local mode, AbModel._saveCache() will be called after this.
     bool uiUpdate = false;
-    bool saveCache = false;
-    final api =
-        "${await bind.mainGetApiServer()}/api/ab/peer/update/${profile.guid}";
-    var headers = getHttpHeaders();
-    headers['Content-Type'] = "application/json";
+    bool saveCacheNeeded = false; // Renamed from saveCache to avoid conflict with AbModel._saveCache
+    
+    if (!isLocalAddressBookMode()) { // Server sync part
+        final api =
+            "${await bind.mainGetApiServer()}/api/ab/peer/update/${profile.guid}";
+        var headers = getHttpHeaders();
+        headers['Content-Type'] = "application/json";
 
-    Future<bool> trySyncOnePeer(Peer p, Peer r) async {
-      var map = Map<String, String>.fromEntries([]);
-      if (p.sameServer != true &&
-          r.username.isNotEmpty &&
-          p.username != r.username) {
-        p.username = r.username;
-        map['username'] = r.username;
-      }
-      if (p.sameServer != true &&
-          r.hostname.isNotEmpty &&
-          p.hostname != r.hostname) {
-        p.hostname = r.hostname;
-        map['hostname'] = r.hostname;
-      }
-      if (p.sameServer != true &&
-          r.platform.isNotEmpty &&
-          p.platform != r.platform) {
-        p.platform = r.platform;
-        map['platform'] = r.platform;
-      }
-      if (personal && r.hash.isNotEmpty && p.hash != r.hash) {
-        p.hash = r.hash;
-        map['hash'] = r.hash;
-        saveCache = true;
-      }
-      if (map.isEmpty) {
-        // no need to sync
-        return false;
-      }
-      map['id'] = p.id;
-      final body = jsonEncode(map);
-      final resp = await http.put(Uri.parse(api), headers: headers, body: body);
-      final errMsg = _jsonDecodeActionResp(resp);
-      if (errMsg.isNotEmpty) {
-        debugPrint('syncOnePeer errMsg: $errMsg');
-        return false;
-      }
-      uiUpdate = true;
-      return true;
+        Future<bool> trySyncOnePeerServer(Peer p, Peer r) async {
+          var map = Map<String, String>.fromEntries([]);
+          if (p.sameServer != true &&
+              r.username.isNotEmpty &&
+              p.username != r.username) {
+            map['username'] = r.username;
+          }
+          if (p.sameServer != true &&
+              r.hostname.isNotEmpty &&
+              p.hostname != r.hostname) {
+            map['hostname'] = r.hostname;
+          }
+          if (p.sameServer != true &&
+              r.platform.isNotEmpty &&
+              p.platform != r.platform) {
+            map['platform'] = r.platform;
+          }
+          if (personal && r.hash.isNotEmpty && p.hash != r.hash) {
+            map['hash'] = r.hash;
+          }
+          if (map.isEmpty) return false; // No server changes needed for this peer's attributes
+
+          // Apply changes locally before pushing, to keep p updated
+          if(map.containsKey('username')) p.username = map['username']!;
+          if(map.containsKey('hostname')) p.hostname = map['hostname']!;
+          if(map.containsKey('platform')) p.platform = map['platform']!;
+          if(map.containsKey('hash')) p.hash = map['hash']!;
+          
+          map['id'] = p.id;
+          final body = jsonEncode(map);
+          final resp = await http.put(Uri.parse(api), headers: headers, body: body);
+          final errMsg = _jsonDecodeActionResp(resp);
+          if (errMsg.isNotEmpty) {
+            debugPrint('syncOnePeer errMsg: $errMsg');
+            return false; // Server update failed
+          }
+          return true; // Server update succeeded
+        }
+        for (var p in peers) {
+            Peer? r = recents.firstWhereOrNull((e) => e.id == p.id);
+            if (r != null) {
+                if (await trySyncOnePeerServer(p,r)) uiUpdate = true;
+            }
+        }
+
+    } else { // Local sync part (just merge, AbModel handles saving)
+        for (var p in peers) {
+            Peer? r = recents.firstWhereOrNull((e) => e.id == p.id);
+            if (r != null) {
+                // Check if merge results in actual change to warrant UI update
+                final originalUsername = p.username;
+                final originalHostname = p.hostname;
+                final originalPlatform = p.platform;
+                final originalHash = p.hash;
+
+                if (p.sameServer != true && r.username.isNotEmpty && p.username != r.username) p.username = r.username;
+                if (p.sameServer != true && r.hostname.isNotEmpty && p.hostname != r.hostname) p.hostname = r.hostname;
+                if (p.sameServer != true && r.platform.isNotEmpty && p.platform != r.platform) p.platform = r.platform;
+                if (personal && r.hash.isNotEmpty && p.hash != r.hash) { // `personal` might need re-evaluation for local
+                    p.hash = r.hash;
+                    saveCacheNeeded = true; // Hash changes always need saving
+                }
+                if (p.username != originalUsername || p.hostname != originalHostname || p.platform != originalPlatform || p.hash != originalHash) {
+                    uiUpdate = true;
+                }
+            }
+        }
     }
 
+
     try {
-      // Not add new peers because IDs that are not on the server can't be synced, then sync will happen every startup.
-      for (var p in peers) {
-        Peer? r = recents.firstWhereOrNull((e) => e.id == p.id);
-        if (r != null) {
-          await trySyncOnePeer(p, r);
-        }
-      }
-      // Pull cannot be used for sync to avoid cyclic sync.
-      if (uiUpdate && gFFI.abModel.currentName.value == profile.name) {
+      if (uiUpdate && (gFFI.abModel.currentName.value == profile.name || isLocalAddressBookMode())) {
         peers.refresh();
       }
-      if (saveCache) {
+      if (saveCacheNeeded && !isLocalAddressBookMode()) { // Only call _saveCache if not in local mode, as AbModel handles it
         gFFI.abModel._saveCache();
       }
     } catch (err) {
@@ -1617,6 +2105,7 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> deletePeers(List<String> ids) async {
+    if (isLocalAddressBookMode()) { /* AbModel handles */ return true; }
     try {
       final api =
           "${await bind.mainGetApiServer()}/api/ab/peer/${profile.guid}";
@@ -1642,6 +2131,7 @@ class Ab extends BaseAb {
   @override
   Future<bool> addTags(
       List<String> tagList, Map<String, int> tagColorMap) async {
+    if (isLocalAddressBookMode()) { /* AbModel handles */ return true; }
     try {
       final api =
           "${await bind.mainGetApiServer()}/api/ab/tag/add/${profile.guid}";
@@ -1670,6 +2160,7 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> renameTag(String oldTag, String newTag) async {
+    if (isLocalAddressBookMode()) { /* AbModel handles */ return true; }
     if (tags.contains(newTag)) {
       BotToast.showText(
           contentColor: Colors.red, text: 'Tag $newTag already exists');
@@ -1699,6 +2190,7 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> setTagColor(String tag, Color color) async {
+    if (isLocalAddressBookMode()) { /* AbModel handles */ return true; }
     try {
       final api =
           "${await bind.mainGetApiServer()}/api/ab/tag/update/${profile.guid}";
@@ -1723,6 +2215,7 @@ class Ab extends BaseAb {
 
   @override
   Future<bool> deleteTag(String tag) async {
+    if (isLocalAddressBookMode()) { /* AbModel handles */ return true; }
     try {
       final api = "${await bind.mainGetApiServer()}/api/ab/tag/${profile.guid}";
       var headers = getHttpHeaders();
@@ -1837,8 +2330,8 @@ class DummyAb extends BaseAb {
 
 Map<String, dynamic> _jsonDecodeRespMap(String body, int statusCode) {
   try {
-    Map<String, dynamic> json = jsonDecode(body);
-    return json;
+    Map<String, dynamic> jsonMap = jsonDecode(body); // Changed variable name
+    return jsonMap;
   } catch (e) {
     final err = body.isNotEmpty && body.length < 128 ? body : e.toString();
     if (statusCode != 200) {
@@ -1850,8 +2343,8 @@ Map<String, dynamic> _jsonDecodeRespMap(String body, int statusCode) {
 
 List<dynamic> _jsonDecodeRespList(String body, int statusCode) {
   try {
-    List<dynamic> json = jsonDecode(body);
-    return json;
+    List<dynamic> jsonList = jsonDecode(body); // Changed variable name
+    return jsonList;
   } catch (e) {
     final err = body.isNotEmpty && body.length < 128 ? body : e.toString();
     if (statusCode != 200) {

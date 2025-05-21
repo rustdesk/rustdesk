@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
 import '../common.dart';
+import 'ab_model.dart'; // Import for isLocalAddressBookMode
 import 'model.dart';
 
 enum PeerTabIndex {
@@ -42,7 +43,8 @@ class PeerTabModel with ChangeNotifier {
     true,
     !isWeb,
     !(bind.isDisableAb() || bind.isDisableAccount()),
-    !(bind.isDisableGroupPanel() || bind.isDisableAccount()),
+    // For Group Tab:
+    !(bind.isDisableGroupPanel() || bind.isDisableAccount()) && !isLocalAddressBookMode(),
   ]);
   final List<bool> _isVisible = List.filled(maxTabCount, true, growable: false);
   List<bool> get isVisibleEnabled => () {
@@ -126,6 +128,9 @@ class PeerTabModel with ChangeNotifier {
 
   String tabTooltip(int index) {
     if (index >= 0 && index < tabNames.length) {
+      if (index == PeerTabIndex.ab.index && isLocalAddressBookMode()) {
+        return translate('Address Book (Local)'); // New tooltip for local mode
+      }
       return translate(tabNames[index]);
     }
     return index.toString();

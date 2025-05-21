@@ -146,6 +146,7 @@ const String kOptionStopService = "stop-service";
 const String kOptionDirectxCapture = "enable-directx-capture";
 const String kOptionAllowRemoteCmModification = "allow-remote-cm-modification";
 const String kOptionEnableTrustedDevices = "enable-trusted-devices";
+const String kOptionLocalAddressBookMode = "local-address-book-mode";
 
 // network options
 const String kOptionAllowWebSocket = "allow-websocket";

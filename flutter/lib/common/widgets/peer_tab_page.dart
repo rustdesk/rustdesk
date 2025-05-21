@@ -23,6 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
 import '../../common.dart';
+import '../../models/ab_model.dart'; // Required for isLocalAddressBookMode
 import '../../models/platform_model.dart';
 
 class PeerTabPage extends StatefulWidget {
@@ -461,7 +462,7 @@ class _PeerTabPageState extends State<PeerTabPage>
       addressbooks.remove(gFFI.abModel.currentName.value);
     }
     return Offstage(
-      offstage: !gFFI.userModel.isLogin || addressbooks.isEmpty,
+      offstage: (!gFFI.userModel.isLogin && !isLocalAddressBookMode()) || addressbooks.isEmpty,
       child: _hoverAction(
         context: context,
         toolTip: translate('Add to address book'),
@@ -478,7 +479,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget editSelectionTags() {
     final model = Provider.of<PeerTabModel>(context);
     return Offstage(
-      offstage: !gFFI.userModel.isLogin ||
+      offstage: (!gFFI.userModel.isLogin && !isLocalAddressBookMode()) ||
           model.currentTab != PeerTabIndex.ab.index ||
           gFFI.abModel.currentAbTags.isEmpty,
       child: _hoverAction(
