@@ -240,6 +240,13 @@ static bool setDisplayToMode(CGDirectDisplayID display, CGDisplayModeRef mode) {
     return true;
 }
 
+// Set the display to a specific mode based on width and height.
+// Returns true if the display mode was successfully changed, false otherwise.
+// If no such mode is available, it will not change the display mode.
+//
+// If `tryHiDPI` is true, it will try to set the display to a HiDPI mode if available.
+// If no HiDPI mode is available, it will fall back to a non-HiDPI mode with the same resolution.
+// If `tryHiDPI` is false, it sets the display to the first mode with the same resolution, no matter if it's HiDPI or not.
 extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t height, bool tryHiDPI)
 {
     bool ret = false;
