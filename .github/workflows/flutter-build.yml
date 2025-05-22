@@ -62,11 +62,9 @@ jobs:
       fail-fast: false
 
   build-for-windows-flutter:
-    name: ${{ matrix.job.target }}
+    name: Build For Windows Flutter
     needs: [build-RustDeskTempTopMostWindow, generate-bridge]
     runs-on: ${{ matrix.job.os }}
-    outputs:
-      timestamp: ${{ steps.get_time.outputs.timestamp }}
     strategy:
       fail-fast: false
       matrix:
@@ -81,14 +79,6 @@ jobs:
             }
           # - { target: aarch64-pc-windows-msvc, os: windows-2022, arch: aarch64 }
     steps:
-      - name: Get Current UTC Time
-        id: get_time
-        run: |
-          # 使用 PowerShell 获取 ISO 8601 格式的 UTC 时间
-          $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-          echo "timestamp=$timestamp" >> $GITHUB_OUTPUT
-        shell: pwsh  # 强制使用 PowerShell
-
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
         with:
@@ -193,15 +183,6 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
-
-      - name: Cache Rust
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache Flutter
         uses: actions/cache@v4
@@ -341,7 +322,7 @@ jobs:
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    name: Build For Windows Sciter
     runs-on: ${{ matrix.job.os }}
     # Temporarily disable this action due to additional test is needed.
     # if: false
@@ -358,7 +339,16 @@ jobs:
               vcpkg-triplet: x86-windows-static,
             }
           # - { target: aarch64-pc-windows-msvc, os: windows-2022 }
+    outputs:
+      formatted-time: ${{ steps.set-time.outputs.current_time }}
     steps:
+      - name: Get current time
+        id: set-time
+        shell: pwsh
+        run: |
+          $currentTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+          echo "current_time=$currentTime" >> $env:GITHUB_OUTPUT
+
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
         with:
@@ -435,17 +425,6 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
-
-      - name: Cache Rust x86 build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-x86-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('Cargo.toml') }}-inline-vram-hwcodec
-          restore-keys: |
-            ${{ runner.os }}-x86-
 
       - name: Cache Sciter
         uses: actions/cache@v4
@@ -540,10 +519,10 @@ jobs:
           retention-days: 1
 
   publish-release:
-    name: Publish Nightly Release
+    name: Publish Release
     needs: [build-for-windows-flutter, build-for-windows-sciter]
     if: ${{ inputs.upload-artifact }}
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
@@ -551,69 +530,59 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: windows-*
-
-      - name: Collect and extract build outputs
-        run: |
-          New-Item -ItemType Directory -Path combined_artifacts -Force
-          
-          # 遍历所有构件（包括子目录中的文件）
-          Get-ChildItem -Path artifacts -Filter "windows-*" -Recurse | ForEach-Object {
-            if ($_.Extension -eq ".zip") {
-              # 创建临时目录用于解压
-              $tempDir = New-Item -ItemType Directory -Path "$env:TEMP\$(New-Guid)"
-              
-              # 解压到临时目录
-              Expand-Archive -Path $_.FullName -DestinationPath $tempDir -Force
-              
-              # 移动所有文件到 combined_artifacts（强制覆盖）
-              Get-ChildItem -Path $tempDir -Recurse | Move-Item -Destination combined_artifacts -Force
-              
-              # 删除临时目录
-              Remove-Item -Path $tempDir -Recurse -Force
-            } else {
-              # 直接复制非 ZIP 文件
-              Copy-Item -Path $_.FullName -Destination combined_artifacts -Force
-            }
-          }
-          
-          # 二次清理空目录（防御性操作）
-          Get-ChildItem -Path combined_artifacts -Directory | Remove-Item -Recurse -Force
-        shell: pwsh
-
-      - name: Show flattened structure
-        run: |
-          Write-Output "Final combined_artifacts structure:"
-          tree /f combined_artifacts
-        shell: cmd
-
       - name: Generate Release Notes
         id: gen_notes
         run: |
-          RAW_TIME="${{ needs.build-for-windows-flutter.outputs.timestamp }}"
-          # 将 ISO 8601 格式的时间转换为可读格式
-          TIMESTAMP=$(echo "$RAW_TIME" | sed 's/T/ /; s/Z//')
-          # 获取最新的提交信息
-          COMMIT_MSG=$(git log -1 --pretty=%B | sed ':a;N;$!ba;s/\n/<br>/g')
-          # 使用单引号包裹每行内容
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo '| 项目                | 值                                  |' >> $GITHUB_OUTPUT
-          echo '|---------------------|-------------------------------------|' >> $GITHUB_OUTPUT
-          echo '| **触发分支**        | `'"${{ github.ref_name }}"'`         |' >> $GITHUB_OUTPUT
-          echo '| **提交哈希**        | `'"${{ github.sha }}"'`              |' >> $GITHUB_OUTPUT
-          echo '| **提交信息**        | '"${COMMIT_MSG}"'                    |' >> $GITHUB_OUTPUT
-          echo '| **构建时间**  | '"${TIMESTAMP}"'                           |' >> $GITHUB_OUTPUT
-          echo '| **工作流运行**      | [#'"${{ github.run_number }}"']('"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"') |' >> $GITHUB_OUTPUT
-          echo '| **Rust 版本**       | `'"${{ env.RUST_VERSION }}"'`       |' >> $GITHUB_OUTPUT
-          echo '| **Flutter 版本**    | `'"${{ env.FLUTTER_VERSION }}"'`    |' >> $GITHUB_OUTPUT
-          echo '| **VCPKG 提交**      | `'"${{ env.VCPKG_COMMIT_ID }}"'`    |' >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          TIMESTAMP="${{ needs.build-for-windows-sciter.outputs.formatted-time }}"
+          
+          # 在 Ubuntu 中确保正确处理换行符（使用 tr 替代 sed 更可靠）
+          COMMIT_MSG=$(git log -1 --pretty=%B | tr '\n' ',' | sed 's/,/<br>/g')
+          
+          # 使用 heredoc 语法提高可读性
+          {
+            echo "notes<<EOF"
+            echo '| 项目                | 值                                  |'
+            echo '|---------------------|-------------------------------------|'
+            echo '| **触发分支**        | `'"${{ github.ref_name }}"'`         |'
+            echo '| **提交哈希**        | `'"${{ github.sha }}"'`              |'
+            echo '| **提交信息**        | '"${COMMIT_MSG}"'                    |'
+            echo '| **构建时间**        | '"${TIMESTAMP}"'                     |'
+            echo '| **工作流运行**      | [#'"${{ github.run_number }}"']('"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"') |'
+            echo '| **Rust 版本**       | `'"${{ env.RUST_VERSION }}"'`       |'
+            echo '| **Flutter 版本**    | `'"${{ env.FLUTTER_VERSION }}"'`    |'
+            echo '| **VCPKG 提交**      | `'"${{ env.VCPKG_COMMIT_ID }}"'`    |'
+            echo "EOF"
+            echo "timestamp=${TIMESTAMP}"
+          } >> $GITHUB_OUTPUT
         shell: bash
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./source-artifact
+          pattern: windows-*
+
+      - name: Extract and Flatten Files
+        run: |
+          # 创建目标目录
+          mkdir -p ./unpacked
+          
+          # 递归查找所有 ZIP 文件
+          find ./source-artifact -type f -name "*.zip" -print0 | while IFS= read -r -d '' zipfile; do
+            echo "Processing: $zipfile"
+            
+            # 创建临时解压目录
+            TEMP_DIR=$(mktemp -d)
+            
+            # 解压到临时目录（保留原始结构）
+            unzip -oq "$zipfile" -d "$TEMP_DIR"
+            
+            # 递归查找所有文件（排除目录）并移动到目标目录
+            find "$TEMP_DIR" -type f -exec mv -f "{}" ./unpacked/ \;
+            
+            # 清理临时目录
+            rm -rf "$TEMP_DIR"
+          done
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
@@ -623,4 +592,4 @@ jobs:
           name: "${{ env.TAG_NAME }} Build ${{ steps.gen_notes.outputs.timestamp }}"
           body: ${{ steps.gen_notes.outputs.notes }}
           files: |
-            combined_artifacts/*
+            ./unpacked/*
