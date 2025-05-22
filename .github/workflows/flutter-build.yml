@@ -48,9 +48,11 @@ env:
 
 jobs:
   generate-bridge:
+    name: Generate Bridge
     uses: ./.github/workflows/bridge.yml
 
   build-RustDeskTempTopMostWindow:
+    name: Build RustDesk Temp Top Most Window
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
       upload-artifact: ${{ inputs.upload-artifact }}
@@ -567,22 +569,37 @@ jobs:
           # 创建目标目录
           mkdir -p ./unpacked
           
-          # 递归查找所有 ZIP 文件
-          find ./source-artifact -type f -name "*.zip" -print0 | while IFS= read -r -d '' zipfile; do
-            echo "Processing: $zipfile"
+          # 递归查找所有层级的 ZIP 文件（含子目录）
+          find ./source-artifact -type f -iname "*.zip" -print0 | while IFS= read -r -d $'\0' zipfile; do
+            echo "🔍 发现 ZIP 文件: $zipfile"
             
-            # 创建临时解压目录
+            # 创建唯一临时目录
             TEMP_DIR=$(mktemp -d)
+            echo "🔄 临时目录: $TEMP_DIR"
             
-            # 解压到临时目录（保留原始结构）
-            unzip -oq "$zipfile" -d "$TEMP_DIR"
+            # 解压到临时目录
+            if ! unzip -oq "$zipfile" -d "$TEMP_DIR"; then
+              echo "❌ 解压失败: $zipfile"
+              exit 1
+            fi
             
-            # 递归查找所有文件（排除目录）并移动到目标目录
+            # 移动所有文件到根目录（包含子目录中的文件）
             find "$TEMP_DIR" -type f -exec mv -f "{}" ./unpacked/ \;
             
             # 清理临时目录
             rm -rf "$TEMP_DIR"
           done
+
+          # 验证最终结果
+          echo "✅ 最终文件列表:"
+          find ./unpacked -type f -exec ls -l "{}" \;
+
+      - name: Validate Paths
+        run: |
+          echo "工作区路径: ${{ github.workspace }}"
+          echo "解压目录绝对路径: $(realpath ./unpacked)"
+          echo "上传路径验证:"
+          du -sh ./unpacked
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
