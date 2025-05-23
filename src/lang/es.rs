@@ -694,7 +694,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("download-new-version-failed-tip", "Descarga fallida. Puedes volver a intentarlo o hacer clic en el botón \"Download\" para descargar desde la página de lanzamientos y actualizar manualmente."),
         ("Auto update", "Auto actualizar"),
         ("update-failed-check-msi-tip", "Comprobación de método de instalación fallida. Por favor, haz clic en el botón \"Download\" para descargar desde la página de lanzamientos y actualizar manualmente."),
-        ("websocket_tip", "Al usar WebSocket, solo se permiten conexiones relay.""),
+        ("websocket_tip", "Al usar WebSocket, solo se permiten conexiones relay."),
         ("Use WebSocket", "Usar WebSocket"),
         ("Trackpad speed", "Velocidad de trackpad"),
         ("Default trackpad speed", "Velocidad predeterminada de trackpad"),
