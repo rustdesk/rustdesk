@@ -559,43 +559,8 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ${{ github.workspace }}/source-artifact
+          path: ${{ github.workspace }}/artifacts
           pattern: windows-*
-
-      - name: List downloaded artifacts
-        run: |
-          echo "下载的文件列表:"
-          ls -lR ${{ github.workspace }}/source-artifact
-
-      - name: Extract and Flatten Files
-        run: |
-          mkdir -p ${{ github.workspace }}/unpacked
-          # 处理 windows-sciter-artifacts
-          find ${{ github.workspace }}/source-artifact/windows-sciter-artifacts -type f -name "*.zip" -print0 | while IFS= read -r -d '' zipfile; do
-            echo "Processing: $zipfile"
-            TEMP_DIR=$(mktemp -d)
-            # 使用 -j 扁平化解压路径
-            unzip -ojq "$zipfile" -d "$TEMP_DIR"
-            # 将 TEMP_DIR 下的所有文件移动到 unpacked 根目录
-            find "$TEMP_DIR" -mindepth 1 -type f -exec mv -f "{}" ${{ github.workspace }}/unpacked/ \;
-            rm -rf "$TEMP_DIR"
-          done
-          # 处理 windows-flutter-artifacts
-          find ${{ github.workspace }}/source-artifact/windows-flutter-artifacts -type f -name "*.zip" -print0 | while IFS= read -r -d '' zipfile; do
-            echo "Processing: $zipfile"
-            TEMP_DIR=$(mktemp -d)
-            unzip -ojq "$zipfile" -d "$TEMP_DIR"
-            find "$TEMP_DIR" -mindepth 1 -type f -exec mv -f "{}" ${{ github.workspace }}/unpacked/ \;
-            rm -rf "$TEMP_DIR"
-          done
-
-      - name: Validate Paths
-        run: |
-          echo "解压目录绝对路径: $(realpath ${{ github.workspace }}/unpacked)"
-          echo "上传路径验证:"
-          du -sh ${{ github.workspace }}/unpacked
-          echo "✅ 解压后的文件列表:"
-          ls -lR ${{ github.workspace }}/unpacked
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
@@ -604,6 +569,6 @@ jobs:
           name: "${{ env.TAG_NAME }} Build ${{ steps.gen_notes.outputs.timestamp }}"
           body: ${{ steps.gen_notes.outputs.notes }}
           files: |
-            ${{ github.workspace }}/unpacked/rustdesk-${{ env.VERSION }}-x86_64.exe
-            ${{ github.workspace }}/unpacked/rustdesk-${{ env.VERSION }}-x86_64.msi
-            ${{ github.workspace }}/unpacked/rustdesk-${{ env.VERSION }}-x86-sciter.exe
+            ${{ github.workspace }}/artifacts/windows-flutter-artifacts/rustdesk-${{ env.VERSION }}-x86_64.exe
+            ${{ github.workspace }}/artifacts/windows-flutter-artifacts/rustdesk-${{ env.VERSION }}-x86_64.msi
+            ${{ github.workspace }}/artifacts/windows-sciter-artifacts/rustdesk-${{ env.VERSION }}-x86-sciter.exe
