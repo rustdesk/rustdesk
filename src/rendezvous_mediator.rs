@@ -568,6 +568,7 @@ impl RendezvousMediator {
             id,
             uuid: uuid.into(),
             pk: pk.into(),
+            no_register_device: Config::no_register_device(),
             ..Default::default()
         });
         socket.send(&msg_out).await?;

@@ -127,7 +127,8 @@ async fn start_hbbs_sync_async() {
                 // Though the username comparison is only necessary on Windows,
                 // we still keep the comparison on other platforms for consistency.
                 let need_upload = (!info_uploaded.uploaded || info_uploaded.username.as_ref() != Some(&sys_username)) &&
-                    info_uploaded.last_uploaded.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true);
+                    info_uploaded.last_uploaded.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true)
+                    && !Config::no_register_device();
                 if need_upload {
                     v["version"] = json!(crate::VERSION);
                     v["id"] = json!(id);
