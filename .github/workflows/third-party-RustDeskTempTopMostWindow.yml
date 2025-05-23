@@ -32,6 +32,7 @@ env:
 
 jobs:
   build-RustDeskTempTopMostWindow:
+    name: Build RustDesk Temp Top Most Window
     runs-on: ${{ inputs.target }}
     strategy:
         fail-fast: false

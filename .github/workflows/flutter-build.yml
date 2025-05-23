@@ -48,11 +48,9 @@ env:
 
 jobs:
   generate-bridge:
-    name: Generate Bridge
     uses: ./.github/workflows/bridge.yml
 
   build-RustDeskTempTopMostWindow:
-    name: Build RustDesk Temp Top Most Window
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
       upload-artifact: ${{ inputs.upload-artifact }}
@@ -564,44 +562,40 @@ jobs:
           path: ${{ github.workspace }}/source-artifact
           pattern: windows-*
 
+      - name: List downloaded artifacts
+        run: |
+          echo "下载的文件列表:"
+          ls -lR ${{ github.workspace }}/source-artifact
+
       - name: Extract and Flatten Files
         run: |
-          # 创建目标目录
           mkdir -p ${{ github.workspace }}/unpacked
-          # 递归查找所有 ZIP 文件
+          # 处理 windows-sciter-artifacts
           find ${{ github.workspace }}/source-artifact/windows-sciter-artifacts -type f -name "*.zip" -print0 | while IFS= read -r -d '' zipfile; do
             echo "Processing: $zipfile"
-            # 创建临时解压目录
             TEMP_DIR=$(mktemp -d)
-            # 解压到临时目录（保留原始结构）
-            unzip -oq "$zipfile" -d "$TEMP_DIR"
-            # 递归查找所有文件（排除目录）并移动到目标目录
-            find "$TEMP_DIR" -type f -exec mv -f "{}" ${{ github.workspace }}/unpacked/ \;
-            # 清理临时目录
+            # 使用 -j 扁平化解压路径
+            unzip -ojq "$zipfile" -d "$TEMP_DIR"
+            # 将 TEMP_DIR 下的所有文件移动到 unpacked 根目录
+            find "$TEMP_DIR" -mindepth 1 -type f -exec mv -f "{}" ${{ github.workspace }}/unpacked/ \;
             rm -rf "$TEMP_DIR"
           done
-          # 递归查找所有 ZIP 文件
+          # 处理 windows-flutter-artifacts
           find ${{ github.workspace }}/source-artifact/windows-flutter-artifacts -type f -name "*.zip" -print0 | while IFS= read -r -d '' zipfile; do
             echo "Processing: $zipfile"
-            # 创建临时解压目录
             TEMP_DIR=$(mktemp -d)
-            # 解压到临时目录（保留原始结构）
-            unzip -oq "$zipfile" -d "$TEMP_DIR"
-            # 递归查找所有文件（排除目录）并移动到目标目录
-            find "$TEMP_DIR" -type f -exec mv -f "{}" ${{ github.workspace }}/unpacked/ \;
-            # 清理临时目录
+            unzip -ojq "$zipfile" -d "$TEMP_DIR"
+            find "$TEMP_DIR" -mindepth 1 -type f -exec mv -f "{}" ${{ github.workspace }}/unpacked/ \;
             rm -rf "$TEMP_DIR"
           done
-          # 验证最终结果
-          echo "✅ 最终文件列表:"
-          find ${{ github.workspace }}/unpacked -type f -exec ls -l "{}" \;
 
       - name: Validate Paths
         run: |
-          echo "工作区路径: ${{ github.workspace }}"
           echo "解压目录绝对路径: $(realpath ${{ github.workspace }}/unpacked)"
           echo "上传路径验证:"
           du -sh ${{ github.workspace }}/unpacked
+          echo "✅ 解压后的文件列表:"
+          ls -lR ${{ github.workspace }}/unpacked
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
