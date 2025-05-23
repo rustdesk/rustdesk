@@ -9,7 +9,7 @@
   <b>  لغتك الأم,  <a href="https://github.com/rustdesk/doc.rustdesk.com">Doc</a> و <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a>, README نحن بحاجة إلى مساعدتك لترجمة هذا </b>
 </p>
 
-[Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) :تواصل معنا عبر
+[Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk) :تواصل معنا عبر
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
@@ -26,6 +26,7 @@
 [**؟ RustDesk كيفية يعمل**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
 [**BINARY تنزيل**](https://github.com/rustdesk/rustdesk/releases)
+
 
 ## التبعيات
 
