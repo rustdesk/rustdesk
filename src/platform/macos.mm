@@ -153,8 +153,28 @@ size_t bitDepth(CGDisplayModeRef mode) {
     return depth;	
 }
 
+static bool isHiDPIMode(CGDisplayModeRef mode) {
+    // Check if the mode is HiDPI by comparing pixel width to width
+    // If pixel width is greater than width, it's a HiDPI mode
+    return CGDisplayModeGetPixelWidth(mode) > CGDisplayModeGetWidth(mode);
+}
+
+CFArrayRef getAllModes(CGDirectDisplayID display) {
+    // Create options dictionary to include HiDPI modes
+    CFMutableDictionaryRef options = CFDictionaryCreateMutable(
+        kCFAllocatorDefault,
+        0,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    // Include HiDPI modes
+    CFDictionarySetValue(options, kCGDisplayShowDuplicateLowResolutionModes, kCFBooleanTrue);
+    CFArrayRef allModes = CGDisplayCopyAllDisplayModes(display, options);
+    CFRelease(options);
+    return allModes;
+}
+
 extern "C" bool MacGetModeNum(CGDirectDisplayID display, uint32_t *numModes) {
-    CFArrayRef allModes = CGDisplayCopyAllDisplayModes(display, NULL);
+    CFArrayRef allModes = getAllModes(display);
     if (allModes == NULL) {
         return false;
     }
@@ -163,12 +183,12 @@ extern "C" bool MacGetModeNum(CGDirectDisplayID display, uint32_t *numModes) {
     return true;
 }
 
-extern "C" bool MacGetModes(CGDirectDisplayID display, uint32_t *widths, uint32_t *heights, uint32_t max, uint32_t *numModes) {
+extern "C" bool MacGetModes(CGDirectDisplayID display, uint32_t *widths, uint32_t *heights, bool *hidpis, uint32_t max, uint32_t *numModes) {
     CGDisplayModeRef currentMode = CGDisplayCopyDisplayMode(display);
     if (currentMode == NULL) {
         return false;
     }
-    CFArrayRef allModes = CGDisplayCopyAllDisplayModes(display, NULL);
+    CFArrayRef allModes = getAllModes(display);
     if (allModes == NULL) {
         CGDisplayModeRelease(currentMode);
         return false;
@@ -181,6 +201,7 @@ extern "C" bool MacGetModes(CGDirectDisplayID display, uint32_t *widths, uint32_
             bitDepth(currentMode) == bitDepth(mode)) {
             widths[realNum] = (uint32_t)CGDisplayModeGetWidth(mode);
             heights[realNum] = (uint32_t)CGDisplayModeGetHeight(mode);
+            hidpis[realNum] = isHiDPIMode(mode);
             realNum++;
         }
     }
@@ -201,7 +222,6 @@ extern "C" bool MacGetMode(CGDirectDisplayID display, uint32_t *width, uint32_t 
     return true;
 }
 
-
 static bool setDisplayToMode(CGDirectDisplayID display, CGDisplayModeRef mode) {
     CGError rc;
     CGDisplayConfigRef config;
@@ -220,29 +240,54 @@ static bool setDisplayToMode(CGDirectDisplayID display, CGDisplayModeRef mode) {
     return true;
 }
 
-extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t height)
+// Set the display to a specific mode based on width and height.
+// Returns true if the display mode was successfully changed, false otherwise.
+// If no such mode is available, it will not change the display mode.
+//
+// If `tryHiDPI` is true, it will try to set the display to a HiDPI mode if available.
+// If no HiDPI mode is available, it will fall back to a non-HiDPI mode with the same resolution.
+// If `tryHiDPI` is false, it sets the display to the first mode with the same resolution, no matter if it's HiDPI or not.
+extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t height, bool tryHiDPI)
 {
     bool ret = false;
     CGDisplayModeRef currentMode = CGDisplayCopyDisplayMode(display);
     if (currentMode == NULL) {
         return ret;
     }
-    CFArrayRef allModes = CGDisplayCopyAllDisplayModes(display, NULL);
+    CFArrayRef allModes = getAllModes(display);
+
     if (allModes == NULL) {
         CGDisplayModeRelease(currentMode);
         return ret;
     }
     int numModes = CFArrayGetCount(allModes);
+    CGDisplayModeRef preferredHiDPIMode = NULL;
+    CGDisplayModeRef fallbackMode = NULL;
     for (int i = 0; i < numModes; i++) {
         CGDisplayModeRef mode = (CGDisplayModeRef)CFArrayGetValueAtIndex(allModes, i);
         if (width == CGDisplayModeGetWidth(mode) &&
             height == CGDisplayModeGetHeight(mode) && 
             CGDisplayModeGetRefreshRate(currentMode) == CGDisplayModeGetRefreshRate(mode) &&
             bitDepth(currentMode) == bitDepth(mode)) {
-            ret = setDisplayToMode(display, mode);
-            break;
+
+            if (isHiDPIMode(mode)) {
+                preferredHiDPIMode = mode;
+                break;
+            } else {
+                fallbackMode = mode;
+                if (!tryHiDPI) {
+                    break;
+                }
+            }
         }
     }
+
+    if (preferredHiDPIMode) {
+        ret = setDisplayToMode(display, preferredHiDPIMode);
+    } else if (fallbackMode) {
+        ret = setDisplayToMode(display, fallbackMode);
+    }
+
     CGDisplayModeRelease(currentMode);
     CFRelease(allModes);
     return ret;
