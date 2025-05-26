@@ -1,6 +1,6 @@
 #  RustDesk 기여 가이드라인
 
-RustDesk는 모든 사람의 기여를 환영합니다. 만약 RustDesk에 기여하고 싶다면 아래 가이드를 참고해주세요:
+RustDesk는 모든 사람의 기여를 환영합니다. 만약 RustDesk에 기여하고 싶다면 아래 가이드를 참고해 주세요:
 
 ## 기여 방식
 
@@ -27,7 +27,7 @@ Git에서는 `git commit` 명령어에 `-s` 옵션을 사용해 서명을 추가
 - PR이 검토되지 않거나 특정 리뷰어가 필요하면, 
 <br/> PR이나 댓글에서 리뷰어를 태그하거나 [이메일](mailto:info@rustdesk.com)로 리뷰를 요청할 수 있습니다.
 
-- 수정된 버그나 추가된 기능과 관련된 테스트 코드를 포함해주세요.
+- 수정된 버그나 추가된 기능과 관련된 테스트 코드를 포함해 주세요.
 
 Git 사용에 대한 자세한 내용은 [GitHub workflow 101](https://github.com/servo/servo/wiki/GitHub-workflow)을 참조하세요.
 
