@@ -283,7 +283,7 @@ impl Client {
 
         if !key.is_empty() && !token.is_empty() {
             // mainly for the security of token
-            allow_err!(secure_tcp(&mut socket, key).await);
+            secure_tcp(&mut socket, key).await?;
         }
 
         let start = std::time::Instant::now();
@@ -599,7 +599,7 @@ impl Client {
 
             if !key.is_empty() && !token.is_empty() {
                 // mainly for the security of token
-                allow_err!(secure_tcp(&mut socket, key).await);
+                secure_tcp(&mut socket, key).await?;
             }
 
             ipv4 = socket.local_addr().is_ipv4();
