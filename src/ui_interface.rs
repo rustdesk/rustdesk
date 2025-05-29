@@ -1157,9 +1157,14 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     #[cfg(target_os = "windows")]
     let mut enable_file_transfer = "".to_owned();
     let is_cm = crate::common::is_cm();
+    let mut connection_attempts = 0;
+    let max_attempts = 10; // Give service time to start
 
     loop {
-        if let Ok(mut c) = ipc::connect(1000, "").await {
+        // Increase timeout and retry attempts when service might be starting
+        let timeout = if connection_attempts < 3 { 1000 } else { 2000 };
+        if let Ok(mut c) = ipc::connect(timeout, "").await {
+            connection_attempts = 0; // Reset on successful connection
             let mut timer = crate::rustdesk_interval(time::interval(time::Duration::from_secs(1)));
             loop {
                 tokio::select! {
@@ -1167,8 +1172,30 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                         match res {
                             Err(err) => {
                                 log::error!("ipc connection closed: {}", err);
+                                // Don't quit immediately if we're starting the service
+                                // Give the service time to start and allow retries
                                 if is_cm {
-                                    crate::ui_cm_interface::quit_cm();
+                                    // Check if service is starting up
+                                    let mut service_starting = false;
+                                    
+                                    #[cfg(windows)]
+                                    {
+                                        // On Windows, check if we're in elevated mode or if service is being installed
+                                        let is_elevated = crate::platform::is_elevated(None).unwrap_or(false);
+                                        service_starting = !is_elevated && (crate::platform::installing_service() || 
+                                            (crate::platform::is_installed() && !crate::platform::is_root()));
+                                    }
+                                    
+                                    #[cfg(not(windows))]
+                                    {
+                                        // On other platforms, check if service is installed but not running as root
+                                        service_starting = crate::platform::is_installed() && 
+                                            !crate::platform::is_root();
+                                    }
+                                    
+                                    if !service_starting {
+                                        crate::ui_cm_interface::quit_cm();
+                                    }
                                 }
                                 break;
                             }
@@ -1247,6 +1274,36 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                 .unwrap()
                 .insert("ipc-closed".to_owned(), "Y".to_owned());
             break;
+        } else {
+            // Connection failed
+            connection_attempts += 1;
+            log::warn!("IPC connection attempt {} failed", connection_attempts);
+            
+            // Only quit if we've exceeded max attempts and not during service startup
+            if is_cm && connection_attempts >= max_attempts {
+                let mut service_starting = false;
+                
+                #[cfg(windows)]
+                {
+                    // On Windows, check if service is being installed/started
+                    let is_elevated = crate::platform::is_elevated(None).unwrap_or(false);
+                    service_starting = !is_elevated && (crate::platform::installing_service() || 
+                        (crate::platform::is_installed() && !crate::platform::is_root()));
+                }
+                
+                #[cfg(not(windows))]
+                {
+                    // On other platforms
+                    service_starting = crate::platform::is_installed() && 
+                        !crate::platform::is_root();
+                }
+                
+                if !service_starting {
+                    log::error!("Failed to connect after {} attempts, quitting", max_attempts);
+                    crate::ui_cm_interface::quit_cm();
+                    break;
+                }
+            }
         }
         *UI_STATUS.lock().unwrap() = UiStatus {
             status_num: -1,
@@ -1259,7 +1316,9 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
             #[cfg(feature = "flutter")]
             video_conn_count,
         };
-        sleep(1.).await;
+        // Use exponential backoff for retries during service startup
+        let sleep_time = if connection_attempts < 5 { 1. } else { 2. };
+        sleep(sleep_time).await;
     }
 }
 
