@@ -368,8 +368,7 @@ class GroupModel {
   void _tryHandlePullError() {
     String errorMessage = groupLoadError.value;
     // The error message is "Retrieving accessible devices is disabled."
-    if (errorMessage.toLowerCase().contains('retrieving accessible') ||
-        errorMessage.toLowerCase().contains('disabled')) {
+    if (errorMessage.toLowerCase().contains('disabled')) {
       users.clear();
       peers.clear();
       deviceGroups.clear();
