@@ -10,6 +10,7 @@ StartupNotify=true
 Categories=Network;RemoteAccess;GTK;
 Keywords=internet;
 Actions=new-window;
+StartupWMClass=rustdesk
 
 X-Desktop-File-Install-Version=0.23
 
