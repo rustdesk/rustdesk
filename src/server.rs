@@ -547,13 +547,40 @@ pub async fn start_server(is_server: bool, no_server: bool) {
     if is_server {
         crate::common::set_server_running(true);
         std::thread::spawn(move || {
-            if let Err(err) = crate::ipc::start("") {
-                log::error!("Failed to start ipc: {}", err);
-                if crate::is_server() {
-                    log::error!("ipc is occupied by another process, try kill it");
-                    std::thread::spawn(stop_main_window_process).join().ok();
+            // Retry IPC server start with exponential backoff during service installation
+            let mut attempts = 0;
+            let max_attempts = 10; // Increase attempts to handle service installation scenario
+            let mut wait_time = 1;
+            
+            loop {
+                match crate::ipc::start("") {
+                    Ok(_) => break,
+                    Err(err) => {
+                        attempts += 1;
+                        log::error!("Failed to start ipc (attempt {}/{}): {}", attempts, max_attempts, err);
+                        
+                        if attempts >= max_attempts {
+                            if crate::is_server() {
+                                log::error!("ipc is occupied by another process after {} attempts", max_attempts);
+                                // Check if we're being started as part of service installation
+                                // In that case, the GUI needs time to close its IPC server
+                                let is_service_installation = std::env::var("RUSTDESK_SERVICE_INSTALLATION").is_ok();
+                                
+                                if !is_service_installation {
+                                    log::error!("Not during service installation, try kill the process occupying IPC");
+                                    std::thread::spawn(stop_main_window_process).join().ok();
+                                } else {
+                                    log::info!("Service installation detected, GUI should restart itself");
+                                }
+                            }
+                            std::process::exit(-1);
+                        }
+                        
+                        // Wait before retrying with exponential backoff
+                        std::thread::sleep(std::time::Duration::from_secs(wait_time));
+                        wait_time = std::cmp::min(wait_time * 2, 10); // Cap at 10 seconds
+                    }
                 }
-                std::process::exit(-1);
             }
         });
         input_service::fix_key_down_timeout_loop();
