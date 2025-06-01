@@ -619,8 +619,11 @@ pub fn is_prelogin() -> bool {
     if is_flatpak() {
         return false;
     }
-    let n = get_active_userid().len();
-    n < 4 && n > 1
+    let name = get_active_username();
+    if let Ok(res) = run_cmds(&format!("getent passwd {}", name)) {
+        return res.contains("/bin/false") || res.contains("/usr/sbin/nologin");
+    }
+    false
 }
 
 // Check "Lock".
