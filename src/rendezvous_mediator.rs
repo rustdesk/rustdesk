@@ -57,6 +57,7 @@ impl RendezvousMediator {
     }
 
     pub async fn start_all() {
+        crate::test_nat_type();
         if config::is_outgoing_only() {
             loop {
                 sleep(1.).await;
@@ -69,7 +70,6 @@ impl RendezvousMediator {
         }
         check_zombie();
         let server = new_server();
-        crate::test_nat_type();
         if config::option2bool("stop-service", &Config::get_option("stop-service")) {
             crate::test_rendezvous_server();
         }
