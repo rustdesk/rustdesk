@@ -54,12 +54,13 @@ extern "C" {
         display: u32,
         widths: *mut u32,
         heights: *mut u32,
+        hidpis: *mut BOOL,
         max: u32,
         numModes: *mut u32,
     ) -> BOOL;
     fn majorVersion() -> u32;
     fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
-    fn MacSetMode(display: u32, width: u32, height: u32) -> BOOL;
+    fn MacSetMode(display: u32, width: u32, height: u32, tryHiDPI: bool) -> BOOL;
 }
 
 pub fn major_version() -> u32 {
@@ -889,33 +890,62 @@ pub fn handle_application_should_open_untitled_file() {
     }
 }
 
+/// Get all resolutions of the display. The resolutions are:
+/// 1. Sorted by width and height in descending order, with duplicates removed.
+/// 2. Filtered out if the width is less than 800 (800x600) if there are too many (e.g., >15).
+/// 3. Contain HiDPI resolutions and the real resolutions.
+///
+/// We don't need to distinguish between HiDPI and real resolutions.
+/// When the controlling side changes the resolution, it will call `change_resolution_directly()`.
+/// `change_resolution_directly()` will try to use the HiDPI resolution first.
+/// This is how teamviewer does it for now.
+///
+/// If we need to distinguish HiDPI and real resolutions, we can add a flag to the `Resolution` struct.
 pub fn resolutions(name: &str) -> Vec<Resolution> {
     let mut v = vec![];
     if let Ok(display) = name.parse::<u32>() {
         let mut num = 0;
         unsafe {
             if YES == MacGetModeNum(display, &mut num) {
-                let (mut widths, mut heights) = (vec![0; num as _], vec![0; num as _]);
+                let (mut widths, mut heights, mut _hidpis) =
+                    (vec![0; num as _], vec![0; num as _], vec![NO; num as _]);
                 let mut real_num = 0;
                 if YES
                     == MacGetModes(
                         display,
                         widths.as_mut_ptr(),
                         heights.as_mut_ptr(),
+                        _hidpis.as_mut_ptr(),
                         num,
                         &mut real_num,
                     )
                 {
                     if real_num <= num {
-                        for i in 0..real_num {
-                            let resolution = Resolution {
+                        v = (0..real_num)
+                            .map(|i| Resolution {
                                 width: widths[i as usize] as _,
                                 height: heights[i as usize] as _,
                                 ..Default::default()
-                            };
-                            if !v.contains(&resolution) {
-                                v.push(resolution);
+                            })
+                            .collect::<Vec<_>>();
+                        // Sort by (w, h), desc
+                        v.sort_by(|a, b| {
+                            if a.width == b.width {
+                                b.height.cmp(&a.height)
+                            } else {
+                                b.width.cmp(&a.width)
                             }
+                        });
+                        // Remove duplicates
+                        v.dedup_by(|a, b| a.width == b.width && a.height == b.height);
+                        // Filter out the ones that are less than width 800 (800x600) if there are too many.
+                        // We can also do this filtering on the client side, but it is better not to change the client side to reduce the impact.
+                        if v.len() > 15 {
+                            // Most width > 800, so it's ok to remove the small ones.
+                            v.retain(|r| r.width >= 800);
+                        }
+                        if v.len() > 15 {
+                            // Ignore if the length is still too long.
                         }
                     }
                 }
@@ -943,7 +973,7 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
 pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
     let display = name.parse::<u32>().map_err(|e| anyhow!(e))?;
     unsafe {
-        if NO == MacSetMode(display, width as _, height as _) {
+        if NO == MacSetMode(display, width as _, height as _, true) {
             bail!("MacSetMode failed");
         }
     }

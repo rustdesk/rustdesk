@@ -696,5 +696,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("update-failed-check-msi-tip", "بررسی روش نصب انجام نشد. لطفاً برای بارگیری از صفحه انتشار ، روی دکمه 'بارگیری' کلیک کنید و به صورت دستی ارتقا دهید."),
         ("websocket_tip", "فقط اتصالات رله پشتیبانی می شوند ، WebSocket هنگام استفاده از ."),
         ("Use WebSocket", "استفاده کنید WebSocket از"),
+        ("Trackpad speed", "سرعت ترک‌پد"),
+        ("Default trackpad speed", "سرعت پیش‌فرض ترک‌پد"),
+        ("Numeric one-time password", "رمز عبور یک‌بار مصرف عددی"),
     ].iter().cloned().collect();
 }

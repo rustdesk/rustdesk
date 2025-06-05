@@ -124,7 +124,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _hideNetwork =
         bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
     _hideWebSocket =
-        true; //bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y';
+        bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y' || isWeb;
     _enableTrustedDevices = mainGetBoolOptionSync(kOptionEnableTrustedDevices);
   }
 

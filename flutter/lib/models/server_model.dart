@@ -36,6 +36,7 @@ class ServerModel with ChangeNotifier {
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
+  bool _allowNumericOneTimePassword = false;
   String _approveMode = "";
   int _zeroClientLengthCounter = 0;
 
@@ -110,6 +111,12 @@ class ServerModel with ChangeNotifier {
           key: 'allow-hide-cm', value: bool2option('allow-hide-cm', false));
     }
     */
+  }
+
+  bool get allowNumericOneTimePassword => _allowNumericOneTimePassword;
+  switchAllowNumericOneTimePassword() async {
+    await mainSetBoolOption(
+        kOptionAllowNumericOneTimePassword, !_allowNumericOneTimePassword);
   }
 
   TextEditingController get serverId => _serverId;
@@ -227,6 +234,8 @@ class ServerModel with ChangeNotifier {
     final temporaryPasswordLength =
         await bind.mainGetOption(key: "temporary-password-length");
     final approveMode = await bind.mainGetOption(key: kOptionApproveMode);
+    final numericOneTimePassword =
+        await mainGetBoolOption(kOptionAllowNumericOneTimePassword);
     /*
     var hideCm = option2bool(
         'allow-hide-cm', await bind.mainGetOption(key: 'allow-hide-cm'));
@@ -263,6 +272,10 @@ class ServerModel with ChangeNotifier {
         bind.mainUpdateTemporaryPassword();
       }
       _temporaryPasswordLength = temporaryPasswordLength;
+      update = true;
+    }
+    if (_allowNumericOneTimePassword != numericOneTimePassword) {
+      _allowNumericOneTimePassword = numericOneTimePassword;
       update = true;
     }
     /*
@@ -817,8 +830,8 @@ class Client {
 
   RxInt unreadChatMessageCount = 0.obs;
 
-  Client(this.id, this.authorized, this.isFileTransfer, this.isViewCamera, this.name, this.peerId,
-      this.keyboard, this.clipboard, this.audio);
+  Client(this.id, this.authorized, this.isFileTransfer, this.isViewCamera,
+      this.name, this.peerId, this.keyboard, this.clipboard, this.audio);
 
   Client.fromJson(Map<String, dynamic> json) {
     id = json['id'];

@@ -246,7 +246,7 @@ extern "C"
                 si.wShowWindow = SW_SHOW;
             }
             wchar_t buf[MAX_PATH];
-            wcscpy_s(buf, sizeof(buf), cmd);
+            wcscpy_s(buf, MAX_PATH, cmd);
             PROCESS_INFORMATION pi;
             LPVOID lpEnvironment = NULL;
             DWORD dwCreationFlags = DETACHED_PROCESS;

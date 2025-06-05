@@ -8,3 +8,4 @@ Icon=rustdesk
 Terminal=false
 Type=Application
 StartupNotify=false
+StartupWMClass=rustdesk
