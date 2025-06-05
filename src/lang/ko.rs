@@ -564,7 +564,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Plug out all", "모두 끄기"),
         ("True color (4:4:4)", "트루컬러 (4:4:4)"),
         ("Enable blocking user input", "사용자 입력 차단 사용함"),
-        ("id_input_tip", "ID, 다이렉트 IP 또는 포트가 있는 도메인(<domain>:<port>)을 입력할 수 있습니다.\n다른 서버에 있는 장치에 액세스하려면 서버 주소 (<id>@<server_address>?key=<key_value>)를 추가하세요. 예를들어 \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\n공용 서버에서 장치에 액세스하려면 공용 서버에 키가 필요하지 않습니다\n첫 번째 연결에서 릴레이 연결을 강제로 사용하려면 ID 끝에 "/r"을 추가합니다. 예를들어 "9123456234/r").),
+        ("id_input_tip", "ID, 다이렉트 IP 또는 포트가 있는 도메인(<domain>:<port>)을 입력할 수 있습니다.\n다른 서버에 있는 장치에 액세스하려면 서버 주소 (<id>@<server_address>?key=<key_value>)를 추가하세요. 예를들어 \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\n공용 서버에서 장치에 액세스하려면 공용 서버에 키가 필요하지 않습니다\n첫 번째 연결에서 릴레이 연결을 강제로 사용하려면 ID 끝에 "/r"을 추가합니다. 예를들어 "9123456234/r"."),
         ("privacy_mode_impl_mag_tip", "모드 1"),
         ("privacy_mode_impl_virtual_display_tip", "모드 2"),
         ("Enter privacy mode", "개인정보 보호 모드 시작"),
