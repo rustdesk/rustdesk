@@ -12,6 +12,15 @@
 > **Misuse Disclaimer:** <br>
 > The developers of RustDesk do not condone or support any unethical or illegal use of this software. Misuse, such as unauthorized access, control or invasion of privacy, is strictly against our guidelines. The authors are not responsible for any misuse of the application.
 
+> [!Caution]
+> **Security Disclaimer:** <br>
+> This may have issues with Security related to Access Tokens as it's bypassing a security check. Please exercise caution
+
+> [!Caution]
+> **Unofficial Fork:** <br>
+> The developers of this version of RustDesk does not support any development use of this software. Please support the official Project.
+> All links are to the official project
+> This fork is provided without support
 
 Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
