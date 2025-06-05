@@ -1361,35 +1361,36 @@ pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
     let Some(rs_pk) = rs_pk else {
         bail!("Handshake failed: invalid public key from rendezvous server");
     };
-    match timeout(READ_TIMEOUT, conn.next()).await? {
-        Some(Ok(bytes)) => {
-            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                match msg_in.union {
-                    Some(rendezvous_message::Union::KeyExchange(ex)) => {
-                        if ex.keys.len() != 1 {
-                            bail!("Handshake failed: invalid key exchange message");
-                        }
-                        let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
-                            .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
-                        let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
-                            get_pk(&their_pk_b)
-                                .context("Wrong their public length in key exchange")?,
-                        );
-                        let mut msg_out = RendezvousMessage::new();
-                        msg_out.set_key_exchange(KeyExchange {
-                            keys: vec![asymmetric_value, symmetric_value],
-                            ..Default::default()
-                        });
-                        timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                        conn.set_key(key);
-                        log::info!("Connection secured");
-                    }
-                    _ => {}
-                }
-            }
-        }
-        _ => {}
-    }
+    //Timeout function?
+    //match timeout(READ_TIMEOUT, conn.next()).await? {
+    //    Some(Ok(bytes)) => {
+    //        if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+    //            match msg_in.union {
+    //                Some(rendezvous_message::Union::KeyExchange(ex)) => {
+    //                    if ex.keys.len() != 1 {
+    //                        bail!("Handshake failed: invalid key exchange message");
+    //                    }
+    //                    let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
+    //                        .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
+    //                    let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
+    //                        get_pk(&their_pk_b)
+    //                            .context("Wrong their public length in key exchange")?,
+    //                    );
+    //                    let mut msg_out = RendezvousMessage::new();
+    //                    msg_out.set_key_exchange(KeyExchange {
+    //                        keys: vec![asymmetric_value, symmetric_value],
+    //                        ..Default::default()
+    //                    });
+    //                    timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
+    //                    conn.set_key(key);
+    //                    log::info!("Connection secured");
+    //                }
+    //                _ => {}
+    //            }
+    //        }
+    //    }
+    //    _ => {}
+    //}
     Ok(())
 }
 
