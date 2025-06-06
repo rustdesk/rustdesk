@@ -32,11 +32,13 @@ Yet another remote desktop software, written in Rust. Works out of the box, no c
 
 RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for help getting started.
 
-[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
+[**OFFICIAL FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**CUSTOM BINARY DOWNLOAD**](https://github.com/DanHolli/rustdesk4foss/releases)
 
-[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
+[**CUSTOM NIGHTLY BUILD**](https://github.com/DanHolli/rustdesk4foss/releases/tag/nightly)
+
+**OFFICIAL STORES**
 
 [<img src="https://f-droid.org/badge/get-it-on.png"
     alt="Get it on F-Droid"
