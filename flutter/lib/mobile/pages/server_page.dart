@@ -227,8 +227,7 @@ void checkService() async {
 }
 
 class ServiceNotRunningNotification extends StatelessWidget {
-  ServiceNotRunningNotification({Key? key}) : super(key: key);
-
+ServiceNotRunningNotification({Key? key}) : super(key: key);
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
@@ -246,15 +245,7 @@ class ServiceNotRunningNotification extends StatelessWidget {
                 .marginOnly(bottom: 8),
             ElevatedButton.icon(
                 icon: const Icon(Icons.play_arrow),
-                onPressed: () {
-                  if (gFFI.userModel.userName.value.isEmpty &&
-                      bind.mainGetLocalOption(key: "show-scam-warning") !=
-                          "N") {
-                    showScamWarning(context, serverModel);
-                  } else {
-                    serverModel.toggleService();
-                  }
-                },
+                onPressed: () => serverModel.toggleService(), // 直接启动服务
                 label: Text(translate("Start service")))
           ],
         ));
