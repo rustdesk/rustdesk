@@ -1843,7 +1843,7 @@ impl Connection {
                 )
                 .await
                 {
-                    log::error!("ipc to connection manager exit: {}", err);
+                    log::warn!("ipc to connection manager exit: {}", err);
                     // https://github.com/rustdesk/rustdesk-server-pro/discussions/382#discussioncomment-10525725, cm may start failed
                     #[cfg(windows)]
                     if !crate::platform::is_prelogin()

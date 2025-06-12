@@ -118,7 +118,7 @@ async fn connect_and_login(
     } else {
         ConnType::PORT_FORWARD
     };
-    let ((mut stream, direct, _pk), (feedback, rendezvous_server)) =
+    let ((mut stream, direct, _pk, _kcp), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
     interface.update_direct(Some(direct));
     let mut buffer = Vec::new();
