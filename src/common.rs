@@ -1923,7 +1923,7 @@ pub async fn punch_udp(
     packets_sent += 1;
     let mut last_send_time = Instant::now();
     let tm = Instant::now();
-    let mut data = [0u8; 1024];
+    let mut data = [0u8; 1500];
 
     loop {
         tokio::select! {

@@ -3869,7 +3869,7 @@ async fn test_udp_uat(
         }
     }
     let mut last_send_time = Instant::now();
-    let mut buf = [0u8; 1024];
+    let mut buf = [0u8; 1500];
 
     loop {
         tokio::select! {
