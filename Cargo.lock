@@ -3623,7 +3623,7 @@ dependencies = [
 [[package]]
 name = "kcp-sys"
 version = "0.1.0"
-source = "git+https://github.com/rustdesk-org/kcp-sys#00e8865454615a5c554d899efd8bc6eae812aaf1"
+source = "git+https://github.com/rustdesk-org/kcp-sys#1e5e30ab8b8c2f7787ab0f88822de36476531562"
 dependencies = [
  "anyhow",
  "auto_impl",
