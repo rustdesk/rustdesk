@@ -40,7 +40,7 @@ impl KcpStream {
         let (input, output) = (endpoint.input_sender(), endpoint.output_receiver().unwrap());
         let (stop_sender, stop_receiver) = oneshot::channel();
         if let Some(packet) = init_packet {
-            if packet.len() >= size_of::<KcpPacketHeader>() {
+            if packet.len() >= std::mem::size_of::<KcpPacketHeader>() {
                 input.send(packet.into()).await?;
             }
         }
@@ -109,7 +109,7 @@ impl KcpStream {
                     result = udp.recv_from(&mut buf) => {
                         match result {
                             Ok((size, _)) => {
-                                if size < size_of::<KcpPacketHeader>() {
+                                if size < std::mem::size_of::<KcpPacketHeader>() {
                                     continue;
                                 }
                                 input
