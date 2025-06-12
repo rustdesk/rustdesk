@@ -49,7 +49,7 @@ impl Cameras {
                         let Some(info) = cameras.first() else {
                             bail!("No camera found")
                         };
-                        let camera = Self::create_camera(info.index())?;
+                        let camera = Self::create_camera(&CameraIndex::Index(0))?;
                         let resolution = camera.resolution();
                         let (width, height) = (resolution.width() as i32, resolution.height() as i32);
                         camera_displays.push(DisplayInfo {
@@ -112,7 +112,7 @@ impl Cameras {
     fn create_camera(index: &CameraIndex) -> ResultType<Camera> {
         let result = Camera::new(
             index.clone(),
-            RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution),
+            RequestedFormat::new::<RgbAFormat>(RequestedFormatType::None),
         );
         match result {
             Ok(camera) => Ok(camera),
