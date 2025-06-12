@@ -658,7 +658,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("new-version-of-{}-tip", "Versi {} sudah tersedia."),
         ("Accessible devices", "Perangkat yang tersedia"),
         ("View camera", "Lihat Kamera"),
-        ("upgrade_remote_rustdesk_client_to_{}_tip", "Mohon upgrade klien RustDesk ke versi {} atau yang lebih baru pada komputer akan terhubung!"),
+        ("upgrade_remote_rustdesk_client_to_{}_tip", "Silahkan perbarui aplikasi RustDesk ke versi {} atau yang lebih baru pada komputer yang akan terhubung!"),
         ("view_camera_unsupported_tip", "Perangkat yang terhubung tidak mendukung tampilan kamera."),
         ("Enable camera", "Aktifkan kamera"),
         ("No cameras", "Tidak ada kamera"),
