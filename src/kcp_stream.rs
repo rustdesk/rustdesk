@@ -37,7 +37,12 @@ impl KcpStream {
         let mut endpoint = KcpEndpoint::new();
         endpoint.run().await;
 
-        let (input, output) = (endpoint.input_sender(), endpoint.output_receiver().unwrap());
+        let (input, output) = (
+            endpoint.input_sender(),
+            endpoint
+                .output_receiver()
+                .ok_or_else(|| anyhow::anyhow!("Failed to get output receiver"))?,
+        );
         let (stop_sender, stop_receiver) = oneshot::channel();
         if let Some(packet) = init_packet {
             if packet.len() >= std::mem::size_of::<KcpPacketHeader>() {
@@ -67,11 +72,16 @@ impl KcpStream {
         let mut endpoint = KcpEndpoint::new();
         endpoint.run().await;
 
-        let (input, output) = (endpoint.input_sender(), endpoint.output_receiver().unwrap());
+        let (input, output) = (
+            endpoint.input_sender(),
+            endpoint
+                .output_receiver()
+                .ok_or_else(|| anyhow::anyhow!("Failed to get output receiver"))?,
+        );
         let (stop_sender, stop_receiver) = oneshot::channel();
         Self::kcp_io(udp_socket.clone(), input, output, stop_receiver).await;
 
-        let conn_id = endpoint.connect(timeout, 0, 0, Bytes::new()).await.unwrap();
+        let conn_id = endpoint.connect(timeout, 0, 0, Bytes::new()).await?;
         if let Some(stream) = stream::KcpStream::new(&endpoint, conn_id) {
             Ok((
                 Self {
@@ -93,7 +103,7 @@ impl KcpStream {
     ) {
         let udp = udp_socket.clone();
         tokio::spawn(async move {
-            let mut buf = vec![0; 10240];
+            let mut buf = vec![0; 1500];
             loop {
                 tokio::select! {
                     _ = &mut stop_receiver => {
