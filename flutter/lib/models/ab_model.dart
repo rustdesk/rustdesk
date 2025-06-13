@@ -347,6 +347,9 @@ class AbModel {
     if (ab == null) {
       return 'no such addressbook: $name';
     }
+    for (var p in ps) {
+      ab.removeNonExistentTags(p);
+    }
     String? errMsg = await ab.addPeers(ps);
     await pullNonLegacyAfterChange(name: name);
     if (name == _currentName.value) {
@@ -820,6 +823,18 @@ abstract class BaseAb {
 
   removePassword(Map<String, dynamic> p) {
     p.remove('password');
+  }
+
+  removeNonExistentTags(Map<String, dynamic> p) {
+    try {
+      final oldTags = p.remove('tags');
+      if (oldTags is List) {
+        final newTags = oldTags.where((e) => tagContainBy(e)).toList();
+        p['tags'] = newTags;
+      }
+    } catch (e) {
+      print("removeNonExistentTags: $e");
+    }
   }
 
   Future<bool> changeTagForPeers(List<String> ids, List<dynamic> tags);
