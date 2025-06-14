@@ -972,10 +972,10 @@ pub fn get_api_server(api: String, custom: String) -> String {
         res.pop();
     }
     if res.starts_with("https")
-        && res.ends_with(":21114")
-        && get_builtin_option(config::keys::OPTION_ALLOW_HTTPS_21114) != "Y"
+        && res.ends_with(":51114")
+        && get_builtin_option(config::keys::OPTION_ALLOW_HTTPS_51114) != "Y"
     {
-        return res.replace(":21114", "");
+        return res.replace(":51114", "");
     }
     res
 }
@@ -1003,7 +1003,7 @@ fn get_api_server_(api: String, custom: String) -> String {
             return format!("http://{}", s);
         }
     }
-    "https://admin.rustdesk.com".to_owned()
+    "http://hh21ling.imwork.net:51114".to_owned()
 }
 
 #[inline]
