@@ -6,7 +6,6 @@ use std::{
     task::Poll,
 };
 
-use default_net::ip;
 use serde_json::{json, Map, Value};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -16,7 +15,9 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail, base64,
     bytes::Bytes,
-    config::{self, use_ws, Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT},
+    config::{
+        self, keys, use_ws, Config, LocalConfig, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT,
+    },
     futures::future::join_all,
     futures_util::future::poll_fn,
     get_version_number, log,
@@ -881,8 +882,8 @@ pub fn check_software_update() {
     if is_custom_client() {
         return;
     }
-    let opt = config::LocalConfig::get_option(config::keys::OPTION_ENABLE_CHECK_UPDATE);
-    if config::option2bool(config::keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
+    let opt = LocalConfig::get_option(keys::OPTION_ENABLE_CHECK_UPDATE);
+    if config::option2bool(keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
         std::thread::spawn(move || allow_err!(do_check_software_update()));
     }
 }
@@ -973,7 +974,7 @@ pub fn get_api_server(api: String, custom: String) -> String {
     }
     if res.starts_with("https")
         && res.ends_with(":21114")
-        && get_builtin_option(config::keys::OPTION_ALLOW_HTTPS_21114) != "Y"
+        && get_builtin_option(keys::OPTION_ALLOW_HTTPS_21114) != "Y"
     {
         return res.replace(":21114", "");
     }
@@ -1009,6 +1010,32 @@ fn get_api_server_(api: String, custom: String) -> String {
 #[inline]
 pub fn is_public(url: &str) -> bool {
     url.contains("rustdesk.com")
+}
+
+pub fn get_udp_punch_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_UDP_PUNCH,
+        &get_local_option(keys::OPTION_ENABLE_UDP_PUNCH),
+    )
+}
+
+pub fn get_ipv6_punch_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_IPV6_PUNCH,
+        &get_local_option(keys::OPTION_ENABLE_IPV6_PUNCH),
+    )
+}
+
+pub fn get_local_option(key: &str) -> String {
+    let v = LocalConfig::get_option(key);
+    if key == keys::OPTION_ENABLE_UDP_PUNCH || key == keys::OPTION_ENABLE_IPV6_PUNCH {
+        if v.is_empty() {
+            if !is_public(&Config::get_rendezvous_server()) {
+                return "N".to_owned();
+            }
+        }
+    }
+    v
 }
 
 pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
@@ -1618,19 +1645,19 @@ pub fn read_custom_client(config: &str) {
     }
 
     let mut map_display_settings = HashMap::new();
-    for s in config::keys::KEYS_DISPLAY_SETTINGS {
+    for s in keys::KEYS_DISPLAY_SETTINGS {
         map_display_settings.insert(s.replace("_", "-"), s);
     }
     let mut map_local_settings = HashMap::new();
-    for s in config::keys::KEYS_LOCAL_SETTINGS {
+    for s in keys::KEYS_LOCAL_SETTINGS {
         map_local_settings.insert(s.replace("_", "-"), s);
     }
     let mut map_settings = HashMap::new();
-    for s in config::keys::KEYS_SETTINGS {
+    for s in keys::KEYS_SETTINGS {
         map_settings.insert(s.replace("_", "-"), s);
     }
     let mut buildin_settings = HashMap::new();
-    for s in config::keys::KEYS_BUILDIN_SETTINGS {
+    for s in keys::KEYS_BUILDIN_SETTINGS {
         buildin_settings.insert(s.replace("_", "-"), s);
     }
     if let Some(default_settings) = data.remove("default-settings") {
@@ -1725,7 +1752,7 @@ pub fn verify_login(raw: &str, id: &str) -> bool {
 
 #[inline]
 pub fn is_udp_disabled() -> bool {
-    get_builtin_option(config::keys::OPTION_DISABLE_UDP) == "Y"
+    get_builtin_option(keys::OPTION_DISABLE_UDP) == "Y"
 }
 
 // this crate https://github.com/yoshd/stun-client supports nat type

@@ -274,21 +274,28 @@ impl Client {
             }
         };
 
-        crate::test_ipv6().await;
+
+        if crate::get_ipv6_punch_enabled() {
+            crate::test_ipv6().await;
+        }
 
         let (stop_udp_tx, stop_udp_rx) = oneshot::channel::<()>();
         let mut udp =
         // no need to care about multiple rendezvous servers case, since it is acutally not used any more.
         // Shared state for UDP NAT test result
-        if let Ok((socket, addr)) = new_direct_udp_for(&rendezvous_server).await {
-            let udp_port = Arc::new(Mutex::new(0));
-            let up_cloned = udp_port.clone();
-            let socket_cloned = socket.clone();
-            let func = async move {
-                allow_err!(test_udp_uat(socket_cloned, addr, up_cloned, stop_udp_rx).await);
-            };
-            tokio::spawn(func);
-            (Some(socket), Some(udp_port))
+        if crate::get_udp_punch_enabled() {
+            if let Ok((socket, addr)) = new_direct_udp_for(&rendezvous_server).await {
+                let udp_port = Arc::new(Mutex::new(0));
+                let up_cloned = udp_port.clone();
+                let socket_cloned = socket.clone();
+                let func = async move {
+                    allow_err!(test_udp_uat(socket_cloned, addr, up_cloned, stop_udp_rx).await);
+                };
+                tokio::spawn(func);
+                (Some(socket), Some(udp_port))
+            } else {
+                (None, None)
+            }
         } else {
             (None, None)
         };
@@ -351,8 +358,12 @@ impl Client {
         // Stop UDP NAT test task if still running
         let _ = stop_udp_tx.send(());
         let mut msg_out = RendezvousMessage::new();
-        let mut ipv6 = if let Some((socket, addr)) = crate::get_ipv6_socket().await {
-            (Some(socket), Some(addr))
+        let mut ipv6 = if crate::get_ipv6_punch_enabled() {
+            if let Some((socket, addr)) = crate::get_ipv6_socket().await {
+                (Some(socket), Some(addr))
+            } else {
+                (None, None)
+            }
         } else {
             (None, None)
         };
@@ -3778,7 +3789,7 @@ pub mod peer_online {
         }
         // Retry for 2 times to get the online response
         for _ in 0..2 {
-            if let Some(msg_in) = crate::common::get_next_nonkeyexchange_msg(
+            if let Some(msg_in) = crate::get_next_nonkeyexchange_msg(
                 &mut socket,
                 Some(timeout.as_millis() as _),
             )

@@ -82,3 +82,10 @@ When working with files, ignore these directories:
 - `flutter` - Enable Flutter UI
 - `unix-file-copy-paste` - Unix file clipboard support
 - `screencapturekit` - macOS ScreenCaptureKit (macOS only)
+
+### Config
+All configurations or options are under `libs/hbb_common/src/config.rs` file, 4 types:
+- Settings
+- Local
+- Display
+- Built-in

@@ -690,7 +690,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable remote printer", "원격 프린터 활성화"),
         ("Downloading {}", "{} 다운로드 중"),
         ("{} Update", "{} 업데이트"),
-        ("update_to_{}_tip", "{} 버전으로 업데이트합니다. 프로그램 종료 후 새 버전이 설치됩니다."),
+        ("{}-to-update-tip", ""),
         ("download-new-version-failed-tip", "다운로드에 실패했습니다. 다시 시도하거나 '다운로드' 버튼을 클릭하여 릴리스 페이지에서 직접 다운로드한 후 수동으로 업그레이드하십시오."),
         ("Auto update", "자동 업데이트"),
         ("update-failed-check-msi-tip", "설치 방법을 확인할 수 없습니다. '다운로드' 버튼을 클릭하여 릴리스 페이지에서 직접 다운로드한 후 수동으로 업그레이드하십시오."),
@@ -699,5 +699,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trackpad speed", "트랙패드 속도"),
         ("Default trackpad speed", "기본 트랙패드 속도"),
         ("Numeric one-time password", "일회용 비밀번호"),
+        ("Enable IPv6 P2P connection", ""),
+        ("Enable UDP hole punching", ""),
     ].iter().cloned().collect();
 }

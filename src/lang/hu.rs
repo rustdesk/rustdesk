@@ -699,5 +699,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trackpad speed", "Érintőpad sebessége"),
         ("Default trackpad speed", "Alapértelmezett érintőpad sebessége"),
         ("Numeric one-time password", ""),
+        ("Enable IPv6 P2P connection", ""),
+        ("Enable UDP hole punching", ""),
     ].iter().cloned().collect();
 }
