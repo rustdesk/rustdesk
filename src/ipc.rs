@@ -420,10 +420,10 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if is_server() {
                     let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
                 }
-                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 if crate::is_main() {
                     // below part is for main windows can be reopen during rustdesk installation and installing service from UI
                     // this make new ipc server (domain socket) can be created.
+                    #[cfg(not(windows))]
                     std::fs::remove_file(&Config::ipc_path("")).ok();
                     #[cfg(target_os = "linux")]
                     {
@@ -441,6 +441,17 @@ async fn handle(data: Data, stream: &mut Connection) {
                             .arg(&format!("/Applications/{}.app", crate::get_app_name()))
                             .spawn()
                             .ok();
+                    }
+                    #[cfg(windows)]
+                    {
+                        // On Windows, when service is being installed, wait a bit then restart the GUI
+                        hbb_common::sleep(2.0).await;
+                        if let Ok(exe) = std::env::current_exe() {
+                            std::process::Command::new(&exe)
+                                .arg("--no-server")
+                                .spawn()
+                                .ok();
+                        }
                     }
                     // leave above open a little time
                     hbb_common::sleep(0.3).await;
