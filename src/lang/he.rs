@@ -699,5 +699,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trackpad speed", "מהירות משטח מגע"),
         ("Default trackpad speed", "מהירות ברירת מחדל של משטח מגע"),
         ("Numeric one-time password", ""),
+        ("Enable IPv6 P2P connection", ""),
+        ("Enable UDP hole punching", ""),
     ].iter().cloned().collect();
 }

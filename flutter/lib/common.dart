@@ -1571,7 +1571,7 @@ bool option2bool(String option, String value) {
 
 String bool2option(String option, bool b) {
   String res;
-  if (option.startsWith('enable-')) {
+  if (option.startsWith('enable-') && option != kOptionEnableUdpPunch && option != kOptionEnableIpv6Punch) {
     res = b ? defaultOptionYes : 'N';
   } else if (option.startsWith('allow-') ||
       option == kOptionStopService ||
@@ -2317,7 +2317,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   if (isMobile) {
     if (id != null) {
       final forceRelay = queryParameters["relay"] != null;
-      connect(Get.context!, id, forceRelay: forceRelay, password: queryParameters["password"]);
+      connect(Get.context!, id,
+          forceRelay: forceRelay, password: queryParameters["password"]);
       return null;
     }
   }
@@ -3446,6 +3447,9 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
 }
 
 Widget loadPowered(BuildContext context) {
+  if (bind.mainGetBuildinOption(key: "hide-powered-by-me") == 'Y') {
+    return SizedBox.shrink();
+  }
   return MouseRegion(
     cursor: SystemMouseCursors.click,
     child: GestureDetector(
