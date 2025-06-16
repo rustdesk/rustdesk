@@ -1297,6 +1297,7 @@ pub async fn change_id_shared(id: String, old_id: String) -> String {
 
 pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
     if !hbb_common::is_valid_custom_id(&id) {
+        log::debug!("debugging invalid id: \"{id}\", base64: \"{}\"", crate::encode64(&id));
         return INVALID_FORMAT;
     }
 
