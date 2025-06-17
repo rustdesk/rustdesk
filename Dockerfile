@@ -1,4 +1,4 @@
-FROM ubuntu
+FROM debian:bullseye-slim
 
 WORKDIR /
 ARG DEBIAN_FRONTEND=noninteractive
