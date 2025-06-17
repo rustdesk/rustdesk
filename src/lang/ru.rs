@@ -687,5 +687,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-action-tip", "Выберите, что делать с полученным снимком экрана."),
         ("Save as", "Сохранить в файл"),
         ("Copy to clipboard", "Копировать в буфер обмена"),
+        ("Enable remote printer", "Использовать удалённый принтер"),
+        ("Downloading {}", "Скачивание"),
+        ("{} Update", "Обновить {}"),
+        ("{}-to-update-tip", "{} закроется и установит новую версию."),
+        ("download-new-version-failed-tip", "Ошибка загрузки. Можно повторить попытку или нажать кнопку \"Скачать\", чтобы скачать приложение с официального сайта и обновить вручную."),
+        ("Auto update", "Автоматическое обновление"),
+        ("update-failed-check-msi-tip", "Невозможно определить метод установки. Нажмите кнопку \"Скачать\", чтобы скачать приложение с официального сайта и обновить его вручную."),
+        ("websocket_tip", "WebSocket поддерживает только подключения к ретранслятору."),
+        ("Use WebSocket", "Использовать WebSocket"),
+        ("Trackpad speed", ""),
+        ("Default trackpad speed", ""),
     ].iter().cloned().collect();
 }

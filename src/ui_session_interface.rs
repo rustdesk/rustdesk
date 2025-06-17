@@ -230,6 +230,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().version.clone()
     }
 
+    pub fn get_trackpad_speed(&self) -> i32 {
+        self.lc.read().unwrap().trackpad_speed
+    }
+
     pub fn fallback_keyboard_mode(&self) -> String {
         let peer_version = self.get_peer_version();
         let platform = self.peer_platform();
@@ -446,6 +450,10 @@ impl<T: InvokeUiSession> Session<T> {
                 self.send(Data::Message(msg));
             }
         }
+    }
+
+    pub fn save_trackpad_speed(&self, trackpad_speed: i32) {
+        self.lc.write().unwrap().save_trackpad_speed(trackpad_speed);
     }
 
     pub fn set_custom_fps(&self, custom_fps: i32) {

@@ -116,6 +116,10 @@ class UserModel {
     userName.value = user.name;
     isAdmin.value = user.isAdmin;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
+    if (isWeb) {
+      // ugly here, tmp solution
+      bind.mainSetLocalOption(key: 'verifier', value: user.verifier ?? '');
+    }
   }
 
   // update ab and group status
@@ -184,7 +188,9 @@ class UserModel {
       rethrow;
     }
 
-    if (loginResponse.user != null) {
+    final isLogInDone = loginResponse.type == HttpType.kAuthResTypeToken &&
+        loginResponse.access_token != null;
+    if (isLogInDone && loginResponse.user != null) {
       _parseAndUpdateUser(loginResponse.user!);
     }
 

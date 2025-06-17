@@ -178,7 +178,7 @@ class Header: Reactor.Component {
         if (handler.version_cmp(pi.version, '1.2.4') < 0) {
             is_file_copy_paste_supported = is_win && pi.platform == "Windows";
         } else {
-            is_file_copy_paste_supported = handler.has_file_clipboard() && pi.platform_additions.has_file_clipboard;
+            is_file_copy_paste_supported = handler.has_file_clipboard() && pi.platform_additions?.has_file_clipboard;
         }
 
         return <popup>

@@ -345,8 +345,11 @@ class InputModel {
   var _fling = false;
   Timer? _flingTimer;
   final _flingBaseDelay = 30;
-  // trackpad, peer linux
-  final _trackpadSpeed = 0.06;
+  final _trackpadAdjustPeerLinux = 0.06;
+  // This is an experience value.
+  final _trackpadAdjustMacToWin = 2.50;
+  int _trackpadSpeed = kDefaultTrackpadSpeed;
+  double _trackpadSpeedInner = kDefaultTrackpadSpeed / 100.0;
   var _trackpadScrollUnsent = Offset.zero;
 
   var _lastScale = 1.0;
@@ -370,6 +373,7 @@ class InputModel {
   bool get isViewOnly => parent.target!.ffiModel.viewOnly;
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
   bool get isViewCamera => parent.target!.connType == ConnType.viewCamera;
+  int get trackpadSpeed => _trackpadSpeed;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
@@ -383,6 +387,28 @@ class InputModel {
       keyboardMode = await bind.sessionGetKeyboardMode(sessionId: sessionId) ??
           kKeyLegacyMode;
     }
+  }
+
+  /// Updates the trackpad speed based on the session value.
+  ///
+  /// The expected format of the retrieved value is a string that can be parsed into a double.
+  /// If parsing fails or the value is out of bounds (less than `kMinTrackpadSpeed` or greater
+  /// than `kMaxTrackpadSpeed`), the trackpad speed is reset to the default
+  /// value (`kDefaultTrackpadSpeed`).
+  ///
+  /// Bounds:
+  /// - Minimum: `kMinTrackpadSpeed`
+  /// - Maximum: `kMaxTrackpadSpeed`
+  /// - Default: `kDefaultTrackpadSpeed`
+  Future<void> updateTrackpadSpeed() async {
+    _trackpadSpeed =
+        (await bind.sessionGetTrackpadSpeed(sessionId: sessionId) ??
+            kDefaultTrackpadSpeed);
+    if (_trackpadSpeed < kMinTrackpadSpeed ||
+        _trackpadSpeed > kMaxTrackpadSpeed) {
+      _trackpadSpeed = kDefaultTrackpadSpeed;
+    }
+    _trackpadSpeedInner = _trackpadSpeed / 100.0;
   }
 
   void handleKeyDownEventModifiers(KeyEvent e) {
@@ -888,13 +914,16 @@ class InputModel {
       }
     }
 
-    final delta = e.panDelta;
+    var delta = e.panDelta * _trackpadSpeedInner;
+    if (isMacOS && peerPlatform == kPeerPlatformWindows) {
+      delta *= _trackpadAdjustMacToWin;
+    }
     _trackpadLastDelta = delta;
 
     var x = delta.dx.toInt();
     var y = delta.dy.toInt();
     if (peerPlatform == kPeerPlatformLinux) {
-      _trackpadScrollUnsent += (delta * _trackpadSpeed);
+      _trackpadScrollUnsent += (delta * _trackpadAdjustPeerLinux);
       x = _trackpadScrollUnsent.dx.truncate();
       y = _trackpadScrollUnsent.dy.truncate();
       _trackpadScrollUnsent -= Offset(x.toDouble(), y.toDouble());
@@ -942,8 +971,8 @@ class InputModel {
       var dx = x.toInt();
       var dy = y.toInt();
       if (parent.target?.ffiModel.pi.platform == kPeerPlatformLinux) {
-        dx = (x * _trackpadSpeed).toInt();
-        dy = (y * _trackpadSpeed).toInt();
+        dx = (x * _trackpadAdjustPeerLinux).toInt();
+        dy = (y * _trackpadAdjustPeerLinux).toInt();
       }
 
       var delay = _flingBaseDelay;
@@ -989,7 +1018,10 @@ class InputModel {
     _stopFling = false;
 
     // 2.0 is an experience value
-    double minFlingValue = 2.0;
+    double minFlingValue = 2.0 * _trackpadSpeedInner;
+    if (isMacOS && peerPlatform == kPeerPlatformWindows) {
+      minFlingValue *= _trackpadAdjustMacToWin;
+    }
     if (_trackpadLastDelta.dx.abs() > minFlingValue ||
         _trackpadLastDelta.dy.abs() > minFlingValue) {
       _fling = true;

@@ -60,6 +60,5 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh && \
 
 USER root
 ENV HOME=/home/user
-#COPY . .
 COPY ./entrypoint.sh /
 ENTRYPOINT ["/entrypoint.sh"]
