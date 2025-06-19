@@ -233,7 +233,7 @@ impl PrivacyModeImpl {
                 if (dd.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) == 0 {
                     continue;
                 }
-                // Skipt the virtual display.
+                // Skip the virtual display.
                 if dd.DeviceName == display.name {
                     continue;
                 }
