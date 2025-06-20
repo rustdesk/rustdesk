@@ -3010,16 +3010,21 @@ pub mod reg_display_settings {
         None
     }
 
-    pub fn restore_reg_connectivity(reg_recovery: RegRecovery) -> ResultType<()> {
+    pub fn restore_reg_connectivity(reg_recovery: RegRecovery, force: bool) -> ResultType<()> {
         let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
         let reg_item = hklm.open_subkey_with_flags(&reg_recovery.path, KEY_READ | KEY_WRITE)?;
-        let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
-        let new_reg_value = RegValue {
-            bytes: reg_recovery.new.0,
-            vtype: isize_to_reg_type(reg_recovery.new.1),
-        };
-        if cur_reg_value != new_reg_value {
-            return Ok(());
+        if !force {
+            let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
+            let new_reg_value = RegValue {
+                bytes: reg_recovery.new.0,
+                vtype: isize_to_reg_type(reg_recovery.new.1),
+            };
+            // Compare if the current value is the same as the new value.
+            // If they are not the same, the registry value has been changed by other processes.
+            // So we do not restore the registry value.
+            if cur_reg_value != new_reg_value {
+                return Ok(());
+            }
         }
         let reg_value = RegValue {
             bytes: reg_recovery.old.0,
