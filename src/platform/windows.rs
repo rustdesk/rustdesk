@@ -41,7 +41,7 @@ use winapi::{
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
-        libloaderapi::{GetProcAddress, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32},
+        libloaderapi::{GetProcAddress, LoadLibraryA, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32},
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
@@ -1351,7 +1351,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
         );
         reg_value_start_menu_shortcuts = "1".to_owned();
     }
-    let install_printer = options.contains("printer") && crate::platform::is_win_10_or_greater();
+    let install_printer = options.contains("printer") && is_win_10_or_greater();
     if install_printer {
         reg_value_printer = "1".to_owned();
     }
@@ -1394,7 +1394,7 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
         // No need to use `|| true` here.
         // The script will not exit even if `--install-remote-printer` panics.
         format!("\"{}\" --install-remote-printer", &src_exe)
-    } else if crate::platform::is_win_10_or_greater() {
+    } else if is_win_10_or_greater() {
         format!("\"{}\" --uninstall-remote-printer", &src_exe)
     } else {
         "".to_owned()
@@ -1715,7 +1715,12 @@ pub fn bootstrap() -> bool {
     #[cfg(not(debug_assertions))]
     {
         // This function will cause `'sciter.dll' was not found neither in PATH nor near the current executable.` when debugging RustDesk.
-        set_safe_load_dll()
+        // Only call set_safe_load_dll() on Windows 10 or greater
+        if is_win_10_or_greater() {
+            set_safe_load_dll()
+        } else {
+            true
+        }
     }
 }
 
@@ -2896,11 +2901,15 @@ pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
 fn nt_terminate_process(process_id: DWORD) -> ResultType<()> {
     type NtTerminateProcess = unsafe extern "system" fn(HANDLE, DWORD) -> DWORD;
     unsafe {
-        let h_module = LoadLibraryExA(
-            CString::new("ntdll.dll")?.as_ptr(),
-            std::ptr::null_mut(),
-            LOAD_LIBRARY_SEARCH_SYSTEM32,
-        );
+        let h_module = if is_win_10_or_greater() {
+            LoadLibraryExA(
+                CString::new("ntdll.dll")?.as_ptr(),
+                std::ptr::null_mut(),
+                LOAD_LIBRARY_SEARCH_SYSTEM32,
+            )
+        } else {
+            LoadLibraryA(CString::new("ntdll.dll")?.as_ptr())
+        };
         if !h_module.is_null() {
             let f_nt_terminate_process: NtTerminateProcess = std::mem::transmute(GetProcAddress(
                 h_module,
@@ -3001,16 +3010,21 @@ pub mod reg_display_settings {
         None
     }
 
-    pub fn restore_reg_connectivity(reg_recovery: RegRecovery) -> ResultType<()> {
+    pub fn restore_reg_connectivity(reg_recovery: RegRecovery, force: bool) -> ResultType<()> {
         let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
         let reg_item = hklm.open_subkey_with_flags(&reg_recovery.path, KEY_READ | KEY_WRITE)?;
-        let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
-        let new_reg_value = RegValue {
-            bytes: reg_recovery.new.0,
-            vtype: isize_to_reg_type(reg_recovery.new.1),
-        };
-        if cur_reg_value != new_reg_value {
-            return Ok(());
+        if !force {
+            let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
+            let new_reg_value = RegValue {
+                bytes: reg_recovery.new.0,
+                vtype: isize_to_reg_type(reg_recovery.new.1),
+            };
+            // Compare if the current value is the same as the new value.
+            // If they are not the same, the registry value has been changed by other processes.
+            // So we do not restore the registry value.
+            if cur_reg_value != new_reg_value {
+                return Ok(());
+            }
         }
         let reg_value = RegValue {
             bytes: reg_recovery.old.0,

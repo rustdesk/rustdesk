@@ -219,9 +219,10 @@ async fn turn_on_privacy_async(impl_key: String, conn_id: i32) -> Option<ResultT
         let res = turn_on_privacy_sync(&impl_key, conn_id);
         let _ = tx.send(res);
     });
-    // Wait at most 5 seconds for the result.
+    // Wait at most 7.5 seconds for the result.
     // Because it may take a long time to turn on the privacy mode with amyuni idd.
-    match hbb_common::timeout(5000, rx).await {
+    // Some laptops may take time to plug in a virtual display.
+    match hbb_common::timeout(7500, rx).await {
         Ok(res) => match res {
             Ok(res) => res,
             Err(e) => Some(Err(anyhow!(e.to_string()))),
