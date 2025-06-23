@@ -1140,9 +1140,7 @@ impl Connection {
         v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["conn_id"] = json!(self.inner.id);
         v["session_id"] = json!(self.lr.session_id);
-        if let Err(e) = self.tx_post_seq.send((url, v)) {
-            log::error!("Failed to send post conn audit: {}", e);
-        }
+        allow_err!(self.tx_post_seq.send((url, v)));
     }
 
     fn get_files_for_audit(job_type: fs::JobType, mut files: Vec<FileEntry>) -> Vec<(String, i64)> {
