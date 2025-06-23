@@ -973,16 +973,8 @@ impl Connection {
     }
 
     async fn post_seq_loop(mut rx: mpsc::UnboundedReceiver<(String, Value)>) {
-        loop {
-            match rx.recv().await {
-                Some((url, v)) => {
-                    allow_err!(Self::post_audit_async(url, v).await);
-                }
-                None => {
-                    // No need to log here.
-                    break;
-                }
-            }
+        while let Some((url, v)) = rx.recv().await {
+            allow_err!(Self::post_audit_async(url, v).await);
         }
     }
 
