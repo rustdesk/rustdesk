@@ -969,13 +969,14 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         clear_remapped_keycode();
-        log::info!("Input thread exited");
+        log::debug!("Input thread exited");
     }
 
     async fn post_seq_loop(mut rx: mpsc::UnboundedReceiver<(String, Value)>) {
         while let Some((url, v)) = rx.recv().await {
             allow_err!(Self::post_audit_async(url, v).await);
         }
+        log::debug!("post_seq_loop exited");
     }
 
     async fn try_port_forward_loop(
