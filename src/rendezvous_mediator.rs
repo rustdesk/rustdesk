@@ -40,12 +40,17 @@ lazy_static::lazy_static! {
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
 
+const UDP_MSG_DUP_MAX_INTERVAL: Duration = Duration::from_millis(100);
+
 #[derive(Clone)]
 pub struct RendezvousMediator {
     addr: TargetAddr<'static>,
     host: String,
     host_prefix: String,
     keep_alive: i32,
+    is_udp: bool,
+    // Used to prevent duplicate request_relay messages.
+    recent_req_relay: Vec<(RequestRelay, Instant)>,
 }
 
 impl RendezvousMediator {
@@ -147,6 +152,8 @@ impl RendezvousMediator {
             host: host.clone(),
             host_prefix: Self::get_host_prefix(&host),
             keep_alive: crate::DEFAULT_KEEP_ALIVE,
+            is_udp: true,
+            recent_req_relay: Vec::new(),
         };
 
         let mut timer = crate::rustdesk_interval(interval(crate::TIMER_OUT));
@@ -294,6 +301,15 @@ impl RendezvousMediator {
                 });
             }
             Some(rendezvous_message::Union::RequestRelay(rr)) => {
+                if self.is_udp {
+                    self.recent_req_relay
+                        .retain(|r| r.1.elapsed() < UDP_MSG_DUP_MAX_INTERVAL);
+                    if self.recent_req_relay.iter().any(|(r, _)| r == &rr) {
+                        log::debug!("Duplicate request_relay ignored: {:?}", rr);
+                        return Ok(());
+                    }
+                    self.recent_req_relay.push((rr.clone(), Instant::now()));
+                };
                 let rz = self.clone();
                 let server = server.clone();
                 tokio::spawn(async move {
@@ -334,6 +350,8 @@ impl RendezvousMediator {
             host: host.clone(),
             host_prefix: Self::get_host_prefix(&host),
             keep_alive: crate::DEFAULT_KEEP_ALIVE,
+            is_udp: false,
+            recent_req_relay: Vec::new(),
         };
         let mut timer = crate::rustdesk_interval(interval(crate::TIMER_OUT));
         let mut last_register_sent: Option<Instant> = None;
@@ -460,7 +478,7 @@ impl RendezvousMediator {
         let last = *LAST_MSG.lock().await;
         *LAST_MSG.lock().await = (addr, Instant::now());
         // skip duplicate punch hole messages
-        if last.0 == addr && last.1.elapsed().as_millis() < 100 {
+        if last.0 == addr && last.1.elapsed() < UDP_MSG_DUP_MAX_INTERVAL {
             return Ok(());
         }
         let peer_addr_v6 = hbb_common::AddrMangle::decode(&fla.socket_addr_v6);
@@ -533,7 +551,7 @@ impl RendezvousMediator {
         let last = *LAST_MSG.lock().await;
         *LAST_MSG.lock().await = (peer_addr, Instant::now());
         // skip duplicate punch hole messages
-        if last.0 == peer_addr && last.1.elapsed().as_millis() < 100 {
+        if last.0 == peer_addr && last.1.elapsed() < UDP_MSG_DUP_MAX_INTERVAL {
             return Ok(());
         }
         let peer_addr_v6 = hbb_common::AddrMangle::decode(&ph.socket_addr_v6);
