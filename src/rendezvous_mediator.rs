@@ -36,6 +36,7 @@ type Message = RendezvousMessage;
 lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Mutex<String> = Default::default();
     static ref LAST_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
+    static ref LAST_RELAY_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
@@ -396,6 +397,14 @@ impl RendezvousMediator {
     }
 
     async fn handle_request_relay(&self, rr: RequestRelay, server: ServerPtr) -> ResultType<()> {
+        let addr = AddrMangle::decode(&rr.socket_addr);
+        let last = *LAST_RELAY_MSG.lock().await;
+        *LAST_RELAY_MSG.lock().await = (addr, Instant::now());
+        // skip duplicate relay request messages
+        if last.0 == addr && last.1.elapsed().as_millis() < 100 {
+            return Ok(());
+        }
+
         self.create_relay(
             rr.socket_addr.into(),
             rr.relay_server,
