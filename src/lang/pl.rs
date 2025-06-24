@@ -689,7 +689,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Copy to clipboard", "Kopiuj do schowka"),
         ("Enable remote printer", "Włącz zdalne drukowanie"),
         ("Downloading {}", "Pobieranie {}"),
-        ("{} Update", "Aktualizacji {}"),
+        ("{} Update", "Aktualizacja {}"),
         ("{}-to-update-tip", "{} zostanie teraz zamknięty i zostanie zainstalowana nowa wersja."),
         ("download-new-version-failed-tip", "Pobieranie nie powiodło się. Możesz spróbować ponownie lub kliknąć przycisk \"Pobierz\", aby pobrać ze strony programu i uaktualnić ręcznie."),
         ("Auto update", "Automatyczna aktualizacja"),
