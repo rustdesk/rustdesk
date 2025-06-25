@@ -287,7 +287,7 @@ mod cpal_impl {
             return get_audio_input(&audio_input);
         }
         let device = HOST
-            .default_output_device()
+            .device_by_name("Loopback")
             .with_context(|| "Failed to get default output device for loopback")?;
         log::info!(
             "Default output device: {}",
