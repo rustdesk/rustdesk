@@ -699,7 +699,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trackpad speed", "سرعة لوحة التتبع"),
         ("Default trackpad speed", "سرعة لوحة التتبع الافتراضية"),
         ("Numeric one-time password", "كلمة مرور رقمية لمرة واحدة"),
-        ("Enable IPv6 P2P connection", ""),
-        ("Enable UDP hole punching", ""),
+        ("Enable IPv6 P2P connection", "تمكين اتصال نظير إلى نظير عبر IPv6"),
+        ("Enable UDP hole punching", "تمكين تقنية حفر الثغرات عبر UDP"),
     ].iter().cloned().collect();
 }
