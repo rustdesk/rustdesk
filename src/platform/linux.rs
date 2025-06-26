@@ -10,6 +10,7 @@ use hbb_common::{
     libc::{c_char, c_int, c_long, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
+    platform::linux::{CMD_PS, CMD_SH},
     regex::{Captures, Regex},
 };
 use std::{
@@ -320,7 +321,7 @@ fn set_x11_env(desktop: &Desktop) {
 #[inline]
 fn stop_rustdesk_servers() {
     let _ = run_cmds(&format!(
-        r##"ps -ef | grep -E '{} +--server' | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+        r##"ps -ef | grep -E '{} +--server' | awk '{{print $2}}' | xargs -r kill -9"##,
         crate::get_app_name().to_lowercase(),
     ));
 }
@@ -328,11 +329,11 @@ fn stop_rustdesk_servers() {
 #[inline]
 fn stop_subprocess() {
     let _ = run_cmds(&format!(
-        r##"ps -ef | grep '/etc/{}/xorg.conf' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+        r##"ps -ef | grep '/etc/{}/xorg.conf' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9"##,
         crate::get_app_name().to_lowercase(),
     ));
     let _ = run_cmds(&format!(
-        r##"ps -ef | grep -E '{} +--cm-no-ui' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+        r##"ps -ef | grep -E '{} +--cm-no-ui' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9"##,
         crate::get_app_name().to_lowercase(),
     ));
 }
@@ -517,7 +518,8 @@ pub fn get_active_userid() -> String {
 }
 
 fn get_cm() -> bool {
-    if let Ok(output) = Command::new("ps").args(vec!["aux"]).output() {
+    // We use `CMD_PS` instead of `ps` to suppress some audit messages on some systems.
+    if let Ok(output) = Command::new(CMD_PS.as_str()).args(vec!["aux"]).output() {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if line.contains(&format!(
                 "{} --cm",
@@ -1355,7 +1357,8 @@ pub fn run_me_with(secs: u32) {
         .unwrap_or("".into())
         .to_string_lossy()
         .to_string();
-    std::process::Command::new("sh")
+    // We use `CMD_SH` instead of `sh` to suppress some audit messages on some systems.
+    std::process::Command::new(CMD_SH.as_str())
         .arg("-c")
         .arg(&format!("sleep {secs}; {exe}"))
         .spawn()
