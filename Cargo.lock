@@ -2217,6 +2217,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "filedescriptor"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e40758ed24c9b2eeb76c35fb0aebc66c626084edd827e07e1552279814c6682d"
+dependencies = [
+ "libc",
+ "thiserror 1.0.61",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "filetime"
 version = "0.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3948,7 +3959,7 @@ source = "git+https://github.com/rustdesk-org/machine-uid#381ff579c1dc3a6c54db9d
 dependencies = [
  "bindgen 0.59.2",
  "cc",
- "winreg",
+ "winreg 0.11.0",
 ]
 
 [[package]]
@@ -5197,6 +5208,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "portable-pty"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4a596a2b3d2752d94f51fac2d4a96737b8705dddd311a32b9af47211f08671e"
+dependencies = [
+ "anyhow",
+ "bitflags 1.3.2",
+ "downcast-rs",
+ "filedescriptor",
+ "lazy_static",
+ "libc",
+ "log",
+ "nix 0.28.0",
+ "serial2",
+ "shared_library",
+ "shell-words",
+ "winapi 0.3.9",
+ "winreg 0.10.1",
+]
+
+[[package]]
 name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6067,6 +6099,7 @@ dependencies = [
  "pam",
  "parity-tokio-ipc",
  "percent-encoding",
+ "portable-pty",
  "qrcode-generator",
  "rdev",
  "remote_printer",
@@ -6103,7 +6136,7 @@ dependencies = [
  "winapi 0.3.9",
  "windows 0.61.1",
  "windows-service",
- "winreg",
+ "winreg 0.11.0",
  "winres",
  "wol-rs",
  "x11-clipboard 0.8.1",
@@ -6467,6 +6500,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serial2"
+version = "0.2.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7d1d08630509d69f90eff4afcd02c3bd974d979225cbd815ff5942351b14375"
+dependencies = [
+ "cfg-if 1.0.0",
+ "libc",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6511,6 +6555,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "shared_library"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a9e7e0f2bfae24d8a5b5a66c5b257a83c7412304311512a0c054cd5e619da11"
+dependencies = [
+ "lazy_static",
+ "libc",
+]
+
+[[package]]
 name = "shared_memory"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6522,6 +6576,12 @@ dependencies = [
  "rand 0.8.5",
  "win-sys",
 ]
+
+[[package]]
+name = "shell-words"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"
 
 [[package]]
 name = "shlex"
@@ -7779,7 +7839,7 @@ dependencies = [
  "rust-ini",
  "thiserror 1.0.61",
  "winapi 0.3.9",
- "winreg",
+ "winreg 0.11.0",
 ]
 
 [[package]]
@@ -8756,6 +8816,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winreg"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80d0f4e272c85def139476380b12f9ac60926689dd2e01d4923222f40580869d"
+dependencies = [
+ "winapi 0.3.9",
 ]
 
 [[package]]

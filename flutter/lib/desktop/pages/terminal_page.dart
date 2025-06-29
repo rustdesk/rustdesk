@@ -1,0 +1,132 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/terminal_model.dart';
+import 'package:get/get.dart';
+import 'package:xterm/xterm.dart';
+import 'terminal_connection_manager.dart';
+
+class TerminalPage extends StatefulWidget {
+  const TerminalPage({
+    Key? key,
+    required this.id,
+    required this.password,
+    required this.tabController,
+    required this.isSharedPassword,
+    required this.terminalId,
+    this.forceRelay,
+    this.connToken,
+  }) : super(key: key);
+  final String id;
+  final String? password;
+  final DesktopTabController tabController;
+  final bool? forceRelay;
+  final bool? isSharedPassword;
+  final String? connToken;
+  final int terminalId;
+
+  @override
+  State<TerminalPage> createState() => _TerminalPageState();
+}
+
+class _TerminalPageState extends State<TerminalPage>
+    with AutomaticKeepAliveClientMixin {
+  late FFI _ffi;
+  late TerminalModel _terminalModel;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    debugPrint('[TerminalPage] Initializing terminal ${widget.terminalId} for peer ${widget.id}');
+    
+    // Use shared FFI instance from connection manager
+    _ffi = TerminalConnectionManager.getConnection(
+      peerId: widget.id,
+      password: widget.password,
+      isSharedPassword: widget.isSharedPassword,
+      forceRelay: widget.forceRelay,
+      connToken: widget.connToken,
+    );
+    
+    // Create terminal model with specific terminal ID
+    _terminalModel = TerminalModel(_ffi, widget.terminalId);
+    debugPrint('[TerminalPage] Terminal model created for terminal ${widget.terminalId}');
+    
+    // Register this terminal model with FFI for event routing
+    _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
+
+    // Initialize terminal connection
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.tabController.onSelected?.call(widget.id);
+      _ffi.dialogManager
+          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      _startTerminal();
+    });
+  }
+
+  void _startTerminal() async {
+    debugPrint('[TerminalPage] _startTerminal called for terminal ${widget.terminalId}');
+    
+    // Wait for the next frame to ensure terminal view is laid out
+    await WidgetsBinding.instance.endOfFrame;
+    
+    // Check if terminal has valid dimensions
+    final terminal = _terminalModel.terminal;
+    if (terminal.viewWidth <= 0 || terminal.viewHeight <= 0 || 
+        !terminal.viewWidth.isFinite || !terminal.viewHeight.isFinite) {
+      debugPrint('[TerminalPage] Terminal view not ready, scheduling retry...');
+      // Schedule for next frame instead of arbitrary delay
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _terminalModel.openTerminal();
+      });
+    } else {
+      // Open terminal on the remote side
+      await _terminalModel.openTerminal();
+    }
+  }
+
+  @override
+  void dispose() {
+    // Unregister terminal model from FFI
+    _ffi.unregisterTerminalModel(widget.terminalId);
+    _terminalModel.dispose();
+    // Release connection reference instead of closing directly
+    TerminalConnectionManager.releaseConnection(widget.id);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: TerminalView(
+        _terminalModel.terminal,
+        controller: _terminalModel.terminalController,
+        autofocus: true,
+        backgroundOpacity: 0.7,
+        padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0),
+        onSecondaryTapDown: (details, offset) async {
+          final selection = _terminalModel.terminalController.selection;
+          if (selection != null) {
+            final text = _terminalModel.terminal.buffer.getText(selection);
+            _terminalModel.terminalController.clearSelection();
+            await Clipboard.setData(ClipboardData(text: text));
+          } else {
+            final data = await Clipboard.getData('text/plain');
+            final text = data?.text;
+            if (text != null) {
+              _terminalModel.terminal.paste(text);
+            }
+          }
+        },
+      ),
+    );
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+}
