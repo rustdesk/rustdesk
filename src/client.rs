@@ -1956,6 +1956,12 @@ impl LoginConfigHandler {
             .into();
         } else if name == keys::OPTION_TERMINAL_PERSISTENT {
             config.terminal_persistent.v = !config.terminal_persistent.v;
+	    option.terminal_persistent = (if config.terminal_persistent.v {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            })
+            .into();
         } else if name == "privacy-mode" {
             // try toggle privacy mode
             option.privacy_mode = (if config.privacy_mode.v {
