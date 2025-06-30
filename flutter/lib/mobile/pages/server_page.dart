@@ -17,7 +17,7 @@ import 'home_page.dart';
 
 class ServerPage extends StatefulWidget implements PageShape {
   @override
-  final title = translate("Share Screen");
+  final title = translate("Share screen");
 
   @override
   final icon = const Icon(Icons.mobile_screen_share);
@@ -649,8 +649,8 @@ class ConnectionManager extends StatelessWidget {
         children: serverModel.clients
             .map((client) => PaddingCard(
                 title: translate(client.isFileTransfer
-                    ? "File Connection"
-                    : "Screen Connection"),
+                    ? "Transfer file"
+                    : "Share screen"),
                 titleIcon: client.isFileTransfer
                     ? Icon(Icons.folder_outlined)
                     : Icon(Icons.mobile_screen_share),

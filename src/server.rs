@@ -33,6 +33,7 @@ use video_service::VideoSource;
 use crate::ipc::Data;
 
 pub mod audio_service;
+pub mod terminal_service;
 cfg_if::cfg_if! {
 if #[cfg(not(target_os = "ios"))] {
 mod clipboard_service;
@@ -146,6 +147,7 @@ pub fn new() -> ServerPtr {
             }
         }
     }
+    // Terminal service is created per connection, not globally
     Arc::new(RwLock::new(server))
 }
 

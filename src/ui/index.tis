@@ -313,7 +313,9 @@ class MyIdMenu: Reactor.Component {
             <menu.context #config-options>
                 <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable keyboard/mouse')}</li>
                 <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable clipboard')}</li>
-                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable file transfer')}</li> 
+                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable file transfer')}</li>
+                <li #enable-camera><span>{svg_checkmark}</span>{translate('Enable camera')}</li>
+                <li #enable-terminal><span>{svg_checkmark}</span>{translate('Enable terminal')}</li>
                 <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable remote restart')}</li> 
                 <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP tunneling')}</li>
                 {is_win ? <li #enable-block-input><span>{svg_checkmark}</span>{translate('Enable blocking user input')}</li> : ""}

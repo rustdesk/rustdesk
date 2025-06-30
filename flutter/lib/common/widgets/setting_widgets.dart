@@ -243,7 +243,8 @@ List<(String, String)> otherDefaultSettings() {
       (
         'Use all my displays for the remote session',
         kKeyUseAllMyDisplaysForTheRemoteSession
-      )
+      ),
+    ('Keep sessions on disconnect', kOptionTerminalPersistent),
   ];
 
   return v;

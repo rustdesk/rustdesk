@@ -47,8 +47,8 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        self, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT,
-        READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
+        self, keys, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution,
+        CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
     fs::JobType,
     futures::future::{select_ok, FutureExt},
@@ -273,7 +273,6 @@ impl Client {
                 (check_port(other_server, RENDEZVOUS_PORT), Vec::new(), true)
             }
         };
-
 
         if crate::get_ipv6_punch_enabled() {
             crate::test_ipv6().await;
@@ -1784,6 +1783,9 @@ impl LoginConfigHandler {
     /// * `v` - value of option
     pub fn set_option(&mut self, k: String, v: String) {
         let mut config = self.load_config();
+        if v == self.get_option(&k) {
+            return;
+        }
         config.options.insert(k, v);
         self.save_config(config);
     }
@@ -1952,6 +1954,14 @@ impl LoginConfigHandler {
                 BoolOption::No
             })
             .into();
+        } else if name == keys::OPTION_TERMINAL_PERSISTENT {
+            config.terminal_persistent.v = !config.terminal_persistent.v;
+	    option.terminal_persistent = (if config.terminal_persistent.v {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            })
+            .into();
         } else if name == "privacy-mode" {
             // try toggle privacy mode
             option.privacy_mode = (if config.privacy_mode.v {
@@ -2049,6 +2059,14 @@ impl LoginConfigHandler {
             return None;
         }
         let mut msg = OptionMessage::new();
+        if self.conn_type.eq(&ConnType::TERMINAL) {
+            if self.get_toggle_option(keys::OPTION_TERMINAL_PERSISTENT) {
+                msg.terminal_persistent = BoolOption::Yes.into();
+                return Some(msg);
+            } else {
+                return None;
+            }
+        }
         let q = self.image_quality.clone();
         if let Some(q) = self.get_image_quality_enum(&q, ignore_default) {
             msg.image_quality = q.into();
@@ -2094,7 +2112,7 @@ impl LoginConfigHandler {
         if self.get_toggle_option("disable-audio") {
             msg.disable_audio = BoolOption::Yes.into();
         }
-        if !view_only && self.get_toggle_option(config::keys::OPTION_ENABLE_FILE_COPY_PASTE) {
+        if !view_only && self.get_toggle_option(keys::OPTION_ENABLE_FILE_COPY_PASTE) {
             msg.enable_file_transfer = BoolOption::Yes.into();
         }
         if view_only || self.get_toggle_option("disable-clipboard") {
@@ -2150,9 +2168,11 @@ impl LoginConfigHandler {
             self.config.show_remote_cursor.v
         } else if name == "lock-after-session-end" {
             self.config.lock_after_session_end.v
+        } else if name == keys::OPTION_TERMINAL_PERSISTENT {
+            self.config.terminal_persistent.v
         } else if name == "privacy-mode" {
             self.config.privacy_mode.v
-        } else if name == config::keys::OPTION_ENABLE_FILE_COPY_PASTE {
+        } else if name == keys::OPTION_ENABLE_FILE_COPY_PASTE {
             self.config.enable_file_copy_paste.v
         } else if name == "disable-audio" {
             self.config.disable_audio.v
@@ -2452,7 +2472,7 @@ impl LoginConfigHandler {
         } else {
             (my_id, self.id.clone())
         };
-        let mut display_name = get_builtin_option(config::keys::OPTION_DISPLAY_NAME);
+        let mut display_name = get_builtin_option(keys::OPTION_DISPLAY_NAME);
         if display_name.is_empty() {
             display_name =
                 serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option("user_info"))
@@ -2522,6 +2542,11 @@ impl LoginConfigHandler {
                 port: self.port_forward.1,
                 ..Default::default()
             }),
+            ConnType::TERMINAL => {
+                let mut terminal = Terminal::new();
+                terminal.service_id = self.get_option("terminal-service-id");
+                lr.set_terminal(terminal);
+            }
             _ => {}
         }
 
@@ -3237,8 +3262,7 @@ pub async fn handle_hash(
     }
 
     if password.is_empty() {
-        let p =
-            crate::ui_interface::get_builtin_option(config::keys::OPTION_DEFAULT_CONNECT_PASSWORD);
+        let p = crate::ui_interface::get_builtin_option(keys::OPTION_DEFAULT_CONNECT_PASSWORD);
         if !p.is_empty() {
             let mut hasher = Sha256::new();
             hasher.update(p.clone());
@@ -3789,11 +3813,9 @@ pub mod peer_online {
         }
         // Retry for 2 times to get the online response
         for _ in 0..2 {
-            if let Some(msg_in) = crate::get_next_nonkeyexchange_msg(
-                &mut socket,
-                Some(timeout.as_millis() as _),
-            )
-            .await
+            if let Some(msg_in) =
+                crate::get_next_nonkeyexchange_msg(&mut socket, Some(timeout.as_millis() as _))
+                    .await
             {
                 match msg_in.union {
                     Some(rendezvous_message::Union::OnlineResponse(online_response)) => {

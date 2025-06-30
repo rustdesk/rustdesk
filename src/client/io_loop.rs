@@ -85,6 +85,7 @@ struct ParsedPeerInfo {
     is_installed: bool,
     idd_impl: String,
     support_view_camera: bool,
+    support_terminal: bool,
 }
 
 impl ParsedPeerInfo {
@@ -131,10 +132,7 @@ impl<T: InvokeUiSession> Remote<T> {
         #[cfg(target_os = "windows")]
         let _file_clip_context_holder = {
             // `is_port_forward()` will not reach here, but we still check it for clarity.
-            if !self.handler.is_file_transfer()
-                && !self.handler.is_port_forward()
-                && !self.handler.is_view_camera()
-            {
+            if self.handler.is_default() {
                 // It is ok to call this function multiple times.
                 ContextSend::enable(true);
                 Some(crate::SimpleCallOnReturn {
@@ -159,6 +157,8 @@ impl<T: InvokeUiSession> Remote<T> {
             ConnType::FILE_TRANSFER
         } else if self.handler.is_view_camera() {
             ConnType::VIEW_CAMERA
+        } else if self.handler.is_terminal() {
+            ConnType::TERMINAL
         } else {
             ConnType::default()
         };
@@ -195,11 +195,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut rx_clip_client_holder = (Arc::new(TokioMutex::new(rx)), None);
                 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
                 {
-                    let is_conn_not_default = self.handler.is_file_transfer()
-                        || self.handler.is_port_forward()
-                        || self.handler.is_rdp()
-                        || self.handler.is_view_camera();
-                    if !is_conn_not_default {
+                    if self.handler.is_default() {
                         (self.client_conn_id, rx_clip_client_holder.0) =
                             clipboard::get_rx_cliprdr_client(&self.handler.get_id());
                         log::debug!("get cliprdr client for conn_id {}", self.client_conn_id);
@@ -338,12 +334,12 @@ impl<T: InvokeUiSession> Remote<T> {
             .set_disconnected(round);
 
         #[cfg(not(target_os = "ios"))]
-        if !self.handler.is_view_camera() && _set_disconnected_ok {
+        if self.handler.is_default() && _set_disconnected_ok {
             Client::try_stop_clipboard();
         }
 
         #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
-        if !self.handler.is_view_camera() && _set_disconnected_ok {
+        if self.handler.is_default() && _set_disconnected_ok {
             crate::clipboard::try_empty_clipboard_files(ClipboardSide::Client, self.client_conn_id);
         }
     }
@@ -437,7 +433,10 @@ impl<T: InvokeUiSession> Remote<T> {
 
     // Start a voice call recorder, records audio and send to remote
     fn start_voice_call(&mut self) -> Option<std::sync::mpsc::Sender<()>> {
-        if self.handler.is_file_transfer() || self.handler.is_port_forward() {
+        if self.handler.is_file_transfer()
+            || self.handler.is_port_forward()
+            || self.handler.is_terminal()
+        {
             return None;
         }
         // iOS does not have this server.
@@ -1230,6 +1229,24 @@ impl<T: InvokeUiSession> Remote<T> {
         return false;
     }
 
+    fn check_terminal_support(&self, peer_version: &str) -> bool {
+        if self.peer_info.support_terminal {
+            return true;
+        }
+        if hbb_common::get_version_number(&peer_version) < hbb_common::get_version_number("1.4.1") {
+            self.handler.msgbox(
+                "error",
+                "Remote terminal not supported",
+                "Remote terminal is not supported by the remote side. Please upgrade to version 1.4.1 or higher.",
+                "",
+            );
+        } else {
+            self.handler
+                .on_error("Remote terminal is not supported by the remote side");
+        }
+        return false;
+    }
+
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -1290,13 +1307,16 @@ impl<T: InvokeUiSession> Remote<T> {
                                 return false;
                             }
                         }
+                        if self.handler.is_terminal() {
+                            if !self.check_terminal_support(&peer_version) {
+                                self.handler.lc.write().unwrap().handle_peer_info(&pi);
+                                return false;
+                            }
+                        }
                         self.handler.handle_peer_info(pi);
                         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
                         self.check_clipboard_file_context();
-                        if !(self.handler.is_file_transfer()
-                            || self.handler.is_port_forward()
-                            || self.handler.is_view_camera())
-                        {
+                        if self.handler.is_default() {
                             #[cfg(feature = "flutter")]
                             #[cfg(not(target_os = "ios"))]
                             let rx = Client::try_start_clipboard(None);
@@ -1661,9 +1681,6 @@ impl<T: InvokeUiSession> Remote<T> {
                                     );
                                 }
                             }
-                            Ok(Permission::Camera) => {
-                                self.handler.set_permission("camera", p.enabled);
-                            }
                             Ok(Permission::Restart) => {
                                 self.handler.set_permission("restart", p.enabled);
                             }
@@ -1923,6 +1940,18 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler
                         .handle_screenshot_resp(response.sid, response.msg);
                 }
+                Some(message::Union::TerminalResponse(response)) => {
+                    use hbb_common::message_proto::terminal_response::Union;
+                    if let Some(Union::Opened(opened)) = &response.union {
+                        if opened.success && !opened.service_id.is_empty() {
+                            self.handler.lc.write().unwrap().set_option(
+                                "terminal-service-id".to_owned(),
+                                opened.service_id.clone(),
+                            );
+                        }
+                    }
+                    self.handler.handle_terminal_response(response);
+                }
                 _ => {}
             }
         }
@@ -1931,6 +1960,12 @@ impl<T: InvokeUiSession> Remote<T> {
 
     fn set_peer_info(&mut self, pi: &PeerInfo) {
         self.peer_info.platform = pi.platform.clone();
+
+        // Check features field for terminal support
+        if let Some(features) = pi.features.as_ref() {
+            self.peer_info.support_terminal = features.terminal;
+        }
+
         if let Ok(platform_additions) =
             serde_json::from_str::<HashMap<String, serde_json::Value>>(&pi.platform_additions)
         {
