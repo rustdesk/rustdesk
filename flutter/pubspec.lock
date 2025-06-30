@@ -624,10 +624,10 @@ packages:
     dependency: "direct overridden"
     description:
       name: flutter_plugin_android_lifecycle
-      sha256: "5a1e6fb2c0561958d7e4c33574674bda7b77caaca7a33b758876956f2902eea3"
+      sha256: b068ffc46f82a55844acfa4fdbb61fad72fa2aef0905548419d97f0f95c456da
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.27"
+    version: "2.0.17"
   flutter_rust_bridge:
     dependency: "direct main"
     description:
