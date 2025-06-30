@@ -51,7 +51,7 @@ protobuf {
 }
 
 android {
-    compileSdkVersion 35
+    compileSdkVersion 34
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
 

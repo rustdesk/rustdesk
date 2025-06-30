@@ -1017,24 +1017,6 @@ jobs:
           cd $(dirname $(dirname $(which flutter)))
           [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
-      - name: Fix Android SDK Platform 35
-        run: |
-          # Remove corrupted platform-35 and reinstall it
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
-          if [ -d "$ANDROID_SDK_ROOT/platforms/android-35" ]; then
-            echo "Removing potentially corrupted android-35 platform..."
-            rm -rf "$ANDROID_SDK_ROOT/platforms/android-35"
-          fi
-          echo "Installing Android SDK Platform 35..."
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-35" || true
-          # Verify the installation
-          if [ -f "$ANDROID_SDK_ROOT/platforms/android-35/android.jar" ]; then
-            echo "Android SDK Platform 35 installed successfully"
-          else
-            echo "Failed to install Android SDK Platform 35, falling back to platform 34"
-            yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" || true
-          fi
-
       - uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
@@ -1304,24 +1286,6 @@ jobs:
         run: |
           cd $(dirname $(dirname $(which flutter)))
           [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
-
-      - name: Fix Android SDK Platform 35
-        run: |
-          # Remove corrupted platform-35 and reinstall it
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
-          if [ -d "$ANDROID_SDK_ROOT/platforms/android-35" ]; then
-            echo "Removing potentially corrupted android-35 platform..."
-            rm -rf "$ANDROID_SDK_ROOT/platforms/android-35"
-          fi
-          echo "Installing Android SDK Platform 35..."
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-35" || true
-          # Verify the installation
-          if [ -f "$ANDROID_SDK_ROOT/platforms/android-35/android.jar" ]; then
-            echo "Android SDK Platform 35 installed successfully"
-          else
-            echo "Failed to install Android SDK Platform 35, falling back to platform 34"
-            yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" || true
-          fi
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
