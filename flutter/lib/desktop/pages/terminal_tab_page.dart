@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -9,31 +8,23 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
-import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/models/model.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:provider/provider.dart';
 
 import '../../models/platform_model.dart';
 import 'terminal_page.dart';
-import 'dart:ui' as ui;
 import 'terminal_connection_manager.dart';
 import '../widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../widgets/popup_menu.dart';
 import 'package:bot_toast/bot_toast.dart';
-import 'package:window_manager/window_manager.dart';
-import 'package:visibility_detector/visibility_detector.dart';
 
 class TerminalTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
 
-  const TerminalTabPage({Key? key, required this.params})
-      : super(key: key);
+  const TerminalTabPage({Key? key, required this.params}) : super(key: key);
 
   @override
-  State<TerminalTabPage> createState() =>
-      _TerminalTabPageState(params);
+  State<TerminalTabPage> createState() => _TerminalTabPageState(params);
 }
 
 class _TerminalTabPageState extends State<TerminalTabPage> {
@@ -103,7 +94,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   Widget _tabMenuBuilder(String peerId, CancelFunc cancelFunc) {
     final List<MenuEntryBase<String>> menu = [];
     const EdgeInsets padding = EdgeInsets.only(left: 8.0, right: 5.0);
-    
+
     // New tab menu item
     menu.add(MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
@@ -113,24 +104,26 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       proc: () {
         _addNewTerminal(peerId);
         cancelFunc();
+        // Also try to close any BotToast overlays
+        BotToast.cleanAll();
       },
       padding: padding,
     ));
-    
+
     menu.add(MenuEntryDivider());
-    
+
     menu.add(MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
-      text: translate('Keep sessions on disconnect'),
+      text: translate('Keep terminal sessions on disconnect'),
       getter: () async {
-        final ffi = Get.find<FFI>(tag: peerId);
+        final ffi = Get.find<FFI>(tag: 'terminal_$peerId');
         return bind.sessionGetToggleOptionSync(
           sessionId: ffi.sessionId,
           arg: kOptionTerminalPersistent,
         );
       },
       setter: (bool v) async {
-        final ffi = Get.find<FFI>(tag: peerId);
+        final ffi = Get.find<FFI>(tag: 'terminal_$peerId');
         bind.sessionToggleOption(
           sessionId: ffi.sessionId,
           value: kOptionTerminalPersistent,
@@ -138,7 +131,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       },
       padding: padding,
     ));
-    
+
     return mod_menu.PopupMenu<String>(
       items: menu
           .map((e) => e.build(
@@ -157,7 +150,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   @override
   void initState() {
     super.initState();
-    
+
     // Add keyboard shortcut handler
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
 
@@ -194,47 +187,49 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     super.dispose();
   }
-  
+
   bool _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent) {
-      final key = event.logicalKey;
-      
       // Use Cmd+T on macOS, Ctrl+Shift+T on other platforms
       if (event.logicalKey == LogicalKeyboardKey.keyT) {
-        if (isMacOS && HardwareKeyboard.instance.isMetaPressed && 
+        if (isMacOS &&
+            HardwareKeyboard.instance.isMetaPressed &&
             !HardwareKeyboard.instance.isShiftPressed) {
           // macOS: Cmd+T (standard for new tab)
-          _addNewTerminalFromKeyboard();
+          _addNewTerminalForCurrentPeer();
           return true;
-        } else if (!isMacOS && HardwareKeyboard.instance.isControlPressed && 
-                   HardwareKeyboard.instance.isShiftPressed) {
+        } else if (!isMacOS &&
+            HardwareKeyboard.instance.isControlPressed &&
+            HardwareKeyboard.instance.isShiftPressed) {
           // Other platforms: Ctrl+Shift+T (to avoid conflict with Ctrl+T in terminal)
-          _addNewTerminalFromKeyboard();
+          _addNewTerminalForCurrentPeer();
           return true;
         }
       }
-      
+
       // Use Cmd+W on macOS, Ctrl+Shift+W on other platforms
       if (event.logicalKey == LogicalKeyboardKey.keyW) {
-        if (isMacOS && HardwareKeyboard.instance.isMetaPressed && 
+        if (isMacOS &&
+            HardwareKeyboard.instance.isMetaPressed &&
             !HardwareKeyboard.instance.isShiftPressed) {
           // macOS: Cmd+W (standard for close tab)
           final currentTab = tabController.state.value.selectedTabInfo;
-          if (currentTab != null && tabController.state.value.tabs.length > 1) {
+          if (tabController.state.value.tabs.length > 1) {
             tabController.closeBy(currentTab.key);
             return true;
           }
-        } else if (!isMacOS && HardwareKeyboard.instance.isControlPressed && 
-                   HardwareKeyboard.instance.isShiftPressed) {
+        } else if (!isMacOS &&
+            HardwareKeyboard.instance.isControlPressed &&
+            HardwareKeyboard.instance.isShiftPressed) {
           // Other platforms: Ctrl+Shift+W (to avoid conflict with Ctrl+W word delete)
           final currentTab = tabController.state.value.selectedTabInfo;
-          if (currentTab != null && tabController.state.value.tabs.length > 1) {
+          if (tabController.state.value.tabs.length > 1) {
             tabController.closeBy(currentTab.key);
             return true;
           }
         }
       }
-      
+
       // Use Alt+Left/Right for tab navigation (avoids conflicts)
       if (HardwareKeyboard.instance.isAltPressed) {
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
@@ -253,7 +248,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
           return true;
         }
       }
-      
+
       // Check for Cmd/Ctrl + Number (switch to specific tab)
       final numberKeys = [
         LogicalKeyboardKey.digit1,
@@ -266,11 +261,11 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         LogicalKeyboardKey.digit8,
         LogicalKeyboardKey.digit9,
       ];
-      
+
       for (int i = 0; i < numberKeys.length; i++) {
         if (event.logicalKey == numberKeys[i] &&
             ((isMacOS && HardwareKeyboard.instance.isMetaPressed) ||
-             (!isMacOS && HardwareKeyboard.instance.isControlPressed))) {
+                (!isMacOS && HardwareKeyboard.instance.isControlPressed))) {
           if (i < tabController.length) {
             tabController.jumpTo(i);
             return true;
@@ -280,7 +275,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     }
     return false;
   }
-  
+
   void _addNewTerminal(String peerId) {
     // Find first tab for this peer to get connection parameters
     final firstTab = tabController.state.value.tabs.firstWhere(
@@ -300,15 +295,12 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     }
   }
 
-  void _addNewTerminalFromKeyboard() {
-    // Same logic as _buildAddButton onTap, but extracted to a method
+  void _addNewTerminalForCurrentPeer() {
     final currentTab = tabController.state.value.selectedTabInfo;
-    if (currentTab != null) {
-      final parts = currentTab.key.split('_');
-      if (parts.isNotEmpty) {
-        final peerId = parts[0];
-        _addNewTerminal(peerId);
-      }
+    final parts = currentTab.key.split('_');
+    if (parts.isNotEmpty) {
+      final peerId = parts[0];
+      _addNewTerminal(peerId);
     }
   }
 
@@ -361,36 +353,10 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
 
   Widget _buildAddButton() {
     return ActionIcon(
-      message: 'New Terminal',
+      message: 'New tab',
       icon: IconFont.add,
       onTap: () {
-        // Get the current active tab to find which peer we're connected to
-        final currentTab = tabController.state.value.selectedTabInfo;
-        if (currentTab != null) {
-          // Extract peer ID from the tab key (format: peerId_terminalId)
-          final parts = currentTab.key.split('_');
-          if (parts.isNotEmpty) {
-            final peerId = parts[0];
-            // Find the first tab with this peer ID to get connection info
-            final firstTab = tabController.state.value.tabs.firstWhere(
-              (tab) => tab.key.startsWith('$peerId\_'),
-              orElse: () => currentTab,
-            );
-            if (firstTab.page is TerminalPage) {
-              final page = firstTab.page as TerminalPage;
-              // Create new terminal for the same peer
-              final terminalId = _nextTerminalId++;
-              tabController.add(_createTerminalTab(
-                peerId: peerId,
-                terminalId: terminalId,
-                password: page.password,
-                isSharedPassword: page.isSharedPassword,
-                forceRelay: page.forceRelay,
-                connToken: page.connToken,
-              ));
-            }
-          }
-        }
+        _addNewTerminalForCurrentPeer();
       },
       isClose: false,
     );

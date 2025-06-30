@@ -16,7 +16,7 @@ class TerminalModel with ChangeNotifier {
 
   bool _terminalOpened = false;
   bool get terminalOpened => _terminalOpened;
-  
+
   bool _disposed = false;
 
   final _inputBuffer = <String>[];
@@ -112,7 +112,7 @@ class TerminalModel with ChangeNotifier {
     }
 
     debugPrint(
-        '[TerminalModel] Opening terminal $terminalId, sessionId: ${parent.sessionId}, size: ${cols}x${rows}');
+        '[TerminalModel] Opening terminal $terminalId, sessionId: ${parent.sessionId}, size: ${cols}x$rows');
     try {
       await bind
           .sessionOpenTerminal(

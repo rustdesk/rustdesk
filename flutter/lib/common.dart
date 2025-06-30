@@ -1573,7 +1573,9 @@ bool option2bool(String option, String value) {
 
 String bool2option(String option, bool b) {
   String res;
-  if (option.startsWith('enable-') && option != kOptionEnableUdpPunch && option != kOptionEnableIpv6Punch) {
+  if (option.startsWith('enable-') &&
+      option != kOptionEnableUdpPunch &&
+      option != kOptionEnableIpv6Punch) {
     res = b ? defaultOptionYes : 'N';
   } else if (option.startsWith('allow-') ||
       option == kOptionStopService ||
@@ -2321,14 +2323,17 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   if (isMobile && id != null) {
     final forceRelay = queryParameters["relay"] != null;
     final password = queryParameters["password"];
-    
+
     // Determine connection type based on command
     if (command == '--file-transfer') {
-      connect(Get.context!, id, isFileTransfer: true, forceRelay: forceRelay, password: password);
+      connect(Get.context!, id,
+          isFileTransfer: true, forceRelay: forceRelay, password: password);
     } else if (command == '--view-camera') {
-      connect(Get.context!, id, isViewCamera: true, forceRelay: forceRelay, password: password);
+      connect(Get.context!, id,
+          isViewCamera: true, forceRelay: forceRelay, password: password);
     } else if (command == '--terminal') {
-      connect(Get.context!, id, isTerminal: true, forceRelay: forceRelay, password: password);
+      connect(Get.context!, id,
+          isTerminal: true, forceRelay: forceRelay, password: password);
     } else {
       // Default to remote desktop for '--connect', '--play', or direct connection
       connect(Get.context!, id, forceRelay: forceRelay, password: password);
@@ -2481,8 +2486,8 @@ connect(BuildContext context, String id,
           context,
           MaterialPageRoute(
             builder: (BuildContext context) => FileManagerPage(
-                id: id, 
-                password: password, 
+                id: id,
+                password: password,
                 isSharedPassword: isSharedPassword,
                 forceRelay: forceRelay),
           ),
@@ -2508,38 +2513,25 @@ connect(BuildContext context, String id,
           context,
           MaterialPageRoute(
             builder: (BuildContext context) => ViewCameraPage(
-                id: id, 
-                password: password, 
+                id: id,
+                password: password,
                 isSharedPassword: isSharedPassword,
                 forceRelay: forceRelay),
           ),
         );
       }
     } else if (isTerminal) {
-      if (isWeb) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (BuildContext context) => TerminalPage(
-              id: id,
-              password: password,
-              isSharedPassword: isSharedPassword,
-            ),
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) => TerminalPage(
+            id: id,
+            password: password,
+            isSharedPassword: isSharedPassword,
+            forceRelay: forceRelay,
           ),
-        );
-      } else {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (BuildContext context) => TerminalPage(
-              id: id,
-              password: password,
-              isSharedPassword: isSharedPassword,
-              forceRelay: forceRelay,
-            ),
-          ),
-        );
-      }
+        ),
+      );
     } else {
       if (isWeb) {
         Navigator.push(
@@ -2559,8 +2551,8 @@ connect(BuildContext context, String id,
           context,
           MaterialPageRoute(
             builder: (BuildContext context) => RemotePage(
-                id: id, 
-                password: password, 
+                id: id,
+                password: password,
                 isSharedPassword: isSharedPassword,
                 forceRelay: forceRelay),
           ),

@@ -1079,7 +1079,6 @@ class FfiModel with ChangeNotifier {
               sessionId: sessionId, arg: kOptionTouchMode) !=
           '';
     }
-    // FIXME: handle ViewCamera ConnType independently.
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
     } else if (connType == ConnType.terminal) {
@@ -2837,7 +2836,14 @@ class ElevationModel with ChangeNotifier {
 }
 
 // The index values of `ConnType` are same as rust protobuf.
-enum ConnType { defaultConn, fileTransfer, portForward, rdp, viewCamera, terminal }
+enum ConnType {
+  defaultConn,
+  fileTransfer,
+  portForward,
+  rdp,
+  viewCamera,
+  terminal
+}
 
 /// Flutter state manager and data communication with the Rust core.
 class FFI {
@@ -2871,10 +2877,10 @@ class FFI {
   late final Peers recentPeersModel; // global
   late final Peers favoritePeersModel; // global
   late final Peers lanPeersModel; // global
-  
+
   // Terminal model registry for multiple terminals
   final Map<int, TerminalModel> _terminalModels = {};
-  
+
   // Getter for terminal models
   Map<int, TerminalModel> get terminalModels => _terminalModels;
 
@@ -3189,21 +3195,21 @@ class FFI {
   Future<bool> invokeMethod(String method, [dynamic arguments]) async {
     return await platformFFI.invokeMethod(method, arguments);
   }
-  
+
   // Terminal model management
   void registerTerminalModel(int terminalId, TerminalModel model) {
     debugPrint('[FFI] Registering terminal model for terminal $terminalId');
     _terminalModels[terminalId] = model;
   }
-  
+
   void unregisterTerminalModel(int terminalId) {
     debugPrint('[FFI] Unregistering terminal model for terminal $terminalId');
     _terminalModels.remove(terminalId);
   }
-  
+
   void routeTerminalResponse(Map<String, dynamic> evt) {
     final int terminalId = evt['terminal_id'] ?? 0;
-    
+
     // Route to specific terminal model if it exists
     final model = _terminalModels[terminalId];
     if (model != null) {
@@ -3313,7 +3319,6 @@ class PeerInfo with ChangeNotifier {
       platformAdditions[kPlatformAdditionsIddImpl] == 'rustdesk_idd';
   bool get isAmyuniIdd =>
       platformAdditions[kPlatformAdditionsIddImpl] == 'amyuni_idd';
-
 
   Display? tryGetDisplay({int? display}) {
     if (displays.isEmpty) {

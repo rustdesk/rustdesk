@@ -4,7 +4,6 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
-import 'package:get/get.dart';
 import 'package:xterm/xterm.dart';
 import 'terminal_connection_manager.dart';
 
@@ -39,9 +38,7 @@ class _TerminalPageState extends State<TerminalPage>
   @override
   void initState() {
     super.initState();
-    
-    debugPrint('[TerminalPage] Initializing terminal ${widget.terminalId} for peer ${widget.id}');
-    
+
     // Use shared FFI instance from connection manager
     _ffi = TerminalConnectionManager.getConnection(
       peerId: widget.id,
@@ -50,11 +47,12 @@ class _TerminalPageState extends State<TerminalPage>
       forceRelay: widget.forceRelay,
       connToken: widget.connToken,
     );
-    
+
     // Create terminal model with specific terminal ID
     _terminalModel = TerminalModel(_ffi, widget.terminalId);
-    debugPrint('[TerminalPage] Terminal model created for terminal ${widget.terminalId}');
-    
+    debugPrint(
+        '[TerminalPage] Terminal model created for terminal ${widget.terminalId}');
+
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
 
@@ -63,29 +61,7 @@ class _TerminalPageState extends State<TerminalPage>
       widget.tabController.onSelected?.call(widget.id);
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
-      _startTerminal();
     });
-  }
-
-  void _startTerminal() async {
-    debugPrint('[TerminalPage] _startTerminal called for terminal ${widget.terminalId}');
-    
-    // Wait for the next frame to ensure terminal view is laid out
-    await WidgetsBinding.instance.endOfFrame;
-    
-    // Check if terminal has valid dimensions
-    final terminal = _terminalModel.terminal;
-    if (terminal.viewWidth <= 0 || terminal.viewHeight <= 0 || 
-        !terminal.viewWidth.isFinite || !terminal.viewHeight.isFinite) {
-      debugPrint('[TerminalPage] Terminal view not ready, scheduling retry...');
-      // Schedule for next frame instead of arbitrary delay
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await _terminalModel.openTerminal();
-      });
-    } else {
-      // Open terminal on the remote side
-      await _terminalModel.openTerminal();
-    }
   }
 
   @override

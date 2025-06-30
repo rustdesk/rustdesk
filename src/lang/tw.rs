@@ -702,6 +702,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Terminal", ""),
         ("Enable terminal", ""),
         ("New tab", ""),
-        ("Keep sessions on disconnect", ""),
+        ("Keep terminal sessions on disconnect", ""),
     ].iter().cloned().collect();
 }
