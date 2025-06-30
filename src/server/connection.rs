@@ -1524,6 +1524,7 @@ impl Connection {
             }
         } else if self.terminal {
             self.keyboard = false;
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             self.init_terminal_service().await;
         } else if self.view_camera {
             if !wait_session_id_confirm {
@@ -2881,7 +2882,10 @@ impl Connection {
                     }
                 }
                 Some(message::Union::TerminalAction(action)) => {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     allow_err!(self.handle_terminal_action(action).await);
+                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    log::warn!("Terminal action received but not supported on this platform");
                 }
                 _ => {}
             }
@@ -3411,6 +3415,7 @@ impl Connection {
                 }
             }
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if let Ok(q) = o.terminal_persistent.enum_value() {
             if q != BoolOption::NotSet {
                 self.update_terminal_persistence(q == BoolOption::Yes).await;
@@ -3820,11 +3825,13 @@ impl Connection {
         self.send(msg_out).await;
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn update_terminal_persistence(&mut self, persistent: bool) {
         self.terminal_persistent = persistent;
         terminal_service::set_persistent(&self.terminal_service_id, persistent).ok();
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn init_terminal_service(&mut self) {
         if self.terminal_service_id.is_empty() {
             self.terminal_service_id = terminal_service::generate_service_id();
@@ -3837,6 +3844,7 @@ impl Connection {
         self.terminal_generic_service = Some(s);
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_terminal_action(&mut self, action: TerminalAction) -> ResultType<()> {
         let mut proxy = terminal_service::TerminalServiceProxy::new(
             self.terminal_service_id.clone(),
