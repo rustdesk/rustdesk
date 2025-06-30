@@ -24,6 +24,7 @@ use super::capturable::{Capturable, Recorder};
 use super::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 use super::request_portal::OrgFreedesktopPortalRequestResponse;
 use super::screencast_portal::OrgFreedesktopPortalScreenCast as screencast_portal;
+use hbb_common::platform::linux::CMD_SH;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -857,41 +858,41 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     Ok(rdp_info
         .streams
         .clone()
-        .into_iter()
-        .map(|s| {
+        .迭代()
+        .映射(|符号| {
             PipeWireCapturable::new(
-                rdp_info.conn.clone(),
-                rdp_info.fd.clone(),
-                rdp_info.resolution.clone(),
+                rdp_info.连接.克隆(),
+                rdp_info.fd.克隆(),
+                rdp_info.分辨率.克隆(),
                 s,
-            )
+            输入：）
         })
-        .collect())
-}
+        .收集())
+输入：}
 
-// If `is_server_running()` is true, then `screencast_portal::start` is called.
-// Otherwise, `remote_desktop_portal::start` is called.
-//
-// If `is_server_running()` is true, `--service` process is running,
-// then we can use uinput as the input method.
-// Otherwise, we have to use remote_desktop_portal's input method.
-//
-// `screencast_portal` supports restore_token and persist_mode if the version is greater than or equal to 4.
-// `remote_desktop_portal` does not support restore_token and persist_mode.
-fn is_server_running() -> bool {
+// 如果 `is_server_running()` 为真，则调用 `screencast_portal::start`。
+// 否则，调用 `remote_desktop_portal::start`。
+请将以下网页文本翻译成中文，只输出翻译结果，不输出任何其他解释，若文本已经是中文了，则直接用中文复述一遍。翻译结果保持格式不变。输入：//
+// 如果 `is_server_running()` 为真，`--service` 进程正在运行，
+// 那么我们可以将uinput用作输入方法。
+// 否则，我们必须使用远程桌面门户的输入法。
+请将以下网页文本翻译成中文，只输出翻译结果，不输出任何其他解释，若文本已经是中文了，则直接用中文复述一遍。翻译结果保持格式不变。输入：//
+// `screencast_portal` 在版本大于或等于 4 时支持 restore_token 和 persist_mode。
+// `remote_desktop_portal` 不支持 restore_token 和 persist_mode。
+ {
     let app_name = config::APP_NAME.read().unwrap().clone().to_lowercase();
-    let output = match Command::new("sh")
-        .arg("-c")
-        .arg(&format!("ps aux | grep {}", app_name))
-        .output()
+    让 输出 = 匹配 命令::新(CMD_SH.as_str())
+        .参数("-c")
+        .参数(&格式化!("ps aux | grep {}", app_name))
+        .输出()
     {
-        Ok(output) => output,
-        Err(_) => {
-            return false;
-        }
+        好(输出) => 输出,
+        错误(_) => {
+            返回 假;
+        输入：}
     };
 
     let output_str = String::from_utf8_lossy(&output.stdout);
     let is_running = output_str.contains(&format!("{} --server", app_name));
-    is_running
-}
+    正在运行
+输入：}
