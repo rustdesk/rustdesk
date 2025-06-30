@@ -1,3 +1,4 @@
+#![cfg_attr(lt_1_77, feature(c_str_literals))]
 mod keyboard;
 /// cbindgen:ignore
 pub mod platform;
