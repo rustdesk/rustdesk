@@ -266,7 +266,7 @@ jobs:
                libayatana-appindicator3-dev\
                libasound2-dev \
                libc6-dev \
-               libclang-11-dev \
+               libclang-dev \
                libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
@@ -280,7 +280,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-11-dev \
+               llvm-dev \
                nasm \
                yasm \
                ninja-build \
