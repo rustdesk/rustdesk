@@ -18,7 +18,7 @@ Başka bir uzak masaüstü yazılımı daha, Rust dilinde yazılmış. Hemen kul
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk, herkesten katkıyı kabul eder. Başlamak için [CONTRIBUTING.md](docs/CONTRIBUTING-TR.md) belgesine göz atın.
+RustDesk, herkesten katkıyı kabul eder. Başlamak için [CONTRIBUTING.md](CONTRIBUTING-TR.md) belgesine göz atın.
 
 [**SSS**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 

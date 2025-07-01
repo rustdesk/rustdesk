@@ -18,7 +18,7 @@ Rustで書かれた、設定不要ですぐに使えるリモートデスクト�
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDeskは皆さんの貢献を歓迎します。  
-貢献の方法については[CONTRIBUTING.md](docs/CONTRIBUTING.md)をご確認ください。
+貢献の方法については[CONTRIBUTING.md](CONTRIBUTING.md)をご確認ください。
 
 [**よくある質問**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
