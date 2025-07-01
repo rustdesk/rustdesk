@@ -103,6 +103,8 @@ pub fn peer_get_sessions_count(id: String, conn_type: i32) -> SyncReturn<usize> 
         ConnType::PORT_FORWARD
     } else if conn_type == ConnType::RDP as i32 {
         ConnType::RDP
+    } else if conn_type == ConnType::TERMINAL as i32 {
+        ConnType::TERMINAL
     } else {
         ConnType::DEFAULT_CONN
     };
@@ -129,6 +131,7 @@ pub fn session_add_sync(
     is_view_camera: bool,
     is_port_forward: bool,
     is_rdp: bool,
+    is_terminal: bool,
     switch_uuid: String,
     force_relay: bool,
     password: String,
@@ -142,6 +145,7 @@ pub fn session_add_sync(
         is_view_camera,
         is_port_forward,
         is_rdp,
+        is_terminal,
         &switch_uuid,
         force_relay,
         password,
@@ -610,6 +614,33 @@ pub fn session_input_string(session_id: SessionID, value: String) {
 pub fn session_send_chat(session_id: SessionID, text: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send_chat(text);
+    }
+}
+
+// Terminal functions
+pub fn session_open_terminal(session_id: SessionID, terminal_id: i32, rows: u32, cols: u32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.open_terminal(terminal_id, rows, cols);
+    } else {
+        log::error!("[flutter_ffi] Session not found for session_id: {}", session_id);
+    }
+}
+
+pub fn session_send_terminal_input(session_id: SessionID, terminal_id: i32, data: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.send_terminal_input(terminal_id, data);
+    }
+}
+
+pub fn session_resize_terminal(session_id: SessionID, terminal_id: i32, rows: u32, cols: u32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.resize_terminal(terminal_id, rows, cols);
+    }
+}
+
+pub fn session_close_terminal(session_id: SessionID, terminal_id: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.close_terminal(terminal_id);
     }
 }
 

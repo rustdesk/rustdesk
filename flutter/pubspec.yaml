@@ -106,6 +106,8 @@ dependencies:
   device_info_plus: ^9.1.0
   qr_flutter: ^4.1.0
   extended_text: 14.0.0
+  xterm: 4.0.0
+  sqflite: 2.2.0
 
 dev_dependencies:
   icons_launcher: ^2.0.4
@@ -118,7 +120,8 @@ dev_dependencies:
 
 dependency_overrides:
   intl: ^0.19.0
-  
+  flutter_plugin_android_lifecycle: 2.0.17
+
 # rerun: flutter pub run flutter_launcher_icons
 flutter_icons:
   image_path: "../res/icon.png"
@@ -193,4 +196,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
-
