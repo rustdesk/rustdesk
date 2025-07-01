@@ -355,6 +355,7 @@ Widget buildConnectionCard(Client client) {
         _CmHeader(client: client),
         client.type_() == ClientType.file ||
                 client.type_() == ClientType.portForward ||
+                client.type_() == ClientType.terminal ||
                 client.disconnected
             ? Offstage()
             : _PrivilegeBoard(client: client),
@@ -499,7 +500,36 @@ class _CmHeaderState extends State<_CmHeader>
                     "(${client.peerId})",
                     style: TextStyle(color: Colors.white, fontSize: 14),
                   ),
-                ).marginOnly(bottom: 10.0),
+                ),
+                if (client.type_() == ClientType.terminal)
+                  FittedBox(
+                    child: Text(
+                      translate("Terminal"),
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                if (client.type_() == ClientType.file)
+                  FittedBox(
+                    child: Text(
+                      translate("File Transfer"),
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                if (client.type_() == ClientType.camera)
+                  FittedBox(
+                    child: Text(
+                      translate("View Camera"),
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                if (client.portForward.isNotEmpty)
+                  FittedBox(
+                    child: Text(
+                      "Port Forward: ${client.portForward}",
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                SizedBox(height: 10.0),
                 FittedBox(
                     child: Row(
                   children: [
