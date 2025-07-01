@@ -59,8 +59,21 @@ class _TerminalPageState extends State<TerminalPage>
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.tabController.onSelected?.call(widget.id);
-      _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      
+      // Check if this is a new connection or additional terminal
+      // Note: When a connection exists, the ref count will be > 1 after this terminal is added
+      final isExistingConnection = TerminalConnectionManager.hasConnection(widget.id) && 
+          TerminalConnectionManager.getTerminalCount(widget.id) > 1;
+      
+      if (!isExistingConnection) {
+        // First terminal - show loading dialog, wait for onReady
+        _ffi.dialogManager
+            .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      } else {
+        // Additional terminal - connection already established
+        // Open the terminal directly
+        _terminalModel.openTerminal();
+      }
     });
   }
 

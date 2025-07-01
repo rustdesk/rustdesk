@@ -48,20 +48,9 @@ class TerminalModel with ChangeNotifier {
 
     terminal.onResize = (w, h, pw, ph) async {
       // Validate all dimensions before using them
-      if (w > 0 &&
-          h > 0 &&
-          pw > 0 &&
-          ph > 0 &&
-          w.isFinite &&
-          h.isFinite &&
-          pw.isFinite &&
-          ph.isFinite &&
-          !w.isNaN &&
-          !h.isNaN &&
-          !pw.isNaN &&
-          !ph.isNaN) {
+      if (w > 0 && h > 0 && pw > 0 && ph > 0) {
         debugPrint(
-            '[TerminalModel] Terminal resized to ${w}x${h} (pixel: ${pw}x${ph})');
+            '[TerminalModel] Terminal resized to ${w}x$h (pixel: ${pw}x$ph)');
         if (_terminalOpened) {
           // Notify remote terminal of resize
           try {
@@ -77,7 +66,7 @@ class TerminalModel with ChangeNotifier {
         }
       } else {
         debugPrint(
-            '[TerminalModel] Invalid terminal dimensions: ${w}x${h} (pixel: ${pw}x${ph})');
+            '[TerminalModel] Invalid terminal dimensions: ${w}x$h (pixel: ${pw}x$ph)');
       }
     };
   }
@@ -100,14 +89,10 @@ class TerminalModel with ChangeNotifier {
     int rows = 24;
     int cols = 80;
 
-    if (terminal.viewHeight > 0 &&
-        terminal.viewHeight.isFinite &&
-        !terminal.viewHeight.isNaN) {
+    if (terminal.viewHeight > 0) {
       rows = terminal.viewHeight;
     }
-    if (terminal.viewWidth > 0 &&
-        terminal.viewWidth.isFinite &&
-        !terminal.viewWidth.isNaN) {
+    if (terminal.viewWidth > 0) {
       cols = terminal.viewWidth;
     }
 
@@ -237,7 +222,7 @@ class TerminalModel with ChangeNotifier {
 
     if (data != null) {
       try {
-        String text;
+        String text = '';
         if (data is String) {
           // Try to decode as base64 first
           try {
