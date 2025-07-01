@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -335,6 +336,12 @@ const kRemoteImageQualityLow = 'low';
 const kRemoteImageQualityCustom = 'custom';
 
 const kIgnoreDpi = true;
+
+const Set<PointerDeviceKind> kTouchBasedDeviceKinds = {
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+};
 
 // ================================ mobile ================================
 
