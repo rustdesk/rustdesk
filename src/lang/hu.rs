@@ -706,6 +706,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable UDP hole punching", "UDP résszűrés engedélyezése"),
         ("Enable IPv6 P2P connection", "IPv6 P2P kapcsolat engedélyezése"),
         ("Numeric one-time password", "Numerikus, egyszer használatos jelszó"),
-        ("Key", "Kulcs"),
     ].iter().cloned().collect();
 }
