@@ -265,6 +265,15 @@ fn ensure_cleanup_task() {
     }
 }
 
+#[cfg(target_os = "linux")]
+pub fn get_sessions_count(include_zombie_tasks: bool) -> usize {
+    let mut c = TERMINAL_SERVICES.lock().unwrap().len();
+    if include_zombie_tasks {
+        c += TERMINAL_TASKS.lock().unwrap().len();
+    }
+    c
+}
+
 pub fn new(service_id: String, is_persistent: bool) -> GenericService {
     // Create the service with initial persistence setting
     allow_err!(get_or_create_service(service_id.clone(), is_persistent));
