@@ -646,7 +646,7 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         #[cfg(target_os = "linux")]
         Data::TerminalSessionCount(_) => {
-            let count = crate::terminal_service::get_sessions_count(true);
+            let count = crate::terminal_service::get_terminal_session_count(true);
             allow_err!(stream.send(&Data::TerminalSessionCount(count)).await);
         }
         #[cfg(feature = "hwcodec")]
