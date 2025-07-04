@@ -41,7 +41,9 @@ use winapi::{
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
-        libloaderapi::{GetProcAddress, LoadLibraryA, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32},
+        libloaderapi::{
+            GetProcAddress, LoadLibraryA, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32,
+        },
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
@@ -784,7 +786,79 @@ pub fn send_sas() {
     }
     unsafe {
         log::info!("SAS received");
+
+        // Check and temporarily set SoftwareSASGeneration if needed
+        let mut original_value: Option<u32> = None;
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+
+        if let Ok(policy_key) = hklm.open_subkey_with_flags(
+            "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+            KEY_READ | KEY_WRITE,
+        ) {
+            // Read current value
+            match policy_key.get_value::<u32, _>("SoftwareSASGeneration") {
+                Ok(value) => {
+                    /*
+                    - 0 = None (disabled)
+                    - 1 = Services
+                    - 2 = Ease of Access applications
+                    - 3 = Services and Ease of Access applications (Both)
+                                      */
+                    if value != 1 && value != 3 {
+                        original_value = Some(value);
+                        log::info!("SoftwareSASGeneration is {}, setting to 1", value);
+                        // Set to 1 for SendSAS to work
+                        if let Err(e) = policy_key.set_value("SoftwareSASGeneration", &1u32) {
+                            log::error!("Failed to set SoftwareSASGeneration: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::info!(
+                        "SoftwareSASGeneration not found or error reading: {}, setting to 1",
+                        e
+                    );
+                    original_value = Some(0); // Mark that we need to restore (delete) it
+                                              // Create and set to 1
+                    if let Err(e) = policy_key.set_value("SoftwareSASGeneration", &1u32) {
+                        log::error!("Failed to set SoftwareSASGeneration: {}", e);
+                    }
+                }
+            }
+        } else {
+            log::error!("Failed to open registry key for SoftwareSASGeneration");
+        }
+
+        // Send SAS
         SendSAS(FALSE);
+
+        // Restore original value if we changed it
+        if let Some(original) = original_value {
+            if let Ok(policy_key) = hklm.open_subkey_with_flags(
+                "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+                KEY_WRITE,
+            ) {
+                if original == 0 {
+                    // It didn't exist before, delete it
+                    if let Err(e) = policy_key.delete_value("SoftwareSASGeneration") {
+                        log::error!("Failed to delete SoftwareSASGeneration: {}", e);
+                    } else {
+                        log::info!("Deleted SoftwareSASGeneration (restored to original state)");
+                    }
+                } else {
+                    // Restore the original value
+                    if let Err(e) = policy_key.set_value("SoftwareSASGeneration", &original) {
+                        log::error!(
+                            "Failed to restore SoftwareSASGeneration to {}: {}",
+                            original,
+                            e
+                        );
+                    } else {
+                        log::info!("Restored SoftwareSASGeneration to {}", original);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1217,7 +1291,7 @@ fn get_after_install(
     // reg delete HKEY_CURRENT_USER\Software\Classes for
     // https://github.com/rustdesk/rustdesk/commit/f4bdfb6936ae4804fc8ab1cf560db192622ad01a
     // and https://github.com/leanflutter/uni_links_desktop/blob/1b72b0226cec9943ca8a84e244c149773f384e46/lib/src/protocol_registrar_impl_windows.dart#L30
-    let hcu = winreg::RegKey::predef(HKEY_CURRENT_USER);
+    let hcu = RegKey::predef(HKEY_CURRENT_USER);
     hcu.delete_subkey_all(format!("Software\\Classes\\{}", exe))
         .ok();
 
