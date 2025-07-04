@@ -3037,7 +3037,7 @@ pub mod reg_display_settings {
     }
 
     pub fn read_reg_connectivity() -> ResultType<HashMap<String, HashMap<String, RegValue>>> {
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
         let reg_connectivity = hklm.open_subkey_with_flags(
             format!("{}\\{}", REG_GRAPHICS_DRIVERS_PATH, REG_CONNECTIVITY_PATH),
             KEY_READ,
@@ -3085,7 +3085,7 @@ pub mod reg_display_settings {
     }
 
     pub fn restore_reg_connectivity(reg_recovery: RegRecovery, force: bool) -> ResultType<()> {
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
         let reg_item = hklm.open_subkey_with_flags(&reg_recovery.path, KEY_READ | KEY_WRITE)?;
         if !force {
             let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
