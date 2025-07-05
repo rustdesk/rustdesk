@@ -699,9 +699,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable camera", "Kamera engedélyezése"),
         ("No cameras", "Nincs kamera"),
         ("view_camera_unsupported_tip", "A kameranézet nem támogatott"),
-        ("Terminal", ""),
-        ("Enable terminal", ""),
-        ("New tab", ""),
-        ("Keep terminal sessions on disconnect", ""),
+        ("Terminal", "Terminál"),
+        ("Enable terminal", "Terminál engedélyezése"),
+        ("New tab", "Új lap"),
+        ("Keep terminal sessions on disconnect", "Terminál munkamenetek megtartása leválasztáskor"),
     ].iter().cloned().collect();
 }
