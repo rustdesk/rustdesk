@@ -122,6 +122,9 @@ impl RendezvousMediator {
                 if elapsed < CONNECT_TIMEOUT {
                     sleep(((CONNECT_TIMEOUT - elapsed) / 1000) as _).await;
                 }
+            } else {
+                // https://github.com/rustdesk/rustdesk/issues/12233
+                sleep(0.033).await;
             }
         }
     }
