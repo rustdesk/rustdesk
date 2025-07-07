@@ -226,6 +226,30 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Check iOS permissions for screen recording and microphone
+  checkIOSPermission() async {
+    // For iOS, we need to check screen recording permission
+    // This is typically done when user tries to start screen sharing
+    
+    // microphone - only audio available on iOS
+    final audioOption = await bind.mainGetOption(key: kOptionEnableAudio);
+    _audioOk = audioOption != 'N';
+    
+    // file - Not available on iOS during screen share
+    _fileOk = false;
+    bind.mainSetOption(key: kOptionEnableFileTransfer, value: "N");
+    
+    // clipboard - Not available on iOS during screen share
+    _clipboardOk = false;
+    bind.mainSetOption(key: kOptionEnableClipboard, value: "N");
+    
+    // media/screen recording - will be checked when actually starting
+    _mediaOk = true;
+    _inputOk = true;
+    
+    notifyListeners();
+  }
+
   updatePasswordModel() async {
     var update = false;
     final temporaryPassword = await bind.mainGetTemporaryPassword();
@@ -311,6 +335,14 @@ class ServerModel with ChangeNotifier {
     _audioOk = !_audioOk;
     bind.mainSetOption(
         key: kOptionEnableAudio, value: _audioOk ? defaultOptionYes : 'N');
+    
+    // For iOS, automatically restart the service to apply microphone change
+    // iOS ReplayKit sets microphoneEnabled when capture starts and cannot be changed dynamically
+    // Must restart capture with new microphone setting
+    if (isIOS && _isStart) {
+      _restartServiceForAudio();
+    }
+    
     notifyListeners();
   }
 
@@ -489,6 +521,25 @@ class ServerModel with ChangeNotifier {
       _serverId.id = id;
       notifyListeners();
     }
+  }
+
+  /// Restart service for iOS audio permission change
+  /// iOS ReplayKit requires setting microphoneEnabled at capture start time
+  /// Cannot dynamically enable/disable microphone during active capture session
+  _restartServiceForAudio() async {
+    if (!isIOS) return;
+    
+    // Show a quick toast to inform user
+    showToast(translate("Restarting service to apply microphone change"));
+    
+    // Stop the current capture
+    parent.target?.invokeMethod("stop_service");
+    
+    // Small delay to ensure clean stop
+    await Future.delayed(Duration(milliseconds: 500));
+    
+    // Start with new audio settings
+    parent.target?.invokeMethod("start_service");
   }
 
   changeStatue(String name, bool value) {
@@ -784,6 +835,7 @@ class ServerModel with ChangeNotifier {
       debugPrint("updateVoiceCallState failed: $e");
     }
   }
+
 
   void androidUpdatekeepScreenOn() async {
     if (!isAndroid) return;

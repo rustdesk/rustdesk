@@ -602,39 +602,44 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       gFFI.serverModel.androidUpdatekeepScreenOn();
     }
 
-    enhancementsTiles.add(SettingsTile.switchTile(
-        initialValue: !_floatingWindowDisabled,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(translate('Floating window')),
-          Text('* ${translate('floating_window_tip')}',
-              style: Theme.of(context).textTheme.bodySmall),
-        ]),
-        onToggle: bind.mainIsOptionFixed(key: kOptionDisableFloatingWindow)
-            ? null
-            : onFloatingWindowChanged));
+    if (isAndroid) {
+      enhancementsTiles.add(SettingsTile.switchTile(
+          initialValue: !_floatingWindowDisabled,
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(translate('Floating window')),
+            Text('* ${translate('floating_window_tip')}',
+                style: Theme.of(context).textTheme.bodySmall),
+          ]),
+          onToggle: bind.mainIsOptionFixed(key: kOptionDisableFloatingWindow)
+              ? null
+              : onFloatingWindowChanged));
+    }
 
-    enhancementsTiles.add(_getPopupDialogRadioEntry(
-      title: 'Keep screen on',
-      list: [
-        _RadioEntry('Never', _keepScreenOnToOption(KeepScreenOn.never)),
-        _RadioEntry('During controlled',
-            _keepScreenOnToOption(KeepScreenOn.duringControlled)),
-        _RadioEntry('During service is on',
-            _keepScreenOnToOption(KeepScreenOn.serviceOn)),
-      ],
-      getter: () => _keepScreenOnToOption(_floatingWindowDisabled
-          ? KeepScreenOn.never
-          : optionToKeepScreenOn(
-              bind.mainGetLocalOption(key: kOptionKeepScreenOn))),
-      asyncSetter: isOptionFixed(kOptionKeepScreenOn) || _floatingWindowDisabled
-          ? null
-          : (value) async {
-              await bind.mainSetLocalOption(
-                  key: kOptionKeepScreenOn, value: value);
-              setState(() => _keepScreenOn = optionToKeepScreenOn(value));
-              gFFI.serverModel.androidUpdatekeepScreenOn();
-            },
-    ));
+    if (isAndroid) {
+      enhancementsTiles.add(_getPopupDialogRadioEntry(
+        title: 'Keep screen on',
+        list: [
+          _RadioEntry('Never', _keepScreenOnToOption(KeepScreenOn.never)),
+          _RadioEntry('During controlled',
+              _keepScreenOnToOption(KeepScreenOn.duringControlled)),
+          _RadioEntry('During service is on',
+              _keepScreenOnToOption(KeepScreenOn.serviceOn)),
+        ],
+        getter: () => _keepScreenOnToOption(
+            _floatingWindowDisabled
+                ? KeepScreenOn.never
+                : optionToKeepScreenOn(
+                    bind.mainGetLocalOption(key: kOptionKeepScreenOn))),
+        asyncSetter: isOptionFixed(kOptionKeepScreenOn) || _floatingWindowDisabled
+            ? null
+            : (value) async {
+                await bind.mainSetLocalOption(
+                    key: kOptionKeepScreenOn, value: value);
+                setState(() => _keepScreenOn = optionToKeepScreenOn(value));
+                gFFI.serverModel.androidUpdatekeepScreenOn();
+              },
+      ));
+    }
 
     final disabledSettings = bind.isDisableSettings();
     final hideSecuritySettings =
@@ -669,7 +674,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 onPressed: (context) {
                   showServerSettings(gFFI.dialogManager);
                 }),
-          if (!isIOS && !_hideNetwork && !_hideProxy)
+          if (!_hideNetwork && !_hideProxy)
             SettingsTile(
                 title: Text(translate('Socks5/Http(s) Proxy')),
                 leading: Icon(Icons.network_ping),
@@ -810,7 +815,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             !outgoingOnly &&
             !hideSecuritySettings)
           SettingsSection(title: Text('2FA'), tiles: tfaTiles),
-        if (isAndroid &&
+        if ((isAndroid || isIOS) &&
             !disabledSettings &&
             !outgoingOnly &&
             !hideSecuritySettings)
@@ -819,7 +824,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             tiles: shareScreenTiles,
           ),
         if (!bind.isIncomingOnly()) defaultDisplaySection(),
-        if (isAndroid &&
+        if ((isAndroid || isIOS) &&
             !disabledSettings &&
             !outgoingOnly &&
             !hideSecuritySettings)
