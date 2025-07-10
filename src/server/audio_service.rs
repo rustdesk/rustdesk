@@ -621,22 +621,24 @@ mod ios_impl {
         Ok(())
     }
     
+    lazy_static::lazy_static! {
+        static ref AUDIO_SENDER: Arc<Mutex<Option<Sender<Vec<f32>>>>> = Arc::new(Mutex::new(None));
+    }
+    
     fn setup_ios_audio_callback(sender: Sender<Vec<f32>>) {
         // Set up the audio callback from iOS
+        // Check current audio permission setting
+        let audio_enabled = Config::get_option("enable-audio") != "N";
         unsafe {
-            // Check current audio permission setting
-            let audio_enabled = Config::get_option("enable-audio") != "N";
             scrap::ios::ffi::enable_audio(audio_enabled, false);
             
             // Set the audio callback
             scrap::ios::ffi::set_audio_callback(Some(audio_callback));
-            
-            // Store sender in a global for the callback
-            AUDIO_SENDER = Some(Box::into_raw(Box::new(sender)));
         }
+        
+        // Store sender in a thread-safe way
+        *AUDIO_SENDER.lock().unwrap() = Some(sender);
     }
-    
-    static mut AUDIO_SENDER: Option<*mut Sender<Vec<f32>>> = None;
     
     extern "C" fn audio_callback(data: *const u8, size: u32, is_mic: bool) {
         // Only process microphone audio when enabled
@@ -644,26 +646,24 @@ mod ios_impl {
             return;
         }
         
-        unsafe {
-            if let Some(sender_ptr) = AUDIO_SENDER {
-                let sender = &*sender_ptr;
-                
-                // Convert audio data from bytes to f32
-                // Assuming audio comes as 16-bit PCM stereo at 48kHz
-                let samples = size as usize / 2; // 16-bit = 2 bytes per sample
-                let mut float_data = Vec::with_capacity(samples);
-                
+        if let Some(ref sender) = *AUDIO_SENDER.lock().unwrap() {
+            // Convert audio data from bytes to f32
+            // Assuming audio comes as 16-bit PCM stereo at 48kHz
+            let samples = size as usize / 2; // 16-bit = 2 bytes per sample
+            let mut float_data = Vec::with_capacity(samples);
+            
+            unsafe {
                 let data_slice = std::slice::from_raw_parts(data as *const i16, samples);
                 for &sample in data_slice {
                     // Convert i16 to f32 normalized to [-1.0, 1.0]
                     float_data.push(sample as f32 / 32768.0);
                 }
-                
-                // Send in chunks matching our frame size
-                for chunk in float_data.chunks(FRAMES_PER_BUFFER * CHANNELS as usize) {
-                    if chunk.len() == FRAMES_PER_BUFFER * CHANNELS as usize {
-                        let _ = sender.send(chunk.to_vec());
-                    }
+            }
+            
+            // Send in chunks matching our frame size
+            for chunk in float_data.chunks(FRAMES_PER_BUFFER * CHANNELS as usize) {
+                if chunk.len() == FRAMES_PER_BUFFER * CHANNELS as usize {
+                    let _ = sender.send(chunk.to_vec());
                 }
             }
         }
