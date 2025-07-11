@@ -268,7 +268,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No permission of file transfer", "Nincs engedély a fájlátvitelre"),
         ("Note", "Megjegyzés"),
         ("Connection", "Kapcsolat"),
-        ("Share Screen", "Képernyőmegosztás"),
+        ("Share screen", "Képernyőmegosztás"),
         ("Chat", "Csevegés"),
         ("Total", "Összes"),
         ("items", "elemek"),
@@ -276,8 +276,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Screen Capture", "Képernyőrögzítés"),
         ("Input Control", "Távoli vezérlés"),
         ("Audio Capture", "Hangrögzítés"),
-        ("File Connection", "Fájlátvitel"),
-        ("Screen Connection", "Képátvitel"),
         ("Do you accept?", "Elfogadás?"),
         ("Open System Setting", "Rendszerbeállítások megnyitása"),
         ("How to get Android input permission?", "Hogyan állítható be az Androidos beviteli engedély?"),
@@ -705,6 +703,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use WebSocket", "WebSocket használata"),
         ("Trackpad speed", "Érintőpad sebessége"),
         ("Default trackpad speed", "Alapértelmezett érintőpad sebessége"),
-		("New tab", "Új lap"),
+	("New tab", "Új lap"),
     ].iter().cloned().collect();
 }
