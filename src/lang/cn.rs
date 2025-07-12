@@ -699,9 +699,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable camera", "允许查看摄像头"),
         ("No cameras", "没有摄像头"),
         ("view_camera_unsupported_tip", "您的远程端不支持查看摄像头。"),
-        ("Terminal", ""),
-        ("Enable terminal", ""),
-        ("New tab", ""),
-        ("Keep terminal sessions on disconnect", ""),
+        ("Terminal", "终端"),
+        ("Enable terminal", "启用终端"),
+        ("New tab", "新建选项卡"),
+        ("Keep terminal sessions on disconnect", "保持终端会话断开连接"),
     ].iter().cloned().collect();
 }
