@@ -40,7 +40,7 @@ use winapi::{
     shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
     um::{
         errhandlingapi::GetLastError,
-        handleapi::CloseHandle,
+        handleapi::{CloseHandle, INVALID_HANDLE_VALUE},
         libloaderapi::{
             GetProcAddress, LoadLibraryA, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32,
         },
@@ -49,15 +49,19 @@ use winapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
             OpenProcessToken, ProcessIdToSessionId, PROCESS_INFORMATION, STARTUPINFOW,
         },
-        securitybaseapi::GetTokenInformation,
+        securitybaseapi::{
+            AllocateAndInitializeSid, DuplicateToken, EqualSid, FreeSid, GetTokenInformation,
+        },
         shellapi::ShellExecuteW,
         sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
         winbase::*,
         wingdi::*,
         winnt::{
-            TokenElevation, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
+            SecurityImpersonation, TokenElevation, TokenGroups, TokenImpersonation, TokenType,
+            DOMAIN_ALIAS_RID_ADMINS, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
             ES_SYSTEM_REQUIRED, HANDLE, PROCESS_ALL_ACCESS, PROCESS_QUERY_LIMITED_INFORMATION,
-            TOKEN_ELEVATION, TOKEN_QUERY,
+            PSID, SECURITY_BUILTIN_DOMAIN_RID, SECURITY_NT_AUTHORITY, SID_IDENTIFIER_AUTHORITY,
+            TOKEN_ELEVATION, TOKEN_GROUPS, TOKEN_QUERY, TOKEN_TYPE,
         },
         winreg::HKEY_CURRENT_USER,
         winspool::{
@@ -519,6 +523,10 @@ extern "C" {
     fn is_local_system() -> BOOL;
     fn alloc_console_and_redirect();
     fn is_service_running_w(svc_name: *const u16) -> bool;
+}
+
+pub fn get_current_session_id(share_rdp: bool) -> DWORD {
+    unsafe { get_current_session(if share_rdp { TRUE } else { FALSE }) }
 }
 
 extern "system" {
@@ -2156,6 +2164,177 @@ pub fn send_message_to_hnwd(
         }
     }
     return true;
+}
+
+pub fn get_logon_user_token(user: &str, pwd: &str) -> ResultType<HANDLE> {
+    let user_split = user.split("\\").collect::<Vec<&str>>();
+    let wuser = wide_string(user_split.get(1).unwrap_or(&user));
+    let wpc = wide_string(user_split.get(0).unwrap_or(&""));
+    let wpwd = wide_string(pwd);
+    let mut ph_token: HANDLE = std::ptr::null_mut();
+    let res = unsafe {
+        LogonUserW(
+            wuser.as_ptr(),
+            wpc.as_ptr(),
+            wpwd.as_ptr(),
+            LOGON32_LOGON_INTERACTIVE,
+            LOGON32_PROVIDER_DEFAULT,
+            &mut ph_token as _,
+        )
+    };
+    if res == FALSE {
+        bail!(
+            "Failed to log on user {}: {}",
+            user,
+            std::io::Error::last_os_error()
+        );
+    } else {
+        if ph_token.is_null() {
+            bail!(
+                "Failed to log on user {}: {}",
+                user,
+                std::io::Error::last_os_error()
+            );
+        }
+        Ok(ph_token)
+    }
+}
+
+// Ensure the token returned is a primary token.
+// If the provided token is an impersonation token, it duplicates it to a primary token.
+// If the provided token is already a primary token, it returns it as is.
+// The caller is responsible for closing the returned token handle.
+pub fn ensure_primary_token(user_token: HANDLE) -> ResultType<HANDLE> {
+    if user_token.is_null() || user_token == INVALID_HANDLE_VALUE {
+        bail!("Invalid user token provided");
+    }
+
+    unsafe {
+        let mut token_type: TOKEN_TYPE = 0;
+        let mut return_length: DWORD = 0;
+
+        if GetTokenInformation(
+            user_token,
+            TokenType,
+            &mut token_type as *mut _ as *mut _,
+            std::mem::size_of::<TOKEN_TYPE>() as DWORD,
+            &mut return_length,
+        ) == FALSE
+        {
+            bail!(
+                "Failed to get token type, error {}",
+                io::Error::last_os_error()
+            );
+        }
+
+        if token_type == TokenImpersonation {
+            let mut duplicate_token: HANDLE = std::ptr::null_mut();
+            let dup_res = DuplicateToken(user_token, SecurityImpersonation, &mut duplicate_token);
+            CloseHandle(user_token);
+            if dup_res == FALSE {
+                bail!(
+                    "Failed to duplicate token, error {}",
+                    io::Error::last_os_error()
+                );
+            }
+            Ok(duplicate_token)
+        } else {
+            Ok(user_token)
+        }
+    }
+}
+
+pub fn is_user_token_admin(user_token: HANDLE) -> ResultType<bool> {
+    if user_token.is_null() || user_token == INVALID_HANDLE_VALUE {
+        bail!("Invalid user token provided");
+    }
+
+    unsafe {
+        let mut dw_size: DWORD = 0;
+        GetTokenInformation(
+            user_token,
+            TokenGroups,
+            std::ptr::null_mut(),
+            0,
+            &mut dw_size,
+        );
+
+        let last_error = GetLastError();
+        if last_error != ERROR_INSUFFICIENT_BUFFER {
+            bail!(
+                "Failed to get token groups buffer size, error: {}",
+                last_error
+            );
+        }
+        if dw_size == 0 {
+            bail!("Token groups buffer size is zero");
+        }
+
+        let mut buffer = vec![0u8; dw_size as usize];
+        if GetTokenInformation(
+            user_token,
+            TokenGroups,
+            buffer.as_mut_ptr() as *mut _,
+            dw_size,
+            &mut dw_size,
+        ) == FALSE
+        {
+            bail!(
+                "Failed to get token groups information, error: {}",
+                io::Error::last_os_error()
+            );
+        }
+
+        let p_token_groups = buffer.as_ptr() as *const TOKEN_GROUPS;
+        let group_count = (*p_token_groups).GroupCount;
+
+        if group_count == 0 {
+            return Ok(false);
+        }
+
+        let mut nt_authority: SID_IDENTIFIER_AUTHORITY = SID_IDENTIFIER_AUTHORITY {
+            Value: SECURITY_NT_AUTHORITY,
+        };
+        let mut administrators_group: PSID = std::ptr::null_mut();
+        if AllocateAndInitializeSid(
+            &mut nt_authority,
+            2,
+            SECURITY_BUILTIN_DOMAIN_RID,
+            DOMAIN_ALIAS_RID_ADMINS,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut administrators_group,
+        ) == FALSE
+        {
+            bail!(
+                "Failed to allocate administrators group SID, error: {}",
+                io::Error::last_os_error()
+            );
+        }
+        if administrators_group.is_null() {
+            bail!("Failed to create administrators group SID");
+        }
+
+        let mut is_admin = false;
+        let groups =
+            std::slice::from_raw_parts((*p_token_groups).Groups.as_ptr(), group_count as usize);
+        for group in groups {
+            if EqualSid(administrators_group, group.Sid) == TRUE {
+                is_admin = true;
+                break;
+            }
+        }
+
+        if !administrators_group.is_null() {
+            FreeSid(administrators_group);
+        }
+
+        Ok(is_admin)
+    }
 }
 
 pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) -> ResultType<()> {

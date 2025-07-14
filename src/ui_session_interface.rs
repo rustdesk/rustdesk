@@ -192,7 +192,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn is_default(&self) -> bool {
-        self.lc.read().unwrap().conn_type.eq(&ConnType::DEFAULT_CONN)
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::DEFAULT_CONN)
     }
 
     pub fn is_view_camera(&self) -> bool {
@@ -201,6 +205,11 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn is_terminal(&self) -> bool {
         self.lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL)
+    }
+
+    pub fn is_terminal_as_admin(&self) -> bool {
+        let terminal = self.is_terminal();
+        terminal && self.lc.read().unwrap().is_run_as_admin
     }
 
     pub fn is_port_forward(&self) -> bool {
@@ -803,7 +812,6 @@ impl<T: InvokeUiSession> Session<T> {
         msg_out.set_terminal_action(action);
         self.send(Data::Message(msg_out));
     }
-
 
     pub fn capture_displays(&self, add: Vec<i32>, sub: Vec<i32>, set: Vec<i32>) {
         let mut misc = Misc::new();

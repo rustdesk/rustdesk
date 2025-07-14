@@ -789,6 +789,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isTerminal: call.arguments['isTerminal'],
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
+          isRunAsAdmin: call.arguments['isRunAsAdmin'] ?? false,
           password: call.arguments['password'],
           forceRelay: call.arguments['forceRelay'],
           connToken: call.arguments['connToken'],

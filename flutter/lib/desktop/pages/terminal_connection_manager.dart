@@ -17,6 +17,7 @@ class TerminalConnectionManager {
     required bool? isSharedPassword,
     required bool? forceRelay,
     required String? connToken,
+    required bool isRunAsAdmin,
   }) {
     final existingFfi = _connections[peerId];
     if (existingFfi != null && !existingFfi.closed) {
@@ -36,6 +37,7 @@ class TerminalConnectionManager {
       forceRelay: forceRelay,
       connToken: connToken,
       isTerminal: true,
+      isRunAsAdmin: isRunAsAdmin,
     );
     
     _connections[peerId] = ffi;

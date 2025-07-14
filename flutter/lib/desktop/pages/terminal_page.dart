@@ -15,6 +15,7 @@ class TerminalPage extends StatefulWidget {
     required this.tabController,
     required this.isSharedPassword,
     required this.terminalId,
+    required this.isRunAsAdmin,
     this.forceRelay,
     this.connToken,
   }) : super(key: key);
@@ -25,6 +26,7 @@ class TerminalPage extends StatefulWidget {
   final bool? isSharedPassword;
   final String? connToken;
   final int terminalId;
+  final bool isRunAsAdmin;
 
   @override
   State<TerminalPage> createState() => _TerminalPageState();
@@ -46,6 +48,7 @@ class _TerminalPageState extends State<TerminalPage>
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
       connToken: widget.connToken,
+      isRunAsAdmin: widget.isRunAsAdmin,
     );
 
     // Create terminal model with specific terminal ID

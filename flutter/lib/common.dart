@@ -2122,6 +2122,7 @@ enum UriLinkType {
   portForward,
   rdp,
   terminal,
+  terminalAdmin,
 }
 
 // uri link handler
@@ -2191,6 +2192,11 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         id = args[i + 1];
         i++;
         break;
+      case '--terminal-admin':
+        type = UriLinkType.terminalAdmin;
+        id = args[i + 1];
+        i++;
+        break;
       case '--password':
         password = args[i + 1];
         i++;
@@ -2242,7 +2248,13 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         break;
       case UriLinkType.terminal:
         Future.delayed(Duration.zero, () {
-          rustDeskWinManager.newTerminal(id!,
+          rustDeskWinManager.newTerminal(id!, false,
+              password: password, forceRelay: forceRelay);
+        });
+        break;
+      case UriLinkType.terminalAdmin:
+        Future.delayed(Duration.zero, () {
+          rustDeskWinManager.newTerminal(id!, true,
               password: password, forceRelay: forceRelay);
         });
         break;
@@ -2264,7 +2276,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     "view-camera",
     "port-forward",
     "rdp",
-    "terminal"
+    "terminal",
+    "terminal-admin",
   ];
   if (uri.authority.isEmpty &&
       uri.path.split('').every((char) => char == '/')) {
@@ -2334,6 +2347,12 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     } else if (command == '--terminal') {
       connect(Get.context!, id,
           isTerminal: true, forceRelay: forceRelay, password: password);
+    } else if (command == 'terminal-admin') {
+      connect(Get.context!, id,
+          isTerminal: true,
+          isTerminalRunAsAdmin: true,
+          forceRelay: forceRelay,
+          password: password);
     } else {
       // Default to remote desktop for '--connect', '--play', or direct connection
       connect(Get.context!, id, forceRelay: forceRelay, password: password);
@@ -2363,6 +2382,7 @@ connectMainDesktop(String id,
     required bool isTerminal,
     required bool isTcpTunneling,
     required bool isRDP,
+    required bool isRunAsAdmin,
     bool? forceRelay,
     String? password,
     String? connToken,
@@ -2386,7 +2406,7 @@ connectMainDesktop(String id,
         connToken: connToken,
         forceRelay: forceRelay);
   } else if (isTerminal) {
-    await rustDeskWinManager.newTerminal(id,
+    await rustDeskWinManager.newTerminal(id, isRunAsAdmin,
         password: password,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
@@ -2408,6 +2428,7 @@ connect(BuildContext context, String id,
     {bool isFileTransfer = false,
     bool isViewCamera = false,
     bool isTerminal = false,
+    bool isTerminalRunAsAdmin = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool forceRelay = false,
@@ -2440,9 +2461,10 @@ connect(BuildContext context, String id,
         id,
         isFileTransfer: isFileTransfer,
         isViewCamera: isViewCamera,
-        isTerminal: isTerminal,
+        isTerminal: isTerminal || isTerminalRunAsAdmin,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
+        isRunAsAdmin: isTerminalRunAsAdmin,
         password: password,
         isSharedPassword: isSharedPassword,
         forceRelay: forceRelay,
@@ -2452,7 +2474,8 @@ connect(BuildContext context, String id,
         'id': id,
         'isFileTransfer': isFileTransfer,
         'isViewCamera': isViewCamera,
-        'isTerminal': isTerminal,
+        'isTerminal': isTerminal || isTerminalRunAsAdmin,
+        'isRunAsAdmin': isTerminalRunAsAdmin,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
         'password': password,
@@ -2520,7 +2543,7 @@ connect(BuildContext context, String id,
           ),
         );
       }
-    } else if (isTerminal) {
+    } else if (isTerminal || isTerminalRunAsAdmin) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -2529,6 +2552,7 @@ connect(BuildContext context, String id,
             password: password,
             isSharedPassword: isSharedPassword,
             forceRelay: forceRelay,
+            isRunAsAdmin: isTerminalRunAsAdmin,
           ),
         ),
       );

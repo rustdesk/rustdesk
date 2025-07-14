@@ -2218,9 +2218,8 @@ dependencies = [
 
 [[package]]
 name = "filedescriptor"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e40758ed24c9b2eeb76c35fb0aebc66c626084edd827e07e1552279814c6682d"
+version = "0.8.2"
+source = "git+https://github.com/rustdesk-org/wezterm?branch=rustdesk/pty_based_0.8.1#80174f8009f41565f0fa8c66dab90d4f9211ae16"
 dependencies = [
  "libc",
  "thiserror 1.0.61",
@@ -5233,8 +5232,7 @@ dependencies = [
 [[package]]
 name = "portable-pty"
 version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "806ee80c2a03dbe1a9fb9534f8d19e4c0546b790cde8fd1fea9d6390644cb0be"
+source = "git+https://github.com/rustdesk-org/wezterm?branch=rustdesk/pty_based_0.8.1#80174f8009f41565f0fa8c66dab90d4f9211ae16"
 dependencies = [
  "anyhow",
  "bitflags 1.3.2",

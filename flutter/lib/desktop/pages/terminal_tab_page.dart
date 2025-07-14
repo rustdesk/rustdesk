@@ -47,6 +47,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       terminalId: terminalId,
       password: params['password'],
       isSharedPassword: params['isSharedPassword'],
+      isRunAsAdmin: params['isRunAsAdmin'] ?? false,
       forceRelay: params['forceRelay'],
       connToken: params['connToken'],
     ));
@@ -55,6 +56,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   TabInfo _createTerminalTab({
     required String peerId,
     required int terminalId,
+    required bool isRunAsAdmin,
     String? password,
     bool? isSharedPassword,
     bool? forceRelay,
@@ -84,6 +86,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         terminalId: terminalId,
         password: password,
         isSharedPassword: isSharedPassword,
+        isRunAsAdmin: isRunAsAdmin,
         tabController: tabController,
         forceRelay: forceRelay,
         connToken: connToken,
@@ -168,6 +171,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
           terminalId: terminalId,
           password: args['password'],
           isSharedPassword: args['isSharedPassword'],
+          isRunAsAdmin: args['isRunAsAdmin'] ?? false,
           forceRelay: args['forceRelay'],
           connToken: args['connToken'],
         ));
@@ -289,6 +293,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         terminalId: terminalId,
         password: page.password,
         isSharedPassword: page.isSharedPassword,
+        isRunAsAdmin: page.isRunAsAdmin,
         forceRelay: page.forceRelay,
         connToken: page.connToken,
       ));

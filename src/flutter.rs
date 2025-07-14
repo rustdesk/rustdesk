@@ -1276,6 +1276,7 @@ pub fn session_add(
     is_port_forward: bool,
     is_rdp: bool,
     is_terminal: bool,
+    is_run_as_admin: bool,
     switch_uuid: &str,
     force_relay: bool,
     password: String,
@@ -1335,6 +1336,7 @@ pub fn session_add(
     session.lc.write().unwrap().initialize(
         id.to_owned(),
         conn_type,
+        is_run_as_admin,
         switch_uuid,
         force_relay,
         get_adapter_luid(),

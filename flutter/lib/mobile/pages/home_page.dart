@@ -206,6 +206,7 @@ class WebHomePage extends StatelessWidget {
     bool isFileTransfer = false;
     bool isViewCamera = false;
     bool isTerminal = false;
+    bool isTerminalRunAsAdmin = false;
     String? id;
     String? password;
     for (int i = 0; i < args.length; i++) {
@@ -230,6 +231,12 @@ class WebHomePage extends StatelessWidget {
           id = args[i + 1];
           i++;
           break;
+        case '--terminal-admin':
+          isTerminal = true;
+          isTerminalRunAsAdmin = true;
+          id = args[i + 1];
+          i++;
+          break;
         case '--password':
           password = args[i + 1];
           i++;
@@ -243,6 +250,7 @@ class WebHomePage extends StatelessWidget {
         isFileTransfer: isFileTransfer, 
         isViewCamera: isViewCamera, 
         isTerminal: isTerminal,
+        isTerminalRunAsAdmin: isTerminalRunAsAdmin,
         password: password);
     }
   }
