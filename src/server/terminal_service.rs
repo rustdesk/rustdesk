@@ -7,6 +7,7 @@ use portable_pty::{Child, CommandBuilder, PtySize};
 use std::{
     collections::{HashMap, VecDeque},
     io::{Read, Write},
+    ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, SyncSender},
@@ -271,17 +272,51 @@ pub fn get_terminal_session_count(include_zombie_tasks: bool) -> usize {
     c
 }
 
-pub fn new(service_id: String, is_persistent: bool) -> GenericService {
+pub type UserToken = u64;
+
+#[derive(Clone)]
+pub struct TerminalService {
+    sp: GenericService,
+    user_token: Option<UserToken>,
+}
+
+impl Deref for TerminalService {
+    type Target = ServiceTmpl<ConnInner>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.sp
+    }
+}
+
+impl DerefMut for TerminalService {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.sp
+    }
+}
+
+pub fn get_service_name(source: VideoSource, idx: usize) -> String {
+    format!("{}{}", source.service_name_prefix(), idx)
+}
+
+pub fn new(
+    service_id: String,
+    is_persistent: bool,
+    user_token: Option<UserToken>,
+) -> GenericService {
     // Create the service with initial persistence setting
     allow_err!(get_or_create_service(service_id.clone(), is_persistent));
-    let svc = EmptyExtraFieldService::new(service_id.clone(), false);
+    let svc = TerminalService {
+        sp: GenericService::new(service_id.clone(), false),
+        user_token,
+    };
     GenericService::run(&svc.clone(), move |sp| run(sp, service_id.clone()));
     svc.sp
 }
 
-fn run(sp: EmptyExtraFieldService, service_id: String) -> ResultType<()> {
+fn run(sp: TerminalService, service_id: String) -> ResultType<()> {
     while sp.ok() {
-        let responses = TerminalServiceProxy::new(service_id.clone(), None).read_outputs();
+        let responses = TerminalServiceProxy::new(service_id.clone(), None, sp.user_token.clone())
+            .read_outputs();
         for response in responses {
             let mut msg_out = Message::new();
             msg_out.set_terminal_response(response);
@@ -451,6 +486,7 @@ impl TerminalSession {
             }
             drop(input_tx);
         }
+        self.output_rx = None;
 
         // Wait for threads to finish
         // The reader thread should join before the writer thread on Windows.
@@ -544,6 +580,8 @@ impl PersistentTerminalService {
 pub struct TerminalServiceProxy {
     service_id: String,
     is_persistent: bool,
+    #[cfg(target_os = "windows")]
+    user_token: Option<UserToken>,
 }
 
 pub fn set_persistent(service_id: &str, is_persistent: bool) -> Result<()> {
@@ -556,7 +594,11 @@ pub fn set_persistent(service_id: &str, is_persistent: bool) -> Result<()> {
 }
 
 impl TerminalServiceProxy {
-    pub fn new(service_id: String, is_persistent: Option<bool>) -> Self {
+    pub fn new(
+        service_id: String,
+        is_persistent: Option<bool>,
+        _user_token: Option<UserToken>,
+    ) -> Self {
         // Get persistence from the service if it exists
         let is_persistent =
             is_persistent.unwrap_or(if let Some(service) = get_service(&service_id) {
@@ -567,6 +609,8 @@ impl TerminalServiceProxy {
         TerminalServiceProxy {
             service_id,
             is_persistent,
+            #[cfg(target_os = "windows")]
+            user_token: _user_token,
         }
     }
 
@@ -670,7 +714,14 @@ impl TerminalServiceProxy {
         // Use default shell for the platform
         let shell = get_default_shell();
         log::debug!("Using shell: {}", shell);
-        let cmd = CommandBuilder::new(&shell);
+
+        #[allow(unused_mut)]
+        let mut cmd = CommandBuilder::new(&shell);
+
+        #[cfg(target_os = "windows")]
+        if let Some(token) = &self.user_token {
+            cmd.set_user_token(*token as _);
+        }
 
         log::debug!("Spawning shell process...");
         let child = pty_pair

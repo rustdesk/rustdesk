@@ -98,7 +98,7 @@ ctrlc = "3.2"
 # arboard = { version = "3.4", features = ["wayland-data-control"] }
 arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
 clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
-portable-pty = "0.8.1" # higher version not work on rustc 1.75
+portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rustdesk/pty_based_0.8.1", package = "portable-pty" }
 
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
