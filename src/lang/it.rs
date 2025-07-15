@@ -703,5 +703,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable terminal", "Abilita terminale"),
         ("New tab", "Nuova scheda"),
         ("Keep terminal sessions on disconnect", "Quando disconetti mantieni attiva sessione terminale"),
+        ("Terminal (Run as administrator)", ""),
+        ("terminal-admin-login-tip", ""),
+        ("Failed to get user token.", ""),
+        ("Incorrect username or password.", ""),
+        ("The user is not an administrator.", ""),
+        ("Failed to check if the user is an administrator.", ""),
+        ("Supported only by the installation version.", ""),
     ].iter().cloned().collect();
 }

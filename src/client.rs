@@ -1611,6 +1611,7 @@ struct ConnToken {
 pub struct LoginConfigHandler {
     id: String,
     pub conn_type: ConnType,
+    pub is_terminal_admin: bool,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
@@ -1736,6 +1737,7 @@ impl LoginConfigHandler {
                 self.other_server = Some((real_id.to_owned(), server.to_owned(), other_server_key));
             }
         }
+
         self.direct = None;
         self.received = false;
         self.switch_uuid = switch_uuid;
@@ -1744,6 +1746,11 @@ impl LoginConfigHandler {
         self.shared_password = shared_password;
         self.record_state = false;
         self.record_permission = true;
+
+        // `std::env::remove_var("IS_TERMINAL_ADMIN");` is called in `session_add_sync()` - `flutter_ffi.rs`.
+        let is_terminal_admin = conn_type == ConnType::TERMINAL
+            && std::env::var("IS_TERMINAL_ADMIN").map_or(false, |v| v == "Y");
+        self.is_terminal_admin = is_terminal_admin;
     }
 
     /// Check if the client should auto login.
@@ -1956,7 +1963,7 @@ impl LoginConfigHandler {
             .into();
         } else if name == keys::OPTION_TERMINAL_PERSISTENT {
             config.terminal_persistent.v = !config.terminal_persistent.v;
-	    option.terminal_persistent = (if config.terminal_persistent.v {
+            option.terminal_persistent = (if config.terminal_persistent.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
@@ -3274,6 +3281,19 @@ pub async fn handle_hash(
     }
 
     lc.write().unwrap().password = password.clone();
+
+    let is_terminal_admin = lc.read().unwrap().is_terminal_admin;
+    let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
+    if is_terminal && is_terminal_admin {
+        if password.is_empty() {
+            interface.msgbox("terminal-admin-login-password", "", "", "");
+        } else {
+            interface.msgbox("terminal-admin-login", "", "", "");
+        }
+        lc.write().unwrap().hash = hash;
+        return;
+    }
+
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
         interface.msgbox("input-password", "Password Required", "", "");
@@ -3285,8 +3305,15 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    let os_username = lc.read().unwrap().get_option("os-username");
-    let os_password = lc.read().unwrap().get_option("os-password");
+    let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
+    let (os_username, os_password) = if is_terminal {
+        ("".to_owned(), "".to_owned())
+    } else {
+        (
+            lc.read().unwrap().get_option("os-username"),
+            lc.read().unwrap().get_option("os-password"),
+        )
+    };
 
     send_login(lc.clone(), os_username, os_password, password, peer).await;
     lc.write().unwrap().hash = hash;

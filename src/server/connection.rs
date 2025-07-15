@@ -56,6 +56,8 @@ use std::{
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
 #[cfg(windows)]
 use crate::virtual_display_manager;
@@ -172,6 +174,22 @@ pub enum AuthConnType {
     Terminal,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Clone, Debug)]
+enum TerminalUserToken {
+    SelfUser,
+    CurrentLogonUser(crate::terminal_service::UserToken),
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+impl TerminalUserToken {
+    fn to_terminal_service_token(&self) -> Option<crate::terminal_service::UserToken> {
+        match self {
+            TerminalUserToken::SelfUser => None,
+            TerminalUserToken::CurrentLogonUser(token) => Some(*token),
+        }
+    }
+}
 pub struct Connection {
     inner: ConnInner,
     display_idx: usize,
@@ -254,6 +272,11 @@ pub struct Connection {
     tx_post_seq: mpsc::UnboundedSender<(String, Value)>,
     terminal_service_id: String,
     terminal_persistent: bool,
+    // The user token must be set when terminal is enabled.
+    // 0 indicates SYSTEM user
+    // other values indicate current user
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    terminal_user_token: Option<TerminalUserToken>,
     terminal_generic_service: Option<Box<GenericService>>,
 }
 
@@ -418,6 +441,8 @@ impl Connection {
             tx_post_seq,
             terminal_service_id: "".to_owned(),
             terminal_persistent: false,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            terminal_user_token: None,
             terminal_generic_service: None,
         };
         let addr = hbb_common::try_into_v4(addr);
@@ -1415,12 +1440,19 @@ impl Connection {
             .unwrap()
             .insert(self.lr.my_id.clone(), self.tx_input.clone());
 
+        // Terminal feature is supported on desktop only
+        #[allow(unused_mut)]
+        let mut terminal = cfg!(not(any(target_os = "android", target_os = "ios")));
+        #[cfg(target_os = "windows")]
+        {
+            terminal = terminal && portable_pty::win::check_support().is_ok();
+        }
         pi.username = username;
         pi.sas_enabled = sas_enabled;
         pi.features = Some(Features {
             privacy_mode: privacy_mode::is_privacy_mode_supported(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            terminal: true, // Terminal feature is supported on desktop only
+            terminal,
             ..Default::default()
         })
         .into();
@@ -1429,7 +1461,9 @@ impl Connection {
         #[allow(unused_mut)]
         let mut wait_session_id_confirm = false;
         #[cfg(windows)]
-        self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
+        if !self.terminal {
+            self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
+        }
         if self.file_transfer.is_some() || self.terminal {
             res.set_peer_info(pi);
         } else if self.view_camera {
@@ -1933,12 +1967,28 @@ impl Connection {
                         sleep(1.).await;
                         return false;
                     }
+                    #[cfg(target_os = "windows")]
+                    if !lr.os_login.username.is_empty() && !crate::platform::is_installed() {
+                        self.send_login_error("Supported only by the installation version.")
+                            .await;
+                        sleep(1.).await;
+                        return false;
+                    }
+
                     self.terminal = true;
                     if let Some(o) = self.options_in_login.as_ref() {
                         self.terminal_persistent =
                             o.terminal_persistent.enum_value() == Ok(BoolOption::Yes);
                     }
                     self.terminal_service_id = terminal.service_id;
+                    #[cfg(target_os = "windows")]
+                    if let Some(msg) =
+                        self.fill_terminal_user_token(&lr.os_login.username, &lr.os_login.password)
+                    {
+                        self.send_login_error(msg).await;
+                        sleep(1.).await;
+                        return false;
+                    }
                 }
                 Some(login_request::Union::PortForward(mut pf)) => {
                     if !Connection::permission("enable-tunnel") {
@@ -2893,6 +2943,94 @@ impl Connection {
         true
     }
 
+    // Try to fill user token for terminal connection.
+    // If username is empty, use the user token of the current session.
+    // If username is not empty, try to logon and check if the user is an administrator.
+    //    If the user is an administrator, use the user token of current process (SYSTEM).
+    //    If the user is not an administrator, return an error message.
+    // Note: Only local and domain users are supported, Microsoft account (online account) not supported for now.
+    #[cfg(target_os = "windows")]
+    fn fill_terminal_user_token(&mut self, username: &str, password: &str) -> Option<&'static str> {
+        // No need to check if the password is empty.
+        if !username.is_empty() {
+            return self.handle_administrator_check(username, password);
+        }
+
+        if crate::platform::is_prelogin() {
+            self.terminal_user_token = None;
+            return Some("No active console user logged on, please connect and logon first.");
+        }
+
+        if crate::platform::is_installed() {
+            return self.handle_installed_user();
+        }
+
+        self.terminal_user_token = Some(TerminalUserToken::SelfUser);
+        None
+    }
+
+    #[cfg(target_os = "windows")]
+    fn handle_administrator_check(
+        &mut self,
+        username: &str,
+        password: &str,
+    ) -> Option<&'static str> {
+        let check_admin_res =
+            crate::platform::get_logon_user_token(username, password).map(|token| {
+                let is_token_admin = crate::platform::is_user_token_admin(token);
+                unsafe {
+                    hbb_common::allow_err!(CloseHandle(HANDLE(token as _)));
+                };
+                is_token_admin
+            });
+        match check_admin_res {
+            Ok(Ok(b)) => {
+                if b {
+                    self.terminal_user_token = Some(TerminalUserToken::SelfUser);
+                    None
+                } else {
+                    Some("The user is not an administrator.")
+                }
+            }
+            Ok(Err(e)) => {
+                log::error!("Failed to check if the user is an administrator: {}", e);
+                Some("Failed to check if the user is an administrator.")
+            }
+            Err(e) => {
+                log::error!("Failed to get logon user token: {}", e);
+                Some("Incorrect username or password.")
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn handle_installed_user(&mut self) -> Option<&'static str> {
+        let session_id = crate::platform::get_current_session_id(true);
+        if session_id == 0xFFFFFFFF {
+            return Some("Failed to get current session id.");
+        }
+        let token = crate::platform::get_user_token(session_id, true);
+        if !token.is_null() {
+            match crate::platform::ensure_primary_token(token) {
+                Ok(t) => {
+                    self.terminal_user_token = Some(TerminalUserToken::CurrentLogonUser(t as _));
+                }
+                Err(e) => {
+                    log::error!("Failed to ensure primary token: {}", e);
+                    self.terminal_user_token =
+                        Some(TerminalUserToken::CurrentLogonUser(token as _));
+                }
+            }
+            None
+        } else {
+            log::error!(
+                "Failed to get user token for terminal action, {}",
+                std::io::Error::last_os_error()
+            );
+            Some("Failed to get user token.")
+        }
+    }
+
     fn update_failure(&self, (mut failure, time): ((i32, i32, i32), i32), remove: bool, i: usize) {
         if remove {
             if failure.0 != 0 {
@@ -3833,12 +3971,19 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn init_terminal_service(&mut self) {
+        debug_assert!(self.terminal_user_token.is_some());
+        let Some(user_token) = self.terminal_user_token.clone() else {
+            // unreachable, but keep it for safety
+            log::error!("Terminal user token is not set.");
+            return;
+        };
         if self.terminal_service_id.is_empty() {
             self.terminal_service_id = terminal_service::generate_service_id();
         }
         let s = Box::new(terminal_service::new(
             self.terminal_service_id.clone(),
             self.terminal_persistent,
+            user_token.to_terminal_service_token(),
         ));
         s.on_subscribe(self.inner.clone());
         self.terminal_generic_service = Some(s);
@@ -3846,9 +3991,15 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_terminal_action(&mut self, action: TerminalAction) -> ResultType<()> {
+        debug_assert!(self.terminal_user_token.is_some());
+        let Some(user_token) = self.terminal_user_token.clone() else {
+            // unreacheable, but keep it for safety
+            bail!("Terminal user token is not set.");
+        };
         let mut proxy = terminal_service::TerminalServiceProxy::new(
             self.terminal_service_id.clone(),
             Some(self.terminal_persistent),
+            user_token.to_terminal_service_token(),
         );
 
         match proxy.handle_action(&action) {
@@ -4248,6 +4399,15 @@ impl Drop for Connection {
 
         if let Some(s) = self.terminal_generic_service.as_ref() {
             s.join();
+        }
+
+        #[cfg(target_os = "windows")]
+        if let Some(TerminalUserToken::CurrentLogonUser(token)) = self.terminal_user_token.take() {
+            if token != 0 {
+                unsafe {
+                    hbb_common::allow_err!(CloseHandle(HANDLE(token as _)));
+                };
+            }
         }
     }
 }

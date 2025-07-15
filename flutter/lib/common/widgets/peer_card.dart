@@ -492,6 +492,7 @@ abstract class BasePeerCard extends StatelessWidget {
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool isTerminal = false,
+    bool isTerminalRunAsAdmin = false,
   }) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
@@ -499,6 +500,9 @@ abstract class BasePeerCard extends StatelessWidget {
         style: style,
       ),
       proc: () {
+        if (isTerminalRunAsAdmin) {
+          setEnvTerminalAdmin();
+        }
         connectInPeerTab(
           context,
           peer,
@@ -507,7 +511,7 @@ abstract class BasePeerCard extends StatelessWidget {
           isViewCamera: isViewCamera,
           isTcpTunneling: isTcpTunneling,
           isRDP: isRDP,
-          isTerminal: isTerminal,
+          isTerminal: isTerminal || isTerminalRunAsAdmin,
         );
       },
       padding: menuPadding,
@@ -549,6 +553,15 @@ abstract class BasePeerCard extends StatelessWidget {
       context,
       translate('Terminal'),
       isTerminal: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _terminalRunAsAdminAction(BuildContext context) {
+    return _connectCommonAction(
+      context,
+      translate('Terminal (Run as administrator)'),
+      isTerminalRunAsAdmin: true,
     );
   }
 
@@ -906,6 +919,10 @@ class RecentPeerCard extends BasePeerCard {
       _terminalAction(context),
     ];
 
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
     final List favs = (await bind.mainGetFav()).toList();
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
@@ -966,6 +983,11 @@ class FavoritePeerCard extends BasePeerCard {
       _viewCameraAction(context),
       _terminalAction(context),
     ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
@@ -1022,6 +1044,10 @@ class DiscoveredPeerCard extends BasePeerCard {
       _terminalAction(context),
     ];
 
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
     final List favs = (await bind.mainGetFav()).toList();
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
@@ -1076,6 +1102,11 @@ class AddressBookPeerCard extends BasePeerCard {
       _viewCameraAction(context),
       _terminalAction(context),
     ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
@@ -1212,6 +1243,11 @@ class MyGroupPeerCard extends BasePeerCard {
       _viewCameraAction(context),
       _terminalAction(context),
     ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
