@@ -1981,7 +1981,7 @@ impl Connection {
                             o.terminal_persistent.enum_value() == Ok(BoolOption::Yes);
                     }
                     self.terminal_service_id = terminal.service_id;
-                    #[cfg(target_os = "windows")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if let Some(msg) =
                         self.fill_terminal_user_token(&lr.os_login.username, &lr.os_login.password)
                     {
@@ -2941,6 +2941,12 @@ impl Connection {
             }
         }
         true
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn fill_terminal_user_token(&mut self, _username: &str, _password: &str) -> Option<&'static str> {
+        self.terminal_user_token = Some(TerminalUserToken::SelfUser);
+        None
     }
 
     // Try to fill user token for terminal connection.
