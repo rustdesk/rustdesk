@@ -481,12 +481,27 @@ impl TerminalSession {
         if let Some(input_tx) = self.input_tx.take() {
             // Send a final newline to ensure the reader can read some data, and then exit.
             // This is required on Windows and Linux.
+            // Although `self.pty_pair = None;` is called below, we can still send a final newline here.
             if let Err(e) = input_tx.send(b"\r\n".to_vec()) {
                 log::warn!("Failed to send final newline to the terminal: {}", e);
             }
             drop(input_tx);
         }
         self.output_rx = None;
+
+        // 1. Windows
+        //    `pty_pair` uses pipe. https://github.com/rustdesk-org/wezterm/blob/80174f8009f41565f0fa8c66dab90d4f9211ae16/pty/src/win/conpty.rs#L16
+        //     `read()` may stuck at https://github.com/rustdesk-org/wezterm/blob/80174f8009f41565f0fa8c66dab90d4f9211ae16/filedescriptor/src/windows.rs#L345
+        //     We can close the pipe to signal the reader thread to exit.
+        //     After https://github.com/rustdesk-org/wezterm/blob/80174f8009f41565f0fa8c66dab90d4f9211ae16/pty/src/win/psuedocon.rs#L86, the reader reads `[27, 91, 63, 57, 48, 48, 49, 108, 27, 91, 63, 49, 48, 48, 52, 108]` in my tests.
+        // 2. Linux
+        //    `pty_pair` uses `libc::openpty`. https://github.com/rustdesk-org/wezterm/blob/80174f8009f41565f0fa8c66dab90d4f9211ae16/pty/src/unix.rs#L32
+        //    We can also call the drop method first. https://github.com/rustdesk-org/wezterm/blob/80174f8009f41565f0fa8c66dab90d4f9211ae16/pty/src/unix.rs#L352
+        //    The reader will get [13, 10] after dropping the `pty_pair`.
+        // 3. macOS
+        //    No stuck cases have been found so far, more testing is needed.
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        self.pty_pair = None;
 
         // Wait for threads to finish
         // The reader thread should join before the writer thread on Windows.
