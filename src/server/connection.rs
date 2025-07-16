@@ -1969,7 +1969,7 @@ impl Connection {
                     }
                     #[cfg(target_os = "windows")]
                     if !lr.os_login.username.is_empty() && !crate::platform::is_installed() {
-                        self.send_login_error("Supported only by the installation version.")
+                        self.send_login_error("Supported only in the installed version.")
                             .await;
                         sleep(1.).await;
                         return false;
