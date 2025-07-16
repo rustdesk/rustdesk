@@ -541,8 +541,7 @@ jobs:
           sed -i "s|pub const RENDEZVOUS_SERVERS: .*|pub const RENDEZVOUS_SERVERS: &[&str] = &[\"${{ secrets.RENDEZVOUS_SERVERS }}\"];|g" hbb_common/src/config.rs
           sed -i "s|pub const RS_PUB_KEY: .*|pub const RS_PUB_KEY: &str = \"${{ secrets.RS_PUB_KEY }}\";|g" hbb_common/src/config.rs
 
-          echo "✅ New config.rs content:"
-          cat hbb_common/src/config.rs    
+          echo "✅ config.rs updated with secrets (content hidden for security)."
 
       - name: Patch flutter
         run: |
