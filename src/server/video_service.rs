@@ -434,8 +434,8 @@ fn run(vs: VideoService) -> ResultType<()> {
         Err(err) => {
             log::error!("Failed to create encoder: {err:?}, fallback to VP9");
             Encoder::set_fallback(&EncoderCfg::VPX(VpxEncoderConfig {
-                width: c.width as _,
-                height: c.height as _,
+                width: 1920,
+                height: 1080,
                 quality,
                 codec: VpxVideoCodecId::VP9,
                 keyframe_interval: None,
@@ -487,8 +487,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
     let mut first_frame = true;
-    let capture_width = c.width;
-    let capture_height = c.height;
+    let capture_width = 1920;
+    let capture_height = 1080;
 
     while sp.ok() {
         #[cfg(windows)]
@@ -741,6 +741,8 @@ fn get_encoder_config(
     record: bool,
     _portable_service: bool,
 ) -> EncoderCfg {
+    let width = 1920;
+    let height = 1080;
     #[cfg(all(windows, feature = "vram"))]
     if _portable_service || c.is_gdi() {
         log::info!("gdi:{}, portable:{}", c.is_gdi(), _portable_service);
@@ -757,8 +759,8 @@ fn get_encoder_config(
             if let Some(feature) = VRamEncoder::try_get(&c.device(), negotiated_codec) {
                 return EncoderCfg::VRAM(VRamEncoderConfig {
                     device: c.device(),
-                    width: c.width,
-                    height: c.height,
+                    width,
+                    height,
                     quality,
                     feature,
                     keyframe_interval,
@@ -769,23 +771,23 @@ fn get_encoder_config(
                 return EncoderCfg::HWRAM(HwRamEncoderConfig {
                     name: hw.name,
                     mc_name: hw.mc_name,
-                    width: c.width,
-                    height: c.height,
+                    width,
+                    height,
                     quality,
                     keyframe_interval,
                 });
             }
             EncoderCfg::VPX(VpxEncoderConfig {
-                width: c.width as _,
-                height: c.height as _,
+                width,
+                height,
                 quality,
                 codec: VpxVideoCodecId::VP9,
                 keyframe_interval,
             })
         }
         format @ (CodecFormat::VP8 | CodecFormat::VP9) => EncoderCfg::VPX(VpxEncoderConfig {
-            width: c.width as _,
-            height: c.height as _,
+            width,
+            height,
             quality,
             codec: if format == CodecFormat::VP8 {
                 VpxVideoCodecId::VP8
@@ -795,14 +797,14 @@ fn get_encoder_config(
             keyframe_interval,
         }),
         CodecFormat::AV1 => EncoderCfg::AOM(AomEncoderConfig {
-            width: c.width as _,
-            height: c.height as _,
+            width,
+            height,
             quality,
             keyframe_interval,
         }),
         _ => EncoderCfg::VPX(VpxEncoderConfig {
-            width: c.width as _,
-            height: c.height as _,
+            width,
+            height,
             quality,
             codec: VpxVideoCodecId::VP9,
             keyframe_interval,
