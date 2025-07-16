@@ -1792,6 +1792,15 @@ dependencies = [
 
 [[package]]
 name = "dirs"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca3aa72a6f96ea37bbc5aa912f6788242832f75369bdfdadcb0e38423f100059"
+dependencies = [
+ "dirs-sys 0.3.7",
+]
+
+[[package]]
+name = "dirs"
 version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
@@ -5090,7 +5099,16 @@ version = "0.7.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3da44b85f8e8dfaec21adae67f95d93244b2ecf6ad2a692320598dcc8e6dd18"
 dependencies = [
- "phf_shared",
+ "phf_shared 0.7.24",
+]
+
+[[package]]
+name = "phf"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
+dependencies = [
+ "phf_shared 0.11.3",
 ]
 
 [[package]]
@@ -5099,8 +5117,18 @@ version = "0.7.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b03e85129e324ad4166b06b2c7491ae27fe3ec353af72e72cd1654c7225d517e"
 dependencies = [
- "phf_generator",
- "phf_shared",
+ "phf_generator 0.7.24",
+ "phf_shared 0.7.24",
+]
+
+[[package]]
+name = "phf_codegen"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aef8048c789fa5e851558d709946d6d79a8ff88c0440c587967f8e94bfb1216a"
+dependencies = [
+ "phf_generator 0.11.3",
+ "phf_shared 0.11.3",
 ]
 
 [[package]]
@@ -5109,8 +5137,18 @@ version = "0.7.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09364cc93c159b8b06b1f4dd8a4398984503483891b0c26b867cf431fb132662"
 dependencies = [
- "phf_shared",
+ "phf_shared 0.7.24",
  "rand 0.6.5",
+]
+
+[[package]]
+name = "phf_generator"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
+dependencies = [
+ "phf_shared 0.11.3",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -5119,7 +5157,16 @@ version = "0.7.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234f71a15de2288bcb7e3b6515828d22af7ec8598ee6d24c3b526fa0a80b67a0"
 dependencies = [
- "siphasher",
+ "siphasher 0.2.3",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
+dependencies = [
+ "siphasher 1.0.1",
 ]
 
 [[package]]
@@ -6146,6 +6193,7 @@ dependencies = [
  "system_shutdown",
  "tao",
  "tauri-winrt-notification",
+ "terminfo",
  "termios 0.3.3",
  "totp-rs",
  "tray-icon",
@@ -6675,6 +6723,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b8de496cf83d4ed58b6be86c3a275b8602f6ffe98d3024a869e124147a9a3ac"
 
 [[package]]
+name = "siphasher"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
+
+[[package]]
 name = "slab"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7033,8 +7087,8 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "013d134ae4a25ee744ad6129db589018558f620ddfa44043887cdd45fa08e75c"
 dependencies = [
- "phf",
- "phf_codegen",
+ "phf 0.7.24",
+ "phf_codegen 0.7.24",
  "serde_json 0.9.10",
 ]
 
@@ -7067,6 +7121,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "terminfo"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "666cd3a6681775d22b200409aad3b089c5b99fb11ecdd8a204d9d62f8148498f"
+dependencies = [
+ "dirs 4.0.0",
+ "fnv",
+ "nom",
+ "phf 0.11.3",
+ "phf_codegen 0.11.3",
 ]
 
 [[package]]
