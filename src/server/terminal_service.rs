@@ -501,7 +501,9 @@ impl TerminalSession {
         // 3. macOS
         //    No stuck cases have been found so far, more testing is needed.
         #[cfg(any(target_os = "windows", target_os = "linux"))]
-        self.pty_pair = None;
+        {
+            self.pty_pair = None;
+        }
 
         // Wait for threads to finish
         // The reader thread should join before the writer thread on Windows.
