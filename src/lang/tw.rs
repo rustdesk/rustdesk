@@ -709,6 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Incorrect username or password.", "使用者名稱或密碼不正確"),
         ("The user is not an administrator.", "使用者並不是系統管理員"),
         ("Failed to check if the user is an administrator.", "檢查使用者是否是系統管理員時失敗了"),
-        ("Supported only in the installed version.", "僅支援在已安裝的版本"),
+        ("Supported only in the installed version.", "僅支援於已安裝的版本"),
     ].iter().cloned().collect();
 }
