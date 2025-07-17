@@ -2084,6 +2084,8 @@ jobs:
     if: False
     name: build-rustdesk-web
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
     env:
