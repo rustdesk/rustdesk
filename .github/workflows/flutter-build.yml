@@ -1519,10 +1519,7 @@ jobs:
           name: bridge-artifact
           path: ./
 #########6666666666666666666666666666666666666666
-      - name: Switch Flathub to user‑remote (avoid summary fetch)
-        run: |
-          flatpak --user remote-delete flathub || true
-          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
 
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
@@ -1800,10 +1797,6 @@ jobs:
           RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
           echo "RUST_TOOLCHAIN_VERSION=$RUST_TOOLCHAIN_VERSION" >> $GITHUB_ENV
 ##############66666666666666666666666666666
-      - name: Switch Flathub to user‑remote (avoid summary fetch)
-        run: |
-          flatpak --user remote-delete flathub || true
-          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
@@ -2066,10 +2059,7 @@ jobs:
         run: |
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.deb flatpak/rustdesk.deb
 ###############66666666666666666666
-      - name: Switch Flathub to user‑remote (avoid summary fetch)
-        run: |
-          flatpak --user remote-delete flathub || true
-          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
 
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
