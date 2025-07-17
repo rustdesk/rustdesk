@@ -538,8 +538,9 @@ jobs:
       - name: Update config.rs with GitHub Secrets
         run: |
           echo "Updating config.rs with GitHub Secrets..."
-          sed -i "s|pub const RENDEZVOUS_SERVERS: .*|pub const RENDEZVOUS_SERVERS: &[&str] = &[\"${{ secrets.RENDEZVOUS_SERVERS }}\"];|g" hbb_common/src/config.rs
-          sed -i "s|pub const RS_PUB_KEY: .*|pub const RS_PUB_KEY: &str = \"${{ secrets.RS_PUB_KEY }}\";|g" hbb_common/src/config.rs
+          sed -i.bak "s|pub const RENDEZVOUS_SERVERS: .*|pub const RENDEZVOUS_SERVERS: &[&str] = &[\"${{ secrets.RENDEZVOUS_SERVERS }}\"];|g" hbb_common/src/config.rs && rm hbb_common/src/config.rs.bak
+          sed -i.bak "s|pub const RS_PUB_KEY: .*|pub const RS_PUB_KEY: &str = \"${{ secrets.RS_PUB_KEY }}\";|g" hbb_common/src/config.rs && rm hbb_common/src/config.rs.bak
+
 
           echo "✅ config.rs updated with secrets (content hidden for security)."
 
@@ -1517,6 +1518,12 @@ jobs:
         with:
           name: bridge-artifact
           path: ./
+#########6666666666666666666666666666666666666666
+      - name: Switch Flathub to user‑remote (avoid summary fetch)
+        run: |
+          flatpak --user remote-delete flathub || true
+          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk
@@ -1792,6 +1799,12 @@ jobs:
         run: |
           RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
           echo "RUST_TOOLCHAIN_VERSION=$RUST_TOOLCHAIN_VERSION" >> $GITHUB_ENV
+##############66666666666666666666666666666
+      - name: Switch Flathub to user‑remote (avoid summary fetch)
+        run: |
+          flatpak --user remote-delete flathub || true
+          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
@@ -2052,6 +2065,12 @@ jobs:
       - name: Rename Binary
         run: |
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.deb flatpak/rustdesk.deb
+###############66666666666666666666
+      - name: Switch Flathub to user‑remote (avoid summary fetch)
+        run: |
+          flatpak --user remote-delete flathub || true
+          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
