@@ -10,7 +10,6 @@ use hbb_common::{
     libc::{c_char, c_int, c_long, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
-    platform::linux::{CMD_PS, CMD_SH},
     regex::{Captures, Regex},
 };
 use std::{
@@ -25,6 +24,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+use terminfo::{capability as cap, Database};
 use users::{get_user_by_name, os::unix::UserExt};
 use wallpaper;
 
@@ -33,8 +33,20 @@ type Xdo = *const c_void;
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
+const INVALID_TERM_VALUES: [&str; 3] = ["", "unknown", "dumb"];
+const SHELL_PROCESSES: [&str; 4] = ["bash", "zsh", "fish", "sh"];
+
 lazy_static::lazy_static! {
     pub static ref IS_X11: bool = hbb_common::platform::linux::is_x11_or_headless();
+    static ref DATABASE_XTERM_256COLOR: Option<Database> = {
+        match Database::from_name("xterm-256color") {
+            Ok(database) => Some(database),
+            Err(err) => {
+                log::error!("Failed to initialize xterm-256color database: {}", err);
+                None
+            }
+        }
+    };
 }
 
 thread_local! {
@@ -256,6 +268,70 @@ fn start_uinput_service() {
     });
 }
 
+/// Suggests the best terminal type based on the environment.
+///
+/// The function prioritizes terminal types in the following order:
+/// 1. `screen-256color`: Preferred when running inside `tmux` or `screen` sessions,
+///    as these multiplexers often support advanced terminal features.
+/// 2. `xterm-256color`: Selected if the terminal supports 256 colors, which is
+///    suitable for modern terminal applications.
+/// 3. `xterm`: Used as a fallback for basic terminal compatibility.
+///
+/// Terminals like `linux` and `vt100` are excluded because they lack support for
+/// modern features required by many applications.
+fn suggest_best_term() -> String {
+    if is_running_in_tmux() || is_running_in_screen() {
+        return "screen-256color".to_string();
+    }
+    if term_supports_256_colors("xterm-256color") {
+        return "xterm-256color".to_string();
+    }
+    "xterm".to_string()
+}
+
+fn is_running_in_tmux() -> bool {
+    std::env::var("TMUX").is_ok()
+}
+
+fn is_running_in_screen() -> bool {
+    std::env::var("STY").is_ok()
+}
+
+fn supports_256_colors(db: &Database) -> bool {
+    db.get::<cap::MaxColors>().map_or(false, |n| n.0 >= 256)
+}
+
+fn term_supports_256_colors(term: &str) -> bool {
+    match term {
+        "xterm-256color" => DATABASE_XTERM_256COLOR
+            .as_ref()
+            .map_or(false, |db| supports_256_colors(db)),
+        _ => Database::from_name(term).map_or(false, |db| supports_256_colors(&db)),
+    }
+}
+
+fn get_cur_term(uid: &str) -> Option<String> {
+    if uid.is_empty() {
+        return None;
+    }
+
+    if let Ok(term) = std::env::var("TERM") {
+        if !INVALID_TERM_VALUES.contains(&term.as_str()) {
+            return Some(term);
+        }
+    }
+
+    for proc in SHELL_PROCESSES {
+        // Construct a regex pattern to match either the process name followed by '$' or 'bin/' followed by the process name.
+        let term = get_env("TERM", uid, &format!("{}$|bin/{}", proc, proc));
+        if !INVALID_TERM_VALUES.contains(&term.as_str()) {
+            return Some(term);
+        }
+    }
+
+    None
+}
+
 #[inline]
 fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
     match desktop {
@@ -273,6 +349,10 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
             if !desktop.home.is_empty() {
                 envs.push(("HOME", desktop.home.clone()));
             }
+            envs.push((
+                "TERM",
+                get_cur_term(&desktop.uid).unwrap_or_else(|| suggest_best_term()),
+            ));
             run_as_user(
                 vec!["--server"],
                 Some((desktop.uid.clone(), desktop.username.clone())),

@@ -1119,6 +1119,9 @@ impl InvokeUiSession for FlutterHandler {
                     ("pid", json!(opened.pid)),
                     ("service_id", json!(&opened.service_id)),
                 ];
+                if !opened.persistent_sessions.is_empty() {
+                    event_data.push(("persistent_sessions", json!(opened.persistent_sessions)));
+                }
                 self.push_event_("terminal_response", &event_data, &[], &[]);
             }
             Some(Union::Data(data)) => {

@@ -1944,10 +1944,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     use hbb_common::message_proto::terminal_response::Union;
                     if let Some(Union::Opened(opened)) = &response.union {
                         if opened.success && !opened.service_id.is_empty() {
-                            self.handler.lc.write().unwrap().set_option(
-                                "terminal-service-id".to_owned(),
-                                opened.service_id.clone(),
-                            );
+                            let mut lc = self.handler.lc.write().unwrap();
+                            let key = lc.get_key_terminal_service_id().to_owned();
+                            lc.set_option(key, opened.service_id.clone());
                         }
                     }
                     self.handler.handle_terminal_response(response);

@@ -131,6 +131,8 @@ fn get_or_create_service(
     // Ensure cleanup task is running
     ensure_cleanup_task();
 
+    service.lock().unwrap().needs_session_sync = true;
+
     Ok(service)
 }
 
@@ -540,6 +542,7 @@ pub struct PersistentTerminalService {
     pub created_at: Instant,
     last_activity: Instant,
     pub is_persistent: bool,
+    needs_session_sync: bool,
 }
 
 impl PersistentTerminalService {
@@ -550,6 +553,7 @@ impl PersistentTerminalService {
             created_at: Instant::now(),
             last_activity: Instant::now(),
             is_persistent,
+            needs_session_sync: false,
         }
     }
 
@@ -695,6 +699,19 @@ impl TerminalServiceProxy {
             // Return service_id for persistent sessions
             if self.is_persistent {
                 opened.service_id = self.service_id.clone();
+            }
+            if service.needs_session_sync {
+                if service.sessions.len() > 1 {
+                    // No need to include the current terminal in the list.
+                    // Because the `persistent_sessions` is used to restore the other sessions.
+                    opened.persistent_sessions = service
+                        .sessions
+                        .keys()
+                        .filter(|&id| *id != open.terminal_id)
+                        .cloned()
+                        .collect();
+                }
+                service.needs_session_sync = false;
             }
             response.set_opened(opened);
 
@@ -855,6 +872,12 @@ impl TerminalServiceProxy {
         // Return service_id for persistent sessions
         if self.is_persistent {
             opened.service_id = service.service_id.clone();
+        }
+        if service.needs_session_sync {
+            if !service.sessions.is_empty() {
+                opened.persistent_sessions = service.sessions.keys().cloned().collect();
+            }
+            service.needs_session_sync = false;
         }
         response.set_opened(opened);
 

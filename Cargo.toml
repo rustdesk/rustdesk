@@ -180,6 +180,7 @@ once_cell = {version = "1.18", optional = true}
 nix = { version = "0.29", features = ["term", "process"]}
 gtk = "0.18"
 termios = "0.3"
+terminfo = "0.8"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
