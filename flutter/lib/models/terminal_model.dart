@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:xterm/xterm.dart';
 
 import 'model.dart';
@@ -195,6 +198,17 @@ class TerminalModel with ChangeNotifier {
         debugPrint('[TerminalModel] Error processing buffered input: $e');
         notifyListeners();
       });
+
+      final persistentSessions =
+          evt['persistent_sessions'] as List<dynamic>? ?? [];
+      if (kWindowId != null && persistentSessions.isNotEmpty) {
+        DesktopMultiWindow.invokeMethod(
+            kWindowId!,
+            kWindowEventRestoreTerminalSessions,
+            jsonEncode({
+              'persistent_sessions': persistentSessions,
+            }));
+      }
     } else {
       terminal.write('Failed to open terminal: $message\r\n');
     }
