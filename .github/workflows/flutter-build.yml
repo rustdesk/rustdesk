@@ -2068,9 +2068,13 @@ jobs:
           shell: /bin/bash
           install: |
             apt-get update -y
-            apt-get install -y git flatpak flatpak-builder
-            flatpak --user remote-delete flathub || true
-            flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+            apt-get install -y software-properties-common
+            add-apt-repository -y ppa:alexlarsson/flatpak
+            apt-get update -y
+            apt-get install -y flatpak flatpak-builder
+            flatpak --version
+            sudo flatpak remote-delete flathub || true
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
