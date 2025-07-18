@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "장치 즐겨찾기가 없습니다. 새 즐겨찾기를 추가해보세요"),
         ("empty_lan_tip", "제어되는 장치가 발견되지 않았습니다."),
         ("empty_address_book_tip", "현재 주소록에 제어되는 클라이언트가 없습니다"),
-        ("eg: admin", "예: 관리자"),
         ("Empty Username", "사용자 이름이 비어있습니다"),
         ("Empty Password", "비밀번호가 비어있습니다"),
         ("Me", "나"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", "사용자가 관리자가 아닙니다."),
         ("Failed to check if the user is an administrator.", "사용자가 관리자인지 확인하는 데 실패했습니다."),
         ("Supported only in the installed version.", "설치된 버전에서만 지원됩니다."),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

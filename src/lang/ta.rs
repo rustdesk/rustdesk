@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "காலி_விருப்பமான_குறிப்பு"),
         ("empty_lan_tip", "காலி_லேன்_குறிப்பு"),
         ("empty_address_book_tip", "காலி_முகவரி_புத்தக_குறிப்பு"),
-        ("eg: admin", "எ.கா: admin"),
         ("Empty Username", "காலி பயனர்பெயர்"),
         ("Empty Password", "காலி கடவுச்சொல்"),
         ("Me", "நான்"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", ""),
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

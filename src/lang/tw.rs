@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "空空如也"),
         ("empty_lan_tip", "喔不，看來我們目前找不到任何夥伴。"),
         ("empty_address_book_tip", "老天，看來您的通訊錄中沒有任何夥伴。"),
-        ("eg: admin", "例如：admin"),
         ("Empty Username", "空使用者帳號"),
         ("Empty Password", "空密碼"),
         ("Me", "我"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", "使用者並不是系統管理員"),
         ("Failed to check if the user is an administrator.", "檢查使用者是否是系統管理員時失敗了"),
         ("Supported only in the installed version.", "僅支援於已安裝的版本"),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

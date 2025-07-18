@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "ჯერ არ გაქვთ რჩეული დისტანციური კვანძები?\nმოდით, ვნახოთ, ვის შეიძლება დავამატოთ რჩეულებში!"),
         ("empty_lan_tip", "დისტანციური კვანძები ვერ მოიძებნა."),
         ("empty_address_book_tip", "მისამართების წიგნში არ არის დისტანციური კვანძები."),
-        ("eg: admin", "მაგ: admin"),
         ("Empty Username", "ცარიელი მომხმარებლის სახელი"),
         ("Empty Password", "ცარიელი პაროლი"),
         ("Me", "მე"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", ""),
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

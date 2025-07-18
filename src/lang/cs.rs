@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Ještě nemáte oblíbené protistrany?\nNajděte někoho, s kým se můžete spojit, a přidejte si ho do oblíbených!"),
         ("empty_lan_tip", "Ale ne, vypadá, že jsme ještě neobjevili žádné protistrany."),
         ("empty_address_book_tip", "Ach bože, zdá se, že ve vašem adresáři nejsou v současné době uvedeni žádní kolegové."),
-        ("eg: admin", "např. admin"),
         ("Empty Username", "Prázdné uživatelské jméno"),
         ("Empty Password", "Prázdné heslo"),
         ("Me", "Já"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", ""),
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

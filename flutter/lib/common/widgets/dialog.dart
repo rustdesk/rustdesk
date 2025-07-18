@@ -1177,7 +1177,7 @@ void showRequestElevationDialog(
               DialogTextField(
                 controller: userController,
                 title: translate('Username'),
-                hintText: translate('eg: admin'),
+                hintText: translate('elevation_username_tip'),
                 prefixIcon: DialogTextField.kUsernameIcon,
                 errorText: errUser.isEmpty ? null : errUser.value,
               ),
