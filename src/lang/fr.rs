@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Vous n’avez pas encore d’appareils distants favoris ?\nTrouvez quelqu’un avec qui vous connecter et ajoutez-le à vos favoris !"),
         ("empty_lan_tip", "Oh non, il semble que nous n’avons pas encore découvert d’appareils sur le réseau local."),
         ("empty_address_book_tip", "Mince, il n’y a actuellement aucun appareil distant répertorié dans votre carnet d’adresses."),
-        ("eg: admin", "ex : admin"),
         ("Empty Username", "Nom d’utilisation non renseigné"),
         ("Empty Password", "Mot de passe non renseigné"),
         ("Me", "Moi"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", ""),
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

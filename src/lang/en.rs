@@ -257,5 +257,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("update-failed-check-msi-tip", "Installation method check failed. Please click the \"Download\" button to download from the release page and upgrade manually."),
         ("websocket_tip", "When using WebSocket, only relay connections are supported."),
         ("terminal-admin-login-tip", "Please input the administrator username and password of the controlled side."),
+        ("elevation_username_tip", "Input username or domain\\username"),
     ].iter().cloned().collect();
 }

@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Încă nu ai niciun dispozitiv pereche favorit?\nHai să-ți găsim pe cineva cu care să te conectezi, iar apoi poți adăuga dispozitivul la Favorite!"),
         ("empty_lan_tip", "Of! S-ar părea că încă nu am descoperit niciun dispozitiv."),
         ("empty_address_book_tip", "Măi să fie! Se pare că deocamdată nu figurează niciun dispozitiv în agenda ta."),
-        ("eg: admin", "ex: admin"),
         ("Empty Username", "Nume utilizator nespecificat"),
         ("Empty Password", "Parolă nespecificată"),
         ("Me", "Eu"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", ""),
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Még nincs kedvenc távoli állomása?\nHagyja, hogy találjunk valakit, akivel kapcsolatba tud lépni, és add hozzá a kedvenceidhez!"),
         ("empty_lan_tip", "Úgy tűnik, még nem adott hozzá egyetlen távoli helyszínt sem."),
         ("empty_address_book_tip", "Úgy tűnik, hogy jelenleg nincsenek távoli állomások a címjegyzékében."),
-        ("eg: admin", "pl: adminisztrátor"),
         ("Empty Username", "Üres felhasználónév"),
         ("Empty Password", "Üres jelszó"),
         ("Me", "Ön"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", "A felhasználó nem rendszergazda."),
         ("Failed to check if the user is an administrator.", "Hiba merült fel annak ellenőrzése során, hogy a felhasználó rendszergazda-e."),
         ("Supported only in the installed version.", "Csak a telepített változatban támogatott."),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }
