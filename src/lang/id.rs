@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Belum ada rekan favorit?\nTemukan seseorang untuk terhubung dan tambahkan ke favorit!"),
         ("empty_lan_tip", "Sepertinya kami belum memiliki rekan"),
         ("empty_address_book_tip", "Tampaknya saat ini tidak ada rekan yang terdaftar dalam buku alamat Anda"),
-        ("eg: admin", "contoh: admin"),
         ("Empty Username", "Nama pengguna kosong"),
         ("Empty Password", "Kata sandi kosong"),
         ("Me", "Saya"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", ""),
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

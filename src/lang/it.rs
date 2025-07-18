@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Ancora nessuna connessione?\nTrova qualcuno con cui connetterti e aggiungilo ai preferiti!"),
         ("empty_lan_tip", "Sembra proprio che non sia stata rilevata nessuna connessione."),
         ("empty_address_book_tip", "Sembra che per ora nella rubrica non ci siano connessioni."),
-        ("eg: admin", "es: admin"),
         ("Empty Username", "Nome utente vuoto"),
         ("Empty Password", "Password vuota"),
         ("Me", "Io"),
@@ -710,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", "L'utente non è un amministratore."),
         ("Failed to check if the user is an administrator.", "Impossibile verificare se l'utente è un amministratore."),
         ("Supported only in the installed version.", "Supportato solo nella versione installata."),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }
