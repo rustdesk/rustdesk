@@ -2551,7 +2551,7 @@ impl LoginConfigHandler {
             }),
             ConnType::TERMINAL => {
                 let mut terminal = Terminal::new();
-                terminal.service_id = self.get_option("terminal-service-id");
+                terminal.service_id = self.get_option(self.get_key_terminal_service_id());
                 lr.set_terminal(terminal);
             }
             _ => {}
@@ -2601,6 +2601,14 @@ impl LoginConfigHandler {
 
     pub fn get_id(&self) -> &str {
         &self.id
+    }
+
+    pub fn get_key_terminal_service_id(&self) -> &'static str {
+        if self.is_terminal_admin {
+            "terminal-admin-service-id"
+        } else {
+            "terminal-service-id"
+        }
     }
 }
 
