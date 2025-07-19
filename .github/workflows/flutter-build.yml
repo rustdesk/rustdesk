@@ -2067,8 +2067,12 @@ jobs:
             --volume "${PWD}:/workspace"
           shell: /bin/bash
           install: |
+            # 确保脚本有执行权限并安装基础工具
+            chmod +x /root/run-on-arch-install.sh || true
+            ls -la /root/run-on-arch-install.sh || echo "Script not found"
+            
             apt-get update -y
-            apt-get install -y software-properties-common
+            apt-get install -y software-properties-common curl wget
             add-apt-repository -y ppa:alexlarsson/flatpak
             apt-get update -y
             apt-get install -y flatpak flatpak-builder
@@ -2167,3 +2171,35 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             flutter/build/rustdesk-${{ env.VERSION }}-${{ env.RELEASE_NAME }}.tar.gz
+
+      - name: Setup Flatpak
+        uses: flatpak/flatpak-github-actions/setup-flatpak@v4
+
+      - name: Check flatpak version and clean cache
+        run: |
+          flatpak --version
+          flatpak-builder --version
+          sudo flatpak remote-delete flathub || true
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo rm -rf /var/tmp/flatpak-cache-*
+          sudo flatpak repair
+
+      - name: Upgrade Kotlin version
+        run: |
+          # 升级 settings.gradle 中的 Kotlin 版本（Flutter 3.19+ 项目）
+          if [ -f "./flutter/android/settings.gradle" ]; then
+            sed -i 's/id '\''org\.jetbrains\.kotlin\.android'\'' version '\''[^'\'']*'\''/id '\''org.jetbrains.kotlin.android'\'' version '\''1.9.22'\''/g' ./flutter/android/settings.gradle
+            echo "✅ Updated Kotlin version in settings.gradle"
+          fi
+          
+          # 升级 build.gradle 中的 Kotlin 版本（Flutter 3.19 之前项目）
+          if [ -f "./flutter/android/build.gradle" ]; then
+            sed -i 's/ext\.kotlin_version = '\''[^'\'']*'\''/ext.kotlin_version = '\''1.9.22'\''/g' ./flutter/android/build.gradle
+            echo "✅ Updated Kotlin version in build.gradle"
+          fi
+          
+          # 显示修改后的版本
+          echo "Current Kotlin version in settings.gradle:"
+          grep -n "org.jetbrains.kotlin.android" ./flutter/android/settings.gradle || echo "Not found in settings.gradle"
+          echo "Current Kotlin version in build.gradle:"
+          grep -n "kotlin_version" ./flutter/android/build.gradle || echo "Not found in build.gradle"
