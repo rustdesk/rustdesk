@@ -2054,42 +2054,7 @@ jobs:
         run: |
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.deb flatpak/rustdesk.deb
 
-      - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
-        id: flatpak
-        with:
-          arch: ${{ matrix.job.arch }}
-          distro: ${{ matrix.job.distro }}
-          githubToken: ${{ github.token }}
-          setup: |
-            ls -l "${PWD}"
-          dockerRunArgs: |
-            --volume "${PWD}:/workspace"
-          shell: /bin/bash
-          install: |
-            # 确保脚本有执行权限并安装基础工具
-            chmod +x /root/run-on-arch-install.sh || true
-            ls -la /root/run-on-arch-install.sh || echo "Script not found"
-            
-            apt-get update -y
-            apt-get install -y software-properties-common curl wget
-            add-apt-repository -y ppa:alexlarsson/flatpak
-            apt-get update -y
-            apt-get install -y flatpak flatpak-builder
-            flatpak --version
-            sudo flatpak remote-delete flathub || true
-            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          run: |
-            # disable git safe.directory
-            git config --global --add safe.directory "*"
-            pushd /workspace
-            # flatpak deps
-            flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-            # package
-            pushd flatpak
-            git clone https://github.com/flathub/shared-modules.git --depth=1
-            flatpak-builder --user --install-deps-from=flathub -y --force-clean --repo=repo ./build ./rustdesk.json
-            flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak com.rustdesk.RustDesk
+
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1
@@ -2172,17 +2137,7 @@ jobs:
           files: |
             flutter/build/rustdesk-${{ env.VERSION }}-${{ env.RELEASE_NAME }}.tar.gz
 
-      - name: Setup Flatpak
-        uses: flatpak/flatpak-github-actions/setup-flatpak@v4
 
-      - name: Check flatpak version and clean cache
-        run: |
-          flatpak --version
-          flatpak-builder --version
-          sudo flatpak remote-delete flathub || true
-          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          sudo rm -rf /var/tmp/flatpak-cache-*
-          sudo flatpak repair
 
       - name: Upgrade Kotlin version
         run: |
@@ -2203,3 +2158,15 @@ jobs:
           grep -n "org.jetbrains.kotlin.android" ./flutter/android/settings.gradle || echo "Not found in settings.gradle"
           echo "Current Kotlin version in build.gradle:"
           grep -n "kotlin_version" ./flutter/android/build.gradle || echo "Not found in build.gradle"
+
+      - name: Build flatpak directly on runner
+        run: |
+          # 安装 flatpak 和依赖
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          
+          # 构建 flatpak
+          cd flatpak
+          flatpak-builder --user --install-deps-from=flathub -y --force-clean --repo=repo ./build ./rustdesk.json
+          flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak com.rustdesk.RustDesk
