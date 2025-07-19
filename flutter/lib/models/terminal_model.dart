@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:xterm/xterm.dart';
@@ -24,7 +25,20 @@ class TerminalModel with ChangeNotifier {
 
   final _inputBuffer = <String>[];
 
+  bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
+
   Future<void> _handleInput(String data) async {
+    // If we press the `Enter` button on Android,
+    // `data` can be '\r' or '\n' when using different keyboards.
+    // Android -> Windows. '\r' works, but '\n' does not. '\n' is just a newline.
+    // Android -> Linux. Both '\r' and '\n' work as expected (execute a command).
+    // So when we receive '\n', we may need to convert it to '\r' to ensure compatibility.
+    // Desktop -> Desktop works fine.
+    // Check if we are on mobile or web(mobile), and convert '\n' to '\r'.
+    final isMobileOrWebMobile = (isMobile || (isWeb && !isWebDesktop));
+    if (isMobileOrWebMobile && isPeerWindows && data == '\n') {
+      data = '\r';
+    }
     if (_terminalOpened) {
       // Send user input to remote terminal
       try {
