@@ -696,10 +696,7 @@ impl TerminalServiceProxy {
             opened.success = true;
             opened.message = "Reconnected to existing terminal".to_string();
             opened.pid = session.pid;
-            // Return service_id for persistent sessions
-            if self.is_persistent {
-                opened.service_id = self.service_id.clone();
-            }
+            opened.service_id = self.service_id.clone();
             if service.needs_session_sync {
                 if service.sessions.len() > 1 {
                     // No need to include the current terminal in the list.
@@ -869,10 +866,7 @@ impl TerminalServiceProxy {
         opened.success = true;
         opened.message = "Terminal opened".to_string();
         opened.pid = session.pid;
-        // Return service_id for persistent sessions
-        if self.is_persistent {
-            opened.service_id = service.service_id.clone();
-        }
+        opened.service_id = service.service_id.clone();
         if service.needs_session_sync {
             if !service.sessions.is_empty() {
                 opened.persistent_sessions = service.sessions.keys().cloned().collect();
