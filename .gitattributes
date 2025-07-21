@@ -1,1 +1,8 @@
 * text=auto
+
+# 设置所有Rust源文件使用LF行尾
+*.rs text eol=lf
+*.toml text eol=lf
+
+# 特别为config.rs设置处理规则
+libs/hbb_common/src/config.rs text eol=lf -diff
