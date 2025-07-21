@@ -124,7 +124,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       },
       setter: (bool v) async {
         final ffi = Get.find<FFI>(tag: 'terminal_$peerId');
-        bind.sessionToggleOption(
+        await bind.sessionToggleOption(
           sessionId: ffi.sessionId,
           value: kOptionTerminalPersistent,
         );
