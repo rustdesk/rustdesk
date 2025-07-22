@@ -108,6 +108,7 @@ dependencies:
   extended_text: 14.0.0
   xterm: 4.0.0
   sqflite: 2.2.0
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   icons_launcher: ^2.0.4
