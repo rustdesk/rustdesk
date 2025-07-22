@@ -3214,7 +3214,7 @@ class FFI {
   }
 
   void routeTerminalResponse(Map<String, dynamic> evt) {
-    final int terminalId = evt['terminal_id'] ?? 0;
+    final int terminalId = TerminalModel.getTerminalIdFromEvt(evt);
 
     // Route to specific terminal model if it exists
     final model = _terminalModels[terminalId];

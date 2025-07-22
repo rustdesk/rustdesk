@@ -551,7 +551,7 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _terminalAction(BuildContext context) {
     return _connectCommonAction(
       context,
-      translate('Terminal'),
+      '${translate('Terminal')} (beta)',
       isTerminal: true,
     );
   }
@@ -560,7 +560,7 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _terminalRunAsAdminAction(BuildContext context) {
     return _connectCommonAction(
       context,
-      translate('Terminal (Run as administrator)'),
+      '${translate('Terminal (Run as administrator)')} (beta)',
       isTerminalRunAsAdmin: true,
     );
   }

@@ -165,9 +165,58 @@ class TerminalModel with ChangeNotifier {
     }
   }
 
+  static int getTerminalIdFromEvt(Map<String, dynamic> evt) {
+    if (evt.containsKey('terminal_id')) {
+      final v = evt['terminal_id'];
+      if (v is int) {
+        // Desktop and mobile send terminal_id as an int
+        return v;
+      } else if (v is String) {
+        // Web sends terminal_id as a string
+        final parsed = int.tryParse(v);
+        if (parsed != null) {
+          return parsed;
+        } else {
+          debugPrint(
+              '[TerminalModel] Failed to parse terminal_id as integer: $v. Expected a numeric string.');
+          return 0;
+        }
+      } else {
+        // Unexpected type, log and handle gracefully
+        debugPrint(
+            '[TerminalModel] Unexpected terminal_id type: ${v.runtimeType}, value: $v. Expected int or String.');
+        return 0;
+      }
+    } else {
+      debugPrint('[TerminalModel] Event does not contain terminal_id');
+      return 0;
+    }
+  }
+
+  static bool getSuccessFromEvt(Map<String, dynamic> evt) {
+    if (evt.containsKey('success')) {
+      final v = evt['success'];
+      if (v is bool) {
+        // Desktop and mobile
+        return v;
+      } else if (v is String) {
+        // Web
+        return v.toLowerCase() == 'true';
+      } else {
+        // Unexpected type, log and handle gracefully
+        debugPrint(
+            '[TerminalModel] Unexpected success type: ${v.runtimeType}, value: $v. Expected bool or String.');
+        return false;
+      }
+    } else {
+      debugPrint('[TerminalModel] Event does not contain success');
+      return false;
+    }
+  }
+
   void handleTerminalResponse(Map<String, dynamic> evt) {
     final String? type = evt['type'];
-    final int evtTerminalId = evt['terminal_id'] ?? 0;
+    final int evtTerminalId = getTerminalIdFromEvt(evt);
 
     // Only handle events for this terminal
     if (evtTerminalId != terminalId) {
@@ -193,7 +242,7 @@ class TerminalModel with ChangeNotifier {
   }
 
   void _handleTerminalOpened(Map<String, dynamic> evt) {
-    final bool success = evt['success'] ?? false;
+    final bool success = getSuccessFromEvt(evt);
     final String message = evt['message'] ?? '';
     final String? serviceId = evt['service_id'];
 

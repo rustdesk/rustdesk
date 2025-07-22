@@ -131,7 +131,7 @@ fn get_or_create_service(
     // Ensure cleanup task is running
     ensure_cleanup_task();
 
-    service.lock().unwrap().reset_status();
+    service.lock().unwrap().reset_status(is_persistent);
 
     Ok(service)
 }
@@ -600,7 +600,8 @@ impl PersistentTerminalService {
         !self.sessions.is_empty()
     }
 
-    fn reset_status(&mut self) {
+    fn reset_status(&mut self, is_persistent: bool) {
+        self.is_persistent = is_persistent;
         self.needs_session_sync = true;
         for session in self.sessions.values() {
             let mut session = session.lock().unwrap();
