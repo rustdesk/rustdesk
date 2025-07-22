@@ -460,9 +460,13 @@ class RustDeskMultiWindowManager {
     if (windows.isEmpty) {
       return;
     }
-    for (final wId in windows) {
-      debugPrint("closing multi window, type: ${type.toString()} id: $wId");
-      await saveWindowPosition(type, windowId: wId);
+    for (int i = 0; i < windows.length; i++) {
+      final wId = windows[i];
+      final shouldSavePos = type != WindowType.Terminal || i == windows.length - 1;
+      if (shouldSavePos) {
+        debugPrint("closing multi window, type: ${type.toString()} id: $wId");
+        await saveWindowPosition(type, windowId: wId);
+      }
       try {
         await WindowController.fromWindowId(wId).setPreventClose(false);
         await WindowController.fromWindowId(wId).close();
