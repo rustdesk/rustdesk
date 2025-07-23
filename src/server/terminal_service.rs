@@ -98,10 +98,15 @@ fn get_default_shell() -> String {
     }
 }
 
+pub fn is_service_specified_user(service_id: &str) -> Option<bool> {
+    get_service(service_id).map(|s| s.lock().unwrap().is_specified_user)
+}
+
 /// Get or create a persistent terminal service
 fn get_or_create_service(
     service_id: String,
     is_persistent: bool,
+    is_specified_user: bool,
 ) -> Result<Arc<Mutex<PersistentTerminalService>>> {
     let mut services = TERMINAL_SERVICES.lock().unwrap();
 
@@ -124,6 +129,7 @@ fn get_or_create_service(
             Arc::new(Mutex::new(PersistentTerminalService::new(
                 service_id.clone(),
                 is_persistent,
+                is_specified_user,
             )))
         })
         .clone();
@@ -306,7 +312,11 @@ pub fn new(
     user_token: Option<UserToken>,
 ) -> GenericService {
     // Create the service with initial persistence setting
-    allow_err!(get_or_create_service(service_id.clone(), is_persistent));
+    allow_err!(get_or_create_service(
+        service_id.clone(),
+        is_persistent,
+        user_token.is_some()
+    ));
     let svc = TerminalService {
         sp: GenericService::new(service_id.clone(), false),
         user_token,
@@ -546,10 +556,11 @@ pub struct PersistentTerminalService {
     last_activity: Instant,
     pub is_persistent: bool,
     needs_session_sync: bool,
+    is_specified_user: bool,
 }
 
 impl PersistentTerminalService {
-    pub fn new(service_id: String, is_persistent: bool) -> Self {
+    pub fn new(service_id: String, is_persistent: bool, is_specified_user: bool) -> Self {
         Self {
             service_id,
             sessions: HashMap::new(),
@@ -557,6 +568,7 @@ impl PersistentTerminalService {
             last_activity: Instant::now(),
             is_persistent,
             needs_session_sync: false,
+            is_specified_user,
         }
     }
 
