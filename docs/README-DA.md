@@ -15,7 +15,7 @@ Chat med os: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitte
 
 Endnu en fjernskrivebordssoftware, skrevet i Rust. Fungerer ud af æsken, ingen konfiguration påkrævet. Du har fuld kontrol over dine data uden bekymringer om sikkerhed. Du kan bruge vores rendezvous/relay-server, [opsætte din egen](https://rustdesk.com/server), eller [skrive din egen rendezvous/relay-server](https://github.com/rustdesk/rustdesk- server-demo).
 
-RustDesk hilser bidrag fra alle velkommen. Se [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for at få hjælp til at komme i gang.
+RustDesk hilser bidrag fra alle velkommen. Se [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) for at få hjælp til at komme i gang.
 
 [**PROGRAM DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 

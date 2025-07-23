@@ -17,7 +17,7 @@
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk вітає внесок кожного. Ознайомтеся з [CONTRIBUTING.md](docs/CONTRIBUTING.md), щоб отримати допомогу на початковому етапі.
+RustDesk вітає внесок кожного. Ознайомтеся з [CONTRIBUTING.md](CONTRIBUTING.md), щоб отримати допомогу на початковому етапі.
 
 [**ЧаПи**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 

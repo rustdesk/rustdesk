@@ -3,10 +3,7 @@ use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     bytes::Bytes,
-    config::{
-        self, keys::*, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT,
-        RENDEZVOUS_PORT,
-    },
+    config::{self, keys::*, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, RENDEZVOUS_PORT},
     directories_next,
     futures::future::join_all,
     log,
@@ -863,7 +860,7 @@ pub fn video_save_directory(root: bool) -> String {
         {
             let drive = std::env::var("SystemDrive").unwrap_or("C:".to_owned());
             let dir =
-                std::path::PathBuf::from(format!("{drive}\\ProgramData\\RustDesk\\recording",));
+                std::path::PathBuf::from(format!("{drive}\\ProgramData\\{appname}\\recording",));
             return dir.to_string_lossy().to_string();
         }
     }
@@ -878,7 +875,7 @@ pub fn video_save_directory(root: bool) -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
-        path.push_str("/RustDesk/ScreenRecord");
+        path.push_str(format!("/{appname}/ScreenRecord").as_str());
         let dir = try_create(&std::path::Path::new(&path));
         if !dir.is_empty() {
             return dir;
@@ -1297,7 +1294,11 @@ pub async fn change_id_shared(id: String, old_id: String) -> String {
 
 pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
     if !hbb_common::is_valid_custom_id(&id) {
-        log::debug!("debugging invalid id: \"{id}\", len: {}, base64: \"{}\"", id.len(), crate::encode64(&id));
+        log::debug!(
+            "debugging invalid id: \"{id}\", len: {}, base64: \"{}\"",
+            id.len(),
+            crate::encode64(&id)
+        );
         let bom = id.trim_start_matches('\u{FEFF}');
         log::debug!("bom: {}", hbb_common::is_valid_custom_id(&bom));
         return INVALID_FORMAT;

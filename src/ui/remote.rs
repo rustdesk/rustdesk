@@ -313,16 +313,10 @@ impl InvokeUiSession for SciterHandler {
 
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
-            ConnType::RDP => {}
-            ConnType::PORT_FORWARD => {}
-            ConnType::FILE_TRANSFER => {}
-            ConnType::VIEW_CAMERA => {}
             ConnType::DEFAULT_CONN => {
                 crate::keyboard::client::start_grab_loop();
             }
-            // Left empty code from compilation.
-            // Please replace the code in the PR.
-            ConnType::VIEW_CAMERA => {}
+            _ => {}
         }
     }
 
@@ -386,6 +380,11 @@ impl InvokeUiSession for SciterHandler {
 
     fn handle_screenshot_resp(&self, _sid: String, msg: String) {
         self.call("screenshot", &make_args!(msg));
+    }
+
+    fn handle_terminal_response(&self, _response: TerminalResponse) {
+        // Terminal support is not implemented for Sciter UI
+        // This is a stub implementation to satisfy the trait requirements
     }
 }
 

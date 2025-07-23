@@ -17,7 +17,7 @@
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-Το RustDesk ενθαρρύνει τη συνεισφορά όλων. Διαβάστε το [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) για βοήθεια στο πως να ξεκινήσετε.
+Το RustDesk ενθαρρύνει τη συνεισφορά όλων. Διαβάστε το [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) για βοήθεια στο πως να ξεκινήσετε.
 
 [**Συχνές ερωτήσεις**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 

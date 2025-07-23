@@ -17,7 +17,7 @@ Enda en annen fjernstyrt desktop programvare, skrevet i Rust. Virker rett ut av 
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk er velkommen for bidrag fra alle. Se [CONTRIBUTING.md](docs/CONTRIBUTING-NO.md) for hjelp med oppstart.
+RustDesk er velkommen for bidrag fra alle. Se [CONTRIBUTING.md](CONTRIBUTING-NO.md) for hjelp med oppstart.
 
 [**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 

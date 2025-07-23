@@ -54,6 +54,7 @@ enum DesktopTabType {
   fileTransfer,
   viewCamera,
   portForward,
+  terminal,
   install,
 }
 

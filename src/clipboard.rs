@@ -427,7 +427,8 @@ impl ClipboardContext {
                 // It's not correct in the server process.
                 #[cfg(target_os = "linux")]
                 let is_kde_x11 = {
-                    let is_kde = std::process::Command::new("sh")
+                    use hbb_common::platform::linux::CMD_SH;
+                    let is_kde = std::process::Command::new(CMD_SH.as_str())
                         .arg("-c")
                         .arg("ps -e | grep -E kded[0-9]+ | grep -v grep")
                         .stdout(std::process::Stdio::piped())
