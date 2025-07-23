@@ -1989,6 +1989,25 @@ impl Connection {
                         sleep(1.).await;
                         return false;
                     }
+
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if let Some(is_user) =
+                        terminal_service::is_service_specified_user(&self.terminal_service_id)
+                    {
+                        if let Some(user_token) = &self.terminal_user_token {
+                            let has_service_token =
+                                user_token.to_terminal_service_token().is_some();
+                            if is_user != has_service_token {
+                                // This occurs when the service id (in the configuration) is manually changed by the user, causing a mismatch in validation.
+                                log::error!("Terminal service user mismatch detected. The service ID may have been manually changed in the configuration, causing validation to fail.");
+                                // No need to translate the following message, because it is in an abnormal case.
+                                self.send_login_error("Terminal service user mismatch detected.")
+                                    .await;
+                                sleep(1.).await;
+                                return false;
+                            }
+                        }
+                    }
                 }
                 Some(login_request::Union::PortForward(mut pf)) => {
                     if !Connection::permission("enable-tunnel") {
@@ -2944,7 +2963,11 @@ impl Connection {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn fill_terminal_user_token(&mut self, _username: &str, _password: &str) -> Option<&'static str> {
+    fn fill_terminal_user_token(
+        &mut self,
+        _username: &str,
+        _password: &str,
+    ) -> Option<&'static str> {
         self.terminal_user_token = Some(TerminalUserToken::SelfUser);
         None
     }
