@@ -1583,7 +1583,9 @@ String bool2option(String option, bool b) {
       option == kOptionForceAlwaysRelay) {
     res = b ? 'Y' : defaultOptionNo;
   } else {
-    assert(false);
+    if (option != kOptionEnableUdpPunch && option != kOptionEnableIpv6Punch) {
+      assert(false);
+    }
     res = b ? 'Y' : 'N';
   }
   return res;
