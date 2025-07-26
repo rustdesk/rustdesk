@@ -19,7 +19,7 @@ b. 3 seconds timeout => update ratio according to network delay
     When network delay < DELAY_THRESHOLD_150MS, increase ratio, max 150kbps;
     When network delay >= DELAY_THRESHOLD_150MS, decrease ratio;
 
-adjust betwen FPS and ratio:
+adjust between FPS and ratio:
     When network delay < DELAY_THRESHOLD_150MS, fps is always higher than the minimum fps, and ratio is increasing;
     When network delay >= DELAY_THRESHOLD_150MS, fps is always lower than the minimum fps, and ratio is decreasing;
 
