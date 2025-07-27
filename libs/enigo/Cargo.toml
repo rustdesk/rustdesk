@@ -1,0 +1,41 @@
+[package]
+name = "enigo"
+version = "0.0.14"
+authors = ["Dustin Bensing <dustin.bensing@googlemail.com>"]
+edition = "2018"
+build = "build.rs"
+
+description = "Enigo lets you control your mouse and keyboard in an abstract way on different operating systems (currently only Linux, macOS, Win – Redox and *BSD planned)"
+documentation = "https://docs.rs/enigo/"
+homepage = "https://github.com/enigo-rs/enigo"
+repository = "https://github.com/enigo-rs/enigo"
+readme = "README.md"
+keywords = ["input", "mouse", "testing", "keyboard", "automation"]
+categories = ["development-tools::testing", "api-bindings", "hardware-support"]
+license = "MIT"
+
+[badges]
+travis-ci = { repository = "enigo-rs/enigo" }
+appveyor = { repository = "pythoneer/enigo-85xiy" }
+
+[dependencies]
+serde = { version = "1.0", optional = true }
+serde_derive = { version = "1.0", optional = true }
+log = "0.4"
+rdev = { git = "https://github.com/rustdesk-org/rdev" }
+tfc = { git = "https://github.com/rustdesk-org/The-Fat-Controller", branch = "history/rebase_upstream_20240722" }
+hbb_common = { path = "../hbb_common" }
+
+[features]
+with_serde = ["serde", "serde_derive"]
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "winbase"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.22"
+objc = "0.2"
+unicode-segmentation = "1.10"
+
+[build-dependencies]
+pkg-config = "0.3"

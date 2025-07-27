@@ -1,0 +1,57 @@
+[package]
+name = "clipboard"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+cc = "1.0"
+
+[features]
+default = []
+unix-file-copy-paste = [
+"dep:x11rb",
+"dep:x11-clipboard",
+"dep:rand",
+"dep:fuser",
+"dep:libc",
+"dep:dashmap",
+"dep:percent-encoding",
+"dep:utf16string",
+"dep:once_cell",
+"dep:cacao"
+]
+
+[dependencies]
+thiserror = "1.0"
+lazy_static = "1.4"
+serde = "1.0"
+serde_derive = "1.0"
+hbb_common = { path = "../hbb_common" }
+parking_lot = {version = "0.12"}
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+rand = {version = "0.8", optional = true}
+libc = {version = "0.2", optional = true}
+dashmap = {version ="5.5", optional = true}
+utf16string = {version = "0.2", optional = true}
+once_cell = {version = "1.18", optional = true}
+
+[target.'cfg(target_os = "linux")'.dependencies]
+percent-encoding = {version  ="2.3", optional = true}
+x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
+x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
+fuser = {version = "0.15", default-features = false, optional = true}
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cacao = {git="https://github.com/clslaid/cacao", branch = "feat/set-file-urls", optional = true}
+# Use `relax-void-encoding`, as that allows us to pass `c_void` instead of implementing `Encode` correctly for `&CGImageRef`
+objc2 = { version = "0.5.1", features = ["relax-void-encoding"] }
+objc2-foundation = { version = "0.2.0", features = ["NSArray", "NSString", "NSEnumerator", "NSGeometry", "NSProgress"] }
+objc2-app-kit = { version = "0.2.0", features = ["NSPasteboard", "NSPasteboardItem", "NSImage", "NSFilePromiseProvider"] }
+uuid = { version = "1.3", features = ["v4"] }
+fsevent = "2.1.2"
+dirs = "5.0"
+xattr = "1.4.0"
