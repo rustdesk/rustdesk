@@ -49,6 +49,15 @@ bool MyCreateServiceW(LPCWSTR serviceName, LPCWSTR displayName, LPCWSTR binaryPa
         WcaLog(LOGMSG_STANDARD, "Service installed successfully\n");
     }
 
+    SERVICE_DELAYED_AUTO_START_INFO delayedStart = { TRUE };
+    if (!ChangeServiceConfig2W(
+        schService,
+        SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
+        &delayedStart
+    )) {
+        WcaLog(LOGMSG_STANDARD, "Failed to configure delayed auto-start for service: %ls, Error: %d\n", serviceName, GetLastError());
+    }
+
     CloseServiceHandle(schService);
     CloseServiceHandle(schSCManager);
     return true;

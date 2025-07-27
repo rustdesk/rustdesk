@@ -2885,6 +2885,7 @@ fn get_import_config(exe: &str) -> String {
 sc stop {app_name}
 sc delete {app_name}
 sc create {app_name} binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\\\"\" start= auto DisplayName= \"{app_name} Service\"
+sc config {app_name} start= delayed-auto
 sc start {app_name}
 sc stop {app_name}
 sc delete {app_name}
@@ -2906,6 +2907,7 @@ if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{ap
     } else {
         format!("
 sc create {app_name} binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
+sc config {app_name} start= delayed-auto
 sc start {app_name}
 ",
     app_name = crate::get_app_name())
