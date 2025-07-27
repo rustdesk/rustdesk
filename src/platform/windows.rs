@@ -2771,6 +2771,7 @@ sc stop {app_name}
 taskkill /F /IM {app_name}.exe{filter}
 {reg_cmd}
 {copy_exe}
+sc config {app_name} start= delayed-auto
 {restore_service_cmd}
 {uninstall_printer_cmd}
 {install_printer_cmd}
@@ -2885,7 +2886,6 @@ fn get_import_config(exe: &str) -> String {
 sc stop {app_name}
 sc delete {app_name}
 sc create {app_name} binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\\\"\" start= auto DisplayName= \"{app_name} Service\"
-sc config {app_name} start= delayed-auto
 sc start {app_name}
 sc stop {app_name}
 sc delete {app_name}
