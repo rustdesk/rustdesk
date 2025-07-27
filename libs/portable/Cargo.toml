@@ -1,0 +1,31 @@
+[package]
+name = "rustdesk-portable-packer"
+version = "1.4.1"
+edition = "2021"
+description = "RustDesk Remote Desktop"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+build = "build.rs"
+
+[dependencies]
+brotli = "3.4"
+dirs = "5.0"
+md5 = "0.7"
+winapi = { version = "0.3", features = ["winbase"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+native-windows-gui = {version = "1.0", default-features = false, features = ["animation-timer", "image-decoder"]}
+
+[package.metadata.winres]
+LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
+ProductName = "RustDesk"
+OriginalFilename = "rustdesk.exe"
+FileDescription = "RustDesk Remote Desktop"
+#ProductVersion = ""
+
+[target.'cfg(target_os="windows")'.build-dependencies]
+winres = "0.1"
+winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
+
+
