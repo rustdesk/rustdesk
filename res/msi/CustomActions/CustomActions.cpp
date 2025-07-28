@@ -765,16 +765,6 @@ void TryCreateStartServiceByShell(LPWSTR svcName, LPWSTR svcBinary, LPWSTR szSvc
         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is created with shell.", svcName);
     }
 
-    hr = StringCchPrintfW(szCmd, cchCmd, L"/c sc config %ls start= delayed-auto", svcName);
-    if (FAILED(hr)) {
-        WcaLog(LOGMSG_STANDARD, "Failed to format delayed auto-start command for service: %ls, HRESULT: 0x%08X", svcName, hr);
-    } else {
-        hi = ShellExecuteW(NULL, L"open", L"cmd.exe", szCmd, NULL, SW_HIDE);
-        if ((int)hi <= 32) {
-            WcaLog(LOGMSG_STANDARD, "Failed to configure delayed auto-start for service with shell: %d, last error: 0x%08X.", (int)hi, GetLastError());
-        }
-    }
-
     // Query and log if the service is running.
     for (int k = 0; k < 10; ++k) {
         if (!QueryServiceStatusExW(svcName, &svcStatus)) {
