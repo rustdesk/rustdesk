@@ -77,6 +77,7 @@ pub struct Remote<T: InvokeUiSession> {
     video_threads: HashMap<usize, VideoThread>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
+    sent_close_reason: bool,
 }
 
 #[derive(Default)]
@@ -125,6 +126,7 @@ impl<T: InvokeUiSession> Remote<T> {
             video_threads: Default::default(),
             chroma: Default::default(),
             last_record_state: false,
+            sent_close_reason: false,
         }
     }
 
@@ -172,7 +174,7 @@ impl<T: InvokeUiSession> Remote<T> {
         )
         .await
         {
-            Ok(((mut peer, direct, pk, _kcp), (feedback, rendezvous_server))) => {
+            Ok(((mut peer, direct, pk, kcp), (feedback, rendezvous_server))) => {
                 self.handler
                     .connection_round_state
                     .lock()
@@ -319,6 +321,13 @@ impl<T: InvokeUiSession> Remote<T> {
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();
+                }
+                if kcp.is_some() {
+                    // Send the close reason if it hasn't been sent yet, as KCP cannot detect the socket close event.
+                    self.send_close_reason(&mut peer, "kcp").await;
+                    // KCP does not send messages immediately, so wait to ensure the last message is sent.
+                    // 1ms works in my test, but 30ms is more reliable.
+                    tokio::time::sleep(Duration::from_millis(30)).await;
                 }
             }
             Err(err) => {
@@ -511,14 +520,22 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    async fn send_close_reason(&mut self, peer: &mut Stream, reason: &str) {
+        if self.sent_close_reason {
+            return;
+        }
+        let mut misc = Misc::new();
+        misc.set_close_reason(reason.to_owned());
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        allow_err!(peer.send(&msg).await);
+        self.sent_close_reason = true;
+    }
+
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
         match data {
             Data::Close => {
-                let mut misc = Misc::new();
-                misc.set_close_reason("".to_owned());
-                let mut msg = Message::new();
-                msg.set_misc(misc);
-                allow_err!(peer.send(&msg).await);
+                self.send_close_reason(peer, "").await;
                 return false;
             }
             Data::Login((os_username, os_password, password, remember)) => {
@@ -1712,6 +1729,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::CloseReason(c)) => {
+                        self.sent_close_reason = true; // The controlled end will close, no need to send close reason
                         self.handler.msgbox("error", "Connection Error", &c, "");
                         return false;
                     }

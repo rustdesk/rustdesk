@@ -354,6 +354,16 @@ class RustDeskMultiWindowManager {
     bool? forceRelay,
     String? connToken,
   }) async {
+    // Iterate through terminal windows in reverse order to prioritize
+    // the most recently added or used windows, as they are more likely
+    // to have an active session.
+    for (final windowId in _terminalWindows.reversed) {
+      if (await DesktopMultiWindow.invokeMethod(
+          windowId, kWindowEventActiveSession, remoteId)) {
+        return MultiWindowCallResult(windowId, null);
+      }
+    }
+
     // Terminal windows should always create new windows, not reuse
     // This avoids the MissingPluginException when trying to invoke
     // new_terminal on an inactive window
@@ -366,7 +376,7 @@ class RustDeskMultiWindowManager {
       "connToken": connToken,
     };
     final msg = jsonEncode(params);
-    
+
     // Always create a new window for terminal
     final windowId = await newSessionWindow(
         WindowType.Terminal, remoteId, msg, _terminalWindows, false);
