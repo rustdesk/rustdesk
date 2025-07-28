@@ -1,7 +1,7 @@
 use crate::{common::do_check_software_update, hbbs_http::create_http_client};
 use hbb_common::{bail, config, log, ResultType};
 use std::{
-    io::{self, Write},
+    io::Write,
     path::PathBuf,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -28,6 +28,7 @@ pub fn update_controlling_session_count(count: usize) {
     CONTROLLING_SESSION_COUNT.store(count, Ordering::SeqCst);
 }
 
+#[allow(dead_code)]
 pub fn start_auto_update() {
     let _sender = TX_MSG.lock().unwrap();
 }
@@ -197,7 +198,10 @@ fn check_update(manually: bool) -> ResultType<()> {
 
 #[cfg(target_os = "windows")]
 fn update_new_version(is_msi: bool, version: &str, file_path: &PathBuf) {
-    log::debug!("New version is downloaded, update begin, is msi: {is_msi}, version: {version}, file: {:?}", file_path.to_str());
+    log::debug!(
+        "New version is downloaded, update begin, is msi: {is_msi}, version: {version}, file: {:?}",
+        file_path.to_str()
+    );
     if let Some(p) = file_path.to_str() {
         if let Some(session_id) = crate::platform::get_current_process_session_id() {
             if is_msi {
@@ -231,7 +235,7 @@ fn update_new_version(is_msi: bool, version: &str, file_path: &PathBuf) {
         } else {
             log::error!(
                 "Failed to get the current process session id, Error {}",
-                io::Error::last_os_error()
+                std::io::Error::last_os_error()
             );
         }
     } else {
