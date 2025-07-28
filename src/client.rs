@@ -447,7 +447,8 @@ impl Client {
                             let addr = AddrMangle::decode(&rr.socket_addr_v6);
                             if addr.port() > 0 {
                                 if s.connect(addr).await.is_ok() {
-                                    connect_futures.push(udp_nat_connect(s, "IPv6").boxed());
+                                    connect_futures
+                                        .push(udp_nat_connect(s, "IPv6", CONNECT_TIMEOUT).boxed());
                                 }
                             }
                         }
@@ -589,10 +590,10 @@ impl Client {
             .boxed(),
         );
         if let Some(udp_socket_nat) = udp_socket_nat {
-            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP").boxed());
+            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP", connect_timeout).boxed());
         }
         if let Some(udp_socket_v6) = udp_socket_v6 {
-            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6").boxed());
+            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).boxed());
         }
         // Run all connection attempts concurrently, return the first successful one
         let (mut conn, kcp, mut typ) = match select_ok(connect_futures).await {
@@ -4009,6 +4010,7 @@ async fn test_udp_uat(
 async fn udp_nat_connect(
     socket: Arc<UdpSocket>,
     typ: &'static str,
+    ms_timeout: u64,
 ) -> ResultType<(Stream, Option<KcpStream>, &'static str)> {
     crate::punch_udp(socket.clone(), false)
         .await
@@ -4016,7 +4018,7 @@ async fn udp_nat_connect(
             log::debug!("{err}");
             anyhow!(err)
         })?;
-    let res = KcpStream::connect(socket, Duration::from_secs(CONNECT_TIMEOUT as _))
+    let res = KcpStream::connect(socket, Duration::from_millis(ms_timeout))
         .await
         .map_err(|err| {
             log::debug!("Failed to connect KCP stream: {}", err);

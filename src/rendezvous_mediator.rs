@@ -834,7 +834,7 @@ async fn udp_nat_listen(
         let res = crate::punch_udp(socket.clone(), true).await?;
         let stream = crate::kcp_stream::KcpStream::accept(
             socket,
-            Duration::from_secs(CONNECT_TIMEOUT as _),
+            Duration::from_millis(CONNECT_TIMEOUT as _),
             res,
         )
         .await?;
