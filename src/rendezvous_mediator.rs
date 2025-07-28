@@ -2,7 +2,7 @@ use std::{
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, RwLock,
     },
     time::{Duration, Instant},
 };
@@ -93,7 +93,7 @@ impl RendezvousMediator {
         }
         scrap::codec::test_av1();
         loop {
-            let mut timeout = CONNECT_TIMEOUT;
+            let timeout = Arc::new(RwLock::new(CONNECT_TIMEOUT));
             let conn_start_time = Instant::now();
             *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
             if !config::option2bool("stop-service", &Config::get_option("stop-service"))
@@ -105,6 +105,7 @@ impl RendezvousMediator {
                 MANUAL_RESTARTED.store(false, Ordering::SeqCst);
                 for host in servers.clone() {
                     let server = server.clone();
+                    let timeout = timeout.clone();
                     futs.push(tokio::spawn(async move {
                         if let Err(err) = Self::start(server, host).await {
                             let err = format!("rendezvous mediator error: {err}");
@@ -113,7 +114,7 @@ impl RendezvousMediator {
                             if err.contains("10054") || err.contains("11001") {
                                 // No such host is known. (os error 11001)
                                 // An existing connection was forcibly closed by the remote host. (os error 10054): also happens for UDP
-                                timeout = 3000;
+                                *timeout.write().unwrap() = 3000;
                             }
                             log::error!("{err}");
                         }
@@ -126,9 +127,10 @@ impl RendezvousMediator {
                 server.write().unwrap().close_connections();
             }
             Config::reset_online();
+            let timeout = *timeout.read().unwrap();
             if !MANUAL_RESTARTED.load(Ordering::SeqCst) {
                 let elapsed = conn_start_time.elapsed().as_millis() as u64;
-                if elapsed < timeout{
+                if elapsed < timeout {
                     sleep(((timeout - elapsed) / 1000) as _).await;
                 }
             } else {
