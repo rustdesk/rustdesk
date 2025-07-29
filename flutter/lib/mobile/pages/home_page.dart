@@ -230,6 +230,12 @@ class WebHomePage extends StatelessWidget {
           id = args[i + 1];
           i++;
           break;
+        case '--terminal-admin':
+          setEnvTerminalAdmin();
+          isTerminal = true;
+          id = args[i + 1];
+          i++;
+          break;
         case '--password':
           password = args[i + 1];
           i++;

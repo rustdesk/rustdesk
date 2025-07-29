@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Δεν υπάρχουν ακόμη αγαπημένες συνδέσεις;\nΑφού πραγματοποιήσετε σύνδεση με κάποιο απομακρυσμένο σταθμό, μπορείτε να τον προσθέσετε στα αγαπημένα σας!"),
         ("empty_lan_tip", "Δεν έχουμε ανακαλυφθεί ακόμη απομακρυσμένοι σταθμοί."),
         ("empty_address_book_tip", "Φαίνεται ότι αυτή τη στιγμή δεν υπάρχουν αγαπημένες συνδέσεις στο βιβλίο διευθύνσεών σας."),
-        ("eg: admin", "π.χ. admin"),
         ("Empty Username", "Κενό όνομα χρήστη"),
         ("Empty Password", "Κενός κωδικός πρόσβασης"),
         ("Me", "Εγώ"),
@@ -703,5 +702,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable terminal", ""),
         ("New tab", ""),
         ("Keep terminal sessions on disconnect", ""),
+        ("Terminal (Run as administrator)", ""),
+        ("terminal-admin-login-tip", ""),
+        ("Failed to get user token.", ""),
+        ("Incorrect username or password.", ""),
+        ("The user is not an administrator.", ""),
+        ("Failed to check if the user is an administrator.", ""),
+        ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

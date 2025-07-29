@@ -231,11 +231,13 @@ pub async fn create_tcp_connection(
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        Command::new("/usr/bin/caffeinate")
+        if let Ok(task) = Command::new("/usr/bin/caffeinate")
             .arg("-u")
             .arg("-t 5")
             .spawn()
-            .ok();
+        {
+            super::CHILD_PROCESS.lock().unwrap().push(task);
+        }
         log::info!("wake up macos");
     }
     Connection::start(addr, stream, id, Arc::downgrade(&server)).await;

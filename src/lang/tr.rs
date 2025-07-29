@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Henüz favori cihazınız yok mu?\nBağlanacak ve favorilere eklemek için birini bulalım!"),
         ("empty_lan_tip", "Hayır, henüz hiçbir cihaz bulamadık gibi görünüyor."),
         ("empty_address_book_tip", "Üzgünüm, şu anda adres defterinizde kayıtlı cihaz yok gibi görünüyor."),
-        ("eg: admin", "örn: admin"),
         ("Empty Username", "Boş Kullanıcı Adı"),
         ("Empty Password", "Boş Parola"),
         ("Me", "Ben"),
@@ -703,5 +702,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable terminal", ""),
         ("New tab", ""),
         ("Keep terminal sessions on disconnect", ""),
+        ("Terminal (Run as administrator)", ""),
+        ("terminal-admin-login-tip", ""),
+        ("Failed to get user token.", ""),
+        ("Incorrect username or password.", ""),
+        ("The user is not an administrator.", ""),
+        ("Failed to check if the user is an administrator.", ""),
+        ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }

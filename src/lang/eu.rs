@@ -461,7 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Parekide gogokorik gabe oraindik?\nBilatu norbait konektatzeko eta gehitu zure gogokoetara!"),
         ("empty_lan_tip", "Ai ez, badirudi ez duzula parekiderik aurkitu oraindik."),
         ("empty_address_book_tip", "Badirudi ez dagoela parekiderik zure helbide-liburuan."),
-        ("eg: admin", "adib. admin"),
         ("Empty Username", "Erabiltzaile-izena hutsik"),
         ("Empty Password", "Pasahitza hutsik"),
         ("Me", "Ni"),
@@ -703,5 +702,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable terminal", ""),
         ("New tab", ""),
         ("Keep terminal sessions on disconnect", ""),
+        ("Terminal (Run as administrator)", ""),
+        ("terminal-admin-login-tip", ""),
+        ("Failed to get user token.", ""),
+        ("Incorrect username or password.", ""),
+        ("The user is not an administrator.", ""),
+        ("Failed to check if the user is an administrator.", ""),
+        ("Supported only in the installed version.", ""),
+        ("elevation_username_tip", ""),
     ].iter().cloned().collect();
 }
