@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Opsüsteemi parool"),
         ("install_tip", "Kasutajakonto kontrolli (UAC) tõttu ei saa RustDesk mõnel juhul korralikult kaugjuhtimispoolena töötada. Kontrolli vältimiseks palun klõpsa alloleval nupul, et RustDesk oma süsteemi paigaldada."),
         ("Click to upgrade", "Vajuta täiendamiseks"),
-        ("Click to download", "Vajuta allalaadimiseks"),
-        ("Click to update", "Vajuta uuendamiseks"),
         ("Configure", "Seadista"),
         ("config_acc", "Töölaua kaugjuhtimiseks tuleb RustDeskile anda \"juurdepääsetavuse\" õigused."),
         ("config_screen", "Töölaua kaugjuhtimiseks tuleb RustDeskile anda \"ekraanisalvestuse\" õigused."),

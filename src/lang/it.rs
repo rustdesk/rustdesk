@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Password sistema operativo"),
         ("install_tip", "A causa del Controllo Account Utente (UAC), RustDesk potrebbe non funzionare correttamente come desktop remoto.\nPer evitare questo problema, fai clic sul tasto qui sotto per installare RustDesk a livello di sistema."),
         ("Click to upgrade", "Aggiorna"),
-        ("Click to download", "Download"),
-        ("Click to update", "Aggiorna"),
         ("Configure", "Configura"),
         ("config_acc", "Per controllare il desktop dall'esterno, devi fornire a RustDesk il permesso 'Accessibilità'."),
         ("config_screen", "Per controllare il desktop dall'esterno, devi fornire a RustDesk il permesso 'Registrazione schermo'."),

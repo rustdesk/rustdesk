@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Hasło systemu operacyjnego"),
         ("install_tip", "RustDesk może nie działać poprawnie na maszynie zdalnej z przyczyn związanych z UAC. W celu uniknięcia problemów z UAC, kliknij poniższy przycisk by zainstalować RustDesk w swoim systemie."),
         ("Click to upgrade", "Zaktualizuj"),
-        ("Click to download", "Pobierz"),
-        ("Click to update", "Uaktualnij"),
         ("Configure", "Konfiguruj"),
         ("config_acc", "Konfiguracja konta"),
         ("config_screen", "Konfiguracja ekranu"),
