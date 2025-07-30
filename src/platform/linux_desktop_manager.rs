@@ -321,7 +321,7 @@ impl DesktopManager {
             ),
             // ("DISPLAY", self.display.clone()),
             // ("XAUTHORITY", self.xauth.clone()),
-            // (ENV_DESKTOP_PROTOCAL, XProtocal::X11.to_string()),
+            // (ENV_DESKTOP_PROTOCOL, XProtocol::X11.to_string()),
         ]);
         self.child_exit.store(false, Ordering::SeqCst);
         let is_child_running = self.is_child_running.clone();

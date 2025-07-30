@@ -2498,7 +2498,7 @@ pub fn user_accessible_folder() -> ResultType<PathBuf> {
     } else if dir2.exists() {
         dir = dir2;
     } else {
-        bail!("no vaild user accessible folder");
+        bail!("no valid user accessible folder");
     }
     Ok(dir)
 }
