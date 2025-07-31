@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Contrasenya del sistema"),
         ("install_tip", "En alguns casos és possible que el RustDesk no funcioni correctament per les restriccions UAC («User Account Control»; Control de comptes d'usuari). Per evitar aquest problema, instal·leu el RustDesk al vostre sistema."),
         ("Click to upgrade", "Feu clic per a actualitzar"),
-        ("Click to download", "Feu clic per a baixar"),
-        ("Click to update", "Feu clic per a actualitzar"),
         ("Configure", "Configura"),
         ("config_acc", "Per a poder controlar el dispositiu remotament, faciliteu al RustDesk els permisos d'accessibilitat."),
         ("config_screen", "Per a poder controlar el dispositiu remotament, faciliteu al RustDesk els permisos de gravació de pantalla."),

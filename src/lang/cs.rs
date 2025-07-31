@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Heslo do operačního systému"),
         ("install_tip", "Kvůli řízení oprávnění v systému (UAC), RustDesk v některých případech na protistraně nefunguje správně. Abyste se UAC vyhnuli, klikněte na níže uvedené tlačítko a nainstalujte tak RustDesk do systému."),
         ("Click to upgrade", "Aktualizovat"),
-        ("Click to download", "Stáhnout"),
-        ("Click to update", "Aktualizovat"),
         ("Configure", "Nastavit"),
         ("config_acc", "Aby bylo možné na dálku ovládat vaši plochu, je třeba aplikaci RustDesk udělit oprávnění pro \"Zpřístupnění pro hendikepované\"."),
         ("config_screen", "Aby bylo možné přistupovat k vaší ploše na dálku, je třeba aplikaci RustDesk udělit oprávnění pro \"Nahrávání obsahu obrazovky\"."),

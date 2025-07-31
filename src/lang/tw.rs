@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "作業系統密碼"),
         ("install_tip", "UAC 會導致 RustDesk 在某些情況下無法正常作為遠端端點運作。若要避開 UAC，請點選下方按鈕將 RustDesk 安裝到系統中。"),
         ("Click to upgrade", "點選以升級"),
-        ("Click to download", "點選以下載"),
-        ("Click to update", "點選以更新"),
         ("Configure", "設定"),
         ("config_acc", "為了遠端控制您的桌面，您需要授予 RustDesk「無障礙功能」權限。"),
         ("config_screen", "為了遠端存取您的桌面，您需要授予 RustDesk「螢幕錄製」權限。"),
@@ -709,6 +707,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", "使用者並不是系統管理員"),
         ("Failed to check if the user is an administrator.", "檢查使用者是否是系統管理員時失敗了"),
         ("Supported only in the installed version.", "僅支援於已安裝的版本"),
-        ("elevation_username_tip", ""),
+        ("elevation_username_tip", "輸入使用者名稱或網域\\使用者名稱"),
     ].iter().cloned().collect();
 }

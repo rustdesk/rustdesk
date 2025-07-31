@@ -3651,7 +3651,7 @@ dependencies = [
 [[package]]
 name = "kcp-sys"
 version = "0.1.0"
-source = "git+https://github.com/rustdesk-org/kcp-sys#1e5e30ab8b8c2f7787ab0f88822de36476531562"
+source = "git+https://github.com/rustdesk-org/kcp-sys#32a6c09fc6223f54aea83981a6aa8995931d29be"
 dependencies = [
  "anyhow",
  "auto_impl",
@@ -3660,6 +3660,7 @@ dependencies = [
  "bytes",
  "cc",
  "dashmap 6.1.0",
+ "log",
  "parking_lot",
  "rand 0.8.5",
  "thiserror 2.0.11",

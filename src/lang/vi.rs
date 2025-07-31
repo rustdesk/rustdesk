@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Mật khẩu hệ điều hành"),
         ("install_tip", "Do UAC, RustDesk sẽ không thể hoạt động đúng cách là bên từ xa trong vài trường hợp. Để tránh UAC, hãy nhấn cái nút dưới đây để cài RustDesk vào hệ thống."),
         ("Click to upgrade", "Nhấn để nâng cấp"),
-        ("Click to download", "Nhấn để tải xuống"),
-        ("Click to update", "Nhấn để cập nhật"),
         ("Configure", "Cài đặt"),
         ("config_acc", "Để có thể điều khiển máy tính từ xa, bạn cần phải cung cấp quyền \"Trợ năng\" cho RustDesk"),
         ("config_screen", "Để có thể truy cập máy tính từ xa, bạn cần phải cung cấp quyền \"Ghi Màn Hình\" cho RustDesk."),

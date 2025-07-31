@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Kata Sandi OS"),
         ("install_tip", "Karena UAC, RustDesk tidak dapat bekerja dengan baik sebagai sisi remote dalam beberapa kasus. Untuk menghindari UAC, silakan klik tombol di bawah ini untuk menginstal RustDesk ke sistem."),
         ("Click to upgrade", "Klik untuk upgrade"),
-        ("Click to download", "Klik untuk unduh"),
-        ("Click to update", "Klik untuk memperbarui"),
         ("Configure", "Konfigurasi"),
         ("config_acc", "Agar bisa mengontrol Desktopmu dari jarak jauh, Kamu harus memberikan izin \"Aksesibilitas\" untuk RustDesk."),
         ("config_screen", "Agar bisa mengakses Desktopmu dari jarak jauh, kamu harus memberikan izin \"Perekaman Layar\" untuk RustDesk."),

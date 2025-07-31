@@ -1937,6 +1937,16 @@ impl Connection {
     }
 
     async fn on_message(&mut self, msg: Message) -> bool {
+        if let Some(message::Union::Misc(misc)) = &msg.union {
+            // Move the CloseReason forward, as this message needs to be received when unauthorized, especially for kcp.
+            if let Some(misc::Union::CloseReason(s)) = &misc.union {
+                log::info!("receive close reason: {}", s);
+                self.on_close("Peer close", true).await;
+                raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
+                return false;
+            }
+        }
+        // After handling CloseReason messages, proceed to process other message types
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
@@ -2790,15 +2800,6 @@ impl Connection {
                             Some(Instant::now().into()),
                         );
                     }
-                    Some(misc::Union::CloseReason(_)) => {
-                        self.on_close("Peer close", true).await;
-                        raii::AuthedConnID::check_remove_session(
-                            self.inner.id(),
-                            self.session_key(),
-                        );
-                        return false;
-                    }
-
                     Some(misc::Union::RestartRemoteDevice(_)) => {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         if self.restart {
