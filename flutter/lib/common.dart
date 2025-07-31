@@ -3719,16 +3719,17 @@ void earlyAssert() {
 void checkUpdate() {
   if (!isWeb) {
     if (!bind.isCustomClient()) {
-      platformFFI.registerEventHandler(
-          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
-          (Map<String, dynamic> evt) async {
-        if (evt['url'] is String) {
-          stateGlobal.updateUrl.value = evt['url'];
-        }
-      });
-      Timer(const Duration(seconds: 1), () async {
-        bind.mainGetSoftwareUpdateUrl();
-      });
+      // 注释掉更新检查的事件注册
+      // platformFFI.registerEventHandler(
+      //     kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+      //     (Map<String, dynamic> evt) async {
+      //   if (evt['url'] is String) {
+      //     stateGlobal.updateUrl.value = evt['url'];
+      //   }
+      // });
+      // Timer(const Duration(seconds: 1), () async {
+      //   bind.mainGetSoftwareUpdateUrl();
+      // });
     }
   }
 }

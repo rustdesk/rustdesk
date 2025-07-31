@@ -81,10 +81,11 @@ fn start_auto_update_check() -> Sender<UpdateMsg> {
 }
 
 fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
-    std::thread::sleep(Duration::from_secs(30));
-    if let Err(e) = check_update(false) {
-        log::error!("Error checking for updates: {}", e);
-    }
+    // 注释掉启动时的更新检查-20250731
+    // std::thread::sleep(Duration::from_secs(30));
+    // if let Err(e) = check_update(false) {
+    //     log::error!("Error checking for updates: {}", e);
+    // }
 
     const MIN_INTERVAL: Duration = Duration::from_secs(60 * 10);
     const RETRY_INTERVAL: Duration = Duration::from_secs(60 * 30);
@@ -93,25 +94,25 @@ fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
     loop {
         let recv_res = rx_msg.recv_timeout(check_interval);
         match &recv_res {
-            Ok(UpdateMsg::CheckUpdate) | Err(_) => {
-                if last_check_time.elapsed() < MIN_INTERVAL {
-                    // log::debug!("Update check skipped due to minimum interval.");
-                    continue;
-                }
-                // Don't check update if there are alive connections.
-                if !has_no_active_conns() {
-                    check_interval = RETRY_INTERVAL;
-                    continue;
-                }
-                if let Err(e) = check_update(matches!(recv_res, Ok(UpdateMsg::CheckUpdate))) {
-                    log::error!("Error checking for updates: {}", e);
-                    check_interval = RETRY_INTERVAL;
-                } else {
-                    last_check_time = Instant::now();
-                    check_interval = DUR_ONE_DAY;
-                }
-            }
+            // 注释掉自动检查逻辑
+            // Ok(UpdateMsg::CheckUpdate) | Err(_) => {
+            //     if last_check_time.elapsed() < MIN_INTERVAL {
+            //         continue;
+            //     }
+            //     if !has_no_active_conns() {
+            //         check_interval = RETRY_INTERVAL;
+            //         continue;
+            //     }
+            //     if let Err(e) = check_update(matches!(recv_res, Ok(UpdateMsg::CheckUpdate))) {
+            //         log::error!("Error checking for updates: {}", e);
+            //         check_interval = RETRY_INTERVAL;
+            //     } else {
+            //         last_check_time = Instant::now();
+            //         check_interval = DUR_ONE_DAY;
+            //     }
+            // }
             Ok(UpdateMsg::Exit) => break,
+            _ => {} // 忽略其他消息
         }
     }
 }
