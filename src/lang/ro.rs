@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Parolă sistem"),
         ("install_tip", "Din cauza restricțiilor CCU, este posibil ca RustDesk să nu funcționeze corespunzător. Pentru a evita acest lucru, dă clic pe butonul de mai jos pentru a instala RustDesk."),
         ("Click to upgrade", "Dă clic pentru a face upgrade"),
-        ("Click to download", "Dă clic pentru a descărca"),
-        ("Click to update", "Dă clic pentru a actualiza"),
         ("Configure", "Configurează"),
         ("config_acc", "Pentru a controla desktopul la distanță, trebuie să permiți RustDesk acces la setările de Accesibilitate."),
         ("config_screen", "Pentru a controla desktopul la distanță, trebuie să permiți RustDesk acces la setările de Înregistrare ecran."),

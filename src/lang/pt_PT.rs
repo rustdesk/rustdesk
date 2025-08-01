@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Senha do SO"),
         ("install_tip", "Devido ao UAC, o RustDesk não funciona correctamente em alguns casos. Para evitar o UAC, por favor clique no botão abaixo para instalar o RustDesk no sistema."),
         ("Click to upgrade", "Clique para atualizar"),
-        ("Click to download", "Clique para carregar"),
-        ("Click to update", "Clique para fazer a actualização"),
         ("Configure", "Configurar"),
         ("config_acc", "Para controlar o seu Ambiente de Trabalho remotamente, é preciso conceder ao RustDesk permissões de \"Acessibilidade\"."),
         ("config_screen", "Para aceder ao seu Ambiente de Trabalho remotamente, é preciso conceder ao RustDesk permissões de \"Gravar a Tela\"/"),

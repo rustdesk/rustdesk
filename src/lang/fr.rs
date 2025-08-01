@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Mot de passe du système d’exploitation"),
         ("install_tip", "RustDesk n’est pas installé, ce qui peut limiter son utilisation à cause de l’UAC. Cliquez ci-dessous pour l’installer."),
         ("Click to upgrade", "Mettre à niveau"),
-        ("Click to download", "Télécharger"),
-        ("Click to update", "Mettre à jour"),
         ("Configure", "Configurer"),
         ("config_acc", "L’autorisation « Accessibilité » est requise pour contrôler votre bureau à distance."),
         ("config_screen", "L’autorisation « Enregistrement d’écran » est requise pour accéder à votre bureau à distance."),

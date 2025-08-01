@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "كلمة مرور نظام التشغيل"),
         ("install_tip", "بسبب صلاحيات تحكم حساب المستخدم. RustDesk قد لا يعمل بشكل صحيح في جهة البعيد في بعض الحالات. لتفادي ذلك. الرجاء الضغط على الزر ادناه لتثبيت RustDesk في جهازك."),
         ("Click to upgrade", "اضغط للارتقاء"),
-        ("Click to download", "اضغط للتنزيل"),
-        ("Click to update", "ضغط للتحديث"),
         ("Configure", "تهيئة"),
         ("config_acc", "لتتمكن من التحكم بسطح مكتبك البعيد, تحتاج الى منح RustDesk اذونات \"امكانية الوصول\"."),
         ("config_screen", "لتتمكن من الوصول الى سطح مكتبك البعيد, تحتاج الى منح RustDesk اذونات \"تسجيل الشاشة\"."),
