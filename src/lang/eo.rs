@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Pasvorto de la operaciumo"),
         ("install_tip", "Vi ne uzas instalita versio. Pro limigoj pro UAC, kiel aparato kontrolata, en kelkaj kazoj, ne estos ebla kontroli la muson kaj klavaron aŭ registri la ekranon. Bonvolu alkliku la butonon malsupre por instali RustDesk sur la operaciumo por eviti la demando supre."),
         ("Click to upgrade", "Alklaki por plibonigi"),
-        ("Click to download", "Alklaki por elŝuti"),
-        ("Click to update", "Alklaki por ĝisdatigi"),
         ("Configure", "Konfiguri"),
         ("config_acc", "Por uzi vian foran aparaton, bonvolu doni la permeson \"alirebleco\" al RustDesk."),
         ("config_screen", "Por uzi vian foran aparaton, bonvolu doni la permeson \"ekranregistrado\" al RustDesk."),

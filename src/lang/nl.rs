@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "OS Wachtwoord"),
         ("install_tip", "Door UAC-beperkingen lukt het niet altijd om uw bureaublad op afstand te bedienen. Installeer RustDesk op het systeem om dit probleem te voorkomen."),
         ("Click to upgrade", "Klik voor upgrade"),
-        ("Click to download", "Klik om te downloaden"),
-        ("Click to update", "Klik om bij te werken"),
         ("Configure", "Configureren"),
         ("config_acc", "Om uw apparaat op afstand te kunnen bedienen, moet u RustDesk toestemming voor Toegankelijkheid geven."),
         ("config_screen", "Om uw apparaat op afstand te kunnen bedienen, moet u RustDesk toestemming voor Schermopname geven."),

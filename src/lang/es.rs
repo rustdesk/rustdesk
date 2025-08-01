@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Contraseña del sistema operativo"),
         ("install_tip", "Debido al Control de cuentas de usuario, es posible que RustDesk no funcione correctamente como escritorio remoto. Para evitar este problema, haga clic en el botón de abajo para instalar RustDesk a nivel de sistema."),
         ("Click to upgrade", "Clic para actualizar"),
-        ("Click to download", "Clic para descargar"),
-        ("Click to update", "Clic para refrescar"),
         ("Configure", "Configurar"),
         ("config_acc", "Para controlar su escritorio desde el exterior, debe otorgar permiso a RustDesk de \"Accesibilidad\"."),
         ("config_screen", "Para controlar su escritorio desde el exterior, debe otorgar permiso a RustDesk de \"Grabación de pantalla\"."),

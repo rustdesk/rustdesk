@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Operációs rendszer jelszavának beállítása"),
         ("install_tip", "Előfordul, hogy bizonyos esetekben hiba léphet fel a Portable verzió használatakor. A megfelelő működés érdekében, telepítse a RustDesk alkalmazást a számítógépére."),
         ("Click to upgrade", "Kattintson ide a frissítés telepítéséhez"),
-        ("Click to download", "Kattintson ide a letöltéshez"),
-        ("Click to update", "Kattintson ide a frissítés letöltéséhez"),
         ("Configure", "Beállítás"),
         ("config_acc", "A számítógép távoli vezérléséhez a RustDesknek hozzáférési jogokat kell biztosítania."),
         ("config_screen", "Ahhoz, hogy távolról hozzáférhessen számítógépéhez, meg kell adnia a RustDesknek a \"Képernyőfelvétel\" jogosultságot."),

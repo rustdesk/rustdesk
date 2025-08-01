@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "OSのパスワード"),
         ("install_tip", "UACの影響により、RustDeskがリモートコンピューター上で正常に動作しない場合があります。UACを回避するには、下のボタンをクリックしてシステムにRustDeskをインストールしてください。"),
         ("Click to upgrade", "アップグレード"),
-        ("Click to download", "ダウンロード"),
-        ("Click to update", "アップデート"),
         ("Configure", "設定"),
         ("config_acc", "リモートからあなたのコンピューターを操作するには、RustDeskに「アクセシビリティ」権限を与える必要があります。"),
         ("config_screen", "リモートからあなたのコンピューターにアクセスするには、RustDeskに「画面録画」の権限を与える必要があります。"),

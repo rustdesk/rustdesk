@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "OS parole"),
         ("install_tip", "UAC dēļ RustDesk dažos gadījumos nevar pareizi darboties kā attālā puse. Lai izvairītos no UAC, lūdzu, noklikšķiniet uz tālāk esošās pogas, lai instalētu RustDesk sistēmā."),
         ("Click to upgrade", "Jaunināt"),
-        ("Click to download", "Lejupielādēt"),
-        ("Click to update", "Atjaunināt"),
         ("Configure", "Konfigurēt"),
         ("config_acc", "Lai attālināti vadītu savu darbvirsmu, jums ir jāpiešķir RustDesk \"Pieejamība\" atļaujas."),
         ("config_screen", "Lai attālināti piekļūtu darbvirsmai, jums ir jāpiešķir RustDesk \"Ekrāna tveršana\" atļaujas."),
