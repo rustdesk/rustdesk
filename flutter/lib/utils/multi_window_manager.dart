@@ -17,6 +17,7 @@ enum WindowType {
   FileTransfer,
   ViewCamera,
   PortForward,
+  Terminal,
   Unknown
 }
 
@@ -33,6 +34,8 @@ extension Index on int {
         return WindowType.ViewCamera;
       case 4:
         return WindowType.PortForward;
+      case 5:
+        return WindowType.Terminal;
       default:
         return WindowType.Unknown;
     }
@@ -61,6 +64,7 @@ class RustDeskMultiWindowManager {
   final List<int> _fileTransferWindows = List.empty(growable: true);
   final List<int> _viewCameraWindows = List.empty(growable: true);
   final List<int> _portForwardWindows = List.empty(growable: true);
+  final List<int> _terminalWindows = List.empty(growable: true);
 
   moveTabToNewWindow(int windowId, String peerId, String sessionId,
       WindowType windowType) async {
@@ -343,6 +347,42 @@ class RustDeskMultiWindowManager {
     );
   }
 
+  Future<MultiWindowCallResult> newTerminal(
+    String remoteId, {
+    String? password,
+    bool? isSharedPassword,
+    bool? forceRelay,
+    String? connToken,
+  }) async {
+    // Iterate through terminal windows in reverse order to prioritize
+    // the most recently added or used windows, as they are more likely
+    // to have an active session.
+    for (final windowId in _terminalWindows.reversed) {
+      if (await DesktopMultiWindow.invokeMethod(
+          windowId, kWindowEventActiveSession, remoteId)) {
+        return MultiWindowCallResult(windowId, null);
+      }
+    }
+
+    // Terminal windows should always create new windows, not reuse
+    // This avoids the MissingPluginException when trying to invoke
+    // new_terminal on an inactive window
+    var params = {
+      "type": WindowType.Terminal.index,
+      "id": remoteId,
+      "password": password,
+      "forceRelay": forceRelay,
+      "isSharedPassword": isSharedPassword,
+      "connToken": connToken,
+    };
+    final msg = jsonEncode(params);
+
+    // Always create a new window for terminal
+    final windowId = await newSessionWindow(
+        WindowType.Terminal, remoteId, msg, _terminalWindows, false);
+    return MultiWindowCallResult(windowId, null);
+  }
+
   Future<MultiWindowCallResult> call(
       WindowType type, String methodName, dynamic args) async {
     final wnds = _findWindowsByType(type);
@@ -373,6 +413,8 @@ class RustDeskMultiWindowManager {
         return _viewCameraWindows;
       case WindowType.PortForward:
         return _portForwardWindows;
+      case WindowType.Terminal:
+        return _terminalWindows;
       case WindowType.Unknown:
         break;
     }
@@ -395,6 +437,8 @@ class RustDeskMultiWindowManager {
       case WindowType.PortForward:
         _portForwardWindows.clear();
         break;
+      case WindowType.Terminal:
+        _terminalWindows.clear();
       case WindowType.Unknown:
         break;
     }
@@ -426,9 +470,13 @@ class RustDeskMultiWindowManager {
     if (windows.isEmpty) {
       return;
     }
-    for (final wId in windows) {
-      debugPrint("closing multi window, type: ${type.toString()} id: $wId");
-      await saveWindowPosition(type, windowId: wId);
+    for (int i = 0; i < windows.length; i++) {
+      final wId = windows[i];
+      final shouldSavePos = type != WindowType.Terminal || i == windows.length - 1;
+      if (shouldSavePos) {
+        debugPrint("closing multi window, type: ${type.toString()} id: $wId");
+        await saveWindowPosition(type, windowId: wId);
+      }
       try {
         await WindowController.fromWindowId(wId).setPreventClose(false);
         await WindowController.fromWindowId(wId).close();

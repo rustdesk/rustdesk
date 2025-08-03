@@ -29,7 +29,7 @@ class Body: Reactor.Component
         };
         var right_style = show_chat ? "" : "display: none";
         var disconnected = c.disconnected;
-        var show_elevation_btn = handler.can_elevate() && show_elevation && !c.is_file_transfer && c.port_forward.length == 0;
+        var show_elevation_btn = handler.can_elevate() && show_elevation && !c.is_file_transfer && !c.is_view_camera && !c.is_terminal && c.port_forward.length == 0;
         var show_accept_btn = handler.get_option('approve-mode') != 'password';
        // below size:* is a workaround for Linux, it already set in css, but not work, shit sciter
         return <div .content style="size:*">
@@ -48,8 +48,8 @@ class Body: Reactor.Component
                     </div>
                 </div>
                 <div />
-                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
-                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div> <div .permissions>
+                {c.is_file_transfer || c.is_terminal || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
+                {c.is_file_transfer || c.is_terminal || c.port_forward || disconnected ? "" : <div> <div .permissions>
                     <div class={!c.keyboard ? "disabled" : ""} title={translate('Enable keyboard/mouse')}><icon .keyboard /></div>
                     <div class={!c.clipboard ? "disabled" : ""} title={translate('Enable clipboard')}><icon .clipboard /></div>
                     <div class={!c.audio ? "disabled" : ""} title={translate('Enable audio')}><icon .audio /></div>
@@ -60,6 +60,9 @@ class Body: Reactor.Component
                     <div class={!c.block_input ? "disabled" : ""} title={translate('Enable blocking user input')} style={is_win ? "" : "display:none;"}><icon .block_input /></div>
                 </div></div>
                 }
+                {c.is_file_transfer ? <div>{translate('Transfer file')}</div> : ""}
+                {c.is_view_camera ? <div>{translate('View camera')}</div> : ""}
+                {c.is_terminal ? <div>{translate('Terminal')}</div> : ""}
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
                 <div .outer_buttons>
@@ -72,10 +75,10 @@ class Body: Reactor.Component
                     {auth && !disconnected ? <button #disconnect .control .button>{translate('Disconnect')}</button> : "" }
                     {auth && disconnected ? <button #close .control .button>{translate('Close')}</button> : "" }
                 </div>
-                {c.is_file_transfer || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
+                {c.is_file_transfer || c.is_terminal || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
             </div>
             <div .right-panel style={right_style}>
-                {c.is_file_transfer || c.port_forward ? "" : <ChatBox msgs={c.msgs} callback={callback} />}
+                {c.is_file_transfer || c.is_terminal || c.port_forward ? "" : <ChatBox msgs={c.msgs} callback={callback} />}
             </div>
         </div>;
     }
@@ -356,7 +359,7 @@ function bring_to_top(idx=-1) {
     }
 }
 
-handler.addConnection = function(id, is_file_transfer, is_view_camera, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
+handler.addConnection = function(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
     stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
@@ -373,7 +376,7 @@ handler.addConnection = function(id, is_file_transfer, is_view_camera, port_forw
     });
     if (!name) name = "NA";
     conn = {
-        id: id, is_file_transfer: is_file_transfer, peer_id: peer_id,
+        id: id, is_file_transfer: is_file_transfer, is_view_camera: is_view_camera, is_terminal: is_terminal, peer_id: peer_id,
         port_forward: port_forward,
         name: name, authorized: authorized, time: new Date(), now: new Date(),
         keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,

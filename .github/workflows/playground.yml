@@ -17,7 +17,7 @@ env:
   TAG_NAME: "nightly"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
-  VERSION: "1.4.0"
+  VERSION: "1.4.1"
   NDK_VERSION: "r26d"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
@@ -266,7 +266,7 @@ jobs:
                libayatana-appindicator3-dev\
                libasound2-dev \
                libc6-dev \
-               libclang-11-dev \
+               libclang-dev \
                libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
@@ -280,7 +280,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-11-dev \
+               llvm-dev \
                nasm \
                yasm \
                ninja-build \

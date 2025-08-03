@@ -14,6 +14,7 @@ import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_view_camera_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_terminal_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -91,6 +92,12 @@ Future<void> main(List<String> args) async {
           kAppTypeDesktopPortForward,
         );
         break;
+      case WindowType.Terminal:
+        desktopType = DesktopType.terminal;
+        runMultiWindow(
+          argument,
+          kAppTypeDesktopTerminal,
+        );
       default:
         break;
     }
@@ -211,6 +218,11 @@ void runMultiWindow(
         params: argument,
       );
       break;
+    case kAppTypeDesktopTerminal:
+      widget = DesktopTerminalScreen(
+        params: argument,
+      );
+      break;
     default:
       // no such appType
       exit(0);
@@ -256,6 +268,9 @@ void runMultiWindow(
       break;
     case kAppTypeDesktopPortForward:
       await restoreWindowPosition(WindowType.PortForward, windowId: kWindowId!);
+      break;
+    case kAppTypeDesktopTerminal:
+      await restoreWindowPosition(WindowType.Terminal, windowId: kWindowId!);
       break;
     default:
       // no such appType

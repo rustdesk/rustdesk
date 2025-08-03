@@ -515,8 +515,6 @@ class ImagePaint extends StatefulWidget {
 }
 
 class _ImagePaintState extends State<ImagePaint> {
-  bool _lastRemoteCursorMoved = false;
-
   String get id => widget.id;
   RxBool get cursorOverImage => widget.cursorOverImage;
   Widget Function(Widget)? get listenerBuilder => widget.listenerBuilder;

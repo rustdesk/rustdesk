@@ -23,7 +23,7 @@ env:
   MAC_RUST_VERSION: "1.81" # 1.81 is requred for macos, because of https://github.com/yury/cidre requires 1.81
   CARGO_NDK_VERSION: "3.1.2"
   SCITER_ARMV7_CMAKE_VERSION: "3.29.7"
-  SCITER_NASM_DEBVERSION: "2.14-1"
+  SCITER_NASM_DEBVERSION: "2.15.05-1"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
   ANDROID_FLUTTER_VERSION: "3.24.5"
@@ -38,7 +38,7 @@ env:
   #  https://github.com/rustdesk/rustdesk/actions/runs/14414119794/job/40427970174
   # 2. Update the `VCPKG_COMMIT_ID` in `ci.yml` and `playground.yml`.
   VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
-  VERSION: "1.4.0"
+  VERSION: "1.4.1"
   NDK_VERSION: "r27c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
@@ -177,24 +177,24 @@ jobs:
 
           # Download printer driver files and extract them to ./rustdesk
           try {
-            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4.zip -OutFile rustdesk_printer_driver_v4.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
             Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
             Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums
 
             # Check and move the files
-            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4\.zip$').Matches.Groups[1].Value
-            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4.zip -Algorithm SHA256
-            $checksum_dll = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
-            $downloadsum_dll = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
-            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_dll -eq $downloadsum_dll.Hash) {
-                Write-Output "rustdesk_printer_driver_v4, checksums match, extract the file."
-                Expand-Archive rustdesk_printer_driver_v4.zip -DestinationPath .
+            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1.4\.zip$').Matches.Groups[1].Value
+            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256
+            $checksum_adapter = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
+            $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
+            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
+                Write-Output "rustdesk_printer_driver_v4-1.4, checksums match, extract the file."
+                Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
                 mkdir ./rustdesk/drivers
-                mv -Force .\rustdesk_printer_driver_v4 ./rustdesk/drivers/RustDeskPrinterDriver
+                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
                 Expand-Archive printer_driver_adapter.zip -DestinationPath .
                 mv -Force .\printer_driver_adapter.dll ./rustdesk
             } elseif ($checksum_driver -ne $downloadsum_driver.Hash) {
-                Write-Output "rustdesk_printer_driver_v4, checksums do not match, ignore the file."
+                Write-Output "rustdesk_printer_driver_v4-1.4, checksums do not match, ignore the file."
             } else {
                 Write-Output "printer_driver_adapter.dll, checksums do not match, ignore the file."
             }
@@ -929,21 +929,21 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-linux-android,
-              os: ubuntu-22.04,
+              os: ubuntu-24.04,
               reltype: release,
               suffix: "",
             }
           - {
               arch: armv7,
               target: armv7-linux-androideabi,
-              os: ubuntu-22.04,
+              os: ubuntu-24.04,
               reltype: release,
               suffix: "",
             }
           - {
               arch: x86_64,
               target: x86_64-linux-android,
-              os: ubuntu-22.04,
+              os: ubuntu-24.04,
               reltype: release,
               suffix: "",
             }
@@ -980,7 +980,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libc6-dev \
-               libclang-11-dev \
+               libclang-dev \
                libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
@@ -993,7 +993,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-11-dev \
+               llvm-dev \
                nasm \
                ninja-build \
                openjdk-17-jdk-headless \
@@ -1212,7 +1212,7 @@ jobs:
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
     if: ${{ inputs.upload-artifact }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     env:
       reltype: release
       x86_target: "" # can be ",android-x86"
@@ -1250,7 +1250,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libc6-dev \
-               libclang-11-dev \
+               libclang-dev \
                libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
@@ -1263,7 +1263,7 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               llvm-11-dev \
+               llvm-dev \
                nasm \
                ninja-build \
                openjdk-17-jdk-headless \
@@ -1978,11 +1978,8 @@ jobs:
           # https://github.com/AppImage/AppImageKit/wiki/FUSE
           sudo apt-get install -y libarchive-tools libfuse2
           # set-up appimage-builder
-          pushd /tmp
-          wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
-          chmod +x appimage-builder-x86_64.AppImage
-          sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
-          popd
+          # https://github.com/AppImage/AppImageKit/issues/1395
+          sudo pip3 install git+https://github.com/rustdesk-org/appimage-builder.git
           # run appimage-builder
           pushd appimage
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
@@ -2009,14 +2006,15 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu18.04,
+              # https://github.com/ostreedev/ostree/commit/4bac96a8c817beda37448f9b8c662162bb619981
+              distro: ubuntu22.04,
               on: ubuntu-22.04,
               arch: x86_64,
               suffix: "",
             }
           - {
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu18.04,
+              distro: ubuntu22.04,
               on: ubuntu-22.04,
               arch: x86_64,
               suffix: "-sciter",
@@ -2084,6 +2082,8 @@ jobs:
     if: False
     name: build-rustdesk-web
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
     env:

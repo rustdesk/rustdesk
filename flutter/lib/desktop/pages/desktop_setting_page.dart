@@ -1011,6 +1011,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(context, 'Enable camera', kOptionEnableCamera,
                 enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable terminal', kOptionEnableTerminal,
+                enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(
                 context, 'Enable TCP tunneling', kOptionEnableTunnel,
                 enabled: enabled, fakeValue: fakeValue),
@@ -1520,9 +1522,8 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
     final hideProxy =
         isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
-    // final hideWebSocket = isWeb ||
-    //     bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y';
-    final hideWebSocket = true;
+    final hideWebSocket = isWeb ||
+        bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y';
 
     if (hideServer && hideProxy && hideWebSocket) {
       return Offstage();

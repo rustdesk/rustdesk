@@ -47,8 +47,8 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        self, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT,
-        READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
+        self, keys, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution,
+        CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
     fs::JobType,
     futures::future::{select_ok, FutureExt},
@@ -274,7 +274,6 @@ impl Client {
             }
         };
 
-
         if crate::get_ipv6_punch_enabled() {
             crate::test_ipv6().await;
         }
@@ -448,7 +447,8 @@ impl Client {
                             let addr = AddrMangle::decode(&rr.socket_addr_v6);
                             if addr.port() > 0 {
                                 if s.connect(addr).await.is_ok() {
-                                    connect_futures.push(udp_nat_connect(s, "IPv6").boxed());
+                                    connect_futures
+                                        .push(udp_nat_connect(s, "IPv6", CONNECT_TIMEOUT).boxed());
                                 }
                             }
                         }
@@ -590,10 +590,10 @@ impl Client {
             .boxed(),
         );
         if let Some(udp_socket_nat) = udp_socket_nat {
-            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP").boxed());
+            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP", connect_timeout).boxed());
         }
         if let Some(udp_socket_v6) = udp_socket_v6 {
-            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6").boxed());
+            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).boxed());
         }
         // Run all connection attempts concurrently, return the first successful one
         let (mut conn, kcp, mut typ) = match select_ok(connect_futures).await {
@@ -1612,6 +1612,7 @@ struct ConnToken {
 pub struct LoginConfigHandler {
     id: String,
     pub conn_type: ConnType,
+    pub is_terminal_admin: bool,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
@@ -1737,6 +1738,7 @@ impl LoginConfigHandler {
                 self.other_server = Some((real_id.to_owned(), server.to_owned(), other_server_key));
             }
         }
+
         self.direct = None;
         self.received = false;
         self.switch_uuid = switch_uuid;
@@ -1745,6 +1747,11 @@ impl LoginConfigHandler {
         self.shared_password = shared_password;
         self.record_state = false;
         self.record_permission = true;
+
+        // `std::env::remove_var("IS_TERMINAL_ADMIN");` is called in `session_add_sync()` - `flutter_ffi.rs`.
+        let is_terminal_admin = conn_type == ConnType::TERMINAL
+            && std::env::var("IS_TERMINAL_ADMIN").map_or(false, |v| v == "Y");
+        self.is_terminal_admin = is_terminal_admin;
     }
 
     /// Check if the client should auto login.
@@ -1784,6 +1791,9 @@ impl LoginConfigHandler {
     /// * `v` - value of option
     pub fn set_option(&mut self, k: String, v: String) {
         let mut config = self.load_config();
+        if v == self.get_option(&k) {
+            return;
+        }
         config.options.insert(k, v);
         self.save_config(config);
     }
@@ -1952,6 +1962,14 @@ impl LoginConfigHandler {
                 BoolOption::No
             })
             .into();
+        } else if name == keys::OPTION_TERMINAL_PERSISTENT {
+            config.terminal_persistent.v = !config.terminal_persistent.v;
+            option.terminal_persistent = (if config.terminal_persistent.v {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            })
+            .into();
         } else if name == "privacy-mode" {
             // try toggle privacy mode
             option.privacy_mode = (if config.privacy_mode.v {
@@ -2049,6 +2067,14 @@ impl LoginConfigHandler {
             return None;
         }
         let mut msg = OptionMessage::new();
+        if self.conn_type.eq(&ConnType::TERMINAL) {
+            if self.get_toggle_option(keys::OPTION_TERMINAL_PERSISTENT) {
+                msg.terminal_persistent = BoolOption::Yes.into();
+                return Some(msg);
+            } else {
+                return None;
+            }
+        }
         let q = self.image_quality.clone();
         if let Some(q) = self.get_image_quality_enum(&q, ignore_default) {
             msg.image_quality = q.into();
@@ -2094,7 +2120,7 @@ impl LoginConfigHandler {
         if self.get_toggle_option("disable-audio") {
             msg.disable_audio = BoolOption::Yes.into();
         }
-        if !view_only && self.get_toggle_option(config::keys::OPTION_ENABLE_FILE_COPY_PASTE) {
+        if !view_only && self.get_toggle_option(keys::OPTION_ENABLE_FILE_COPY_PASTE) {
             msg.enable_file_transfer = BoolOption::Yes.into();
         }
         if view_only || self.get_toggle_option("disable-clipboard") {
@@ -2150,9 +2176,11 @@ impl LoginConfigHandler {
             self.config.show_remote_cursor.v
         } else if name == "lock-after-session-end" {
             self.config.lock_after_session_end.v
+        } else if name == keys::OPTION_TERMINAL_PERSISTENT {
+            self.config.terminal_persistent.v
         } else if name == "privacy-mode" {
             self.config.privacy_mode.v
-        } else if name == config::keys::OPTION_ENABLE_FILE_COPY_PASTE {
+        } else if name == keys::OPTION_ENABLE_FILE_COPY_PASTE {
             self.config.enable_file_copy_paste.v
         } else if name == "disable-audio" {
             self.config.disable_audio.v
@@ -2452,7 +2480,7 @@ impl LoginConfigHandler {
         } else {
             (my_id, self.id.clone())
         };
-        let mut display_name = get_builtin_option(config::keys::OPTION_DISPLAY_NAME);
+        let mut display_name = get_builtin_option(keys::OPTION_DISPLAY_NAME);
         if display_name.is_empty() {
             display_name =
                 serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option("user_info"))
@@ -2522,6 +2550,11 @@ impl LoginConfigHandler {
                 port: self.port_forward.1,
                 ..Default::default()
             }),
+            ConnType::TERMINAL => {
+                let mut terminal = Terminal::new();
+                terminal.service_id = self.get_option(self.get_key_terminal_service_id());
+                lr.set_terminal(terminal);
+            }
             _ => {}
         }
 
@@ -2569,6 +2602,14 @@ impl LoginConfigHandler {
 
     pub fn get_id(&self) -> &str {
         &self.id
+    }
+
+    pub fn get_key_terminal_service_id(&self) -> &'static str {
+        if self.is_terminal_admin {
+            "terminal-admin-service-id"
+        } else {
+            "terminal-service-id"
+        }
     }
 }
 
@@ -3237,8 +3278,7 @@ pub async fn handle_hash(
     }
 
     if password.is_empty() {
-        let p =
-            crate::ui_interface::get_builtin_option(config::keys::OPTION_DEFAULT_CONNECT_PASSWORD);
+        let p = crate::ui_interface::get_builtin_option(keys::OPTION_DEFAULT_CONNECT_PASSWORD);
         if !p.is_empty() {
             let mut hasher = Sha256::new();
             hasher.update(p.clone());
@@ -3250,6 +3290,19 @@ pub async fn handle_hash(
     }
 
     lc.write().unwrap().password = password.clone();
+
+    let is_terminal_admin = lc.read().unwrap().is_terminal_admin;
+    let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
+    if is_terminal && is_terminal_admin {
+        if password.is_empty() {
+            interface.msgbox("terminal-admin-login-password", "", "", "");
+        } else {
+            interface.msgbox("terminal-admin-login", "", "", "");
+        }
+        lc.write().unwrap().hash = hash;
+        return;
+    }
+
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
         interface.msgbox("input-password", "Password Required", "", "");
@@ -3261,8 +3314,15 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    let os_username = lc.read().unwrap().get_option("os-username");
-    let os_password = lc.read().unwrap().get_option("os-password");
+    let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
+    let (os_username, os_password) = if is_terminal {
+        ("".to_owned(), "".to_owned())
+    } else {
+        (
+            lc.read().unwrap().get_option("os-username"),
+            lc.read().unwrap().get_option("os-password"),
+        )
+    };
 
     send_login(lc.clone(), os_username, os_password, password, peer).await;
     lc.write().unwrap().hash = hash;
@@ -3634,7 +3694,7 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
         && title == "Connection Error"
         && ((text.contains("10054") || text.contains("104")) && retry_for_relay
             || (!text.to_lowercase().contains("offline")
-                && !text.to_lowercase().contains("exist")
+                && !text.to_lowercase().contains("not exist")
                 && !text.to_lowercase().contains("handshake")
                 && !text.to_lowercase().contains("failed")
                 && !text.to_lowercase().contains("resolve")
@@ -3789,11 +3849,9 @@ pub mod peer_online {
         }
         // Retry for 2 times to get the online response
         for _ in 0..2 {
-            if let Some(msg_in) = crate::get_next_nonkeyexchange_msg(
-                &mut socket,
-                Some(timeout.as_millis() as _),
-            )
-            .await
+            if let Some(msg_in) =
+                crate::get_next_nonkeyexchange_msg(&mut socket, Some(timeout.as_millis() as _))
+                    .await
             {
                 match msg_in.union {
                     Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
@@ -3952,6 +4010,7 @@ async fn test_udp_uat(
 async fn udp_nat_connect(
     socket: Arc<UdpSocket>,
     typ: &'static str,
+    ms_timeout: u64,
 ) -> ResultType<(Stream, Option<KcpStream>, &'static str)> {
     crate::punch_udp(socket.clone(), false)
         .await
@@ -3959,7 +4018,7 @@ async fn udp_nat_connect(
             log::debug!("{err}");
             anyhow!(err)
         })?;
-    let res = KcpStream::connect(socket, Duration::from_secs(CONNECT_TIMEOUT as _))
+    let res = KcpStream::connect(socket, Duration::from_millis(ms_timeout))
         .await
         .map_err(|err| {
             log::debug!("Failed to connect KCP stream: {}", err);

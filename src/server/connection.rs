@@ -56,6 +56,8 @@ use std::{
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
 #[cfg(windows)]
 use crate::virtual_display_manager;
@@ -169,8 +171,25 @@ pub enum AuthConnType {
     FileTransfer,
     PortForward,
     ViewCamera,
+    Terminal,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Clone, Debug)]
+enum TerminalUserToken {
+    SelfUser,
+    CurrentLogonUser(crate::terminal_service::UserToken),
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+impl TerminalUserToken {
+    fn to_terminal_service_token(&self) -> Option<crate::terminal_service::UserToken> {
+        match self {
+            TerminalUserToken::SelfUser => None,
+            TerminalUserToken::CurrentLogonUser(token) => Some(*token),
+        }
+    }
+}
 pub struct Connection {
     inner: ConnInner,
     display_idx: usize,
@@ -182,6 +201,7 @@ pub struct Connection {
     file_timer: crate::RustDeskInterval,
     file_transfer: Option<(String, bool)>,
     view_camera: bool,
+    terminal: bool,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
     port_forward_address: String,
     tx_to_cm: mpsc::UnboundedSender<ipc::Data>,
@@ -250,6 +270,14 @@ pub struct Connection {
     // For post requests that need to be sent sequentially.
     // eg. post_conn_audit
     tx_post_seq: mpsc::UnboundedSender<(String, Value)>,
+    terminal_service_id: String,
+    terminal_persistent: bool,
+    // The user token must be set when terminal is enabled.
+    // 0 indicates SYSTEM user
+    // other values indicate current user
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    terminal_user_token: Option<TerminalUserToken>,
+    terminal_generic_service: Option<Box<GenericService>>,
 }
 
 impl ConnInner {
@@ -347,6 +375,7 @@ impl Connection {
             file_timer: crate::rustdesk_interval(time::interval(SEC30)),
             file_transfer: None,
             view_camera: false,
+            terminal: false,
             port_forward_socket: None,
             port_forward_address: "".to_owned(),
             tx_to_cm,
@@ -410,6 +439,11 @@ impl Connection {
             tx_from_authed,
             printer_data: Vec::new(),
             tx_post_seq,
+            terminal_service_id: "".to_owned(),
+            terminal_persistent: false,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            terminal_user_token: None,
+            terminal_generic_service: None,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -450,7 +484,7 @@ impl Connection {
         let mut last_recv_time = Instant::now();
 
         conn.stream.set_send_timeout(
-            if conn.file_transfer.is_some() || conn.port_forward_socket.is_some() {
+            if conn.file_transfer.is_some() || conn.port_forward_socket.is_some() || conn.terminal {
                 SEND_TIMEOUT_OTHER
             } else {
                 SEND_TIMEOUT_VIDEO
@@ -1253,6 +1287,8 @@ impl Connection {
             (2, AuthConnType::PortForward)
         } else if self.view_camera {
             (3, AuthConnType::ViewCamera)
+        } else if self.terminal {
+            (4, AuthConnType::Terminal)
         } else {
             (0, AuthConnType::Remote)
         };
@@ -1361,8 +1397,7 @@ impl Connection {
             return;
         }
         #[cfg(target_os = "linux")]
-        if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() && !self.view_camera
-        {
+        if self.is_remote() {
             let mut msg = "".to_string();
             if crate::platform::linux::is_login_screen_wayland() {
                 msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned()
@@ -1393,7 +1428,8 @@ impl Connection {
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if self.file_transfer.is_some() {
-            if crate::platform::is_prelogin() { // }|| self.tx_to_cm.send(ipc::Data::Test).is_err() {
+            if crate::platform::is_prelogin() {
+                // }|| self.tx_to_cm.send(ipc::Data::Test).is_err() {
                 username = "".to_owned();
             }
         }
@@ -1404,10 +1440,19 @@ impl Connection {
             .unwrap()
             .insert(self.lr.my_id.clone(), self.tx_input.clone());
 
+        // Terminal feature is supported on desktop only
+        #[allow(unused_mut)]
+        let mut terminal = cfg!(not(any(target_os = "android", target_os = "ios")));
+        #[cfg(target_os = "windows")]
+        {
+            terminal = terminal && portable_pty::win::check_support().is_ok();
+        }
         pi.username = username;
         pi.sas_enabled = sas_enabled;
         pi.features = Some(Features {
             privacy_mode: privacy_mode::is_privacy_mode_supported(),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            terminal,
             ..Default::default()
         })
         .into();
@@ -1416,8 +1461,10 @@ impl Connection {
         #[allow(unused_mut)]
         let mut wait_session_id_confirm = false;
         #[cfg(windows)]
-        self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
-        if self.file_transfer.is_some() {
+        if !self.terminal {
+            self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
+        }
+        if self.file_transfer.is_some() || self.terminal {
             res.set_peer_info(pi);
         } else if self.view_camera {
             let supported_encoding = scrap::codec::Encoder::supported_encoding();
@@ -1509,6 +1556,10 @@ impl Connection {
             } else {
                 self.delayed_read_dir = Some((dir.to_owned(), show_hidden));
             }
+        } else if self.terminal {
+            self.keyboard = false;
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            self.init_terminal_service().await;
         } else if self.view_camera {
             if !wait_session_id_confirm {
                 self.try_sub_camera_displays();
@@ -1531,9 +1582,16 @@ impl Connection {
         }
     }
 
+    #[inline]
+    fn is_remote(&self) -> bool {
+        self.file_transfer.is_none()
+            && self.port_forward_socket.is_none()
+            && !self.view_camera
+            && !self.terminal
+    }
+
     fn try_sub_monitor_services(&mut self) {
-        let is_remote =
-            self.file_transfer.is_none() && self.port_forward_socket.is_none() && !self.view_camera;
+        let is_remote = self.is_remote();
         if is_remote && !self.services_subed {
             self.services_subed = true;
             if let Some(s) = self.server.upgrade() {
@@ -1651,6 +1709,7 @@ impl Connection {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),
             is_view_camera: self.view_camera,
+            is_terminal: self.terminal,
             port_forward: self.port_forward_address.clone(),
             peer_id,
             name,
@@ -1878,6 +1937,16 @@ impl Connection {
     }
 
     async fn on_message(&mut self, msg: Message) -> bool {
+        if let Some(message::Union::Misc(misc)) = &msg.union {
+            // Move the CloseReason forward, as this message needs to be received when unauthorized, especially for kcp.
+            if let Some(misc::Union::CloseReason(s)) = &misc.union {
+                log::info!("receive close reason: {}", s);
+                self.on_close("Peer close", true).await;
+                raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
+                return false;
+            }
+        }
+        // After handling CloseReason messages, proceed to process other message types
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
@@ -1901,6 +1970,54 @@ impl Connection {
                         return false;
                     }
                     self.view_camera = true;
+                }
+                Some(login_request::Union::Terminal(terminal)) => {
+                    if !Connection::permission(keys::OPTION_ENABLE_TERMINAL) {
+                        self.send_login_error("No permission of terminal").await;
+                        sleep(1.).await;
+                        return false;
+                    }
+                    #[cfg(target_os = "windows")]
+                    if !lr.os_login.username.is_empty() && !crate::platform::is_installed() {
+                        self.send_login_error("Supported only in the installed version.")
+                            .await;
+                        sleep(1.).await;
+                        return false;
+                    }
+
+                    self.terminal = true;
+                    if let Some(o) = self.options_in_login.as_ref() {
+                        self.terminal_persistent =
+                            o.terminal_persistent.enum_value() == Ok(BoolOption::Yes);
+                    }
+                    self.terminal_service_id = terminal.service_id;
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if let Some(msg) =
+                        self.fill_terminal_user_token(&lr.os_login.username, &lr.os_login.password)
+                    {
+                        self.send_login_error(msg).await;
+                        sleep(1.).await;
+                        return false;
+                    }
+
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if let Some(is_user) =
+                        terminal_service::is_service_specified_user(&self.terminal_service_id)
+                    {
+                        if let Some(user_token) = &self.terminal_user_token {
+                            let has_service_token =
+                                user_token.to_terminal_service_token().is_some();
+                            if is_user != has_service_token {
+                                // This occurs when the service id (in the configuration) is manually changed by the user, causing a mismatch in validation.
+                                log::error!("Terminal service user mismatch detected. The service ID may have been manually changed in the configuration, causing validation to fail.");
+                                // No need to translate the following message, because it is in an abnormal case.
+                                self.send_login_error("Terminal service user mismatch detected.")
+                                    .await;
+                                sleep(1.).await;
+                                return false;
+                            }
+                        }
+                    }
                 }
                 Some(login_request::Union::PortForward(mut pf)) => {
                     if !Connection::permission("enable-tunnel") {
@@ -2683,15 +2800,6 @@ impl Connection {
                             Some(Instant::now().into()),
                         );
                     }
-                    Some(misc::Union::CloseReason(_)) => {
-                        self.on_close("Peer close", true).await;
-                        raii::AuthedConnID::check_remove_session(
-                            self.inner.id(),
-                            self.session_key(),
-                        );
-                        return false;
-                    }
-
                     Some(misc::Union::RestartRemoteDevice(_)) => {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         if self.restart {
@@ -2791,7 +2899,7 @@ impl Connection {
                                 }
                             } else if self.view_camera {
                                 self.try_sub_camera_displays();
-                            } else {
+                            } else if !self.terminal {
                                 self.try_sub_monitor_services();
                             }
                         }
@@ -2843,10 +2951,114 @@ impl Connection {
                         self.refresh_video_display(Some(request.display as usize));
                     }
                 }
+                Some(message::Union::TerminalAction(action)) => {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    allow_err!(self.handle_terminal_action(action).await);
+                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    log::warn!("Terminal action received but not supported on this platform");
+                }
                 _ => {}
             }
         }
         true
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn fill_terminal_user_token(
+        &mut self,
+        _username: &str,
+        _password: &str,
+    ) -> Option<&'static str> {
+        self.terminal_user_token = Some(TerminalUserToken::SelfUser);
+        None
+    }
+
+    // Try to fill user token for terminal connection.
+    // If username is empty, use the user token of the current session.
+    // If username is not empty, try to logon and check if the user is an administrator.
+    //    If the user is an administrator, use the user token of current process (SYSTEM).
+    //    If the user is not an administrator, return an error message.
+    // Note: Only local and domain users are supported, Microsoft account (online account) not supported for now.
+    #[cfg(target_os = "windows")]
+    fn fill_terminal_user_token(&mut self, username: &str, password: &str) -> Option<&'static str> {
+        // No need to check if the password is empty.
+        if !username.is_empty() {
+            return self.handle_administrator_check(username, password);
+        }
+
+        if crate::platform::is_prelogin() {
+            self.terminal_user_token = None;
+            return Some("No active console user logged on, please connect and logon first.");
+        }
+
+        if crate::platform::is_installed() {
+            return self.handle_installed_user();
+        }
+
+        self.terminal_user_token = Some(TerminalUserToken::SelfUser);
+        None
+    }
+
+    #[cfg(target_os = "windows")]
+    fn handle_administrator_check(
+        &mut self,
+        username: &str,
+        password: &str,
+    ) -> Option<&'static str> {
+        let check_admin_res =
+            crate::platform::get_logon_user_token(username, password).map(|token| {
+                let is_token_admin = crate::platform::is_user_token_admin(token);
+                unsafe {
+                    hbb_common::allow_err!(CloseHandle(HANDLE(token as _)));
+                };
+                is_token_admin
+            });
+        match check_admin_res {
+            Ok(Ok(b)) => {
+                if b {
+                    self.terminal_user_token = Some(TerminalUserToken::SelfUser);
+                    None
+                } else {
+                    Some("The user is not an administrator.")
+                }
+            }
+            Ok(Err(e)) => {
+                log::error!("Failed to check if the user is an administrator: {}", e);
+                Some("Failed to check if the user is an administrator.")
+            }
+            Err(e) => {
+                log::error!("Failed to get logon user token: {}", e);
+                Some("Incorrect username or password.")
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn handle_installed_user(&mut self) -> Option<&'static str> {
+        let session_id = crate::platform::get_current_session_id(true);
+        if session_id == 0xFFFFFFFF {
+            return Some("Failed to get current session id.");
+        }
+        let token = crate::platform::get_user_token(session_id, true);
+        if !token.is_null() {
+            match crate::platform::ensure_primary_token(token) {
+                Ok(t) => {
+                    self.terminal_user_token = Some(TerminalUserToken::CurrentLogonUser(t as _));
+                }
+                Err(e) => {
+                    log::error!("Failed to ensure primary token: {}", e);
+                    self.terminal_user_token =
+                        Some(TerminalUserToken::CurrentLogonUser(token as _));
+                }
+            }
+            None
+        } else {
+            log::error!(
+                "Failed to get user token for terminal action, {}",
+                std::io::Error::last_os_error()
+            );
+            Some("Failed to get user token.")
+        }
     }
 
     fn update_failure(&self, (mut failure, time): ((i32, i32, i32), i32), remove: bool, i: usize) {
@@ -3371,6 +3583,12 @@ impl Connection {
                 }
             }
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if let Ok(q) = o.terminal_persistent.enum_value() {
+            if q != BoolOption::NotSet {
+                self.update_terminal_persistence(q == BoolOption::Yes).await;
+            }
+        }
     }
 
     async fn turn_on_privacy(&mut self, impl_key: String) {
@@ -3562,12 +3780,7 @@ impl Connection {
 
     #[cfg(windows)]
     fn portable_check(&mut self) {
-        if self.portable.is_installed
-            || self.file_transfer.is_some()
-            || self.view_camera
-            || self.port_forward_socket.is_some()
-            || !self.keyboard
-        {
+        if self.portable.is_installed || !self.is_remote() || !self.keyboard {
             return;
         }
         let running = portable_client::running();
@@ -3778,6 +3991,68 @@ impl Connection {
         };
         msg_out.set_message_box(res);
         self.send(msg_out).await;
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    async fn update_terminal_persistence(&mut self, persistent: bool) {
+        self.terminal_persistent = persistent;
+        terminal_service::set_persistent(&self.terminal_service_id, persistent).ok();
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    async fn init_terminal_service(&mut self) {
+        debug_assert!(self.terminal_user_token.is_some());
+        let Some(user_token) = self.terminal_user_token.clone() else {
+            // unreachable, but keep it for safety
+            log::error!("Terminal user token is not set.");
+            return;
+        };
+        if self.terminal_service_id.is_empty() {
+            self.terminal_service_id = terminal_service::generate_service_id();
+        }
+        let s = Box::new(terminal_service::new(
+            self.terminal_service_id.clone(),
+            self.terminal_persistent,
+            user_token.to_terminal_service_token(),
+        ));
+        s.on_subscribe(self.inner.clone());
+        self.terminal_generic_service = Some(s);
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    async fn handle_terminal_action(&mut self, action: TerminalAction) -> ResultType<()> {
+        debug_assert!(self.terminal_user_token.is_some());
+        let Some(user_token) = self.terminal_user_token.clone() else {
+            // unreacheable, but keep it for safety
+            bail!("Terminal user token is not set.");
+        };
+        let mut proxy = terminal_service::TerminalServiceProxy::new(
+            self.terminal_service_id.clone(),
+            Some(self.terminal_persistent),
+            user_token.to_terminal_service_token(),
+        );
+
+        match proxy.handle_action(&action) {
+            Ok(Some(response)) => {
+                let mut msg_out = Message::new();
+                msg_out.set_terminal_response(response);
+                self.send(msg_out).await;
+            }
+            Ok(None) => {
+                // No response needed
+            }
+            Err(err) => {
+                let mut response = TerminalResponse::new();
+                let mut error = TerminalError::new();
+                error.message = format!("Failed to handle action: {}", err);
+                response.set_error(error);
+                let mut msg_out = Message::new();
+                msg_out.set_terminal_response(response);
+                self.send(msg_out).await;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -4151,6 +4426,19 @@ impl Drop for Connection {
     fn drop(&mut self) {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.release_pressed_modifiers();
+
+        if let Some(s) = self.terminal_generic_service.as_ref() {
+            s.join();
+        }
+
+        #[cfg(target_os = "windows")]
+        if let Some(TerminalUserToken::CurrentLogonUser(token)) = self.terminal_user_token.take() {
+            if token != 0 {
+                unsafe {
+                    hbb_common::allow_err!(CloseHandle(HANDLE(token as _)));
+                };
+            }
+        }
     }
 }
 

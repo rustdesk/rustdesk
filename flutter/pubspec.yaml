@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # 1.1.9-1 works for android, but for ios it becomes 1.1.91, need to set it to 1.1.9-a.1 for iOS, will get 1.1.9.1, but iOS store not allow 4 numbers
-version: 1.4.0+58
+version: 1.4.1+59
 
 environment:
   sdk: '^3.1.0'
@@ -106,6 +106,9 @@ dependencies:
   device_info_plus: ^9.1.0
   qr_flutter: ^4.1.0
   extended_text: 14.0.0
+  xterm: 4.0.0
+  sqflite: 2.2.0
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   icons_launcher: ^2.0.4
@@ -118,7 +121,8 @@ dev_dependencies:
 
 dependency_overrides:
   intl: ^0.19.0
-  
+  flutter_plugin_android_lifecycle: 2.0.17
+
 # rerun: flutter pub run flutter_launcher_icons
 flutter_icons:
   image_path: "../res/icon.png"
@@ -193,4 +197,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
-
