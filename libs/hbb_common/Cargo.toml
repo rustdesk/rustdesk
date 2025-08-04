@@ -1,0 +1,85 @@
+[package]
+name = "hbb_common"
+version = "0.1.0"
+authors = ["open-trade <info@opentradesolutions.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# new flexi_logger failed on rustc 1.75
+flexi_logger = { version = "0.27", features = ["async"] }
+protobuf = { version = "3.7", features = ["with-bytes"] }
+tokio = { version = "1.44", features = ["full"] }
+tokio-util = { version = "0.7", features = ["full"] }
+futures = "0.3"
+bytes = { version = "1.10", features = ["serde"] }
+log = "0.4"
+env_logger = "0.11"
+socket2 = { version = "0.3", features = ["reuseport"] }
+zstd = "0.13"
+anyhow = "1.0"
+futures-util = "0.3"
+directories-next = "2.0"
+rand = "0.8"
+serde_derive = "1.0"
+serde = "1.0"
+serde_json = "1.0"
+lazy_static = "1.5"
+confy = { git = "https://github.com/rustdesk-org/confy" }
+dirs-next = "2.0"
+filetime = "0.2"
+sodiumoxide = "0.2"
+regex = "1.11"
+tokio-socks = { git = "https://github.com/rustdesk-org/tokio-socks" }
+chrono = "0.4"
+backtrace = "0.3"
+libc = "0.2"
+dlopen = "0.1"
+toml = "0.7"
+uuid = { version = "1.16", features = ["v4"] }
+# new sysinfo issue: https://github.com/rustdesk/rustdesk/pull/6330#issuecomment-2270871442
+sysinfo = { git = "https://github.com/rustdesk-org/sysinfo", branch = "rlim_max" }
+# new flexi_logger failed on nightly rustc 1.75 for x86
+thiserror = "1.0"
+httparse = "1.10"
+base64 = "0.22"
+url = "2.5"
+sha2 = "0.10"
+whoami = "1.5"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+mac_address = "1.1"
+default_net = { git = "https://github.com/rustdesk-org/default_net" }
+machine-uid = { git = "https://github.com/rustdesk-org/machine-uid" }
+
+[target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
+tokio-rustls = { version = "0.26", features = [
+    "logging",
+    "tls12",
+    "ring",
+], default-features = false }
+rustls-platform-verifier = "0.5"
+rustls-pki-types = "1.11"
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+tungstenite = { version = "0.26", features = ["rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+tokio-native-tls = "0.3"
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+tungstenite = { version = "0.26", features = ["native-tls"] }
+
+[build-dependencies]
+protobuf-codegen = { version = "3.7" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "0.3", features = [
+    "winuser",
+    "synchapi",
+    "pdh",
+    "memoryapi",
+    "sysinfoapi",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+osascript = "0.3"
