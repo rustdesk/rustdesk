@@ -5,9 +5,15 @@ use std::{
 };
 
 #[cfg(not(any(target_os = "ios")))]
+use crate::ipc::CheckIfRestart;
+#[cfg(not(any(target_os = "ios")))]
 use crate::{ui_interface::get_builtin_option, Connection};
 use hbb_common::{
-    config::{self, keys, Config, LocalConfig},
+    config::{
+        self,
+        keys::{self, KEYS_DISPLAY_SETTINGS},
+        Config,
+    },
     log,
     tokio::{self, sync::broadcast, time::Instant},
 };
@@ -42,11 +48,29 @@ fn start_hbbs_sync() -> broadcast::Sender<Vec<i32>> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct StrategyOptions {
+pub struct SelfHostStrategyOptions {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub config_options: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub extra: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct PublicStrategy {
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub modifiable_options: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub override_options: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub hard_options: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct PublicStrategyPayload {
+    #[serde(default)]
+    pub modified_at: i64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub options: String,
 }
 
 struct InfoUploaded {
@@ -91,7 +115,10 @@ async fn start_hbbs_sync_async() {
     let mut last_sent: Option<Instant> = None;
     let mut info_uploaded = InfoUploaded::default();
     let mut sysinfo_ver = "".to_owned();
+    let mut modified_at_public = get_public_strategy_modified_at();
     loop {
+        use hbb_common::config::LocalConfig;
+
         tokio::select! {
             _ = interval.tick() => {
                 let url = heartbeat_url();
@@ -103,6 +130,7 @@ async fn start_hbbs_sync_async() {
                 if config::option2bool("stop-service", &Config::get_option("stop-service")) {
                     continue;
                 }
+                let is_public = crate::is_public(&url);
                 let conns = Connection::alive_conns();
                 if info_uploaded.uploaded && (url != info_uploaded.url || id != info_uploaded.id) {
                     info_uploaded.uploaded = false;
@@ -154,7 +182,7 @@ async fn start_hbbs_sync_async() {
                     }
                     let v = v.to_string();
                     let mut hash = "".to_owned();
-                    if crate::is_public(&url) {
+                    if is_public {
                         use sha2::{Digest, Sha256};
                         let mut hasher = Sha256::new();
                         hasher.update(url.as_bytes());
@@ -215,8 +243,17 @@ async fn start_hbbs_sync_async() {
                 if !conns.is_empty() {
                     v["conns"] = json!(conns);
                 }
-                let modified_at = LocalConfig::get_option("strategy_timestamp").parse::<i64>().unwrap_or(0);
-                v["modified_at"] = json!(modified_at);
+                let modified_at = if is_public {
+                    modified_at_public
+                } else {
+                    LocalConfig::get_option("strategy_timestamp").parse::<i64>().unwrap_or(0)
+                };
+                if is_public {
+                    v["stime"] = json!(modified_at);
+                } else {
+                    v["modified_at"] = json!(modified_at);
+
+                }
                 if let Ok(s) = crate::post_request(url.clone(), v.to_string(), "").await {
                     if let Ok(mut rsp) = serde_json::from_str::<HashMap::<&str, Value>>(&s) {
                         if rsp.remove("sysinfo").is_some() {
@@ -229,17 +266,29 @@ async fn start_hbbs_sync_async() {
                                     SENDER.lock().unwrap().send(conns).ok();
                                 }
                         }
-                        if let Some(rsp_modified_at) = rsp.remove("modified_at") {
-                            if let Ok(rsp_modified_at) = serde_json::from_value::<i64>(rsp_modified_at) {
-                                if rsp_modified_at != modified_at {
-                                    LocalConfig::set_option("strategy_timestamp".to_string(), rsp_modified_at.to_string());
+                        if is_public {
+                            if let Some(strategy_payload) = rsp.remove("strategy") {
+                                if let Ok(payload) = serde_json::from_value::<PublicStrategyPayload>(strategy_payload) {
+                                    if let Ok(strategy) = serde_json::from_str::<PublicStrategy>(&payload.options) {
+                                        crate::hbbs_http::sync::load_strategy(Some(strategy.clone()));
+                                        save_strategy_payload(payload.clone());
+                                        modified_at_public = payload.modified_at;
+                                    }
                                 }
                             }
-                        }
-                        if let Some(strategy) = rsp.remove("strategy") {
-                            if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
-                                log::info!("strategy updated");
-                                handle_config_options(strategy.config_options);
+                        } else {
+                            if let Some(rsp_modified_at) = rsp.remove("modified_at") {
+                                if let Ok(rsp_modified_at) = serde_json::from_value::<i64>(rsp_modified_at) {
+                                    if rsp_modified_at != modified_at {
+                                        LocalConfig::set_option("strategy_timestamp".to_string(), rsp_modified_at.to_string());
+                                    }
+                                }
+                            }
+                            if let Some(strategy) = rsp.remove("strategy") {
+                                if let Ok(strategy) = serde_json::from_value::<SelfHostStrategyOptions>(strategy) {
+                                    log::info!("strategy updated");
+                                    handle_config_options(strategy.config_options);
+                                }
                             }
                         }
                     }
@@ -279,4 +328,213 @@ fn handle_config_options(config_options: HashMap<String, String>) {
 #[cfg(not(any(target_os = "ios")))]
 pub fn is_pro() -> bool {
     PRO.lock().unwrap().clone()
+}
+
+pub struct CheckPublicServer {
+    is_public: bool,
+}
+
+impl CheckPublicServer {
+    pub fn new() -> Self {
+        Self {
+            is_public: crate::with_public(),
+        }
+    }
+}
+
+impl Drop for CheckPublicServer {
+    fn drop(&mut self) {
+        let new_is_public = crate::with_public();
+        if new_is_public != self.is_public {
+            if new_is_public {
+                #[cfg(not(any(target_os = "ios")))]
+                load_strategy(None);
+            } else {
+                #[cfg(not(any(target_os = "ios")))]
+                let _restart = CheckIfRestart::new();
+                *config::STRATEGY_OVERRIDE_SETTINGS.write().unwrap() = HashMap::new();
+                *config::STRATEGY_HARD_SETTINGS.write().unwrap() = HashMap::new();
+            }
+        }
+    }
+}
+
+fn save_strategy_payload(payload: PublicStrategyPayload) {
+    // Parse the strategy from options, clear modifiable_options, and re-serialize
+    let mut processed_payload = payload.clone();
+    if let Ok(mut strategy) = serde_json::from_str::<PublicStrategy>(&payload.options) {
+        strategy.modifiable_options = Default::default();
+        processed_payload.options = serde_json::to_string(&strategy).unwrap_or_default();
+    }
+
+    // Only encrypt the options field, keep signature in plain text
+    let encrypted_options =
+        match hbb_common::password_security::encrypt(processed_payload.options.as_bytes()) {
+            Ok(encrypted) => encrypted,
+            Err(_) => {
+                log::error!("Failed to encrypt strategy options");
+                return;
+            }
+        };
+
+    // Create StrategyPayload with encrypted options and plain modified_at
+    let storage_payload = PublicStrategyPayload {
+        modified_at: processed_payload.modified_at,
+        options: encrypted_options,
+    };
+
+    // Serialize the entire StrategyPayload
+    let storage_data = serde_json::to_string(&storage_payload).unwrap_or_default();
+
+    // Save to file using unified path
+    if let Ok(strategy_path) = get_strategy_path(true) {
+        match std::fs::write(&strategy_path, storage_data) {
+            Ok(_) => {
+                log::debug!("Strategy config saved to: {:?}", strategy_path);
+            }
+            Err(e) => {
+                log::warn!("Failed to save strategy config: {}", e);
+            }
+        }
+    } else {
+        log::warn!("Failed to get strategy path");
+    }
+}
+
+/// Get strategy config file path for all platforms
+fn get_strategy_path(create: bool) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let dir = {
+        #[cfg(target_os = "windows")]
+        {
+            let app_name = crate::get_app_name();
+            let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
+            let program_data =
+                std::env::var("ProgramData").unwrap_or_else(|_| format!("{}\\ProgramData", drive));
+            std::path::PathBuf::from(program_data).join(&app_name)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Config::path("")
+        }
+    };
+    if create {
+        std::fs::create_dir_all(&dir)?;
+    }
+    Ok(dir.join("strategy"))
+}
+
+/// Load strategy config from file
+fn load_strategy_config_from_file() -> Result<String, Box<dyn std::error::Error>> {
+    // Load from file using unified path
+    let strategy_path = get_strategy_path(false)?;
+    if strategy_path.exists() {
+        let storage_data = std::fs::read_to_string(&strategy_path)?;
+        log::debug!("Loaded strategy config from: {:?}", strategy_path);
+        Ok(storage_data)
+    } else {
+        Err("Strategy config file not found".into())
+    }
+}
+
+#[cfg(not(any(target_os = "ios")))]
+pub fn load_strategy(strategy: Option<PublicStrategy>) {
+    if !crate::with_public() {
+        return;
+    }
+    let _restart = CheckIfRestart::new();
+    let from_file = strategy.is_none();
+    let strategy = match strategy {
+        Some(strategy) => strategy,
+        None => {
+            // Load from strategy config file
+            match crate::hbbs_http::sync::load_strategy_config_from_file() {
+                Ok(strategy_store) => {
+                    // Deserialize StrategyPayload with encrypted options
+                    if let Ok(storage_payload) =
+                        serde_json::from_str::<PublicStrategyPayload>(&strategy_store)
+                    {
+                        // Decrypt options
+                        if let Ok(decrypted_options) = hbb_common::password_security::decrypt(
+                            storage_payload.options.as_bytes(),
+                        ) {
+                            if let Ok(options) = String::from_utf8(decrypted_options) {
+                                // Reconstruct StrategyPayload with decrypted options
+                                let payload = PublicStrategyPayload {
+                                    modified_at: storage_payload.modified_at,
+                                    options,
+                                };
+                                if let Ok(strategy) =
+                                    serde_json::from_str::<PublicStrategy>(&payload.options)
+                                {
+                                    strategy
+                                } else {
+                                    PublicStrategy::default()
+                                }
+                            } else {
+                                log::warn!("Failed to decode decrypted options");
+                                PublicStrategy::default()
+                            }
+                        } else {
+                            log::warn!("Failed to decrypt strategy options");
+                            PublicStrategy::default()
+                        }
+                    } else {
+                        log::warn!("Failed to deserialize strategy payload");
+                        PublicStrategy::default()
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to load strategy config from strategy file: {}", e);
+                    PublicStrategy::default()
+                }
+            }
+        }
+    };
+    if !from_file {
+        let mut map_settings = HashMap::new();
+        for s in keys::KEYS_SETTINGS {
+            map_settings.insert(s.replace("_", "-"), s);
+        }
+        for (k, v) in strategy.modifiable_options {
+            if let Some(k2) = map_settings.get(&k) {
+                let old = config::Config::get_option(k2);
+                if old != *v {
+                    config::Config::set_option(k2.to_string(), v.to_owned());
+                }
+            }
+        }
+    }
+    // override
+    let mut settings = HashMap::new();
+    for (k, v) in &strategy.override_options {
+        let k2 = k.replace("-", "_");
+        if KEYS_DISPLAY_SETTINGS.contains(&k2.as_str()) {
+            settings.insert(k2, v.to_owned());
+        } else {
+            settings.insert(k.to_owned(), v.to_owned());
+        }
+    }
+    *config::STRATEGY_OVERRIDE_SETTINGS.write().unwrap() = settings;
+
+    // hard settings
+    settings = HashMap::new();
+    for (k, v) in &strategy.hard_options {
+        settings.insert(k.to_owned(), v.to_owned());
+    }
+    *config::STRATEGY_HARD_SETTINGS.write().unwrap() = settings;
+}
+
+#[inline]
+#[cfg(not(any(target_os = "ios")))]
+fn get_public_strategy_modified_at() -> i64 {
+    match load_strategy_config_from_file() {
+        Ok(strategy_store) => {
+            if let Ok(payload) = serde_json::from_str::<PublicStrategyPayload>(&strategy_store) {
+                payload.modified_at
+            } else {
+                0
+            }
+        }
+        Err(_) => 0,
+    }
 }

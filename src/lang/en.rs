@@ -209,7 +209,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wrong-2fa-code", "Can't verify the code. Check that code and local time settings are correct"),
         ("enter-2fa-title", "Two-factor authentication"),
         ("powered_by_me", "Powered by RustDesk"),
-        ("outgoing_only_desk_tip", "This is a customized edition.\nYou can connect to other devices, but other devices cannot connect to your device."),
+        ("outgoing_only_desk_tip", "This is an outgoing-only edition.\nYou can connect to other devices, but other devices cannot connect to your device."),
         ("preset_password_warning", "This customized edition comes with a preset password. Anyone knowing this password could gain full control of your device. If you did not expect this, uninstall the software immediately."),
         ("share_warning_tip", "The fields above are shared and visible to others."),
         ("ab_web_console_tip", "More on web console"),
@@ -258,5 +258,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("websocket_tip", "When using WebSocket, only relay connections are supported."),
         ("terminal-admin-login-tip", "Please input the administrator username and password of the controlled side."),
         ("elevation_username_tip", "Input username or domain\\username"),
+        ("deploy-code-requirement-tip", "Deploy code must be 12 characters"),
+        ("deploy-confirm-tip", "Do you want to deploy to this team?"),
     ].iter().cloned().collect();
 }

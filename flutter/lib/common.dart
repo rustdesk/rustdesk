@@ -3407,6 +3407,7 @@ Future<bool> setServerConfig(
     }
   }
   final oldApiServer = await bind.mainGetApiServer();
+  final oldWithPublic = withPublic();
 
   // should set one by one
   await bind.mainSetOption(
@@ -3419,6 +3420,15 @@ Future<bool> setServerConfig(
       oldApiServer != newApiServer &&
       gFFI.userModel.isLogin) {
     gFFI.userModel.logOut(apiServer: oldApiServer);
+  }
+  if (!isWeb) {
+    gFFI.deployModel.checkDeploy();
+    if (oldWithPublic != withPublic()) {
+      // Wait for strategy synchronization to complete through IPC.
+      Future.delayed(Duration(milliseconds: 2000), () {
+        reloadCurrentWindow();
+      });
+    }
   }
   return true;
 }
@@ -3943,3 +3953,5 @@ String decode_http_response(http.Response resp) {
     return resp.body;
   }
 }
+
+bool withPublic() => bind.withPublic();

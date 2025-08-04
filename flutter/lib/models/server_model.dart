@@ -457,6 +457,9 @@ class ServerModel with ChangeNotifier {
     if (isAndroid) {
       androidUpdatekeepScreenOn();
     }
+    if (isAndroid) {
+      gFFI.deployModel.checkDeploy();
+    }
   }
 
   /// Stop the screen sharing service.

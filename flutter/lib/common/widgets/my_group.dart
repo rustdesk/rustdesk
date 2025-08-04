@@ -177,7 +177,8 @@ class _MyGroupState extends State<MyGroup> {
           itemCount: deviceGroupItems.length + userItems.length,
           itemBuilder: (context, index) => index < deviceGroupItems.length
               ? _buildDeviceGroupItem(deviceGroupItems[index])
-              : _buildUserItem(userItems[index - deviceGroupItems.length]));
+              : _buildUserItem(
+                  userItems[index - deviceGroupItems.length], userItems));
       var maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
       return Obx(() => stateGlobal.isPortrait.isFalse
           ? listView(false)
@@ -185,20 +186,29 @@ class _MyGroupState extends State<MyGroup> {
     });
   }
 
-  Widget _buildUserItem(UserPayload user) {
-    final username = user.name;
+  Widget _buildUserItem(UserPayload user, List<UserPayload> userItems) {
+    var username = user.name;
+    if (userItems.where((u) => u.name == user.name).length > 1) {
+      if (user.guid.length > 4) {
+        username = '${user.name}-${user.guid.substring(user.guid.length - 4)}';
+      }
+    }
+    final userGuid = user.guid;
     return InkWell(onTap: () {
       isSelectedDeviceGroup.value = false;
-      if (selectedAccessibleItemName.value != username) {
-        selectedAccessibleItemName.value = username;
+      if (selectedAccessibleItemName.value != userGuid) {
+        selectedAccessibleItemName.value = userGuid;
       } else {
         selectedAccessibleItemName.value = '';
       }
     }, child: Obx(
       () {
         bool selected = !isSelectedDeviceGroup.value &&
-            selectedAccessibleItemName.value == username;
-        final isMe = username == gFFI.userModel.userName.value;
+            selectedAccessibleItemName.value.isNotEmpty &&
+            selectedAccessibleItemName.value == userGuid;
+        final isMe = withPublic()
+            ? user.email == gFFI.userModel.email.value
+            : user.name == gFFI.userModel.userName.value;
         final colorMe = MyTheme.color(context).me!;
         return Container(
           decoration: BoxDecoration(
@@ -267,6 +277,7 @@ class _MyGroupState extends State<MyGroup> {
     }, child: Obx(
       () {
         bool selected = isSelectedDeviceGroup.value &&
+            selectedAccessibleItemName.value.isNotEmpty &&
             selectedAccessibleItemName.value == name;
         return Container(
           decoration: BoxDecoration(

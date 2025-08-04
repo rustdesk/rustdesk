@@ -642,25 +642,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     final settings = SettingsList(
       sections: [
         customClientSection,
-        if (!bind.isDisableAccount())
-          SettingsSection(
-            title: Text(translate('Account')),
-            tiles: [
-              SettingsTile(
-                title: Obx(() => Text(gFFI.userModel.userName.value.isEmpty
-                    ? translate('Login')
-                    : '${translate('Logout')} (${gFFI.userModel.userName.value})')),
-                leading: Icon(Icons.person),
-                onPressed: (context) {
-                  if (gFFI.userModel.userName.value.isEmpty) {
-                    loginDialog();
-                  } else {
-                    logOutConfirmDialog();
-                  }
-                },
-              ),
-            ],
-          ),
+        if (!bind.isDisableAccount()) _AccountSection(),
+        if (withPublic() && isAndroid && (bind.isHost() || bind.isStandard()))
+          _DeploySection(),
         SettingsSection(title: Text(translate("Settings")), tiles: [
           if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(
@@ -1236,4 +1220,100 @@ SettingsTile _getPopupDialogRadioEntry({
       child: Obx(() => Text(translate(valueText.value))),
     ),
   );
+}
+
+class _DeploySection extends AbstractSettingsSection {
+  @override
+  Widget build(BuildContext context) {
+    final model = gFFI.deployModel;
+    return Obx(() {
+      final tiles = <AbstractSettingsTile>[];
+
+      // Only show status tile when not deployed or no team
+      if (!model.isDeployed.value || model.team.value.isEmpty) {
+        tiles.add(SettingsTile(
+          title: model.checking.value
+              ? Text(translate('Checking...'))
+              : Text(translate('Deploy now')),
+          leading: model.checking.value
+              ? Icon(Icons.hourglass_empty)
+              : Icon(Icons.rocket_launch),
+          onPressed: model.checking.value
+              ? null
+              : (context) {
+                  model.showDeployPage.value = true;
+                },
+        ));
+      }
+
+      if (model.isDeployed.value) {
+        if (model.team.value.isNotEmpty) {
+          if (!(bind.isStandard() &&
+              gFFI.userModel.isLogin &&
+              gFFI.userModel.teamName.value == model.team.value)) {
+            tiles.add(SettingsTile(
+              title: Text(translate('Team')),
+              value: Text(model.team.value),
+              leading: Icon(Icons.people),
+            ));
+          }
+        }
+        if (model.group.value.isNotEmpty) {
+          tiles.add(SettingsTile(
+            title: Text(translate('Device Group')),
+            value: Text(model.group.value),
+            leading: Icon(Icons.device_hub),
+          ));
+        }
+        if (model.user.value.isNotEmpty) {
+          if (!(bind.isStandard() &&
+              gFFI.userModel.isLogin &&
+              gFFI.userModel.userName.value == model.user.value)) {
+            tiles.add(SettingsTile(
+              title: Text(translate('User')),
+              value: Text(model.user.value),
+              leading: Icon(Icons.person),
+            ));
+          }
+        }
+      }
+
+      return SettingsSection(
+        title: Text(translate('Deployment')),
+        tiles: tiles,
+      );
+    });
+  }
+}
+
+class _AccountSection extends AbstractSettingsSection {
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() => SettingsSection(
+          title: Text(translate('Account')),
+          tiles: [
+            SettingsTile(
+              title: Text(gFFI.userModel.userName.value.isEmpty
+                  ? translate('Login')
+                  : '${translate('Logout')} (${gFFI.userModel.userName.value})'),
+              leading: Icon(Icons.person),
+              onPressed: (context) {
+                if (gFFI.userModel.userName.value.isEmpty) {
+                  loginDialog();
+                } else {
+                  logOutConfirmDialog();
+                }
+              },
+            ),
+            if (gFFI.userModel.isLogin) ...[
+              if (gFFI.userModel.teamName.value.isNotEmpty)
+                SettingsTile(
+                  title: Text(translate("Team")),
+                  description: Text(gFFI.userModel.teamName.value),
+                  leading: Icon(Icons.people),
+                ),
+            ],
+          ],
+        ));
+  }
 }

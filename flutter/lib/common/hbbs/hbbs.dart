@@ -26,6 +26,8 @@ enum UserStatus { kDisabled, kNormal, kUnverified }
 class UserPayload {
   String name = '';
   String email = '';
+  String guid = ''; // empty in login, available in users
+  String teamName = ''; // empty for pro
   String note = '';
   String? verifier;
   UserStatus status;
@@ -34,6 +36,8 @@ class UserPayload {
   UserPayload.fromJson(Map<String, dynamic> json)
       : name = json['name'] ?? '',
         email = json['email'] ?? '',
+        guid = json['guid'] ?? '',
+        teamName = json['team_name'] ?? '',
         note = json['note'] ?? '',
         verifier = json['verifier'],
         status = json['status'] == 0
@@ -46,6 +50,7 @@ class UserPayload {
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> map = {
       'name': name,
+      'email': email, // used in login request
       'status': status == UserStatus.kDisabled
           ? 0
           : status == UserStatus.kUnverified
@@ -58,6 +63,7 @@ class UserPayload {
   Map<String, dynamic> toGroupCacheJson() {
     final Map<String, dynamic> map = {
       'name': name,
+      'guid': guid,
     };
     return map;
   }
@@ -84,7 +90,8 @@ class PeerPayload {
   static Peer toPeer(PeerPayload p) {
     return Peer.fromJson({
       "id": p.id,
-      'loginName': p.user_name,
+      'login_name': p.user_name,
+      'user': p.user,
       "username": p.info['username'] ?? '',
       "platform": _platform(p.info['os']),
       "hostname": p.info['device_name'],
@@ -120,6 +127,7 @@ class PeerPayload {
 
 class LoginRequest {
   String? username;
+  String? email;
   String? password;
   String? id;
   String? uuid;
@@ -131,6 +139,7 @@ class LoginRequest {
 
   LoginRequest(
       {this.username,
+      this.email,
       this.password,
       this.id,
       this.uuid,
@@ -143,6 +152,7 @@ class LoginRequest {
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     if (username != null) data['username'] = username;
+    if (email != null) data['email'] = email;
     if (password != null) data['password'] = password;
     if (id != null) data['id'] = id;
     if (uuid != null) data['uuid'] = uuid;

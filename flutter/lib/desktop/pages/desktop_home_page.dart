@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
+import 'package:flutter_hbb/common/widgets/deploy_page.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
@@ -23,6 +24,8 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
+import 'package:flutter_hbb/common/widgets/login.dart';
+
 import '../widgets/button.dart';
 
 class DesktopHomePage extends StatefulWidget {
@@ -52,22 +55,125 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   final RxBool _editHover = false.obs;
   final RxBool _block = false.obs;
+  final RxBool _isLeftPaneVisible = true.obs; // Controls left panel visibility
+  final RxBool _isHelpCardsEmpty = true.obs;
 
   final GlobalKey _childKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    if (withPublic()) {
+      if (bind.isHost()) {
+        return Obx(() {
+          if (gFFI.deployModel.isDeployed.isFalse &&
+              gFFI.deployModel.showDeployPage.value) {
+            return DeployPage();
+          } else {
+            return _buildBody();
+          }
+        });
+      } else if (bind.isClient()) {
+      } else if (bind.isSos()) {}
+    }
+    return _buildBody();
+  }
+
+  Widget _buildBody() {
     final isIncomingOnly = bind.isIncomingOnly();
     return _buildBlock(
         child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        buildLeftPane(context),
-        if (!isIncomingOnly) const VerticalDivider(width: 1),
-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+        // Left panel
+        if (isIncomingOnly)
+          buildLeftPane(context)
+        else
+          Obx(() => AnimatedContainer(
+                duration: Duration(milliseconds: 300),
+                width: _isLeftPaneVisible.value || !_isHelpCardsEmpty.value
+                    ? null
+                    : 0,
+                child: _isLeftPaneVisible.value || !_isHelpCardsEmpty.value
+                    ? buildLeftPane(context)
+                    : SizedBox.shrink(),
+              )),
+        // Divider
+        if (!isIncomingOnly)
+          Obx(() => AnimatedContainer(
+                duration: Duration(milliseconds: 300),
+                width: _isLeftPaneVisible.value || !_isHelpCardsEmpty.value
+                    ? 1
+                    : 0,
+                child: _isLeftPaneVisible.value || !_isHelpCardsEmpty.value
+                    ? const VerticalDivider(width: 1)
+                    : SizedBox.shrink(),
+              )),
+        // Right panel with toggle button
+        if (!isIncomingOnly)
+          Expanded(
+            child: Stack(
+              children: [
+                buildRightPane(context),
+                // Toggle button positioned at the left border of right panel
+                Obx(() => _isHelpCardsEmpty.value
+                    ? Positioned(
+                        left: 0,
+                        top: 20,
+                        child: _buildLeftPanelToggleButton(),
+                      )
+                    : SizedBox.shrink())
+              ],
+            ),
+          ),
       ],
     ));
+  }
+
+  Widget _buildLeftPanelToggleButton() {
+    return Container(
+      width: 24,
+      height: 32,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.only(
+            topRight: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+          ),
+          border: Border.all(
+            color: Theme.of(context).dividerColor,
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: Offset(1, 0),
+            ),
+          ],
+        ),
+        child: IconButton(
+          icon: Icon(
+            _isLeftPaneVisible.value ? Icons.chevron_left : Icons.chevron_right,
+            size: 16,
+            color: Theme.of(context).iconTheme.color,
+          ),
+          onPressed: () {
+            _isLeftPaneVisible.value = !_isLeftPaneVisible.value;
+          },
+          tooltip: _isLeftPaneVisible.value
+              ? translate('Hide left panel')
+              : translate('Show left panel'),
+          padding: EdgeInsets.all(4),
+          constraints: BoxConstraints(
+            minWidth: 24,
+            minHeight: 32,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildBlock({required Widget child}) {
@@ -79,6 +185,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final isIncomingOnly = bind.isIncomingOnly();
     final isOutgoingOnly = bind.isOutgoingOnly();
     final children = <Widget>[
+      if (withPublic() && bind.isClient()) buildClientHeader(),
+      if (withPublic() && bind.isHost()) buildHostHeader(),
       if (!isOutgoingOnly) buildPresetPasswordWarning(),
       if (bind.isCustomClient())
         Align(
@@ -93,8 +201,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
       FutureBuilder<Widget>(
-        future: Future.value(
-            Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
+        future: Future.value(Obx(() {
+          final widget = buildHelpCards(stateGlobal.updateUrl.value);
+          Future.delayed(Duration.zero, () {
+            _isHelpCardsEmpty.value = widget is Container &&
+                widget.child == null &&
+                widget.constraints == null;
+          });
+          return widget;
+        })),
         builder: (_, data) {
           if (data.hasData) {
             if (isIncomingOnly) {
@@ -687,6 +802,244 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ),
       ],
     );
+  }
+
+  Widget buildHostHeader() {
+    final model = gFFI.deployModel;
+    return Obx(() {
+      Widget buildCheckingContent() {
+        return Row(
+          children: [
+            Icon(
+              Icons.hourglass_empty,
+              size: 16,
+              color: Colors.blue,
+            ),
+            SizedBox(width: 8),
+            Text(
+              translate("Checking..."),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.blue[600],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        );
+      }
+
+      Widget buildDeployedContent() {
+        Widget buildInfoRow(String label, String value) {
+          return Row(
+            children: [
+              Text(
+                "$label:",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.color
+                      ?.withOpacity(0.7),
+                ),
+              ),
+              SizedBox(width: 6),
+              Expanded(
+                child: SelectableText(
+                  value,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            buildInfoRow(translate("Team"), model.team.value),
+            if (model.group.value.isNotEmpty) ...[
+              SizedBox(height: 6),
+              buildInfoRow(translate("Group"), model.group.value),
+            ],
+            if (model.user.value.isNotEmpty) ...[
+              SizedBox(height: 6),
+              buildInfoRow(translate("User"), model.user.value),
+            ],
+          ],
+        );
+      }
+
+      Widget buildNotDeployedContent() {
+        return Column(
+          children: [
+            ElevatedButton.icon(
+              icon: Icon(Icons.rocket_launch, size: 16),
+              label: Text(translate("Deploy now")),
+              onPressed: () {
+                gFFI.deployModel.showDeployPage.value = true;
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: MyTheme.accent,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                elevation: 0,
+              ),
+            ),
+          ],
+        );
+      }
+
+      return Card(
+        elevation: 0,
+        margin: EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: model.error.value.isNotEmpty
+                ? Theme.of(context).colorScheme.error.withOpacity(0.2)
+                : model.isDeployed.value
+                    ? Colors.green.withOpacity(0.2)
+                    : Colors.grey.withOpacity(0.1),
+            width: 1,
+          ),
+        ),
+        color: Theme.of(context).cardColor.withOpacity(0.7),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16.0),
+          child: model.checking.value
+              ? buildCheckingContent()
+              : model.isDeployed.value
+                  ? buildDeployedContent()
+                  : buildNotDeployedContent(),
+        ),
+      );
+    });
+  }
+
+  Widget buildClientHeader() {
+    Widget buildIconTextRow({
+      required IconData icon,
+      required String text,
+      required Color iconColor,
+      String? tooltipMessage,
+    }) {
+      final Color? textColor = Theme.of(context).textTheme.titleLarge?.color;
+      return Tooltip(
+        message: tooltipMessage ?? text,
+        waitDuration: Duration(milliseconds: 300),
+        child: Row(
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.centerLeft,
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+                maxLines: 2,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget buildNotLoggedInContent() {
+      return OutlinedButton.icon(
+        onPressed: () async {
+          await loginDialog();
+          setState(() {});
+        },
+        icon: Icon(Icons.login, size: 16, color: MyTheme.accent),
+        label: Text(
+          translate("Login"),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: MyTheme.accent,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: MyTheme.accent,
+          side: BorderSide(color: MyTheme.accent.withOpacity(0.4)),
+          shape: StadiumBorder(),
+          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          minimumSize: Size(0, 0),
+        ),
+      );
+    }
+
+    return Obx(() {
+      return Card(
+        elevation: 0,
+        margin: EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: Colors.grey.withOpacity(0.1),
+            width: 1,
+          ),
+        ),
+        color: Theme.of(context).cardColor.withOpacity(0.7),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (gFFI.userModel.isLogin) ...[
+                buildIconTextRow(
+                  icon: Icons.person_outline,
+                  text: gFFI.userModel.userName.value,
+                  iconColor: MyTheme.accent,
+                ),
+                if (gFFI.userModel.teamName.value.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  buildIconTextRow(
+                    icon: Icons.people_outline,
+                    text: gFFI.userModel.teamName.value,
+                    iconColor: MyTheme.accent,
+                    tooltipMessage:
+                        "${translate("Team")}: ${gFFI.userModel.teamName.value}",
+                  ),
+                ],
+              ] else
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 20,
+                      alignment: Alignment.centerLeft,
+                      child: Icon(Icons.person_outline,
+                          size: 20, color: Colors.grey),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(child: buildNotLoggedInContent()),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      );
+    });
   }
 
   @override

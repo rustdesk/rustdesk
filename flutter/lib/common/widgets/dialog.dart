@@ -389,6 +389,8 @@ class DialogTextField extends StatelessWidget {
   static const kUsernameIcon = Icon(Icons.account_circle_outlined);
   static const kPasswordTitle = 'Password';
   static const kPasswordIcon = Icon(Icons.lock_outline);
+  static const kEmailTitle = 'Email';
+  static const kEmailIccon = Icon(Icons.email_outlined);
 
   DialogTextField(
       {Key? key,
@@ -2234,7 +2236,7 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.key, color: MyTheme.accent),
-          Text(translate(peer.password.isEmpty
+          Text(translate(!peer.hasValidPassword()
                   ? 'Set shared password'
                   : 'Change Password'))
               .paddingOnly(left: 10),
@@ -2276,7 +2278,7 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
           onPressed: cancel,
           isOutline: true,
         ),
-        if (peer.password.isNotEmpty)
+        if (peer.hasValidPassword())
           dialogButton(
             "Remove",
             icon: Icon(Icons.delete_outline_rounded),

@@ -1,0 +1,72 @@
+name: 'Modify Source Code'
+description: 'Modify source code based on client type'
+inputs:
+  appname:
+    description: 'App name'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Modify source code for ${{ inputs.appname }}
+      shell: bash
+      if: ${{ inputs.appname != 'RustDesk' }}
+      run: |
+        APP_NAME_LOWER=$(echo "${{ inputs.appname }}" | awk '{print tolower($0)}')
+        echo "Modifying source code for ${{ inputs.appname }}, app name in lowercase: ${APP_NAME_LOWER}"
+
+        # libs/hbb_common/src/config.rs
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -i '' "s/pub static ref APP_NAME: RwLock<String> = RwLock::new(\"RustDesk\".to_owned());/pub static ref APP_NAME: RwLock<String> = RwLock::new(\"${{ inputs.appname }}\".to_owned());/g" libs/hbb_common/src/config.rs
+        else
+          sed -i "s/pub static ref APP_NAME: RwLock<String> = RwLock::new(\"RustDesk\".to_owned());/pub static ref APP_NAME: RwLock<String> = RwLock::new(\"${{ inputs.appname }}\".to_owned());/g" libs/hbb_common/src/config.rs
+        fi
+        echo "Modified APP_NAME in libs/hbb_common/src/config.rs"
+
+        # libs/portable/src/main.rs
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -E -i '' 's/const APP_PREFIX: &str = "([^"]*)".*/const APP_PREFIX: \&str = "${APP_NAME_LOWER}";/g' libs/portable/src/main.rs
+        else
+          sed -E -i 's/const APP_PREFIX: &str = "([^"]*)".*/const APP_PREFIX: \&str = "${APP_NAME_LOWER}";/g' libs/portable/src/main.rs
+        fi
+        echo "Modified APP_PREFIX in libs/portable/src/main.rs"        
+
+        # android/app/src/main/AndroidManifest.xml
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -i '' "s/RustDesk/${{ inputs.appname }}/g" flutter/android/app/src/main/AndroidManifest.xml
+          sed -i '' "s/rustdesk/${APP_NAME_LOWER}/g" flutter/android/app/src/main/AndroidManifest.xml
+        else
+          sed -i "s/RustDesk/${{ inputs.appname }}/g" flutter/android/app/src/main/AndroidManifest.xml
+          sed -i "s/rustdesk/${APP_NAME_LOWER}/g" flutter/android/app/src/main/AndroidManifest.xml
+        fi
+        echo "Modified AndroidManifest.xml"
+        
+        # android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -i '' "s/RustDesk/${{ inputs.appname }}/g" flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt
+          sed -i '' "s/rustdesk/${APP_NAME_LOWER}/g" flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt
+        else
+          sed -i "s/RustDesk/${{ inputs.appname }}/g" flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt
+          sed -i "s/rustdesk/${APP_NAME_LOWER}/g" flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt
+        fi
+        echo "Modified MainService.kt"
+        
+        # flutter/android/app/build.gradle - modify applicationId
+        # https://developer.android.com/guide/topics/manifest/manifest-element
+        APP_NAME_UNDERSCORE=$(echo "${APP_NAME_LOWER}" | sed 's/-/_/g')
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -i '' "s/applicationId \"com.carriez.flutter_hbb\"/applicationId \"com.carriez.flutter_hbb.${APP_NAME_UNDERSCORE}\"/g" flutter/android/app/build.gradle
+        else
+          sed -i "s/applicationId \"com.carriez.flutter_hbb\"/applicationId \"com.carriez.flutter_hbb.${APP_NAME_UNDERSCORE}\"/g" flutter/android/app/build.gradle
+        fi
+        echo "Modified applicationId in build.gradle to com.carriez.flutter_hbb.${APP_NAME_UNDERSCORE}"
+        
+        # src/server/dbus.rs - modify DBUS_NAME
+        # https://dbus.freedesktop.org/doc/dbus-specification.html#message-protocol-names
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -i '' "s/const DBUS_NAME: \&str = \"org.rustdesk.rustdesk\";/const DBUS_NAME: \&str = \"com.rustdesk.${APP_NAME_UNDERSCORE}\";/g" src/server/dbus.rs
+        else
+          sed -i "s/const DBUS_NAME: \&str = \"org.rustdesk.rustdesk\";/const DBUS_NAME: \&str = \"com.rustdesk.${APP_NAME_UNDERSCORE}\";/g" src/server/dbus.rs
+        fi
+        echo "Modified DBUS_NAME in src/server/dbus.rs to com.rustdesk.${APP_NAME_UNDERSCORE}"
+  

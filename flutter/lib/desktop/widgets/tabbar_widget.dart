@@ -960,6 +960,44 @@ class _ListView extends StatelessWidget {
     }
   }
 
+  List<Widget> buildHideSingleItem() {
+    if (bind.isStandard()) {
+      return List.empty();
+    }
+    return [
+      FutureBuilder<List<String>>(
+        future: Future.wait([
+          bind.mainGetAppName(),
+          bind.mainGetVersion(),
+        ]),
+        builder: (context, snapshot) {
+          final appName = snapshot.data?[0] ?? 'RustDesk';
+          final version = snapshot.data?[1] ?? '';
+
+          return Container(
+            height: _kTabBarHeight - 1,
+            child: Row(
+              children: [
+                Text(appName),
+                Text(
+                  version,
+                  style: TextStyle(
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.color
+                        ?.withOpacity(0.7),
+                    // fontSize: 12,
+                  ),
+                ).marginOnly(left: 4),
+              ],
+            ),
+          );
+        },
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() => ListView(
@@ -968,7 +1006,7 @@ class _ListView extends StatelessWidget {
         shrinkWrap: true,
         physics: const BouncingScrollPhysics(),
         children: isHideSingleItem()
-            ? List.empty()
+            ? buildHideSingleItem()
             : state.value.tabs.asMap().entries.map((e) {
                 final index = e.key;
                 final tab = e.value;

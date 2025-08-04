@@ -8,6 +8,7 @@ import '../../common/widgets/chat_page.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
 import 'connection_page.dart';
+import 'package:flutter_hbb/common/widgets/deploy_page.dart';
 
 abstract class PageShape extends Widget {
   final String title = "";
@@ -61,6 +62,20 @@ class HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!withPublic() || (!bind.isHost() && !bind.isStandard())) {
+      return _buildHome();
+    }
+
+    return Obx(() {
+      if (gFFI.deployModel.isDeployed.isFalse &&
+          gFFI.deployModel.showDeployPage.value) {
+        return DeployPage();
+      }
+      return _buildHome();
+    });
+  }
+
+  Widget _buildHome() {
     return WillPopScope(
         onWillPop: () async {
           if (_selectedIndex != 0) {
@@ -245,11 +260,11 @@ class WebHomePage extends StatelessWidget {
       }
     }
     if (id != null) {
-      connect(context, id, 
-        isFileTransfer: isFileTransfer, 
-        isViewCamera: isViewCamera, 
-        isTerminal: isTerminal,
-        password: password);
+      connect(context, id,
+          isFileTransfer: isFileTransfer,
+          isViewCamera: isViewCamera,
+          isTerminal: isTerminal,
+          password: password);
     }
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -431,7 +433,7 @@ class _PeerCardState extends State<_PeerCard>
   bool _shouldBuildPasswordIcon(Peer peer) {
     if (gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index) return false;
     if (gFFI.abModel.current.isPersonal()) return false;
-    return peer.password.isNotEmpty;
+    return peer.hasValidPassword();
   }
 
   /// Show the peer menu and handle user's choice.
@@ -1181,8 +1183,9 @@ class AddressBookPeerCard extends BasePeerCard {
   MenuEntryBase<String> _changeSharedAbPassword() {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate(
-            peer.password.isEmpty ? 'Set shared password' : 'Change Password'),
+        translate(!peer.hasValidPassword()
+            ? 'Set shared password'
+            : 'Change Password'),
         style: style,
       ),
       proc: () {
@@ -1487,13 +1490,21 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
       );
     }
     if (!gFFI.abModel.current.isPersonal()) {
-      if (peer.password.isNotEmpty) {
-        password = peer.password;
-        isSharedPassword = true;
+      if (withPublic()) {
+        if (peer.sharedPassword.hash.isNotEmpty &&
+            peer.sharedPassword.salt.isNotEmpty) {
+          password = jsonEncode(peer.sharedPassword.toJson());
+          isSharedPassword = true;
+        }
+      } else {
+        if (peer.password.isNotEmpty) {
+          password = peer.password;
+          isSharedPassword = true;
+        }
       }
       if (password.isEmpty) {
         final abPassword = gFFI.abModel.getdefaultSharedPassword();
-        if (abPassword != null) {
+        if (abPassword != null && abPassword.isNotEmpty) {
           password = abPassword;
           isSharedPassword = true;
         }

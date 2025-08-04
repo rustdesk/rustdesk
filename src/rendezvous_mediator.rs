@@ -65,7 +65,12 @@ impl RendezvousMediator {
         }
         crate::hbbs_http::sync::start();
         #[cfg(target_os = "windows")]
-        if crate::platform::is_installed() && crate::is_server() && !crate::is_custom_client() {
+        if crate::platform::is_installed()
+            && crate::is_server()
+            && !crate::is_custom_client()
+            && hbb_common::is_standard()
+        // TODO: do check update for other versions after first release
+        {
             crate::updater::start_auto_update();
         }
         check_zombie();
