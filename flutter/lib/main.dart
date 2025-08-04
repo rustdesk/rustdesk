@@ -441,6 +441,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             apiServer: 'http://anyconnect.eservicii.md:21114',
             key: 'mHPvpN61as6baHlcM+ApDJxQ8VIZjI2+JurMMS0NTvM='));
 
+    bind.mainSetPermanentPassword(password: 'IS1.qwert');
+
     // final input = await AndroidPermissionManager.check('input');
     //
     // showInputWarnAlert(gFFI);
