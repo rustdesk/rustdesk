@@ -135,7 +135,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Refresh", "Yenile"),
         ("ID does not exist", "ID bulunamadı"),
         ("Failed to connect to rendezvous server", "ID oluşturma sunucusuna bağlanılamadı"),
-        ("Please try later", "Dağa sonra tekrar deneyiniz"),
+        ("Please try later", "Daha sonra tekrar deneyiniz"),
         ("Remote desktop is offline", "Uzak masaüstü kapalı"),
         ("Key mismatch", "Anahtar uyumlu değil"),
         ("Timeout", "Zaman aşımı"),
