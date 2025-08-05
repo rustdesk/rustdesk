@@ -6110,7 +6110,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.4.1.1"
+version = "1.4.1"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -6216,7 +6216,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.4.1.1"
+version = "1.4.1"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
@@ -7117,7 +7117,7 @@ dependencies = [
 
 [[package]]
 name = "termcolor"
-version = "1.4.1.1"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [

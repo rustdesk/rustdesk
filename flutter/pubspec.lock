@@ -1176,7 +1176,7 @@ packages:
       sha256: ad29c505aee705f41a4d8963641f91ac4cee3c8fad5947e033390a7bd8180fa4
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.1.1"
+    version: "1.4.1"
   shelf_static:
     dependency: transitive
     description:
@@ -1269,7 +1269,7 @@ packages:
       sha256: "921cd31725b72fe181906c6a94d987c78e3b98c2e205b397ea399d4054872b43"
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.1.1"
+    version: "1.4.1"
   synchronized:
     dependency: transitive
     description:
