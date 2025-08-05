@@ -25,7 +25,6 @@ import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
 import 'consts.dart';
-import 'lock_screen.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'models/platform_model.dart';
@@ -146,71 +145,30 @@ void runMainApp(bool startService) async {
   }
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
- 
-  // 启动 LockAppWrapper，控制解锁与主应用的切换
-  runApp(const LockAppWrapper());
-}
+  runApp(App());
 
-class LockAppWrapper extends StatefulWidget {
-  const LockAppWrapper({super.key});
-
-  @override
-  State<LockAppWrapper> createState() => _LockAppWrapperState();
-}
-
-class _LockAppWrapperState extends State<LockAppWrapper> {
-  bool _unlocked = false;
-  Timer? _lockTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _startLockTimer();
-    _initWindow();
-  }
-
-  void _initWindow() async {
-    WindowOptions windowOptions = getHiddenTitleBarWindowOptions(isMainWindow: true);
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await restoreWindowPosition(WindowType.Main);
-      final handledByUniLinks = await initUniLinks();
-      if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs)) {
-        windowManager.hide();
-      } else {
-        windowManager.show();
-        windowManager.focus();
-        rustDeskWinManager.registerActiveWindow(kWindowMainId);
-      }
-      windowManager.setOpacity(1);
-      windowManager.setTitle(getWindowName());
-      setResizable(!bind.isIncomingOnly());
-    });
-  }
-
-  void _onUnlockSuccess() {
-    setState(() {
-      _unlocked = true;
-    });
-    _startLockTimer();
-  }
-
-  void _startLockTimer() {
-    _lockTimer?.cancel();
-    _lockTimer = Timer(const Duration(seconds: 60), () {
-      setState(() {
-        _unlocked = false;
-      });
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: _unlocked
-          ? const App() // 解锁后进入主界面
-          : LockScreen(onUnlockSuccess: _onUnlockSuccess), // 锁屏界面
-    );
-  }
+  // Set window option.
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(isMainWindow: true);
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    // Restore the location of the main window before window hide or show.
+    await restoreWindowPosition(WindowType.Main);
+    // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
+    final handledByUniLinks = await initUniLinks();
+    debugPrint("handled by uni links: $handledByUniLinks");
+    if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs)) {
+      windowManager.hide();
+    } else {
+      windowManager.show();
+      windowManager.focus();
+      // Move registration of active main window here to prevent from async visible check.
+      rustDeskWinManager.registerActiveWindow(kWindowMainId);
+    }
+    windowManager.setOpacity(1);
+    windowManager.setTitle(getWindowName());
+    // Do not use `windowManager.setResizable()` here.
+    setResizable(!bind.isIncomingOnly());
+  });
 }
 
 void runMobileApp() async {
