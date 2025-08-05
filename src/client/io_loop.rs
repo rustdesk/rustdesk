@@ -1250,11 +1250,11 @@ impl<T: InvokeUiSession> Remote<T> {
         if self.peer_info.support_terminal {
             return true;
         }
-        if hbb_common::get_version_number(&peer_version) < hbb_common::get_version_number("1.4.1") {
+        if hbb_common::get_version_number(&peer_version) < hbb_common::get_version_number("1.4.1.1") {
             self.handler.msgbox(
                 "error",
                 "Remote terminal not supported",
-                "Remote terminal is not supported by the remote side. Please upgrade to version 1.4.1 or higher.",
+                "Remote terminal is not supported by the remote side. Please upgrade to version 1.4.1.1 or higher.",
                 "",
             );
         } else {
