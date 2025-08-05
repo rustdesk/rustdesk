@@ -107,6 +107,7 @@ dependencies:
   qr_flutter: ^4.1.0
   extended_text: 14.0.0
   flutter_native_splash:
+  change_app_package_name: 1.5.0
 
 dev_dependencies:
   icons_launcher: ^2.0.4
