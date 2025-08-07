@@ -146,7 +146,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Set Password", "비밀번호 설정"),
         ("OS Password", "OS 비밀번호"),
         ("install_tip", "UAC로 인해 경우에 따라 RustDesk가 원격 쪽에서 제대로 작동하지 않을 수 있습니다. UAC를 피하려면 아래 버튼을 클릭하여 시스템에 RustDesk를 설치하세요."),
-        ("Click to upgrade", "업그레이드하려면 클릭"),
+        ("Click to upgrade", "업그레이드"),
         ("Configure", "구성"),
         ("config_acc", "데스크톱을 원격으로 제어하려면 RustDesk에 \"접근성\" 권한을 부여해야 합니다."),
         ("config_screen", "데스크톱에 원격으로 액세스하려면 RustDesk에 \"화면 녹화\" 권한을 부여해야 합니다."),
