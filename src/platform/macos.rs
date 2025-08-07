@@ -788,7 +788,7 @@ pub fn extract_update_dmg(file: &str) {
             log::info!("Extracted dmg file to {}", UPDATE_TEMP_DIR);
         }
         Err(e) => {
-            evt.insert("error", e.to_string());
+            evt.insert("err", e.to_string());
             log::error!("Failed to extract dmg file {}: {}", file, e);
         }
     }
