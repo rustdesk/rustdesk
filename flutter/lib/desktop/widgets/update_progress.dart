@@ -29,7 +29,7 @@ void handleUpdate(String releasePageUrl) {
   gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
         title: Obx(() => Text(translate(
-            '${_isExtracting.isTrue ? "Extracting" : "Downloading"} {$appName}'))),
+            _isExtracting.isTrue ? 'Installing ...' : 'Downloading {$appName}'))),
         content:
             UpdateProgress(releasePageUrl, downloadUrl, downloadId, onCanceled)
                 .marginSymmetric(horizontal: 8)
