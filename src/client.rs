@@ -334,7 +334,7 @@ impl Client {
         } else {
             NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
         };
-
+/*
         if !key.is_empty() && !token.is_empty() {
             // mainly for the security of token
             secure_tcp(&mut socket, key)
@@ -354,6 +354,7 @@ impl Client {
                 hbb_common::sleep(0.001).await;
             }
         }
+*/
         // Stop UDP NAT test task if still running
         let _ = stop_udp_tx.send(());
         let mut msg_out = RendezvousMessage::new();
@@ -734,12 +735,12 @@ impl Client {
             let mut socket = connect_tcp(rendezvous_server, CONNECT_TIMEOUT)
                 .await
                 .with_context(|| "Failed to connect to rendezvous server")?;
-
+/*
             if !key.is_empty() && !token.is_empty() {
                 // mainly for the security of token
                 secure_tcp(&mut socket, key).await?;
             }
-
+*/
             ipv4 = socket.local_addr().is_ipv4();
             let mut msg_out = RendezvousMessage::new();
             uuid = Uuid::new_v4().to_string();
