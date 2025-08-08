@@ -708,5 +708,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to check if the user is an administrator.", "Hiba merült fel annak ellenőrzése során, hogy a felhasználó rendszergazda-e."),
         ("Supported only in the installed version.", "Csak a telepített változatban támogatott."),
         ("elevation_username_tip", "Felhasználónév vagy tartománynév megadása\\felhasználónév"),
+        ("Preparing for installation ...", ""),
     ].iter().cloned().collect();
 }
