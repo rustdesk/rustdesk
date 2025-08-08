@@ -8,7 +8,7 @@ abstract class ValidationRule {
   String get name;
   bool validate(String value);
 }
-
+/*
 class UppercaseValidationRule extends ValidationRule {
   @override
   String get name => translate('uppercase');
@@ -21,7 +21,7 @@ class UppercaseValidationRule extends ValidationRule {
     });
   }
 }
-
+*/
 class LowercaseValidationRule extends ValidationRule {
   @override
   String get name => translate('lowercase');
