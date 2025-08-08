@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "رمز عبور سیستم عامل"),
         ("install_tip", "لطفا برنامه را نصب کنید UAC و جلوگیری از خطای RustDesk برای راحتی در استفاده از نرم افزار"),
         ("Click to upgrade", "برای ارتقا کلیک کنید"),
-        ("Click to download", "برای دانلود کلیک کنید"),
-        ("Click to update", "برای به روز رسانی کلیک کنید"),
         ("Configure", "تنظیم"),
         ("config_acc", "بدهید \"access\" مجوز RustDesk برای کنترل از راه دور دسکتاپ باید به"),
         ("config_screen", "بدهید \"screenshot\" مجوز RustDesk برای کنترل از راه دور دسکتاپ باید به"),
