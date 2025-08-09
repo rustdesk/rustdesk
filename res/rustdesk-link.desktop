@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=RustDeskURL Scheme Handler
+Name=RustDesk
 NoDisplay=true
 MimeType=x-scheme-handler/rustdesk;
 TryExec=rustdesk
