@@ -703,6 +703,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 if is_remote {
                     if let Some(job) = get_job(id, &mut self.write_jobs) {
                         job.is_last_job = false;
+                        job.is_resume = true;
                         allow_err!(
                             peer.send(&fs::new_send(
                                 id,
@@ -717,12 +718,13 @@ impl<T: InvokeUiSession> Remote<T> {
                 } else {
                     if let Some(job) = get_job(id, &mut self.read_jobs) {
                         match &job.data_source {
-                            fs::DataSource::FilePath(p) => {
+                            fs::DataSource::FilePath(_p) => {
                                 job.is_last_job = false;
+                                job.is_resume = true;
                                 allow_err!(
                                     peer.send(&fs::new_receive(
                                         id,
-                                        p.to_string_lossy().to_string(),
+                                        job.remote.clone(),
                                         job.file_num,
                                         job.files.clone(),
                                         job.total_size(),
@@ -770,7 +772,8 @@ impl<T: InvokeUiSession> Remote<T> {
                                 Some(file_transfer_send_confirm_request::Union::Skip(true))
                             },
                             ..Default::default()
-                        });
+                        })
+                        .await;
                     }
                 } else {
                     if let Some(job) = fs::get_job(id, &mut self.write_jobs) {
@@ -789,7 +792,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             },
                             ..Default::default()
                         };
-                        job.confirm(&req);
+                        job.confirm(&req).await;
                         file_action.set_send_confirm(req);
                         msg.set_file_action(file_action);
                         allow_err!(peer.send(&msg).await);
@@ -1470,14 +1473,24 @@ impl<T: InvokeUiSession> Remote<T> {
                                         if let fs::DataSource::FilePath(p) = &job.data_source {
                                             let read_path =
                                                 get_string(&fs::TransferJob::join(p, &file.name));
-                                            let overwrite_strategy =
+                                            let mut overwrite_strategy =
                                                 job.default_overwrite_strategy();
+                                            let mut offset = 0;
+                                            if digest.is_identical && job.is_resume {
+                                                if digest.transferred_size > 0 {
+                                                    overwrite_strategy = Some(true);
+                                                    offset = digest.transferred_size as _;
+                                                } else {
+                                                    // Force skip if the file is identical and the job is set to resume.
+                                                    overwrite_strategy = Some(false);
+                                                }
+                                            }
                                             if let Some(overwrite) = overwrite_strategy {
                                                 let req = FileTransferSendConfirmRequest {
                                                     id: digest.id,
                                                     file_num: digest.file_num,
                                                     union: Some(if overwrite {
-                                                        file_transfer_send_confirm_request::Union::OffsetBlk(0)
+                                                        file_transfer_send_confirm_request::Union::OffsetBlk(offset)
                                                     } else {
                                                         file_transfer_send_confirm_request::Union::Skip(
                                                             true,
@@ -1485,7 +1498,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                     }),
                                                     ..Default::default()
                                                 };
-                                                job.confirm(&req);
+                                                job.confirm(&req).await;
                                                 let msg = new_send_confirm(req);
                                                 allow_err!(peer.send(&msg).await);
                                             } else {
@@ -1506,8 +1519,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                         if let fs::DataSource::FilePath(p) = &job.data_source {
                                             let write_path =
                                                 get_string(&fs::TransferJob::join(p, &file.name));
-                                            let overwrite_strategy =
-                                                job.default_overwrite_strategy();
+                                            job.set_digest(digest.file_size, digest.last_modified);
                                             match fs::is_write_need_confirmation(
                                                 &write_path,
                                                 &digest,
@@ -1515,16 +1527,29 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 Ok(res) => match res {
                                                     DigestCheckResult::IsSame => {
                                                         let req = FileTransferSendConfirmRequest {
-                                                        id: digest.id,
-                                                        file_num: digest.file_num,
-                                                        union: Some(file_transfer_send_confirm_request::Union::Skip(true)),
-                                                        ..Default::default()
-                                                    };
-                                                        job.confirm(&req);
+                                                            id: digest.id,
+                                                            file_num: digest.file_num,
+                                                            union: Some(file_transfer_send_confirm_request::Union::Skip(true)),
+                                                            ..Default::default()
+                                                        };
+                                                        job.confirm(&req).await;
                                                         let msg = new_send_confirm(req);
                                                         allow_err!(peer.send(&msg).await);
                                                     }
                                                     DigestCheckResult::NeedConfirm(digest) => {
+                                                        let mut overwrite_strategy =
+                                                            job.default_overwrite_strategy();
+                                                        let mut offset = 0;
+                                                        if digest.is_identical && job.is_resume {
+                                                            if digest.transferred_size > 0 {
+                                                                overwrite_strategy = Some(true);
+                                                                offset =
+                                                                    digest.transferred_size as _;
+                                                            } else {
+                                                                // Force skip if the file is identical and the job is set to resume.
+                                                                overwrite_strategy = Some(false);
+                                                            }
+                                                        }
                                                         if let Some(overwrite) = overwrite_strategy
                                                         {
                                                             let req =
@@ -1532,13 +1557,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                                                     id: digest.id,
                                                                     file_num: digest.file_num,
                                                                     union: Some(if overwrite {
-                                                                        file_transfer_send_confirm_request::Union::OffsetBlk(0)
+                                                                        file_transfer_send_confirm_request::Union::OffsetBlk(offset)
                                                                     } else {
                                                                         file_transfer_send_confirm_request::Union::Skip(true)
                                                                     }),
                                                                     ..Default::default()
                                                                 };
-                                                            job.confirm(&req);
+                                                            job.confirm(&req).await;
                                                             let msg = new_send_confirm(req);
                                                             allow_err!(peer.send(&msg).await);
                                                         } else {
@@ -1558,7 +1583,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                         union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
                                                     };
-                                                        job.confirm(&req);
+                                                        job.confirm(&req).await;
                                                         let msg = new_send_confirm(req);
                                                         allow_err!(peer.send(&msg).await);
                                                     }
@@ -1905,7 +1930,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     },
                     Some(file_action::Union::SendConfirm(c)) => {
                         if let Some(job) = fs::get_job(c.id, &mut self.read_jobs) {
-                            job.confirm(&c);
+                            job.confirm(&c).await;
                         }
                     }
                     _ => {}
