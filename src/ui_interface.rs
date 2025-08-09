@@ -813,6 +813,7 @@ pub fn get_async_http_status(url: String) -> Option<String> {
 }
 
 #[inline]
+#[cfg(not(feature = "flutter"))]
 pub fn post_request(url: String, body: String, header: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     std::thread::spawn(move || {

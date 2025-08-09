@@ -117,7 +117,7 @@ pub fn check_clipboard_files(
     None
 }
 
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 pub fn update_clipboard_files(files: Vec<String>, side: ClipboardSide) {
     if !files.is_empty() {
         std::thread::spawn(move || {
@@ -141,6 +141,7 @@ pub fn try_empty_clipboard_files(_side: ClipboardSide, _conn_id: i32) {
                 }
             }
         }
+        #[allow(unused_mut)]
         if let Some(mut ctx) = ctx.as_mut() {
             #[cfg(target_os = "linux")]
             {

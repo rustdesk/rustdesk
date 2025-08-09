@@ -17,7 +17,9 @@ use hbb_common::message_proto::{DisplayInfo, Resolution};
 use crate::AdapterDevice;
 
 use crate::common::{bail, ResultType};
-use crate::{Frame, PixelBuffer, Pixfmt, TraitCapturer};
+use crate::{Frame, TraitCapturer};
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+use crate::{PixelBuffer, Pixfmt};
 
 pub const PRIMARY_CAMERA_IDX: usize = 0;
 lazy_static::lazy_static! {
@@ -162,11 +164,11 @@ impl Cameras {
         return Ok(Vec::new());
     }
 
-    pub fn exists(index: usize) -> bool {
+    pub fn exists(_index: usize) -> bool {
         false
     }
 
-    pub fn get_camera_resolution(index: usize) -> ResultType<Resolution> {
+    pub fn get_camera_resolution(_index: usize) -> ResultType<Resolution> {
         bail!(CAMERA_NOT_SUPPORTED);
     }
 
@@ -174,7 +176,7 @@ impl Cameras {
         vec![]
     }
 
-    pub fn get_capturer(current: usize) -> ResultType<Box<dyn TraitCapturer>> {
+    pub fn get_capturer(_current: usize) -> ResultType<Box<dyn TraitCapturer>> {
         bail!(CAMERA_NOT_SUPPORTED);
     }
 }
@@ -201,6 +203,7 @@ impl CameraCapturer {
         })
     }
 
+    #[allow(dead_code)]
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     fn new(_current: usize) -> ResultType<Self> {
         bail!(CAMERA_NOT_SUPPORTED);

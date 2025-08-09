@@ -1,17 +1,13 @@
-#[cfg(windows)]
-use crate::platform::is_installed;
 use crate::ui_interface::get_option;
 #[cfg(windows)]
 use crate::{
     display_service,
     ipc::{connect, Data},
+    platform::is_installed,
 };
-use hbb_common::{
-    anyhow::anyhow,
-    bail, lazy_static,
-    tokio::{self, sync::oneshot},
-    ResultType,
-};
+#[cfg(windows)]
+use hbb_common::tokio;
+use hbb_common::{anyhow::anyhow, bail, lazy_static, tokio::sync::oneshot, ResultType};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -39,7 +35,8 @@ pub const TURN_OFF_OTHER_ID: &'static str =
 pub const NO_PHYSICAL_DISPLAYS: &'static str = "no_need_privacy_mode_no_physical_displays_tip";
 
 pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = "privacy_mode_impl_mag";
-pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str = "privacy_mode_impl_exclude_from_capture";
+pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str =
+    "privacy_mode_impl_exclude_from_capture";
 pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = "privacy_mode_impl_virtual_display";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

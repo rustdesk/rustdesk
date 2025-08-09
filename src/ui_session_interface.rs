@@ -5,22 +5,13 @@ use crate::{
 };
 use async_trait::async_trait;
 use bytes::Bytes;
-use rdev::{Event, EventType::*, KeyCode};
-use std::{
-    collections::HashMap,
-    ffi::c_void,
-    ops::{Deref, DerefMut},
-    str::FromStr,
-    sync::{Arc, Mutex, RwLock},
-    time::SystemTime,
-};
-use uuid::Uuid;
-
+#[cfg(all(target_os = "windows", not(feature = "flutter")))]
+use hbb_common::config::keys;
 #[cfg(not(feature = "flutter"))]
 use hbb_common::fs;
 use hbb_common::{
     allow_err,
-    config::{keys, Config, LocalConfig, PeerConfig},
+    config::{Config, LocalConfig, PeerConfig},
     get_version_number, log,
     message_proto::*,
     rendezvous_proto::ConnType,
@@ -31,6 +22,17 @@ use hbb_common::{
     },
     whoami, Stream,
 };
+use rdev::{Event, EventType::*, KeyCode};
+#[cfg(all(feature = "vram", feature = "flutter"))]
+use std::ffi::c_void;
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    str::FromStr,
+    sync::{Arc, Mutex, RwLock},
+    time::SystemTime,
+};
+use uuid::Uuid;
 
 use crate::client::io_loop::Remote;
 use crate::client::{
@@ -192,7 +194,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn is_default(&self) -> bool {
-        self.lc.read().unwrap().conn_type.eq(&ConnType::DEFAULT_CONN)
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::DEFAULT_CONN)
     }
 
     pub fn is_view_camera(&self) -> bool {
@@ -803,7 +809,6 @@ impl<T: InvokeUiSession> Session<T> {
         msg_out.set_terminal_action(action);
         self.send(Data::Message(msg_out));
     }
-
 
     pub fn capture_displays(&self, add: Vec<i32>, sub: Vec<i32>, set: Vec<i32>) {
         let mut misc = Misc::new();
