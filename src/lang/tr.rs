@@ -135,7 +135,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Refresh", "Yenile"),
         ("ID does not exist", "ID bulunamadı"),
         ("Failed to connect to rendezvous server", "ID oluşturma sunucusuna bağlanılamadı"),
-        ("Please try later", "Dağa sonra tekrar deneyiniz"),
+        ("Please try later", "Daha sonra tekrar deneyiniz"),
         ("Remote desktop is offline", "Uzak masaüstü kapalı"),
         ("Key mismatch", "Anahtar uyumlu değil"),
         ("Timeout", "Zaman aşımı"),
@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "İşletim Sistemi Şifresi"),
         ("install_tip", "Kullanıcı Hesabı Denetimi nedeniyle, RustDesk bir uzak masaüstü olarak düzgün çalışmayabilir. Bu sorunu önlemek için, RustDesk'i sistem seviyesinde kurmak için aşağıdaki butona tıklayın."),
         ("Click to upgrade", "Yükseltmek için tıklayınız"),
-        ("Click to download", "İndirmek için tıklayınız"),
-        ("Click to update", "Güncellemek için tıklayınız"),
         ("Configure", "Ayarla"),
         ("config_acc", "Masaüstünüzü dışarıdan kontrol etmek için RustDesk'e \"Erişilebilirlik\""),
         ("config_screen", "Masaüstünüzü dışarıdan kontrol etmek için RustDesk'e \"Ekran Kaydı\" iznini vermeniz gerekir."),
@@ -710,5 +708,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
         ("elevation_username_tip", ""),
+        ("Preparing for installation ...", ""),
     ].iter().cloned().collect();
 }

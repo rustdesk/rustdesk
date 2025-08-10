@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Sistema eragilearen pasahitza"),
         ("install_tip", "Erabiltzaile Kontuen Kontrolarengatik, RustDesk ezin du ondo funtzionatu urruneko mahaigainean. EKK saihesteko, mesedez, egin klik azpiko botoian RustDesk sistema mailan instalatzeko."),
         ("Click to upgrade", "Egin klik bertsio-berritzeko"),
-        ("Click to download", "Egin klik deskargatzeko"),
-        ("Click to update", "Egin klik eguneratzeko"),
         ("Configure", "Konfiguratu"),
         ("config_acc", "Zure mahaigaina urrunetik kontrolatzeko, RustDesk-i \"Irisgarritasuna\" baimenak eman behar dituzu."),
         ("config_screen", "Zure mahaigaina kanpotik kontrolatzeko, RustDesk-i \"Pantaila grabatu\" baimena eman behar duzu."),
@@ -710,5 +708,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
         ("elevation_username_tip", ""),
+        ("Preparing for installation ...", ""),
     ].iter().cloned().collect();
 }

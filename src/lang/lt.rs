@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "OS slaptažodis"),
         ("install_tip", "Kai kuriais atvejais UAC gali priversti RustDesk netinkamai veikti nuotoliniame pagrindiniame kompiuteryje. Norėdami apeiti UAC, spustelėkite toliau esantį mygtuką, kad įdiegtumėte RustDesk į savo kompiuterį."),
         ("Click to upgrade", "Spustelėkite, jei norite atnaujinti"),
-        ("Click to download", "Spustelėkite norėdami atsisiųsti"),
-        ("Click to update", "Spustelėkite norėdami atnaujinti"),
         ("Configure", "Konfigūruoti"),
         ("config_acc", "Norėdami nuotoliniu būdu valdyti darbalaukį, turite suteikti RustDesk \"prieigos\" leidimus"),
         ("config_screen", "Norėdami nuotoliniu būdu pasiekti darbalaukį, turite suteikti RustDesk leidimus \"ekrano kopija\""),
@@ -710,5 +708,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
         ("elevation_username_tip", ""),
+        ("Preparing for installation ...", ""),
     ].iter().cloned().collect();
 }

@@ -28,6 +28,7 @@ use objc::rc::autoreleasepool;
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
 use std::{
+    collections::HashMap,
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -743,7 +744,7 @@ pub fn update_me() -> ResultType<()> {
         let update_body = format!(
             r#"
 do shell script "
-pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDesk.app && cp -R '{}' /Applications/ && chown -R {}:staff /Applications/RustDesk.app
+pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDesk.app && ditto '{}' /Applications/RustDesk.app && chown -R {}:staff /Applications/RustDesk.app && xattr -r -d com.apple.quarantine /Applications/RustDesk.app
 " with prompt "RustDesk wants to update itself" with administrator privileges
     "#,
             std::process::id(),
@@ -775,9 +776,25 @@ pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDes
 }
 
 pub fn update_to(file: &str) -> ResultType<()> {
-    extract_dmg(file, UPDATE_TEMP_DIR)?;
     update_extracted(UPDATE_TEMP_DIR)?;
     Ok(())
+}
+
+pub fn extract_update_dmg(file: &str) {
+    let mut evt: HashMap<&str, String> =
+        HashMap::from([("name", "extract-update-dmg".to_string())]);
+    match extract_dmg(file, UPDATE_TEMP_DIR) {
+        Ok(_) => {
+            log::info!("Extracted dmg file to {}", UPDATE_TEMP_DIR);
+        }
+        Err(e) => {
+            evt.insert("err", e.to_string());
+            log::error!("Failed to extract dmg file {}: {}", file, e);
+        }
+    }
+    let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
+    #[cfg(feature = "flutter")]
+    crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
 }
 
 fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
@@ -807,8 +824,8 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
     let src_path = format!("{}/{}", mount_point, app_name);
     let dest_path = format!("{}/{}", target_dir, app_name);
 
-    let copy_status = Command::new("cp")
-        .args(&["-R", &src_path, &dest_path])
+    let copy_status = Command::new("ditto")
+        .args(&[&src_path, &dest_path])
         .status()?;
 
     if !copy_status.success() {

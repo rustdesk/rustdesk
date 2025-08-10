@@ -629,7 +629,10 @@ pub fn session_open_terminal(session_id: SessionID, terminal_id: i32, rows: u32,
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.open_terminal(terminal_id, rows, cols);
     } else {
-        log::error!("[flutter_ffi] Session not found for session_id: {}", session_id);
+        log::error!(
+            "[flutter_ffi] Session not found for session_id: {}",
+            session_id
+        );
     }
 }
 
@@ -2649,6 +2652,21 @@ pub fn main_set_common(_key: String, _value: String) {
                         }
                     }
                     fs::remove_file(f).ok();
+                }
+            }
+        } else if _key == "extract-update-dmg" {
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(new_version_file) = get_download_file_from_url(&_value) {
+                    if let Some(f) = new_version_file.to_str() {
+                        crate::platform::macos::extract_update_dmg(f);
+                    } else {
+                        // unreachable!()
+                        log::error!("Failed to get the new version file path");
+                    }
+                } else {
+                    // unreachable!()
+                    log::error!("Failed to get the new version file from url: {}", _value);
                 }
             }
         }

@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "ოპერაციული სისტემის პაროლი"),
         ("install_tip", "ზოგიერთ შემთხვევაში UAC-ის გამო RustDesk შეიძლება არასწორად მუშაობდეს დაშორებულ კვანძზე. UAC-თან დაკავშირებული პრობლემების თავიდან ასაცილებლად დააჭირეთ ქვემოთ მოცემულ ღილაკს სისტემაში RustDesk-ის დასაყენებლად."),
         ("Click to upgrade", "დააჭირეთ განახლებისთვის"),
-        ("Click to download", "დააჭირეთ ჩამოსატვირთად"),
-        ("Click to update", "დააჭირეთ განახლებისთვის"),
         ("Configure", "კონფიგურაცია"),
         ("config_acc", "თქვენი სამუშაო მაგიდის დისტანციური მართვისთვის უნდა მიანიჭოთ RustDesk-ს \"წვდომის\" უფლებები"),
         ("config_screen", "სამუშაო მაგიდაზე დისტანციური წვდომისთვის უნდა მიანიჭოთ RustDesk-ს \"ეკრანის ანაბეჭდის\" უფლებები"),
@@ -710,5 +708,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
         ("elevation_username_tip", ""),
+        ("Preparing for installation ...", ""),
     ].iter().cloned().collect();
 }

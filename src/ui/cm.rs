@@ -7,6 +7,10 @@ use sciter::{make_args, Element, Value, HELEMENT};
 use std::sync::Mutex;
 use std::{ops::Deref, sync::Arc};
 
+lazy_static::lazy_static! {
+    pub static ref HIDE_CM: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+}
+
 #[derive(Clone, Default)]
 pub struct SciterHandler {
     pub element: Arc<Mutex<Option<Element>>>,
@@ -151,6 +155,10 @@ impl SciterConnectionManager {
     fn get_option(&self, key: String) -> String {
         crate::ui_interface::get_option(key)
     }
+
+    fn hide_cm(&self) -> bool {
+        *crate::ui::cm::HIDE_CM.lock().unwrap()
+    }
 }
 
 impl sciter::EventHandler for SciterConnectionManager {
@@ -172,5 +180,6 @@ impl sciter::EventHandler for SciterConnectionManager {
         fn can_elevate();
         fn elevate_portable(i32);
         fn get_option(String);
+        fn hide_cm();
     }
 }

@@ -279,10 +279,10 @@ impl Client {
         }
 
         let (stop_udp_tx, stop_udp_rx) = oneshot::channel::<()>();
-        let mut udp =
+        let udp =
         // no need to care about multiple rendezvous servers case, since it is acutally not used any more.
         // Shared state for UDP NAT test result
-        if crate::get_udp_punch_enabled() {
+        if crate::get_udp_punch_enabled() && !interface.is_force_relay() {
             if let Ok((socket, addr)) = new_direct_udp_for(&rendezvous_server).await {
                 let udp_port = Arc::new(Mutex::new(0));
                 let up_cloned = udp_port.clone();
@@ -298,6 +298,57 @@ impl Client {
         } else {
             (None, None)
         };
+        let fut = Self::_start_inner(
+            peer.to_owned(),
+            key.to_owned(),
+            token.to_owned(),
+            conn_type,
+            interface.clone(),
+            udp.clone(),
+            Some(stop_udp_tx),
+            rendezvous_server.clone(),
+            servers.clone(),
+            contained,
+        );
+        if udp.0.is_none() {
+            return fut.await;
+        }
+        let mut connect_futures = Vec::new();
+        connect_futures.push(fut.boxed());
+        let fut = Self::_start_inner(
+            peer.to_owned(),
+            key.to_owned(),
+            token.to_owned(),
+            conn_type,
+            interface,
+            (None, None),
+            None,
+            rendezvous_server,
+            servers,
+            contained,
+        );
+        connect_futures.push(fut.boxed());
+        match select_ok(connect_futures).await {
+            Ok(conn) => Ok((conn.0 .0, conn.0 .1)),
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn _start_inner(
+        peer: String,
+        key: String,
+        token: String,
+        conn_type: ConnType,
+        interface: impl Interface,
+        mut udp: (Option<Arc<UdpSocket>>, Option<Arc<Mutex<u16>>>),
+        stop_udp_tx: Option<oneshot::Sender<()>>,
+        mut rendezvous_server: String,
+        servers: Vec<String>,
+        contained: bool,
+    ) -> ResultType<(
+        (Stream, bool, Option<Vec<u8>>, Option<KcpStream>),
+        (i32, String),
+    )> {
         let mut start = Instant::now();
         let mut socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));
@@ -327,9 +378,8 @@ impl Client {
         let my_nat_type = crate::get_nat_type(100).await;
         let mut is_local = false;
         let mut feedback = 0;
-        let force_relay = interface.is_force_relay() || use_ws() || Config::is_proxy();
         use hbb_common::protobuf::Enum;
-        let nat_type = if force_relay {
+        let nat_type = if interface.is_force_relay() {
             NatType::SYMMETRIC
         } else {
             NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
@@ -337,7 +387,7 @@ impl Client {
 
         if !key.is_empty() && !token.is_empty() {
             // mainly for the security of token
-            secure_tcp(&mut socket, key)
+            secure_tcp(&mut socket, &key)
                 .await
                 .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
         } else if let Some(udp) = udp.1.as_ref() {
@@ -355,7 +405,7 @@ impl Client {
             }
         }
         // Stop UDP NAT test task if still running
-        let _ = stop_udp_tx.send(());
+        stop_udp_tx.map(|tx| tx.send(()));
         let mut msg_out = RendezvousMessage::new();
         let mut ipv6 = if crate::get_ipv6_punch_enabled() {
             if let Some((socket, addr)) = crate::get_ipv6_socket().await {
@@ -375,7 +425,7 @@ impl Client {
             conn_type: conn_type.into(),
             version: crate::VERSION.to_owned(),
             udp_port: udp_nat_port as _,
-            force_relay,
+            force_relay: interface.is_force_relay(),
             socket_addr_v6: ipv6.1.unwrap_or_default(),
             ..Default::default()
         });
@@ -447,16 +497,17 @@ impl Client {
                             let addr = AddrMangle::decode(&rr.socket_addr_v6);
                             if addr.port() > 0 {
                                 if s.connect(addr).await.is_ok() {
-                                    connect_futures.push(udp_nat_connect(s, "IPv6").boxed());
+                                    connect_futures
+                                        .push(udp_nat_connect(s, "IPv6", CONNECT_TIMEOUT).boxed());
                                 }
                             }
                         }
                         signed_id_pk = rr.pk().into();
                         let fut = Self::create_relay(
-                            peer,
+                            &peer,
                             rr.uuid,
                             rr.relay_server,
-                            key,
+                            &key,
                             conn_type,
                             my_addr.is_ipv4(),
                         );
@@ -477,7 +528,7 @@ impl Client {
                         feedback = rr.feedback;
                         log::info!("{:?} used to establish {typ} connection", start.elapsed());
                         let pk =
-                            Self::secure_connection(peer, signed_id_pk, key, &mut conn).await?;
+                            Self::secure_connection(&peer, signed_id_pk, &key, &mut conn).await?;
                         return Ok(((conn, false, pk, kcp), (feedback, rendezvous_server)));
                     }
                     _ => {
@@ -505,7 +556,7 @@ impl Client {
             Self::connect(
                 my_addr,
                 peer_addr,
-                peer,
+                &peer,
                 signed_id_pk,
                 &relay_server,
                 &rendezvous_server,
@@ -513,8 +564,8 @@ impl Client {
                 peer_nat_type,
                 my_nat_type,
                 is_local,
-                key,
-                token,
+                &key,
+                &token,
                 conn_type,
                 interface,
                 udp.0,
@@ -589,10 +640,10 @@ impl Client {
             .boxed(),
         );
         if let Some(udp_socket_nat) = udp_socket_nat {
-            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP").boxed());
+            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP", connect_timeout).boxed());
         }
         if let Some(udp_socket_v6) = udp_socket_v6 {
-            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6").boxed());
+            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).boxed());
         }
         // Run all connection attempts concurrently, return the first successful one
         let (mut conn, kcp, mut typ) = match select_ok(connect_futures).await {
@@ -1730,7 +1781,9 @@ impl LoginConfigHandler {
         self.restarting_remote_device = false;
         self.force_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
-                || force_relay;
+                || force_relay
+                || use_ws()
+                || Config::is_proxy();
         if let Some((real_id, server, key)) = &self.other_server {
             let other_server_key = self.get_option("other-server-key");
             if !other_server_key.is_empty() && key.is_empty() {
@@ -4009,6 +4062,7 @@ async fn test_udp_uat(
 async fn udp_nat_connect(
     socket: Arc<UdpSocket>,
     typ: &'static str,
+    ms_timeout: u64,
 ) -> ResultType<(Stream, Option<KcpStream>, &'static str)> {
     crate::punch_udp(socket.clone(), false)
         .await
@@ -4016,7 +4070,7 @@ async fn udp_nat_connect(
             log::debug!("{err}");
             anyhow!(err)
         })?;
-    let res = KcpStream::connect(socket, Duration::from_secs(CONNECT_TIMEOUT as _))
+    let res = KcpStream::connect(socket, Duration::from_millis(ms_timeout))
         .await
         .map_err(|err| {
             log::debug!("Failed to connect KCP stream: {}", err);

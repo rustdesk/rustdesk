@@ -147,8 +147,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Operativsystemadgangskode"),
         ("install_tip", "På grund af UAC kan RustDesk ikke fungere korrekt i nogle tilfælde på fjernskrivebordet. For at undgå UAC skal du klikke på knappen nedenfor for at installere RustDesk på systemet"),
         ("Click to upgrade", "Klik for at opgradere"),
-        ("Click to download", "Klik for at downloade"),
-        ("Click to update", "Klik for at opdatere"),
         ("Configure", "Konfigurer"),
         ("config_acc", "For at kontrollere dit skrivebord på afstand skal du give RustDesk \"Access \" Rettigheder."),
         ("config_screen", "For at kunne få adgang til dit skrivebord langtfra, skal du give RustDesk \"skærmstøtte \" tilladelser."),
@@ -710,5 +708,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to check if the user is an administrator.", ""),
         ("Supported only in the installed version.", ""),
         ("elevation_username_tip", ""),
+        ("Preparing for installation ...", ""),
     ].iter().cloned().collect();
 }
