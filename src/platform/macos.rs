@@ -793,6 +793,7 @@ pub fn extract_update_dmg(file: &str) {
         }
     }
     let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
+    #[cfg(feature = "flutter")]
     crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
 }
 
