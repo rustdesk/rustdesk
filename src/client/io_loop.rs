@@ -2257,7 +2257,7 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             #[cfg(feature = "unix-file-copy-paste")]
             if crate::is_support_file_copy_paste_num(self.handler.lc.read().unwrap().version) {
-                let mut out_msg = None;
+                let mut out_msgs = vec![];
 
                 #[cfg(target_os = "macos")]
                 if clipboard::platform::unix::macos::should_handle_msg(&clip) {
@@ -2269,7 +2269,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         log::error!("failed to handle cliprdr msg: {}", e);
                     }
                 } else {
-                    out_msg = unix_file_clip::serve_clip_messages(
+                    out_msgs = unix_file_clip::serve_clip_messages(
                         ClipboardSide::Client,
                         clip,
                         self.client_conn_id,
@@ -2278,14 +2278,14 @@ impl<T: InvokeUiSession> Remote<T> {
 
                 #[cfg(not(target_os = "macos"))]
                 {
-                    out_msg = unix_file_clip::serve_clip_messages(
+                    out_msgs = unix_file_clip::serve_clip_messages(
                         ClipboardSide::Client,
                         clip,
                         self.client_conn_id,
                     );
                 }
 
-                if let Some(msg) = out_msg {
+                for msg in out_msgs.into_iter() {
                     allow_err!(_peer.send(&msg).await);
                 }
             }
