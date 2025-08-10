@@ -192,7 +192,13 @@ impl Client {
         conn_type: ConnType,
         interface: impl Interface,
     ) -> ResultType<(
-        (Stream, bool, Option<Vec<u8>>, Option<KcpStream>),
+        (
+            Stream,
+            bool,
+            Option<Vec<u8>>,
+            Option<KcpStream>,
+            &'static str,
+        ),
         (i32, String),
     )> {
         debug_assert!(peer == interface.get_id());
@@ -219,7 +225,13 @@ impl Client {
         conn_type: ConnType,
         interface: impl Interface,
     ) -> ResultType<(
-        (Stream, bool, Option<Vec<u8>>, Option<KcpStream>),
+        (
+            Stream,
+            bool,
+            Option<Vec<u8>>,
+            Option<KcpStream>,
+            &'static str,
+        ),
         (i32, String),
     )> {
         if config::is_incoming_only() {
@@ -234,6 +246,7 @@ impl Client {
                     true,
                     None,
                     None,
+                    "TCP",
                 ),
                 (0, "".to_owned()),
             ));
@@ -246,6 +259,7 @@ impl Client {
                     true,
                     None,
                     None,
+                    "TCP",
                 ),
                 (0, "".to_owned()),
             ));
@@ -346,7 +360,13 @@ impl Client {
         servers: Vec<String>,
         contained: bool,
     ) -> ResultType<(
-        (Stream, bool, Option<Vec<u8>>, Option<KcpStream>),
+        (
+            Stream,
+            bool,
+            Option<Vec<u8>>,
+            Option<KcpStream>,
+            &'static str,
+        ),
         (i32, String),
     )> {
         let mut start = Instant::now();
@@ -536,7 +556,7 @@ impl Client {
                         log::info!("{:?} used to establish {typ} connection", start.elapsed());
                         let pk =
                             Self::secure_connection(&peer, signed_id_pk, &key, &mut conn).await?;
-                        return Ok(((conn, false, pk, kcp), (feedback, rendezvous_server)));
+                        return Ok(((conn, false, pk, kcp, typ), (feedback, rendezvous_server)));
                     }
                     _ => {
                         log::error!("Unexpected protobuf msg received: {:?}", msg_in);
@@ -604,7 +624,13 @@ impl Client {
         udp_socket_nat: Option<Arc<UdpSocket>>,
         udp_socket_v6: Option<Arc<UdpSocket>>,
         punch_type: &str,
-    ) -> ResultType<(Stream, bool, Option<Vec<u8>>, Option<KcpStream>)> {
+    ) -> ResultType<(
+        Stream,
+        bool,
+        Option<Vec<u8>>,
+        Option<KcpStream>,
+        &'static str,
+    )> {
         let direct_failures = interface.get_lch().read().unwrap().direct_failures;
         let mut connect_timeout = 0;
         const MIN: u64 = 1000;
@@ -698,7 +724,7 @@ impl Client {
         );
         let pk = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await?;
         log::info!("{} punch secure_connection ok", punch_type);
-        Ok((conn, direct, pk, kcp))
+        Ok((conn, direct, pk, kcp, typ))
     }
 
     /// Establish secure connection with the server.
