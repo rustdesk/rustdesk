@@ -257,7 +257,7 @@ impl Client {
         } else {
             (peer, "", key, token)
         };
-        let (mut rendezvous_server, servers, contained) = if other_server.is_empty() {
+        let (rendezvous_server, servers, contained) = if other_server.is_empty() {
             crate::get_rendezvous_server(1_000).await
         } else {
             if other_server == PUBLIC_SERVER {
@@ -417,6 +417,7 @@ impl Client {
             (None, None)
         };
         let udp_nat_port = udp.1.map(|x| *x.lock().unwrap()).unwrap_or(0);
+        let punch_type = if udp_nat_port > 0 { "UDP" } else { "TCP" };
         msg_out.set_punch_hole_request(PunchHoleRequest {
             id: peer.to_owned(),
             token: token.to_owned(),
@@ -430,7 +431,13 @@ impl Client {
             ..Default::default()
         });
         for i in 1..=3 {
-            log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
+            log::info!(
+                "#{} {} punch attempt with {}, id: {}",
+                i,
+                punch_type,
+                my_addr,
+                peer
+            );
             socket.send(&msg_out).await?;
             // below timeout should not bigger than hbbs's connection timeout.
             if let Some(msg_in) =
@@ -481,7 +488,7 @@ impl Client {
                                     }
                                 }
                             }
-                            log::info!("Hole Punched {} = {}", peer, peer_addr);
+                            log::info!("{} Hole Punched {} = {}", punch_type, peer, peer_addr);
                             break;
                         }
                     }
@@ -543,8 +550,9 @@ impl Client {
         }
         let time_used = start.elapsed().as_millis() as u64;
         log::info!(
-            "{} ms used to punch hole, relay_server: {}, {}",
+            "{} ms used to {} punch hole, relay_server: {}, {}",
             time_used,
+            punch_type,
             relay_server,
             if is_local {
                 "is_local: true".to_owned()
@@ -570,6 +578,7 @@ impl Client {
                 interface,
                 udp.0,
                 ipv6.0,
+                punch_type,
             )
             .await?,
             (feedback, rendezvous_server),
@@ -594,6 +603,7 @@ impl Client {
         interface: impl Interface,
         udp_socket_nat: Option<Arc<UdpSocket>>,
         udp_socket_v6: Option<Arc<UdpSocket>>,
+        punch_type: &str,
     ) -> ResultType<(Stream, bool, Option<Vec<u8>>, Option<KcpStream>)> {
         let direct_failures = interface.get_lch().read().unwrap().direct_failures;
         let mut connect_timeout = 0;
@@ -681,8 +691,13 @@ impl Client {
             interface.get_lch().write().unwrap().set_direct_failure(n);
         }
         let mut conn = conn?;
-        log::info!("{:?} used to establish {typ} connection", start.elapsed());
+        log::info!(
+            "{:?} used to establish {typ} connection with {} punch",
+            start.elapsed(),
+            punch_type
+        );
         let pk = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await?;
+        log::info!("{} punch secure_connection ok", punch_type);
         Ok((conn, direct, pk, kcp))
     }
 
