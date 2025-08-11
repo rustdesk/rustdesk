@@ -437,11 +437,6 @@ impl Client {
             (None, None)
         };
         let udp_nat_port = udp.1.map(|x| *x.lock().unwrap()).unwrap_or(0);
-        if udp.0.is_some() && udp_nat_port == 0 {
-            let err_msg = "skip udp punch because udp nat port is 0";
-            log::info!("{}", err_msg);
-            bail!(err_msg);
-        }
         let punch_type = if udp_nat_port > 0 { "UDP" } else { "TCP" };
         msg_out.set_punch_hole_request(PunchHoleRequest {
             id: peer.to_owned(),
