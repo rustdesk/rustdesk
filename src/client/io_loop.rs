@@ -1481,9 +1481,6 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 if digest.transferred_size > 0 {
                                                     overwrite_strategy = Some(true);
                                                     offset = digest.transferred_size as _;
-                                                } else {
-                                                    // Force skip if the file is identical and the job is set to resume.
-                                                    overwrite_strategy = Some(false);
                                                 }
                                             }
                                             if let Some(overwrite) = overwrite_strategy {
@@ -1521,7 +1518,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                             let write_path =
                                                 get_string(&fs::TransferJob::join(p, &file.name));
                                             job.set_digest(digest.file_size, digest.last_modified);
+                                            let peer_ver = self.handler.lc.read().unwrap().version;
+                                            let is_support_resume =
+                                                crate::is_support_file_transfer_resume_num(
+                                                    peer_ver,
+                                                );
                                             match fs::is_write_need_confirmation(
+                                                is_support_resume,
                                                 &write_path,
                                                 &digest,
                                             ) {
@@ -1546,9 +1549,6 @@ impl<T: InvokeUiSession> Remote<T> {
                                                                 overwrite_strategy = Some(true);
                                                                 offset =
                                                                     digest.transferred_size as _;
-                                                            } else {
-                                                                // Force skip if the file is identical and the job is set to resume.
-                                                                overwrite_strategy = Some(false);
                                                             }
                                                         }
                                                         if let Some(overwrite) = overwrite_strategy

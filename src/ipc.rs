@@ -195,6 +195,7 @@ pub enum Data {
         is_view_camera: bool,
         is_terminal: bool,
         peer_id: String,
+        peer_version: String,
         name: String,
         authorized: bool,
         port_forward: String,

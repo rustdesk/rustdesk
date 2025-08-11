@@ -10,6 +10,6 @@ jobs:
       - uses: vedantmgoyal9/winget-releaser@main
         with:
           identifier: RustDesk.RustDesk
-          version: "1.4.1"
-          release-tag: "1.4.1"
+          version: "1.4.2"
+          release-tag: "1.4.2"
           token: ${{ secrets.WINGET_TOKEN }}

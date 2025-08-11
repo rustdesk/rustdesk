@@ -1704,7 +1704,13 @@ impl Connection {
             && crate::get_builtin_option(keys::OPTION_ONE_WAY_FILE_TRANSFER) != "Y"
     }
 
-    fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
+    fn try_start_cm(
+        &mut self,
+        peer_id: String,
+        peer_version: String,
+        name: String,
+        authorized: bool,
+    ) {
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),
@@ -1712,6 +1718,7 @@ impl Connection {
             is_terminal: self.terminal,
             port_forward: self.port_forward_address.clone(),
             peer_id,
+            peer_version,
             name,
             authorized,
             keyboard: self.keyboard,
@@ -2110,7 +2117,7 @@ impl Connection {
                     && is_logon()))
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
-                self.try_start_cm(lr.my_id, lr.my_name, false);
+                self.try_start_cm(lr.my_id, lr.version.clone(), lr.my_name, false);
                 if hbb_common::get_version_number(&lr.version)
                     >= hbb_common::get_version_number("1.2.0")
                 {
@@ -2123,13 +2130,18 @@ impl Connection {
                     #[cfg(target_os = "linux")]
                     self.linux_headless_handle.wait_desktop_cm_ready().await;
                     self.send_logon_response().await;
-                    self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
+                    self.try_start_cm(
+                        lr.my_id.clone(),
+                        lr.version.clone(),
+                        lr.my_name.clone(),
+                        self.authorized,
+                    );
                 } else {
                     self.send_login_error(err_msg).await;
                 }
             } else if lr.password.is_empty() {
                 if err_msg.is_empty() {
-                    self.try_start_cm(lr.my_id, lr.my_name, false);
+                    self.try_start_cm(lr.my_id, lr.version, lr.my_name, false);
                 } else {
                     self.send_login_error(
                         crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY,
@@ -2146,7 +2158,7 @@ impl Connection {
                     if err_msg.is_empty() {
                         self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
                             .await;
-                        self.try_start_cm(lr.my_id, lr.my_name, false);
+                        self.try_start_cm(lr.my_id, lr.version, lr.my_name, false);
                     } else {
                         self.send_login_error(
                             crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG,
@@ -2159,7 +2171,7 @@ impl Connection {
                         #[cfg(target_os = "linux")]
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
                         self.send_logon_response().await;
-                        self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
+                        self.try_start_cm(lr.my_id, lr.version, lr.my_name, self.authorized);
                     } else {
                         self.send_login_error(err_msg).await;
                     }
@@ -2179,6 +2191,7 @@ impl Connection {
                         self.send_logon_response().await;
                         self.try_start_cm(
                             self.lr.my_id.to_owned(),
+                            self.lr.version.to_owned(),
                             self.lr.my_name.to_owned(),
                             self.authorized,
                         );
@@ -2230,6 +2243,7 @@ impl Connection {
                             self.send_logon_response().await;
                             self.try_start_cm(
                                 lr.my_id.clone(),
+                                lr.version.clone(),
                                 lr.my_name.clone(),
                                 self.authorized,
                             );
