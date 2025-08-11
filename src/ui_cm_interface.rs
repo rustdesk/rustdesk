@@ -76,6 +76,7 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     close: bool,
     running: bool,
     conn_id: i32,
+    peer_ver: String,
     #[cfg(target_os = "windows")]
     file_transfer_enabled: bool,
     #[cfg(target_os = "windows")]
@@ -408,10 +409,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
+                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, peer_version, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
                                     log::debug!("conn_id: {}", id);
                                     self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
                                     self.conn_id = id;
+                                    self.peer_ver = peer_version;
                                     #[cfg(target_os = "windows")]
                                     {
                                         self.file_transfer_enabled = _file_transfer_enabled;
@@ -442,10 +444,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
                                         if let Ok(bytes) = self.stream.next_raw().await {
                                             fs = ipc::FS::WriteBlock{id, file_num, data:bytes.into(), compressed};
-                                            handle_fs(fs, &mut write_jobs, &self.tx, Some(&tx_log)).await;
+                                            handle_fs(fs, &mut write_jobs, &self.tx, Some(&tx_log), &self.peer_ver).await;
                                         }
                                     } else {
-                                        handle_fs(fs, &mut write_jobs, &self.tx, Some(&tx_log)).await;
+                                        handle_fs(fs, &mut write_jobs, &self.tx, Some(&tx_log), &self.peer_ver).await;
                                     }
                                     let log = fs::serialize_transfer_jobs(&write_jobs);
                                     self.cm.ui_handler.file_transfer_log("transfer", &log);
@@ -614,6 +616,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             close: true,
             running: true,
             conn_id: 0,
+            peer_ver: String::new(),
             #[cfg(target_os = "windows")]
             file_transfer_enabled: false,
             #[cfg(target_os = "windows")]
@@ -672,6 +675,7 @@ pub async fn start_listen<T: InvokeUiCM>(
     tx: mpsc::UnboundedSender<Data>,
 ) {
     let mut current_id = 0;
+    let mut peer_ver = String::new();
     let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
     loop {
         match rx.recv().await {
@@ -682,6 +686,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 is_terminal,
                 port_forward,
                 peer_id,
+                peer_version,
                 name,
                 authorized,
                 keyboard,
@@ -695,6 +700,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 ..
             }) => {
                 current_id = id;
+                peer_ver = peer_version;
                 cm.add_connection(
                     id,
                     is_file_transfer,
@@ -719,7 +725,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 cm.new_message(current_id, text);
             }
             Some(Data::FS(fs)) => {
-                handle_fs(fs, &mut write_jobs, &tx, None).await;
+                handle_fs(fs, &mut write_jobs, &tx, None, &peer_ver).await;
             }
             Some(Data::Close) => {
                 break;
@@ -748,6 +754,7 @@ async fn handle_fs(
     write_jobs: &mut Vec<fs::TransferJob>,
     tx: &UnboundedSender<Data>,
     tx_log: Option<&UnboundedSender<String>>,
+    peer_ver: &str,
 ) {
     use std::path::PathBuf;
 
@@ -878,8 +885,10 @@ async fn handle_fs(
                 if let Some(file) = job.files().get(file_num as usize) {
                     if let fs::DataSource::FilePath(p) = &job.data_source {
                         let path = get_string(&fs::TransferJob::join(p, &file.name));
-                        match is_write_need_confirmation(&path, &digest) {
+                        let is_support_resume = crate::is_support_file_transfer_resume(peer_ver);
+                        match is_write_need_confirmation(is_support_resume, &path, &digest) {
                             Ok(digest_result) => {
+                                job.set_digest(file_size, last_modified);
                                 match digest_result {
                                     DigestCheckResult::IsSame => {
                                         req.set_skip(true);
@@ -906,6 +915,13 @@ async fn handle_fs(
                             }
                         }
                     }
+                }
+            }
+        }
+        ipc::FS::SendConfirm(bytes) => {
+            if let Ok(r) = FileTransferSendConfirmRequest::parse_from_bytes(&bytes) {
+                if let Some(job) = fs::get_job(r.id, write_jobs) {
+                    job.confirm(&r).await;
                 }
             }
         }

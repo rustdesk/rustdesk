@@ -105,6 +105,7 @@ pub enum FS {
         last_modified: u64,
         is_upload: bool,
     },
+    SendConfirm(Vec<u8>),
     Rename {
         id: i32,
         path: String,
@@ -192,6 +193,7 @@ pub enum Data {
         is_view_camera: bool,
         is_terminal: bool,
         peer_id: String,
+        peer_version: String,
         name: String,
         authorized: bool,
         port_forward: String,
