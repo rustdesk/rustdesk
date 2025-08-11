@@ -117,6 +117,13 @@ class Header: Reactor.Component {
             icon_conn = svg_insecure_relay;
             title_conn = translate("Relayed and unencrypted connection");
         }
+        var stream_type = this.stream_type;
+        if (stream_type == "Relay") {
+            stream_type = "TCP";
+        }
+        if (stream_type) {
+            title_conn += " (" + stream_type + ")";
+        }
         var title = get_id();
         if (pi.hostname) title += "(" + pi.username + "@" + pi.hostname + ")";
         if ((pi.displays || []).length == 0) {
@@ -695,10 +702,11 @@ function startChat() {
     chatbox = view.window(params);
 }
 
-handler.setConnectionType = function(secured, direct) {
+handler.setConnectionType = function(secured, direct, stream_type) {
     header.update({
        secure_connection: secured,
        direct_connection: direct, 
+       stream_type: stream_type,
     });
 }
 

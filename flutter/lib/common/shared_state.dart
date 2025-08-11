@@ -77,9 +77,11 @@ class CurrentDisplayState {
 class ConnectionType {
   final Rx<String> _secure = kInvalidValueStr.obs;
   final Rx<String> _direct = kInvalidValueStr.obs;
+  final Rx<String> _stream_type = kInvalidValueStr.obs;
 
   Rx<String> get secure => _secure;
   Rx<String> get direct => _direct;
+  Rx<String> get stream_type => _stream_type;
 
   static String get strSecure => 'secure';
   static String get strInsecure => 'insecure';
@@ -94,9 +96,14 @@ class ConnectionType {
     _direct.value = v ? strDirect : strIndirect;
   }
 
+  void setStreamType(String v) {
+    _stream_type.value = v;
+  }
+
   bool isValid() {
     return _secure.value != kInvalidValueStr &&
-        _direct.value != kInvalidValueStr;
+        _direct.value != kInvalidValueStr &&
+        _stream_type.value != kInvalidValueStr;
   }
 }
 
