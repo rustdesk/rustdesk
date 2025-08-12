@@ -550,7 +550,7 @@ impl Client {
                         connect_futures.push(
                             async move {
                                 let conn = fut.await?;
-                                Ok((conn, None, "Relay"))
+                                Ok((conn, None, if use_ws() { "WebSocket" } else { "Relay" }))
                             }
                             .boxed(),
                         );
