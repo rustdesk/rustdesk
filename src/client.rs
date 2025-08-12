@@ -204,7 +204,7 @@ impl Client {
         debug_assert!(peer == interface.get_id());
         interface.update_direct(None);
         interface.update_received(false);
-        match Self::_start(peer, key, token, conn_type, interface).await {
+        match Self::_start(peer, key, token, conn_type, interface.clone()).await {
             Err(err) => {
                 let err_str = err.to_string();
                 if err_str.starts_with("Failed") {
@@ -213,7 +213,16 @@ impl Client {
                     return Err(err);
                 }
             }
-            Ok(x) => Ok(x),
+            Ok(x) => {
+                let direct_failures = interface.get_lch().read().unwrap().direct_failures;
+                let direct = x.0 .1;
+                if !interface.is_force_relay() && (direct_failures == 0) != direct {
+                    let n = if direct { 0 } else { 1 };
+                    log::info!("direct_failures updated to {}", n);
+                    interface.get_lch().write().unwrap().set_direct_failure(n);
+                }
+                Ok(x)
+            }
         }
     }
 
@@ -688,7 +697,6 @@ impl Client {
         };
 
         let mut direct = !conn.is_err();
-        interface.update_direct(Some(direct));
         if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
                 conn = Self::request_relay(
@@ -701,8 +709,9 @@ impl Client {
                     conn_type,
                 )
                 .await;
-                interface.update_direct(Some(false));
                 if let Err(e) = conn {
+                    // this direct is mainly used by on_establish_connection_error, so we update it here before bail
+                    interface.update_direct(Some(false));
                     bail!("Failed to connect via relay server: {}", e);
                 }
                 typ = "Relay";
@@ -711,19 +720,22 @@ impl Client {
                 bail!("Failed to make direct connection to remote desktop");
             }
         }
-        if !relay_server.is_empty() && (direct_failures == 0) != direct {
-            let n = if direct { 0 } else { 1 };
-            log::info!("direct_failures updated to {}", n);
-            interface.get_lch().write().unwrap().set_direct_failure(n);
-        }
         let mut conn = conn?;
         log::info!(
             "{:?} used to establish {typ} connection with {} punch",
             start.elapsed(),
             punch_type
         );
-        let pk = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await?;
-        log::info!("{} punch secure_connection ok", punch_type);
+        let res = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await;
+        let pk: Option<Vec<u8>> = match res {
+            Ok(pk) => pk,
+            Err(e) => {
+                // this direct is mainly used by on_establish_connection_error, so we update it here before bail
+                interface.update_direct(Some(direct));
+                bail!(e);
+            }
+        };
+        log::debug!("{} punch secure_connection ok", punch_type);
         Ok((conn, direct, pk, kcp, typ))
     }
 
