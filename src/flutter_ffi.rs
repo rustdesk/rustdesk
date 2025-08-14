@@ -37,7 +37,11 @@ lazy_static::lazy_static! {
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
     flutter::async_tasks::start_flutter_async_runner();
-    *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    // `APP_DIR` is set in `main_get_data_dir_ios()` on iOS.
+    #[cfg(not(target_os = "ios"))]
+    {
+        *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    }
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
     if custom_client_config.is_empty() {
         crate::load_custom_client();
@@ -1802,7 +1806,8 @@ pub fn main_set_home_dir(_home: String) {
 }
 
 // This is a temporary method to get data dir for ios
-pub fn main_get_data_dir_ios() -> SyncReturn<String> {
+pub fn main_get_data_dir_ios(app_dir: String) -> SyncReturn<String> {
+    *config::APP_DIR.write().unwrap() = app_dir;
     let data_dir = config::Config::path("data");
     if !data_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&data_dir) {
