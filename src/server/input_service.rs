@@ -1,8 +1,6 @@
 #[cfg(target_os = "linux")]
 use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;
-#[cfg(target_os = "macos")]
-use crate::common::is_server;
 use crate::input::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
@@ -19,7 +17,7 @@ use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
 use scrap::wayland::pipewire::RDP_SESSION_INFO;
 use std::{
     convert::TryFrom,
-    ops::{Deref, DerefMut, Sub},
+    ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{self, Duration, Instant},
@@ -699,6 +697,7 @@ fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
     }
 }
 
+#[allow(unreachable_code)]
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
     #[cfg(target_os = "macos")]
     {
@@ -714,6 +713,7 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
 }
 
 // to-do: merge handle_mouse and handle_pointer
+#[allow(unreachable_code)]
 pub fn handle_pointer(evt: &PointerDeviceEvent, conn: i32) {
     #[cfg(target_os = "macos")]
     {
@@ -894,7 +894,7 @@ fn get_last_input_cursor_pos() -> (i32, i32) {
 }
 
 // check if mouse is moved by the controlled side user to make controlled side has higher mouse priority than remote.
-fn active_mouse_(conn: i32) -> bool {
+fn active_mouse_(_conn: i32) -> bool {
     true
     /* this method is buggy (not working on macOS, making fast moving mouse event discarded here) and added latency (this is blocking way, must do in async way), so we disable it for now
     // out of time protection
@@ -1264,7 +1264,7 @@ fn sim_rdev_rawkey_virtual(code: u32, keydown: bool) {
 fn simulate_(event_type: &EventType) {
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(input) = &VIRTUAL_INPUT_STATE {
+        if let Some(input) = VIRTUAL_INPUT_STATE.as_ref() {
             let _ = input.simulate(&event_type);
         }
     }
@@ -1276,7 +1276,7 @@ fn press_capslock() {
     let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(input) = &mut VIRTUAL_INPUT_STATE {
+        if let Some(input) = VIRTUAL_INPUT_STATE.as_mut() {
             if input.simulate(&EventType::KeyPress(caps_key)).is_ok() {
                 input.capslock_down = true;
                 key_sleep();
@@ -1291,7 +1291,7 @@ fn release_capslock() {
     let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(input) = &mut VIRTUAL_INPUT_STATE {
+        if let Some(input) = VIRTUAL_INPUT_STATE.as_mut() {
             if input.simulate(&EventType::KeyRelease(caps_key)).is_ok() {
                 input.capslock_down = false;
                 key_sleep();
