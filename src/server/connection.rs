@@ -2703,11 +2703,7 @@ impl Connection {
                             }
                             Some(file_action::Union::SendConfirm(r)) => {
                                 if let Some(job) = fs::get_job(r.id, &mut self.read_jobs) {
-                                    job.confirm(&r).await;
-                                } else {
-                                    if let Ok(sc) = r.write_to_bytes() {
-                                        self.send_fs(ipc::FS::SendConfirm(sc));
-                                    }
+                                    job.confirm(&r);
                                 }
                             }
                             Some(file_action::Union::Rename(r)) => {

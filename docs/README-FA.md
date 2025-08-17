@@ -12,7 +12,7 @@
 با ما گفتگو کنید:  [Reddit](https://www.reddit.com/r/rustdesk) | [Twitter](https://twitter.com/rustdesk) | [Discord](https://discord.gg/nDceKgxnkV) | [YouTube](https://www.youtube.com/@rustdesk) 
 
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-%D9%88%DB%8C%DA%98%DA%AF%DB%8C%E2%80%8C%D9%87%D8%A7%DB%8C%20%D9%BE%DB%8C%D8%B4%D8%B1%D9%81%D8%AA%D9%87-blue)](https://rustdesk.com/pricing.html)
 
 راست‌دسک (RustDesk) نرم‌افزاری برای کارکردن با رایانه‌ی رومیزی از راه دور است و با زبان برنامه‌نویسی Rust نوشته شده است. نیاز به تنظیمات چندانی ندارد و شما را قادر می سازد تا بدون نگرانی از امنیت اطلاعات خود بر آن‌ها کنترل کامل داشته باشید.
 

@@ -171,6 +171,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     let agent = format!("{}_server.plist", crate::get_full_name());
     let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
     if !prompt {
+        // in macos 13, there is new way to check if they are running or enabled, https://developer.apple.com/documentation/servicemanagement/updating-helper-executables-from-earlier-versions-of-macos#Respond-to-changes-in-System-Settings
         if !std::path::Path::new(&format!("/Library/LaunchDaemons/{}", daemon)).exists() {
             return false;
         }
@@ -295,7 +296,10 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
 
 fn correct_app_name(s: &str) -> String {
     let s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
-    let s = s.replace("RustDesk", &crate::get_app_name());
+    let mut s = s.replace("RustDesk", &crate::get_app_name());
+    if let Some(bundleid) = get_bundle_id() {
+        s = s.replace("com.carriez.rustdesk", &bundleid);
+    }
     s
 }
 
@@ -1050,5 +1054,29 @@ impl WakeLock {
             .as_mut()
             .map(|h| h.set_display(display))
             .ok_or(anyhow!("no AwakeHandle"))?
+    }
+}
+
+fn get_bundle_id() -> Option<String> {
+    unsafe {
+        let bundle: id = msg_send![class!(NSBundle), mainBundle];
+        if bundle.is_null() {
+            return None;
+        }
+
+        let bundle_id: id = msg_send![bundle, bundleIdentifier];
+        if bundle_id.is_null() {
+            return None;
+        }
+
+        let c_str: *const std::os::raw::c_char = msg_send![bundle_id, UTF8String];
+        if c_str.is_null() {
+            return None;
+        }
+
+        let bundle_id_str = std::ffi::CStr::from_ptr(c_str)
+            .to_string_lossy()
+            .to_string();
+        Some(bundle_id_str)
     }
 }
