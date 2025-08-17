@@ -25,7 +25,7 @@ use hbb_common::{
 };
 use include_dir::{include_dir, Dir};
 use objc::rc::autoreleasepool;
-use objc::{class, msg_send, runtime::Object, sel, sel_impl};
+use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
 use std::{
     collections::HashMap,
