@@ -296,9 +296,9 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
 
 fn correct_app_name(s: &str) -> String {
     let s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
-    let s = s.replace("RustDesk", &crate::get_app_name());
+    let mut s = s.replace("RustDesk", &crate::get_app_name());
     if let Some(bundleid) = get_bundle_id() {
-        let s = s.replace("com.carriez.rustdesk", &bundleid);
+        s = s.replace("com.carriez.rustdesk", &bundleid);
     }
     s
 }
