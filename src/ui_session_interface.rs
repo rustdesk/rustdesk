@@ -192,7 +192,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn is_default(&self) -> bool {
-        self.lc.read().unwrap().conn_type.eq(&ConnType::DEFAULT_CONN)
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::DEFAULT_CONN)
     }
 
     pub fn is_view_camera(&self) -> bool {
@@ -803,7 +807,6 @@ impl<T: InvokeUiSession> Session<T> {
         msg_out.set_terminal_action(action);
         self.send(Data::Message(msg_out));
     }
-
 
     pub fn capture_displays(&self, add: Vec<i32>, sub: Vec<i32>, set: Vec<i32>) {
         let mut misc = Misc::new();
@@ -1611,7 +1614,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_permission(&self, name: &str, value: bool);
     fn close_success(&self);
     fn update_quality_status(&self, qs: QualityStatus);
-    fn set_connection_type(&self, is_secured: bool, direct: bool);
+    fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str);
     fn set_fingerprint(&self, fingerprint: String);
     fn job_error(&self, id: i32, err: String, file_num: i32);
     fn job_done(&self, id: i32, file_num: i32);

@@ -15,7 +15,7 @@
 
 우리와 채팅: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-%EA%B3%A0%EA%B8%89%20%EA%B8%B0%EB%8A%A5-blue)](https://rustdesk.com/pricing.html)
 
 Rust로 작성된 또 다른 원격 데스크톱 소프트웨어입니다. 구성할 필요 없이 바로 사용할 수 있습니다. 보안에 대한 걱정 없이 데이터를 완벽하게 제어할 수 있습니다. 저희의 rendezvous/relay server 서버를 사용하거나, [직접 설정](https://rustdesk.com/server), 또는 [직접 rendezvous/relay 서버를 작성할 수 있습니다](https://github.com/rustdesk/rustdesk-server-demo).
 
