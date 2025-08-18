@@ -418,6 +418,7 @@ pub fn is_modifier(key: &rdev::Key) -> bool {
 }
 
 #[inline]
+#[allow(dead_code)]
 pub fn is_modifier_code(evt: &KeyEvent) -> bool {
     match evt.union {
         Some(key_event::Union::Chr(code)) => {

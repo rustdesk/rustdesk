@@ -192,12 +192,10 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipboardFile> {
 
 #[cfg(feature = "unix-file-copy-paste")]
 pub mod unix_file_clip {
-    use crate::clipboard::try_empty_clipboard_files;
-
-    use super::{
-        super::clipboard::{update_clipboard_files, ClipboardSide},
-        *,
-    };
+    use super::*;
+    #[cfg(target_os = "linux")]
+    use crate::clipboard::update_clipboard_files;
+    use crate::clipboard::{try_empty_clipboard_files, ClipboardSide};
     #[cfg(target_os = "linux")]
     use clipboard::platform::unix::fuse;
     use clipboard::platform::unix::{
