@@ -113,7 +113,9 @@ pub fn start(args: &mut [String]) {
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
         page = "install.html";
-    } else if args[0] == "--cm" {
+    } else if (args[0] == "--cm"
+        || args[0] == "--connection-manager")
+    {
         frame.register_behavior("connection-manager", move || {
             Box::new(cm::SciterConnectionManager::new())
         });
