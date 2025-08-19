@@ -696,7 +696,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable camera", "Włącz kamerę"),
         ("No cameras", "Brak kamer"),
         ("view_camera_unsupported_tip", "Zdalne urządzenie nie obsługuje podglądu kamery."),
-        ("Terminal", "Rerminal"),
+        ("Terminal", "Terminal"),
         ("Enable terminal", "Włącz terminal"),
         ("New tab", "Nowa zakładka"),
         ("Keep terminal sessions on disconnect", "Utrzymaj sesję terminala przy rozłączeniu"),
@@ -708,6 +708,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to check if the user is an administrator.", "Błąd sprawdzania, czy użytkownik jest administratorem."),
         ("Supported only in the installed version.", "Wspierane tylko dla zainstalowanej aplikacji."),
         ("elevation_username_tip", "Podaj nazwę użytkownika lub domena\\użytkownik"),
-        ("Preparing for installation ...", ""),
+        ("Preparing for installation ...", "Przygotowywanie do instalacji ..."),
     ].iter().cloned().collect();
 }
