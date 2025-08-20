@@ -1,4 +1,4 @@
-name: Flutter Tag Build
+name: Flutter Tag Build (Windows Only)
 
 on:
   workflow_dispatch:
@@ -10,8 +10,8 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'
 
 jobs:
-  run-flutter-tag-build:
-    uses: ./.github/workflows/flutter-build.yml
+  run-flutter-windows-build:
+    uses: ./.github/workflows/flutter-windows-build.yml
     secrets: inherit
     with:
       upload-artifact: true
