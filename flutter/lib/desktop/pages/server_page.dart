@@ -362,7 +362,8 @@ Widget buildConnectionCard(Client client) {
         Expanded(
           child: Align(
             alignment: Alignment.bottomCenter,
-            child: _CmControlPanel(client: client),
+            // Control panel disabled - hide toolbar when being connected remotely
+            child: Offstage(),
           ),
         )
       ],
