@@ -42,6 +42,7 @@ import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
 import 'package:flutter_hbb/native/common.dart'
     if (dart.library.html) 'package:flutter_hbb/web/common.dart';
+import 'package:http/http.dart' as http;
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -2753,7 +2754,7 @@ class ServerConfig {
     } catch (err) {
       final input = msg.split('').reversed.join('');
       final bytes = base64Decode(base64.normalize(input));
-      json = jsonDecode(utf8.decode(bytes));
+      json = jsonDecode(utf8.decode(bytes, allowMalformed: true));
     }
     idServer = json['host'] ?? '';
     relayServer = json['relay'] ?? '';
@@ -3929,5 +3930,16 @@ String getConnectionText(bool secure, bool direct, String streamType) {
     return connectionText;
   } else {
     return '$connectionText ($streamType)';
+  }
+}
+
+String decode_http_response(http.Response resp) {
+  try {
+    // https://github.com/rustdesk/rustdesk-server-pro/discussions/758
+    return utf8.decode(resp.bodyBytes, allowMalformed: true);
+  } catch (e) {
+    debugPrint('Failed to decode response as UTF-8: $e');
+    // Fallback to bodyString which handles encoding automatically
+    return resp.body;
   }
 }

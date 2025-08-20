@@ -304,14 +304,14 @@ class TerminalModel with ChangeNotifier {
           // Try to decode as base64 first
           try {
             final bytes = base64Decode(data);
-            text = utf8.decode(bytes);
+            text = utf8.decode(bytes, allowMalformed: true);
           } catch (e) {
             // If base64 decode fails, treat as plain text
             text = data;
           }
         } else if (data is List) {
           // Handle if data comes as byte array
-          text = utf8.decode(List<int>.from(data));
+          text = utf8.decode(List<int>.from(data), allowMalformed: true);
         } else {
           debugPrint('[TerminalModel] Unknown data type: ${data.runtimeType}');
           return;
