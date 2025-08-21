@@ -17,9 +17,7 @@ mod et;
 mod eu;
 mod fa;
 mod fr;
-mod gu;
 mod he;
-mod hi;
 mod hr;
 mod hu;
 mod id;
@@ -29,7 +27,6 @@ mod ko;
 mod kz;
 mod lt;
 mod lv;
-mod ml;
 mod nb;
 mod nl;
 mod pl;
@@ -96,9 +93,6 @@ pub const LANGS: &[(&str, &str)] = &[
     ("sc", "Sardu"),
     ("ta", "தமிழ்"),
     ("ge", "ქართული"),
-    ("hi", "हिंदी"),
-    ("gu", "ગુજરાતી"),
-    ("ml", "മലയാളം"),
 ];
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -176,9 +170,6 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "sc" => sc::T.deref(),
         "ta" => ta::T.deref(),
         "ge" => ge::T.deref(),
-        "hi" => hi::T.deref(),
-        "ml" => ml::T.deref(),
-        "gu" => gu::T.deref(),
         _ => en::T.deref(),
     };
     let (name, placeholder_value) = extract_placeholder(&name);
