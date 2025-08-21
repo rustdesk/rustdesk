@@ -14,7 +14,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    
     <queries>
         <intent>
             <!-- https://developer.android.com/training/package-visibility/use-cases#open-urls-custom-tabs -->
