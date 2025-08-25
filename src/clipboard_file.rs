@@ -143,6 +143,40 @@ pub fn clip_2_msg(clip: ClipboardFile) -> Message {
             })),
             ..Default::default()
         },
+        ClipboardFile::Files { files } => {
+            let files = files
+                .iter()
+                .filter_map(|(f, s)| {
+                    if *s == 0 {
+                        if let Ok(meta) = std::fs::metadata(f) {
+                            Some(CliprdrFile {
+                                name: f.to_owned(),
+                                size: meta.len(),
+                                ..Default::default()
+                            })
+                        } else {
+                            None
+                        }
+                    } else {
+                        Some(CliprdrFile {
+                            name: f.to_owned(),
+                            size: *s,
+                            ..Default::default()
+                        })
+                    }
+                })
+                .collect::<Vec<_>>();
+            Message {
+                union: Some(message::Union::Cliprdr(Cliprdr {
+                    union: Some(cliprdr::Union::Files(CliprdrFiles {
+                        files,
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }
+        }
     }
 }
 
@@ -243,7 +277,7 @@ pub mod unix_file_clip {
         side: ClipboardSide,
         clip: ClipboardFile,
         conn_id: i32,
-    ) -> Option<Message> {
+    ) -> Vec<Message> {
         log::debug!("got clipfile from client peer");
         match clip {
             ClipboardFile::MonitorReady => {
@@ -257,7 +291,7 @@ pub mod unix_file_clip {
                     .is_some()
                 {
                     log::error!("no file contents format found");
-                    return None;
+                    return vec![];
                 };
                 let Some(file_descriptor_id) = format_list
                     .iter()
@@ -265,13 +299,13 @@ pub mod unix_file_clip {
                     .map(|(id, _)| *id)
                 else {
                     log::error!("no file descriptor format found");
-                    return None;
+                    return vec![];
                 };
                 // sync file system from peer
                 let data = ClipboardFile::FormatDataRequest {
                     requested_format_id: file_descriptor_id,
                 };
-                return Some(clip_2_msg(data));
+                return vec![clip_2_msg(data)];
             }
             ClipboardFile::FormatListResponse {
                 msg_flags: _msg_flags,
@@ -282,13 +316,13 @@ pub mod unix_file_clip {
                 log::debug!("requested format id: {}", _requested_format_id);
                 let format_data = serv_files::get_file_list_pdu();
                 if !format_data.is_empty() {
-                    return Some(clip_2_msg(ClipboardFile::FormatDataResponse {
+                    return vec![clip_2_msg(ClipboardFile::FormatDataResponse {
                         msg_flags: 1,
                         format_data,
-                    }));
+                    })];
                 }
                 // empty file list, send failure message
-                return Some(msg_resp_format_data_failure());
+                return vec![msg_resp_format_data_failure()];
             }
             #[cfg(target_os = "linux")]
             ClipboardFile::FormatDataResponse {
@@ -329,7 +363,7 @@ pub mod unix_file_clip {
                 ..
             } => {
                 log::debug!("file contents request: stream_id: {}, list_index: {}, dw_flags: {}, n_position_low: {}, n_position_high: {}, cb_requested: {}", stream_id, list_index, dw_flags, n_position_low, n_position_high, cb_requested);
-                match serv_files::read_file_contents(
+                return serv_files::read_file_contents(
                     conn_id,
                     stream_id,
                     list_index,
@@ -337,15 +371,16 @@ pub mod unix_file_clip {
                     n_position_low,
                     n_position_high,
                     cb_requested,
-                ) {
-                    Ok(data) => {
-                        return Some(clip_2_msg(data));
-                    }
+                )
+                .into_iter()
+                .map(|res| match res {
+                    Ok(data) => clip_2_msg(data),
                     Err(e) => {
                         log::error!("failed to read file contents: {:?}", e);
-                        return Some(resp_file_contents_fail(stream_id));
+                        resp_file_contents_fail(stream_id)
                     }
-                }
+                })
+                .collect::<_>();
             }
             #[cfg(target_os = "linux")]
             ClipboardFile::FileContentsResponse {
@@ -387,6 +422,6 @@ pub mod unix_file_clip {
                 log::error!("unsupported clipboard file type");
             }
         }
-        None
+        vec![]
     }
 }
