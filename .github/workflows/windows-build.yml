@@ -1,0 +1,80 @@
+name: RustDesk Flutter Windows Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/windows-build.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'flutter/**'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          
+      - name: 安装 Rust 环境
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+          
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.4'  # 与补丁版本匹配
+          cache: true
+          
+      - name: 安装 Visual Studio 组件
+        uses: microsoft/setup-msbuild@v2
+        
+      - name: 应用 Flutter 补丁
+        run: |
+          cd $env:FLUTTER_HOME/packages/flutter
+          git apply $env:GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+        shell: pwsh
+        
+      - name: 获取 Flutter 依赖
+        run: |
+          cd flutter
+          flutter pub get
+          
+      - name: 下载预编译的 Rust 引擎
+        run: |
+          cd flutter
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release -Force
+        shell: pwsh
+        
+      - name: 移动 Rust 引擎到指定目录
+        run: |
+          $flutterEnginePath = "$env:FLUTTER_HOME\bin\cache\artifacts\engine\windows-x64-release"
+          Move-Item -Force -Path .\flutter\windows-x64-release\* -Destination $flutterEnginePath
+        shell: pwsh
+        
+      - name: 编译 Windows 应用
+        run: |
+          cd flutter
+          flutter build windows --release
+          
+      - name: 打包编译结果
+        run: |
+          mkdir -p artifacts
+          Copy-Item -Path flutter\build\windows\x64\runner\Release -Destination artifacts\rustdesk-windows -Recurse
+          Compress-Archive -Path artifacts\rustdesk-windows\* -DestinationPath artifacts\rustdesk-windows.zip
+        shell: pwsh
+        
+      - name: 上传编译产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-windows-build
+          path: artifacts\rustdesk-windows.zip
