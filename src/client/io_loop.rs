@@ -722,12 +722,22 @@ impl<T: InvokeUiSession> Remote<T> {
                             fs::DataSource::FilePath(_p) => {
                                 job.is_last_job = false;
                                 job.is_resume = true;
+                                job.set_finished_size_on_resume();
+                                #[cfg(not(windows))]
+                                let files = job.files().clone();
+                                #[cfg(windows)]
+                                let mut files = job.files().clone();
+                                #[cfg(windows)]
+                                if self.handler.peer_platform() != "Windows" {
+                                    // peer is not windows, need transform \ to /
+                                    fs::transform_windows_path(&mut files);
+                                }
                                 allow_err!(
                                     peer.send(&fs::new_receive(
                                         id,
                                         job.remote.clone(),
                                         job.file_num,
-                                        job.files.clone(),
+                                        files,
                                         job.total_size(),
                                     ))
                                     .await
@@ -1463,6 +1473,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);
                                 job.set_files(entries);
+                                job.set_finished_size_on_resume();
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
                                 job.files = entries;
                             }
