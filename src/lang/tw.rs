@@ -709,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Supported only in the installed version.", "僅支援於已安裝的版本"),
         ("elevation_username_tip", "輸入使用者名稱或網域\\使用者名稱"),
         ("Preparing for installation ...", ""),
+        ("Show my cursor", ""),
     ].iter().cloned().collect();
 }

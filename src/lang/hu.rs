@@ -709,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Supported only in the installed version.", "Csak a telepített változatban támogatott."),
         ("elevation_username_tip", "Felhasználónév vagy tartománynév megadása\\felhasználónév"),
         ("Preparing for installation ...", "Felkészülés a telepítésre ..."),
+        ("Show my cursor", ""),
     ].iter().cloned().collect();
 }

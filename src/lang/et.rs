@@ -709,5 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Supported only in the installed version.", ""),
         ("elevation_username_tip", ""),
         ("Preparing for installation ...", ""),
+        ("Show my cursor", ""),
     ].iter().cloned().collect();
 }
