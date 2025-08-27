@@ -46,7 +46,7 @@ class ConnectStatus: Reactor.Component {
             return translate('connecting_status');
         }
         if (!handler.using_public_server()) return translate('Ready');
-        return <span>{translate("Ready")}, <span .link #setup-server>{translate("setup_server_tip")}</span></span>;
+        return <span>{translate("Ready")}! </span>; //(JEM)
     }
 
     event click $(#start-service) () {
@@ -342,7 +342,7 @@ class MyIdMenu: Reactor.Component {
                 <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <Languages />
                 <li #allow-auto-update><span>{svg_checkmark}</span>{translate('Auto update')}</li> 
-                <li #about>{translate('About')} {" "}{handler.get_app_name()}</li>
+                <li #about>{translate('About')} {" IPMon Remote Desktop"}</li>
             </menu>
         </popup>;
     }
@@ -383,13 +383,13 @@ class MyIdMenu: Reactor.Component {
     }
 
     function showAbout() {
-        var name = handler.get_app_name();
+        var name = "IPMon Remote Desktop";
         msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
             <div>Fingerprint: " + handler.get_fingerprint() + " \
-            <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
-            <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
-	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2025 Purslane Ltd.\
+            <div .link .custom-event url='https://rustdesk.com'>" + "Vers&atilde;o customizada do RustDesk [1R]" + "</div> \
+            <div .link .custom-event url='https://softjem.com.br'>" + translate("Visite nosso site") + "</div> \
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2025 SoftJem Tecnologia\
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
             </div>\

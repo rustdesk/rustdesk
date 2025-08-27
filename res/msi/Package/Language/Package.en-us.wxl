@@ -10,13 +10,13 @@ This file contains the declaration of all the localizable strings.
 	<!-- General strings -->
 	<String Id="DowngradeError" Value="A newer version of [ProductName] is already installed." />
 
-	<String Id="AR_Comment" Value="RustDesk" />
+	<String Id="AR_Comment" Value="IPMRmt" />
 
-	<String Id="F_App" Value="RustDesk" />
-	<String Id="F_App_Desc" Value="RustDesk - Main programs installations." />
+	<String Id="F_App" Value="IPMRmt" />
+	<String Id="F_App_Desc" Value="IPMRmt - Main programs installations." />
 
-	<String Id="SC_Uninstall" Value="Uninstall RustDesk" />
-	<String Id="SC_Uninstall_Desc" Value="Removes RustDesk or parts of it from the computer" />
+	<String Id="SC_Uninstall" Value="Uninstall IPMRmt" />
+	<String Id="SC_Uninstall_Desc" Value="Removes IPMRmt or parts of it from the computer" />
 
 	<!-- Client related strings -->
 	<String Id="F_Client" Value="Client" />
@@ -26,20 +26,20 @@ This file contains the declaration of all the localizable strings.
 	<String Id="F_LAVFilters" Value="LAV Filters" />
 	<String Id="F_LAVFilters_Desc" Value="Recommended directshow filters for best audio and video playback experience." />
 
-	<String Id="SC_Client" Value="RustDesk" />
-	<String Id="SC_Client_Desc" Value="Start RustDesk." />
+	<String Id="SC_Client" Value="IPMRmt" />
+	<String Id="SC_Client_Desc" Value="Start IPMRmt." />
 
-	<String Id="SC_Client_Tray" Value="RustDesk Tray" />
-	<String Id="SC_Client_Tray_Desc" Value="Start RustDesk tray." />
+	<String Id="SC_Client_Tray" Value="IPMRmt Tray" />
+	<String Id="SC_Client_Tray_Desc" Value="Start IPMRmt tray." />
 
 	<!-- Server related strings -->
 	<String Id="F_Server" Value="Server" />
-	<String Id="F_Server_Desc" Value="The server part of RustDesk. Provides the MediaLibrary and other services." />
+	<String Id="F_Server_Desc" Value="The server part of IPMRmt. Provides the MediaLibrary and other services." />
 	<String Id="F_Server_Plugins" Value="Plugins" />
 	<String Id="F_Server_Plugins_Desc" Value="Plugins for the server." />
 
-	<String Id="Service_DisplayName" Value="RustDesk Service" />
-	<String Id="Service_Description" Value="This service runs the RustDesk Server." />
+	<String Id="Service_DisplayName" Value="IPMRmt Service" />
+	<String Id="Service_Description" Value="This service runs the IPMRmt Server." />
 
 	<!-- Launch Conditions -->
 	<String Id="LC_OS" Value="[ProductName] requires minimum Windows 7 / 2008 R2 as operating system." />

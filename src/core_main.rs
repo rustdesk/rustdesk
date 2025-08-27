@@ -88,7 +88,7 @@ pub fn core_main() -> Option<Vec<String>> {
         if should_check_start_tray && !crate::check_process("--tray", true) {
             #[cfg(target_os = "linux")]
             hbb_common::allow_err!(crate::platform::check_autostart_config());
-            hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
+            //hbb_common::allow_err!(crate::run_me(vec!["--tray"])); //(JEM)
         }
     }
     #[cfg(not(debug_assertions))]
@@ -316,7 +316,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
         } else if args[0] == "--tray" {
             if !crate::check_process("--tray", true) {
-                crate::tray::start_tray();
+               // crate::tray::start_tray();  (JEM)
             }
             return None;
         } else if args[0] == "--install-service" {

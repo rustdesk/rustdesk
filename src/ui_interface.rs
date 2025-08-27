@@ -861,7 +861,7 @@ pub fn video_save_directory(root: bool) -> String {
         {
             let drive = std::env::var("SystemDrive").unwrap_or("C:".to_owned());
             let dir =
-                std::path::PathBuf::from(format!("{drive}\\ProgramData\\{appname}\\recording",));
+                std::path::PathBuf::from(format!("{drive}\\ProgramData\\IPMRmt\\recording",));
             return dir.to_string_lossy().to_string();
         }
     }
@@ -876,7 +876,7 @@ pub fn video_save_directory(root: bool) -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
-        path.push_str(format!("/{appname}/ScreenRecord").as_str());
+        path.push_str(format!("/IPMRmt/ScreenRecord").as_str());
         let dir = try_create(&std::path::Path::new(&path));
         if !dir.is_empty() {
             return dir;

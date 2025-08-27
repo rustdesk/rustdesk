@@ -148,7 +148,22 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 connectionType.direct.value == ConnectionType.strDirect;
             String msgConn = getConnectionText(
                 secure, direct, connectionType.stream_type.value);
-            var msgFingerprint = '${translate('Fingerprint')}:\n';
+
+            final remotePage = tabController.state.value.tabs  // (JEM)
+              .firstWhere((tab) => tab.key == key)
+              .page as RemotePage;
+            final ffi = remotePage.ffi;
+            final pi = ffi.ffiModel.pi;
+			
+            String infSes = "${pi.username}@${pi.hostname}";   // (JEM)
+            if (infSes == "@") {
+              infSes = "";
+            } else {
+             infSes = "Sessão: ${infSes}\n";
+            }
+												
+            var msgFingerprint = "${infSes}${translate('Fingerprint')}:\n";  // (JEM)
+
             var fingerprint = FingerprintState.find(key).value;
             if (fingerprint.isEmpty) {
               fingerprint = 'N/A';
