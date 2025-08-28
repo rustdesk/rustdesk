@@ -126,9 +126,18 @@ pub struct ConnInner {
     tx_video: Option<Sender>,
 }
 
+struct InputMouse {
+    msg: MouseEvent,
+    conn_id: i32,
+    username: String,
+    argb: u32,
+    simulate: bool,
+    show_cursor: bool,
+}
+
 enum MessageInput {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    Mouse((MouseEvent, i32)),
+    Mouse(InputMouse),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Key((KeyEvent, bool)),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -225,6 +234,9 @@ pub struct Connection {
     // by peer
     disable_keyboard: bool,
     // by peer
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    show_my_cursor: bool,
+    // by peer
     disable_clipboard: bool,
     // by peer
     disable_audio: bool,
@@ -240,6 +252,7 @@ pub struct Connection {
     server_audit_conn: String,
     server_audit_file: String,
     lr: LoginRequest,
+    peer_argb: u32,
     session_last_recv_time: Option<Arc<Mutex<Instant>>>,
     chat_unanswered: bool,
     file_transferred: bool,
@@ -403,11 +416,14 @@ impl Connection {
             enable_file_transfer: false,
             disable_clipboard: false,
             disable_keyboard: false,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            show_my_cursor: false,
             tx_input,
             video_ack_required: false,
             server_audit_conn: "".to_owned(),
             server_audit_file: "".to_owned(),
             lr: Default::default(),
+            peer_argb: 0u32,
             session_last_recv_time: None,
             chat_unanswered: false,
             file_transferred: false,
@@ -938,8 +954,15 @@ impl Connection {
         loop {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
                 Ok(v) => match v {
-                    MessageInput::Mouse((msg, id)) => {
-                        handle_mouse(&msg, id);
+                    MessageInput::Mouse(mouse_input) => {
+                        handle_mouse(
+                            &mouse_input.msg,
+                            mouse_input.conn_id,
+                            mouse_input.username,
+                            mouse_input.argb,
+                            mouse_input.simulate,
+                            mouse_input.show_cursor,
+                        );
                     }
                     MessageInput::Key((mut msg, press)) => {
                         // Set the press state to false, use `down` only in `handle_key()`.
@@ -1784,8 +1807,25 @@ impl Connection {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn input_mouse(&self, msg: MouseEvent, conn_id: i32) {
-        self.tx_input.send(MessageInput::Mouse((msg, conn_id))).ok();
+    fn input_mouse(
+        &self,
+        msg: MouseEvent,
+        conn_id: i32,
+        username: String,
+        argb: u32,
+        simulate: bool,
+        show_cursor: bool,
+    ) {
+        self.tx_input
+            .send(MessageInput::Mouse(InputMouse {
+                msg,
+                conn_id,
+                username,
+                argb,
+                simulate,
+                show_cursor,
+            }))
+            .ok();
     }
 
     #[inline]
@@ -1900,6 +1940,7 @@ impl Connection {
 
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
+        self.peer_argb = crate::str2color(&format!("{}{}", &lr.my_id, &lr.my_platform), 0xff);
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
         }
@@ -2279,7 +2320,23 @@ impl Connection {
                         }
                         #[cfg(target_os = "macos")]
                         self.retina.on_mouse_event(&mut me, self.display_idx);
-                        self.input_mouse(me, self.inner.id());
+                        self.input_mouse(
+                            me,
+                            self.inner.id(),
+                            self.lr.my_name.clone(),
+                            self.peer_argb,
+                            true,
+                            self.show_my_cursor,
+                        );
+                    } else if self.show_my_cursor {
+                        self.input_mouse(
+                            me,
+                            self.inner.id(),
+                            self.lr.my_name.clone(),
+                            self.peer_argb,
+                            false,
+                            true,
+                        );
                     }
                     self.update_auto_disconnect_timer();
                 }
@@ -3640,6 +3697,18 @@ impl Connection {
                 self.update_terminal_persistence(q == BoolOption::Yes).await;
             }
         }
+        #[cfg(target_os = "windows")]
+        if let Ok(q) = o.show_my_cursor.enum_value() {
+            if q != BoolOption::NotSet {
+                use crate::whiteboard;
+                self.show_my_cursor = q == BoolOption::Yes;
+                if q == BoolOption::Yes {
+                    whiteboard::register_whiteboard(whiteboard::get_key_cursor(self.inner.id));
+                } else {
+                    whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(self.inner.id));
+                }
+            }
+        }
     }
 
     async fn turn_on_privacy(&mut self, impl_key: String) {
@@ -4792,6 +4861,11 @@ mod raii {
                 scrap::wayland::pipewire::try_close_session();
             }
             Self::check_wake_lock();
+            #[cfg(target_os = "windows")]
+            {
+                use crate::whiteboard;
+                whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(self.0));
+            }
         }
     }
 }

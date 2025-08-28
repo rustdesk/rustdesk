@@ -134,6 +134,11 @@ impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1"
 runas = "1.2"
+tiny-skia = "0.11"
+softbuffer = "0.4"
+fontdb = "0.23"
+bytemuck = "1.23"
+ttf-parser = "0.25"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"

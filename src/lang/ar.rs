@@ -708,6 +708,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to check if the user is an administrator.", "فشل التحقق مما إذا كان المستخدم لديه صلاحيات المسؤول."),
         ("Supported only in the installed version.", "مدعوم فقط في النسخة المُثبتة."),
         ("elevation_username_tip", "يرجى إدخال اسم مستخدم بصلاحيات المسؤول للمتابعة."),
-        ("Preparing for installation ...", "جارٍ التحضير للتثبيت...")
+        ("Preparing for installation ...", "جارٍ التحضير للتثبيت..."),
+        ("Show my cursor", ""),
     ].iter().cloned().collect();
 }

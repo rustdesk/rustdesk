@@ -1593,6 +1593,7 @@ class _KeyboardMenu extends StatelessWidget {
               inputSource(),
               Divider(),
               viewMode(),
+              if (pi.platform == kPeerPlatformWindows) showMyCursor(),
               Divider(),
               ...toolbarToggles(),
               ...mouseSpeed(),
@@ -1749,10 +1750,34 @@ class _KeyboardMenu extends StatelessWidget {
                 final viewOnly = await bind.sessionGetToggleOption(
                     sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
                 ffiModel.setViewOnly(id, viewOnly ?? value);
+                final showMyCursor = await bind.sessionGetToggleOption(
+                    sessionId: ffi.sessionId, arg: kOptionToggleShowMyCursor);
+                ffiModel.setShowMyCursor(showMyCursor ?? value);
               }
             : null,
         ffi: ffi,
         child: Text(translate('View Mode')));
+  }
+
+  showMyCursor() {
+    final ffiModel = ffi.ffiModel;
+    return CkbMenuButton(
+            value: ffiModel.showMyCursor,
+            onChanged: ffiModel.viewOnly
+                ? (value) async {
+                    if (value == null) return;
+                    await bind.sessionToggleOption(
+                        sessionId: ffi.sessionId,
+                        value: kOptionToggleShowMyCursor);
+                    final showMyCursor = await bind.sessionGetToggleOption(
+                        sessionId: ffi.sessionId,
+                        arg: kOptionToggleShowMyCursor);
+                    ffiModel.setShowMyCursor(showMyCursor ?? value);
+                  }
+                : null,
+            ffi: ffi,
+            child: Text(translate('Show my cursor')))
+        .paddingOnly(left: 26.0);
   }
 
   mobileActions() {

@@ -116,6 +116,7 @@ class FfiModel with ChangeNotifier {
   Timer? _timer;
   var _reconnects = 1;
   bool _viewOnly = false;
+  bool _showMyCursor = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
 
@@ -154,6 +155,7 @@ class FfiModel with ChangeNotifier {
   bool get isPeerMobile => isPeerAndroid;
 
   bool get viewOnly => _viewOnly;
+  bool get showMyCursor => _showMyCursor;
 
   set inputBlocked(v) {
     _inputBlocked = v;
@@ -1144,6 +1146,8 @@ class FfiModel with ChangeNotifier {
           peerId,
           bind.sessionGetToggleOptionSync(
               sessionId: sessionId, arg: kOptionToggleViewOnly));
+      setShowMyCursor(bind.sessionGetToggleOptionSync(
+          sessionId: sessionId, arg: kOptionToggleShowMyCursor));
     }
     if (connType == ConnType.defaultConn || connType == ConnType.viewCamera) {
       final platformAdditions = evt['platform_additions'];
@@ -1491,6 +1495,13 @@ class FfiModel with ChangeNotifier {
     }
     if (_viewOnly != value) {
       _viewOnly = value;
+      notifyListeners();
+    }
+  }
+
+  void setShowMyCursor(bool value) {
+    if (_showMyCursor != value) {
+      _showMyCursor = value;
       notifyListeners();
     }
   }
