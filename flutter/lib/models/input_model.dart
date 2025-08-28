@@ -1313,8 +1313,12 @@ class InputModel {
           isMove = false;
           canvas = coords.canvas;
           rect = coords.remoteRect;
-          x -= coords.relativeOffset.dx / devicePixelRatio;
-          y -= coords.relativeOffset.dy / devicePixelRatio;
+          x -= isWindows
+              ? coords.relativeOffset.dx / devicePixelRatio
+              : coords.relativeOffset.dx;
+          y -= isWindows
+              ? coords.relativeOffset.dy / devicePixelRatio
+              : coords.relativeOffset.dy;
         }
       }
     }
@@ -1339,15 +1343,21 @@ class InputModel {
   }
 
   bool _isInCurrentWindow(double x, double y) {
-    final w = _windowRect!.width / devicePixelRatio;
-    final h = _windowRect!.width / devicePixelRatio;
+    var w = _windowRect!.width;
+    var h = _windowRect!.height;
+    if (isWindows) {
+      w /= devicePixelRatio;
+      h /= devicePixelRatio;
+    }
     return x >= 0 && y >= 0 && x <= w && y <= h;
   }
 
   static RemoteWindowCoords? findRemoteCoords(double x, double y,
       List<RemoteWindowCoords> remoteWindowCoords, double devicePixelRatio) {
-    x *= devicePixelRatio;
-    y *= devicePixelRatio;
+    if (isWindows) {
+      x *= devicePixelRatio;
+      y *= devicePixelRatio;
+    }
     for (final c in remoteWindowCoords) {
       if (x >= c.relativeOffset.dx &&
           y >= c.relativeOffset.dy &&
