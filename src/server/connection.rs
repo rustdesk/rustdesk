@@ -3703,9 +3703,26 @@ impl Connection {
                 use crate::whiteboard;
                 self.show_my_cursor = q == BoolOption::Yes;
                 if q == BoolOption::Yes {
-                    whiteboard::register_whiteboard(whiteboard::get_key_cursor(self.inner.id));
+                    if crate::platform::windows::is_win_10_or_greater() {
+                        whiteboard::register_whiteboard(whiteboard::get_key_cursor(self.inner.id));
+                    } else {
+                        let mut msg_out = Message::new();
+                        let res = MessageBox {
+                            msgtype: "nook-nocancel-hasclose".to_owned(),
+                            title: "Show my cursor".to_owned(),
+                            text: "Windows 10 or greater is required.".to_owned(),
+                            link: "".to_owned(),
+                            ..Default::default()
+                        };
+                        msg_out.set_message_box(res);
+                        self.send(msg_out).await;
+                    }
                 } else {
-                    whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(self.inner.id));
+                    if crate::platform::windows::is_win_10_or_greater() {
+                        whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(
+                            self.inner.id,
+                        ));
+                    }
                 }
             }
         }
