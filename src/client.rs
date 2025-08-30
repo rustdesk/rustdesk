@@ -1782,41 +1782,13 @@ impl LoginConfigHandler {
         shared_password: Option<String>,
         conn_token: Option<String>,
     ) {
-        let mut id = id;
-        if id.contains("@") {
-            let mut v = id.split("@");
-            let raw_id: &str = v.next().unwrap_or_default();
-            let mut server_key = v.next().unwrap_or_default().split('?');
-            let server = server_key.next().unwrap_or_default();
-            let args = server_key.next().unwrap_or_default();
-            let key = if server == PUBLIC_SERVER {
-                config::RS_PUB_KEY.to_owned()
-            } else {
-                let mut args_map: HashMap<String, &str> = HashMap::new();
-                for arg in args.split('&') {
-                    if let Some(kv) = arg.find('=') {
-                        let k = arg[0..kv].to_lowercase();
-                        let v = &arg[kv + 1..];
-                        args_map.insert(k, v);
-                    }
-                }
-                let key = args_map.remove("key").unwrap_or_default();
-                key.to_owned()
-            };
-
-            // here we can check <id>/r@server
-            let real_id = crate::ui_interface::handle_relay_id(raw_id).to_string();
-            if real_id != raw_id {
-                force_relay = true;
-            }
-            self.other_server = Some((real_id.clone(), server.to_owned(), key));
-            id = format!("{real_id}@{server}");
-        } else {
-            let real_id = crate::ui_interface::handle_relay_id(&id);
-            if real_id != id {
-                force_relay = true;
-                id = real_id.to_owned();
-            }
+        let format_id = format_id(id.as_str());
+        let id = format_id.id;
+        if format_id.force_relay {
+            force_relay = true;
+        };
+        if format_id.server.is_some() {
+            self.other_server = format_id.server;
         }
 
         self.id = id;
@@ -3909,14 +3881,66 @@ async fn hc_connection_(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+pub struct FormatId {
+    pub id: String,
+    pub server: Option<(String, String, String)>,
+    pub force_relay: bool,
+}
+
+fn format_id(id: &str) -> FormatId {
+    if id.contains("@") {
+        let mut force_relay = false;
+        let mut v = id.split("@");
+        let raw_id: &str = v.next().unwrap_or_default();
+        let mut server_key = v.next().unwrap_or_default().split('?');
+        let server = server_key.next().unwrap_or_default();
+        let args = server_key.next().unwrap_or_default();
+        let key = if server == PUBLIC_SERVER {
+            config::RS_PUB_KEY.to_owned()
+        } else {
+            let mut args_map: HashMap<String, &str> = HashMap::new();
+            for arg in args.split('&') {
+                if let Some(kv) = arg.find('=') {
+                    let k = arg[0..kv].to_lowercase();
+                    let v = &arg[kv + 1..];
+                    args_map.insert(k, v);
+                }
+            }
+            let key = args_map.remove("key").unwrap_or_default();
+            key.to_owned()
+        };
+
+        // here we can check <id>/r@server
+        let real_id = crate::ui_interface::handle_relay_id(raw_id).to_string();
+        if real_id != raw_id {
+            force_relay = true;
+        }
+        FormatId {
+            id: format!("{real_id}@{server}"),
+            server: Some((real_id.to_string(), server.to_string(), key.to_string())),
+            force_relay,
+        }
+    } else {
+        let real_id = crate::ui_interface::handle_relay_id(&id);
+        FormatId {
+            id: real_id.to_string(),
+            server: None,
+            force_relay: real_id != id,
+        }
+    }
+}
+
 pub mod peer_online {
+    use std::collections::HashMap;
+
     use hbb_common::{
         anyhow::bail,
         config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT},
         log,
         rendezvous_proto::*,
         sleep,
-        socket_client::connect_tcp,
+        socket_client::{check_port, connect_tcp},
         ResultType, Stream,
     };
 
@@ -3929,35 +3953,93 @@ pub mod peer_online {
             f(onlines, offlines)
         } else {
             let query_timeout = std::time::Duration::from_millis(3_000);
-            match query_online_states_(&ids, query_timeout).await {
-                Ok((onlines, offlines)) => {
-                    f(onlines, offlines);
+            let (rendezvous_server, _servers, _contained) =
+                crate::get_rendezvous_server(READ_TIMEOUT).await;
+
+            let group = ids
+                .iter()
+                .map(|id| (id, super::format_id(id)))
+                .map(|(raw_id, format)| {
+                    if let Some((pure_id, server, _key)) = format.server {
+                        (raw_id, pure_id, server)
+                    } else {
+                        (raw_id, format.id, rendezvous_server.clone())
+                    }
+                })
+                .map(|(raw_id, id, server)| {
+                    if server == crate::client::PUBLIC_SERVER {
+                        (
+                            raw_id,
+                            id,
+                            hbb_common::config::RENDEZVOUS_SERVERS[0].to_string(),
+                        )
+                    } else {
+                        (
+                            raw_id,
+                            id,
+                            check_port(server, hbb_common::config::RENDEZVOUS_PORT),
+                        )
+                    }
+                })
+                .fold(HashMap::new(), |mut map, (raw_id, id, server)| {
+                    map.entry(server)
+                        .or_insert(HashMap::new())
+                        .insert(id, raw_id);
+                    map
+                });
+
+            let query_group = group.iter().map(|(server, map)| {
+                let ids: Vec<String> = map.keys().map(|t| t.to_string()).collect();
+                (map, query_online_states_(ids, query_timeout, server))
+            });
+
+            let mut onlines = Vec::new();
+            let mut offlines = Vec::new();
+
+            for (map, query) in query_group.into_iter() {
+                match query.await {
+                    Ok((on, off)) => {
+                        for id in on.iter() {
+                            if let Some(raw_id) = map.get(id) {
+                                onlines.push(raw_id.to_string());
+                            }
+                        }
+                        for id in off.iter() {
+                            if let Some(raw_id) = map.get(id) {
+                                offlines.push(raw_id.to_string());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::debug!("query onlines, {}", &e);
+                    }
                 }
-                Err(e) => {
-                    log::debug!("query onlines, {}", &e);
-                }
+            }
+            f(onlines, offlines);
+        }
+    }
+
+    async fn create_online_stream(rendezvous_server: &str) -> ResultType<Stream> {
+        let tmp = rendezvous_server.rfind(':').map(|pos| {
+            let url = &rendezvous_server[..pos];
+            let port: u16 = rendezvous_server[pos + 1..].parse().unwrap_or(0);
+            (url, port)
+        });
+        match tmp {
+            Some((url, port)) if port > 0 => {
+                let online_server = format!("{}:{}", url, port - 1);
+                connect_tcp(online_server, CONNECT_TIMEOUT).await
+            }
+            _ => {
+                bail!("Invalid server address: {}", rendezvous_server);
             }
         }
     }
 
-    async fn create_online_stream() -> ResultType<Stream> {
-        let (rendezvous_server, _servers, _contained) =
-            crate::get_rendezvous_server(READ_TIMEOUT).await;
-        let tmp: Vec<&str> = rendezvous_server.split(":").collect();
-        if tmp.len() != 2 {
-            bail!("Invalid server address: {}", rendezvous_server);
-        }
-        let port: u16 = tmp[1].parse()?;
-        if port == 0 {
-            bail!("Invalid server address: {}", rendezvous_server);
-        }
-        let online_server = format!("{}:{}", tmp[0], port - 1);
-        connect_tcp(online_server, CONNECT_TIMEOUT).await
-    }
-
     async fn query_online_states_(
-        ids: &Vec<String>,
+        ids: Vec<String>,
         timeout: std::time::Duration,
+        rendezvous_server: &str,
     ) -> ResultType<(Vec<String>, Vec<String>)> {
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_request(OnlineRequest {
@@ -3966,7 +4048,7 @@ pub mod peer_online {
             ..Default::default()
         });
 
-        let mut socket = match create_online_stream().await {
+        let mut socket = match create_online_stream(rendezvous_server).await {
             Ok(s) => s,
             Err(e) => {
                 log::debug!("Failed to create peers online stream, {e}");
