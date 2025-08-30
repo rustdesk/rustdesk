@@ -62,21 +62,15 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
     }
     path.push(target);
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-lib=static={}",
-            name.trim_start_matches("lib")
-        )
+        "cargo:rustc-link-lib=static={}",
+        name.trim_start_matches("lib")
     );
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-search={}",
-            path.join("lib").to_str().unwrap()
-        )
+        "cargo:rustc-link-search={}",
+        path.join("lib").to_str().unwrap()
     );
     let include = path.join("include");
-    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
+    println!("cargo:include={}", include.to_str().unwrap());
     include
 }
 
@@ -111,23 +105,17 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
     path.push(directories.pop().unwrap());
     // Link the library.
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-lib=static={}",
-            name.trim_start_matches("lib")
-        )
+        "cargo:rustc-link-lib=static={}",
+        name.trim_start_matches("lib")
     );
     // Add the library path.
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-search={}",
-            path.join("lib").to_str().unwrap()
-        )
+        "cargo:rustc-link-search={}",
+        path.join("lib").to_str().unwrap()
     );
     // Add the include path.
     let include = path.join("include");
-    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
+    println!("cargo:include={}", include.to_str().unwrap());
     include
 }
 
