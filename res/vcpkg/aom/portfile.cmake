@@ -22,7 +22,7 @@ else()
     vcpkg_from_git(
         OUT_SOURCE_PATH SOURCE_PATH
         URL "https://aomedia.googlesource.com/aom"
-        REF d6f30ae474dd6c358f26de0a0fc26a0d7340a84c # 3.11.0
+        REF 10aece4157eb79315da205f39e19bf6ab3ee30d0 # 3.12.1
         PATCHES
             aom-uninitialized-pointer.diff
             # aom-avx2.diff
