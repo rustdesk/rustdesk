@@ -55,7 +55,7 @@ pub mod plugin;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod tray;
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 mod whiteboard;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
