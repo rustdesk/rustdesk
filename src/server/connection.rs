@@ -3697,13 +3697,17 @@ impl Connection {
                 self.update_terminal_persistence(q == BoolOption::Yes).await;
             }
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
         if let Ok(q) = o.show_my_cursor.enum_value() {
             if q != BoolOption::NotSet {
                 use crate::whiteboard;
                 self.show_my_cursor = q == BoolOption::Yes;
+                #[cfg(target_os = "windows")]
+                let is_win10_or_greater = crate::platform::windows::is_win_10_or_greater();
+                #[cfg(not(target_os = "windows"))]
+                let is_win10_or_greater = false;
                 if q == BoolOption::Yes {
-                    if crate::platform::windows::is_win_10_or_greater() {
+                    if !cfg!(target_os = "windows") || is_win10_or_greater {
                         whiteboard::register_whiteboard(whiteboard::get_key_cursor(self.inner.id));
                     } else {
                         let mut msg_out = Message::new();
@@ -3718,7 +3722,7 @@ impl Connection {
                         self.send(msg_out).await;
                     }
                 } else {
-                    if crate::platform::windows::is_win_10_or_greater() {
+                    if !cfg!(target_os = "windows") || is_win10_or_greater {
                         whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(
                             self.inner.id,
                         ));
@@ -4878,7 +4882,7 @@ mod raii {
                 scrap::wayland::pipewire::try_close_session();
             }
             Self::check_wake_lock();
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
             {
                 use crate::whiteboard;
                 whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(self.0));

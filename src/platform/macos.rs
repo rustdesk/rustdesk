@@ -780,7 +780,7 @@ pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDes
     Ok(())
 }
 
-pub fn update_to(file: &str) -> ResultType<()> {
+pub fn update_to(_file: &str) -> ResultType<()> {
     update_extracted(UPDATE_TEMP_DIR)?;
     Ok(())
 }
