@@ -31,13 +31,14 @@ env:
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2025.01.13
+  # vcpkg version: 2025.08.27
   # If we change the `VCPKG COMMIT_ID`, please remember:
   # 1. Call `$VCPKG_ROOT/vcpkg x-update-baseline` to update the baseline in `vcpkg.json`.
   #  Or we may face build issue like 
   #  https://github.com/rustdesk/rustdesk/actions/runs/14414119794/job/40427970174
   # 2. Update the `VCPKG_COMMIT_ID` in `ci.yml` and `playground.yml`.
-  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836" # 2025.01.13, got "/opt/artifacts/vcpkg/vcpkg: No such file or directory" with latest version
   VERSION: "1.4.2"
   NDK_VERSION: "r27c"
   #signing keys env variable checks
@@ -1637,6 +1638,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Modify vcpkg.json for armv7
+        if: matrix.job.vcpkg-triplet == 'arm-linux'
+        run: |
+          # Replace the baseline in vcpkg.json with ARMV7_VCPKG_COMMIT_ID for armv7 builds
+          sed -i 's/"baseline": ".*"/"baseline": "${{ env.ARMV7_VCPKG_COMMIT_ID }}"/' vcpkg.json
+          echo "Modified vcpkg.json for armv7 build:"
+          grep -A 2 -B 2 '"baseline"' vcpkg.json
+
       - name: Free Space
         run: |
           df -h
@@ -1722,11 +1731,12 @@ jobs:
             rm -rf vcpkg
             git clone https://github.com/microsoft/vcpkg
             pushd vcpkg
-            git reset --hard ${{ env.VCPKG_COMMIT_ID }}
             # build vcpkg helper executable with gcc-8 for arm-linux but use prebuilt one on x64-linux
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
+              git reset --hard ${{ env.ARMV7_VCPKG_COMMIT_ID }}
               CC=/usr/bin/gcc-8 CXX=/usr/bin/g++-8 sh bootstrap-vcpkg.sh -disableMetrics
             else
+              git reset --hard ${{ env.VCPKG_COMMIT_ID }}
               sh bootstrap-vcpkg.sh -disableMetrics
             fi
             popd
