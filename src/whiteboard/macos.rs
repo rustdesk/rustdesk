@@ -3,11 +3,11 @@ use core_graphics::context::CGContextRef;
 use foreign_types::ForeignTypeRef;
 use hbb_common::{bail, log, ResultType};
 use objc::{class, msg_send, runtime::Object, sel, sel_impl};
-use piet::{kurbo::BezPath, RenderContext};
-use piet_coregraphics::CoreGraphicsContext;
+use piet::{kurbo::BezPath, FontFamily, RenderContext, Text, TextLayoutBuilder};
+use piet_coregraphics::{CoreGraphicsContext, CoreGraphicsTextLayout};
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use tao::{
-    dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
+    dpi::{LogicalSize, PhysicalPosition},
     event::{Event, StartCause, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     platform::macos::MonitorHandleExtMacOS,
@@ -16,6 +16,8 @@ use tao::{
 };
 
 const MAXIMUM_WINDOW_LEVEL: i64 = 2147483647;
+const CURSOR_TEXT_FONT_SIZE: f64 = 14.0;
+const CURSOR_TEXT_OFFSET: f64 = 20.0;
 
 struct WindowState {
     window: Arc<Window>,
@@ -29,6 +31,12 @@ struct Ripple {
     x: f64,
     y: f64,
     start_time: Instant,
+}
+
+struct CursorInfo {
+    window_id: WindowId,
+    text_key: (String, u32),
+    cursor: Cursor,
 }
 
 fn set_window_properties(window: &Arc<Window>) -> ResultType<()> {
@@ -108,7 +116,8 @@ fn draw_cursors(
     windows: &Vec<WindowState>,
     window_id: WindowId,
     window_ripples: &mut HashMap<WindowId, Vec<Ripple>>,
-    last_cursors: &HashMap<String, (WindowId, Cursor)>,
+    last_cursors: &HashMap<String, CursorInfo>,
+    map_cursor_text: &mut HashMap<(String, u32), CoreGraphicsTextLayout>,
 ) {
     for window in windows.iter() {
         if window.window.id() != window_id {
@@ -154,10 +163,11 @@ fn draw_cursors(
                                 });
                             }
 
-                            for (wid, cursor) in last_cursors.values() {
-                                if *wid != window.window.id() {
+                            for info in last_cursors.values() {
+                                if info.window_id != window.window.id() {
                                     continue;
                                 }
+                                let cursor = &info.cursor;
 
                                 let (x, y) = (cursor.x as f64, cursor.y as f64);
                                 let size = 1.0;
@@ -178,6 +188,23 @@ fn draw_cursors(
                                     (cursor.argb >> 24 & 0xFF) as u8,
                                 );
                                 context.fill(pb, &color);
+
+                                let pos =
+                                    (x + CURSOR_TEXT_OFFSET * size, y + CURSOR_TEXT_OFFSET * size);
+                                if let Some(layout) = map_cursor_text.get(&info.text_key) {
+                                    context.draw_text(layout, pos);
+                                } else {
+                                    let text = context.text();
+                                    if let Ok(layout) = text
+                                        .new_text_layout(cursor.text.clone())
+                                        .font(FontFamily::SYSTEM_UI, CURSOR_TEXT_FONT_SIZE)
+                                        .text_color(color)
+                                        .build()
+                                    {
+                                        context.draw_text(&layout, pos);
+                                        map_cursor_text.insert(info.text_key.clone(), layout);
+                                    }
+                                }
                             }
                             if let Err(e) = context.finish() {
                                 log::error!("Failed to draw cursor: {}", e);
@@ -209,7 +236,8 @@ pub(super) fn create_event_loop() -> ResultType<()> {
     };
 
     let mut window_ripples: HashMap<WindowId, Vec<Ripple>> = HashMap::new();
-    let mut last_cursors: HashMap<String, (WindowId, Cursor)> = HashMap::new();
+    let mut last_cursors: HashMap<String, CursorInfo> = HashMap::new();
+    let mut map_cursor_text: HashMap<(String, u32), CoreGraphicsTextLayout> = HashMap::new();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -229,7 +257,13 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                 _ => {}
             },
             Event::RedrawRequested(window_id) => {
-                draw_cursors(&windows, window_id, &mut window_ripples, &last_cursors);
+                draw_cursors(
+                    &windows,
+                    window_id,
+                    &mut window_ripples,
+                    &last_cursors,
+                    &mut map_cursor_text,
+                );
             }
             Event::MainEventsCleared => {
                 for window in windows.iter() {
@@ -268,14 +302,15 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                         }
                         last_cursors.insert(
                             k,
-                            (
-                                window.window.id(),
-                                Cursor {
+                            CursorInfo {
+                                window_id: window.window.id(),
+                                text_key: (cursor.text.clone(), cursor.argb),
+                                cursor: Cursor {
                                     x: (cursor.x - window.display_origin.0 as f32),
                                     y: (cursor.y - window.display_origin.1 as f32),
                                     ..cursor
                                 },
-                            ),
+                            },
                         );
                         window.window.request_redraw();
                         break;
