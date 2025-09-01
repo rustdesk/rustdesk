@@ -1,4 +1,4 @@
-use super::{server::EVENT_PROXY, Cursor, CustomEvent};
+use super::{server::EVENT_PROXY, Cursor, CustomEvent, Ripple};
 use core_graphics::context::CGContextRef;
 use foreign_types::ForeignTypeRef;
 use hbb_common::{bail, log, ResultType};
@@ -25,12 +25,6 @@ struct WindowState {
     outer_position: PhysicalPosition<i32>,
     // A simple workaround to the (logical) cursor position.
     display_origin: (f64, f64),
-}
-
-struct Ripple {
-    x: f64,
-    y: f64,
-    start_time: Instant,
 }
 
 struct CursorInfo {
@@ -144,23 +138,14 @@ fn draw_cursors(
                             context.clear(None, piet::Color::TRANSPARENT);
 
                             if let Some(ripples) = window_ripples.get_mut(&window_id) {
-                                let ripple_duration = std::time::Duration::from_millis(500);
-                                ripples.retain_mut(|ripple| {
-                                    let elapsed = ripple.start_time.elapsed();
-                                    let progress =
-                                        elapsed.as_secs_f64() / ripple_duration.as_secs_f64();
-                                    let radius = 25.0 * progress;
-                                    let alpha = 1.0 - progress;
-                                    if alpha > 0.0 {
-                                        let color = piet::Color::rgba(1.0, 0.5, 0.5, alpha);
-                                        let circle =
-                                            piet::kurbo::Circle::new((ripple.x, ripple.y), radius);
-                                        context.stroke(circle, &color, 2.0);
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                });
+                                Ripple::retain_active(ripples);
+                                for ripple in ripples.iter() {
+                                    let (radius, alpha) = ripple.get_radius_alpha();
+                                    let color = piet::Color::rgba(1.0, 0.25, 0.25, alpha * 0.5);
+                                    let circle =
+                                        piet::kurbo::Circle::new((ripple.x, ripple.y), radius);
+                                    context.stroke(circle, &color, 2.0);
+                                }
                             }
 
                             for info in last_cursors.values() {
@@ -181,12 +166,8 @@ fn draw_cursors(
                                 pb.line_to((x + 6.0 * size, y + 12.0 * size));
                                 pb.line_to((x + 11.0 * size, y + 12.0 * size));
 
-                                let color = piet::Color::rgba8(
-                                    (cursor.argb >> 16 & 0xFF) as u8,
-                                    (cursor.argb >> 8 & 0xFF) as u8,
-                                    (cursor.argb & 0xFF) as u8,
-                                    (cursor.argb >> 24 & 0xFF) as u8,
-                                );
+                                let rgba = super::argb_to_rgba(cursor.argb);
+                                let color = piet::Color::rgba8(rgba.0, rgba.1, rgba.2, rgba.3);
                                 context.fill(pb, &color);
 
                                 let pos =
