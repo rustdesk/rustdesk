@@ -61,9 +61,6 @@ fn set_window_properties(window: &Arc<Window>) -> ResultType<()> {
             let main_screen: *mut Object = msg_send![ns_screen_class, mainScreen];
             let screen_frame: NSRect = msg_send![main_screen, frame];
             let _: () = msg_send![ns_window, setFrame: screen_frame display: true];
-            let ns_color_class = class!(NSColor);
-            let clear_color: *mut Object = msg_send![ns_color_class, clearColor];
-            let _: () = msg_send![ns_window, setBackgroundColor: clear_color];
             let _: () = msg_send![ns_window, setIgnoresMouseEvents: true];
         }
     }
@@ -157,12 +154,12 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                                         let elapsed = ripple.start_time.elapsed();
                                         let progress =
                                             elapsed.as_secs_f64() / ripple_duration.as_secs_f64();
-                                        let radius = 45.0 * progress / scale_factor;
+                                        let radius = 25.0 * progress;
                                         let alpha = 1.0 - progress;
                                         if alpha > 0.0 {
                                             let color = piet::Color::rgba(1.0, 0.5, 0.5, alpha);
                                             let circle = piet::kurbo::Circle::new(
-                                                (ripple.x / scale_factor, ripple.y / scale_factor),
+                                                (ripple.x, ripple.y),
                                                 radius,
                                             );
                                             context.stroke(circle, &color, 2.0);
@@ -174,8 +171,8 @@ pub(super) fn create_event_loop() -> ResultType<()> {
 
                                     for cursor in last_cursors.values() {
                                         let (x, y) = (
-                                            cursor.x as f64 / scale_factor,
-                                            cursor.y as f64 / scale_factor,
+                                            cursor.x as f64,
+                                            cursor.y as f64,
                                         );
                                         let size = 1.0;
 

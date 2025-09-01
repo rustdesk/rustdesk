@@ -2329,6 +2329,8 @@ impl Connection {
                             self.show_my_cursor,
                         );
                     } else if self.show_my_cursor {
+                        #[cfg(target_os = "macos")]
+                        self.retina.on_mouse_event(&mut me, self.display_idx);
                         self.input_mouse(
                             me,
                             self.inner.id(),
