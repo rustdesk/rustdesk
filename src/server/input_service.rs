@@ -992,8 +992,8 @@ pub fn handle_pointer_(evt: &PointerDeviceEvent, conn: i32) {
 pub fn handle_mouse_(
     evt: &MouseEvent,
     conn: i32,
-    username: String,
-    argb: u32,
+    _username: String,
+    _argb: u32,
     simulate: bool,
     _show_cursor: bool,
 ) {
@@ -1002,7 +1002,7 @@ pub fn handle_mouse_(
     }
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     if _show_cursor {
-        handle_mouse_show_cursor_(evt, conn, username, argb);
+        handle_mouse_show_cursor_(evt, conn, _username, _argb);
     }
 }
 
