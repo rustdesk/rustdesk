@@ -1,12 +1,13 @@
 use super::{create_event_loop, CustomEvent};
 use crate::ipc::{new_listener, Connection, Data};
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+use hbb_common::ResultType;
 use hbb_common::{
     allow_err, log,
     tokio::{
         self,
         sync::mpsc::{unbounded_channel, UnboundedReceiver},
     },
-    ResultType,
 };
 use lazy_static::lazy_static;
 use std::sync::RwLock;
@@ -99,6 +100,7 @@ async fn handle_new_stream(mut conn: Connection) {
     });
 }
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub(super) fn get_displays_rect() -> ResultType<(i32, i32, u32, u32)> {
     let displays = crate::server::display_service::try_get_displays()?;
     let mut min_x = i32::MAX;
