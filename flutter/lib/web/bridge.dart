@@ -85,7 +85,7 @@ class RustdeskImpl {
       required String switchUuid,
       required bool forceRelay,
       required String password,
-      required bool isSharedPassword,
+      required int passwordType,
       String? connToken,
       dynamic hint}) {
     return js.context.callMethod('setByName', [
@@ -93,7 +93,7 @@ class RustdeskImpl {
       jsonEncode({
         'id': id,
         'password': password,
-        'is_shared_password': isSharedPassword,
+        'passwordType': passwordType,
         'isFileTransfer': isFileTransfer,
         'isViewCamera': isViewCamera,
         'isTerminal': isTerminal

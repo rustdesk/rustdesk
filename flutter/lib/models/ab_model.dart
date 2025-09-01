@@ -56,6 +56,7 @@ class AbModel {
   RxString get currentAbPullError => current.pullError;
   RxString get currentAbPushError => current.pushError;
   String? _personalAbGuid;
+  dynamic _personalAbInfo;
   RxBool legacyMode = false.obs;
 
   // Only handles peers add/remove
@@ -130,6 +131,7 @@ class AbModel {
       try {
         // Read personal guid every time to avoid upgrading the server without closing the main window
         _personalAbGuid = null;
+        _personalAbInfo = null;
         await _getPersonalAbGuid();
         // Determine legacy mode based on whether _personalAbGuid is null
         legacyMode.value = _personalAbGuid == null;
@@ -139,8 +141,15 @@ class AbModel {
         if (_personalAbGuid != null) {
           debugPrint("pull ab list");
           List<AbProfile> abProfiles = List.empty(growable: true);
-          abProfiles.add(AbProfile(_personalAbGuid!, _personalAddressBookName,
-              gFFI.userModel.userName.value, null, ShareRule.read.value));
+          abProfiles.add(
+            AbProfile(
+                _personalAbGuid!,
+                _personalAddressBookName,
+                gFFI.userModel.userName.value,
+                null,
+                ShareRule.read.value,
+                _personalAbInfo),
+          );
           // get all address book name
           await _getSharedAbProfiles(abProfiles);
           addressbooks.removeWhere((key, value) =>
@@ -242,6 +251,7 @@ class AbModel {
         throw 'HTTP ${resp.statusCode}';
       }
       _personalAbGuid = json['guid'];
+      _personalAbInfo = json['info'];
       return true;
     } catch (err) {
       debugPrint('get personal ab err: ${err.toString()}');
@@ -609,7 +619,7 @@ class AbModel {
             if (name == null || guid == null) {
               continue;
             }
-            ab = Ab(AbProfile(guid, name, '', '', ShareRule.read.value),
+            ab = Ab(AbProfile(guid, name, '', '', ShareRule.read.value, null),
                 name == _personalAddressBookName);
           }
           addressbooks[name] = ab;
@@ -765,6 +775,28 @@ class AbModel {
 
   void removePeerUpdateListener(String key) {
     _peerIdUpdateListeners.remove(key);
+  }
+
+  String? getCurrentAbPassword() {
+    if (current.name() == _legacyAddressBookName) {
+      return null;
+    }
+    final profile = current.sharedProfile();
+    if (profile == null) {
+      return null;
+    }
+    try {
+      if (profile.info is Map) {
+        final password = (profile.info as Map)['password'];
+        if (password is String && password.isNotEmpty) {
+          return password;
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint("getCurrentAbPassword: $e");
+      return null;
+    }
   }
 
 // #endregion

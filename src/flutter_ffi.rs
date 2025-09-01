@@ -139,7 +139,7 @@ pub fn session_add_sync(
     switch_uuid: String,
     force_relay: bool,
     password: String,
-    is_shared_password: bool,
+    password_type: i32,
     conn_token: Option<String>,
 ) -> SyncReturn<String> {
     let add_res = session_add(
@@ -153,7 +153,7 @@ pub fn session_add_sync(
         &switch_uuid,
         force_relay,
         password,
-        is_shared_password,
+        password_type,
         conn_token,
     );
     // We can't put the remove call together with `std::env::var("IS_TERMINAL_ADMIN")`.
@@ -273,7 +273,10 @@ pub fn session_take_screenshot(session_id: SessionID, display: usize) {
     }
 }
 
-pub fn session_handle_screenshot(#[allow(unused_variables)] session_id: SessionID, action: String) -> String {
+pub fn session_handle_screenshot(
+    #[allow(unused_variables)] session_id: SessionID,
+    action: String,
+) -> String {
     crate::client::screenshot::handle_screenshot(action)
 }
 
@@ -2692,7 +2695,11 @@ pub fn session_get_common_sync(
     SyncReturn(session_get_common(session_id, key, param))
 }
 
-pub fn session_get_common(session_id: SessionID, key: String, #[allow(unused_variables)] param: String) -> Option<String> {
+pub fn session_get_common(
+    session_id: SessionID,
+    key: String,
+    #[allow(unused_variables)] param: String,
+) -> Option<String> {
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         let v = if key == "is_screenshot_supported" {
             s.is_screenshot_supported().to_string()

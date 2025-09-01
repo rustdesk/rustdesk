@@ -2384,36 +2384,34 @@ connectMainDesktop(String id,
     bool? forceRelay,
     String? password,
     String? connToken,
-    bool? isSharedPassword}) async {
+    PasswordType? passwordType}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
         password: password,
-        isSharedPassword: isSharedPassword,
+        passwordType: passwordType,
         connToken: connToken,
         forceRelay: forceRelay);
   } else if (isViewCamera) {
     await rustDeskWinManager.newViewCamera(id,
         password: password,
-        isSharedPassword: isSharedPassword,
+        passwordType: passwordType,
         connToken: connToken,
         forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP,
         password: password,
-        isSharedPassword: isSharedPassword,
+        passwordType: passwordType,
         connToken: connToken,
         forceRelay: forceRelay);
   } else if (isTerminal) {
     await rustDeskWinManager.newTerminal(id,
         password: password,
-        isSharedPassword: isSharedPassword,
+        passwordType: passwordType,
         connToken: connToken,
         forceRelay: forceRelay);
   } else {
     await rustDeskWinManager.newRemoteDesktop(id,
-        password: password,
-        isSharedPassword: isSharedPassword,
-        forceRelay: forceRelay);
+        password: password, passwordType: passwordType, forceRelay: forceRelay);
   }
 }
 
@@ -2431,7 +2429,7 @@ connect(BuildContext context, String id,
     bool forceRelay = false,
     String? password,
     String? connToken,
-    bool? isSharedPassword}) async {
+    PasswordType? passwordType}) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
@@ -2462,7 +2460,7 @@ connect(BuildContext context, String id,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
         password: password,
-        isSharedPassword: isSharedPassword,
+        passwordType: passwordType,
         forceRelay: forceRelay,
       );
     } else {
@@ -2474,7 +2472,7 @@ connect(BuildContext context, String id,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
         'password': password,
-        'isSharedPassword': isSharedPassword,
+        'passwordType': passwordType?.toJson(),
         'forceRelay': forceRelay,
         'connToken': connToken,
       });
@@ -2494,9 +2492,7 @@ connect(BuildContext context, String id,
           MaterialPageRoute(
             builder: (BuildContext context) =>
                 desktop_file_manager.FileManagerPage(
-                    id: id,
-                    password: password,
-                    isSharedPassword: isSharedPassword),
+                    id: id, password: password, passwordType: passwordType),
           ),
         );
       } else {
@@ -2506,7 +2502,7 @@ connect(BuildContext context, String id,
             builder: (BuildContext context) => FileManagerPage(
                 id: id,
                 password: password,
-                isSharedPassword: isSharedPassword,
+                passwordType: passwordType,
                 forceRelay: forceRelay),
           ),
         );
@@ -2522,7 +2518,7 @@ connect(BuildContext context, String id,
               id: id,
               toolbarState: ToolbarState(),
               password: password,
-              isSharedPassword: isSharedPassword,
+              passwordType: passwordType,
             ),
           ),
         );
@@ -2533,7 +2529,7 @@ connect(BuildContext context, String id,
             builder: (BuildContext context) => ViewCameraPage(
                 id: id,
                 password: password,
-                isSharedPassword: isSharedPassword,
+                passwordType: passwordType,
                 forceRelay: forceRelay),
           ),
         );
@@ -2545,7 +2541,7 @@ connect(BuildContext context, String id,
           builder: (BuildContext context) => TerminalPage(
             id: id,
             password: password,
-            isSharedPassword: isSharedPassword,
+            passwordType: passwordType,
             forceRelay: forceRelay,
           ),
         ),
@@ -2560,7 +2556,7 @@ connect(BuildContext context, String id,
               id: id,
               toolbarState: ToolbarState(),
               password: password,
-              isSharedPassword: isSharedPassword,
+              passwordType: passwordType,
             ),
           ),
         );
@@ -2571,7 +2567,7 @@ connect(BuildContext context, String id,
             builder: (BuildContext context) => RemotePage(
                 id: id,
                 password: password,
-                isSharedPassword: isSharedPassword,
+                passwordType: passwordType,
                 forceRelay: forceRelay),
           ),
         );
@@ -3941,5 +3937,25 @@ String decode_http_response(http.Response resp) {
     debugPrint('Failed to decode response as UTF-8: $e');
     // Fallback to bodyString which handles encoding automatically
     return resp.body;
+  }
+}
+
+enum PasswordType {
+  preset,
+  sharedAb,
+  abDefault;
+
+  String toJson() => name;
+
+  static PasswordType? fromJson(dynamic value) {
+    if (value == null) return null;
+    if (value is! String) return null;
+
+    for (PasswordType type in PasswordType.values) {
+      if (type.name == value) {
+        return type;
+      }
+    }
+    return null;
   }
 }

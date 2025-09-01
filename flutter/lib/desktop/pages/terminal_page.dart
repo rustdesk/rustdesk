@@ -13,7 +13,7 @@ class TerminalPage extends StatefulWidget {
     required this.id,
     required this.password,
     required this.tabController,
-    required this.isSharedPassword,
+    required this.passwordType,
     required this.terminalId,
     this.forceRelay,
     this.connToken,
@@ -22,7 +22,7 @@ class TerminalPage extends StatefulWidget {
   final String? password;
   final DesktopTabController tabController;
   final bool? forceRelay;
-  final bool? isSharedPassword;
+  final PasswordType? passwordType;
   final String? connToken;
   final int terminalId;
 
@@ -43,7 +43,7 @@ class _TerminalPageState extends State<TerminalPage>
     _ffi = TerminalConnectionManager.getConnection(
       peerId: widget.id,
       password: widget.password,
-      isSharedPassword: widget.isSharedPassword,
+      passwordType: widget.passwordType,
       forceRelay: widget.forceRelay,
       connToken: widget.connToken,
     );
@@ -59,12 +59,13 @@ class _TerminalPageState extends State<TerminalPage>
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.tabController.onSelected?.call(widget.id);
-      
+
       // Check if this is a new connection or additional terminal
       // Note: When a connection exists, the ref count will be > 1 after this terminal is added
-      final isExistingConnection = TerminalConnectionManager.hasConnection(widget.id) && 
-          TerminalConnectionManager.getTerminalCount(widget.id) > 1;
-      
+      final isExistingConnection =
+          TerminalConnectionManager.hasConnection(widget.id) &&
+              TerminalConnectionManager.getTerminalCount(widget.id) > 1;
+
       if (!isExistingConnection) {
         // First terminal - show loading dialog, wait for onReady
         _ffi.dialogManager

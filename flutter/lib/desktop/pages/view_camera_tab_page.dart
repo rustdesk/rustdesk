@@ -92,7 +92,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           tabController: tabController,
           connToken: params['connToken'],
           forceRelay: params['forceRelay'],
-          isSharedPassword: params['isSharedPassword'],
+          passwordType: PasswordType.fromJson(params['passwordType']),
         ),
       ));
       _update_remote_count();
@@ -406,7 +406,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           tabController: tabController,
           connToken: args['connToken'],
           forceRelay: args['forceRelay'],
-          isSharedPassword: args['isSharedPassword'],
+          passwordType: PasswordType.fromJson(args['passwordType']),
         ),
       ));
     } else if (call.method == kWindowDisableGrabKeyboard) {

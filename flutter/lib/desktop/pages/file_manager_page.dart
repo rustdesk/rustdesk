@@ -56,14 +56,14 @@ class FileManagerPage extends StatefulWidget {
       {Key? key,
       required this.id,
       required this.password,
-      required this.isSharedPassword,
+      required this.passwordType,
       this.tabController,
       this.connToken,
       this.forceRelay})
       : super(key: key);
   final String id;
   final String? password;
-  final bool? isSharedPassword;
+  final PasswordType? passwordType;
   final bool? forceRelay;
   final String? connToken;
   final DesktopTabController? tabController;
@@ -91,7 +91,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     _ffi.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
-        isSharedPassword: widget.isSharedPassword,
+        passwordType: widget.passwordType,
         connToken: widget.connToken,
         forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -42,13 +42,13 @@ class ViewCameraPage extends StatefulWidget {
       {Key? key,
       required this.id,
       this.password,
-      this.isSharedPassword,
+      this.passwordType,
       this.forceRelay})
       : super(key: key);
 
   final String id;
   final String? password;
-  final bool? isSharedPassword;
+  final PasswordType? passwordType;
   final bool? forceRelay;
 
   @override
@@ -92,7 +92,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       widget.id,
       isViewCamera: true,
       password: widget.password,
-      isSharedPassword: widget.isSharedPassword,
+      passwordType: widget.passwordType,
       forceRelay: widget.forceRelay,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {

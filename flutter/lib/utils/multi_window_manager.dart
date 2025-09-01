@@ -228,7 +228,7 @@ class RustDeskMultiWindowManager {
     bool? forceRelay,
     String? switchUuid,
     bool? isRDP,
-    bool? isSharedPassword,
+    PasswordType? passwordType,
     String? connToken,
   }) async {
     var params = {
@@ -243,8 +243,8 @@ class RustDeskMultiWindowManager {
     if (isRDP != null) {
       params['isRDP'] = isRDP;
     }
-    if (isSharedPassword != null) {
-      params['isSharedPassword'] = isSharedPassword;
+    if (passwordType != null) {
+      params['passwordType'] = passwordType.toJson();
     }
     if (connToken != null) {
       params['connToken'] = connToken;
@@ -270,7 +270,7 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newRemoteDesktop(
     String remoteId, {
     String? password,
-    bool? isSharedPassword,
+    PasswordType? passwordType,
     String? switchUuid,
     bool? forceRelay,
   }) async {
@@ -282,14 +282,14 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       switchUuid: switchUuid,
-      isSharedPassword: isSharedPassword,
+      passwordType: passwordType,
     );
   }
 
   Future<MultiWindowCallResult> newFileTransfer(
     String remoteId, {
     String? password,
-    bool? isSharedPassword,
+    PasswordType? passwordType,
     bool? forceRelay,
     String? connToken,
   }) async {
@@ -300,7 +300,7 @@ class RustDeskMultiWindowManager {
       _fileTransferWindows,
       password: password,
       forceRelay: forceRelay,
-      isSharedPassword: isSharedPassword,
+      passwordType: passwordType,
       connToken: connToken,
     );
   }
@@ -308,7 +308,7 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newViewCamera(
     String remoteId, {
     String? password,
-    bool? isSharedPassword,
+    PasswordType? passwordType,
     String? switchUuid,
     bool? forceRelay,
     String? connToken,
@@ -321,7 +321,7 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       switchUuid: switchUuid,
-      isSharedPassword: isSharedPassword,
+      passwordType: passwordType,
       connToken: connToken,
     );
   }
@@ -330,7 +330,7 @@ class RustDeskMultiWindowManager {
     String remoteId,
     bool isRDP, {
     String? password,
-    bool? isSharedPassword,
+    PasswordType? passwordType,
     bool? forceRelay,
     String? connToken,
   }) async {
@@ -342,7 +342,7 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       isRDP: isRDP,
-      isSharedPassword: isSharedPassword,
+      passwordType: passwordType,
       connToken: connToken,
     );
   }
@@ -350,7 +350,7 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newTerminal(
     String remoteId, {
     String? password,
-    bool? isSharedPassword,
+    PasswordType? passwordType,
     bool? forceRelay,
     String? connToken,
   }) async {
@@ -372,7 +372,7 @@ class RustDeskMultiWindowManager {
       "id": remoteId,
       "password": password,
       "forceRelay": forceRelay,
-      "isSharedPassword": isSharedPassword,
+      "passwordType": passwordType?.toJson(),
       "connToken": connToken,
     };
     final msg = jsonEncode(params);
@@ -472,7 +472,8 @@ class RustDeskMultiWindowManager {
     }
     for (int i = 0; i < windows.length; i++) {
       final wId = windows[i];
-      final shouldSavePos = type != WindowType.Terminal || i == windows.length - 1;
+      final shouldSavePos =
+          type != WindowType.Terminal || i == windows.length - 1;
       if (shouldSavePos) {
         debugPrint("closing multi window, type: ${type.toString()} id: $wId");
         await saveWindowPosition(type, windowId: wId);

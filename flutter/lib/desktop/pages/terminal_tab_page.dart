@@ -46,7 +46,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       peerId: params['id'],
       terminalId: terminalId,
       password: params['password'],
-      isSharedPassword: params['isSharedPassword'],
+      passwordType: PasswordType.fromJson(params['passwordType']),
       forceRelay: params['forceRelay'],
       connToken: params['connToken'],
     ));
@@ -56,7 +56,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     required String peerId,
     required int terminalId,
     String? password,
-    bool? isSharedPassword,
+    PasswordType? passwordType,
     bool? forceRelay,
     String? connToken,
   }) {
@@ -83,7 +83,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         id: peerId,
         terminalId: terminalId,
         password: password,
-        isSharedPassword: isSharedPassword,
+        passwordType: passwordType,
         tabController: tabController,
         forceRelay: forceRelay,
         connToken: connToken,
@@ -167,7 +167,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
           peerId: id,
           terminalId: terminalId,
           password: args['password'],
-          isSharedPassword: args['isSharedPassword'],
+          passwordType: PasswordType.fromJson(args['passwordType']),
           forceRelay: args['forceRelay'],
           connToken: args['connToken'],
         ));
@@ -331,7 +331,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         peerId: peerId,
         terminalId: newTerminalId,
         password: page.password,
-        isSharedPassword: page.isSharedPassword,
+        passwordType: page.passwordType,
         forceRelay: page.forceRelay,
         connToken: page.connToken,
       ));

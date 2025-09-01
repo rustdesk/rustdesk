@@ -1284,7 +1284,7 @@ pub fn session_add(
     switch_uuid: &str,
     force_relay: bool,
     password: String,
-    is_shared_password: bool,
+    password_type: i32,
     conn_token: Option<String>,
 ) -> ResultType<FlutterSession> {
     let conn_type = if is_file_transfer {
@@ -1314,13 +1314,25 @@ pub fn session_add(
 
     LocalConfig::set_remote_id(&id);
 
-    let mut preset_password = password.clone();
-    let shared_password = if is_shared_password {
-        // To achieve a flexible password application order, we don't treat shared password as a preset password.
-        preset_password = Default::default();
-        Some(password)
+    let (preset_password, initial_password) = if !password.is_empty() {
+        if password_type == 0 {
+            (password, None)
+        } else if password_type == 1 {
+            (
+                Default::default(),
+                Some(InitialPassword::SharedAb(password)),
+            )
+        } else if password_type == 2 {
+            (
+                Default::default(),
+                Some(InitialPassword::AbDefault(password)),
+            )
+        } else {
+            log::error!("Invalid password type: {}", password_type);
+            (Default::default(), None)
+        }
     } else {
-        None
+        (Default::default(), None)
     };
 
     let session: Session<FlutterHandler> = Session {
@@ -1343,7 +1355,7 @@ pub fn session_add(
         switch_uuid,
         force_relay,
         get_adapter_luid(),
-        shared_password,
+        initial_password,
         conn_token,
     );
 

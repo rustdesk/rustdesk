@@ -12,11 +12,15 @@ import '../../common/widgets/dialog.dart';
 
 class FileManagerPage extends StatefulWidget {
   FileManagerPage(
-      {Key? key, required this.id, this.password, this.isSharedPassword, this.forceRelay})
+      {Key? key,
+      required this.id,
+      this.password,
+      this.passwordType,
+      this.forceRelay})
       : super(key: key);
   final String id;
   final String? password;
-  final bool? isSharedPassword;
+  final PasswordType? passwordType;
   final bool? forceRelay;
 
   @override
@@ -75,7 +79,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     gFFI.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
-        isSharedPassword: widget.isSharedPassword,
+        passwordType: widget.passwordType,
         forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       gFFI.dialogManager
