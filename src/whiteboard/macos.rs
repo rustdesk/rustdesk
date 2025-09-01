@@ -7,34 +7,28 @@ use piet::{kurbo::BezPath, RenderContext};
 use piet_coregraphics::CoreGraphicsContext;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use tao::{
-    dpi::{PhysicalPosition, PhysicalSize},
+    dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
     event::{Event, StartCause, WindowEvent},
-    event_loop::{ControlFlow, EventLoopBuilder},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
+    platform::macos::MonitorHandleExtMacOS,
     rwh_06::{HasWindowHandle, RawWindowHandle},
-    window::{Window, WindowBuilder},
+    window::{Window, WindowBuilder, WindowId},
 };
 
 const MAXIMUM_WINDOW_LEVEL: i64 = 2147483647;
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct NSRect {
-    origin: NSPoint,
-    size: NSSize,
+struct WindowState {
+    window: Arc<Window>,
+    logical_size: LogicalSize<f64>,
+    outer_position: PhysicalPosition<i32>,
+    // A simple workaround to the (logical) cursor position.
+    display_origin: (f64, f64),
 }
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct NSPoint {
+struct Ripple {
     x: f64,
     y: f64,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct NSSize {
-    width: f64,
-    height: f64,
+    start_time: Instant,
 }
 
 fn set_window_properties(window: &Arc<Window>) -> ResultType<()> {
@@ -57,35 +51,153 @@ fn set_window_properties(window: &Arc<Window>) -> ResultType<()> {
             // NSWindowStyleMaskNonactivatingPanel
             let new_style_mask = current_style_mask | (1 << 7);
             let _: () = msg_send![ns_window, setStyleMask: new_style_mask];
-            let ns_screen_class = class!(NSScreen);
-            let main_screen: *mut Object = msg_send![ns_screen_class, mainScreen];
-            let screen_frame: NSRect = msg_send![main_screen, frame];
-            let _: () = msg_send![ns_window, setFrame: screen_frame display: true];
             let _: () = msg_send![ns_window, setIgnoresMouseEvents: true];
         }
     }
     Ok(())
 }
 
+fn create_windows(event_loop: &EventLoop<(String, CustomEvent)>) -> ResultType<Vec<WindowState>> {
+    let mut windows = Vec::new();
+    let map_display_origins: HashMap<_, _> = crate::server::display_service::try_get_displays()?
+        .into_iter()
+        .map(|display| (display.name(), display.origin()))
+        .collect();
+    // We can't use `crate::server::display_service::try_get_displays()` here.
+    // Because the `display` returned by `crate::server::display_service::try_get_displays()`:
+    // 1. `display.origin()` is the logic position.
+    // 2. `display.width()` and `display.height()` are the physical size.
+    for monitor in event_loop.available_monitors() {
+        let Some(origin) = map_display_origins.get(&monitor.native_id().to_string()) else {
+            // unreachable!
+            bail!(
+                "Failed to find display origin for monitor: {}",
+                monitor.native_id()
+            );
+        };
+
+        let window_builder = WindowBuilder::new()
+            .with_title("RustDesk whiteboard")
+            .with_transparent(true)
+            .with_decorations(false)
+            .with_position(monitor.position())
+            .with_inner_size(monitor.size());
+
+        let window = Arc::new(window_builder.build::<(String, CustomEvent)>(event_loop)?);
+        set_window_properties(&window)?;
+
+        let mut scale_factor = window.scale_factor();
+        if scale_factor == 0.0 {
+            scale_factor = 1.0;
+        }
+        let physical_size = window.inner_size();
+        let logical_size = physical_size.to_logical::<f64>(scale_factor);
+        let inner_position = window.inner_position()?;
+        let outer_position = inner_position;
+        windows.push(WindowState {
+            window,
+            logical_size,
+            outer_position,
+            display_origin: (origin.0 as f64, origin.1 as f64),
+        });
+    }
+    Ok(windows)
+}
+
+fn draw_cursors(
+    windows: &Vec<WindowState>,
+    window_id: WindowId,
+    window_ripples: &mut HashMap<WindowId, Vec<Ripple>>,
+    last_cursors: &HashMap<String, (WindowId, Cursor)>,
+) {
+    for window in windows.iter() {
+        if window.window.id() != window_id {
+            continue;
+        }
+
+        if let Ok(handle) = window.window.window_handle() {
+            if let RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
+                unsafe {
+                    let ns_view = appkit_handle.ns_view.as_ptr() as *mut Object;
+                    let current_context: *mut Object =
+                        msg_send![class!(NSGraphicsContext), currentContext];
+                    if !current_context.is_null() {
+                        let cg_context_ptr: *mut std::ffi::c_void =
+                            msg_send![current_context, CGContext];
+                        if !cg_context_ptr.is_null() {
+                            let cg_context_ref =
+                                CGContextRef::from_ptr_mut(cg_context_ptr as *mut _);
+                            let mut context = CoreGraphicsContext::new_y_up(
+                                cg_context_ref,
+                                window.logical_size.height,
+                                None,
+                            );
+                            context.clear(None, piet::Color::TRANSPARENT);
+
+                            if let Some(ripples) = window_ripples.get_mut(&window_id) {
+                                let ripple_duration = std::time::Duration::from_millis(500);
+                                ripples.retain_mut(|ripple| {
+                                    let elapsed = ripple.start_time.elapsed();
+                                    let progress =
+                                        elapsed.as_secs_f64() / ripple_duration.as_secs_f64();
+                                    let radius = 25.0 * progress;
+                                    let alpha = 1.0 - progress;
+                                    if alpha > 0.0 {
+                                        let color = piet::Color::rgba(1.0, 0.5, 0.5, alpha);
+                                        let circle =
+                                            piet::kurbo::Circle::new((ripple.x, ripple.y), radius);
+                                        context.stroke(circle, &color, 2.0);
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                });
+                            }
+
+                            for (wid, cursor) in last_cursors.values() {
+                                if *wid != window.window.id() {
+                                    continue;
+                                }
+
+                                let (x, y) = (cursor.x as f64, cursor.y as f64);
+                                let size = 1.0;
+
+                                let mut pb = BezPath::new();
+                                pb.move_to((x, y));
+                                pb.line_to((x, y + 16.0 * size));
+                                pb.line_to((x + 4.0 * size, y + 13.0 * size));
+                                pb.line_to((x + 7.0 * size, y + 20.0 * size));
+                                pb.line_to((x + 9.0 * size, y + 19.0 * size));
+                                pb.line_to((x + 6.0 * size, y + 12.0 * size));
+                                pb.line_to((x + 11.0 * size, y + 12.0 * size));
+
+                                let color = piet::Color::rgba8(
+                                    (cursor.argb >> 16 & 0xFF) as u8,
+                                    (cursor.argb >> 8 & 0xFF) as u8,
+                                    (cursor.argb & 0xFF) as u8,
+                                    (cursor.argb >> 24 & 0xFF) as u8,
+                                );
+                                context.fill(pb, &color);
+                            }
+                            if let Err(e) = context.finish() {
+                                log::error!("Failed to draw cursor: {}", e);
+                            }
+                        } else {
+                            log::warn!("CGContext is null");
+                        }
+                    }
+                    let _: () = msg_send![ns_view, setNeedsDisplay:true];
+                }
+            }
+        }
+    }
+}
+
 pub(super) fn create_event_loop() -> ResultType<()> {
     crate::platform::hide_dock();
     let event_loop = EventLoopBuilder::<(String, CustomEvent)>::with_user_event().build();
-    let mut window_builder = WindowBuilder::new()
-        .with_title("RustDesk whiteboard")
-        .with_transparent(true)
-        .with_decorations(false);
 
-    let (x, y, w, h) = super::server::get_displays_rect()?;
-    if w > 0 && h > 0 {
-        window_builder = window_builder
-            .with_position(PhysicalPosition::new(x, y))
-            .with_inner_size(PhysicalSize::new(w, h));
-    } else {
-        bail!("No valid display found, wxh: {}x{}", w, h);
-    }
-
-    let window = Arc::new(window_builder.build::<(String, CustomEvent)>(&event_loop)?);
-    set_window_properties(&window)?;
+    let windows = create_windows(&event_loop)?;
 
     let proxy = event_loop.create_proxy();
     EVENT_PROXY.write().unwrap().replace(proxy);
@@ -96,31 +208,18 @@ pub(super) fn create_event_loop() -> ResultType<()> {
         }),
     };
 
-    // to-do: The scale factor may not be correct.
-    // There may be multiple monitors with different scale factors.
-    // But we only have one window, and one scale factor.
-    let mut scale_factor = window.scale_factor();
-    if scale_factor == 0.0 {
-        scale_factor = 1.0;
-    }
-    let physical_size = window.inner_size();
-    let logical_size = physical_size.to_logical::<f64>(scale_factor);
-
-    struct Ripple {
-        x: f64,
-        y: f64,
-        start_time: Instant,
-    }
-    let mut ripples: Vec<Ripple> = Vec::new();
-    let mut last_cursors: HashMap<String, Cursor> = HashMap::new();
+    let mut window_ripples: HashMap<WindowId, Vec<Ripple>> = HashMap::new();
+    let mut last_cursors: HashMap<String, (WindowId, Cursor)> = HashMap::new();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
         match event {
             Event::NewEvents(StartCause::Init) => {
-                window.set_outer_position(PhysicalPosition::new(0, 0));
-                window.request_redraw();
+                for window in windows.iter() {
+                    window.window.set_outer_position(window.outer_position);
+                    window.window.request_redraw();
+                }
                 crate::platform::hide_dock();
             }
             Event::WindowEvent { event, .. } => match event {
@@ -129,96 +228,58 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                 }
                 _ => {}
             },
-            Event::RedrawRequested(_) => {
-                if let Ok(handle) = window.window_handle() {
-                    if let RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
-                        unsafe {
-                            let ns_view = appkit_handle.ns_view.as_ptr() as *mut Object;
-                            let current_context: *mut Object =
-                                msg_send![class!(NSGraphicsContext), currentContext];
-                            if !current_context.is_null() {
-                                let cg_context_ptr: *mut std::ffi::c_void =
-                                    msg_send![current_context, CGContext];
-                                if !cg_context_ptr.is_null() {
-                                    let cg_context_ref =
-                                        CGContextRef::from_ptr_mut(cg_context_ptr as *mut _);
-                                    let mut context = CoreGraphicsContext::new_y_up(
-                                        cg_context_ref,
-                                        logical_size.height,
-                                        None,
-                                    );
-                                    context.clear(None, piet::Color::TRANSPARENT);
-
-                                    let ripple_duration = std::time::Duration::from_millis(500);
-                                    ripples.retain_mut(|ripple| {
-                                        let elapsed = ripple.start_time.elapsed();
-                                        let progress =
-                                            elapsed.as_secs_f64() / ripple_duration.as_secs_f64();
-                                        let radius = 25.0 * progress;
-                                        let alpha = 1.0 - progress;
-                                        if alpha > 0.0 {
-                                            let color = piet::Color::rgba(1.0, 0.5, 0.5, alpha);
-                                            let circle = piet::kurbo::Circle::new(
-                                                (ripple.x, ripple.y),
-                                                radius,
-                                            );
-                                            context.stroke(circle, &color, 2.0);
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    });
-
-                                    for cursor in last_cursors.values() {
-                                        let (x, y) = (
-                                            cursor.x as f64,
-                                            cursor.y as f64,
-                                        );
-                                        let size = 1.0;
-
-                                        let mut pb = BezPath::new();
-                                        pb.move_to((x, y));
-                                        pb.line_to((x, y + 16.0 * size));
-                                        pb.line_to((x + 4.0 * size, y + 13.0 * size));
-                                        pb.line_to((x + 7.0 * size, y + 20.0 * size));
-                                        pb.line_to((x + 9.0 * size, y + 19.0 * size));
-                                        pb.line_to((x + 6.0 * size, y + 12.0 * size));
-                                        pb.line_to((x + 11.0 * size, y + 12.0 * size));
-
-                                        let color = piet::Color::rgba8(
-                                            (cursor.argb >> 16 & 0xFF) as u8,
-                                            (cursor.argb >> 8 & 0xFF) as u8,
-                                            (cursor.argb & 0xFF) as u8,
-                                            (cursor.argb >> 24 & 0xFF) as u8,
-                                        );
-                                        context.fill(pb, &color);
-                                    }
-                                    if let Err(e) = context.finish() {
-                                        log::error!("Failed to draw cursor: {}", e);
-                                    }
-                                } else {
-                                    log::warn!("CGContext is null");
-                                }
-                            }
-                            let _: () = msg_send![ns_view, setNeedsDisplay:true];
-                        }
-                    }
-                }
+            Event::RedrawRequested(window_id) => {
+                draw_cursors(&windows, window_id, &mut window_ripples, &last_cursors);
             }
             Event::MainEventsCleared => {
-                window.request_redraw();
+                for window in windows.iter() {
+                    window.window.request_redraw();
+                }
             }
             Event::UserEvent((k, evt)) => match evt {
                 CustomEvent::Cursor(cursor) => {
-                    if cursor.btns != 0 {
-                        ripples.push(Ripple {
-                            x: cursor.x as _,
-                            y: cursor.y as _,
-                            start_time: Instant::now(),
-                        });
+                    for window in windows.iter() {
+                        let (l, t, r, b) = (
+                            window.display_origin.0,
+                            window.display_origin.1,
+                            window.display_origin.0 + window.logical_size.width,
+                            window.display_origin.1 + window.logical_size.height,
+                        );
+                        if (cursor.x as f64) < l
+                            || (cursor.x as f64) > r
+                            || (cursor.y as f64) < t
+                            || (cursor.y as f64) > b
+                        {
+                            continue;
+                        }
+
+                        if cursor.btns != 0 {
+                            let window_id = window.window.id();
+                            let ripple = Ripple {
+                                x: (cursor.x as f64 - window.display_origin.0),
+                                y: (cursor.y as f64 - window.display_origin.1),
+                                start_time: Instant::now(),
+                            };
+                            if let Some(ripples) = window_ripples.get_mut(&window_id) {
+                                ripples.push(ripple);
+                            } else {
+                                window_ripples.insert(window_id, vec![ripple]);
+                            }
+                        }
+                        last_cursors.insert(
+                            k,
+                            (
+                                window.window.id(),
+                                Cursor {
+                                    x: (cursor.x - window.display_origin.0 as f32),
+                                    y: (cursor.y - window.display_origin.1 as f32),
+                                    ..cursor
+                                },
+                            ),
+                        );
+                        window.window.request_redraw();
+                        break;
                     }
-                    last_cursors.insert(k, cursor);
-                    window.request_redraw();
                 }
                 CustomEvent::Exit => {
                     *control_flow = ControlFlow::Exit;
