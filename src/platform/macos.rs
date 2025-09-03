@@ -27,11 +27,18 @@ use include_dir::{include_dir, Dir};
 use objc::rc::autoreleasepool;
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    os::unix::process::CommandExt,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
 static mut LATEST_SEED: i32 = 0;
+
+const UPDATE_TEMP_DIR: &str = "/tmp/.rustdeskupdate";
 
 extern "C" {
     fn CGSCurrentCursorSeed() -> i32;
@@ -48,12 +55,13 @@ extern "C" {
         display: u32,
         widths: *mut u32,
         heights: *mut u32,
+        hidpis: *mut BOOL,
         max: u32,
         numModes: *mut u32,
     ) -> BOOL;
     fn majorVersion() -> u32;
     fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
-    fn MacSetMode(display: u32, width: u32, height: u32) -> BOOL;
+    fn MacSetMode(display: u32, width: u32, height: u32, tryHiDPI: bool) -> BOOL;
 }
 
 pub fn major_version() -> u32 {
@@ -155,11 +163,15 @@ pub fn install_service() -> bool {
     is_installed_daemon(false)
 }
 
+// Remember to check if `update_daemon_agent()` need to be changed if changing `is_installed_daemon()`.
+// No need to merge the existing dup code, because the code in these two functions are too critical.
+// New code should be written in a common function.
 pub fn is_installed_daemon(prompt: bool) -> bool {
     let daemon = format!("{}_service.plist", crate::get_full_name());
     let agent = format!("{}_server.plist", crate::get_full_name());
     let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
     if !prompt {
+        // in macos 13, there is new way to check if they are running or enabled, https://developer.apple.com/documentation/servicemanagement/updating-helper-executables-from-earlier-versions-of-macos#Respond-to-changes-in-System-Settings
         if !std::path::Path::new(&format!("/Library/LaunchDaemons/{}", daemon)).exists() {
             return false;
         }
@@ -218,9 +230,77 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     false
 }
 
+fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync: bool) {
+    let update_script_file = "update.scpt";
+    let Some(update_script) = PRIVILEGES_SCRIPTS_DIR.get_file(update_script_file) else {
+        return;
+    };
+    let Some(update_script_body) = update_script.contents_utf8().map(correct_app_name) else {
+        return;
+    };
+
+    let Some(daemon_plist) = PRIVILEGES_SCRIPTS_DIR.get_file("daemon.plist") else {
+        return;
+    };
+    let Some(daemon_plist_body) = daemon_plist.contents_utf8().map(correct_app_name) else {
+        return;
+    };
+    let Some(agent_plist) = PRIVILEGES_SCRIPTS_DIR.get_file("agent.plist") else {
+        return;
+    };
+    let Some(agent_plist_body) = agent_plist.contents_utf8().map(correct_app_name) else {
+        return;
+    };
+
+    let func = move || {
+        let mut binding = std::process::Command::new("osascript");
+        let cmd = binding
+            .arg("-e")
+            .arg(update_script_body)
+            .arg(daemon_plist_body)
+            .arg(agent_plist_body)
+            .arg(&get_active_username())
+            .arg(std::process::id().to_string())
+            .arg(update_source_dir);
+        match cmd.status() {
+            Err(e) => {
+                log::error!("run osascript failed: {}", e);
+            }
+            _ => {
+                let installed = std::path::Path::new(&agent_plist_file).exists();
+                log::info!("Agent file {} installed: {}", &agent_plist_file, installed);
+                if installed {
+                    // Unload first, or load may not work if already loaded.
+                    // We hope that the load operation can immediately trigger a start.
+                    std::process::Command::new("launchctl")
+                        .args(&["unload", "-w", &agent_plist_file])
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .status()
+                        .ok();
+                    let status = std::process::Command::new("launchctl")
+                        .args(&["load", "-w", &agent_plist_file])
+                        .status();
+                    log::info!("launch server, status: {:?}", &status);
+                }
+            }
+        }
+    };
+    if sync {
+        func();
+    } else {
+        std::thread::spawn(func);
+    }
+}
+
 fn correct_app_name(s: &str) -> String {
-    let s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
-    let s = s.replace("RustDesk", &crate::get_app_name());
+    let mut s = s.to_owned();
+    if let Some(bundleid) = get_bundle_id() {
+        s = s.replace("com.carriez.rustdesk", &bundleid);
+    }
+    s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
+    s = s.replace("RustDesk", &crate::get_app_name());
     s
 }
 
@@ -491,6 +571,38 @@ pub fn is_prelogin() -> bool {
     get_active_userid() == "0"
 }
 
+// https://stackoverflow.com/questions/11505255/osx-check-if-the-screen-is-locked
+// No "CGSSessionScreenIsLocked" can be found when macOS is not locked.
+//
+// `ioreg -n Root -d1` returns `"CGSSessionScreenIsLocked"=Yes`
+// `ioreg -n Root -d1 -a` returns
+// ```
+// ...
+//    <key>CGSSessionScreenIsLocked</key>
+//    <true/>
+// ...
+// ```
+pub fn is_locked() -> bool {
+    match std::process::Command::new("ioreg")
+        .arg("-n")
+        .arg("Root")
+        .arg("-d1")
+        .output()
+    {
+        Ok(output) => {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            // Although `"CGSSessionScreenIsLocked"=Yes` was printed on my macOS,
+            // I also check `"CGSSessionScreenIsLocked"=true` for better compability.
+            output_str.contains("\"CGSSessionScreenIsLocked\"=Yes")
+                || output_str.contains("\"CGSSessionScreenIsLocked\"=true")
+        }
+        Err(e) => {
+            log::error!("Failed to query ioreg for the lock state: {}", e);
+            false
+        }
+    }
+}
+
 pub fn is_root() -> bool {
     crate::username() == "root"
 }
@@ -602,6 +714,156 @@ pub fn quit_gui() {
     };
 }
 
+pub fn update_me() -> ResultType<()> {
+    let is_installed_daemon = is_installed_daemon(false);
+    let option_stop_service = "stop-service";
+    let is_service_stopped = hbb_common::config::option2bool(
+        option_stop_service,
+        &crate::ui_interface::get_option(option_stop_service),
+    );
+
+    let cmd = std::env::current_exe()?;
+    // RustDesk.app/Contents/MacOS/RustDesk
+    let app_dir = cmd
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.parent())
+        .map(|d| d.to_string_lossy().to_string());
+    let Some(app_dir) = app_dir else {
+        bail!("Unknown app directory of current exe file: {:?}", cmd);
+    };
+
+    if is_installed_daemon && !is_service_stopped {
+        let agent = format!("{}_server.plist", crate::get_full_name());
+        let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
+        std::process::Command::new("launchctl")
+            .args(&["unload", "-w", &agent_plist_file])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok();
+        update_daemon_agent(agent_plist_file, app_dir, true);
+    } else {
+        // `kill -9` may not work without "administrator privileges"
+        let update_body = format!(
+            r#"
+do shell script "
+pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDesk.app && ditto '{}' /Applications/RustDesk.app && chown -R {}:staff /Applications/RustDesk.app && xattr -r -d com.apple.quarantine /Applications/RustDesk.app
+" with prompt "RustDesk wants to update itself" with administrator privileges
+    "#,
+            std::process::id(),
+            app_dir,
+            get_active_username()
+        );
+        match Command::new("osascript")
+            .arg("-e")
+            .arg(update_body)
+            .status()
+        {
+            Ok(status) if !status.success() => {
+                log::error!("osascript execution failed with status: {}", status);
+            }
+            Err(e) => {
+                log::error!("run osascript failed: {}", e);
+            }
+            _ => {}
+        }
+    }
+    std::process::Command::new("open")
+        .arg("-n")
+        .arg(&format!("/Applications/{}.app", crate::get_app_name()))
+        .spawn()
+        .ok();
+    // leave open a little time
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    Ok(())
+}
+
+pub fn update_to(_file: &str) -> ResultType<()> {
+    update_extracted(UPDATE_TEMP_DIR)?;
+    Ok(())
+}
+
+pub fn extract_update_dmg(file: &str) {
+    let mut evt: HashMap<&str, String> =
+        HashMap::from([("name", "extract-update-dmg".to_string())]);
+    match extract_dmg(file, UPDATE_TEMP_DIR) {
+        Ok(_) => {
+            log::info!("Extracted dmg file to {}", UPDATE_TEMP_DIR);
+        }
+        Err(e) => {
+            evt.insert("err", e.to_string());
+            log::error!("Failed to extract dmg file {}: {}", file, e);
+        }
+    }
+    let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
+    #[cfg(feature = "flutter")]
+    crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
+}
+
+fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
+    let mount_point = "/Volumes/RustDeskUpdate";
+    let target_path = Path::new(target_dir);
+
+    if target_path.exists() {
+        std::fs::remove_dir_all(target_path)?;
+    }
+    std::fs::create_dir_all(target_path)?;
+
+    Command::new("hdiutil")
+        .args(&["attach", "-nobrowse", "-mountpoint", mount_point, dmg_path])
+        .status()?;
+
+    struct DmgGuard(&'static str);
+    impl Drop for DmgGuard {
+        fn drop(&mut self) {
+            let _ = Command::new("hdiutil")
+                .args(&["detach", self.0, "-force"])
+                .status();
+        }
+    }
+    let _guard = DmgGuard(mount_point);
+
+    let app_name = "RustDesk.app";
+    let src_path = format!("{}/{}", mount_point, app_name);
+    let dest_path = format!("{}/{}", target_dir, app_name);
+
+    let copy_status = Command::new("ditto")
+        .args(&[&src_path, &dest_path])
+        .status()?;
+
+    if !copy_status.success() {
+        bail!("Failed to copy application {:?}", copy_status);
+    }
+
+    if !Path::new(&dest_path).exists() {
+        bail!(
+            "Copy operation failed - destination not found at {}",
+            dest_path
+        );
+    }
+
+    Ok(())
+}
+
+fn update_extracted(target_dir: &str) -> ResultType<()> {
+    let exe_path = format!("{}/RustDesk.app/Contents/MacOS/RustDesk", target_dir);
+    let _child = unsafe {
+        Command::new(&exe_path)
+            .arg("--update")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .pre_exec(|| {
+                hbb_common::libc::setsid();
+                Ok(())
+            })
+            .spawn()?
+    };
+    Ok(())
+}
+
 pub fn get_double_click_time() -> u32 {
     // to-do: https://github.com/servo/core-foundation-rs/blob/786895643140fa0ee4f913d7b4aeb0c4626b2085/cocoa/src/appkit.rs#L2823
     500 as _
@@ -614,6 +876,7 @@ pub fn hide_dock() {
 }
 
 #[inline]
+#[allow(dead_code)]
 fn get_server_start_time_of(p: &Process, path: &Path) -> Option<i64> {
     let cmd = p.cmd();
     if cmd.len() <= 1 {
@@ -632,6 +895,7 @@ fn get_server_start_time_of(p: &Process, path: &Path) -> Option<i64> {
 }
 
 #[inline]
+#[allow(dead_code)]
 fn get_server_start_time(sys: &mut System, path: &Path) -> Option<(i64, Pid)> {
     sys.refresh_processes_specifics(ProcessRefreshKind::new());
     for (_, p) in sys.processes() {
@@ -650,33 +914,62 @@ pub fn handle_application_should_open_untitled_file() {
     }
 }
 
+/// Get all resolutions of the display. The resolutions are:
+/// 1. Sorted by width and height in descending order, with duplicates removed.
+/// 2. Filtered out if the width is less than 800 (800x600) if there are too many (e.g., >15).
+/// 3. Contain HiDPI resolutions and the real resolutions.
+///
+/// We don't need to distinguish between HiDPI and real resolutions.
+/// When the controlling side changes the resolution, it will call `change_resolution_directly()`.
+/// `change_resolution_directly()` will try to use the HiDPI resolution first.
+/// This is how teamviewer does it for now.
+///
+/// If we need to distinguish HiDPI and real resolutions, we can add a flag to the `Resolution` struct.
 pub fn resolutions(name: &str) -> Vec<Resolution> {
     let mut v = vec![];
     if let Ok(display) = name.parse::<u32>() {
         let mut num = 0;
         unsafe {
             if YES == MacGetModeNum(display, &mut num) {
-                let (mut widths, mut heights) = (vec![0; num as _], vec![0; num as _]);
+                let (mut widths, mut heights, mut _hidpis) =
+                    (vec![0; num as _], vec![0; num as _], vec![NO; num as _]);
                 let mut real_num = 0;
                 if YES
                     == MacGetModes(
                         display,
                         widths.as_mut_ptr(),
                         heights.as_mut_ptr(),
+                        _hidpis.as_mut_ptr(),
                         num,
                         &mut real_num,
                     )
                 {
                     if real_num <= num {
-                        for i in 0..real_num {
-                            let resolution = Resolution {
+                        v = (0..real_num)
+                            .map(|i| Resolution {
                                 width: widths[i as usize] as _,
                                 height: heights[i as usize] as _,
                                 ..Default::default()
-                            };
-                            if !v.contains(&resolution) {
-                                v.push(resolution);
+                            })
+                            .collect::<Vec<_>>();
+                        // Sort by (w, h), desc
+                        v.sort_by(|a, b| {
+                            if a.width == b.width {
+                                b.height.cmp(&a.height)
+                            } else {
+                                b.width.cmp(&a.width)
                             }
+                        });
+                        // Remove duplicates
+                        v.dedup_by(|a, b| a.width == b.width && a.height == b.height);
+                        // Filter out the ones that are less than width 800 (800x600) if there are too many.
+                        // We can also do this filtering on the client side, but it is better not to change the client side to reduce the impact.
+                        if v.len() > 15 {
+                            // Most width > 800, so it's ok to remove the small ones.
+                            v.retain(|r| r.width >= 800);
+                        }
+                        if v.len() > 15 {
+                            // Ignore if the length is still too long.
                         }
                     }
                 }
@@ -704,7 +997,7 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
 pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
     let display = name.parse::<u32>().map_err(|e| anyhow!(e))?;
     unsafe {
-        if NO == MacSetMode(display, width as _, height as _) {
+        if NO == MacSetMode(display, width as _, height as _, true) {
             bail!("MacSetMode failed");
         }
     }
@@ -764,5 +1057,29 @@ impl WakeLock {
             .as_mut()
             .map(|h| h.set_display(display))
             .ok_or(anyhow!("no AwakeHandle"))?
+    }
+}
+
+fn get_bundle_id() -> Option<String> {
+    unsafe {
+        let bundle: id = msg_send![class!(NSBundle), mainBundle];
+        if bundle.is_null() {
+            return None;
+        }
+
+        let bundle_id: id = msg_send![bundle, bundleIdentifier];
+        if bundle_id.is_null() {
+            return None;
+        }
+
+        let c_str: *const std::os::raw::c_char = msg_send![bundle_id, UTF8String];
+        if c_str.is_null() {
+            return None;
+        }
+
+        let bundle_id_str = std::ffi::CStr::from_ptr(c_str)
+            .to_string_lossy()
+            .to_string();
+        Some(bundle_id_str)
     }
 }

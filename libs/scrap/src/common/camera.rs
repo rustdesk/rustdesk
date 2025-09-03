@@ -17,7 +17,9 @@ use hbb_common::message_proto::{DisplayInfo, Resolution};
 use crate::AdapterDevice;
 
 use crate::common::{bail, ResultType};
-use crate::{Frame, PixelBuffer, Pixfmt, TraitCapturer};
+use crate::{Frame, TraitCapturer};
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+use crate::{PixelBuffer, Pixfmt};
 
 pub const PRIMARY_CAMERA_IDX: usize = 0;
 lazy_static::lazy_static! {
@@ -49,7 +51,18 @@ impl Cameras {
                         let Some(info) = cameras.first() else {
                             bail!("No camera found")
                         };
-                        let camera = Self::create_camera(info.index())?;
+                        // Use index (0) camera as main camera, fallback to the first camera if index (0) is not available.
+                        // But maybe we also need to check index (1) or the lowest index camera.
+                        //
+                        // https://askubuntu.com/questions/234362/how-to-fix-this-problem-where-sometimes-dev-video0-becomes-automatically-dev
+                        // https://github.com/rustdesk/rustdesk/pull/12010#issue-3125329069
+                        let mut camera_index = info.index().clone();
+                        if !matches!(camera_index, CameraIndex::Index(0)) {
+                            if cameras.iter().any(|cam| matches!(cam.index(), CameraIndex::Index(0))) {
+                                camera_index = CameraIndex::Index(0);
+                            }
+                        }
+                        let camera = Self::create_camera(&camera_index)?;
                         let resolution = camera.resolution();
                         let (width, height) = (resolution.width() as i32, resolution.height() as i32);
                         camera_displays.push(DisplayInfo {
@@ -110,9 +123,14 @@ impl Cameras {
     }
 
     fn create_camera(index: &CameraIndex) -> ResultType<Camera> {
+        let format_type = if cfg!(target_os = "linux") {
+            RequestedFormatType::None
+        } else {
+            RequestedFormatType::AbsoluteHighestResolution
+        };
         let result = Camera::new(
             index.clone(),
-            RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution),
+            RequestedFormat::new::<RgbAFormat>(format_type),
         );
         match result {
             Ok(camera) => Ok(camera),
@@ -146,11 +164,11 @@ impl Cameras {
         return Ok(Vec::new());
     }
 
-    pub fn exists(index: usize) -> bool {
+    pub fn exists(_index: usize) -> bool {
         false
     }
 
-    pub fn get_camera_resolution(index: usize) -> ResultType<Resolution> {
+    pub fn get_camera_resolution(_index: usize) -> ResultType<Resolution> {
         bail!(CAMERA_NOT_SUPPORTED);
     }
 
@@ -158,7 +176,7 @@ impl Cameras {
         vec![]
     }
 
-    pub fn get_capturer(current: usize) -> ResultType<Box<dyn TraitCapturer>> {
+    pub fn get_capturer(_current: usize) -> ResultType<Box<dyn TraitCapturer>> {
         bail!(CAMERA_NOT_SUPPORTED);
     }
 }
@@ -185,6 +203,7 @@ impl CameraCapturer {
         })
     }
 
+    #[allow(dead_code)]
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     fn new(_current: usize) -> ResultType<Self> {
         bail!(CAMERA_NOT_SUPPORTED);

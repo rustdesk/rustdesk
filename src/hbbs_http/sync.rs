@@ -49,6 +49,38 @@ pub struct StrategyOptions {
     pub extra: HashMap<String, String>,
 }
 
+struct InfoUploaded {
+    uploaded: bool,
+    url: String,
+    last_uploaded: Option<Instant>,
+    id: String,
+    username: Option<String>,
+}
+
+impl Default for InfoUploaded {
+    fn default() -> Self {
+        Self {
+            uploaded: false,
+            url: "".to_owned(),
+            last_uploaded: None,
+            id: "".to_owned(),
+            username: None,
+        }
+    }
+}
+
+impl InfoUploaded {
+    fn uploaded(url: String, id: String, username: String) -> Self {
+        Self {
+            uploaded: true,
+            url,
+            last_uploaded: None,
+            id,
+            username: Some(username),
+        }
+    }
+}
+
 #[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn start_hbbs_sync_async() {
@@ -57,8 +89,7 @@ async fn start_hbbs_sync_async() {
         TIME_CONN,
     ));
     let mut last_sent: Option<Instant> = None;
-    let mut info_uploaded: (bool, String, Option<Instant>, String) =
-        (false, "".to_owned(), None, "".to_owned());
+    let mut info_uploaded = InfoUploaded::default();
     let mut sysinfo_ver = "".to_owned();
     loop {
         tokio::select! {
@@ -73,80 +104,103 @@ async fn start_hbbs_sync_async() {
                     continue;
                 }
                 let conns = Connection::alive_conns();
-                if info_uploaded.0 && (url != info_uploaded.1 || id != info_uploaded.3) {
-                    info_uploaded.0 = false;
+                if info_uploaded.uploaded && (url != info_uploaded.url || id != info_uploaded.id) {
+                    info_uploaded.uploaded = false;
                     *PRO.lock().unwrap() = false;
                 }
-                if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true) {
-                    let mut v = crate::get_sysinfo();
-                    // username is empty in login screen of windows, but here we only upload sysinfo once, causing
-                    // real user name not uploaded after login screen. https://github.com/rustdesk/rustdesk/discussions/8031
-                    if !cfg!(windows) || !v["username"].as_str().unwrap_or_default().is_empty() {
-                        v["version"] = json!(crate::VERSION);
-                        v["id"] = json!(id);
-                        v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
-                        let ab_name = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NAME);
-                        if !ab_name.is_empty() {
-                            v[keys::OPTION_PRESET_ADDRESS_BOOK_NAME] = json!(ab_name);
-                        }
-                        let ab_tag = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_TAG);
-                        if !ab_tag.is_empty() {
-                            v[keys::OPTION_PRESET_ADDRESS_BOOK_TAG] = json!(ab_tag);
-                        }
-                        let username = get_builtin_option(keys::OPTION_PRESET_USERNAME);
-                        if !username.is_empty() {
-                            v[keys::OPTION_PRESET_USERNAME] = json!(username);
-                        }
-                        let strategy_name = get_builtin_option(keys::OPTION_PRESET_STRATEGY_NAME);
-                        if !strategy_name.is_empty() {
-                            v[keys::OPTION_PRESET_STRATEGY_NAME] = json!(strategy_name);
-                        }
-                        let device_group_name = get_builtin_option(keys::OPTION_PRESET_DEVICE_GROUP_NAME);
-                        if !device_group_name.is_empty() {
-                            v[keys::OPTION_PRESET_DEVICE_GROUP_NAME] = json!(device_group_name);
-                        }
-                        let v = v.to_string();
+                // For Windows:
+                // We can't skip uploading sysinfo when the username is empty, because the username may
+                // always be empty before login. We also need to upload the other sysinfo info.
+                //
+                // https://github.com/rustdesk/rustdesk/discussions/8031
+                // We still need to check the username after uploading sysinfo, because
+                // 1. The username may be empty when logining in, and it can be fetched after a while.
+                //    In this case, we need to upload sysinfo again.
+                // 2. The username may be changed after uploading sysinfo, and we need to upload sysinfo again.
+                //
+                // The Windows session will switch to the last user session before the restart,
+                // so it may be able to get the username before login.
+                // But strangely, sometimes we can get the username before login,
+                // we may not be able to get the username before login after the next restart.
+                let mut v = crate::get_sysinfo();
+                let sys_username = v["username"].as_str().unwrap_or_default().to_string();
+                // Though the username comparison is only necessary on Windows,
+                // we still keep the comparison on other platforms for consistency.
+                let need_upload = (!info_uploaded.uploaded || info_uploaded.username.as_ref() != Some(&sys_username)) &&
+                    info_uploaded.last_uploaded.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true);
+                if need_upload {
+                    v["version"] = json!(crate::VERSION);
+                    v["id"] = json!(id);
+                    v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
+                    let ab_name = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NAME);
+                    if !ab_name.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_NAME] = json!(ab_name);
+                    }
+                    let ab_tag = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_TAG);
+                    if !ab_tag.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_TAG] = json!(ab_tag);
+                    }
+                    let username = get_builtin_option(keys::OPTION_PRESET_USERNAME);
+                    if !username.is_empty() {
+                        v[keys::OPTION_PRESET_USERNAME] = json!(username);
+                    }
+                    let strategy_name = get_builtin_option(keys::OPTION_PRESET_STRATEGY_NAME);
+                    if !strategy_name.is_empty() {
+                        v[keys::OPTION_PRESET_STRATEGY_NAME] = json!(strategy_name);
+                    }
+                    let device_group_name = get_builtin_option(keys::OPTION_PRESET_DEVICE_GROUP_NAME);
+                    if !device_group_name.is_empty() {
+                        v[keys::OPTION_PRESET_DEVICE_GROUP_NAME] = json!(device_group_name);
+                    }
+                    let v = v.to_string();
+                    let mut hash = "".to_owned();
+                    if crate::is_public(&url) {
                         use sha2::{Digest, Sha256};
                         let mut hasher = Sha256::new();
                         hasher.update(url.as_bytes());
                         hasher.update(&v.as_bytes());
                         let res = hasher.finalize();
-                        let hash = hbb_common::base64::encode(&res[..]);
+                        hash = hbb_common::base64::encode(&res[..]);
                         let old_hash = config::Status::get("sysinfo_hash");
                         let ver = config::Status::get("sysinfo_ver"); // sysinfo_ver is the version of sysinfo on server's side
                         if hash == old_hash {
+                            // When the api doesn't exist, Ok("") will be returned in test.
                             let samever = match crate::post_request(url.replace("heartbeat", "sysinfo_ver"), "".to_owned(), "").await {
                                 Ok(x)  => {
                                     sysinfo_ver = x.clone();
+                                    *PRO.lock().unwrap() = true;
                                     x == ver
                                 }
                                 _ => {
-                                    true // if failed to get sysinfo_ver, we assume it's the same version
+                                    false // to make sure Pro can be assigned in below post for old
+                                            // hbbs pro not supporting sysinfo_ver, use false for ensuring
                                 }
                             };
                             if samever {
-                                info_uploaded = (true, url.clone(), None, id.clone());
+                                info_uploaded = InfoUploaded::uploaded(url.clone(), id.clone(), sys_username);
                                 log::info!("sysinfo not changed, skip upload");
                                 continue;
                             }
                         }
-                        match crate::post_request(url.replace("heartbeat", "sysinfo"), v, "").await {
-                            Ok(x)  => {
-                                if x == "SYSINFO_UPDATED" {
-                                    info_uploaded = (true, url.clone(), None, id.clone());
-                                    log::info!("sysinfo updated");
+                    }
+                    match crate::post_request(url.replace("heartbeat", "sysinfo"), v, "").await {
+                        Ok(x)  => {
+                            if x == "SYSINFO_UPDATED" {
+                                info_uploaded = InfoUploaded::uploaded(url.clone(), id.clone(), sys_username);
+                                log::info!("sysinfo updated");
+                                if !hash.is_empty() {
                                     config::Status::set("sysinfo_hash", hash);
                                     config::Status::set("sysinfo_ver", sysinfo_ver.clone());
-                                    *PRO.lock().unwrap() = true;
-                                } else if x == "ID_NOT_FOUND" {
-                                    info_uploaded.2 = None; // next heartbeat will upload sysinfo again
-                                } else {
-                                    info_uploaded.2 = Some(Instant::now());
                                 }
+                                *PRO.lock().unwrap() = true;
+                            } else if x == "ID_NOT_FOUND" {
+                                info_uploaded.last_uploaded = None; // next heartbeat will upload sysinfo again
+                            } else {
+                                info_uploaded.last_uploaded = Some(Instant::now());
                             }
-                            _ => {
-                                info_uploaded.2 = Some(Instant::now());
-                            }
+                        }
+                        _ => {
+                            info_uploaded.last_uploaded = Some(Instant::now());
                         }
                     }
                 }
@@ -166,7 +220,7 @@ async fn start_hbbs_sync_async() {
                 if let Ok(s) = crate::post_request(url.clone(), v.to_string(), "").await {
                     if let Ok(mut rsp) = serde_json::from_str::<HashMap::<&str, Value>>(&s) {
                         if rsp.remove("sysinfo").is_some() {
-                            info_uploaded.0 = false;
+                            info_uploaded.uploaded = false;
                             config::Status::set("sysinfo_hash", "".to_owned());
                             log::info!("sysinfo required to forcely update");
                         }

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -1592,10 +1593,31 @@ class _KeyboardMenu extends StatelessWidget {
               inputSource(),
               Divider(),
               viewMode(),
+              if (pi.platform == kPeerPlatformWindows ||
+                  pi.platform == kPeerPlatformMacOS)
+                showMyCursor(),
               Divider(),
               ...toolbarToggles(),
+              ...mouseSpeed(),
               ...mobileActions(),
             ]);
+  }
+
+  mouseSpeed() {
+    final speedWidgets = [];
+    final sessionId = ffi.sessionId;
+    if (isDesktop) {
+      if (ffi.ffiModel.keyboard) {
+        final enabled = !ffi.ffiModel.viewOnly;
+        final trackpad = MenuButton(
+          child: Text(translate('Trackpad speed')).paddingOnly(left: 26.0),
+          onPressed: enabled ? () => trackpadSpeedDialog(sessionId, ffi) : null,
+          ffi: ffi,
+        );
+        speedWidgets.add(trackpad);
+      }
+    }
+    return speedWidgets;
   }
 
   keyboardMode() {
@@ -1730,10 +1752,41 @@ class _KeyboardMenu extends StatelessWidget {
                 final viewOnly = await bind.sessionGetToggleOption(
                     sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
                 ffiModel.setViewOnly(id, viewOnly ?? value);
+                final showMyCursor = await bind.sessionGetToggleOption(
+                    sessionId: ffi.sessionId, arg: kOptionToggleShowMyCursor);
+                ffiModel.setShowMyCursor(showMyCursor ?? value);
               }
             : null,
         ffi: ffi,
         child: Text(translate('View Mode')));
+  }
+
+  showMyCursor() {
+    final ffiModel = ffi.ffiModel;
+    return CkbMenuButton(
+            value: ffiModel.showMyCursor,
+            onChanged: (value) async {
+              if (value == null) return;
+              await bind.sessionToggleOption(
+                  sessionId: ffi.sessionId, value: kOptionToggleShowMyCursor);
+              final showMyCursor = await bind.sessionGetToggleOption(
+                      sessionId: ffi.sessionId,
+                      arg: kOptionToggleShowMyCursor) ??
+                  value;
+              ffiModel.setShowMyCursor(showMyCursor);
+
+              // Also set view only if showMyCursor is enabled and viewOnly is not enabled.
+              if (showMyCursor && !ffiModel.viewOnly) {
+                await bind.sessionToggleOption(
+                    sessionId: ffi.sessionId, value: kOptionToggleViewOnly);
+                final viewOnly = await bind.sessionGetToggleOption(
+                    sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
+                ffiModel.setViewOnly(id, viewOnly ?? value);
+              }
+            },
+            ffi: ffi,
+            child: Text(translate('Show my cursor')))
+        .paddingOnly(left: 26.0);
   }
 
   mobileActions() {

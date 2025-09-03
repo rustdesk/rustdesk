@@ -81,6 +81,7 @@ class RustdeskImpl {
       required bool isViewCamera,
       required bool isPortForward,
       required bool isRdp,
+      required bool isTerminal,
       required String switchUuid,
       required bool forceRelay,
       required String password,
@@ -94,7 +95,8 @@ class RustdeskImpl {
         'password': password,
         'is_shared_password': isSharedPassword,
         'isFileTransfer': isFileTransfer,
-        'isViewCamera': isViewCamera
+        'isViewCamera': isViewCamera,
+        'isTerminal': isTerminal
       })
     ]);
   }
@@ -265,6 +267,16 @@ class RustdeskImpl {
           'option:session',
           jsonEncode({'name': 'view_style', 'value': value})
         ]));
+  }
+
+  Future<int?> sessionGetTrackpadSpeed(
+      {required UuidValue sessionId, dynamic hint}) {
+    throw UnimplementedError("sessionGetTrackpadSpeed");
+  }
+
+  Future<void> sessionSetTrackpadSpeed(
+      {required UuidValue sessionId, required int value, dynamic hint}) {
+    throw UnimplementedError("sessionSetTrackpadSpeed");
   }
 
   Future<String?> sessionGetScrollStyle(
@@ -896,8 +908,18 @@ class RustdeskImpl {
     return js.context.callMethod('getByName', ['option:local', key]);
   }
 
+  // Do not return the real environment variables.
+  // Use the global variable as the environment variable in web.
   String mainGetEnv({required String key, dynamic hint}) {
-    throw UnimplementedError("mainGetEnv");
+    return js.context.callMethod('getByName', ['envvar', key]);
+  }
+
+  // Use the global variable as the environment variable in web.
+  void mainSetEnv({required String key, String? value, dynamic hint}) {
+    js.context.callMethod('setByName', [
+      'envvar',
+      jsonEncode({'name': key, 'value': value})
+    ]);
   }
 
   Future<void> mainSetLocalOption(
@@ -1520,15 +1542,20 @@ class RustdeskImpl {
 
   Future<void> mainAccountAuth(
       {required String op, required bool rememberMe, dynamic hint}) {
-    throw UnimplementedError("mainAccountAuth");
+    return Future(() => js.context.callMethod('setByName', [
+          'account_auth',
+          jsonEncode({'op': op, 'remember': rememberMe})
+        ]));
   }
 
   Future<void> mainAccountAuthCancel({dynamic hint}) {
-    throw UnimplementedError("mainAccountAuthCancel");
+    return Future(
+        () => js.context.callMethod('setByName', ['account_auth_cancel']));
   }
 
   Future<String> mainAccountAuthResult({dynamic hint}) {
-    throw UnimplementedError("mainAccountAuthResult");
+    return Future(
+        () => js.context.callMethod('getByName', ['account_auth_result']));
   }
 
   Future<void> mainOnMainWindowClose({dynamic hint}) {
@@ -1850,6 +1877,106 @@ class RustdeskImpl {
 
   String? sessionGetConnToken({required UuidValue sessionId, dynamic hint}) {
     throw UnimplementedError("sessionGetConnToken");
+  }
+
+  String mainGetPrinterNames({dynamic hint}) {
+    return '';
+  }
+
+  Future<void> sessionPrinterResponse(
+      {required UuidValue sessionId,
+      required int id,
+      required String path,
+      required String printerName,
+      dynamic hint}) {
+    throw UnimplementedError("sessionPrinterResponse");
+  }
+
+  Future<String> mainGetCommon({required String key, dynamic hint}) {
+    throw UnimplementedError("mainGetCommon");
+  }
+
+  String mainGetCommonSync({required String key, dynamic hint}) {
+    throw UnimplementedError("mainGetCommonSync");
+  }
+
+  Future<void> mainSetCommon(
+      {required String key, required String value, dynamic hint}) {
+    throw UnimplementedError("mainSetCommon");
+  }
+
+  Future<String> sessionHandleScreenshot(
+      {required UuidValue sessionId, required String action, dynamic hint}) {
+    throw UnimplementedError("sessionHandleScreenshot");
+  }
+
+  String? sessionGetCommonSync(
+      {required UuidValue sessionId,
+      required String key,
+      required String param,
+      dynamic hint}) {
+    throw UnimplementedError("sessionGetCommonSync");
+  }
+
+  Future<void> sessionTakeScreenshot(
+      {required UuidValue sessionId, required int display, dynamic hint}) {
+    throw UnimplementedError("sessionTakeScreenshot");
+  }
+
+  Future<void> sessionOpenTerminal(
+      {required UuidValue sessionId,
+      required int terminalId,
+      required int rows,
+      required int cols,
+      dynamic hint}) {
+    return Future(() => js.context.callMethod('setByName', [
+          'open_terminal',
+          jsonEncode({
+            'terminal_id': terminalId,
+            'rows': rows,
+            'cols': cols,
+          })
+        ]));
+  }
+
+  Future<void> sessionSendTerminalInput(
+      {required UuidValue sessionId,
+      required int terminalId,
+      required String data,
+      dynamic hint}) {
+    return Future(() => js.context.callMethod('setByName', [
+          'send_terminal_input',
+          jsonEncode({
+            'terminal_id': terminalId,
+            'data': data,
+          })
+        ]));
+  }
+
+  Future<void> sessionResizeTerminal(
+      {required UuidValue sessionId,
+      required int terminalId,
+      required int rows,
+      required int cols,
+      dynamic hint}) {
+    return Future(() => js.context.callMethod('setByName', [
+          'resize_terminal',
+          jsonEncode({
+            'terminal_id': terminalId,
+            'rows': rows,
+            'cols': cols,
+          })
+        ]));
+  }
+
+  Future<void> sessionCloseTerminal(
+      {required UuidValue sessionId, required int terminalId, dynamic hint}) {
+    return Future(() => js.context.callMethod('setByName', [
+          'close_terminal',
+          jsonEncode({
+            'terminal_id': terminalId,
+          })
+        ]));
   }
 
   void dispose() {}

@@ -30,6 +30,7 @@ import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'mobile/pages/view_camera_page.dart';
+import 'mobile/pages/terminal_page.dart';
 import 'desktop/pages/remote_page.dart' as desktop_remote;
 import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
 import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
@@ -41,6 +42,7 @@ import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
 import 'package:flutter_hbb/native/common.dart'
     if (dart.library.html) 'package:flutter_hbb/web/common.dart';
+import 'package:http/http.dart' as http;
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -99,6 +101,7 @@ enum DesktopType {
   remote,
   fileTransfer,
   viewCamera,
+  terminal,
   cm,
   portForward,
 }
@@ -1152,15 +1155,23 @@ Widget createDialogContent(String text) {
 
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
-    {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
+    {bool? hasCancel,
+    ReconnectHandle? reconnect,
+    int? reconnectTimeout,
+    VoidCallback? onSubmit,
+    int? submitTimeout}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
   submit() {
     dialogManager.dismissAll();
-    // https://github.com/rustdesk/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
-    if (!type.contains("custom") && desktopType != DesktopType.portForward) {
-      closeConnection();
+    if (onSubmit != null) {
+      onSubmit.call();
+    } else {
+      // https://github.com/rustdesk/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
+      if (!type.contains("custom") && desktopType != DesktopType.portForward) {
+        closeConnection();
+      }
     }
   }
 
@@ -1176,7 +1187,18 @@ void msgBox(SessionID sessionId, String type, String title, String text,
 
   if (type != "connecting" && type != "success" && !type.contains("nook")) {
     hasOk = true;
-    buttons.insert(0, dialogButton('OK', onPressed: submit));
+    late final Widget btn;
+    if (submitTimeout != null) {
+      btn = _CountDownButton(
+        text: 'OK',
+        second: submitTimeout,
+        onPressed: submit,
+        submitOnTimeout: true,
+      );
+    } else {
+      btn = dialogButton('OK', onPressed: submit);
+    }
+    buttons.insert(0, btn);
   }
   hasCancel ??= !type.contains("error") &&
       !type.contains("nocancel") &&
@@ -1197,7 +1219,8 @@ void msgBox(SessionID sessionId, String type, String title, String text,
       reconnectTimeout != null) {
     // `enabled` is used to disable the dialog button once the button is clicked.
     final enabled = true.obs;
-    final button = Obx(() => _ReconnectCountDownButton(
+    final button = Obx(() => _CountDownButton(
+          text: 'Reconnect',
           second: reconnectTimeout,
           onPressed: enabled.isTrue
               ? () {
@@ -1551,7 +1574,9 @@ bool option2bool(String option, String value) {
 
 String bool2option(String option, bool b) {
   String res;
-  if (option.startsWith('enable-')) {
+  if (option.startsWith('enable-') &&
+      option != kOptionEnableUdpPunch &&
+      option != kOptionEnableIpv6Punch) {
     res = b ? defaultOptionYes : 'N';
   } else if (option.startsWith('allow-') ||
       option == kOptionStopService ||
@@ -1559,7 +1584,9 @@ String bool2option(String option, bool b) {
       option == kOptionForceAlwaysRelay) {
     res = b ? 'Y' : defaultOptionNo;
   } else {
-    assert(false);
+    if (option != kOptionEnableUdpPunch && option != kOptionEnableIpv6Punch) {
+      assert(false);
+    }
     res = b ? 'Y' : 'N';
   }
   return res;
@@ -2097,6 +2124,11 @@ enum UriLinkType {
   viewCamera,
   portForward,
   rdp,
+  terminal,
+}
+
+setEnvTerminalAdmin() {
+  bind.mainSetEnv(key: 'IS_TERMINAL_ADMIN', value: 'Y');
 }
 
 // uri link handler
@@ -2161,6 +2193,17 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         id = args[i + 1];
         i++;
         break;
+      case '--terminal':
+        type = UriLinkType.terminal;
+        id = args[i + 1];
+        i++;
+        break;
+      case '--terminal-admin':
+        setEnvTerminalAdmin();
+        type = UriLinkType.terminal;
+        id = args[i + 1];
+        i++;
+        break;
       case '--password':
         password = args[i + 1];
         i++;
@@ -2210,6 +2253,12 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
               password: password, forceRelay: forceRelay);
         });
         break;
+      case UriLinkType.terminal:
+        Future.delayed(Duration.zero, () {
+          rustDeskWinManager.newTerminal(id!,
+              password: password, forceRelay: forceRelay);
+        });
+        break;
     }
 
     return true;
@@ -2227,7 +2276,9 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     "file-transfer",
     "view-camera",
     "port-forward",
-    "rdp"
+    "rdp",
+    "terminal",
+    "terminal-admin",
   ];
   if (uri.authority.isEmpty &&
       uri.path.split('').every((char) => char == '/')) {
@@ -2256,20 +2307,9 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
       }
     }
   } else if (options.contains(uri.authority)) {
-    final optionIndex = options.indexOf(uri.authority);
     command = '--${uri.authority}';
     if (uri.path.length > 1) {
       id = uri.path.substring(1);
-    }
-    if (isMobile && id != null) {
-      if (optionIndex == 0 || optionIndex == 1) {
-        connect(Get.context!, id);
-      } else if (optionIndex == 2) {
-        connect(Get.context!, id, isFileTransfer: true);
-      } else if (optionIndex == 3) {
-        connect(Get.context!, id, isViewCamera: true);
-      }
-      return null;
     }
   } else if (uri.authority.length > 2 &&
       (uri.path.length <= 1 ||
@@ -2294,12 +2334,29 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     }
   }
 
-  if (isMobile) {
-    if (id != null) {
-      final forceRelay = queryParameters["relay"] != null;
-      connect(Get.context!, id, forceRelay: forceRelay);
-      return null;
+  if (isMobile && id != null) {
+    final forceRelay = queryParameters["relay"] != null;
+    final password = queryParameters["password"];
+
+    // Determine connection type based on command
+    if (command == '--file-transfer') {
+      connect(Get.context!, id,
+          isFileTransfer: true, forceRelay: forceRelay, password: password);
+    } else if (command == '--view-camera') {
+      connect(Get.context!, id,
+          isViewCamera: true, forceRelay: forceRelay, password: password);
+    } else if (command == '--terminal') {
+      connect(Get.context!, id,
+          isTerminal: true, forceRelay: forceRelay, password: password);
+    } else if (command == 'terminal-admin') {
+      setEnvTerminalAdmin();
+      connect(Get.context!, id,
+          isTerminal: true, forceRelay: forceRelay, password: password);
+    } else {
+      // Default to remote desktop for '--connect', '--play', or direct connection
+      connect(Get.context!, id, forceRelay: forceRelay, password: password);
     }
+    return null;
   }
 
   List<String> args = List.empty(growable: true);
@@ -2321,6 +2378,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
 connectMainDesktop(String id,
     {required bool isFileTransfer,
     required bool isViewCamera,
+    required bool isTerminal,
     required bool isTcpTunneling,
     required bool isRDP,
     bool? forceRelay,
@@ -2345,6 +2403,12 @@ connectMainDesktop(String id,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
         forceRelay: forceRelay);
+  } else if (isTerminal) {
+    await rustDeskWinManager.newTerminal(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        connToken: connToken,
+        forceRelay: forceRelay);
   } else {
     await rustDeskWinManager.newRemoteDesktop(id,
         password: password,
@@ -2361,6 +2425,7 @@ connectMainDesktop(String id,
 connect(BuildContext context, String id,
     {bool isFileTransfer = false,
     bool isViewCamera = false,
+    bool isTerminal = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool forceRelay = false,
@@ -2383,7 +2448,7 @@ connect(BuildContext context, String id,
   id = id.replaceAll(' ', '');
   final oldId = id;
   id = await bind.mainHandleRelayId(id: id);
-  final forceRelay2 = id != oldId || forceRelay;
+  forceRelay = id != oldId || forceRelay;
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 
@@ -2393,17 +2458,19 @@ connect(BuildContext context, String id,
         id,
         isFileTransfer: isFileTransfer,
         isViewCamera: isViewCamera,
+        isTerminal: isTerminal,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
         password: password,
         isSharedPassword: isSharedPassword,
-        forceRelay: forceRelay2,
+        forceRelay: forceRelay,
       );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
         'isFileTransfer': isFileTransfer,
         'isViewCamera': isViewCamera,
+        'isTerminal': isTerminal,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
         'password': password,
@@ -2437,7 +2504,10 @@ connect(BuildContext context, String id,
           context,
           MaterialPageRoute(
             builder: (BuildContext context) => FileManagerPage(
-                id: id, password: password, isSharedPassword: isSharedPassword),
+                id: id,
+                password: password,
+                isSharedPassword: isSharedPassword,
+                forceRelay: forceRelay),
           ),
         );
       }
@@ -2452,7 +2522,6 @@ connect(BuildContext context, String id,
               id: id,
               toolbarState: ToolbarState(),
               password: password,
-              forceRelay: forceRelay,
               isSharedPassword: isSharedPassword,
             ),
           ),
@@ -2462,10 +2531,25 @@ connect(BuildContext context, String id,
           context,
           MaterialPageRoute(
             builder: (BuildContext context) => ViewCameraPage(
-                id: id, password: password, isSharedPassword: isSharedPassword),
+                id: id,
+                password: password,
+                isSharedPassword: isSharedPassword,
+                forceRelay: forceRelay),
           ),
         );
       }
+    } else if (isTerminal) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) => TerminalPage(
+            id: id,
+            password: password,
+            isSharedPassword: isSharedPassword,
+            forceRelay: forceRelay,
+          ),
+        ),
+      );
     } else {
       if (isWeb) {
         Navigator.push(
@@ -2476,7 +2560,6 @@ connect(BuildContext context, String id,
               id: id,
               toolbarState: ToolbarState(),
               password: password,
-              forceRelay: forceRelay,
               isSharedPassword: isSharedPassword,
             ),
           ),
@@ -2486,7 +2569,10 @@ connect(BuildContext context, String id,
           context,
           MaterialPageRoute(
             builder: (BuildContext context) => RemotePage(
-                id: id, password: password, isSharedPassword: isSharedPassword),
+                id: id,
+                password: password,
+                isSharedPassword: isSharedPassword,
+                forceRelay: forceRelay),
           ),
         );
       }
@@ -2668,7 +2754,7 @@ class ServerConfig {
     } catch (err) {
       final input = msg.split('').reversed.join('');
       final bytes = base64Decode(base64.normalize(input));
-      json = jsonDecode(utf8.decode(bytes));
+      json = jsonDecode(utf8.decode(bytes, allowMalformed: true));
     }
     idServer = json['host'] ?? '';
     relayServer = json['relay'] ?? '';
@@ -2858,6 +2944,7 @@ Future<bool> canBeBlocked() async {
   return access_mode == 'view' || (access_mode.isEmpty && !option);
 }
 
+// to-do: web not implemented
 Future<void> shouldBeBlocked(RxBool block, WhetherUseRemoteBlock? use) async {
   if (use != null && !await use()) {
     block.value = false;
@@ -3183,21 +3270,24 @@ parseParamScreenRect(Map<String, dynamic> params) {
 
 get isInputSourceFlutter => stateGlobal.getInputSource() == "Input source 2";
 
-class _ReconnectCountDownButton extends StatefulWidget {
-  _ReconnectCountDownButton({
+class _CountDownButton extends StatefulWidget {
+  _CountDownButton({
     Key? key,
+    required this.text,
     required this.second,
     required this.onPressed,
+    this.submitOnTimeout = false,
   }) : super(key: key);
+  final String text;
   final VoidCallback? onPressed;
   final int second;
+  final bool submitOnTimeout;
 
   @override
-  State<_ReconnectCountDownButton> createState() =>
-      _ReconnectCountDownButtonState();
+  State<_CountDownButton> createState() => _CountDownButtonState();
 }
 
-class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
+class _CountDownButtonState extends State<_CountDownButton> {
   late int _countdownSeconds = widget.second;
 
   Timer? _timer;
@@ -3218,6 +3308,9 @@ class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (_countdownSeconds <= 0) {
         timer.cancel();
+        if (widget.submitOnTimeout) {
+          widget.onPressed?.call();
+        }
       } else {
         setState(() {
           _countdownSeconds--;
@@ -3229,7 +3322,7 @@ class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
   @override
   Widget build(BuildContext context) {
     return dialogButton(
-      '${translate('Reconnect')} (${_countdownSeconds}s)',
+      '${translate(widget.text)} (${_countdownSeconds}s)',
       onPressed: widget.onPressed,
       isOutline: true,
     );
@@ -3419,6 +3512,9 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
 }
 
 Widget loadPowered(BuildContext context) {
+  if (bind.mainGetBuildinOption(key: "hide-powered-by-me") == 'Y') {
+    return SizedBox.shrink();
+  }
   return MouseRegion(
     cursor: SystemMouseCursors.click,
     child: GestureDetector(
@@ -3814,4 +3910,36 @@ String get appName {
     _appName = bind.mainGetAppNameSync();
   }
   return _appName;
+}
+
+String getConnectionText(bool secure, bool direct, String streamType) {
+  String connectionText;
+  if (secure && direct) {
+    connectionText = translate("Direct and encrypted connection");
+  } else if (secure && !direct) {
+    connectionText = translate("Relayed and encrypted connection");
+  } else if (!secure && direct) {
+    connectionText = translate("Direct and unencrypted connection");
+  } else {
+    connectionText = translate("Relayed and unencrypted connection");
+  }
+  if (streamType == 'Relay') {
+    streamType = 'TCP';
+  }
+  if (streamType.isEmpty) {
+    return connectionText;
+  } else {
+    return '$connectionText ($streamType)';
+  }
+}
+
+String decode_http_response(http.Response resp) {
+  try {
+    // https://github.com/rustdesk/rustdesk-server-pro/discussions/758
+    return utf8.decode(resp.bodyBytes, allowMalformed: true);
+  } catch (e) {
+    debugPrint('Failed to decode response as UTF-8: $e');
+    // Fallback to bodyString which handles encoding automatically
+    return resp.body;
+  }
 }

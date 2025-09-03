@@ -6,15 +6,17 @@ use reqwest::Client as AsyncClient;
 
 macro_rules! configure_http_client {
     ($builder:expr, $Client: ty) => {{
-        let mut builder = $builder;
+        // https://github.com/rustdesk/rustdesk/issues/11569
+        // https://docs.rs/reqwest/latest/reqwest/struct.ClientBuilder.html#method.no_proxy
+        let mut builder = $builder.no_proxy();
         let client = if let Some(conf) = Config::get_socks() {
             let proxy_result = Proxy::from_conf(&conf, None);
 
             match proxy_result {
                 Ok(proxy) => {
                     let proxy_setup = match &proxy.intercept {
-                        ProxyScheme::Http { host, .. } =>{ reqwest::Proxy::http(format!("http://{}", host))},
-                        ProxyScheme::Https { host, .. } => {reqwest::Proxy::https(format!("https://{}", host))},
+                        ProxyScheme::Http { host, .. } =>{ reqwest::Proxy::all(format!("http://{}", host))},
+                        ProxyScheme::Https { host, .. } => {reqwest::Proxy::all(format!("https://{}", host))},
                         ProxyScheme::Socks5 { addr, .. } => { reqwest::Proxy::all(&format!("socks5://{}", addr)) }
                     };
 

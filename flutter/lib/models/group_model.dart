@@ -47,7 +47,10 @@ class GroupModel {
     }
     try {
       await _pull();
-    } catch (_) {}
+      _tryHandlePullError();
+    } catch (e) {
+      print("pull accessibles error: $e");
+    }
     groupLoading.value = false;
     initialized = true;
     platformFFI.tryHandle({'name': LoadEvent.group});
@@ -119,7 +122,7 @@ class GroupModel {
         final resp = await http.get(uri, headers: getHttpHeaders());
         _statusCode = resp.statusCode;
         Map<String, dynamic> json =
-            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeResp(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         }
@@ -177,7 +180,7 @@ class GroupModel {
         final resp = await http.get(uri, headers: getHttpHeaders());
         _statusCode = resp.statusCode;
         Map<String, dynamic> json =
-            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeResp(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           if (json['error'] == 'Admin required!' ||
               json['error']
@@ -243,7 +246,7 @@ class GroupModel {
         _statusCode = resp.statusCode;
 
         Map<String, dynamic> json =
-            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeResp(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         }
@@ -360,5 +363,15 @@ class GroupModel {
 
   void removePeerUpdateListener(String key) {
     _peerIdUpdateListeners.remove(key);
+  }
+
+  void _tryHandlePullError() {
+    String errorMessage = groupLoadError.value;
+    // The error message is "Retrieving accessible devices is disabled."
+    if (errorMessage.toLowerCase().contains('disabled')) {
+      users.clear();
+      peers.clear();
+      deviceGroups.clear();
+    }
   }
 }

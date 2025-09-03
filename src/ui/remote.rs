@@ -178,8 +178,11 @@ impl InvokeUiSession for SciterHandler {
         self.call("setCursorPosition", &make_args!(cp.x, cp.y));
     }
 
-    fn set_connection_type(&self, is_secured: bool, direct: bool) {
-        self.call("setConnectionType", &make_args!(is_secured, direct));
+    fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str) {
+        self.call(
+            "setConnectionType",
+            &make_args!(is_secured, direct, stream_type.to_string()),
+        );
     }
 
     fn set_fingerprint(&self, _fingerprint: String) {}
@@ -313,16 +316,10 @@ impl InvokeUiSession for SciterHandler {
 
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
-            ConnType::RDP => {}
-            ConnType::PORT_FORWARD => {}
-            ConnType::FILE_TRANSFER => {}
-            ConnType::VIEW_CAMERA => {}
             ConnType::DEFAULT_CONN => {
                 crate::keyboard::client::start_grab_loop();
             }
-            // Left empty code from compilation.
-            // Please replace the code in the PR.
-            ConnType::VIEW_CAMERA => {}
+            _ => {}
         }
     }
 
@@ -382,6 +379,15 @@ impl InvokeUiSession for SciterHandler {
 
     fn printer_request(&self, id: i32, path: String) {
         self.call("printerRequest", &make_args!(id, path));
+    }
+
+    fn handle_screenshot_resp(&self, _sid: String, msg: String) {
+        self.call("screenshot", &make_args!(msg));
+    }
+
+    fn handle_terminal_response(&self, _response: TerminalResponse) {
+        // Terminal support is not implemented for Sciter UI
+        // This is a stub implementation to satisfy the trait requirements
     }
 }
 
@@ -529,6 +535,9 @@ impl sciter::EventHandler for SciterSession {
         fn save_custom_image_quality(i32);
         fn refresh_video(i32);
         fn record_screen(bool);
+        fn is_screenshot_supported();
+        fn take_screenshot(i32, String);
+        fn handle_screenshot(String);
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
         fn toggle_option(String);
@@ -865,6 +874,10 @@ impl SciterSession {
 
     fn on_printer_selected(&self, id: i32, path: String, printer_name: String) {
         self.printer_response(id, path, printer_name);
+    }
+
+    fn handle_screenshot(&self, action: String) -> String {
+        crate::client::screenshot::handle_screenshot(action)
     }
 }
 

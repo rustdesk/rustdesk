@@ -21,11 +21,12 @@ use hbb_common::{
 };
 use std::{
     collections::HashMap,
+    path::PathBuf,
     sync::{
         atomic::{AtomicI32, Ordering},
         Arc,
     },
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 pub type SessionID = uuid::Uuid;
@@ -36,7 +37,11 @@ lazy_static::lazy_static! {
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
     flutter::async_tasks::start_flutter_async_runner();
-    *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    // `APP_DIR` is set in `main_get_data_dir_ios()` on iOS.
+    #[cfg(not(target_os = "ios"))]
+    {
+        *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    }
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
     if custom_client_config.is_empty() {
         crate::load_custom_client();
@@ -63,6 +68,7 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     {
         use hbb_common::env_logger::*;
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
+        crate::common::test_nat_type();
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -101,6 +107,8 @@ pub fn peer_get_sessions_count(id: String, conn_type: i32) -> SyncReturn<usize> 
         ConnType::PORT_FORWARD
     } else if conn_type == ConnType::RDP as i32 {
         ConnType::RDP
+    } else if conn_type == ConnType::TERMINAL as i32 {
+        ConnType::TERMINAL
     } else {
         ConnType::DEFAULT_CONN
     };
@@ -127,25 +135,34 @@ pub fn session_add_sync(
     is_view_camera: bool,
     is_port_forward: bool,
     is_rdp: bool,
+    is_terminal: bool,
     switch_uuid: String,
     force_relay: bool,
     password: String,
     is_shared_password: bool,
     conn_token: Option<String>,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(
+    let add_res = session_add(
         &session_id,
         &id,
         is_file_transfer,
         is_view_camera,
         is_port_forward,
         is_rdp,
+        is_terminal,
         &switch_uuid,
         force_relay,
         password,
         is_shared_password,
         conn_token,
-    ) {
+    );
+    // We can't put the remove call together with `std::env::var("IS_TERMINAL_ADMIN")`.
+    // Because there are some `bail!` in `session_add()`, we must make sure `IS_TERMINAL_ADMIN` is removed at last.
+    if is_terminal {
+        std::env::remove_var("IS_TERMINAL_ADMIN");
+    }
+
+    if let Err(e) = add_res {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -248,6 +265,16 @@ pub fn session_refresh(session_id: SessionID, display: usize) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.refresh_video(display as _);
     }
+}
+
+pub fn session_take_screenshot(session_id: SessionID, display: usize) {
+    if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        s.take_screenshot(display as _, session_id.to_string());
+    }
+}
+
+pub fn session_handle_screenshot(#[allow(unused_variables)] session_id: SessionID, action: String) -> String {
+    crate::client::screenshot::handle_screenshot(action)
 }
 
 pub fn session_is_multi_ui_session(session_id: SessionID) -> SyncReturn<bool> {
@@ -481,6 +508,20 @@ pub fn session_set_custom_fps(session_id: SessionID, fps: i32) {
     }
 }
 
+pub fn session_get_trackpad_speed(session_id: SessionID) -> Option<i32> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        Some(session.get_trackpad_speed())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_trackpad_speed(session_id: SessionID, value: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_trackpad_speed(value);
+    }
+}
+
 pub fn session_lock_screen(session_id: SessionID) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.lock_screen();
@@ -584,6 +625,36 @@ pub fn session_input_string(session_id: SessionID, value: String) {
 pub fn session_send_chat(session_id: SessionID, text: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send_chat(text);
+    }
+}
+
+// Terminal functions
+pub fn session_open_terminal(session_id: SessionID, terminal_id: i32, rows: u32, cols: u32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.open_terminal(terminal_id, rows, cols);
+    } else {
+        log::error!(
+            "[flutter_ffi] Session not found for session_id: {}",
+            session_id
+        );
+    }
+}
+
+pub fn session_send_terminal_input(session_id: SessionID, terminal_id: i32, data: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.send_terminal_input(terminal_id, data);
+    }
+}
+
+pub fn session_resize_terminal(session_id: SessionID, terminal_id: i32, rows: u32, cols: u32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.resize_terminal(terminal_id, rows, cols);
+    }
+}
+
+pub fn session_close_terminal(session_id: SessionID, terminal_id: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.close_terminal(terminal_id);
     }
 }
 
@@ -880,7 +951,10 @@ pub fn main_set_option(key: String, value: String) {
         );
     }
 
-    if key.eq("custom-rendezvous-server") {
+    if key.eq("custom-rendezvous-server")
+        || key.eq(config::keys::OPTION_ALLOW_WEBSOCKET)
+        || key.eq("api-server")
+    {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
         crate::rendezvous_mediator::RendezvousMediator::restart();
@@ -1005,6 +1079,35 @@ pub fn main_get_use_texture_render() -> SyncReturn<bool> {
 
 pub fn main_get_env(key: String) -> SyncReturn<String> {
     SyncReturn(std::env::var(key).unwrap_or_default())
+}
+
+// Dart does not support changing environment variables.
+// `Platform.environment['MY_VAR'] = 'VAR';` will throw an error
+// `Unsupported operation: Cannot modify unmodifiable map`.
+//
+// And we need to share the environment variables between rust and dart isolates sometimes.
+pub fn main_set_env(key: String, value: Option<String>) -> SyncReturn<()> {
+    let is_valid_key = !key.is_empty() && !key.contains('=') && !key.contains('\0');
+    debug_assert!(is_valid_key, "Invalid environment variable key: {}", key);
+    if !is_valid_key {
+        log::error!("Invalid environment variable key: {}", key);
+        return SyncReturn(());
+    }
+
+    match value {
+        Some(v) => {
+            let is_valid_value = !v.contains('\0');
+            debug_assert!(is_valid_value, "Invalid environment variable value: {}", v);
+            if !is_valid_value {
+                log::error!("Invalid environment variable value: {}", v);
+                return SyncReturn(());
+            }
+            std::env::set_var(key, v);
+        }
+        None => std::env::remove_var(key),
+    }
+
+    SyncReturn(())
 }
 
 pub fn main_set_local_option(key: String, value: String) {
@@ -1703,7 +1806,8 @@ pub fn main_set_home_dir(_home: String) {
 }
 
 // This is a temporary method to get data dir for ios
-pub fn main_get_data_dir_ios() -> SyncReturn<String> {
+pub fn main_get_data_dir_ios(app_dir: String) -> SyncReturn<String> {
+    *config::APP_DIR.write().unwrap() = app_dir;
     let data_dir = config::Config::path("data");
     if !data_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&data_dir) {
@@ -2418,7 +2522,42 @@ pub fn main_get_common(key: String) -> String {
     } else if key == "transfer-job-id" {
         return hbb_common::fs::get_next_job_id().to_string();
     } else {
-        "".to_owned()
+        if key.starts_with("download-data-") {
+            let id = key.replace("download-data-", "");
+            match crate::hbbs_http::downloader::get_download_data(&id) {
+                Ok(data) => serde_json::to_string(&data).unwrap_or_default(),
+                Err(e) => {
+                    format!("error:{}", e)
+                }
+            }
+        } else if key.starts_with("download-file-") {
+            let _version = key.replace("download-file-", "");
+            #[cfg(target_os = "windows")]
+            return match crate::platform::windows::is_msi_installed() {
+                Ok(true) => format!("rustdesk-{_version}-x86_64.msi"),
+                Ok(false) => format!("rustdesk-{_version}-x86_64.exe"),
+                Err(e) => {
+                    log::error!("Failed to check if is msi: {}", e);
+                    format!("error:update-failed-check-msi-tip")
+                }
+            };
+            #[cfg(target_os = "macos")]
+            {
+                return if cfg!(target_arch = "x86_64") {
+                    format!("rustdesk-{_version}-x86_64.dmg")
+                } else if cfg!(target_arch = "aarch64") {
+                    format!("rustdesk-{_version}-aarch64.dmg")
+                } else {
+                    "error:unsupported".to_owned()
+                };
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+            {
+                "error:unsupported".to_owned()
+            }
+        } else {
+            "".to_owned()
+        }
     }
 }
 
@@ -2438,6 +2577,16 @@ pub fn main_set_common(_key: String, _value: String) {
                     (false, err)
                 }
             };
+            if success {
+                // Use `ipc` to notify the server process to update the install option in the registry.
+                // Because `install_update_printer()` may prompt for permissions, there is no need to prompt again here.
+                if let Err(e) = crate::ipc::set_install_option(
+                    crate::platform::REG_NAME_INSTALL_PRINTER.to_string(),
+                    "1".to_string(),
+                ) {
+                    log::error!("Failed to set install printer option: {}", e);
+                }
+            }
             let data = HashMap::from([
                 ("name", serde_json::json!("install-printer-res")),
                 ("success", serde_json::json!(success)),
@@ -2448,6 +2597,111 @@ pub fn main_set_common(_key: String, _value: String) {
                 serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
             );
         });
+    }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        use crate::updater::get_download_file_from_url;
+        if _key == "download-new-version" {
+            let download_url = _value.clone();
+            let event_key = "download-new-version".to_owned();
+            let data = if let Some(download_file) = get_download_file_from_url(&download_url) {
+                std::fs::remove_file(&download_file).ok();
+                match crate::hbbs_http::downloader::download_file(
+                    download_url,
+                    Some(PathBuf::from(download_file)),
+                    Some(Duration::from_secs(3)),
+                ) {
+                    Ok(id) => HashMap::from([("name", event_key), ("id", id)]),
+                    Err(e) => HashMap::from([("name", event_key), ("error", e.to_string())]),
+                }
+            } else {
+                HashMap::from([
+                    ("name", event_key),
+                    ("error", "Invalid download url".to_string()),
+                ])
+            };
+            let _res = flutter::push_global_event(
+                flutter::APP_TYPE_MAIN,
+                serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+            );
+        } else if _key == "update-me" {
+            if let Some(new_version_file) = get_download_file_from_url(&_value) {
+                log::debug!(
+                    "New version file is downloaed, update begin, {:?}",
+                    new_version_file.to_str()
+                );
+                if let Some(f) = new_version_file.to_str() {
+                    // 1.4.0 does not support "--update"
+                    // But we can assume that the new version supports it.
+                    #[cfg(target_os = "windows")]
+                    if f.ends_with(".exe") {
+                        if let Err(e) =
+                            crate::platform::run_exe_in_cur_session(f, vec!["--update"], false)
+                        {
+                            log::error!("Failed to run the update exe: {}", e);
+                        }
+                    } else if f.ends_with(".msi") {
+                        if let Err(e) = crate::platform::update_me_msi(f, false) {
+                            log::error!("Failed to run the update msi: {}", e);
+                        }
+                    } else {
+                        // unreachable!()
+                    }
+                    #[cfg(target_os = "macos")]
+                    match crate::platform::update_to(f) {
+                        Ok(_) => {
+                            log::info!("Update successfully!");
+                        }
+                        Err(e) => {
+                            log::error!("Failed to update to new version, {}", e);
+                        }
+                    }
+                    fs::remove_file(f).ok();
+                }
+            }
+        } else if _key == "extract-update-dmg" {
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(new_version_file) = get_download_file_from_url(&_value) {
+                    if let Some(f) = new_version_file.to_str() {
+                        crate::platform::macos::extract_update_dmg(f);
+                    } else {
+                        // unreachable!()
+                        log::error!("Failed to get the new version file path");
+                    }
+                } else {
+                    // unreachable!()
+                    log::error!("Failed to get the new version file from url: {}", _value);
+                }
+            }
+        }
+    }
+
+    if _key == "remove-downloader" {
+        crate::hbbs_http::downloader::remove(&_value);
+    } else if _key == "cancel-downloader" {
+        crate::hbbs_http::downloader::cancel(&_value);
+    }
+}
+
+pub fn session_get_common_sync(
+    session_id: SessionID,
+    key: String,
+    param: String,
+) -> SyncReturn<Option<String>> {
+    SyncReturn(session_get_common(session_id, key, param))
+}
+
+pub fn session_get_common(session_id: SessionID, key: String, #[allow(unused_variables)] param: String) -> Option<String> {
+    if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        let v = if key == "is_screenshot_supported" {
+            s.is_screenshot_supported().to_string()
+        } else {
+            "".to_owned()
+        };
+        Some(v)
+    } else {
+        None
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.3.9"
+version = "1.4.2"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -46,7 +46,6 @@ screencapturekit = ["cpal/screencapturekit"]
 
 [dependencies]
 async-trait = "0.1"
-whoami = "1.5.0"
 scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common" }
 serde_derive = "1.0"
@@ -82,7 +81,8 @@ fon = "0.6"
 zip = "0.6"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
-
+stunclient = "0.4"
+kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 # https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
 cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit" }
@@ -95,9 +95,10 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-# arboard = { version = "3.4.0", features = ["wayland-data-control"] }
+# arboard = { version = "3.4", features = ["wayland-data-control"] }
 arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
 clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
+portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rustdesk/pty_based_0.8.1", package = "portable-pty" }
 
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
@@ -118,14 +119,26 @@ winapi = { version = "0.3", features = [
     "ioapiset",
     "winspool",
 ] }
+windows = { version = "0.61", features = [
+    "Win32",
+    "Win32_System",
+    "Win32_System_Diagnostics",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
+] }
 winreg = "0.11"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display" }
 remote_printer = { path = "libs/remote_printer" }
 impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system" }
 shared_memory = "0.12"
-tauri-winrt-notification = "0.1.2"
+tauri-winrt-notification = "0.1"
 runas = "1.2"
+tiny-skia = "0.11"
+softbuffer = "0.4"
+fontdb = "0.23"
+bytemuck = "1.23"
+ttf-parser = "0.25"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -136,6 +149,10 @@ core-graphics = "0.22"
 include_dir = "0.7"
 fruitbasket = "0.10"
 objc_id = "0.1"
+# If we use piet "0.7" here, we must also update core-graphics to "0.24".
+piet = "0.6"
+piet-coregraphics = "0.6"
+foreign-types = "0.3"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 tray-icon = { git = "https://github.com/tauri-apps/tray-icon" }
@@ -172,6 +189,7 @@ once_cell = {version = "1.18", optional = true}
 nix = { version = "0.29", features = ["term", "process"]}
 gtk = "0.18"
 termios = "0.3"
+terminfo = "0.8"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
@@ -215,7 +233,3 @@ panic = 'abort'
 strip = true
 #opt-level = 'z' # only have smaller size after strip
 rpath = true
-
-[profile.dev]
-split-debuginfo = '...'  # Platform-specific.
-#strip = "debuginfo" 

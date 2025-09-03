@@ -48,7 +48,6 @@ macro_rules! make_lib_wrapper {
                 $(let $field = if let Some(lib) = &lib {
                     match unsafe { lib.symbol::<$tp>(stringify!($field)) } {
                         Ok(m) => {
-                            log::info!("method found {}", stringify!($field));
                             Some(*m)
                         },
                         Err(e) => {

@@ -66,7 +66,7 @@ class UserModel {
         reset(resetOther: status == 401);
         return;
       }
-      final data = json.decode(utf8.decode(response.bodyBytes));
+      final data = json.decode(decode_http_response(response));
       final error = data['error'];
       if (error != null) {
         throw error;
@@ -116,6 +116,10 @@ class UserModel {
     userName.value = user.name;
     isAdmin.value = user.isAdmin;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
+    if (isWeb) {
+      // ugly here, tmp solution
+      bind.mainSetLocalOption(key: 'verifier', value: user.verifier ?? '');
+    }
   }
 
   // update ab and group status
@@ -156,7 +160,7 @@ class UserModel {
 
     final Map<String, dynamic> body;
     try {
-      body = jsonDecode(utf8.decode(resp.bodyBytes));
+      body = jsonDecode(decode_http_response(resp));
     } catch (e) {
       debugPrint("login: jsonDecode resp body failed: ${e.toString()}");
       if (resp.statusCode != 200) {
@@ -184,7 +188,9 @@ class UserModel {
       rethrow;
     }
 
-    if (loginResponse.user != null) {
+    final isLogInDone = loginResponse.type == HttpType.kAuthResTypeToken &&
+        loginResponse.access_token != null;
+    if (isLogInDone && loginResponse.user != null) {
       _parseAndUpdateUser(loginResponse.user!);
     }
 

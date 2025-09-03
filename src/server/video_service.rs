@@ -49,7 +49,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, Display, EncodeInput, TraitCapturer,
+    CodecFormat, Display, EncodeInput, TraitCapturer, TraitPixelBuffer,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -70,6 +70,13 @@ lazy_static::lazy_static! {
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
+    static ref SCREENSHOTS: Mutex<HashMap<usize, Screenshot>> = Default::default();
+}
+
+struct Screenshot {
+    sid: String,
+    tx: Sender,
+    restore_vram: bool,
 }
 
 #[inline]
@@ -457,7 +464,7 @@ fn get_capturer(
 }
 
 fn run(vs: VideoService) -> ResultType<()> {
-    let _raii = Raii::new(vs.sp.name());
+    let mut _raii = Raii::new(vs.sp.name());
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
     // ensure_inited() is needed because clear() may be called.
@@ -639,6 +646,49 @@ fn run(vs: VideoService) -> ResultType<()> {
             Ok(frame) => {
                 repeat_encode_counter = 0;
                 if frame.valid() {
+                    let screenshot = SCREENSHOTS.lock().unwrap().remove(&display_idx);
+                    if let Some(mut screenshot) = screenshot {
+                        let restore_vram = screenshot.restore_vram;
+                        let (msg, w, h, data) = match &frame {
+                            scrap::Frame::PixelBuffer(f) => match get_rgba_from_pixelbuf(f) {
+                                Ok(rgba) => ("".to_owned(), f.width(), f.height(), rgba),
+                                Err(e) => {
+                                    let serr = e.to_string();
+                                    log::error!(
+                                        "Failed to convert the pix format into rgba, {}",
+                                        &serr
+                                    );
+                                    (format!("Convert pixfmt: {}", serr), 0, 0, vec![])
+                                }
+                            },
+                            scrap::Frame::Texture(_) => {
+                                if restore_vram {
+                                    // Already set one time, just ignore to break infinite loop.
+                                    // Though it's unreachable, this branch is kept to avoid infinite loop.
+                                    (
+                                        "Please change codec and try again.".to_owned(),
+                                        0,
+                                        0,
+                                        vec![],
+                                    )
+                                } else {
+                                    #[cfg(all(windows, feature = "vram"))]
+                                    VRamEncoder::set_not_use(sp.name(), true);
+                                    screenshot.restore_vram = true;
+                                    SCREENSHOTS.lock().unwrap().insert(display_idx, screenshot);
+                                    _raii.try_vram = false;
+                                    bail!("SWITCH");
+                                }
+                            }
+                        };
+                        std::thread::spawn(move || {
+                            handle_screenshot(screenshot, msg, w, h, data);
+                        });
+                        if restore_vram {
+                            bail!("SWITCH");
+                        }
+                    }
+
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
                     let send_conn_ids = handle_one_frame(
                         display_idx,
@@ -764,24 +814,32 @@ fn run(vs: VideoService) -> ResultType<()> {
     Ok(())
 }
 
-struct Raii(String);
+struct Raii {
+    name: String,
+    try_vram: bool,
+}
 
 impl Raii {
     fn new(name: String) -> Self {
         log::info!("new video service: {}", name);
         VIDEO_QOS.lock().unwrap().new_display(name.clone());
-        Raii(name)
+        Raii {
+            name,
+            try_vram: true,
+        }
     }
 }
 
 impl Drop for Raii {
     fn drop(&mut self) {
-        log::info!("stop video service: {}", self.0);
+        log::info!("stop video service: {}", self.name);
         #[cfg(feature = "vram")]
-        VRamEncoder::set_not_use(self.0.clone(), false);
+        if self.try_vram {
+            VRamEncoder::set_not_use(self.name.clone(), false);
+        }
         #[cfg(feature = "vram")]
         Encoder::update(scrap::codec::EncodingUpdate::Check);
-        VIDEO_QOS.lock().unwrap().remove_display(&self.0);
+        VIDEO_QOS.lock().unwrap().remove_display(&self.name);
     }
 }
 
@@ -1205,4 +1263,78 @@ fn check_qos(
     }
     drop(video_qos);
     Ok(())
+}
+
+pub fn set_take_screenshot(display_idx: usize, sid: String, tx: Sender) {
+    SCREENSHOTS.lock().unwrap().insert(
+        display_idx,
+        Screenshot {
+            sid,
+            tx,
+            restore_vram: false,
+        },
+    );
+}
+
+// We need to this function, because the `stride` may be larger than `width * 4`.
+fn get_rgba_from_pixelbuf<'a>(pixbuf: &scrap::PixelBuffer<'a>) -> ResultType<Vec<u8>> {
+    let w = pixbuf.width();
+    let h = pixbuf.height();
+    let stride = pixbuf.stride();
+    let Some(s) = stride.get(0) else {
+        bail!("Invalid pixel buf stride.")
+    };
+
+    if *s == w * 4 {
+        let mut rgba = vec![];
+        scrap::convert(pixbuf, scrap::Pixfmt::RGBA, &mut rgba)?;
+        Ok(rgba)
+    } else {
+        let bgra = pixbuf.data();
+        let mut bit_flipped = Vec::with_capacity(w * h * 4);
+        for y in 0..h {
+            for x in 0..w {
+                let i = s * y + 4 * x;
+                bit_flipped.extend_from_slice(&[bgra[i + 2], bgra[i + 1], bgra[i], bgra[i + 3]]);
+            }
+        }
+        Ok(bit_flipped)
+    }
+}
+
+fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, data: Vec<u8>) {
+    let mut response = ScreenshotResponse::new();
+    response.sid = screenshot.sid;
+    if msg.is_empty() {
+        if data.is_empty() {
+            response.msg = "Failed to take screenshot, please try again later.".to_owned();
+        } else {
+            fn encode_png(width: usize, height: usize, rgba: Vec<u8>) -> ResultType<Vec<u8>> {
+                let mut png = Vec::new();
+                let mut encoder =
+                    repng::Options::smallest(width as _, height as _).build(&mut png)?;
+                encoder.write(&rgba)?;
+                encoder.finish()?;
+                Ok(png)
+            }
+            match encode_png(w as _, h as _, data) {
+                Ok(png) => {
+                    response.data = png.into();
+                }
+                Err(e) => {
+                    response.msg = format!("Error encoding png: {}", e);
+                }
+            }
+        }
+    } else {
+        response.msg = msg;
+    }
+    let mut msg_out = Message::new();
+    msg_out.set_screenshot_response(response);
+    if let Err(e) = screenshot
+        .tx
+        .send((hbb_common::tokio::time::Instant::now(), Arc::new(msg_out)))
+    {
+        log::error!("Failed to send screenshot, {}", e);
+    }
 }

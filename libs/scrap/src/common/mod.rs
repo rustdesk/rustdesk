@@ -63,6 +63,7 @@ pub enum ImageFormat {
 }
 
 #[repr(C)]
+#[derive(Clone)]
 pub struct ImageRgb {
     pub raw: Vec<u8>,
     pub w: usize,

@@ -21,6 +21,10 @@ pub fn start_tray() {
             return;
         }
     }
+
+    #[cfg(target_os = "linux")]
+    crate::server::check_zombie();
+
     allow_err!(make_tray());
 }
 
@@ -56,7 +60,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let mut event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
-    let quit_i = MenuItem::new(translate("Exit".to_owned()), true, None);
+    let quit_i = MenuItem::new(translate("Stop service".to_owned()), true, None);
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
     tray_menu.append_items(&[&open_i, &quit_i]).ok();
     let tooltip = |count: usize| {
@@ -99,9 +103,11 @@ fn make_tray() -> hbb_common::ResultType<()> {
         }
         #[cfg(target_os = "linux")]
         {
-            // Do not use "xdg-open", it won't read config
+            // Do not use "xdg-open", it won't read the config.
             if crate::dbus::invoke_new_connection(crate::get_uri_prefix()).is_err() {
-                crate::run_me::<&str>(vec![]).ok();
+                if let Ok(task) = crate::run_me::<&str>(vec![]) {
+                    crate::server::CHILD_PROCESS.lock().unwrap().push(task);
+                }
             }
         }
     };

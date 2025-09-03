@@ -54,6 +54,7 @@ enum DesktopTabType {
   fileTransfer,
   viewCamera,
   portForward,
+  terminal,
   install,
 }
 
@@ -651,7 +652,9 @@ class _DesktopTabState extends State<DesktopTab>
                                     controller.state.value.scrollController;
                                 if (!sc.canScroll) return;
                                 _scrollDebounce.call(() {
-                                  sc.animateTo(sc.offset + e.scrollDelta.dy,
+                                  double adjust = 2.5;
+                                  sc.animateTo(
+                                      sc.offset + e.scrollDelta.dy * adjust,
                                       duration: Duration(milliseconds: 200),
                                       curve: Curves.ease);
                                 });
