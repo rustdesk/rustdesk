@@ -908,8 +908,18 @@ class RustdeskImpl {
     return js.context.callMethod('getByName', ['option:local', key]);
   }
 
+  // Do not return the real environment variables.
+  // Use the global variable as the environment variable in web.
   String mainGetEnv({required String key, dynamic hint}) {
-    throw UnimplementedError("mainGetEnv");
+    return js.context.callMethod('getByName', ['envvar', key]);
+  }
+
+  // Use the global variable as the environment variable in web.
+  void mainSetEnv({required String key, String? value, dynamic hint}) {
+    js.context.callMethod('setByName', [
+      'envvar',
+      jsonEncode({'name': key, 'value': value})
+    ]);
   }
 
   Future<void> mainSetLocalOption(
@@ -1960,9 +1970,7 @@ class RustdeskImpl {
   }
 
   Future<void> sessionCloseTerminal(
-      {required UuidValue sessionId,
-      required int terminalId,
-      dynamic hint}) {
+      {required UuidValue sessionId, required int terminalId, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
           'close_terminal',
           jsonEncode({

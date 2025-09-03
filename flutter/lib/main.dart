@@ -147,9 +147,15 @@ void runMainApp(bool startService) async {
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
 
+  bool? alwaysOnTop;
+  if (isDesktop) {
+    alwaysOnTop =
+        bind.mainGetBuildinOption(key: "main-window-always-on-top") == 'Y';
+  }
+
   // Set window option.
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(isMainWindow: true);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+      isMainWindow: true, alwaysOnTop: alwaysOnTop);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     // Restore the location of the main window before window hide or show.
     await restoreWindowPosition(WindowType.Main);

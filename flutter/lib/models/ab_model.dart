@@ -208,7 +208,7 @@ class AbModel {
         return false;
       }
       Map<String, dynamic> json =
-          _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
+          _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
       if (json.containsKey('error')) {
         throw json['error'];
       }
@@ -234,7 +234,7 @@ class AbModel {
         return false;
       }
       Map<String, dynamic> json =
-          _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
+          _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
       if (json.containsKey('error')) {
         throw json['error'];
       }
@@ -271,7 +271,7 @@ class AbModel {
         headers['Content-Type'] = "application/json";
         final resp = await http.post(uri, headers: headers);
         Map<String, dynamic> json =
-            _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         }
@@ -925,7 +925,7 @@ class LegacyAb extends BaseAb {
         peers.clear();
       } else if (resp.body.isNotEmpty) {
         Map<String, dynamic> json =
-            _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         } else if (json.containsKey('data')) {
@@ -983,7 +983,7 @@ class LegacyAb extends BaseAb {
         ret = true;
       } else {
         Map<String, dynamic> json =
-            _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         } else if (resp.statusCode == 200) {
@@ -1359,7 +1359,7 @@ class Ab extends BaseAb {
         final resp = await http.post(uri, headers: headers);
         statusCode = resp.statusCode;
         Map<String, dynamic> json =
-            _jsonDecodeRespMap(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         }
@@ -1416,7 +1416,7 @@ class Ab extends BaseAb {
       final resp = await http.post(uri, headers: headers);
       statusCode = resp.statusCode;
       List<dynamic> json =
-          _jsonDecodeRespList(utf8.decode(resp.bodyBytes), resp.statusCode);
+          _jsonDecodeRespList(decode_http_response(resp), resp.statusCode);
       if (resp.statusCode != 200) {
         throw 'HTTP ${resp.statusCode}';
       }

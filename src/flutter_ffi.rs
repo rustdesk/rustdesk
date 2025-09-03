@@ -37,7 +37,11 @@ lazy_static::lazy_static! {
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
     flutter::async_tasks::start_flutter_async_runner();
-    *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    // `APP_DIR` is set in `main_get_data_dir_ios()` on iOS.
+    #[cfg(not(target_os = "ios"))]
+    {
+        *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    }
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
     if custom_client_config.is_empty() {
         crate::load_custom_client();
@@ -138,7 +142,7 @@ pub fn session_add_sync(
     is_shared_password: bool,
     conn_token: Option<String>,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(
+    let add_res = session_add(
         &session_id,
         &id,
         is_file_transfer,
@@ -151,7 +155,14 @@ pub fn session_add_sync(
         password,
         is_shared_password,
         conn_token,
-    ) {
+    );
+    // We can't put the remove call together with `std::env::var("IS_TERMINAL_ADMIN")`.
+    // Because there are some `bail!` in `session_add()`, we must make sure `IS_TERMINAL_ADMIN` is removed at last.
+    if is_terminal {
+        std::env::remove_var("IS_TERMINAL_ADMIN");
+    }
+
+    if let Err(e) = add_res {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -262,7 +273,7 @@ pub fn session_take_screenshot(session_id: SessionID, display: usize) {
     }
 }
 
-pub fn session_handle_screenshot(session_id: SessionID, action: String) -> String {
+pub fn session_handle_screenshot(#[allow(unused_variables)] session_id: SessionID, action: String) -> String {
     crate::client::screenshot::handle_screenshot(action)
 }
 
@@ -622,7 +633,10 @@ pub fn session_open_terminal(session_id: SessionID, terminal_id: i32, rows: u32,
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.open_terminal(terminal_id, rows, cols);
     } else {
-        log::error!("[flutter_ffi] Session not found for session_id: {}", session_id);
+        log::error!(
+            "[flutter_ffi] Session not found for session_id: {}",
+            session_id
+        );
     }
 }
 
@@ -1065,6 +1079,35 @@ pub fn main_get_use_texture_render() -> SyncReturn<bool> {
 
 pub fn main_get_env(key: String) -> SyncReturn<String> {
     SyncReturn(std::env::var(key).unwrap_or_default())
+}
+
+// Dart does not support changing environment variables.
+// `Platform.environment['MY_VAR'] = 'VAR';` will throw an error
+// `Unsupported operation: Cannot modify unmodifiable map`.
+//
+// And we need to share the environment variables between rust and dart isolates sometimes.
+pub fn main_set_env(key: String, value: Option<String>) -> SyncReturn<()> {
+    let is_valid_key = !key.is_empty() && !key.contains('=') && !key.contains('\0');
+    debug_assert!(is_valid_key, "Invalid environment variable key: {}", key);
+    if !is_valid_key {
+        log::error!("Invalid environment variable key: {}", key);
+        return SyncReturn(());
+    }
+
+    match value {
+        Some(v) => {
+            let is_valid_value = !v.contains('\0');
+            debug_assert!(is_valid_value, "Invalid environment variable value: {}", v);
+            if !is_valid_value {
+                log::error!("Invalid environment variable value: {}", v);
+                return SyncReturn(());
+            }
+            std::env::set_var(key, v);
+        }
+        None => std::env::remove_var(key),
+    }
+
+    SyncReturn(())
 }
 
 pub fn main_set_local_option(key: String, value: String) {
@@ -1763,7 +1806,8 @@ pub fn main_set_home_dir(_home: String) {
 }
 
 // This is a temporary method to get data dir for ios
-pub fn main_get_data_dir_ios() -> SyncReturn<String> {
+pub fn main_get_data_dir_ios(app_dir: String) -> SyncReturn<String> {
+    *config::APP_DIR.write().unwrap() = app_dir;
     let data_dir = config::Config::path("data");
     if !data_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&data_dir) {
@@ -2615,6 +2659,21 @@ pub fn main_set_common(_key: String, _value: String) {
                     fs::remove_file(f).ok();
                 }
             }
+        } else if _key == "extract-update-dmg" {
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(new_version_file) = get_download_file_from_url(&_value) {
+                    if let Some(f) = new_version_file.to_str() {
+                        crate::platform::macos::extract_update_dmg(f);
+                    } else {
+                        // unreachable!()
+                        log::error!("Failed to get the new version file path");
+                    }
+                } else {
+                    // unreachable!()
+                    log::error!("Failed to get the new version file from url: {}", _value);
+                }
+            }
         }
     }
 
@@ -2633,7 +2692,7 @@ pub fn session_get_common_sync(
     SyncReturn(session_get_common(session_id, key, param))
 }
 
-pub fn session_get_common(session_id: SessionID, key: String, param: String) -> Option<String> {
+pub fn session_get_common(session_id: SessionID, key: String, #[allow(unused_variables)] param: String) -> Option<String> {
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         let v = if key == "is_screenshot_supported" {
             s.is_screenshot_supported().to_string()

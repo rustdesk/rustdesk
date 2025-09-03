@@ -8,7 +8,7 @@ use std::{
 
 use serde_json::{json, Map, Value};
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 use hbb_common::whoami;
 use hbb_common::{
     allow_err,
@@ -161,6 +161,16 @@ pub fn is_support_screenshot(ver: &str) -> bool {
 #[inline]
 pub fn is_support_screenshot_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number("1.4.0")
+}
+
+#[inline]
+pub fn is_support_file_transfer_resume(ver: &str) -> bool {
+    is_support_file_transfer_resume_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+pub fn is_support_file_transfer_resume_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.4.2")
 }
 
 // is server process, with "--server" args
@@ -776,12 +786,22 @@ pub fn username() -> String {
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
+// Exactly the implementation of "whoami::hostname()".
+// This wrapper is to suppress warnings.
+#[inline(always)]
+#[cfg(not(target_os = "ios"))]
+pub fn whoami_hostname() -> String {
+    let mut hostname = whoami::fallible::hostname().unwrap_or_else(|_| "localhost".to_string());
+    hostname.make_ascii_lowercase();
+    hostname
+}
+
 #[inline]
 pub fn hostname() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         #[allow(unused_mut)]
-        let mut name = whoami::hostname();
+        let mut name = whoami_hostname();
         // some time, there is .local, some time not, so remove it for osx
         #[cfg(target_os = "macos")]
         if name.ends_with(".local") {
@@ -1723,7 +1743,7 @@ pub fn is_custom_client() -> bool {
     get_app_name() != "RustDesk"
 }
 
-pub fn verify_login(raw: &str, id: &str) -> bool {
+pub fn verify_login(_raw: &str, _id: &str) -> bool {
     true
     /*
     if is_custom_client() {
@@ -2018,6 +2038,22 @@ pub async fn get_ipv6_socket() -> Option<(Arc<UdpSocket>, bytes::Bytes)> {
         }
     }
     None
+}
+
+// The color is the same to `str2color()` in flutter.
+pub fn str2color(s: &str, alpha: u8) -> u32 {
+    let bytes = s.as_bytes();
+    // dart code `160 << 16 + 114 << 8 + 91` results `0`.
+    let mut hash: u32 = 0;
+    for &byte in bytes {
+        let code = byte as u32;
+        hash = code.wrapping_add((hash << 5).wrapping_sub(hash));
+    }
+
+    hash = hash % 16777216;
+    let rgb = hash & 0xFF7FFF;
+
+    (alpha as u32) << 24 | rgb
 }
 
 #[cfg(test)]

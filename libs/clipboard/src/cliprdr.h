@@ -170,6 +170,8 @@ extern "C"
 
     typedef UINT (*pcNotifyClipboardMsg)(UINT32 connID, const NOTIFICATION_MESSAGE *msg);
 
+    typedef UINT (*pcHandleClipboardFiles)(UINT32 connID, size_t nFiles, WCHAR **fileNames);
+
     typedef UINT (*pcCliprdrClientFormatList)(CliprdrClientContext *context,
                                               const CLIPRDR_FORMAT_LIST *formatList);
     typedef UINT (*pcCliprdrServerFormatList)(CliprdrClientContext *context,
@@ -217,6 +219,7 @@ extern "C"
         pcCliprdrMonitorReady MonitorReady;
         pcCliprdrTempDirectory TempDirectory;
         pcNotifyClipboardMsg NotifyClipboardMsg;
+        pcHandleClipboardFiles HandleClipboardFiles;
         pcCliprdrClientFormatList ClientFormatList;
         pcCliprdrServerFormatList ServerFormatList;
         pcCliprdrClientFormatListResponse ClientFormatListResponse;

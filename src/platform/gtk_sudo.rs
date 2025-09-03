@@ -465,7 +465,7 @@ fn ui_parent(
 fn child(su_user: Option<String>, args: Vec<String>) -> ResultType<()> {
     // https://doc.rust-lang.org/std/env/consts/constant.OS.html
     let os = std::env::consts::OS;
-    let bsd = os == "freebsd" || os == "dragonfly" || os == "netbsd" || os == "openbad";
+    let bsd = os == "freebsd" || os == "dragonfly" || os == "netbsd" || os == "openbsd";
     let mut params = vec!["sudo".to_string()];
     if su_user.is_some() {
         params.push("-S".to_string());

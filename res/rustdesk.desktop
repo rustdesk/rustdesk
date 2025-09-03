@@ -8,7 +8,7 @@ Terminal=false
 Type=Application
 StartupNotify=true
 Categories=Network;RemoteAccess;GTK;
-Keywords=internet;
+Keywords=internet;linux;dart;rust;remote-control;p2p;teamviewer;rust-lang;rdp;remote-desktop;vnc;
 Actions=new-window;
 StartupWMClass=rustdesk
 

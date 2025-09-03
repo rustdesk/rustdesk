@@ -61,6 +61,7 @@ class CachedPeerData {
 
   bool secure = false;
   bool direct = false;
+  String streamType = '';
 
   CachedPeerData();
 
@@ -74,6 +75,7 @@ class CachedPeerData {
       'permissions': permissions,
       'secure': secure,
       'direct': direct,
+      'streamType': streamType,
     });
   }
 
@@ -92,6 +94,7 @@ class CachedPeerData {
       });
       data.secure = map['secure'];
       data.direct = map['direct'];
+      data.streamType = map['streamType'];
       return data;
     } catch (e) {
       debugPrint('Failed to parse CachedPeerData: $e');
@@ -113,6 +116,7 @@ class FfiModel with ChangeNotifier {
   Timer? _timer;
   var _reconnects = 1;
   bool _viewOnly = false;
+  bool _showMyCursor = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
 
@@ -151,6 +155,7 @@ class FfiModel with ChangeNotifier {
   bool get isPeerMobile => isPeerAndroid;
 
   bool get viewOnly => _viewOnly;
+  bool get showMyCursor => _showMyCursor;
 
   set inputBlocked(v) {
     _inputBlocked = v;
@@ -223,27 +228,45 @@ class FfiModel with ChangeNotifier {
     timerScreenshot?.cancel();
   }
 
-  setConnectionType(String peerId, bool secure, bool direct) {
+  setConnectionType(
+      String peerId, bool secure, bool direct, String streamType) {
     cachedPeerData.secure = secure;
     cachedPeerData.direct = direct;
+    cachedPeerData.streamType = streamType;
     _secure = secure;
     _direct = direct;
     try {
       var connectionType = ConnectionTypeState.find(peerId);
       connectionType.setSecure(secure);
       connectionType.setDirect(direct);
+      connectionType.setStreamType(streamType);
     } catch (e) {
       //
     }
   }
 
-  Widget? getConnectionImage() {
+  Widget? getConnectionImageText() {
     if (secure == null || direct == null) {
       return null;
     } else {
       final icon =
           '${secure == true ? 'secure' : 'insecure'}${direct == true ? '' : '_relay'}';
-      return SvgPicture.asset('assets/$icon.svg', width: 48, height: 48);
+      final iconWidget =
+          SvgPicture.asset('assets/$icon.svg', width: 48, height: 48);
+      String connectionText =
+          getConnectionText(secure!, direct!, cachedPeerData.streamType);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          iconWidget,
+          SizedBox(height: 4),
+          Text(
+            connectionText,
+            style: TextStyle(fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
     }
   }
 
@@ -260,7 +283,7 @@ class FfiModel with ChangeNotifier {
       'link': '',
     }, sessionId, peerId);
     updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
-    setConnectionType(peerId, data.secure, data.direct);
+    setConnectionType(peerId, data.secure, data.direct, data.streamType);
     await handlePeerInfo(data.peerInfo, peerId, true);
     for (final element in data.cursorDataList) {
       updateLastCursorId(element);
@@ -289,8 +312,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'sync_platform_additions') {
         handlePlatformAdditions(evt, sessionId, peerId);
       } else if (name == 'connection_ready') {
-        setConnectionType(
-            peerId, evt['secure'] == 'true', evt['direct'] == 'true');
+        setConnectionType(peerId, evt['secure'] == 'true',
+            evt['direct'] == 'true', evt['stream_type'] ?? '');
       } else if (name == 'switch_display') {
         // switch display is kept for backward compatibility
         handleSwitchDisplay(evt, sessionId, peerId);
@@ -836,10 +859,16 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'input-password') {
       enterPasswordDialog(sessionId, dialogManager);
     } else if (type == 'session-login' || type == 'session-re-login') {
-      enterUserLoginDialog(sessionId, dialogManager);
-    } else if (type == 'session-login-password' ||
-        type == 'session-login-password') {
-      enterUserLoginAndPasswordDialog(sessionId, dialogManager);
+      enterUserLoginDialog(sessionId, dialogManager, 'login_linux_tip', true);
+    } else if (type == 'session-login-password') {
+      enterUserLoginAndPasswordDialog(
+          sessionId, dialogManager, 'login_linux_tip', true);
+    } else if (type == 'terminal-admin-login') {
+      enterUserLoginDialog(
+          sessionId, dialogManager, 'terminal-admin-login-tip', false);
+    } else if (type == 'terminal-admin-login-password') {
+      enterUserLoginAndPasswordDialog(
+          sessionId, dialogManager, 'terminal-admin-login-tip', false);
     } else if (type == 'restarting') {
       showMsgBox(sessionId, type, title, text, link, false, dialogManager,
           hasCancel: false);
@@ -1117,6 +1146,8 @@ class FfiModel with ChangeNotifier {
           peerId,
           bind.sessionGetToggleOptionSync(
               sessionId: sessionId, arg: kOptionToggleViewOnly));
+      setShowMyCursor(bind.sessionGetToggleOptionSync(
+          sessionId: sessionId, arg: kOptionToggleShowMyCursor));
     }
     if (connType == ConnType.defaultConn || connType == ConnType.viewCamera) {
       final platformAdditions = evt['platform_additions'];
@@ -1464,6 +1495,13 @@ class FfiModel with ChangeNotifier {
     }
     if (_viewOnly != value) {
       _viewOnly = value;
+      notifyListeners();
+    }
+  }
+
+  void setShowMyCursor(bool value) {
+    if (_showMyCursor != value) {
+      _showMyCursor = value;
       notifyListeners();
     }
   }
@@ -3208,7 +3246,7 @@ class FFI {
   }
 
   void routeTerminalResponse(Map<String, dynamic> evt) {
-    final int terminalId = evt['terminal_id'] ?? 0;
+    final int terminalId = TerminalModel.getTerminalIdFromEvt(evt);
 
     // Route to specific terminal model if it exists
     final model = _terminalModels[terminalId];

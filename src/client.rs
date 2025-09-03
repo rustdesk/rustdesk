@@ -192,13 +192,19 @@ impl Client {
         conn_type: ConnType,
         interface: impl Interface,
     ) -> ResultType<(
-        (Stream, bool, Option<Vec<u8>>, Option<KcpStream>),
+        (
+            Stream,
+            bool,
+            Option<Vec<u8>>,
+            Option<KcpStream>,
+            &'static str,
+        ),
         (i32, String),
     )> {
         debug_assert!(peer == interface.get_id());
         interface.update_direct(None);
         interface.update_received(false);
-        match Self::_start(peer, key, token, conn_type, interface).await {
+        match Self::_start(peer, key, token, conn_type, interface.clone()).await {
             Err(err) => {
                 let err_str = err.to_string();
                 if err_str.starts_with("Failed") {
@@ -207,7 +213,19 @@ impl Client {
                     return Err(err);
                 }
             }
-            Ok(x) => Ok(x),
+            Ok(x) => {
+                // Set x.2 to true only in the connect() function to indicate that direct_failures needs to be updated; everywhere else it should be set to false.
+                if x.2 {
+                    let direct_failures = interface.get_lch().read().unwrap().direct_failures;
+                    let direct = x.0 .1;
+                    if !interface.is_force_relay() && (direct_failures == 0) != direct {
+                        let n = if direct { 0 } else { 1 };
+                        log::info!("direct_failures updated to {}", n);
+                        interface.get_lch().write().unwrap().set_direct_failure(n);
+                    }
+                }
+                Ok((x.0, x.1))
+            }
         }
     }
 
@@ -219,8 +237,15 @@ impl Client {
         conn_type: ConnType,
         interface: impl Interface,
     ) -> ResultType<(
-        (Stream, bool, Option<Vec<u8>>, Option<KcpStream>),
+        (
+            Stream,
+            bool,
+            Option<Vec<u8>>,
+            Option<KcpStream>,
+            &'static str,
+        ),
         (i32, String),
+        bool,
     )> {
         if config::is_incoming_only() {
             bail!("Incoming only mode");
@@ -234,8 +259,10 @@ impl Client {
                     true,
                     None,
                     None,
+                    "TCP",
                 ),
                 (0, "".to_owned()),
+                false,
             ));
         }
         // Allow connect to {domain}:{port}
@@ -246,8 +273,10 @@ impl Client {
                     true,
                     None,
                     None,
+                    "TCP",
                 ),
                 (0, "".to_owned()),
+                false,
             ));
         }
 
@@ -257,7 +286,7 @@ impl Client {
         } else {
             (peer, "", key, token)
         };
-        let (mut rendezvous_server, servers, contained) = if other_server.is_empty() {
+        let (rendezvous_server, servers, contained) = if other_server.is_empty() {
             crate::get_rendezvous_server(1_000).await
         } else {
             if other_server == PUBLIC_SERVER {
@@ -279,10 +308,10 @@ impl Client {
         }
 
         let (stop_udp_tx, stop_udp_rx) = oneshot::channel::<()>();
-        let mut udp =
+        let udp =
         // no need to care about multiple rendezvous servers case, since it is acutally not used any more.
         // Shared state for UDP NAT test result
-        if crate::get_udp_punch_enabled() {
+        if crate::get_udp_punch_enabled() && !interface.is_force_relay() {
             if let Ok((socket, addr)) = new_direct_udp_for(&rendezvous_server).await {
                 let udp_port = Arc::new(Mutex::new(0));
                 let up_cloned = udp_port.clone();
@@ -298,6 +327,64 @@ impl Client {
         } else {
             (None, None)
         };
+        let fut = Self::_start_inner(
+            peer.to_owned(),
+            key.to_owned(),
+            token.to_owned(),
+            conn_type,
+            interface.clone(),
+            udp.clone(),
+            Some(stop_udp_tx),
+            rendezvous_server.clone(),
+            servers.clone(),
+            contained,
+        );
+        if udp.0.is_none() {
+            return fut.await;
+        }
+        let mut connect_futures = Vec::new();
+        connect_futures.push(fut.boxed());
+        let fut = Self::_start_inner(
+            peer.to_owned(),
+            key.to_owned(),
+            token.to_owned(),
+            conn_type,
+            interface,
+            (None, None),
+            None,
+            rendezvous_server,
+            servers,
+            contained,
+        );
+        connect_futures.push(fut.boxed());
+        match select_ok(connect_futures).await {
+            Ok(conn) => Ok((conn.0 .0, conn.0 .1, conn.0 .2)),
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn _start_inner(
+        peer: String,
+        key: String,
+        token: String,
+        conn_type: ConnType,
+        interface: impl Interface,
+        mut udp: (Option<Arc<UdpSocket>>, Option<Arc<Mutex<u16>>>),
+        stop_udp_tx: Option<oneshot::Sender<()>>,
+        mut rendezvous_server: String,
+        servers: Vec<String>,
+        contained: bool,
+    ) -> ResultType<(
+        (
+            Stream,
+            bool,
+            Option<Vec<u8>>,
+            Option<KcpStream>,
+            &'static str,
+        ),
+        (i32, String),
+        bool,
+    )> {
         let mut start = Instant::now();
         let mut socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));
@@ -327,9 +414,8 @@ impl Client {
         let my_nat_type = crate::get_nat_type(100).await;
         let mut is_local = false;
         let mut feedback = 0;
-        let force_relay = interface.is_force_relay() || use_ws() || Config::is_proxy();
         use hbb_common::protobuf::Enum;
-        let nat_type = if force_relay {
+        let nat_type = if interface.is_force_relay() {
             NatType::SYMMETRIC
         } else {
             NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
@@ -337,7 +423,7 @@ impl Client {
 
         if !key.is_empty() && !token.is_empty() {
             // mainly for the security of token
-            secure_tcp(&mut socket, key)
+            secure_tcp(&mut socket, &key)
                 .await
                 .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
         } else if let Some(udp) = udp.1.as_ref() {
@@ -355,7 +441,7 @@ impl Client {
             }
         }
         // Stop UDP NAT test task if still running
-        let _ = stop_udp_tx.send(());
+        stop_udp_tx.map(|tx| tx.send(()));
         let mut msg_out = RendezvousMessage::new();
         let mut ipv6 = if crate::get_ipv6_punch_enabled() {
             if let Some((socket, addr)) = crate::get_ipv6_socket().await {
@@ -367,6 +453,7 @@ impl Client {
             (None, None)
         };
         let udp_nat_port = udp.1.map(|x| *x.lock().unwrap()).unwrap_or(0);
+        let punch_type = if udp_nat_port > 0 { "UDP" } else { "TCP" };
         msg_out.set_punch_hole_request(PunchHoleRequest {
             id: peer.to_owned(),
             token: token.to_owned(),
@@ -375,12 +462,18 @@ impl Client {
             conn_type: conn_type.into(),
             version: crate::VERSION.to_owned(),
             udp_port: udp_nat_port as _,
-            force_relay,
+            force_relay: interface.is_force_relay(),
             socket_addr_v6: ipv6.1.unwrap_or_default(),
             ..Default::default()
         });
         for i in 1..=3 {
-            log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
+            log::info!(
+                "#{} {} punch attempt with {}, id: {}",
+                i,
+                punch_type,
+                my_addr,
+                peer
+            );
             socket.send(&msg_out).await?;
             // below timeout should not bigger than hbbs's connection timeout.
             if let Some(msg_in) =
@@ -431,7 +524,7 @@ impl Client {
                                     }
                                 }
                             }
-                            log::info!("Hole Punched {} = {}", peer, peer_addr);
+                            log::info!("{} Hole Punched {} = {}", punch_type, peer, peer_addr);
                             break;
                         }
                     }
@@ -447,23 +540,24 @@ impl Client {
                             let addr = AddrMangle::decode(&rr.socket_addr_v6);
                             if addr.port() > 0 {
                                 if s.connect(addr).await.is_ok() {
-                                    connect_futures.push(udp_nat_connect(s, "IPv6").boxed());
+                                    connect_futures
+                                        .push(udp_nat_connect(s, "IPv6", CONNECT_TIMEOUT).boxed());
                                 }
                             }
                         }
                         signed_id_pk = rr.pk().into();
                         let fut = Self::create_relay(
-                            peer,
+                            &peer,
                             rr.uuid,
                             rr.relay_server,
-                            key,
+                            &key,
                             conn_type,
                             my_addr.is_ipv4(),
                         );
                         connect_futures.push(
                             async move {
                                 let conn = fut.await?;
-                                Ok((conn, None, "Relay"))
+                                Ok((conn, None, if use_ws() { "WebSocket" } else { "Relay" }))
                             }
                             .boxed(),
                         );
@@ -477,8 +571,12 @@ impl Client {
                         feedback = rr.feedback;
                         log::info!("{:?} used to establish {typ} connection", start.elapsed());
                         let pk =
-                            Self::secure_connection(peer, signed_id_pk, key, &mut conn).await?;
-                        return Ok(((conn, false, pk, kcp), (feedback, rendezvous_server)));
+                            Self::secure_connection(&peer, signed_id_pk, &key, &mut conn).await?;
+                        return Ok((
+                            (conn, typ == "IPv6", pk, kcp, typ),
+                            (feedback, rendezvous_server),
+                            false,
+                        ));
                     }
                     _ => {
                         log::error!("Unexpected protobuf msg received: {:?}", msg_in);
@@ -492,8 +590,9 @@ impl Client {
         }
         let time_used = start.elapsed().as_millis() as u64;
         log::info!(
-            "{} ms used to punch hole, relay_server: {}, {}",
+            "{} ms used to {} punch hole, relay_server: {}, {}",
             time_used,
+            punch_type,
             relay_server,
             if is_local {
                 "is_local: true".to_owned()
@@ -505,7 +604,7 @@ impl Client {
             Self::connect(
                 my_addr,
                 peer_addr,
-                peer,
+                &peer,
                 signed_id_pk,
                 &relay_server,
                 &rendezvous_server,
@@ -513,15 +612,17 @@ impl Client {
                 peer_nat_type,
                 my_nat_type,
                 is_local,
-                key,
-                token,
+                &key,
+                &token,
                 conn_type,
                 interface,
                 udp.0,
                 ipv6.0,
+                punch_type,
             )
             .await?,
             (feedback, rendezvous_server),
+            true,
         ))
     }
 
@@ -543,7 +644,14 @@ impl Client {
         interface: impl Interface,
         udp_socket_nat: Option<Arc<UdpSocket>>,
         udp_socket_v6: Option<Arc<UdpSocket>>,
-    ) -> ResultType<(Stream, bool, Option<Vec<u8>>, Option<KcpStream>)> {
+        punch_type: &str,
+    ) -> ResultType<(
+        Stream,
+        bool,
+        Option<Vec<u8>>,
+        Option<KcpStream>,
+        &'static str,
+    )> {
         let direct_failures = interface.get_lch().read().unwrap().direct_failures;
         let mut connect_timeout = 0;
         const MIN: u64 = 1000;
@@ -589,10 +697,10 @@ impl Client {
             .boxed(),
         );
         if let Some(udp_socket_nat) = udp_socket_nat {
-            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP").boxed());
+            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP", connect_timeout).boxed());
         }
         if let Some(udp_socket_v6) = udp_socket_v6 {
-            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6").boxed());
+            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).boxed());
         }
         // Run all connection attempts concurrently, return the first successful one
         let (mut conn, kcp, mut typ) = match select_ok(connect_futures).await {
@@ -601,7 +709,6 @@ impl Client {
         };
 
         let mut direct = !conn.is_err();
-        interface.update_direct(Some(direct));
         if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
                 conn = Self::request_relay(
@@ -614,8 +721,9 @@ impl Client {
                     conn_type,
                 )
                 .await;
-                interface.update_direct(Some(false));
                 if let Err(e) = conn {
+                    // this direct is mainly used by on_establish_connection_error, so we update it here before bail
+                    interface.update_direct(Some(false));
                     bail!("Failed to connect via relay server: {}", e);
                 }
                 typ = "Relay";
@@ -624,15 +732,23 @@ impl Client {
                 bail!("Failed to make direct connection to remote desktop");
             }
         }
-        if !relay_server.is_empty() && (direct_failures == 0) != direct {
-            let n = if direct { 0 } else { 1 };
-            log::info!("direct_failures updated to {}", n);
-            interface.get_lch().write().unwrap().set_direct_failure(n);
-        }
         let mut conn = conn?;
-        log::info!("{:?} used to establish {typ} connection", start.elapsed());
-        let pk = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await?;
-        Ok((conn, direct, pk, kcp))
+        log::info!(
+            "{:?} used to establish {typ} connection with {} punch",
+            start.elapsed(),
+            punch_type
+        );
+        let res = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await;
+        let pk: Option<Vec<u8>> = match res {
+            Ok(pk) => pk,
+            Err(e) => {
+                // this direct is mainly used by on_establish_connection_error, so we update it here before bail
+                interface.update_direct(Some(direct));
+                bail!(e);
+            }
+        };
+        log::debug!("{} punch secure_connection ok", punch_type);
+        Ok((conn, direct, pk, kcp, typ))
     }
 
     /// Establish secure connection with the server.
@@ -1611,6 +1727,7 @@ struct ConnToken {
 pub struct LoginConfigHandler {
     id: String,
     pub conn_type: ConnType,
+    pub is_terminal_admin: bool,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
@@ -1729,13 +1846,16 @@ impl LoginConfigHandler {
         self.restarting_remote_device = false;
         self.force_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
-                || force_relay;
+                || force_relay
+                || use_ws()
+                || Config::is_proxy();
         if let Some((real_id, server, key)) = &self.other_server {
             let other_server_key = self.get_option("other-server-key");
             if !other_server_key.is_empty() && key.is_empty() {
                 self.other_server = Some((real_id.to_owned(), server.to_owned(), other_server_key));
             }
         }
+
         self.direct = None;
         self.received = false;
         self.switch_uuid = switch_uuid;
@@ -1744,6 +1864,11 @@ impl LoginConfigHandler {
         self.shared_password = shared_password;
         self.record_state = false;
         self.record_permission = true;
+
+        // `std::env::remove_var("IS_TERMINAL_ADMIN");` is called in `session_add_sync()` - `flutter_ffi.rs`.
+        let is_terminal_admin = conn_type == ConnType::TERMINAL
+            && std::env::var("IS_TERMINAL_ADMIN").map_or(false, |v| v == "Y");
+        self.is_terminal_admin = is_terminal_admin;
     }
 
     /// Check if the client should auto login.
@@ -1956,7 +2081,7 @@ impl LoginConfigHandler {
             .into();
         } else if name == keys::OPTION_TERMINAL_PERSISTENT {
             config.terminal_persistent.v = !config.terminal_persistent.v;
-	    option.terminal_persistent = (if config.terminal_persistent.v {
+            option.terminal_persistent = (if config.terminal_persistent.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
@@ -2007,7 +2132,19 @@ impl LoginConfigHandler {
                 option.show_remote_cursor = f(self.get_toggle_option("show-remote-cursor"));
                 option.enable_file_transfer = f(self.config.enable_file_copy_paste.v);
                 option.lock_after_session_end = f(self.config.lock_after_session_end.v);
+                if config.show_my_cursor.v {
+                    config.show_my_cursor.v = false;
+                    option.show_my_cursor = BoolOption::No.into();
+                }
             }
+        } else if name == "show-my-cursor" {
+            config.show_my_cursor.v = !config.show_my_cursor.v;
+            option.show_my_cursor = if config.show_my_cursor.v {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            }
+            .into();
         } else {
             let is_set = self
                 .options
@@ -2100,6 +2237,9 @@ impl LoginConfigHandler {
         if view_only || self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
         }
+        if view_only && self.get_toggle_option("show-my-cursor") {
+            msg.show_my_cursor = BoolOption::Yes.into();
+        }
         if self.get_toggle_option("follow-remote-cursor") {
             msg.follow_remote_cursor = BoolOption::Yes.into();
         }
@@ -2184,6 +2324,8 @@ impl LoginConfigHandler {
             self.config.allow_swap_key.v
         } else if name == "view-only" {
             self.config.view_only.v
+        } else if name == "show-my-cursor" {
+            self.config.show_my_cursor.v
         } else if name == "follow-remote-cursor" {
             self.config.follow_remote_cursor.v
         } else if name == "follow-remote-window" {
@@ -2544,7 +2686,7 @@ impl LoginConfigHandler {
             }),
             ConnType::TERMINAL => {
                 let mut terminal = Terminal::new();
-                terminal.service_id = self.get_option("terminal-service-id");
+                terminal.service_id = self.get_option(self.get_key_terminal_service_id());
                 lr.set_terminal(terminal);
             }
             _ => {}
@@ -2594,6 +2736,14 @@ impl LoginConfigHandler {
 
     pub fn get_id(&self) -> &str {
         &self.id
+    }
+
+    pub fn get_key_terminal_service_id(&self) -> &'static str {
+        if self.is_terminal_admin {
+            "terminal-admin-service-id"
+        } else {
+            "terminal-service-id"
+        }
     }
 }
 
@@ -3274,6 +3424,19 @@ pub async fn handle_hash(
     }
 
     lc.write().unwrap().password = password.clone();
+
+    let is_terminal_admin = lc.read().unwrap().is_terminal_admin;
+    let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
+    if is_terminal && is_terminal_admin {
+        if password.is_empty() {
+            interface.msgbox("terminal-admin-login-password", "", "", "");
+        } else {
+            interface.msgbox("terminal-admin-login", "", "", "");
+        }
+        lc.write().unwrap().hash = hash;
+        return;
+    }
+
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
         interface.msgbox("input-password", "Password Required", "", "");
@@ -3285,8 +3448,15 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    let os_username = lc.read().unwrap().get_option("os-username");
-    let os_password = lc.read().unwrap().get_option("os-password");
+    let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
+    let (os_username, os_password) = if is_terminal {
+        ("".to_owned(), "".to_owned())
+    } else {
+        (
+            lc.read().unwrap().get_option("os-username"),
+            lc.read().unwrap().get_option("os-password"),
+        )
+    };
 
     send_login(lc.clone(), os_username, os_password, password, peer).await;
     lc.write().unwrap().hash = hash;
@@ -3658,7 +3828,7 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
         && title == "Connection Error"
         && ((text.contains("10054") || text.contains("104")) && retry_for_relay
             || (!text.to_lowercase().contains("offline")
-                && !text.to_lowercase().contains("exist")
+                && !text.to_lowercase().contains("not exist")
                 && !text.to_lowercase().contains("handshake")
                 && !text.to_lowercase().contains("failed")
                 && !text.to_lowercase().contains("resolve")
@@ -3974,6 +4144,7 @@ async fn test_udp_uat(
 async fn udp_nat_connect(
     socket: Arc<UdpSocket>,
     typ: &'static str,
+    ms_timeout: u64,
 ) -> ResultType<(Stream, Option<KcpStream>, &'static str)> {
     crate::punch_udp(socket.clone(), false)
         .await
@@ -3981,7 +4152,7 @@ async fn udp_nat_connect(
             log::debug!("{err}");
             anyhow!(err)
         })?;
-    let res = KcpStream::connect(socket, Duration::from_secs(CONNECT_TIMEOUT as _))
+    let res = KcpStream::connect(socket, Duration::from_millis(ms_timeout))
         .await
         .map_err(|err| {
             log::debug!("Failed to connect KCP stream: {}", err);

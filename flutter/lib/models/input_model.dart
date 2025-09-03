@@ -371,6 +371,7 @@ class InputModel {
   String get id => parent.target?.id ?? '';
   String? get peerPlatform => parent.target?.ffiModel.pi.platform;
   bool get isViewOnly => parent.target!.ffiModel.viewOnly;
+  bool get showMyCursor => parent.target!.ffiModel.showMyCursor;
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
   bool get isViewCamera => parent.target!.connType == ConnType.viewCamera;
   int get trackpadSpeed => _trackpadSpeed;
@@ -876,7 +877,7 @@ class InputModel {
 
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
-    if (isViewOnly) return;
+    if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (!isPhysicalMouse.value) {
       isPhysicalMouse.value = true;
@@ -1037,7 +1038,7 @@ class InputModel {
     if (isDesktop) _queryOtherWindowCoords = true;
     _remoteWindowCoords = [];
     _windowRect = null;
-    if (isViewOnly) return;
+    if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) {
       if (isPhysicalMouse.value) {
@@ -1051,7 +1052,7 @@ class InputModel {
 
   void onPointUpImage(PointerUpEvent e) {
     if (isDesktop) _queryOtherWindowCoords = false;
-    if (isViewOnly) return;
+    if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
@@ -1060,7 +1061,7 @@ class InputModel {
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
-    if (isViewOnly) return;
+    if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (_queryOtherWindowCoords) {
@@ -1312,8 +1313,12 @@ class InputModel {
           isMove = false;
           canvas = coords.canvas;
           rect = coords.remoteRect;
-          x -= coords.relativeOffset.dx / devicePixelRatio;
-          y -= coords.relativeOffset.dy / devicePixelRatio;
+          x -= isWindows
+              ? coords.relativeOffset.dx / devicePixelRatio
+              : coords.relativeOffset.dx;
+          y -= isWindows
+              ? coords.relativeOffset.dy / devicePixelRatio
+              : coords.relativeOffset.dy;
         }
       }
     }
@@ -1338,15 +1343,21 @@ class InputModel {
   }
 
   bool _isInCurrentWindow(double x, double y) {
-    final w = _windowRect!.width / devicePixelRatio;
-    final h = _windowRect!.width / devicePixelRatio;
+    var w = _windowRect!.width;
+    var h = _windowRect!.height;
+    if (isWindows) {
+      w /= devicePixelRatio;
+      h /= devicePixelRatio;
+    }
     return x >= 0 && y >= 0 && x <= w && y <= h;
   }
 
   static RemoteWindowCoords? findRemoteCoords(double x, double y,
       List<RemoteWindowCoords> remoteWindowCoords, double devicePixelRatio) {
-    x *= devicePixelRatio;
-    y *= devicePixelRatio;
+    if (isWindows) {
+      x *= devicePixelRatio;
+      y *= devicePixelRatio;
+    }
     for (final c in remoteWindowCoords) {
       if (x >= c.relativeOffset.dx &&
           y >= c.relativeOffset.dy &&

@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.4.0"
+version = "1.4.2"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -98,7 +98,7 @@ ctrlc = "3.2"
 # arboard = { version = "3.4", features = ["wayland-data-control"] }
 arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
 clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
-portable-pty = "0.8.1" # higher version not work on rustc 1.75
+portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rustdesk/pty_based_0.8.1", package = "portable-pty" }
 
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
@@ -134,6 +134,11 @@ impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1"
 runas = "1.2"
+tiny-skia = "0.11"
+softbuffer = "0.4"
+fontdb = "0.23"
+bytemuck = "1.23"
+ttf-parser = "0.25"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -144,6 +149,10 @@ core-graphics = "0.22"
 include_dir = "0.7"
 fruitbasket = "0.10"
 objc_id = "0.1"
+# If we use piet "0.7" here, we must also update core-graphics to "0.24".
+piet = "0.6"
+piet-coregraphics = "0.6"
+foreign-types = "0.3"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 tray-icon = { git = "https://github.com/tauri-apps/tray-icon" }
@@ -180,6 +189,7 @@ once_cell = {version = "1.18", optional = true}
 nix = { version = "0.29", features = ["term", "process"]}
 gtk = "0.18"
 termios = "0.3"
+terminfo = "0.8"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"

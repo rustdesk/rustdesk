@@ -42,6 +42,7 @@ import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
 import 'package:flutter_hbb/native/common.dart'
     if (dart.library.html) 'package:flutter_hbb/web/common.dart';
+import 'package:http/http.dart' as http;
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -1583,7 +1584,9 @@ String bool2option(String option, bool b) {
       option == kOptionForceAlwaysRelay) {
     res = b ? 'Y' : defaultOptionNo;
   } else {
-    assert(false);
+    if (option != kOptionEnableUdpPunch && option != kOptionEnableIpv6Punch) {
+      assert(false);
+    }
     res = b ? 'Y' : 'N';
   }
   return res;
@@ -2124,6 +2127,10 @@ enum UriLinkType {
   terminal,
 }
 
+setEnvTerminalAdmin() {
+  bind.mainSetEnv(key: 'IS_TERMINAL_ADMIN', value: 'Y');
+}
+
 // uri link handler
 bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   List<String>? args;
@@ -2187,6 +2194,12 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         i++;
         break;
       case '--terminal':
+        type = UriLinkType.terminal;
+        id = args[i + 1];
+        i++;
+        break;
+      case '--terminal-admin':
+        setEnvTerminalAdmin();
         type = UriLinkType.terminal;
         id = args[i + 1];
         i++;
@@ -2264,7 +2277,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     "view-camera",
     "port-forward",
     "rdp",
-    "terminal"
+    "terminal",
+    "terminal-admin",
   ];
   if (uri.authority.isEmpty &&
       uri.path.split('').every((char) => char == '/')) {
@@ -2332,6 +2346,10 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
       connect(Get.context!, id,
           isViewCamera: true, forceRelay: forceRelay, password: password);
     } else if (command == '--terminal') {
+      connect(Get.context!, id,
+          isTerminal: true, forceRelay: forceRelay, password: password);
+    } else if (command == 'terminal-admin') {
+      setEnvTerminalAdmin();
       connect(Get.context!, id,
           isTerminal: true, forceRelay: forceRelay, password: password);
     } else {
@@ -2736,7 +2754,7 @@ class ServerConfig {
     } catch (err) {
       final input = msg.split('').reversed.join('');
       final bytes = base64Decode(base64.normalize(input));
-      json = jsonDecode(utf8.decode(bytes));
+      json = jsonDecode(utf8.decode(bytes, allowMalformed: true));
     }
     idServer = json['host'] ?? '';
     relayServer = json['relay'] ?? '';
@@ -3892,4 +3910,36 @@ String get appName {
     _appName = bind.mainGetAppNameSync();
   }
   return _appName;
+}
+
+String getConnectionText(bool secure, bool direct, String streamType) {
+  String connectionText;
+  if (secure && direct) {
+    connectionText = translate("Direct and encrypted connection");
+  } else if (secure && !direct) {
+    connectionText = translate("Relayed and encrypted connection");
+  } else if (!secure && direct) {
+    connectionText = translate("Direct and unencrypted connection");
+  } else {
+    connectionText = translate("Relayed and unencrypted connection");
+  }
+  if (streamType == 'Relay') {
+    streamType = 'TCP';
+  }
+  if (streamType.isEmpty) {
+    return connectionText;
+  } else {
+    return '$connectionText ($streamType)';
+  }
+}
+
+String decode_http_response(http.Response resp) {
+  try {
+    // https://github.com/rustdesk/rustdesk-server-pro/discussions/758
+    return utf8.decode(resp.bodyBytes, allowMalformed: true);
+  } catch (e) {
+    debugPrint('Failed to decode response as UTF-8: $e');
+    // Fallback to bodyString which handles encoding automatically
+    return resp.body;
+  }
 }

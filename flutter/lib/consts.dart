@@ -64,6 +64,7 @@ const String kWindowEventNewFileTransfer = "new_file_transfer";
 const String kWindowEventNewViewCamera = "new_view_camera";
 const String kWindowEventNewPortForward = "new_port_forward";
 const String kWindowEventNewTerminal = "new_terminal";
+const String kWindowEventRestoreTerminalSessions = "restore_terminal_sessions";
 const String kWindowEventActiveSession = "active_session";
 const String kWindowEventActiveDisplaySession = "active_display_session";
 const String kWindowEventGetRemoteList = "get_remote_list";
@@ -171,6 +172,7 @@ const kHideUsernameOnCard = "hide-username-on-card";
 const String kOptionHideHelpCards = "hide-help-cards";
 
 const String kOptionToggleViewOnly = "view-only";
+const String kOptionToggleShowMyCursor = "show-my-cursor";
 
 const String kOptionDisableFloatingWindow = "disable-floating-window";
 

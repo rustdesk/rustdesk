@@ -1,19 +1,16 @@
-#[cfg(target_os = "windows")]
-use crate::ipc::ClipboardNonFile;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
-use crate::{
-    clipboard::ClipboardSide,
-    ipc::{self, Data},
-};
+use crate::ipc::{self, Data};
+#[cfg(target_os = "windows")]
+use crate::{clipboard::ClipboardSide, ipc::ClipboardNonFile};
 #[cfg(target_os = "windows")]
 use clipboard::ContextSend;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 use hbb_common::{
     allow_err,
-    config::{keys::*, option2bool, Config},
+    config::Config,
     fs::is_write_need_confirmation,
     fs::{self, get_string, new_send_confirm, DigestCheckResult},
     log,
@@ -25,12 +22,16 @@ use hbb_common::{
         task::spawn_blocking,
     },
 };
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
+#[cfg(target_os = "windows")]
+use hbb_common::{
+    config::{keys::*, option2bool},
+    tokio::sync::Mutex as TokioMutex,
+    ResultType,
+};
 use serde_derive::Serialize;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use std::iter::FromIterator;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "windows")]
 use std::sync::Arc;
 use std::{
     collections::HashMap,
@@ -860,6 +861,7 @@ async fn handle_fs(
             file_size,
             last_modified,
             is_upload,
+            is_resume,
         } => {
             if let Some(job) = fs::get_job(id, write_jobs) {
                 let mut req = FileTransferSendConfirmRequest {
@@ -878,8 +880,9 @@ async fn handle_fs(
                 if let Some(file) = job.files().get(file_num as usize) {
                     if let fs::DataSource::FilePath(p) = &job.data_source {
                         let path = get_string(&fs::TransferJob::join(p, &file.name));
-                        match is_write_need_confirmation(&path, &digest) {
+                        match is_write_need_confirmation(is_resume, &path, &digest) {
                             Ok(digest_result) => {
+                                job.set_digest(file_size, last_modified);
                                 match digest_result {
                                     DigestCheckResult::IsSame => {
                                         req.set_skip(true);
@@ -906,6 +909,13 @@ async fn handle_fs(
                             }
                         }
                     }
+                }
+            }
+        }
+        ipc::FS::SendConfirm(bytes) => {
+            if let Ok(r) = FileTransferSendConfirmRequest::parse_from_bytes(&bytes) {
+                if let Some(job) = fs::get_job(r.id, write_jobs) {
+                    job.confirm(&r).await;
                 }
             }
         }
