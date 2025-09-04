@@ -366,8 +366,7 @@ impl WindowState {
         }
 
         for cursor in self.last_cursors.values() {
-            let (x, y) = (cursor.x as f64, cursor.y as f64);
-            let (x, y) = (x as f32, y as f32);
+            let (x, y) = (cursor.x, cursor.y);
             let size = 1.5f32;
 
             let mut pb = PathBuilder::new();
@@ -408,7 +407,7 @@ impl WindowState {
                         x + 24.0 * size,
                         y + 24.0 * size,
                         &arrow_paint,
-                        24.0f32,
+                        14.0f32,
                     );
                 });
             }

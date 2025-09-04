@@ -3,7 +3,10 @@ use core_graphics::context::CGContextRef;
 use foreign_types::ForeignTypeRef;
 use hbb_common::{bail, log, ResultType};
 use objc::{class, msg_send, runtime::Object, sel, sel_impl};
-use piet::{kurbo::BezPath, FontFamily, RenderContext, Text, TextLayoutBuilder};
+use piet::{
+    kurbo::{BezPath, Point},
+    FontFamily, RenderContext, Text, TextLayout, TextLayoutBuilder,
+};
 use piet_coregraphics::{CoreGraphicsContext, CoreGraphicsTextLayout};
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use tao::{
@@ -172,16 +175,28 @@ fn draw_cursors(
 
                                 let pos =
                                     (x + CURSOR_TEXT_OFFSET * size, y + CURSOR_TEXT_OFFSET * size);
+                                let get_rounded_rect = |layout: &CoreGraphicsTextLayout| {
+                                    let text_pos = Point::new(pos.0, pos.1);
+                                    let padded_bounds = (layout.image_bounds()
+                                        + text_pos.to_vec2())
+                                    .inflate(3.0, 3.0);
+                                    padded_bounds.to_rounded_rect(5.0)
+                                };
+
                                 if let Some(layout) = map_cursor_text.get(&info.text_key) {
+                                    context.fill(get_rounded_rect(layout), &piet::Color::WHITE);
                                     context.draw_text(layout, pos);
                                 } else {
                                     let text = context.text();
+                                    let color = piet::Color::rgba8(0, 0, 0, 255);
                                     if let Ok(layout) = text
                                         .new_text_layout(cursor.text.clone())
                                         .font(FontFamily::SYSTEM_UI, CURSOR_TEXT_FONT_SIZE)
                                         .text_color(color)
                                         .build()
                                     {
+                                        context
+                                            .fill(get_rounded_rect(&layout), &piet::Color::WHITE);
                                         context.draw_text(&layout, pos);
                                         map_cursor_text.insert(info.text_key.clone(), layout);
                                     }

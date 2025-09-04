@@ -133,8 +133,7 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                     ripple_paint.anti_alias = true;
 
                     let mut ripple_pb = PathBuilder::new();
-                    let (rx, ry) = (ripple.x as f64, ripple.y as f64);
-                    ripple_pb.push_circle(rx as f32, ry as f32, radius as f32);
+                    ripple_pb.push_circle(ripple.x, ripple.y, radius);
                     if let Some(path) = ripple_pb.finish() {
                         pixmap.fill_path(
                             &path,
@@ -147,9 +146,8 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                 }
 
                 for cursor in last_cursors.values() {
-                    let (x, y) = (cursor.x as f64, cursor.y as f64);
-                    let (x, y) = (x as f32, y as f32);
-                    let size = 1.5 as f32;
+                    let (x, y) = (cursor.x, cursor.y);
+                    let size = 1.5f32;
 
                     let mut pb = PathBuilder::new();
                     pb.move_to(x, y);
@@ -179,7 +177,7 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                         black_paint.set_color_rgba8(0, 0, 0, 255);
                         black_paint.anti_alias = true;
                         let mut stroke = Stroke::default();
-                        stroke.width = 1.0 as f32;
+                        stroke.width = 1.0f32;
                         pixmap.stroke_path(
                             &path,
                             &black_paint,
@@ -196,7 +194,7 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                                 x + 24.0 * size,
                                 y + 24.0 * size,
                                 &arrow_paint,
-                                24.0 as f32,
+                                14.0f32,
                             );
                         });
                     }
