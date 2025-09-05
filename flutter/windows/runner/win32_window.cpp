@@ -10,7 +10,7 @@
 
 namespace {
 
-constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+constexpr const wchar_t kWindowClassName[] = L"RustDeskWindow";
 
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
