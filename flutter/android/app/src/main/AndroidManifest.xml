@@ -56,10 +56,10 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <activity
+        <activity android:exported="false"
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode|navigation"
-            android:exported="true"
+            android:exported="false"
             android:hardwareAccelerated="true"
             android:launchMode="singleTop"
             android:theme="@style/LaunchTheme"
