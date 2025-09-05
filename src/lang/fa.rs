@@ -126,7 +126,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Balanced", "متعادل"),
         ("Optimize reaction time", "بهینه سازی : زمان واکنش"),
         ("Custom", "سفارشی"),
-        ("Show remote cursor", "نمایش مکان نما موس میزبان"),
+        ("Show remote cursor", "نمایش نشان‌گر موس میزبان"),
         ("Show quality monitor", "نمایش کیفیت مانیتور"),
         ("Disable clipboard", " غیرفعالسازی کلیپبورد"),
         ("Lock after session end", "قفل کردن حساب کاربری سیستم عامل پس از پایان جلسه"),
@@ -596,7 +596,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ab_web_console_tip", "اطلاعات بیشتر در کنسول وب"),
         ("allow-only-conn-window-open-tip", "باز است اتصال برقرار شود RustDesk زمانی که"),
         ("no_need_privacy_mode_no_physical_displays_tip", "بدون نمایشگر فیزیکی نیازی به استفاده از حالت خصوصی نیست"),
-        ("Follow remote cursor", "مکان نما ریموت را دنبال کنید"),
+        ("Follow remote cursor", "نشان‌گر ریموت را دنبال کنید"),
         ("Follow remote window focus", "دنبال کردن فوکوس پنجره راه دور"),
         ("default_proxy_tip", "و پورت 1080 می باشد Sock5 پرونکل پیش فرض"),
         ("no_audio_input_device_tip", "دستگاه ورودی صوتی پیدا نشد"),
@@ -709,6 +709,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Supported only in the installed version.", "فقط در نسخه نصب‌شده پشتیبانی می‌شود."),
         ("elevation_username_tip", "لطفاً نام کاربری مدیریتی را برای ارتقاء دسترسی وارد کنید."),
         ("Preparing for installation ...", "در حال آماده‌سازی برای نصب..."),
-        ("Show my cursor", ""),
+        ("Show my cursor", "نمایش نشان‌گر من"),
     ].iter().cloned().collect();
 }
