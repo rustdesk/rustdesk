@@ -3709,13 +3709,13 @@ impl Connection {
                 #[cfg(not(target_os = "windows"))]
                 let is_lower_win10 = false;
                 #[cfg(target_os = "linux")]
-                let is_wayland = !crate::platform::linux::is_x11();
+                let is_linux_supported = crate::whiteboard::is_supported();
                 #[cfg(not(target_os = "linux"))]
-                let is_wayland = false;
+                let is_linux_supported = false;
                 let not_support_msg = if is_lower_win10 {
                     "Windows 10 or greater is required."
-                } else if is_wayland {
-                    "This feature is not supported on Wayland, please switch to X11."
+                } else if cfg!(target_os = "linux") && !is_linux_supported {
+                    "This feature is not supported on native Wayland, please install XWayland or switch to X11."
                 } else {
                     ""
                 };
