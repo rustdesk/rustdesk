@@ -5,8 +5,12 @@ mod server;
 
 #[cfg(target_os = "windows")]
 mod windows;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+mod win_linux;
 
 #[cfg(target_os = "windows")]
 use windows::create_event_loop;

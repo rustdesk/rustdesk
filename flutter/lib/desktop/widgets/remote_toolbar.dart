@@ -1593,8 +1593,8 @@ class _KeyboardMenu extends StatelessWidget {
               inputSource(),
               Divider(),
               viewMode(),
-              if (pi.platform == kPeerPlatformWindows ||
-                  pi.platform == kPeerPlatformMacOS)
+              if ([kPeerPlatformWindows, kPeerPlatformMacOS, kPeerPlatformLinux]
+                  .contains(pi.platform))
                 showMyCursor(),
               Divider(),
               ...toolbarToggles(),

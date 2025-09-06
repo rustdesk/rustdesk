@@ -289,7 +289,7 @@ pub enum Data {
     #[cfg(target_os = "windows")]
     PortForwardSessionCount(Option<usize>),
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Whiteboard((String, crate::whiteboard::CustomEvent)),
 }
 

@@ -575,7 +575,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--whiteboard" {
-            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 crate::whiteboard::run();
             }

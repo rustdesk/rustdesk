@@ -3699,24 +3699,35 @@ impl Connection {
                 self.update_terminal_persistence(q == BoolOption::Yes).await;
             }
         }
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if let Ok(q) = o.show_my_cursor.enum_value() {
             if q != BoolOption::NotSet {
                 use crate::whiteboard;
                 self.show_my_cursor = q == BoolOption::Yes;
                 #[cfg(target_os = "windows")]
-                let is_win10_or_greater = crate::platform::windows::is_win_10_or_greater();
+                let is_lower_win10 = !crate::platform::windows::is_win_10_or_greater();
                 #[cfg(not(target_os = "windows"))]
-                let is_win10_or_greater = false;
+                let is_lower_win10 = false;
+                #[cfg(target_os = "linux")]
+                let is_wayland = !crate::platform::linux::is_x11();
+                #[cfg(not(target_os = "linux"))]
+                let is_wayland = false;
+                let not_support_msg = if is_lower_win10 {
+                    "Windows 10 or greater is required."
+                } else if is_wayland {
+                    "This feature is not supported on Wayland, please switch to X11."
+                } else {
+                    ""
+                };
                 if q == BoolOption::Yes {
-                    if !cfg!(target_os = "windows") || is_win10_or_greater {
+                    if not_support_msg.is_empty() {
                         whiteboard::register_whiteboard(whiteboard::get_key_cursor(self.inner.id));
                     } else {
                         let mut msg_out = Message::new();
                         let res = MessageBox {
                             msgtype: "nook-nocancel-hasclose".to_owned(),
                             title: "Show my cursor".to_owned(),
-                            text: "Windows 10 or greater is required.".to_owned(),
+                            text: not_support_msg.to_owned(),
                             link: "".to_owned(),
                             ..Default::default()
                         };
@@ -3724,7 +3735,7 @@ impl Connection {
                         self.send(msg_out).await;
                     }
                 } else {
-                    if !cfg!(target_os = "windows") || is_win10_or_greater {
+                    if not_support_msg.is_empty() {
                         whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(
                             self.inner.id,
                         ));
@@ -4884,7 +4895,7 @@ mod raii {
                 scrap::wayland::pipewire::try_close_session();
             }
             Self::check_wake_lock();
-            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 use crate::whiteboard;
                 whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(self.0));
