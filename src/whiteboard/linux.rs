@@ -61,7 +61,44 @@ extern "C" {
 
 const SHAPE_INPUT: std::ffi::c_int = 2;
 
+fn get_display_from_xwayland() -> Option<String> {
+    if let Ok(output) = crate::platform::run_cmds("pgrep -a Xwayland") {
+        // 1410 /usr/bin/Xwayland :1 -auth /run/user/1000/xauth_RoDZey -listenfd 8 -listenfd 9 -displayfd 76 -wm 78 -rootless -enable-ei-portal
+        if output.contains("Xwayland") {
+            if let Some(display) = output.split_whitespace().nth(2) {
+                if display.starts_with(':') {
+                    return Some(display.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn preset_env() -> bool {
+    if crate::platform::is_x11() {
+        return true;
+    }
+    if let Some(display) = get_display_from_xwayland() {
+        // https://github.com/rust-windowing/winit/blob/f6893a4390dfe6118ce4b33458d458fd3efd3025/src/event_loop.rs#L99
+        // It is acceptable to modify global environment variables here because this process is an isolated,
+        // dedicated "whiteboard" process.
+        std::env::set_var("DISPLAY", display);
+        std::env::remove_var("WAYLAND_DISPLAY");
+        return true;
+    }
+    false
+}
+
+pub fn is_supported() -> bool {
+    crate::platform::is_x11() || get_display_from_xwayland().is_some()
+}
+
 pub fn run() {
+    if !preset_env() {
+        return;
+    }
+
     let event_loop = match EventLoop::<(String, CustomEvent)>::with_user_event().build() {
         Ok(el) => el,
         Err(e) => {

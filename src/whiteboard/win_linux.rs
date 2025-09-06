@@ -158,11 +158,11 @@ pub(super) fn create_font_face() -> ResultType<Face<'static>> {
     let mut font_db = fontdb::Database::new();
     font_db.load_system_fonts();
     let query = fontdb::Query {
-        families: &[fontdb::Family::Monospace],
+        families: &[fontdb::Family::Monospace, fontdb::Family::SansSerif],
         ..fontdb::Query::default()
     };
     let Some(font_id) = font_db.query(&query) else {
-        bail!("No monospace font found!");
+        bail!("No monospace or sans-serif font found!");
     };
     let Some((font_source, face_index)) = font_db.face_source(font_id) else {
         bail!("No face found for font!");

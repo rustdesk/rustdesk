@@ -16,6 +16,8 @@ mod win_linux;
 use windows::create_event_loop;
 #[cfg(target_os = "macos")]
 use macos::create_event_loop;
+#[cfg(target_os = "linux")]
+pub use linux::is_supported;
 
 pub use client::*;
 pub use server::*;
