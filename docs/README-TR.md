@@ -10,15 +10,15 @@
   <b>README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ve <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Belge</a>'sini ana dilinize çevirmemiz için yardımınıza ihtiyacımız var</b>
 </p>
 
-Bizimle sohbet edin: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Bizimle sohbet edin: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Geli%C5%9Fmi%C5%9F%20%C3%96zellikler-blue)](https://rustdesk.com/pricing.html)
 
 Başka bir uzak masaüstü yazılımı daha, Rust dilinde yazılmış. Hemen kullanıma hazır, hiçbir yapılandırma gerektirmez. Verilerinizin tam kontrolünü elinizde tutarsınız ve güvenlikle ilgili endişeleriniz olmaz. Kendi buluş/iletme sunucumuzu kullanabilirsiniz, [kendi sunucunuzu kurabilirsiniz](https://rustdesk.com/server) veya [kendi buluş/iletme sunucunuzu yazabilirsiniz](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk, herkesten katkıyı kabul eder. Başlamak için [CONTRIBUTING.md](docs/CONTRIBUTING-TR.md) belgesine göz atın.
+RustDesk, herkesten katkıyı kabul eder. Başlamak için [CONTRIBUTING.md](CONTRIBUTING-TR.md) belgesine göz atın.
 
 [**SSS**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
@@ -29,23 +29,6 @@ RustDesk, herkesten katkıyı kabul eder. Başlamak için [CONTRIBUTING.md](docs
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="F-Droid'de Alın"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
-
-## Ücretsiz Genel Sunucular
-
-Aşağıda ücretsiz olarak kullandığınız sunucular listelenmiştir, zaman içinde değişebilirler. Eğer bunlardan birine yakın değilseniz, ağınız yavaş olabilir.
-| Konum | Sağlayıcı | Özellikler |
-| --------- | ------------- | ------------------ |
-| Almanya | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4 GB RAM |
-| Almanya | [Codext](https://codext.de) | 4 vCPU / 8 GB RAM |
-| Ukrayna (Kiev) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
-
-## Geliştirici Konteyneri
-
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Eğer zaten VS Code ve Docker kurulu ise yukarıdaki rozete tıklayarak başlayabilirsiniz. Tıklamak, VS Code'un gerektiğinde Dev Konteyner eklentisini otomatik olarak yüklemesine, kaynak kodunu bir konteyner hacmine klonlamasına ve kullanım için bir geliştirici konteyneri başlatmasına neden olur.
-
-Daha fazla bilgi için [DEVCONTAINER.md](docs/DEVCONTAINER-TR.md) belgesine bakabilirsiniz.
 
 ## Bağımlılıklar
 
@@ -138,34 +121,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Wayland'ı X11 (Xorg) Olarak Değiştirme
-
-RustDesk, Wayland'ı desteklemez. Xorg'u GNOME oturumu olarak varsayılan olarak ayarlamak için [burayı](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) kontrol edin.
-
-## Wayland Desteği
-
-Wayland'ın diğer pencerelere tuş vuruşu göndermek için herhangi bir API sağlamadığı görünmektedir. Bu nedenle, RustDesk daha düşük bir seviyeden, yani Linux çekirdek seviyesindeki `/dev/uinput` cihazının API'sini kullanır.
-
-Wayland tarafı kontrol edildiğinde, aşağıdaki şekilde başlatmanız gerekir:
-```bash
-# uinput servisini başlatın
-$ sudo rustdesk --service
-$ rustdesk
-```
-**Uyarı**: Wayland ekran kaydı farklı arayüzler kullanır. RustDesk şu anda yalnızca org.freedesktop.portal.ScreenCast'ı destekler.
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Desteklenmez
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Desteklenir
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
-```
-
 ## Docker ile Derleme Nasıl Yapılır
 
 Öncelikle deposunu klonlayın ve Docker konteynerini oluşturun:
@@ -210,6 +165,10 @@ Lütfen bu komutları RustDesk deposunun kökünden çalıştırdığınızdan e
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platforma özgü kod
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: mobil için Flutter kodu
 - **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Flutter web istemcisi için JavaScript
+
+> [!Dikkat]
+> **Yanlış Kullanım Uyarısı:** <br>
+> RustDesk geliştiricileri, bu yazılımın etik olmayan veya yasa dışı kullanımını onaylamaz veya desteklemez. Yetkisiz erişim, kontrol veya gizlilik ihlali gibi kötüye kullanımlar kesinlikle yönergelerimize aykırıdır. Yazarlar, uygulamanın herhangi bir yanlış kullanımından sorumlu değildir.
 
 ## Ekran Görüntüleri
 

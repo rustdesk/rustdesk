@@ -1,4 +1,5 @@
 use crate::client::*;
+use async_trait::async_trait;
 use hbb_common::{
     config::PeerConfig,
     config::READ_TIMEOUT,
@@ -32,11 +33,14 @@ impl Session {
             password,
             lc: Default::default(),
         };
-        session
-            .lc
-            .write()
-            .unwrap()
-            .initialize(id.to_owned(), ConnType::PORT_FORWARD, None);
+        session.lc.write().unwrap().initialize(
+            id.to_owned(),
+            ConnType::PORT_FORWARD,
+            None,
+            false,
+            None,
+            None,
+        );
         session
     }
 }

@@ -14,7 +14,11 @@ class UppercaseValidationRule extends ValidationRule {
   String get name => translate('uppercase');
   @override
   bool validate(String value) {
-    return value.contains(RegExp(r'[A-Z]'));
+    return value.runes.any((int rune) {
+      var character = String.fromCharCode(rune);
+      return character.toUpperCase() == character &&
+          character.toLowerCase() != character;
+    });
   }
 }
 
@@ -24,7 +28,11 @@ class LowercaseValidationRule extends ValidationRule {
 
   @override
   bool validate(String value) {
-    return value.contains(RegExp(r'[a-z]'));
+    return value.runes.any((int rune) {
+      var character = String.fromCharCode(rune);
+      return character.toLowerCase() == character &&
+          character.toUpperCase() != character;
+    });
   }
 }
 

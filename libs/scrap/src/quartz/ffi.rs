@@ -193,6 +193,7 @@ extern "C" {
     pub fn CGDisplayIsOnline(display: u32) -> i32;
 
     pub fn CGDisplayBounds(display: u32) -> CGRect;
+    pub fn BackingScaleFactor(display: u32) -> f32;
 
     // IOSurface
 

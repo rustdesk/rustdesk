@@ -1,0 +1,60 @@
+name: build RustDeskTempTopMostWindow
+
+on:
+  workflow_call:
+    inputs:
+        upload-artifact:
+          type: boolean
+          default: true
+        target:
+            description: 'Target'
+            required: true
+            type: string
+            default: 'windows-2022'
+        configuration:
+            description: 'Configuration'
+            required: true
+            type: string
+            default: 'Release'
+        platform:
+            description: 'Platform'
+            required: true
+            type: string
+            default: 'x64'
+        target_version:
+            description: 'TargetVersion'
+            required: true
+            type: string
+            default: 'Windows10'
+
+env:
+  project_path: WindowInjection/WindowInjection.vcxproj
+
+jobs:
+  build-RustDeskTempTopMostWindow:
+    runs-on: ${{ inputs.target }}
+    strategy:
+        fail-fast: false
+    env:
+      build_output_dir: RustDeskTempTopMostWindow/WindowInjection/${{ inputs.platform }}/${{ inputs.configuration }}
+    steps:
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Download the source code
+        run: |
+          git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
+
+        # Build. commit 53b548a5398624f7149a382000397993542ad796 is tag v0.3
+      - name: Build the project
+        run: |
+          cd RustDeskTempTopMostWindow && git checkout 53b548a5398624f7149a382000397993542ad796
+          msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@master
+        if: ${{ inputs.upload-artifact }}
+        with:
+            name: topmostwindow-artifacts
+            path: |
+              ./${{ env.build_output_dir }}/WindowInjection.dll

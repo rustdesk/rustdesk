@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:extended_text/extended_text.dart';
 import 'package:flutter_hbb/desktop/widgets/dragable_divider.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -15,7 +16,9 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:wakelock/wakelock.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:flutter_hbb/web/dummy.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/web_unique.dart';
 
 import '../../consts.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
@@ -53,20 +56,24 @@ class FileManagerPage extends StatefulWidget {
       {Key? key,
       required this.id,
       required this.password,
-      required this.tabController,
+      required this.isSharedPassword,
+      this.tabController,
+      this.connToken,
       this.forceRelay})
       : super(key: key);
   final String id;
   final String? password;
+  final bool? isSharedPassword;
   final bool? forceRelay;
-  final DesktopTabController tabController;
+  final String? connToken;
+  final DesktopTabController? tabController;
 
   @override
   State<StatefulWidget> createState() => _FileManagerPageState();
 }
 
 class _FileManagerPageState extends State<FileManagerPage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   final _mouseFocusScope = Rx<MouseFocusScope>(MouseFocusScope.none);
 
   final _dropMaskVisible = false.obs; // TODO impl drop mask
@@ -84,18 +91,27 @@ class _FileManagerPageState extends State<FileManagerPage>
     _ffi.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
+        isSharedPassword: widget.isSharedPassword,
+        connToken: widget.connToken,
         forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    Get.put(_ffi, tag: 'ft_${widget.id}');
-    if (!Platform.isLinux) {
-      Wakelock.enable();
+    Get.put<FFI>(_ffi, tag: 'ft_${widget.id}');
+    if (!isLinux) {
+      WakelockPlus.enable();
+    }
+    if (isWeb) {
+      _ffi.ffiModel.updateEventListener(_ffi.sessionId, widget.id);
     }
     debugPrint("File manager page init success with id ${widget.id}");
     _ffi.dialogManager.setOverlayState(_overlayKeyState);
-    widget.tabController.onSelected?.call(widget.id);
+    // Call onSelected in post frame callback, since we cannot guarantee that the callback will not call setState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.tabController?.onSelected?.call(widget.id);
+    });
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -103,16 +119,25 @@ class _FileManagerPageState extends State<FileManagerPage>
     model.close().whenComplete(() {
       _ffi.close();
       _ffi.dialogManager.dismissAll();
-      if (!Platform.isLinux) {
-        Wakelock.disable();
+      if (!isLinux) {
+        WakelockPlus.disable();
       }
       Get.delete<FFI>(tag: 'ft_${widget.id}');
     });
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      jobController.jobTable.refresh();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -123,10 +148,11 @@ class _FileManagerPageState extends State<FileManagerPage>
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: Row(
             children: [
-              Flexible(
-                  flex: 3,
-                  child: dropArea(FileManagerView(
-                      model.localController, _ffi, _mouseFocusScope))),
+              if (!isWeb)
+                Flexible(
+                    flex: 3,
+                    child: dropArea(FileManagerView(
+                        model.localController, _ffi, _mouseFocusScope))),
               Flexible(
                   flex: 3,
                   child: dropArea(FileManagerView(
@@ -167,10 +193,31 @@ class _FileManagerPageState extends State<FileManagerPage>
   /// transfer status list
   /// watch transfer status
   Widget statusList() {
+    Widget getIcon(JobProgress job) {
+      final color = Theme.of(context).tabBarTheme.labelColor;
+      switch (job.type) {
+        case JobType.deleteDir:
+        case JobType.deleteFile:
+          return Icon(Icons.delete_outline, color: color);
+        default:
+          return Transform.rotate(
+            angle: isWeb
+                ? job.isRemoteToLocal
+                    ? pi / 2
+                    : pi / 2 * 3
+                : job.isRemoteToLocal
+                    ? pi
+                    : 0,
+            child: Icon(Icons.arrow_forward_ios, color: color),
+          );
+      }
+    }
+
     statusListView(List<JobProgress> jobs) => ListView.builder(
           controller: ScrollController(),
           itemBuilder: (BuildContext context, int index) {
             final item = jobs[index];
+            final status = item.getStatus();
             return Padding(
               padding: const EdgeInsets.only(bottom: 5),
               child: generateCard(
@@ -180,16 +227,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Transform.rotate(
-                          angle: item.isRemoteToLocal ? pi : 0,
-                          child: SvgPicture.asset(
-                            "assets/arrow.svg",
-                            color: Theme.of(context).tabBarTheme.labelColor,
-                          ),
-                        ).paddingOnly(left: 15),
-                        const SizedBox(
-                          width: 16.0,
-                        ),
+                        getIcon(item)
+                            .marginSymmetric(horizontal: 10, vertical: 12),
                         Expanded(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -198,45 +237,28 @@ class _FileManagerPageState extends State<FileManagerPage>
                               Tooltip(
                                 waitDuration: Duration(milliseconds: 500),
                                 message: item.jobName,
-                                child: Text(
-                                  item.fileName,
+                                child: ExtendedText(
+                                  item.jobName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                ).paddingSymmetric(vertical: 10),
-                              ),
-                              Text(
-                                '${translate("Total")} ${readableFileSize(item.totalSize.toDouble())}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: MyTheme.darkGray,
+                                  overflowWidget: TextOverflowWidget(
+                                      child: Text("..."),
+                                      position: TextOverflowPosition.start),
                                 ),
                               ),
-                              Offstage(
-                                offstage: item.state != JobState.inProgress,
-                                child: Text(
-                                  '${translate("Speed")} ${readableFileSize(item.speed)}/s',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: MyTheme.darkGray,
-                                  ),
-                                ),
+                              Tooltip(
+                                waitDuration: Duration(milliseconds: 500),
+                                message: status,
+                                child: Text(status,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: MyTheme.darkGray,
+                                    )).marginOnly(top: 6),
                               ),
                               Offstage(
-                                offstage: item.state == JobState.inProgress,
-                                child: Text(
-                                  translate(
-                                    item.display(),
-                                  ),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: MyTheme.darkGray,
-                                  ),
-                                ),
-                              ),
-                              Offstage(
-                                offstage: item.state != JobState.inProgress,
+                                offstage: item.type != JobType.transfer ||
+                                    item.state != JobState.inProgress,
                                 child: LinearPercentIndicator(
-                                  padding: EdgeInsets.only(right: 15),
                                   animateFromLastPercent: true,
                                   center: Text(
                                     '${(item.finishedSize / item.totalSize * 100).toStringAsFixed(0)}%',
@@ -246,7 +268,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   progressColor: MyTheme.accent,
                                   backgroundColor: Theme.of(context).hoverColor,
                                   lineHeight: kDesktopFileTransferRowHeight,
-                                ).paddingSymmetric(vertical: 15),
+                                ).paddingSymmetric(vertical: 8),
                               ),
                             ],
                           ),
@@ -257,22 +279,23 @@ class _FileManagerPageState extends State<FileManagerPage>
                             Offstage(
                               offstage: item.state != JobState.paused,
                               child: MenuButton(
+                                tooltip: translate("Resume"),
                                 onPressed: () {
                                   jobController.resumeJob(item.id);
                                 },
                                 child: SvgPicture.asset(
                                   "assets/refresh.svg",
-                                  color: Colors.white,
+                                  colorFilter: svgColor(Colors.white),
                                 ),
                                 color: MyTheme.accent,
                                 hoverColor: MyTheme.accent80,
                               ),
                             ),
                             MenuButton(
-                              padding: EdgeInsets.only(right: 15),
+                              tooltip: translate("Delete"),
                               child: SvgPicture.asset(
                                 "assets/close.svg",
-                                color: Colors.white,
+                                colorFilter: svgColor(Colors.white),
                               ),
                               onPressed: () {
                                 jobController.jobTable.removeAt(index);
@@ -282,11 +305,11 @@ class _FileManagerPageState extends State<FileManagerPage>
                               hoverColor: MyTheme.accent80,
                             ),
                           ],
-                        ),
+                        ).marginAll(12),
                       ],
                     ),
                   ],
-                ).paddingSymmetric(vertical: 10),
+                ),
               ),
             );
           },
@@ -307,13 +330,14 @@ class _FileManagerPageState extends State<FileManagerPage>
                         children: [
                           SvgPicture.asset(
                             "assets/transfer.svg",
-                            color: Theme.of(context).tabBarTheme.labelColor,
+                            colorFilter: svgColor(
+                                Theme.of(context).tabBarTheme.labelColor),
                             height: 40,
                           ).paddingOnly(bottom: 10),
                           Text(
                             translate("No transfers in progress"),
                             textAlign: TextAlign.center,
-                            textScaleFactor: 1.20,
+                            textScaler: TextScaler.linear(1.20),
                             style: TextStyle(
                                 color:
                                     Theme.of(context).tabBarTheme.labelColor),
@@ -469,6 +493,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget headTools() {
+    var uploadButtonTapPosition = RelativeRect.fill;
+    RxBool isUploadFolder =
+        (bind.mainGetLocalOption(key: 'upload-folder-button') == 'Y').obs;
     return Container(
       child: Column(
         children: [
@@ -515,6 +542,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               Row(
                 children: [
                   MenuButton(
+                    tooltip: translate('Back'),
                     padding: EdgeInsets.only(
                       right: 3,
                     ),
@@ -522,7 +550,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       quarterTurns: 2,
                       child: SvgPicture.asset(
                         "assets/arrow.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                     ),
                     color: Theme.of(context).cardColor,
@@ -533,11 +562,13 @@ class _FileManagerViewState extends State<FileManagerView> {
                     },
                   ),
                   MenuButton(
+                    tooltip: translate('Parent directory'),
                     child: RotatedBox(
                       quarterTurns: 3,
                       child: SvgPicture.asset(
                         "assets/arrow.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                     ),
                     color: Theme.of(context).cardColor,
@@ -596,6 +627,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 switch (_locationStatus.value) {
                   case LocationStatus.bread:
                     return MenuButton(
+                      tooltip: translate('Search'),
                       onPressed: () {
                         _locationStatus.value = LocationStatus.fileSearchBar;
                         Future.delayed(
@@ -603,7 +635,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       },
                       child: SvgPicture.asset(
                         "assets/search.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
@@ -613,20 +646,23 @@ class _FileManagerViewState extends State<FileManagerView> {
                       onPressed: null,
                       child: SvgPicture.asset(
                         "assets/close.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).disabledColor,
                       hoverColor: Theme.of(context).hoverColor,
                     );
                   case LocationStatus.fileSearchBar:
                     return MenuButton(
+                      tooltip: translate('Clear'),
                       onPressed: () {
                         onSearchText("", isLocal);
                         _locationStatus.value = LocationStatus.bread;
                       },
                       child: SvgPicture.asset(
                         "assets/close.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
@@ -634,6 +670,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 }
               }),
               MenuButton(
+                tooltip: translate('Refresh File'),
                 padding: EdgeInsets.only(
                   left: 3,
                 ),
@@ -642,7 +679,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                 },
                 child: SvgPicture.asset(
                   "assets/refresh.svg",
-                  color: Theme.of(context).tabBarTheme.labelColor,
+                  colorFilter:
+                      svgColor(Theme.of(context).tabBarTheme.labelColor),
                 ),
                 color: Theme.of(context).cardColor,
                 hoverColor: Theme.of(context).hoverColor,
@@ -658,6 +696,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                       isLocal ? MainAxisAlignment.start : MainAxisAlignment.end,
                   children: [
                     MenuButton(
+                      tooltip: translate('Home'),
                       padding: EdgeInsets.only(
                         right: 3,
                       ),
@@ -666,17 +705,34 @@ class _FileManagerViewState extends State<FileManagerView> {
                       },
                       child: SvgPicture.asset(
                         "assets/home.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
                     ),
                     MenuButton(
+                      tooltip: translate('Create Folder'),
                       onPressed: () {
                         final name = TextEditingController();
+                        String? errorText;
                         _ffi.dialogManager.show((setState, close, context) {
+                          name.addListener(() {
+                            if (errorText != null) {
+                              setState(() {
+                                errorText = null;
+                              });
+                            }
+                          });
                           submit() {
                             if (name.value.text.isNotEmpty) {
+                              if (!PathUtil.validName(name.value.text,
+                                  controller.options.value.isWindows)) {
+                                setState(() {
+                                  errorText = translate("Invalid folder name");
+                                });
+                                return;
+                              }
                               controller.createDir(PathUtil.join(
                                 controller.directory.value.path,
                                 name.value.text,
@@ -692,7 +748,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 SvgPicture.asset("assets/folder_new.svg",
-                                    color: MyTheme.accent),
+                                    colorFilter: svgColor(MyTheme.accent)),
                                 Text(
                                   translate("Create Folder"),
                                 ).paddingOnly(
@@ -708,10 +764,11 @@ class _FileManagerViewState extends State<FileManagerView> {
                                     labelText: translate(
                                       "Please enter the folder name",
                                     ),
+                                    errorText: errorText,
                                   ),
                                   controller: name,
                                   autofocus: true,
-                                ),
+                                ).workaroundFreezeLinuxMint(),
                               ],
                             ),
                             actions: [
@@ -734,12 +791,14 @@ class _FileManagerViewState extends State<FileManagerView> {
                       },
                       child: SvgPicture.asset(
                         "assets/folder_new.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
                     ),
                     Obx(() => MenuButton(
+                          tooltip: translate('Delete'),
                           onPressed: SelectedItems.valid(selectedItems.items)
                               ? () async {
                                   await (controller
@@ -749,7 +808,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                               : null,
                           child: SvgPicture.asset(
                             "assets/trash.svg",
-                            color: Theme.of(context).tabBarTheme.labelColor,
+                            colorFilter: svgColor(
+                                Theme.of(context).tabBarTheme.labelColor),
                           ),
                           color: Theme.of(context).cardColor,
                           hoverColor: Theme.of(context).hoverColor,
@@ -758,6 +818,66 @@ class _FileManagerViewState extends State<FileManagerView> {
                   ],
                 ),
               ),
+              if (isWeb)
+                Obx(() => ElevatedButton.icon(
+                      style: ButtonStyle(
+                        padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
+                            isLocal
+                                ? EdgeInsets.only(left: 10)
+                                : EdgeInsets.only(right: 10)),
+                        backgroundColor: MaterialStateProperty.all(
+                          selectedItems.items.isEmpty
+                              ? MyTheme.accent80
+                              : MyTheme.accent,
+                        ),
+                      ),
+                      onPressed: () =>
+                          {webselectFiles(is_folder: isUploadFolder.value)},
+                      label: InkWell(
+                        hoverColor: Colors.transparent,
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        focusColor: Colors.transparent,
+                        onTapDown: (e) {
+                          final x = e.globalPosition.dx;
+                          final y = e.globalPosition.dy;
+                          uploadButtonTapPosition =
+                              RelativeRect.fromLTRB(x, y, x, y);
+                        },
+                        onTap: () async {
+                          final value = await showMenu<bool>(
+                              context: context,
+                              position: uploadButtonTapPosition,
+                              items: [
+                                PopupMenuItem<bool>(
+                                  value: false,
+                                  child: Text(translate('Upload files')),
+                                ),
+                                PopupMenuItem<bool>(
+                                  value: true,
+                                  child: Text(translate('Upload folder')),
+                                ),
+                              ]);
+                          if (value != null) {
+                            isUploadFolder.value = value;
+                            bind.mainSetLocalOption(
+                                key: 'upload-folder-button',
+                                value: value ? 'Y' : '');
+                            webselectFiles(is_folder: value);
+                          }
+                        },
+                        child: Icon(Icons.arrow_drop_down),
+                      ),
+                      icon: Text(
+                        translate(isUploadFolder.isTrue
+                            ? 'Upload folder'
+                            : 'Upload files'),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          color: Colors.white,
+                        ),
+                      ).marginOnly(left: 8),
+                    )).marginOnly(left: 16),
               Obx(() => ElevatedButton.icon(
                     style: ButtonStyle(
                       padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
@@ -791,31 +911,34 @@ class _FileManagerViewState extends State<FileManagerView> {
                                   : Colors.white,
                             ),
                           )
-                        : RotatedBox(
-                            quarterTurns: 2,
-                            child: SvgPicture.asset(
-                              "assets/arrow.svg",
-                              color: selectedItems.items.isEmpty
-                                  ? Theme.of(context).brightness ==
-                                          Brightness.light
-                                      ? MyTheme.grayBg
-                                      : MyTheme.darkGray
-                                  : Colors.white,
-                              alignment: Alignment.bottomRight,
-                            ),
-                          ),
+                        : isWeb
+                            ? Offstage()
+                            : RotatedBox(
+                                quarterTurns: 2,
+                                child: SvgPicture.asset(
+                                  "assets/arrow.svg",
+                                  colorFilter: svgColor(
+                                      selectedItems.items.isEmpty
+                                          ? Theme.of(context).brightness ==
+                                                  Brightness.light
+                                              ? MyTheme.grayBg
+                                              : MyTheme.darkGray
+                                          : Colors.white),
+                                  alignment: Alignment.bottomRight,
+                                ),
+                              ),
                     label: isLocal
                         ? SvgPicture.asset(
                             "assets/arrow.svg",
-                            color: selectedItems.items.isEmpty
+                            colorFilter: svgColor(selectedItems.items.isEmpty
                                 ? Theme.of(context).brightness ==
                                         Brightness.light
                                     ? MyTheme.grayBg
                                     : MyTheme.darkGray
-                                : Colors.white,
+                                : Colors.white),
                           )
                         : Text(
-                            translate('Receive'),
+                            translate(isWeb ? 'Download' : 'Receive'),
                             style: TextStyle(
                               color: selectedItems.items.isEmpty
                                   ? Theme.of(context).brightness ==
@@ -870,6 +993,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         menuPos = RelativeRect.fromLTRB(x, y, x, y);
       },
       child: MenuButton(
+        tooltip: translate('More'),
         onPressed: () => mod_menu.showMenu(
           context: context,
           position: menuPos,
@@ -889,7 +1013,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         ),
         child: SvgPicture.asset(
           "assets/dots.svg",
-          color: Theme.of(context).tabBarTheme.labelColor,
+          colorFilter: svgColor(Theme.of(context).tabBarTheme.labelColor),
         ),
         color: Theme.of(context).cardColor,
         hoverColor: Theme.of(context).hoverColor,
@@ -901,6 +1025,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       BuildContext context, ScrollController scrollController) {
     final fd = controller.directory.value;
     final entries = fd.entries;
+    Rx<Entry?> rightClickEntry = Rx(null);
 
     return ListSearchActionListener(
       node: _keyboardNode,
@@ -959,16 +1084,70 @@ class _FileManagerViewState extends State<FileManagerView> {
           final lastModifiedStr = entry.isDrive
               ? " "
               : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
+          var secondaryPosition = RelativeRect.fromLTRB(0, 0, 0, 0);
+          onTap() {
+            final items = selectedItems;
+            // handle double click
+            if (_checkDoubleClick(entry)) {
+              controller.openDirectory(entry.path);
+              items.clear();
+              return;
+            }
+            _onSelectedChanged(items, filteredEntries, entry, isLocal);
+          }
+
+          onSecondaryTap() {
+            final items = [
+              if (!entry.isDrive &&
+                  versionCmp(_ffi.ffiModel.pi.version, "1.3.0") >= 0)
+                mod_menu.PopupMenuItem(
+                  child: Text(translate("Rename")),
+                  height: CustomPopupMenuTheme.height,
+                  onTap: () {
+                    controller.renameAction(entry, isLocal);
+                  },
+                )
+            ];
+            if (items.isNotEmpty) {
+              rightClickEntry.value = entry;
+              final future = mod_menu.showMenu(
+                context: context,
+                position: secondaryPosition,
+                items: items,
+              );
+              future.then((value) {
+                rightClickEntry.value = null;
+              });
+              future.onError((error, stackTrace) {
+                rightClickEntry.value = null;
+              });
+            }
+          }
+
+          onSecondaryTapDown(details) {
+            secondaryPosition = RelativeRect.fromLTRB(
+                details.globalPosition.dx,
+                details.globalPosition.dy,
+                details.globalPosition.dx,
+                details.globalPosition.dy);
+          }
+
           return Padding(
             padding: EdgeInsets.symmetric(vertical: 1),
             child: Obx(() => Container(
                 decoration: BoxDecoration(
                   color: selectedItems.items.contains(entry)
-                      ? Theme.of(context).hoverColor
+                      ? MyTheme.button
                       : Theme.of(context).cardColor,
                   borderRadius: BorderRadius.all(
                     Radius.circular(5.0),
                   ),
+                  border: rightClickEntry.value == entry
+                      ? Border.all(
+                          color: MyTheme.button,
+                          width: 1.0,
+                        )
+                      : null,
                 ),
                 key: ValueKey(entry.name),
                 height: kDesktopFileTransferRowHeight,
@@ -1000,28 +1179,26 @@ class _FileManagerViewState extends State<FileManagerView> {
                                                 entry.isFile
                                                     ? "assets/file.svg"
                                                     : "assets/folder.svg",
-                                                color: Theme.of(context)
-                                                    .tabBarTheme
-                                                    .labelColor,
+                                                colorFilter: svgColor(
+                                                    Theme.of(context)
+                                                        .tabBarTheme
+                                                        .labelColor),
                                               ),
                                         Expanded(
                                             child: Text(entry.name.nonBreaking,
+                                                style: TextStyle(
+                                                    color: selectedItems.items
+                                                            .contains(entry)
+                                                        ? Colors.white
+                                                        : null),
                                                 overflow:
                                                     TextOverflow.ellipsis))
                                       ]),
                                     )),
                               ),
-                              onTap: () {
-                                final items = selectedItems;
-                                // handle double click
-                                if (_checkDoubleClick(entry)) {
-                                  controller.openDirectory(entry.path);
-                                  items.clear();
-                                  return;
-                                }
-                                _onSelectedChanged(
-                                    items, filteredEntries, entry, isLocal);
-                              },
+                              onTap: onTap,
+                              onSecondaryTap: onSecondaryTap,
+                              onSecondaryTapDown: onSecondaryTapDown,
                             ),
                             SizedBox(
                               width: 2.0,
@@ -1038,11 +1215,17 @@ class _FileManagerViewState extends State<FileManagerView> {
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: MyTheme.darkGray,
+                                          color: selectedItems.items
+                                                  .contains(entry)
+                                              ? Colors.white70
+                                              : MyTheme.darkGray,
                                         ),
                                       )),
                                 ),
                               ),
+                              onTap: onTap,
+                              onSecondaryTap: onSecondaryTap,
+                              onSecondaryTapDown: onSecondaryTapDown,
                             ),
                             // Divider from header.
                             SizedBox(
@@ -1058,9 +1241,16 @@ class _FileManagerViewState extends State<FileManagerView> {
                                     sizeStr,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                        fontSize: 10, color: MyTheme.darkGray),
+                                        fontSize: 10,
+                                        color:
+                                            selectedItems.items.contains(entry)
+                                                ? Colors.white70
+                                                : MyTheme.darkGray),
                                   ),
                                 ),
+                                onTap: onTap,
+                                onSecondaryTap: onSecondaryTap,
+                                onSecondaryTapDown: onSecondaryTapDown,
                               ),
                             ),
                           ],
@@ -1127,9 +1317,13 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _onSelectedChanged(SelectedItems selectedItems, List<Entry> entries,
       Entry entry, bool isLocal) {
     final isCtrlDown = RawKeyboard.instance.keysPressed
-        .contains(LogicalKeyboardKey.controlLeft);
-    final isShiftDown =
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft);
+            .contains(LogicalKeyboardKey.controlLeft) ||
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.controlRight);
+    final isShiftDown = RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.shiftLeft) ||
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.shiftRight);
     if (isCtrlDown) {
       if (selectedItems.items.contains(entry)) {
         selectedItems.remove(entry);
@@ -1281,7 +1475,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     onPointerSignal: (e) {
                       if (e is PointerScrollEvent) {
                         final sc = _breadCrumbScroller;
-                        final scale = Platform.isWindows ? 2 : 4;
+                        final scale = isWindows ? 2 : 4;
                         sc.jumpTo(sc.offset + e.scrollDelta.dy / scale);
                       }
                     },
@@ -1444,7 +1638,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           _locationStatus.value == LocationStatus.pathLocation
               ? "assets/folder.svg"
               : "assets/search.svg",
-          color: Theme.of(context).tabBarTheme.labelColor,
+          colorFilter: svgColor(Theme.of(context).tabBarTheme.labelColor),
         ),
         Expanded(
           child: TextField(
@@ -1463,7 +1657,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             onChanged: _locationStatus.value == LocationStatus.fileSearchBar
                 ? (searchText) => onSearchText(searchText, isLocal)
                 : null,
-          ),
+          ).workaroundFreezeLinuxMint(),
         )
       ],
     );

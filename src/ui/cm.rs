@@ -7,6 +7,10 @@ use sciter::{make_args, Element, Value, HELEMENT};
 use std::sync::Mutex;
 use std::{ops::Deref, sync::Arc};
 
+lazy_static::lazy_static! {
+    pub static ref HIDE_CM: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+}
+
 #[derive(Clone, Default)]
 pub struct SciterHandler {
     pub element: Arc<Mutex<Option<Element>>>,
@@ -19,6 +23,8 @@ impl InvokeUiCM for SciterHandler {
             &make_args!(
                 client.id,
                 client.is_file_transfer,
+                client.is_view_camera,
+                client.is_terminal,
                 client.port_forward.clone(),
                 client.peer_id.clone(),
                 client.name.clone(),
@@ -28,7 +34,8 @@ impl InvokeUiCM for SciterHandler {
                 client.audio,
                 client.file,
                 client.restart,
-                client.recording
+                client.recording,
+                client.block_input
             ),
         );
     }
@@ -63,7 +70,7 @@ impl InvokeUiCM for SciterHandler {
         );
     }
 
-    fn file_transfer_log(&self, _log: String) {}
+    fn file_transfer_log(&self, _action: &str, _log: &str) {}
 }
 
 impl SciterHandler {
@@ -148,6 +155,10 @@ impl SciterConnectionManager {
     fn get_option(&self, key: String) -> String {
         crate::ui_interface::get_option(key)
     }
+
+    fn hide_cm(&self) -> bool {
+        *crate::ui::cm::HIDE_CM.lock().unwrap()
+    }
 }
 
 impl sciter::EventHandler for SciterConnectionManager {
@@ -169,5 +180,6 @@ impl sciter::EventHandler for SciterConnectionManager {
         fn can_elevate();
         fn elevate_portable(i32);
         fn get_option(String);
+        fn hide_cm();
     }
 }

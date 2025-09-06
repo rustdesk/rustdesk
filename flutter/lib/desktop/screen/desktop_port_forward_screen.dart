@@ -17,6 +17,7 @@ class DesktopPortForwardScreen extends StatelessWidget {
         ChangeNotifierProvider.value(value: gFFI.ffiModel),
       ],
       child: Scaffold(
+        backgroundColor: isLinux ? Colors.transparent : null,
         body: PortForwardTabPage(
           params: params,
         ),

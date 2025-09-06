@@ -118,11 +118,14 @@ async fn connect_and_login(
     } else {
         ConnType::PORT_FORWARD
     };
-    let (mut stream, direct, _pk) =
+    let ((mut stream, direct, _pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
     interface.update_direct(Some(direct));
     let mut buffer = Vec::new();
     let mut received = false;
+
+    let _keep_it = hc_connection(feedback, rendezvous_server, token).await;
+
     loop {
         tokio::select! {
             res = timeout(READ_TIMEOUT, stream.next()) => match res {
@@ -141,8 +144,9 @@ async fn connect_and_login(
                         }
                         Some(message::Union::LoginResponse(lr)) => match lr.union {
                             Some(login_response::Union::Error(err)) => {
-                                interface.handle_login_error(&err);
-                                return Ok(None);
+                                if !interface.handle_login_error(&err) {
+                                    return Ok(None);
+                                }
                             }
                             Some(login_response::Union::PeerInfo(pi)) => {
                                 interface.handle_peer_info(pi);
@@ -167,6 +171,9 @@ async fn connect_and_login(
                 match d {
                     Some(Data::Login((os_username, os_password, password, remember))) => {
                         interface.handle_login_from_ui(os_username, os_password, password, remember, &mut stream).await;
+                    }
+                    Some(Data::Message(msg)) => {
+                        allow_err!(stream.send(&msg).await);
                     }
                     _ => {}
                 }

@@ -6,13 +6,13 @@
   <a href="#file-structure">Struktura</a> •
   <a href="#snapshot">Ukázky</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Potřebujeme Vaši pomoc s překláním textů tohoto ČTIMNE, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">uživatelského rozhraní aplikace RustDesk</a> a <a href="https://github.com/rustdesk/doc.rustdesk.com">dokumentace k ní</a> do vašeho jazyka</b>
+  <b>Potřebujeme Vaši pomoc s překladem tohoto README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">uživatelského rozhraní aplikace RustDesk</a> a <a href="https://github.com/rustdesk/doc.rustdesk.com">dokumentace k ní</a> do vašeho jazyka</b>
 </p>
 
-Dopisujte si s námi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Popovídejte si s námi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Pokro%C4%8Dil%C3%A9%20Funkce-blue)](https://rustdesk.com/pricing.html)
 
 Zase další software pro přístup k ploše na dálku, naprogramovaný v jazyce Rust. Funguje hned tak, jak je – není třeba žádného nastavování. Svá data máte ve svých rukách, bez obav o zabezpečení. Je možné používat námi poskytovaný propojovací/předávací (relay) server, [vytvořit si svůj vlastní](https://rustdesk.com/server), nebo [si dokonce svůj vlastní naprogramovat](https://github.com/rustdesk/rustdesk-server-demo), budete-li chtít.
 
@@ -21,14 +21,6 @@ Projekt RustDesk vítá přiložení ruky k dílu od každého. Jak začít se d
 [**Jak RustDesk funguje?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
 [**STAHOVÁNÍ ZKOMPILOVANÝCH APLIKACÍ**](https://github.com/rustdesk/rustdesk/releases)
-
-## Veřejné, zdarma službu nabízející servery
-
-Níže jsou uvedeny servery zdarma k vašemu použití (údaje se mohou v čase měnit). Pokud se nenacházíte v oblastech světa poblíž nich, spojení může být pomalé.
-| umístění | dodavatel | parametry |
-| --------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## Softwarové součásti, na kterých závisí
 
@@ -44,7 +36,7 @@ Varianta pro mobilní platformy používá aplikační rámec (framework) Flutte
 
 - Připravte si vývojové prostředí pro jazyky Rust a C++
 
-- Nainstalujte [vcpkg](https://github.com/microsoft/vcpkg), a nastavte správně proměnnou prostsředí `VCPKG_ROOT`
+- Nainstalujte [vcpkg](https://github.com/microsoft/vcpkg), a správně nastavte proměnnou prostředí `VCPKG_ROOT`
 
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus aom
@@ -111,10 +103,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Změna z Wayland na X11 (Xorg)
-
-RustDesk (zatím) nepodporuje zobrazovací server Wayland. Jak nastavit Xorg jako výchozí pro relace v prostředí GNOME naleznete [zde](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/).
-
 ## Jak sestavit prostřednictvím Docker kontejnerizace
 
 Začněte tím, že si naklonujete tento repozitář a sestavíte docker kontejner:
@@ -131,7 +119,7 @@ Poté pokaždé, když bude třeba aplikaci sestavit, spusťte následující p�
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Všimněte si, že prvotní sestavení může trvat déle (než se do mezipaměti uloží veškeré softwarové součásti, které jsou potřeba) – následná opakování už budou rychlejší. Dále, pokud potřebujete příkazu pro sestavení zadat nějaké argumenty, je možné je zapsat na konec příkazu na pozici `<OPTIONAL-ARGS>`. Například, pokud byste chtěli sestavit optimalizovaně pro vydání, spustili byste výše uvedený příkaz následovaný `--release`. Výsledný spustitelný soubor se objeví v cílové složce na vašem systému a bude ho možné spustit pomocí:
+Všimněte si, že prvotní sestavení může trvat déle (než se do mezipaměti uloží veškeré softwarové součásti, které jsou potřeba) – následná opakování už budou rychlejší. Pokud navíc potřebujete zadat různé argumenty příkazu pro sestavení, můžete tak učinit na konci příkazu v pozici `<OPTIONAL-ARGS>`. Například, pokud byste chtěli sestavit optimalizovanou verzi pro vydání, spustili byste výše uvedený příkaz následovaný `--release`. Výsledný spustitelný soubor se objeví v cílové složce na vašem systému a bude ho možné spustit pomocí:
 
 ```sh
 target/debug/rustdesk
@@ -143,7 +131,7 @@ Nebo, pokud spouštíte variantu pro vydání:
 target/release/rustdesk
 ```
 
-Zajistětě, abyste tyto příkazy spouštěli z kořene repozitáře s RustDesk, jinak aplikace nemusí být schopná nalézt potřebné prostředky (resources). Také si všimněte, že ostatní dílčí príkazy nástroje cargo, jako třeba `install` nebo `run` zatím nejsou prostřednictvím této metody podporovány, protože by vedly k instalaci či spuštění program uvnitř kontejneru namísto přímo v systému.
+Ujistěte se, že tyto příkazy spouštíte z kořenového adresáře RustDesk, jinak aplikace nemusí být schopná nalézt potřebné prostředky (resources). Také si všimněte, že ostatní dílčí príkazy nástroje cargo, jako třeba `install` nebo `run` zatím nejsou prostřednictvím této metody podporovány, protože by vedly k instalaci či spuštění program uvnitř kontejneru namísto přímo v systému.
 
 ## Struktura souborů
 

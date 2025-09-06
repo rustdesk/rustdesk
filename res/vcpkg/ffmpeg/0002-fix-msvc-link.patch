@@ -1,0 +1,11 @@
+diff --git a/configure b/configure
+--- a/configure
++++ b/configure
+@@ -6162,6 +6162,7 @@ EOF
+         test -n "$extern_prefix"  && append X86ASMFLAGS "-DPREFIX"
+         case "$objformat" in
+             elf*) enabled debug && append X86ASMFLAGS $x86asm_debug ;;
++            win*) enabled debug && append X86ASMFLAGS "-g" ;;
+         esac
+ 
+         enabled avx512    && check_x86asm avx512_external    "vmovdqa32 [eax]{k1}{z}, zmm0"

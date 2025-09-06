@@ -1,17 +1,39 @@
-import 'dart:io';
-
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:get/get.dart';
+
+const int kMaxVirtualDisplayCount = 4;
+const int kAllVirtualDisplay = -1;
 
 const double kDesktopRemoteTabBarHeight = 28.0;
 const int kInvalidWindowId = -1;
 const int kMainWindowId = 0;
 
+const kAllDisplayValue = -1;
+
+const kKeyLegacyMode = 'legacy';
+const kKeyMapMode = 'map';
+const kKeyTranslateMode = 'translate';
+
+const String kPlatformAdditionsIsWayland = "is_wayland";
+const String kPlatformAdditionsHeadless = "headless";
+const String kPlatformAdditionsIsInstalled = "is_installed";
+const String kPlatformAdditionsIddImpl = "idd_impl";
+const String kPlatformAdditionsRustDeskVirtualDisplays =
+    "rustdesk_virtual_displays";
+const String kPlatformAdditionsAmyuniVirtualDisplays =
+    "amyuni_virtual_displays";
+const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
+const String kPlatformAdditionsSupportedPrivacyModeImpl =
+    "supported_privacy_mode_impl";
+
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
 const String kPeerPlatformMacOS = "Mac OS";
 const String kPeerPlatformAndroid = "Android";
+const String kPeerPlatformWebDesktop = "WebDesktop";
 
 const double kScrollbarThickness = 12.0;
 
@@ -23,10 +45,14 @@ const String kAppTypeConnectionManager = "cm";
 
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
+const String kAppTypeDesktopViewCamera = "view camera";
 const String kAppTypeDesktopPortForward = "port forward";
+const String kAppTypeDesktopTerminal = "terminal";
 
 const String kWindowMainWindowOnTop = "main_window_on_top";
 const String kWindowGetWindowInfo = "get_window_info";
+const String kWindowGetScreenList = "get_screen_list";
+// This method is not used, maybe it can be removed.
 const String kWindowDisableGrabKeyboard = "disable_grab_keyboard";
 const String kWindowActionRebuild = "rebuild";
 const String kWindowEventHide = "hide";
@@ -35,20 +61,125 @@ const String kWindowConnect = "connect";
 
 const String kWindowEventNewRemoteDesktop = "new_remote_desktop";
 const String kWindowEventNewFileTransfer = "new_file_transfer";
+const String kWindowEventNewViewCamera = "new_view_camera";
 const String kWindowEventNewPortForward = "new_port_forward";
+const String kWindowEventNewTerminal = "new_terminal";
+const String kWindowEventRestoreTerminalSessions = "restore_terminal_sessions";
 const String kWindowEventActiveSession = "active_session";
+const String kWindowEventActiveDisplaySession = "active_display_session";
 const String kWindowEventGetRemoteList = "get_remote_list";
 const String kWindowEventGetSessionIdList = "get_session_id_list";
+const String kWindowEventRemoteWindowCoords = "remote_window_coords";
+const String kWindowEventSetFullscreen = "set_fullscreen";
 
 const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventGetCachedSessionData = "get_cached_session_data";
+const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
+const String kOptionViewStyle = "view_style";
+const String kOptionScrollStyle = "scroll_style";
+const String kOptionImageQuality = "image_quality";
 const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
+const String kOptionTextureRender = "use-texture-render";
+const String kOptionD3DRender = "allow-d3d-render";
 const String kOptionOpenInTabs = "allow-open-in-tabs";
 const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
+const String kOptionViewOnly = "view_only";
+const String kOptionEnableLanDiscovery = "enable-lan-discovery";
+const String kOptionWhitelist = "whitelist";
+const String kOptionEnableAbr = "enable-abr";
+const String kOptionEnableRecordSession = "enable-record-session";
+const String kOptionDirectServer = "direct-server";
+const String kOptionDirectAccessPort = "direct-access-port";
+const String kOptionAllowAutoDisconnect = "allow-auto-disconnect";
+const String kOptionAutoDisconnectTimeout = "auto-disconnect-timeout";
+const String kOptionEnableHwcodec = "enable-hwcodec";
+const String kOptionAllowAutoRecordIncoming = "allow-auto-record-incoming";
+const String kOptionAllowAutoRecordOutgoing = "allow-auto-record-outgoing";
+const String kOptionVideoSaveDirectory = "video-save-directory";
+const String kOptionAccessMode = "access-mode";
+const String kOptionEnableKeyboard = "enable-keyboard";
+// "Settings -> Security -> Permissions"
+const String kOptionEnableRemotePrinter = "enable-remote-printer";
+const String kOptionEnableClipboard = "enable-clipboard";
+const String kOptionEnableFileTransfer = "enable-file-transfer";
+const String kOptionEnableAudio = "enable-audio";
+const String kOptionEnableCamera = "enable-camera";
+const String kOptionEnableTerminal = "enable-terminal";
+const String kOptionTerminalPersistent = "terminal-persistent";
+const String kOptionEnableTunnel = "enable-tunnel";
+const String kOptionEnableRemoteRestart = "enable-remote-restart";
+const String kOptionEnableBlockInput = "enable-block-input";
+const String kOptionAllowRemoteConfigModification =
+    "allow-remote-config-modification";
+const String kOptionVerificationMethod = "verification-method";
+const String kOptionApproveMode = "approve-mode";
+const String kOptionAllowNumericOneTimePassword =
+    "allow-numeric-one-time-password";
+const String kOptionCollapseToolbar = "collapse_toolbar";
+const String kOptionShowRemoteCursor = "show_remote_cursor";
+const String kOptionFollowRemoteCursor = "follow_remote_cursor";
+const String kOptionFollowRemoteWindow = "follow_remote_window";
+const String kOptionZoomCursor = "zoom-cursor";
+const String kOptionShowQualityMonitor = "show_quality_monitor";
+const String kOptionDisableAudio = "disable_audio";
+const String kOptionEnableFileCopyPaste = "enable-file-copy-paste";
+// "Settings -> Display -> Other default options"
+const String kOptionDisableClipboard = "disable_clipboard";
+const String kOptionLockAfterSessionEnd = "lock_after_session_end";
+const String kOptionPrivacyMode = "privacy_mode";
+const String kOptionTouchMode = "touch-mode";
+const String kOptionI444 = "i444";
+const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
+const String kOptionCodecPreference = "codec-preference";
+const String kOptionRemoteMenubarDragLeft = "remote-menubar-drag-left";
+const String kOptionRemoteMenubarDragRight = "remote-menubar-drag-right";
+const String kOptionHideAbTagsPanel = "hideAbTagsPanel";
+const String kOptionRemoteMenubarState = "remoteMenubarState";
+const String kOptionPeerSorting = "peer-sorting";
+const String kOptionPeerTabIndex = "peer-tab-index";
+const String kOptionPeerTabOrder = "peer-tab-order";
+const String kOptionPeerTabVisible = "peer-tab-visible";
+const String kOptionPeerCardUiType = "peer-card-ui-type";
+const String kOptionCurrentAbName = "current-ab-name";
+const String kOptionEnableConfirmClosingTabs = "enable-confirm-closing-tabs";
+const String kOptionAllowAlwaysSoftwareRender = "allow-always-software-render";
+const String kOptionEnableCheckUpdate = "enable-check-update";
+const String kOptionAllowAutoUpdate = "allow-auto-update";
+const String kOptionAllowLinuxHeadless = "allow-linux-headless";
+const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
+const String kOptionStopService = "stop-service";
+const String kOptionDirectxCapture = "enable-directx-capture";
+const String kOptionAllowRemoteCmModification = "allow-remote-cm-modification";
+const String kOptionEnableUdpPunch = "enable-udp-punch";
+const String kOptionEnableIpv6Punch = "enable-ipv6-punch";
+const String kOptionEnableTrustedDevices = "enable-trusted-devices";
 
-const String kUniLinksPrefix = "rustdesk://";
+// network options
+const String kOptionAllowWebSocket = "allow-websocket";
+
+// buildin opitons
+const String kOptionHideServerSetting = "hide-server-settings";
+const String kOptionHideProxySetting = "hide-proxy-settings";
+const String kOptionHideWebSocketSetting = "hide-websocket-settings";
+const String kOptionHideRemotePrinterSetting = "hide-remote-printer-settings";
+const String kOptionHideSecuritySetting = "hide-security-settings";
+const String kOptionHideNetworkSetting = "hide-network-settings";
+const String kOptionRemovePresetPasswordWarning =
+    "remove-preset-password-warning";
+const kHideUsernameOnCard = "hide-username-on-card";
+const String kOptionHideHelpCards = "hide-help-cards";
+
+const String kOptionToggleViewOnly = "view-only";
+const String kOptionToggleShowMyCursor = "show-my-cursor";
+
+const String kOptionDisableFloatingWindow = "disable-floating-window";
+
+const String kOptionKeepScreenOn = "keep-screen-on";
+
+const String kOptionShowMobileAction = "showMobileActions";
+
 const String kUrlActionClose = "close";
 
 const String kTabLabelHomePage = "Home";
@@ -60,10 +191,29 @@ const int kWindowMainId = 0;
 const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
 
+const String kMouseEventTypeDefault = "";
+const String kMouseEventTypePanStart = "pan_start";
+const String kMouseEventTypePanUpdate = "pan_update";
+const String kMouseEventTypePanEnd = "pan_end";
+const String kMouseEventTypeDown = "down";
+const String kMouseEventTypeUp = "up";
+
+const String kKeyFlutterKey = "flutter_key";
+
+const String kKeyShowDisplaysAsIndividualWindows =
+    'displays_as_individual_windows';
+const String kKeyUseAllMyDisplaysForTheRemoteSession =
+    'use_all_my_displays_for_the_remote_session';
+const String kKeyShowMonitorsToolbar = 'show_monitors_toolbar';
+const String kKeyReverseMouseWheel = "reverse_mouse_wheel";
+
+const String kMsgboxTextWaitingForImage = 'Connected, waiting for image...';
+
 // the executable name of the portable version
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";
 
 const Color kColorWarn = Color.fromARGB(255, 245, 133, 59);
+const Color kColorCanvas = Colors.black;
 
 const int kMobileDefaultDisplayWidth = 720;
 const int kMobileDefaultDisplayHeight = 1280;
@@ -77,12 +227,43 @@ const int kDesktopMaxDisplaySize = 3840;
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 
-EdgeInsets get kDragToResizeAreaPadding =>
-    !kUseCompatibleUiMode && Platform.isLinux
-        ? stateGlobal.fullscreen || stateGlobal.isMaximized.value
-            ? EdgeInsets.zero
-            : EdgeInsets.all(5.0)
-        : EdgeInsets.zero;
+const double kMinFps = 5;
+const double kDefaultFps = 30;
+const double kMaxFps = 120;
+
+const double kMinQuality = 10;
+const double kDefaultQuality = 50;
+const double kMaxQuality = 100;
+const double kMaxMoreQuality = 2000;
+
+// trackpad speed
+const String kKeyTrackpadSpeed = 'trackpad-speed';
+const int kMinTrackpadSpeed = 10;
+const int kDefaultTrackpadSpeed = 100;
+const int kMaxTrackpadSpeed = 1000;
+
+// incomming (should be incoming) is kept, because change it will break the previous setting.
+const String kKeyPrinterIncomingJobAction = 'printer-incomming-job-action';
+const String kValuePrinterIncomingJobDismiss = 'dismiss';
+const String kValuePrinterIncomingJobDefault = '';
+const String kValuePrinterIncomingJobSelected = 'selected';
+const String kKeyPrinterSelected = 'printer-selected-name';
+const String kKeyPrinterSave = 'allow-printer-dialog-save';
+const String kKeyPrinterAllowAutoPrint = 'allow-printer-auto-print';
+
+double kNewWindowOffset = isWindows
+    ? 56.0
+    : isLinux
+        ? 50.0
+        : isMacOS
+            ? 30.0
+            : 50.0;
+
+EdgeInsets get kDragToResizeAreaPadding => !kUseCompatibleUiMode && isLinux
+    ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
+        ? EdgeInsets.zero
+        : EdgeInsets.all(5.0)
+    : EdgeInsets.zero;
 // https://en.wikipedia.org/wiki/Non-breaking_space
 const int $nbsp = 0x00A0;
 
@@ -100,15 +281,17 @@ const double kDesktopIconButtonSplashRadius = 20;
 /// [kMinCursorSize] indicates min cursor (w, h)
 const int kMinCursorSize = 12;
 
-/// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
-const kDefaultScrollAmountMultiplier = 5.0;
-const kDefaultScrollDuration = Duration(milliseconds: 50);
-const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
 const kMaximizeEdgeSize = 0.0;
-var kWindowEdgeSize = Platform.isWindows ? 1.0 : 5.0;
-const kWindowBorderWidth = 1.0;
+// Do not use kWindowResizeEdgeSize directly. Use `windowResizeEdgeSize` in `common.dart` instead.
+const kWindowResizeEdgeSize = 5.0;
+final kWindowBorderWidth = isWindows ? 0.0 : 1.0;
 const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
+const kFrameBorderRadius = 12.0;
+const kFrameClipRRectBorderRadius = 12.0;
+const kFrameBoxShadowBlurRadius = 32.0;
+const kFrameBoxShadowOffsetFocused = 4.0;
+const kFrameBoxShadowOffsetUnfocused = 2.0;
 
 const kInvalidValueStr = 'InvalidValueStr';
 
@@ -154,13 +337,19 @@ const kRemoteImageQualityLow = 'low';
 /// [kRemoteImageQualityCustom] Custom image quality.
 const kRemoteImageQualityCustom = 'custom';
 
-/// [kRemoteAudioGuestToHost] Guest to host audio mode(default).
-const kRemoteAudioGuestToHost = 'guest-to-host';
-
-/// [kRemoteAudioDualWay] dual-way audio mode(default).
-const kRemoteAudioDualWay = 'dual-way';
-
 const kIgnoreDpi = true;
+
+const Set<PointerDeviceKind> kTouchBasedDeviceKinds = {
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+};
+
+// ================================ mobile ================================
+
+// Magic numbers, maybe need to avoid it or use a better way to get them.
+const kMobileDelaySoftKeyboard = Duration(milliseconds: 30);
+const kMobileDelaySoftKeyboardFocus = Duration(milliseconds: 30);
 
 /// Android constants
 const kActionApplicationDetailsSettings =
@@ -172,6 +361,7 @@ const kManageExternalStorage = "android.permission.MANAGE_EXTERNAL_STORAGE";
 const kRequestIgnoreBatteryOptimizations =
     "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS";
 const kSystemAlertWindow = "android.permission.SYSTEM_ALERT_WINDOW";
+const kAndroid13Notification = "android.permission.POST_NOTIFICATIONS";
 
 /// Android channel invoke type key
 class AndroidChannel {
@@ -427,3 +617,5 @@ enum WindowsTarget {
 extension WindowsTargetExt on int {
   WindowsTarget get windowsVersion => getWindowsTarget(this);
 }
+
+const kCheckSoftwareUpdateFinish = 'check_software_update_finish';

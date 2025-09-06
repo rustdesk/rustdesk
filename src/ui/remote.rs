@@ -66,6 +66,39 @@ impl SciterHandler {
         }
         displays_value
     }
+
+    fn make_platform_additions(data: &str) -> Option<Value> {
+        if let Ok(v2) = serde_json::from_str::<HashMap<String, serde_json::Value>>(data) {
+            let mut value = Value::map();
+            for (k, v) in v2 {
+                match v {
+                    serde_json::Value::String(s) => {
+                        value.set_item(k, s);
+                    }
+                    serde_json::Value::Number(n) => {
+                        if let Some(n) = n.as_i64() {
+                            value.set_item(k, n as i32);
+                        } else if let Some(n) = n.as_f64() {
+                            value.set_item(k, n);
+                        }
+                    }
+                    serde_json::Value::Bool(b) => {
+                        value.set_item(k, b);
+                    }
+                    _ => {
+                        // ignore for now
+                    }
+                }
+            }
+            if value.len() > 0 {
+                return Some(value);
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
 impl InvokeUiSession for SciterHandler {
@@ -122,12 +155,17 @@ impl InvokeUiSession for SciterHandler {
             "updateQualityStatus",
             &make_args!(
                 status.speed.map_or(Value::null(), |it| it.into()),
-                status.fps.map_or(Value::null(), |it| it.into()),
+                status
+                    .fps
+                    .iter()
+                    .next()
+                    .map_or(Value::null(), |(_, v)| (*v).into()),
                 status.delay.map_or(Value::null(), |it| it.into()),
                 status.target_bitrate.map_or(Value::null(), |it| it.into()),
                 status
                     .codec_format
-                    .map_or(Value::null(), |it| it.to_string().into())
+                    .map_or(Value::null(), |it| it.to_string().into()),
+                status.chroma.map_or(Value::null(), |it| it.into())
             ),
         );
     }
@@ -140,8 +178,11 @@ impl InvokeUiSession for SciterHandler {
         self.call("setCursorPosition", &make_args!(cp.x, cp.y));
     }
 
-    fn set_connection_type(&self, is_secured: bool, direct: bool) {
-        self.call("setConnectionType", &make_args!(is_secured, direct));
+    fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str) {
+        self.call(
+            "setConnectionType",
+            &make_args!(is_secured, direct, stream_type.to_string()),
+        );
     }
 
     fn set_fingerprint(&self, _fingerprint: String) {}
@@ -223,7 +264,7 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
+    fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb) {
         VIDEO
             .lock()
             .unwrap()
@@ -239,6 +280,10 @@ impl InvokeUiSession for SciterHandler {
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
         pi_sciter.set_item("displays", Self::make_displays_array(&pi.displays));
         pi_sciter.set_item("current_display", pi.current_display);
+        pi_sciter.set_item("version", pi.version.clone());
+        if let Some(v) = Self::make_platform_additions(&pi.platform_additions) {
+            pi_sciter.set_item("platform_additions", v);
+        }
         self.call("updatePi", &make_args!(pi_sciter));
     }
 
@@ -249,14 +294,32 @@ impl InvokeUiSession for SciterHandler {
         );
     }
 
+    fn set_platform_additions(&self, _data: &str) {
+        // Ignore for sciter version.
+    }
+
+    fn set_current_display(&self, _disp_idx: i32) {
+        self.call("setCurrentDisplay", &make_args!(_disp_idx));
+    }
+
+    fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>) {
+        let mut v = Value::array(0);
+        let mut sessions = sessions;
+        for s in sessions.drain(..) {
+            let mut obj = Value::map();
+            obj.set_item("sid", s.sid.to_string());
+            obj.set_item("name", s.name);
+            v.push(obj);
+        }
+        self.call("setMultipleWindowsSession", &make_args!(v));
+    }
+
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
-            ConnType::RDP => {}
-            ConnType::PORT_FORWARD => {}
-            ConnType::FILE_TRANSFER => {}
             ConnType::DEFAULT_CONN => {
                 crate::keyboard::client::start_grab_loop();
             }
+            _ => {}
         }
     }
 
@@ -304,11 +367,28 @@ impl InvokeUiSession for SciterHandler {
     }
 
     /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
-    fn get_rgba(&self) -> *const u8 {
+    fn get_rgba(&self, _display: usize) -> *const u8 {
         std::ptr::null()
     }
 
-    fn next_rgba(&self) {}
+    fn next_rgba(&self, _display: usize) {}
+
+    fn update_record_status(&self, start: bool) {
+        self.call("updateRecordStatus", &make_args!(start));
+    }
+
+    fn printer_request(&self, id: i32, path: String) {
+        self.call("printerRequest", &make_args!(id, path));
+    }
+
+    fn handle_screenshot_resp(&self, _sid: String, msg: String) {
+        self.call("screenshot", &make_args!(msg));
+    }
+
+    fn handle_terminal_response(&self, _response: TerminalResponse) {
+        // Terminal support is not implemented for Sciter UI
+        // This is a stub implementation to satisfy the trait requirements
+    }
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -407,6 +487,8 @@ impl sciter::EventHandler for SciterSession {
         fn is_port_forward();
         fn is_rdp();
         fn login(String, String, String, bool);
+        fn send2fa(String, bool);
+        fn get_enable_trusted_devices();
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
         fn enter(String);
@@ -419,6 +501,8 @@ impl sciter::EventHandler for SciterSession {
         fn get_chatbox();
         fn get_icon();
         fn get_home_dir();
+        fn get_next_job_id();
+        fn update_next_job_id(i32);
         fn read_dir(String, bool);
         fn remove_dir(i32, String, bool);
         fn create_dir(i32, String, bool);
@@ -430,8 +514,8 @@ impl sciter::EventHandler for SciterSession {
         fn confirm_delete_files(i32, i32);
         fn set_no_confirm(i32);
         fn cancel_job(i32);
-        fn send_files(i32, String, String, i32, bool, bool);
-        fn add_job(i32, String, String, i32, bool, bool);
+        fn send_files(i32, i32, String, String, i32, bool, bool);
+        fn add_job(i32, i32, String, String, i32, bool, bool);
         fn resume_job(i32, bool);
         fn get_platform(bool);
         fn get_path_sep(bool);
@@ -449,9 +533,11 @@ impl sciter::EventHandler for SciterSession {
         fn save_view_style(String);
         fn save_image_quality(String);
         fn save_custom_image_quality(i32);
-        fn refresh_video();
-        fn record_screen(bool, i32, i32);
-        fn record_status(bool);
+        fn refresh_video(i32);
+        fn record_screen(bool);
+        fn is_screenshot_supported();
+        fn take_screenshot(i32, String);
+        fn handle_screenshot(String);
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
         fn toggle_option(String);
@@ -459,12 +545,19 @@ impl sciter::EventHandler for SciterSession {
         fn peer_platform();
         fn set_write_override(i32, i32, bool, bool, bool);
         fn get_keyboard_mode();
+        fn is_keyboard_mode_supported(String);
         fn save_keyboard_mode(String);
         fn alternative_codecs();
-        fn change_prefer_codec();
+        fn update_supported_decodings();
         fn restart_remote_device();
         fn request_voice_call();
         fn close_voice_call();
+        fn version_cmp(String, String);
+        fn set_selected_windows_session_id(String);
+        fn is_recording();
+        fn has_file_clipboard();
+        fn get_printer_names();
+        fn on_printer_selected(i32, String, String);
     }
 }
 
@@ -472,7 +565,6 @@ impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let force_relay = args.contains(&"--relay".to_string());
         let session: Session<SciterHandler> = Session {
-            id: id.clone(),
             password: password.clone(),
             args,
             server_keyboard_enabled: Arc::new(RwLock::new(true)),
@@ -483,6 +575,8 @@ impl SciterSession {
 
         let conn_type = if cmd.eq("--file-transfer") {
             ConnType::FILE_TRANSFER
+        } else if cmd.eq("--view-camera") {
+            ConnType::VIEW_CAMERA
         } else if cmd.eq("--port-forward") {
             ConnType::PORT_FORWARD
         } else if cmd.eq("--rdp") {
@@ -495,7 +589,7 @@ impl SciterSession {
             .lc
             .write()
             .unwrap()
-            .initialize(id, conn_type, None, force_relay);
+            .initialize(id, conn_type, None, force_relay, None, None, None);
 
         Self(session)
     }
@@ -567,6 +661,14 @@ impl SciterSession {
         }
         self.save_config(config);
         log::info!("size saved");
+    }
+
+    fn set_selected_windows_session_id(&mut self, u_sid: String) {
+        self.send_selected_session_id(u_sid);
+    }
+
+    fn has_file_clipboard(&self) -> bool {
+        cfg!(any(target_os = "windows", feature = "unix-file-copy-paste"))
     }
 
     fn get_port_forwards(&mut self) -> Value {
@@ -752,6 +854,30 @@ impl SciterSession {
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
+    }
+
+    fn version_cmp(&self, v1: String, v2: String) -> i32 {
+        (hbb_common::get_version_number(&v1) - hbb_common::get_version_number(&v2)) as i32
+    }
+
+    fn get_printer_names(&self) -> Value {
+        #[cfg(target_os = "windows")]
+        let printer_names = crate::platform::windows::get_printer_names().unwrap_or_default();
+        #[cfg(not(target_os = "windows"))]
+        let printer_names: Vec<String> = vec![];
+        let mut v = Value::array(0);
+        for name in printer_names {
+            v.push(name);
+        }
+        v
+    }
+
+    fn on_printer_selected(&self, id: i32, path: String, printer_name: String) {
+        self.printer_response(id, path, printer_name);
+    }
+
+    fn handle_screenshot(&self, action: String) -> String {
+        crate::client::screenshot::handle_screenshot(action)
     }
 }
 

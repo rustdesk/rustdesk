@@ -1,0 +1,12 @@
+prefix=@LIBVPX_PREFIX@
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: vpx
+Description: WebM Project VPx codec implementation
+Version: @VERSION@
+Requires:
+Conflicts:
+Libs: -L"${libdir}" -lvpx
+Cflags: -I"${includedir}"

@@ -69,8 +69,6 @@ function getExt(name) {
   return "";
 }
 
-var jobIdCounter = 1;
-
 class JobTable: Reactor.Component {
   this var jobs = [];
   this var job_map = {};
@@ -126,8 +124,7 @@ class JobTable: Reactor.Component {
     }
     if (!to) return;
     to += handler.get_path_sep(!is_remote) + getFileName(is_remote, path);
-    var id = jobIdCounter;
-    jobIdCounter += 1;
+    var id = handler.get_next_job_id();
     this.jobs.push({ type: "transfer",
                      id: id, path: path, to: to,
                      include_hidden: show_hidden,
@@ -135,7 +132,7 @@ class JobTable: Reactor.Component {
                      is_last: false
                     });
     this.job_map[id] = this.jobs[this.jobs.length - 1];
-    handler.send_files(id, path, to, 0, show_hidden, is_remote);
+    handler.send_files(id, 0, path, to, 0, show_hidden, is_remote);
     var self = this;
     self.timer(30ms, function() { self.update(); });
   }
@@ -147,8 +144,8 @@ class JobTable: Reactor.Component {
     is_remote: is_remote, is_last: true, file_num: file_num };
     this.jobs.push(job);
     this.job_map[id] = this.jobs[this.jobs.length - 1];
-    jobIdCounter = id + 1;
-    handler.add_job(id, path, to, file_num, show_hidden, is_remote);
+    handler.update_next_job_id(id + 1);
+    handler.add_job(id, 0, path, to, file_num, show_hidden, is_remote);
     stdout.println(JSON.stringify(job));
   }
 
@@ -162,16 +159,14 @@ class JobTable: Reactor.Component {
   }
 
   function addDelDir(path, is_remote) {
-    var id = jobIdCounter;
-    jobIdCounter += 1;
+    var id = handler.get_next_job_id();
     this.jobs.push({ type: "del-dir", id: id, path: path, is_remote: is_remote });
     this.job_map[id] = this.jobs[this.jobs.length - 1];
     this.update();
   }
 
   function addDelFile(path, is_remote) {
-    var id = jobIdCounter;
-    jobIdCounter += 1;
+    var id = handler.get_next_job_id();
     this.jobs.push({ type: "del-file", id: id, path: path, is_remote: is_remote });
     this.job_map[id] = this.jobs[this.jobs.length - 1];
     this.update();
@@ -552,9 +547,9 @@ class FolderView : Reactor.Component {
             return;
           }
           var path = me.joinPath(name);
-           handler.create_dir(jobIdCounter, path, me.is_remote);
-           create_dir_jobs[jobIdCounter] = { is_remote: me.is_remote, path: path };
-          jobIdCounter += 1;
+           var id = handler.get_next_job_id();
+           handler.create_dir(id, path, me.is_remote);
+           create_dir_jobs[id] = { is_remote: me.is_remote, path: path };
         });
     }
 

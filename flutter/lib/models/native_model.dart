@@ -15,13 +15,14 @@ import 'package:path_provider/path_provider.dart';
 import '../common.dart';
 import '../generated_bridge.dart';
 
-class RgbaFrame extends Struct {
+final class RgbaFrame extends Struct {
   @Uint32()
   external int len;
   external Pointer<Uint8> data;
 }
 
-typedef F3 = Pointer<Uint8> Function(Pointer<Utf8>);
+typedef F3 = Pointer<Uint8> Function(Pointer<Utf8>, int);
+typedef F3Dart = Pointer<Uint8> Function(Pointer<Utf8>, Int32);
 typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 
 /// FFI wrapper around the native Rust core.
@@ -47,20 +48,26 @@ class PlatformFFI {
 
   static get isMain => instance._appType == kAppTypeMain;
 
+  static String getByName(String name, [String arg = '']) {
+    return '';
+  }
+
+  static void setByName(String name, [String value = '']) {}
+
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
     return packageInfo.version;
   }
 
   bool registerEventHandler(
-      String eventName, String handlerName, HandleEvent handler) {
+      String eventName, String handlerName, HandleEvent handler, {bool replace = false}) {
     debugPrint('registerEventHandler $eventName $handlerName');
     var handlers = _eventHandlers[eventName];
     if (handlers == null) {
       _eventHandlers[eventName] = {handlerName: handler};
       return true;
     } else {
-      if (handlers.containsKey(handlerName)) {
+      if (!replace && handlers.containsKey(handlerName)) {
         return false;
       } else {
         handlers[handlerName] = handler;
@@ -80,12 +87,12 @@ class PlatformFFI {
   String translate(String name, String locale) =>
       _ffiBind.translate(name: name, locale: locale);
 
-  Uint8List? getRgba(SessionID sessionId, int bufSize) {
+  Uint8List? getRgba(SessionID sessionId, int display, int bufSize) {
     if (_session_get_rgba == null) return null;
     final sessionIdStr = sessionId.toString();
     var a = sessionIdStr.toNativeUtf8();
     try {
-      final buffer = _session_get_rgba!(a);
+      final buffer = _session_get_rgba!(a, display);
       if (buffer == nullptr) {
         return null;
       }
@@ -96,28 +103,36 @@ class PlatformFFI {
     }
   }
 
-  int getRgbaSize(SessionID sessionId) =>
-      _ffiBind.sessionGetRgbaSize(sessionId: sessionId);
-  void nextRgba(SessionID sessionId) =>
-      _ffiBind.sessionNextRgba(sessionId: sessionId);
-  void registerTexture(SessionID sessionId, int ptr) =>
-      _ffiBind.sessionRegisterTexture(sessionId: sessionId, ptr: ptr);
+  int getRgbaSize(SessionID sessionId, int display) =>
+      _ffiBind.sessionGetRgbaSize(sessionId: sessionId, display: display);
+  void nextRgba(SessionID sessionId, int display) =>
+      _ffiBind.sessionNextRgba(sessionId: sessionId, display: display);
+  void registerPixelbufferTexture(SessionID sessionId, int display, int ptr) =>
+      _ffiBind.sessionRegisterPixelbufferTexture(
+          sessionId: sessionId, display: display, ptr: ptr);
+  void registerGpuTexture(SessionID sessionId, int display, int ptr) =>
+      _ffiBind.sessionRegisterGpuTexture(
+          sessionId: sessionId, display: display, ptr: ptr);
 
   /// Init the FFI class, loads the native Rust core library.
   Future<void> init(String appType) async {
     _appType = appType;
-    final dylib = Platform.isAndroid
+    final dylib = isAndroid
         ? DynamicLibrary.open('librustdesk.so')
-        : Platform.isLinux
+        : isLinux
             ? DynamicLibrary.open('librustdesk.so')
-            : Platform.isWindows
+            : isWindows
                 ? DynamicLibrary.open('librustdesk.dll')
-                : Platform.isMacOS
-                    ? DynamicLibrary.open("liblibrustdesk.dylib")
-                    : DynamicLibrary.process();
+                :
+                // Use executable itself as the dynamic library for MacOS.
+                // Multiple dylib instances will cause some global instances to be invalid.
+                // eg. `lazy_static` objects in rust side, will be created more than once, which is not expected.
+                //
+                // isMacOS? DynamicLibrary.open("liblibrustdesk.dylib") :
+                DynamicLibrary.process();
     debugPrint('initializing FFI $_appType');
     try {
-      _session_get_rgba = dylib.lookupFunction<F3, F3>("session_get_rgba");
+      _session_get_rgba = dylib.lookupFunction<F3Dart, F3>("session_get_rgba");
       try {
         // SYSTEM user failed
         _dir = (await getApplicationDocumentsDirectory()).path;
@@ -125,11 +140,13 @@ class PlatformFFI {
         debugPrint('Failed to get documents directory: $e');
       }
       _ffiBind = RustdeskImpl(dylib);
-      if (Platform.isLinux) {
-        // Start a dbus service, no need to await
-        _ffiBind.mainStartDbusServer();
-        _ffiBind.mainStartPa();
-      } else if (Platform.isMacOS && isMain) {
+
+      if (isLinux) {
+        if (isMain) {
+          // Start a dbus service for uri links, no need to await
+          _ffiBind.mainStartDbusServer();
+        }
+      } else if (isMacOS && isMain) {
         // Start ipc service for uri links.
         _ffiBind.mainStartIpcUrlServer();
       }
@@ -139,7 +156,10 @@ class PlatformFFI {
           // only support for android
           _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
         } else if (isIOS) {
-          _homeDir = _ffiBind.mainGetDataDirIos();
+          // The previous code was `_homeDir = (await getDownloadsDirectory())?.path ?? '';`,
+          // which provided the `downloads` path in the sandbox.
+          // It is unclear why we now use the `data` directory in the sandbox instead.
+          _homeDir = _ffiBind.mainGetDataDirIos(appDir: _dir);
         } else {
           // no need to set home dir
         }
@@ -149,20 +169,20 @@ class PlatformFFI {
       String id = 'NA';
       String name = 'Flutter';
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-      if (Platform.isAndroid) {
+      if (isAndroid) {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         name = '${androidInfo.brand}-${androidInfo.model}';
         id = androidInfo.id.hashCode.toString();
-        androidVersion = androidInfo.version.sdkInt ?? 0;
-      } else if (Platform.isIOS) {
+        androidVersion = androidInfo.version.sdkInt;
+      } else if (isIOS) {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-        name = iosInfo.utsname.machine ?? '';
+        name = iosInfo.utsname.machine;
         id = iosInfo.identifierForVendor.hashCode.toString();
-      } else if (Platform.isLinux) {
+      } else if (isLinux) {
         LinuxDeviceInfo linuxInfo = await deviceInfo.linuxInfo;
         name = linuxInfo.name;
         id = linuxInfo.machineId ?? linuxInfo.id;
-      } else if (Platform.isWindows) {
+      } else if (isWindows) {
         try {
           // request windows build number to fix overflow on win7
           windowsBuildNumber = getWindowsTargetBuildNumber();
@@ -174,7 +194,7 @@ class PlatformFFI {
           name = "unknown";
           id = "unknown";
         }
-      } else if (Platform.isMacOS) {
+      } else if (isMacOS) {
         MacOsDeviceInfo macOsInfo = await deviceInfo.macOsInfo;
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? '';
@@ -192,7 +212,10 @@ class PlatformFFI {
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
       await _ffiBind.mainSetHomeDir(home: _homeDir);
-      await _ffiBind.mainInit(appDir: _dir);
+      await _ffiBind.mainInit(
+        appDir: _dir,
+        customClientConfig: '',
+      );
     } catch (e) {
       debugPrintStack(label: 'initialize failed: $e');
     }
@@ -241,7 +264,7 @@ class PlatformFFI {
     _eventCallback = fun;
   }
 
-  void setRgbaCallback(void Function(Uint8List) fun) async {}
+  void setRgbaCallback(void Function(int, Uint8List) fun) async {}
 
   void startDesktopWebListener() {}
 
@@ -262,4 +285,6 @@ class PlatformFFI {
   void syncAndroidServiceAppDirConfigPath() {
     invokeMethod(AndroidChannel.kSyncAppDirConfigPath, _dir);
   }
+
+  void setFullscreenCallback(void Function(bool) fun) {}
 }

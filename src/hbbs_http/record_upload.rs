@@ -1,3 +1,4 @@
+use crate::hbbs_http::create_http_client;
 use bytes::Bytes;
 use hbb_common::{bail, config::Config, lazy_static, log, ResultType};
 use reqwest::blocking::{Body, Client};
@@ -25,7 +26,7 @@ pub fn is_enable() -> bool {
 
 pub fn run(rx: Receiver<RecordState>) {
     let mut uploader = RecordUploader {
-        client: Client::new(),
+        client: create_http_client(),
         api_server: crate::get_api_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
@@ -63,12 +64,12 @@ pub fn run(rx: Receiver<RecordState>) {
                 }
             },
             Err(e) => {
-                log::trace!("upload thread stop:{}", e);
+                log::trace!("upload thread stop: {}", e);
                 break;
             }
         } {
             uploader.running = false;
-            log::error!("upload stop:{}", e);
+            log::error!("upload stop: {}", e);
         }
     });
 }
@@ -184,7 +185,7 @@ impl RecordUploader {
                             ],
                             buf,
                         )?;
-                        log::info!("upload success, file:{}", self.filename);
+                        log::info!("upload success, file: {}", self.filename);
                         Ok(())
                     }
                     Err(e) => bail!(e.to_string()),

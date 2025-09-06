@@ -1,0 +1,16 @@
+diff --git a/flutter-sdk/.gclient b/flutter-sdk/.gclient
+new file mode 100644
+index 0000000..fd12886
+--- /dev/null
++++ b/flutter-sdk/.gclient
+@@ -0,0 +1,10 @@
++solutions = [
++  {
++    "managed": False,
++    "name": "src/flutter",
++    "url": "https://github.com/flutter/engine.git@FLUTTER_VERSION_PLACEHOLDER",
++    "custom_deps": {},
++    "deps_file": "DEPS",
++    "safesync_url": "",
++  },
++]

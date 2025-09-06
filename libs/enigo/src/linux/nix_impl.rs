@@ -345,7 +345,7 @@ fn convert_to_tfc_key(key: Key) -> Option<TFC_Key> {
         Key::Numpad9 => TFC_Key::N9,
         Key::Decimal => TFC_Key::NumpadDecimal,
         Key::Clear => TFC_Key::NumpadClear,
-        Key::Pause => TFC_Key::PlayPause,
+        Key::Pause => TFC_Key::Pause,
         Key::Print => TFC_Key::Print,
         Key::Snapshot => TFC_Key::PrintScreen,
         Key::Insert => TFC_Key::Insert,

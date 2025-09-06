@@ -1,0 +1,71 @@
+From 8d061adb7b00fc765b8001307c025437ef1cad88 Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Thu, 5 Sep 2024 16:32:16 +0800
+Subject: [PATCH 2/5] libavcodec/amfenc: reconfig when bitrate change
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/amfenc.c | 20 ++++++++++++++++++++
+ libavcodec/amfenc.h |  1 +
+ 2 files changed, 21 insertions(+)
+
+diff --git a/libavcodec/amfenc.c b/libavcodec/amfenc.c
+index a47aea6108..f70f0109f6 100644
+--- a/libavcodec/amfenc.c
++++ b/libavcodec/amfenc.c
+@@ -275,6 +275,7 @@ static int amf_init_context(AVCodecContext *avctx)
+ 
+     ctx->hwsurfaces_in_queue = 0;
+     ctx->hwsurfaces_in_queue_max = 16;
++    ctx->av_bitrate = avctx->bit_rate;
+ 
+     // configure AMF logger
+     // the return of these functions indicates old state and do not affect behaviour
+@@ -640,6 +641,23 @@ static void amf_release_buffer_with_frame_ref(AMFBuffer *frame_ref_storage_buffe
+     frame_ref_storage_buffer->pVtbl->Release(frame_ref_storage_buffer);
+ }
+ 
++static int reconfig_encoder(AVCodecContext *avctx)
++{
++    AmfContext *ctx = avctx->priv_data;
++    AMF_RESULT  res = AMF_OK;
++
++    if (ctx->av_bitrate != avctx->bit_rate) {
++        av_log(ctx, AV_LOG_INFO, "change bitrate from %d to %d\n", ctx->av_bitrate, avctx->bit_rate);
++        ctx->av_bitrate = avctx->bit_rate;
++        if (avctx->codec->id == AV_CODEC_ID_H264) {
++            AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_TARGET_BITRATE, avctx->bit_rate);
++        } else if (avctx->codec->id == AV_CODEC_ID_HEVC) {
++            AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_TARGET_BITRATE, avctx->bit_rate);
++        }
++    }
++    return 0;
++}
++
+ int ff_amf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
+ {
+     AmfContext *ctx = avctx->priv_data;
+@@ -653,6 +671,8 @@ int ff_amf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
+     int         query_output_data_flag = 0;
+     AMF_RESULT  res_resubmit;
+ 
++    reconfig_encoder(avctx);
++
+     if (!ctx->encoder)
+         return AVERROR(EINVAL);
+ 
+diff --git a/libavcodec/amfenc.h b/libavcodec/amfenc.h
+index 320c66919e..481e0fb75d 100644
+--- a/libavcodec/amfenc.h
++++ b/libavcodec/amfenc.h
+@@ -115,6 +115,7 @@ typedef struct AmfContext {
+     int                 max_b_frames;
+     int                 qvbr_quality_level;
+     int                 hw_high_motion_quality_boost;
++    int64_t             av_bitrate;
+ 
+     // HEVC - specific options
+ 
+-- 
+2.43.0.windows.1
+

@@ -154,8 +154,8 @@ impl MouseControllable for Enigo {
                 }
             },
             match button {
-                MouseButton::Back => XBUTTON1 as u32 * WHEEL_DELTA as u32,
-                MouseButton::Forward => XBUTTON2 as u32 * WHEEL_DELTA as u32,
+                MouseButton::Back => XBUTTON1 as u32,
+                MouseButton::Forward => XBUTTON2 as u32,
                 _ => 0,
             },
             0,

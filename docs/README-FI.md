@@ -9,23 +9,15 @@
   <b>Tarvitsemme apua tämän README-tiedoston kääntämiseksi äidinkielellesi</b>
 </p>
 
-Juttele meidän kanssa: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Juttele meidän kanssa: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Edistyneet%20Ominaisuudet-blue)](https://rustdesk.com/pricing.html)
 
 Vielä yksi etätyöpöytäohjelmisto, ohjelmoitu Rust-kielellä. Toimii suoraan pakkauksesta, ei tarvitse asetusta. Hallitset täysin tietojasi, ei tarvitse murehtia turvallisuutta. Voit käyttää meidän rendezvous/relay-palvelinta, [aseta omasi](https://rustdesk.com/server), tai [kirjoittaa oma rendezvous/relay-palvelin](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk toivottaa avustukset tervetulleiksi kaikilta. Katso lisätietoja [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) avun saamiseksi.
 
 [**BINAARILATAUS**](https://github.com/rustdesk/rustdesk/releases)
-
-## Vapaita julkisia palvelimia
-
-Alla on palvelimia, joita voit käyttää ilmaiseksi, ne saattavat muuttua ajan mittaan. Jos et ole lähellä yhtä näistä, verkkosi voi olla hidas.
-| Sijainti | Myyjä | Määrittely |
-| --------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Riippuvuudet
 
@@ -103,10 +95,6 @@ wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/lib
 mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
-
-### Vaihda Wayland-ympäristö X11 (Xorg)-ympäristöön
-
-RustDesk ei tue Waylandia. Tarkista [tämä](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) asettamalla Xorg oletus GNOME-istuntoon.
 
 ## Kuinka rakennetaan Dockerin kanssa
 

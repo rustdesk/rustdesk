@@ -103,7 +103,7 @@ class ChatModel with ChangeNotifier {
   void setOverlayState(BlockableOverlayState blockableOverlayState) {
     _blockableOverlayState = blockableOverlayState;
 
-    _blockableOverlayState!.addMiddleBlockedListener((v) {
+    _blockableOverlayState.addMiddleBlockedListener((v) {
       if (!v) {
         isWindowFocus.value = false;
         if (isWindowFocus.value) {
@@ -197,9 +197,9 @@ class ChatModel with ChangeNotifier {
   showChatWindowOverlay({Offset? chatInitPos}) {
     if (chatWindowOverlayEntry != null) return;
     isWindowFocus.value = true;
-    _blockableOverlayState?.setMiddleBlocked(true);
+    _blockableOverlayState.setMiddleBlocked(true);
 
-    final overlayState = _blockableOverlayState?.state;
+    final overlayState = _blockableOverlayState.state;
     if (overlayState == null) return;
     if (isMobile &&
         !gFFI.chatModel.currentKey.isOut && // not in remote page
@@ -212,7 +212,7 @@ class ChatModel with ChangeNotifier {
           onPointerDown: (_) {
             if (!isWindowFocus.value) {
               isWindowFocus.value = true;
-              _blockableOverlayState?.setMiddleBlocked(true);
+              _blockableOverlayState.setMiddleBlocked(true);
             }
           },
           child: DraggableChatWindow(
@@ -228,20 +228,21 @@ class ChatModel with ChangeNotifier {
 
   hideChatWindowOverlay() {
     if (chatWindowOverlayEntry != null) {
-      _blockableOverlayState?.setMiddleBlocked(false);
+      _blockableOverlayState.setMiddleBlocked(false);
       chatWindowOverlayEntry!.remove();
       chatWindowOverlayEntry = null;
       return;
     }
   }
 
-  _isChatOverlayHide() => ((!isDesktop && chatIconOverlayEntry == null) ||
-      chatWindowOverlayEntry == null);
+  _isChatOverlayHide() =>
+      ((!(isDesktop || isWebDesktop) && chatIconOverlayEntry == null) ||
+          chatWindowOverlayEntry == null);
 
   toggleChatOverlay({Offset? chatInitPos}) {
     if (_isChatOverlayHide()) {
       gFFI.invokeMethod("enable_soft_keyboard", true);
-      if (!isDesktop) {
+      if (!(isDesktop || isWebDesktop)) {
         showChatIconOverlay();
       }
       showChatWindowOverlay(chatInitPos: chatInitPos);
@@ -285,6 +286,10 @@ class ChatModel with ChangeNotifier {
     await toggleCMSidePage();
   }
 
+  toggleCMFilePage() async {
+    await toggleCMSidePage();
+  }
+
   var _togglingCMSidePage = false; // protect order for await
   toggleCMSidePage() async {
     if (_togglingCMSidePage) return false;
@@ -296,6 +301,13 @@ class ChatModel with ChangeNotifier {
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
     } else {
+      final currentSelectedTab =
+          gFFI.serverModel.tabController.state.value.selectedTabInfo;
+      final client = parent.target?.serverModel.clients.firstWhereOrNull(
+          (client) => client.id.toString() == currentSelectedTab.key);
+      if (client != null) {
+        client.unreadChatMessageCount.value = 0;
+      }
       requestChatInputFocus();
       await windowManager.show();
       await windowManager.setSizeAlignment(
@@ -516,10 +528,18 @@ class ChatModel with ChangeNotifier {
 
   void onVoiceCallStarted() {
     _voiceCallStatus.value = VoiceCallStatus.connected;
+    if (isAndroid) {
+      parent.target?.invokeMethod("on_voice_call_started");
+    }
   }
 
   void onVoiceCallClosed(String reason) {
     _voiceCallStatus.value = VoiceCallStatus.notStarted;
+    if (isAndroid) {
+      // We can always invoke "on_voice_call_closed"
+      // no matter if the `_voiceCallStatus` was `VoiceCallStatus.notStarted` or not.
+      parent.target?.invokeMethod("on_voice_call_closed");
+    }
   }
 
   void onVoiceCallIncoming() {

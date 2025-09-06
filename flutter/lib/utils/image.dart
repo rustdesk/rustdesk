@@ -3,7 +3,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
-Future<ui.Image> decodeImageFromPixels(
+import 'package:flutter_hbb/common.dart';
+
+Future<ui.Image?> decodeImageFromPixels(
   Uint8List pixels,
   int width,
   int height,
@@ -11,41 +13,77 @@ Future<ui.Image> decodeImageFromPixels(
   int? rowBytes,
   int? targetWidth,
   int? targetHeight,
-  VoidCallback? onPixelsCopied,
   bool allowUpscaling = true,
 }) async {
   if (targetWidth != null) {
     assert(allowUpscaling || targetWidth <= width);
+    if (!(allowUpscaling || targetWidth <= width)) {
+      print("not allow upscaling but targetWidth > width");
+      return null;
+    }
   }
   if (targetHeight != null) {
     assert(allowUpscaling || targetHeight <= height);
-  }
-
-  final ui.ImmutableBuffer buffer =
-      await ui.ImmutableBuffer.fromUint8List(pixels);
-  onPixelsCopied?.call();
-  final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
-    buffer,
-    width: width,
-    height: height,
-    rowBytes: rowBytes,
-    pixelFormat: format,
-  );
-  if (!allowUpscaling) {
-    if (targetWidth != null && targetWidth > descriptor.width) {
-      targetWidth = descriptor.width;
-    }
-    if (targetHeight != null && targetHeight > descriptor.height) {
-      targetHeight = descriptor.height;
+    if (!(allowUpscaling || targetHeight <= height)) {
+      print("not allow upscaling but targetHeight > height");
+      return null;
     }
   }
 
-  final ui.Codec codec = await descriptor.instantiateCodec(
-    targetWidth: targetWidth,
-    targetHeight: targetHeight,
-  );
+  final ui.ImmutableBuffer buffer;
+  try {
+    buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
+  } catch (e) {
+    return null;
+  }
 
-  final ui.FrameInfo frameInfo = await codec.getNextFrame();
+  final ui.ImageDescriptor descriptor;
+  try {
+    descriptor = ui.ImageDescriptor.raw(
+      buffer,
+      width: width,
+      height: height,
+      rowBytes: rowBytes,
+      pixelFormat: format,
+    );
+    if (!allowUpscaling) {
+      if (targetWidth != null && targetWidth > descriptor.width) {
+        targetWidth = descriptor.width;
+      }
+      if (targetHeight != null && targetHeight > descriptor.height) {
+        targetHeight = descriptor.height;
+      }
+    }
+  } catch (e) {
+    print("ImageDescriptor.raw failed: $e");
+    buffer.dispose();
+    return null;
+  }
+
+  final ui.Codec codec;
+  try {
+    codec = await descriptor.instantiateCodec(
+      targetWidth: targetWidth,
+      targetHeight: targetHeight,
+    );
+  } catch (e) {
+    print("instantiateCodec failed: $e");
+    buffer.dispose();
+    descriptor.dispose();
+    return null;
+  }
+
+  final ui.FrameInfo frameInfo;
+  try {
+    frameInfo = await codec.getNextFrame();
+  } catch (e) {
+    print("getNextFrame failed: $e");
+    codec.dispose();
+    buffer.dispose();
+    descriptor.dispose();
+    return null;
+  }
+
   codec.dispose();
   buffer.dispose();
   descriptor.dispose();
@@ -78,6 +116,11 @@ class ImagePainter extends CustomPainter {
       if (scale > 10.00000) {
         paint.filterQuality = FilterQuality.high;
       }
+    }
+    // It's strange that if (scale < 0.5 && paint.filterQuality == FilterQuality.medium)
+    // The canvas.drawImage will not work on web
+    if (isWeb) {
+      paint.filterQuality = FilterQuality.high;
     }
     canvas.drawImage(
         image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);

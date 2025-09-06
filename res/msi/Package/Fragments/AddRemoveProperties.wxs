@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+	<?include ../Includes.wxi?>
+
+	<Fragment>
+
+		<Property Id="AddRemovePropertiesFile" Value="1" />
+
+		<!--STOP_SERVICE is set to 'Y'. Because the config value may be empty or 'Y'-->
+		<Property Id="STOP_SERVICE" Value="&apos;Y&apos;" />
+
+		<Property Id="LAUNCH_TRAY_APP" Value="Y" />
+
+		<!--
+		Support entries shown when clicking "Click here for support information"
+		in Control Panel's Add/Remove Programs https://learn.microsoft.com/en-us/windows/win32/msi/property-reference
+		-->
+		<!--<Property Id="ARPCOMMENTS" Value="!(loc.AR_Comment)" />
+		<Property Id="ARPCONTACT" Value="https://github.com/rustdesk/rustdesk" />
+		<Property Id="ARPHELPLINK" Value="https://github.com/rustdesk/rustdesk" />
+		<Property Id="ARPREADME" Value="https://github.com/rustdesk/rustdesk" />
+		<Property Id="ARPURLINFOABOUT" Value="https://github.com/rustdesk/rustdesk" />
+		<Property Id="ARPURLUPDATEINFO" Value="https://github.com/rustdesk/rustdesk" />-->
+
+		<Property Id="ARPPRODUCTICON" Value="AppIcon" />
+
+		<!--$ArpStart$-->
+		<!--$ArpEnd$-->
+
+		<!--$CustomClientPropsStart$-->
+		<!--$CustomClientPropsEnd$-->
+
+		<Property Id="APP_WINDOWS_INSTALLER">
+			<RegistrySearch Id="AppWindowsInstallerFolderSearch" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Name="WindowsInstaller" Type="raw" />
+		</Property>
+	</Fragment>
+</Wix>

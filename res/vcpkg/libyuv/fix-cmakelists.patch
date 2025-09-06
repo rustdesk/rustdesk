@@ -1,0 +1,80 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index bc641685..42e72a39 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,19 +1,22 @@
++CMAKE_MINIMUM_REQUIRED( VERSION 3.12 )
++
+ # CMakeLists for libyuv
+ # Originally created for "roxlu build system" to compile libyuv on windows
+ # Run with -DTEST=ON to build unit tests
+ 
+ PROJECT ( YUV C CXX )	# "C" is required even for C++ projects
+-CMAKE_MINIMUM_REQUIRED( VERSION 2.8.12 )
+ OPTION( TEST "Built unit tests" OFF )
+ 
++SET( CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE ON )
++
+ SET ( ly_base_dir	${PROJECT_SOURCE_DIR} )
+ SET ( ly_src_dir	${ly_base_dir}/source )
+ SET ( ly_inc_dir	${ly_base_dir}/include )
+ SET ( ly_tst_dir	${ly_base_dir}/unit_test )
+ SET ( ly_lib_name	yuv )
+ SET ( ly_lib_static	${ly_lib_name} )
+-SET ( ly_lib_shared	${ly_lib_name}_shared )
+ 
++FILE ( GLOB_RECURSE ly_include_files ${ly_inc_dir}/libyuv/*.h )
+ FILE ( GLOB_RECURSE	ly_source_files ${ly_src_dir}/*.cc )
+ LIST ( SORT			ly_source_files )
+ 
+@@ -28,27 +31,20 @@ endif()
+ 
+ # this creates the static library (.a)
+ ADD_LIBRARY				( ${ly_lib_static} STATIC ${ly_source_files} )
+-
+-# this creates the shared library (.so)
+-ADD_LIBRARY				( ${ly_lib_shared} SHARED ${ly_source_files} )
+-SET_TARGET_PROPERTIES	( ${ly_lib_shared} PROPERTIES OUTPUT_NAME "${ly_lib_name}" )
+-SET_TARGET_PROPERTIES	( ${ly_lib_shared} PROPERTIES PREFIX "lib" )
+-if(WIN32)
+-  SET_TARGET_PROPERTIES	( ${ly_lib_shared} PROPERTIES IMPORT_PREFIX "lib" )
+-endif()
++SET_TARGET_PROPERTIES     ( ${ly_lib_static} PROPERTIES PUBLIC_HEADER include/libyuv.h )
+ 
+ # this creates the conversion tool
+ ADD_EXECUTABLE			( yuvconvert ${ly_base_dir}/util/yuvconvert.cc )
+-TARGET_LINK_LIBRARIES	( yuvconvert ${ly_lib_static} )
++TARGET_LINK_LIBRARIES   ( yuvconvert ${ly_lib_static} )
+ 
+ # this creates the yuvconstants tool
+-ADD_EXECUTABLE      ( yuvconstants ${ly_base_dir}/util/yuvconstants.c )
+-TARGET_LINK_LIBRARIES  ( yuvconstants ${ly_lib_static} )
++ADD_EXECUTABLE          ( yuvconstants ${ly_base_dir}/util/yuvconstants.c )
++TARGET_LINK_LIBRARIES   ( yuvconstants ${ly_lib_static} )
+ 
+ find_package ( JPEG )
+ if (JPEG_FOUND)
+-  include_directories( ${JPEG_INCLUDE_DIR} )
+-  target_link_libraries( ${ly_lib_shared} ${JPEG_LIBRARY} )
++  include_directories( ${JPEG_INCLUDE_DIR})
++  target_link_libraries(${ly_lib_static} PUBLIC ${JPEG_LIBRARY})
+   add_definitions( -DHAVE_JPEG )
+ endif()
+ 
+@@ -89,12 +85,11 @@ if(TEST)
+   endif()
+ endif()
+ 
+-
+ # install the conversion tool, .so, .a, and all the header files
+-INSTALL ( PROGRAMS ${CMAKE_BINARY_DIR}/yuvconvert			DESTINATION bin )
+-INSTALL ( TARGETS ${ly_lib_static}						DESTINATION lib )
+-INSTALL ( TARGETS ${ly_lib_shared} LIBRARY				DESTINATION lib RUNTIME DESTINATION bin )
+-INSTALL ( DIRECTORY ${PROJECT_SOURCE_DIR}/include/		DESTINATION include )
++INSTALL ( TARGETS yuvconvert DESTINATION tools )
++INSTALL ( FILES ${ly_include_files} DESTINATION include/libyuv )
++INSTALL ( TARGETS ${ly_lib_static} EXPORT libyuv-targets DESTINATION lib INCLUDES DESTINATION include PUBLIC_HEADER DESTINATION include )
++INSTALL( EXPORT libyuv-targets DESTINATION share/cmake/libyuv/ EXPORT_LINK_INTERFACE_LIBRARIES )
+ 
+ # create the .deb and .rpm packages using cpack
+ INCLUDE ( CM_linux_packages.cmake )

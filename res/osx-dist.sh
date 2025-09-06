@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 echo $MACOS_CODESIGN_IDENTITY
-cargo install flutter_rust_bridge_codegen --version 1.75.3 --features uuid
+cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid
 cd flutter; flutter pub get; cd -
 ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
 ./build.py --flutter

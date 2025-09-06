@@ -1,0 +1,22 @@
+﻿<Project Sdk="WixToolset.Sdk/4.0.5">
+  <PropertyGroup>
+    <IncludeSearchPaths>
+    </IncludeSearchPaths>
+    <Configurations>Release</Configurations>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="Includes.wxi" />
+    <Content Include="Resources\icon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="4.0.5" />
+    <PackageReference Include="WixToolset.Heat" Version="4.0.5" />
+    <PackageReference Include="WixToolset.Netfx.wixext" Version="4.0.5" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CustomActions\CustomActions.vcxproj" />
+  </ItemGroup>
+</Project>

@@ -1,5 +1,5 @@
 use crate::android::ffi::*;
-use crate::rgba_to_i420;
+use crate::{Frame, Pixfmt};
 use lazy_static::lazy_static;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -7,20 +7,20 @@ use std::sync::Mutex;
 use std::{io, time::Duration};
 
 lazy_static! {
-    static ref SCREEN_SIZE: Mutex<(u16, u16, u16)> = Mutex::new((0, 0, 0)); // (width, height, scale)
+   pub(crate)  static ref SCREEN_SIZE: Mutex<(u16, u16, u16)> = Mutex::new((0, 0, 0)); // (width, height, scale)
 }
 
 pub struct Capturer {
     display: Display,
-    bgra: Vec<u8>,
+    rgba: Vec<u8>,
     saved_raw_data: Vec<u8>, // for faster compare and copy
 }
 
 impl Capturer {
-    pub fn new(display: Display, _yuv: bool) -> io::Result<Capturer> {
+    pub fn new(display: Display) -> io::Result<Capturer> {
         Ok(Capturer {
             display,
-            bgra: Vec::new(),
+            rgba: Vec::new(),
             saved_raw_data: Vec::new(),
         })
     }
@@ -35,22 +35,60 @@ impl Capturer {
 }
 
 impl crate::TraitCapturer for Capturer {
-    fn set_use_yuv(&mut self, _use_yuv: bool) {}
-
     fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
-        if let Some(buf) = get_video_raw() {
-            crate::would_block_if_equal(&mut self.saved_raw_data, buf)?;
-            rgba_to_i420(self.width(), self.height(), buf, &mut self.bgra);
-            Ok(Frame::RAW(&self.bgra))
+        if get_video_raw(&mut self.rgba, &mut self.saved_raw_data).is_some() {
+            Ok(Frame::PixelBuffer(PixelBuffer::new(
+                &self.rgba,
+                self.width(),
+                self.height(),
+            )))
         } else {
             return Err(io::ErrorKind::WouldBlock.into());
         }
     }
 }
 
-pub enum Frame<'a> {
-    RAW(&'a [u8]),
-    Empty,
+pub struct PixelBuffer<'a> {
+    data: &'a [u8],
+    width: usize,
+    height: usize,
+    stride: Vec<usize>,
+}
+
+impl<'a> PixelBuffer<'a> {
+    pub fn new(data: &'a [u8], width: usize, height: usize) -> Self {
+        let stride0 = data.len() / height;
+        let mut stride = Vec::new();
+        stride.push(stride0);
+        PixelBuffer {
+            data,
+            width,
+            height,
+            stride,
+        }
+    }
+}
+
+impl<'a> crate::TraitPixelBuffer for PixelBuffer<'a> {
+    fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn height(&self) -> usize {
+        self.height
+    }
+
+    fn stride(&self) -> Vec<usize> {
+        self.stride.clone()
+    }
+
+    fn pixfmt(&self) -> Pixfmt {
+        Pixfmt::RGBA
+    }
 }
 
 pub struct Display {
@@ -143,4 +181,9 @@ fn get_size() -> Option<(u16, u16, u16)> {
         }
     }
     None
+}
+
+pub fn is_start() -> Option<bool> {
+    let res = call_main_service_get_by_name("is_start").ok()?;
+    Some(res == "true")
 }

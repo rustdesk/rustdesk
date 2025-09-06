@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
@@ -21,24 +22,40 @@ class PeerTabModel with ChangeNotifier {
   WeakReference<FFI> parent;
   int get currentTab => _currentTab;
   int _currentTab = 0; // index in tabNames
-  List<String> tabNames = [
-    'Recent Sessions',
+  static const int maxTabCount = 5;
+  static const List<String> tabNames = [
+    'Recent sessions',
     'Favorites',
     'Discovered',
-    'Address Book',
-    'Group',
+    'Address book',
+    'Accessible devices',
   ];
-  final List<IconData> icons = [
+  static const List<IconData> icons = [
     Icons.access_time_filled,
     Icons.star,
     Icons.explore,
     IconFont.addressBook,
-    Icons.group,
+    IconFont.deviceGroupFill,
   ];
-  final List<bool> _isVisible = List.filled(5, true, growable: false);
-  List<bool> get isVisible => _isVisible;
-  List<int> get indexs => List.generate(tabNames.length, (index) => index);
-  List<int> get visibleIndexs => indexs.where((e) => _isVisible[e]).toList();
+  List<bool> isEnabled = List.from([
+    true,
+    true,
+    !isWeb && bind.mainGetLocalOption(key: "disable-discovery-panel") != "Y",
+    !(bind.isDisableAb() || bind.isDisableAccount()),
+    !(bind.isDisableGroupPanel() || bind.isDisableAccount()),
+  ]);
+  final List<bool> _isVisible = List.filled(maxTabCount, true, growable: false);
+  List<bool> get isVisibleEnabled => () {
+        final list = _isVisible.toList();
+        for (int i = 0; i < maxTabCount; i++) {
+          list[i] = list[i] && isEnabled[i];
+        }
+        return list;
+      }();
+  final List<int> orders =
+      List.generate(maxTabCount, (index) => index, growable: false);
+  List<int> get visibleEnabledOrderedIndexs =>
+      orders.where((e) => isVisibleEnabled[e]).toList();
   List<Peer> _selectedPeers = List.empty(growable: true);
   List<Peer> get selectedPeers => _selectedPeers;
   bool _multiSelectionMode = false;
@@ -53,7 +70,7 @@ class PeerTabModel with ChangeNotifier {
   PeerTabModel(this.parent) {
     // visible
     try {
-      final option = bind.getLocalFlutterOption(k: 'peer-tab-visible');
+      final option = bind.getLocalFlutterOption(k: kOptionPeerTabVisible);
       if (option.isNotEmpty) {
         List<dynamic> decodeList = jsonDecode(option);
         if (decodeList.length == _isVisible.length) {
@@ -67,13 +84,37 @@ class PeerTabModel with ChangeNotifier {
     } catch (e) {
       debugPrint("failed to get peer tab visible list:$e");
     }
+    // order
+    try {
+      final option = bind.getLocalFlutterOption(k: kOptionPeerTabOrder);
+      if (option.isNotEmpty) {
+        List<dynamic> decodeList = jsonDecode(option);
+        if (decodeList.length == maxTabCount) {
+          var sortedList = decodeList.toList();
+          sortedList.sort();
+          bool valid = true;
+          for (int i = 0; i < maxTabCount; i++) {
+            if (sortedList[i] is! int || sortedList[i] != i) {
+              valid = false;
+            }
+          }
+          if (valid) {
+            for (int i = 0; i < orders.length; i++) {
+              orders[i] = decodeList[i];
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("failed to get peer tab order list: $e");
+    }
     // init currentTab
     _currentTab =
-        int.tryParse(bind.getLocalFlutterOption(k: 'peer-tab-index')) ?? 0;
-    if (_currentTab < 0 || _currentTab >= tabNames.length) {
+        int.tryParse(bind.getLocalFlutterOption(k: kOptionPeerTabIndex)) ?? 0;
+    if (_currentTab < 0 || _currentTab >= maxTabCount) {
       _currentTab = 0;
     }
-    _trySetCurrentTabToFirstVisible();
+    _trySetCurrentTabToFirstVisibleEnabled();
   }
 
   setCurrentTab(int index) {
@@ -87,15 +128,13 @@ class PeerTabModel with ChangeNotifier {
     if (index >= 0 && index < tabNames.length) {
       return translate(tabNames[index]);
     }
-    assert(false);
     return index.toString();
   }
 
   IconData tabIcon(int index) {
-    if (index >= 0 && index < tabNames.length) {
+    if (index >= 0 && index < icons.length) {
       return icons[index];
     }
-    assert(false);
     return Icons.help;
   }
 
@@ -113,7 +152,7 @@ class PeerTabModel with ChangeNotifier {
       // https://github.com/flutter/flutter/issues/101275#issuecomment-1604541700
       // After onTap, the shift key should be pressed for a while when not in multiselection mode,
       // because onTap is delayed when onDoubleTap is not null
-      if (isDesktop && !_isShiftDown) return;
+      if (isDesktop || isWebDesktop) return;
       _multiSelectionMode = true;
     }
     final cached = _currentTabCachedPeers.map((e) => e.id).toList();
@@ -145,10 +184,17 @@ class PeerTabModel with ChangeNotifier {
     notifyListeners();
   }
 
+  // `notifyListeners()` will cause many rebuilds.
+  // So, we need to reduce the calls to "notifyListeners()" only when necessary.
+  // A better way is to use a new model.
   setCurrentTabCachedPeers(List<Peer> peers) {
     Future.delayed(Duration.zero, () {
+      final isPreEmpty = _currentTabCachedPeers.isEmpty;
       _currentTabCachedPeers = peers;
-      notifyListeners();
+      final isNowEmpty = _currentTabCachedPeers.isEmpty;
+      if (isPreEmpty != isNowEmpty) {
+        notifyListeners();
+      }
     });
   }
 
@@ -171,29 +217,54 @@ class PeerTabModel with ChangeNotifier {
   }
 
   setTabVisible(int index, bool visible) {
-    if (index >= 0 && index < _isVisible.length) {
+    if (index >= 0 && index < maxTabCount) {
       if (_isVisible[index] != visible) {
         _isVisible[index] = visible;
         if (index == _currentTab && !visible) {
-          _trySetCurrentTabToFirstVisible();
-        } else if (visible && visibleIndexs.length == 1) {
+          _trySetCurrentTabToFirstVisibleEnabled();
+        } else if (visible && visibleEnabledOrderedIndexs.length == 1) {
           _currentTab = index;
         }
         try {
           bind.setLocalFlutterOption(
-              k: 'peer-tab-visible', v: jsonEncode(_isVisible));
+              k: kOptionPeerTabVisible, v: jsonEncode(_isVisible));
         } catch (_) {}
         notifyListeners();
       }
     }
   }
 
-  _trySetCurrentTabToFirstVisible() {
-    if (!_isVisible[_currentTab]) {
-      int firstVisible = _isVisible.indexWhere((e) => e);
-      if (firstVisible >= 0) {
-        _currentTab = firstVisible;
+  _trySetCurrentTabToFirstVisibleEnabled() {
+    if (!visibleEnabledOrderedIndexs.contains(_currentTab)) {
+      if (visibleEnabledOrderedIndexs.isNotEmpty) {
+        _currentTab = visibleEnabledOrderedIndexs.first;
       }
+    }
+  }
+
+  reorder(int oldIndex, int newIndex) {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    if (oldIndex < 0 || oldIndex >= visibleEnabledOrderedIndexs.length) {
+      return;
+    }
+    if (newIndex < 0 || newIndex >= visibleEnabledOrderedIndexs.length) {
+      return;
+    }
+    final oldTabValue = visibleEnabledOrderedIndexs[oldIndex];
+    final newTabValue = visibleEnabledOrderedIndexs[newIndex];
+    int oldValueIndex = orders.indexOf(oldTabValue);
+    int newValueIndex = orders.indexOf(newTabValue);
+    final list = orders.toList();
+    if (oldIndex != -1 && newIndex != -1) {
+      list.removeAt(oldValueIndex);
+      list.insert(newValueIndex, oldTabValue);
+      for (int i = 0; i < list.length; i++) {
+        orders[i] = list[i];
+      }
+      bind.setLocalFlutterOption(k: kOptionPeerTabOrder, v: jsonEncode(orders));
+      notifyListeners();
     }
   }
 }

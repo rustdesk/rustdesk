@@ -33,7 +33,7 @@ class ConnectStatus: Reactor.Component {
             <div .connect-status>
                 <span class={"connect-status-icon connect-status" + (service_stopped ? 0 : connect_status)} />
                 {this.getConnectStatusStr()}
-                {service_stopped ? <span .link #start-service>{translate('Start Service')}</span> : ""}
+                {service_stopped ? <span .link #start-service>{translate('Start service')}</span> : ""}
             </div>;
     }
 
@@ -93,7 +93,7 @@ class DirectServer: Reactor.Component {
     }
 
     function render() {
-        var text = translate("Enable Direct IP Access");
+        var text = translate("Enable direct IP access");
         var enabled = handler.get_option("direct-server") == "Y";
         var cls = enabled ? "selected" : "line-through";
         return <li class={cls}><span>{svg_checkmark}</span>{text}{enabled && <EditDirectAccessPort />}</li>;
@@ -210,13 +210,16 @@ class Enhancements: Reactor.Component {
 
     function render() {
         var has_hwcodec = handler.has_hwcodec();
+        var has_vram = handler.has_vram();
+        var support_remove_wallpaper = handler.support_remove_wallpaper();
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
-                {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
+                {(has_hwcodec || has_vram) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
+                {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
             </menu>
         </li>;
     }
@@ -226,6 +229,9 @@ class Enhancements: Reactor.Component {
             if (el.id && el.id.indexOf("enable-") == 0) {
                 var enabled = handler.get_option(el.id) != "N";
                 el.attributes.toggleClass("selected", enabled);
+            } else if (el.id && el.id.indexOf("allow-") == 0) {
+                var enabled = handler.get_option(el.id) == "Y";
+                el.attributes.toggleClass("selected", enabled);
             }
         }
 
@@ -234,18 +240,28 @@ class Enhancements: Reactor.Component {
     event click $(menu#enhancements-menu>li) (_, me) {
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
-            handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
+            var set_value = handler.get_option(v) != 'N' ? 'N' : '';
+            handler.set_option(v, set_value);
+            if (v == "enable-hwcodec" && set_value == '') {
+                handler.check_hwcodec();
+            }
+        } else if (v.indexOf("allow-") == 0) {
+            handler.set_option(v, handler.get_option(v) == 'Y' ? '' : 'Y');
         } else if (v == 'screen-recording') {
-            var dir = handler.get_option("video-save-directory");
-            if (!dir) dir = handler.default_video_save_directory();
+            var show_root_dir = is_win && handler.is_installed();
+            var user_dir = handler.video_save_directory(false);
+            var root_dir = show_root_dir ? handler.video_save_directory(true) : "";
             var ts0 = handler.get_option("enable-record-session") == '' ? { checked: true } : {};
             var ts1 = handler.get_option("allow-auto-record-incoming") == 'Y' ? { checked: true } : {};
+            var ts2 = handler.get_local_option("allow-auto-record-outgoing") == 'Y' ? { checked: true } : {};
             msgbox("custom-recording", translate('Recording'),
                 <div .form>
-                    <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable Recording Session')}</button></div>
+                    <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable recording session')}</button></div>
                     <div><button|checkbox(auto_record_incoming) {ts1}>{translate('Automatically record incoming sessions')}</button></div>
+                    <div><button|checkbox(auto_record_outgoing) {ts2}>{translate('Automatically record outgoing sessions')}</button></div>
                     <div>
-                        <div style="word-wrap:break-word"><span>{translate("Directory")}:&nbsp;&nbsp;</span><span #folderPath>{dir}</span></div>
+                        {show_root_dir ? <div style="word-wrap:break-word"><span>{translate("Incoming")}:&nbsp;&nbsp;</span><span>{root_dir}</span></div> : ""}
+                        <div style="word-wrap:break-word"><span>{translate(show_root_dir ? "Outgoing" : "Directory")}:&nbsp;&nbsp;</span><span #folderPath>{user_dir}</span></div>
                         <div> <button #select_directory .link>{translate('Change')}</button> </div>
                     </div>
                 </div>
@@ -253,7 +269,8 @@ class Enhancements: Reactor.Component {
                 if (!res) return;
                 handler.set_option("enable-record-session", res.enable_record_session ? '' : 'N');
                 handler.set_option("allow-auto-record-incoming", res.auto_record_incoming ? 'Y' : '');
-                handler.set_option("video-save-directory", $(#folderPath).text);
+                handler.set_local_option("allow-auto-record-outgoing", res.auto_record_outgoing ? 'Y' : '');
+                handler.set_local_option("video-save-directory", $(#folderPath).text);
             });
         }
         this.toggleMenuState();
@@ -294,12 +311,15 @@ class MyIdMenu: Reactor.Component {
         var username = handler.get_local_option("access_token") ? getUserName() : '';
         return <popup>
             <menu.context #config-options>
-                <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable Keyboard/Mouse')}</li>
-                <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable Clipboard')}</li>
-                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
-                <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable Remote Restart')}</li> 
-                <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
-                <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN Discovery')}</li>
+                <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable keyboard/mouse')}</li>
+                <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable clipboard')}</li>
+                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable file transfer')}</li>
+                <li #enable-camera><span>{svg_checkmark}</span>{translate('Enable camera')}</li>
+                <li #enable-terminal><span>{svg_checkmark}</span>{translate('Enable terminal')}</li>
+                <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable remote restart')}</li> 
+                <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP tunneling')}</li>
+                {is_win ? <li #enable-block-input><span>{svg_checkmark}</span>{translate('Enable blocking user input')}</li> : ""}
+                <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN discovery')}</li>
                 <AudioInputs />
                 <Enhancements />
                 <li #allow-remote-config-modification><span>{svg_checkmark}</span>{translate('Enable remote configuration modification')}</li>
@@ -307,9 +327,10 @@ class MyIdMenu: Reactor.Component {
                 <li #custom-server>{translate('ID/Relay Server')}</li>
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
+                { false && <li #allow-websocket><span>{svg_checkmark}</span>{translate('Use WebSocket')}</li> }
                 <div .separator />
-                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
-                {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
+                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
+                {is_win && handler.is_installed() ? <ShareRdp /> : ""}
                 <DirectServer />
                 {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
@@ -320,6 +341,7 @@ class MyIdMenu: Reactor.Component {
                 <div .separator />
                 <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <Languages />
+                <li #allow-auto-update><span>{svg_checkmark}</span>{translate('Auto update')}</li> 
                 <li #about>{translate('About')} {" "}{handler.get_app_name()}</li>
             </menu>
         </popup>;
@@ -367,7 +389,7 @@ class MyIdMenu: Reactor.Component {
             <div>Fingerprint: " + handler.get_fingerprint() + " \
             <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
             <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
-	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2023 Purslane Ltd.\
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2025 Purslane Ltd.\
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
             </div>\
@@ -428,11 +450,11 @@ class MyIdMenu: Reactor.Component {
                 var key = (res.key || "").trim();
                 if (id == old_id && relay == old_relay && key == old_key && api == old_api) return;
                 if (id) {
-                    var err = handler.test_if_valid_server(id);
+                    var err = handler.test_if_valid_server(id, true);
                     if (err) return translate("ID Server") + ": " + err;
                 }
                 if (relay) {
-                    var err = handler.test_if_valid_server(relay);
+                    var err = handler.test_if_valid_server(relay, true);
                     if (err) return translate("Relay Server") + ": " + err;
                 }
                 if (api) {
@@ -452,7 +474,7 @@ class MyIdMenu: Reactor.Component {
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
             msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
-            <div><span>{translate("Hostname")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
+            <div><span>{translate("Server")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
             <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>
@@ -463,7 +485,7 @@ class MyIdMenu: Reactor.Component {
                 var password = (res.password || "").trim();
                 if (proxy == old_proxy && username == old_username && password == old_password) return;
                 if (proxy) {
-                    var err = handler.test_if_valid_server(proxy);
+                    var err = handler.test_if_valid_server(proxy, false);
                     if (err) return translate("Server") + ": " + err;
                 }
                 handler.set_socks(proxy, username, password);
@@ -571,7 +593,7 @@ class App: Reactor.Component
                             <div .title>{translate('Control Remote Desktop')}</div>
                             <ID @{this.remote_id} />
                             <div .right-buttons>
-                                <button .button .outline #file-transfer>{translate('Transfer File')}</button>
+                                <button .button .outline #file-transfer>{translate('Transfer file')}</button>
                                 <button .button #connect>{translate('Connect')}</button>
                             </div>
                         </div>
@@ -813,11 +835,12 @@ class PasswordEyeArea : Reactor.Component {
     render() {
         var method = handler.get_option('verification-method');
         var mode= handler.get_option('approve-mode');
-        var value = mode == 'click' ||  method == 'use-permanent-password' ? "-" : password_cache[0];
+        var hide_one_time = mode == 'click' ||  method == 'use-permanent-password';
+        var value = hide_one_time ? "-" : password_cache[0];
         return
             <div .eye-area style="width: *">
                 <input|text @{this.input} readonly value={value} />
-                {svg_refresh_password}
+                {hide_one_time ? "" : svg_refresh_password}
             </div>;
     }
 
@@ -903,6 +926,8 @@ class PasswordArea: Reactor.Component {
             { !show_password ? '' : <div .separator /> }
             { !show_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
             { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
+            <div .separator />
+            <li #tfa><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
         </menu></popup>;
     }
 
@@ -918,11 +943,14 @@ class PasswordArea: Reactor.Component {
         var pwd_id = handler.get_option('verification-method');
         if (pwd_id != 'use-temporary-password' && pwd_id != 'use-permanent-password')
             pwd_id = 'use-both-passwords';
+        var has_valid_2fa = handler.has_valid_2fa();
         for (var el in this.$$(menu#edit-password-context>li)) {
             if (el.id.indexOf("approve-mode-") == 0)
                 el.attributes.toggleClass("selected", el.id == mode_id);
             if (el.id.indexOf("use-") == 0)
                 el.attributes.toggleClass("selected", el.id == pwd_id);
+            if (el.id == "tfa")
+                el.attributes.toggleClass("selected", has_valid_2fa);
         }
     }
 
@@ -975,6 +1003,32 @@ class PasswordArea: Reactor.Component {
             passwordArea.update();
         }
     }
+
+    event click $(li#tfa) {
+        var me = this;
+        var has_valid_2fa = handler.has_valid_2fa();
+        if (has_valid_2fa) {
+            handler.set_option('2fa', '');
+            me.update();
+        } else {
+            var new2fa = handler.generate2fa();
+            var src = handler.generate_2fa_img_src(new2fa);
+            msgbox("custom-2fa-setting", translate('enable-2fa-title'),
+                <div .form>
+                    <div>{translate('enable-2fa-desc')}</div>
+                    <img src={src} />
+                    <div .code><input name='code' type='text' .outline-focus /></div>
+                </div>
+                , "", function(res=null) {
+                if (!res) return;
+                if (!res.code) return;
+                if (!handler.verify2fa(res.code)) {
+                    return translate('wrong-2fa-code');
+                }
+                me.update();
+            }, 400);
+        }
+    }
 }
 
 var password_cache = ["","","",""];
@@ -1009,7 +1063,7 @@ updatePasswordArea();
 
 class ID: Reactor.Component {
     function render() {
-        return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")} maxlength="21"
+        return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")}
         value={formatId(handler.get_remote_id())} />;
     }
 
@@ -1103,7 +1157,7 @@ function showSettings() {
 function checkConnectStatus() {
     handler.check_mouse_time(); // trigger connection status updater
     self.timer(1s, function() {
-        var tmp = !!handler.get_option("stop-service");
+        var tmp = handler.get_option("stop-service") == "Y";
         if (tmp != service_stopped) {
             service_stopped = tmp;
             app.update();
@@ -1162,7 +1216,7 @@ function self.onMouse(evt) {
 }
 
 function check_if_overlay() {
-    if (!handler.get_option('allow-remote-config-modification')) {
+    if (handler.get_option('allow-remote-config-modification') != 'Y') {
         var time0 = getTime();
         handler.check_mouse_time();
         self.timer(120ms, function() {
@@ -1214,7 +1268,7 @@ function login() {
             if (data.type == 'email_check') {
                 abLoading = false;
                 show_progress(-1);
-                on_email_check(data);
+                on_2fa_check(data);
                 return;
             }
             handler.set_local_option("access_token", data.access_token);
@@ -1232,12 +1286,15 @@ function login() {
       });
 }
 
-function on_email_check(last_msg) {
-    var emailHint = last_msg.user.email;
-    msgbox("custom-email-verification-code", translate('Verification code'), <div .form .set-password> 
-            <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> 
-            <div><span>{translate('Verification code')}:</span><input|text name="verification_code" .outline-focus /></div> 
-            <div style="font-size:0.9em; margin-bottom:1em;">{translate('verification_tip')}</div>
+function on_2fa_check(last_msg) {
+    const isEmailCheck = !last_msg.tfa_type || last_msg.tfa_type == 'email_check';
+    const secret = last_msg.secret;
+    const emailHint = last_msg.user.email;
+
+    msgbox("custom-2fa-verification-code", translate('Verification code'), <div .form .set-password> 
+            { isEmailCheck && <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> }
+            <div><span>{translate(isEmailCheck ? 'Verification code' : '2FA code')}:</span><input|text name="verification_code" .outline-focus /></div> 
+            { isEmailCheck && <div style="font-size:0.9em; margin-bottom:1em;">{translate('verification_tip')}</div> }
         </div>, "", 
         function(res=null, show_progress) {
             if (!res) return;
@@ -1249,7 +1306,17 @@ function on_email_check(last_msg) {
             }
             abLoading = true;
             var url = handler.get_api_server();
-            httpRequest(url + "/api/login", #post, {username: last_msg.user.name, id: my_id, uuid: handler.get_uuid(), type: 'email_code', autoLogin: true, verificationCode: code, deviceInfo: getDeviceInfo()}, 
+            const loginData = {
+                username: last_msg.user.name,
+                id: my_id,
+                uuid: handler.get_uuid(),
+                type: 'email_code',
+                verificationCode: code,
+                tfaCode: isEmailCheck ? '' : code,
+                secret: secret,
+                deviceInfo: getDeviceInfo()
+            };
+            httpRequest(url + "/api/login", #post, loginData, 
                 function(data) {
                     if (data.error) {
                         abLoading = false;
@@ -1295,7 +1362,8 @@ function logout() {
 }
 
 function refreshCurrentUser() {
-    if (!handler.get_local_option("access_token")) return;
+    var token = handler.get_local_option("access_token");
+    if (!token) { return; }
     abLoading = true;
     abError = "";
     app.update();
@@ -1306,6 +1374,10 @@ function refreshCurrentUser() {
             }
             handleAbError(data.error);
             return;
+        }
+	if (!handler.verify_login(data.verifier, token)) {
+          handleAbError("Please update your self-hosting server Pro to latest version");
+          return;
         }
         set_local_user_info(data);
         myIdMenu.update();

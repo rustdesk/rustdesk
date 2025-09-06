@@ -4,10 +4,11 @@ import 'dart:convert';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
 
 import '../common.dart';
+import '../utils/http_service.dart' as http;
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -16,12 +17,23 @@ bool refreshingUser = false;
 class UserModel {
   final RxString userName = ''.obs;
   final RxBool isAdmin = false.obs;
+  final RxString networkError = ''.obs;
   bool get isLogin => userName.isNotEmpty;
   WeakReference<FFI> parent;
 
-  UserModel(this.parent);
+  UserModel(this.parent) {
+    userName.listen((p0) {
+      // When user name becomes empty, show login button
+      // When user name becomes non-empty:
+      //  For _updateLocalUserInfo, network error will be set later
+      //  For login success, should clear network error
+      networkError.value = '';
+    });
+  }
 
   void refreshCurrentUser() async {
+    if (bind.isDisableAccount()) return;
+    networkError.value = '';
     final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') {
       await updateOtherModels();
@@ -36,19 +48,25 @@ class UserModel {
     if (refreshingUser) return;
     try {
       refreshingUser = true;
-      final response = await http.post(Uri.parse('$url/api/currentUser'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token'
-          },
-          body: json.encode(body));
+      final http.Response response;
+      try {
+        response = await http.post(Uri.parse('$url/api/currentUser'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token'
+            },
+            body: json.encode(body));
+      } catch (e) {
+        networkError.value = e.toString();
+        rethrow;
+      }
       refreshingUser = false;
       final status = response.statusCode;
       if (status == 401 || status == 400) {
         reset(resetOther: status == 401);
         return;
       }
-      final data = json.decode(utf8.decode(response.bodyBytes));
+      final data = json.decode(decode_http_response(response));
       final error = data['error'];
       if (error != null) {
         throw error;
@@ -98,11 +116,18 @@ class UserModel {
     userName.value = user.name;
     isAdmin.value = user.isAdmin;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
+    if (isWeb) {
+      // ugly here, tmp solution
+      bind.mainSetLocalOption(key: 'verifier', value: user.verifier ?? '');
+    }
   }
 
   // update ab and group status
   static Future<void> updateOtherModels() async {
-    await Future.wait([gFFI.abModel.pullAb(), gFFI.groupModel.pull()]);
+    await Future.wait([
+      gFFI.abModel.pullAb(force: ForcePullAb.listAndCurrent, quiet: false),
+      gFFI.groupModel.pull()
+    ]);
   }
 
   Future<void> logOut({String? apiServer}) async {
@@ -131,12 +156,11 @@ class UserModel {
   Future<LoginResponse> login(LoginRequest loginRequest) async {
     final url = await bind.mainGetApiServer();
     final resp = await http.post(Uri.parse('$url/api/login'),
-        headers: {'Content-Type': 'application/json'},
         body: jsonEncode(loginRequest.toJson()));
 
     final Map<String, dynamic> body;
     try {
-      body = jsonDecode(utf8.decode(resp.bodyBytes));
+      body = jsonDecode(decode_http_response(resp));
     } catch (e) {
       debugPrint("login: jsonDecode resp body failed: ${e.toString()}");
       if (resp.statusCode != 200) {
@@ -164,7 +188,9 @@ class UserModel {
       rethrow;
     }
 
-    if (loginResponse.user != null) {
+    final isLogInDone = loginResponse.type == HttpType.kAuthResTypeToken &&
+        loginResponse.access_token != null;
+    if (isLogInDone && loginResponse.user != null) {
       _parseAndUpdateUser(loginResponse.user!);
     }
 

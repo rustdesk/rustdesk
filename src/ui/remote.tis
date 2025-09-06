@@ -23,7 +23,7 @@ handler.setDisplay = function(x, y, w, h, cursor_embedded) {
     display_origin_y = y;
     display_cursor_embedded = cursor_embedded;
     adaptDisplay();
-    if (recording) handler.record_screen(true, w, h);
+    if (recording) handler.record_screen(true, 0, w, h);
 }
 
 // in case toolbar not shown correctly
@@ -478,7 +478,7 @@ function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     if (is_file_transfer) save_file_transfer_close_state();
     if (is_file_transfer || is_port_forward || size_adapted) handler.save_size(x, y, w, h);
-    if (recording) handler.record_screen(false, display_width, display_height);
+    if (recording) handler.record_screen(false, 0, display_width, display_height);
 }
 
 var qualityMonitor;
@@ -510,19 +510,22 @@ class QualityMonitor: Reactor.Component
             <div>
                 Codec: {qualityMonitorData[4]}
             </div>
+            <div>
+                Chroma: {qualityMonitorData[5]}
+            </div>
         </div>;
     }
 }
 
 $(#quality-monitor).content(<QualityMonitor />);
-handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format) {
-    speed ? qualityMonitorData[0] = speed:null;
-    fps ? qualityMonitorData[1] = fps:null;
-    delay ? qualityMonitorData[2] = delay:null;
-    bitrate ? qualityMonitorData[3] = bitrate:null;
-    codec_format ? qualityMonitorData[4] = codec_format:null;
+handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format, chroma) {
+    if (speed !== null) qualityMonitorData[0] = speed;
+    if (fps !== null) qualityMonitorData[1] = fps;
+    if (delay !== null) qualityMonitorData[2] = qualityMonitorData[1] === 0 ? 0 : delay;
+    if (bitrate !== null) qualityMonitorData[3] = bitrate;
+    if (codec_format !== null) qualityMonitorData[4] = codec_format;
+    if (chroma !== null) qualityMonitorData[5] = chroma;
     qualityMonitor.update();
-    if (codec_format) header.update();
 }
 
 handler.setPermission = function(name, enabled) {

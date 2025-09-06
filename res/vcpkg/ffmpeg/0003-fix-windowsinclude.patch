@@ -1,0 +1,13 @@
+diff --git a/fftools/cmdutils.c b/fftools/cmdutils.c
+--- a/fftools/cmdutils.c
++++ b/fftools/cmdutils.c
+@@ -51,6 +51,8 @@
+ #include "fopen_utf8.h"
+ #include "opt_common.h"
+ #ifdef _WIN32
++#define _WIN32_WINNT 0x0502
++#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ #include "compat/w32dlfcn.h"
+ #endif
+ 

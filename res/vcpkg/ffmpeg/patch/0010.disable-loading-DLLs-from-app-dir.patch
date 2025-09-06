@@ -1,0 +1,31 @@
+diff --git a/compat/w32dlfcn.h b/compat/w32dlfcn.h
+index ac20e83..1e83aa6 100644
+--- a/compat/w32dlfcn.h
++++ b/compat/w32dlfcn.h
+@@ -76,6 +76,7 @@ static inline HMODULE win32_dlopen(const char *name)
+         if (!name_w)
+             goto exit;
+         namelen = wcslen(name_w);
++        /*
+         // Try local directory first
+         path = get_module_filename(NULL);
+         if (!path)
+@@ -91,6 +92,7 @@ static inline HMODULE win32_dlopen(const char *name)
+         path = new_path;
+         wcscpy(path + pathlen + 1, name_w);
+         module = LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
++        */
+         if (module == NULL) {
+             // Next try System32 directory
+             pathlen = GetSystemDirectoryW(path, pathsize);
+@@ -131,7 +133,9 @@ exit:
+         return NULL;
+     module = LoadPackagedLibrary(name_w, 0);
+ #else
+-#define LOAD_FLAGS (LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32)
++// #define LOAD_FLAGS (LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32)
++// Don't dynamic-link libraries from the application directory.
++ #define LOAD_FLAGS LOAD_LIBRARY_SEARCH_SYSTEM32
+     /* filename may be be in CP_ACP */
+     if (!name_w)
+         return LoadLibraryExA(name, NULL, LOAD_FLAGS);

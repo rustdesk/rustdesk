@@ -16,10 +16,10 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # 1.1.9-1 works for android, but for ios it becomes 1.1.91, need to set it to 1.1.9-a.1 for iOS, will get 1.1.9.1, but iOS store not allow 4 numbers
-version: 1.2.3+39
+version: 1.4.2+60
 
 environment:
-  sdk: ">=2.17.0"
+  sdk: '^3.1.0'
 
 dependencies:
   flutter:
@@ -27,31 +27,30 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  ffi: ^2.0.1
-  path_provider: ^2.0.12
-  external_path: ^1.0.1
-  provider: ^6.0.3
+  ffi: ^2.1.0
+  path_provider: ^2.1.1
+  external_path: ^1.0.3
+  provider: ^6.0.5
   tuple: ^2.0.0
-  wakelock: ^0.6.2
-  # Keep this version for the compatibility of some old systems like win7.
-  device_info_plus: ^4.1.2
+  wakelock_plus: ^1.1.3
   #firebase_analytics: ^9.1.5
-  package_info_plus: ^3.1.2
-  url_launcher: ^6.0.9
+  package_info_plus: ^4.2.0
+  url_launcher: ^6.3.1
+  url_launcher_ios: ^6.3.2
   toggle_switch: ^2.1.0
-  dash_chat_2: 
+  dash_chat_2:
     git:
       url: https://github.com/rustdesk-org/Dash-Chat-2
-  draggable_float_widget: ^0.0.2
+  draggable_float_widget: ^0.1.0
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
-  http: ^0.13.4
+  http: ^1.1.0
   qr_code_scanner: ^1.0.0
   zxing2: ^0.2.0
-  image_picker: ^0.8.5
+  image_picker: ^1.1.2
   image: ^4.0.17
   back_button_interceptor: ^6.0.1
-  flutter_rust_bridge: "<1.76.0"
+  flutter_rust_bridge: "1.80.1"
   window_manager:
     git:
       url: https://github.com/rustdesk-org/window_manager
@@ -64,29 +63,21 @@ dependencies:
     git:
       url: https://github.com/google/flutter-desktop-embedding.git
       path: plugins/window_size
-      ref: a738913c8ce2c9f47515382d40827e794a334274
+      ref: eb3964990cf19629c89ff8cb4a37640c7b3d5601
   get: ^4.6.5
   visibility_detector: ^0.4.0+2
   contextmenu: ^3.0.0
-  desktop_drop: 
-    git:
-      url: https://github.com/rustdesk-org/flutter-plugins
-      path: ./packages/desktop_drop
+  desktop_drop: ^0.4.4
   scroll_pos: ^0.4.0
   debounce_throttle: ^2.0.0
   file_picker: ^5.1.0
   flutter_svg: ^2.0.5
-  flutter_improved_scrolling:
-    # currently, we use flutter 3.10.0+.
-    #
-    # for flutter 3.0.5, please use official version(just comment code below).
-    # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
+  uni_links:
     git:
-      url: https://github.com/rustdesk-org/flutter_improved_scrolling
-  uni_links: ^0.5.1
-  uni_links_desktop: 
-    git:
-      url: https://github.com/rustdesk-org/uni_links_desktop
+      url: https://github.com/rustdesk-org/uni_links
+      path: uni_links
+      ref: f416118d843a7e9ed117c7bb7bdc2deda5a9e86f
+  uni_links_desktop: ^0.1.6 # use 0.1.6 to make flutter 3.13 works
   path: ^1.8.1
   auto_size_text: ^3.0.0
   bot_toast: ^4.0.3
@@ -94,17 +85,30 @@ dependencies:
   password_strength: ^0.2.0
   flutter_launcher_icons: ^0.13.1
   flutter_keyboard_visibility: ^5.4.0
-  texture_rgba_renderer: ^0.0.16
+  texture_rgba_renderer:
+    git:
+      url: https://github.com/rustdesk-org/flutter_texture_rgba_renderer
+      ref: 42797e0f03141dc2b585f76c64a13974508058b4
   percent_indicator: ^4.2.2
   dropdown_button2: ^2.0.0
+  flutter_gpu_texture_renderer:
+    git:
+      url: https://github.com/rustdesk-org/flutter_gpu_texture_renderer
+      ref: 08a471bb8ceccdd50483c81cdfa8b81b07b14b87
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
   flex_color_picker: ^3.3.0
   dynamic_layouts:
     git:
-      url: https://github.com/21pages/dynamic_layouts.git
+      url: https://github.com/rustdesk-org/dynamic_layouts.git
       ref: 24cb88413fa5181d949ddacbb30a65d5c459e7d9
   pull_down_button: ^0.9.3
+  device_info_plus: ^9.1.0
+  qr_flutter: ^4.1.0
+  extended_text: 14.0.0
+  xterm: 4.0.0
+  sqflite: 2.2.0
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   icons_launcher: ^2.0.4
@@ -113,7 +117,11 @@ dev_dependencies:
   build_runner: ^2.4.6
   freezed: ^2.4.2
   flutter_lints: ^2.0.2
-  ffigen: ^7.2.4
+  ffigen: ^8.0.2
+
+dependency_overrides:
+  intl: ^0.19.0
+  flutter_plugin_android_lifecycle: 2.0.17
 
 # rerun: flutter pub run flutter_launcher_icons
 flutter_icons:
@@ -157,6 +165,12 @@ flutter:
     - family: AddressBook
       fonts:
         - asset: assets/address_book.ttf
+    - family: DeviceGroup
+      fonts:
+        - asset: assets/device_group.ttf
+    - family: More
+      fonts:
+        - asset: assets/more.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

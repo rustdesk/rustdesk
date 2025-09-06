@@ -1,0 +1,38 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+	xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+	<?include ../Includes.wxi?>
+
+	<Fragment>
+		<!-- For compatibility with command line values from previous versions -->
+		<Property Id="INSTALLFOLDER" Secure="yes">
+      		<RegistrySearch Id="InstallFolderSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="INSTALLFOLDER" Type="raw" />
+    	</Property>
+
+		<!-- If a property value has been passed via the command line (which includes when set from the bundle), the registry search will
+				 overwrite the command line value, these actions temporarily store the command line value before the registry search
+				 is performed so they can be restored after the registry search is complete -->
+		<SetProperty Id="SavedInstallFolderCmdLineValue" Value="[INSTALLFOLDER]" Before="AppSearch" Sequence="first" Condition="INSTALLFOLDER" />
+
+		<!-- If a command line value was stored, restore it after the registry search has been performed -->
+		<SetProperty Action="RestoreSavedInstallFolderValue" Id="INSTALLFOLDER" Value="[SavedInstallFolderCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedInstallFolderCmdLineValue" />
+
+		<!-- If a command line value or registry value was set, update the main properties with the value -->
+		<SetProperty Id="INSTALLFOLDER_INNER" Value="[INSTALLFOLDER]" After="RestoreSavedInstallFolderValue" Sequence="first" Condition="INSTALLFOLDER" />
+
+		<!-- INSTALLFOLDER_INNER is defined for compatibility with previous versions of the installer. -->
+		<!-- Because we need to use INSTALLFOLDER as the command line argument. -->
+		<StandardDirectory Id="ProgramFiles6432Folder">
+			<Directory Id="INSTALLFOLDER_INNER" Name="$(var.Product)" />
+		</StandardDirectory>
+
+		<StandardDirectory Id="CommonAppDataFolder">
+			<Directory Id="App.Data.Folder" Name="$(var.Product)" />
+		</StandardDirectory>
+
+		<StandardDirectory Id="ProgramMenuFolder">
+			<Directory Id="App.StartMenu" Name="$(var.Product)" />
+		</StandardDirectory>
+
+		<StandardDirectory Id="DesktopFolder" />
+	</Fragment>
+</Wix>

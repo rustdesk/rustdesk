@@ -23,14 +23,20 @@ fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
     unimplemented!()
 }
 
-/// Link vcppkg package.
+/// Link vcpkg package.
 fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     let mut target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     if target_arch == "x86_64" {
         target_arch = "x64".to_owned();
+    } else if target_arch == "x86" {
+        target_arch = "x86".to_owned();
+    } else if target_arch == "loongarch64" {
+        target_arch = "loongarch64".to_owned();
     } else if target_arch == "aarch64" {
         target_arch = "arm64".to_owned();
+    } else {
+        target_arch = "arm".to_owned();
     }
     let mut target = if target_os == "macos" {
         if target_arch == "x64" {
@@ -49,24 +55,22 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
         target = target.replace("x64", "x86");
     }
     println!("cargo:info={}", target);
-    path.push("installed");
+    if let Ok(vcpkg_root) = std::env::var("VCPKG_INSTALLED_ROOT") {
+        path = vcpkg_root.into();
+    } else {
+        path.push("installed");
+    }
     path.push(target);
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-lib=static={}",
-            name.trim_start_matches("lib")
-        )
+        "cargo:rustc-link-lib=static={}",
+        name.trim_start_matches("lib")
     );
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-search={}",
-            path.join("lib").to_str().unwrap()
-        )
+        "cargo:rustc-link-search={}",
+        path.join("lib").to_str().unwrap()
     );
     let include = path.join("include");
-    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
+    println!("cargo:include={}", include.to_str().unwrap());
     include
 }
 
@@ -101,23 +105,17 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
     path.push(directories.pop().unwrap());
     // Link the library.
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-lib=static={}",
-            name.trim_start_matches("lib")
-        )
+        "cargo:rustc-link-lib=static={}",
+        name.trim_start_matches("lib")
     );
     // Add the library path.
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-search={}",
-            path.join("lib").to_str().unwrap()
-        )
+        "cargo:rustc-link-search={}",
+        path.join("lib").to_str().unwrap()
     );
     // Add the include path.
     let include = path.join("include");
-    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
+    println!("cargo:include={}", include.to_str().unwrap());
     include
 }
 
@@ -182,7 +180,71 @@ fn gen_vcpkg_package(package: &str, ffi_header: &str, generated: &str, regex: &s
     generate_bindings(&ffi_header, &includes, &ffi_rs, &exact_file, regex);
 }
 
+// If you have problems installing ffmpeg, you can download $VCPKG_ROOT/installed from ci
+// Linux require link in hwcodec
+/*
+fn ffmpeg() {
+    // ffmpeg
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    let static_libs = vec!["avcodec", "avutil", "avformat"];
+    static_libs.iter().for_each(|lib| {
+        find_package(lib);
+    });
+    if target_os == "windows" {
+        println!("cargo:rustc-link-lib=static=libmfx");
+    }
+
+    // os
+    let dyn_libs: Vec<&str> = if target_os == "windows" {
+        ["User32", "bcrypt", "ole32", "advapi32"].to_vec()
+    } else if target_os == "linux" {
+        let mut v = ["va", "va-drm", "va-x11", "vdpau", "X11", "stdc++"].to_vec();
+        if target_arch == "x86_64" {
+            v.push("z");
+        }
+        v
+    } else if target_os == "macos" || target_os == "ios" {
+        ["c++", "m"].to_vec()
+    } else if target_os == "android" {
+        ["z", "m", "android", "atomic"].to_vec()
+    } else {
+        panic!("unsupported os");
+    };
+    dyn_libs
+        .iter()
+        .map(|lib| println!("cargo:rustc-link-lib={}", lib))
+        .count();
+
+    if target_os == "macos" || target_os == "ios" {
+        println!("cargo:rustc-link-lib=framework=CoreFoundation");
+        println!("cargo:rustc-link-lib=framework=CoreVideo");
+        println!("cargo:rustc-link-lib=framework=CoreMedia");
+        println!("cargo:rustc-link-lib=framework=VideoToolbox");
+        println!("cargo:rustc-link-lib=framework=AVFoundation");
+    }
+}
+*/
+
 fn main() {
+    // there is problem with cfg(target_os) in build.rs, so use our workaround
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+
+    // We check if is macos, because macos uses rust 1.8.1.
+    // `cargo::rustc-check-cfg` is new with Cargo 1.80.
+    // No need to run `cargo version` to get the version here, because:
+    // The following lines are used to suppress the lint warnings.
+    //          warning: unexpected `cfg` condition name: `quartz`
+    if cfg!(target_os = "macos") {
+        if target_os != "ios" {
+            println!("cargo::rustc-check-cfg=cfg(android)");
+            println!("cargo::rustc-check-cfg=cfg(dxgi)");
+            println!("cargo::rustc-check-cfg=cfg(quartz)");
+            println!("cargo::rustc-check-cfg=cfg(x11)");
+            //        ^^^^^^^^^^^^^^^^^^^^^^ new with Cargo 1.80
+        }
+    }
+
     // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,
     // please install x64 toolchain by "rustup toolchain install stable-x86_64-pc-windows-msvc",
@@ -197,9 +259,9 @@ fn main() {
     find_package("libyuv");
     gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
     gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
+    gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
+    // ffmpeg();
 
-    // there is problem with cfg(target_os) in build.rs, so use our workaround
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "ios" {
         // nothing
     } else if target_os == "android" {

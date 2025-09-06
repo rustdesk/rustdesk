@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
@@ -7,9 +6,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/input_model.dart';
 
 /// must keep the order
-enum WindowType { Main, RemoteDesktop, FileTransfer, PortForward, Unknown }
+// ignore: constant_identifier_names
+enum WindowType {
+  Main,
+  RemoteDesktop,
+  FileTransfer,
+  ViewCamera,
+  PortForward,
+  Terminal,
+  Unknown
+}
 
 extension Index on int {
   WindowType get windowType {
@@ -21,7 +31,11 @@ extension Index on int {
       case 2:
         return WindowType.FileTransfer;
       case 3:
+        return WindowType.ViewCamera;
+      case 4:
         return WindowType.PortForward;
+      case 5:
+        return WindowType.Terminal;
       default:
         return WindowType.Unknown;
     }
@@ -48,38 +62,116 @@ class RustDeskMultiWindowManager {
   final List<AsyncCallback> _windowActiveCallbacks = List.empty(growable: true);
   final List<int> _remoteDesktopWindows = List.empty(growable: true);
   final List<int> _fileTransferWindows = List.empty(growable: true);
+  final List<int> _viewCameraWindows = List.empty(growable: true);
   final List<int> _portForwardWindows = List.empty(growable: true);
+  final List<int> _terminalWindows = List.empty(growable: true);
 
-  moveTabToNewWindow(int windowId, String peerId, String sessionId) async {
+  moveTabToNewWindow(int windowId, String peerId, String sessionId,
+      WindowType windowType) async {
     var params = {
-      'type': WindowType.RemoteDesktop.index,
+      'type': windowType.index,
       'id': peerId,
       'tab_window_id': windowId,
       'session_id': sessionId,
     };
+    if (windowType == WindowType.RemoteDesktop) {
+      await _newSession(
+        false,
+        WindowType.RemoteDesktop,
+        kWindowEventNewRemoteDesktop,
+        peerId,
+        _remoteDesktopWindows,
+        jsonEncode(params),
+      );
+    } else if (windowType == WindowType.ViewCamera) {
+      await _newSession(
+        false,
+        WindowType.ViewCamera,
+        kWindowEventNewViewCamera,
+        peerId,
+        _viewCameraWindows,
+        jsonEncode(params),
+      );
+    }
+  }
+
+  // This function must be called in the main window thread.
+  // Because the _remoteDesktopWindows is managed in that thread.
+  openMonitorSession(int windowId, String peerId, int display, int displayCount,
+      Rect? screenRect, int windowType) async {
+    final isCamera = windowType == WindowType.ViewCamera.index;
+    final windowIDs = isCamera ? _viewCameraWindows : _remoteDesktopWindows;
+    if (windowIDs.length > 1) {
+      for (final windowId in windowIDs) {
+        if (await DesktopMultiWindow.invokeMethod(
+            windowId,
+            kWindowEventActiveDisplaySession,
+            jsonEncode({
+              'id': peerId,
+              'display': display,
+            }))) {
+          return;
+        }
+      }
+    }
+
+    final displays = display == kAllDisplayValue
+        ? List.generate(displayCount, (index) => index)
+        : [display];
+    var params = {
+      'type': windowType,
+      'id': peerId,
+      'tab_window_id': windowId,
+      'display': display,
+      'displays': displays,
+    };
+    if (screenRect != null) {
+      params['screen_rect'] = {
+        'l': screenRect.left,
+        't': screenRect.top,
+        'r': screenRect.right,
+        'b': screenRect.bottom,
+      };
+    }
     await _newSession(
       false,
-      WindowType.RemoteDesktop,
-      kWindowEventNewRemoteDesktop,
+      windowType.windowType,
+      isCamera ? kWindowEventNewViewCamera : kWindowEventNewRemoteDesktop,
       peerId,
-      _remoteDesktopWindows,
+      windowIDs,
       jsonEncode(params),
+      screenRect: screenRect,
     );
   }
 
   Future<int> newSessionWindow(
-      WindowType type, String remoteId, String msg, List<int> windows) async {
+    WindowType type,
+    String remoteId,
+    String msg,
+    List<int> windows,
+    bool withScreenRect,
+  ) async {
     final windowController = await DesktopMultiWindow.createWindow(msg);
+    if (isWindows) {
+      windowController.setInitBackgroundColor(Colors.black);
+    }
     final windowId = windowController.windowId;
-    windowController
-      ..setFrame(
-          const Offset(0, 0) & Size(1280 + windowId * 20, 720 + windowId * 20))
-      ..center()
-      ..setTitle(getWindowNameWithId(
+    if (!withScreenRect) {
+      windowController
+        ..setFrame(const Offset(0, 0) &
+            Size(1280 + windowId * 20, 720 + windowId * 20))
+        ..center()
+        ..setTitle(getWindowNameWithId(
+          remoteId,
+          overrideType: type,
+        ));
+    } else {
+      windowController.setTitle(getWindowNameWithId(
         remoteId,
         overrideType: type,
       ));
-    if (Platform.isMacOS) {
+    }
+    if (isMacOS) {
       Future.microtask(() => windowController.show());
     }
     registerActiveWindow(windowId);
@@ -93,11 +185,13 @@ class RustDeskMultiWindowManager {
     String methodName,
     String remoteId,
     List<int> windows,
-    String msg,
-  ) async {
+    String msg, {
+    Rect? screenRect,
+  }) async {
     if (openInTabs) {
       if (windows.isEmpty) {
-        final windowId = await newSessionWindow(type, remoteId, msg, windows);
+        final windowId = await newSessionWindow(
+            type, remoteId, msg, windows, screenRect != null);
         return MultiWindowCallResult(windowId, null);
       } else {
         return call(type, methodName, msg);
@@ -106,16 +200,21 @@ class RustDeskMultiWindowManager {
       if (_inactiveWindows.isNotEmpty) {
         for (final windowId in windows) {
           if (_inactiveWindows.contains(windowId)) {
-            await restoreWindowPosition(type,
-                windowId: windowId, peerId: remoteId);
+            if (screenRect == null) {
+              await restoreWindowPosition(type,
+                  windowId: windowId, peerId: remoteId);
+            }
             await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
-            WindowController.fromWindowId(windowId).show();
+            if (methodName != kWindowEventNewRemoteDesktop) {
+              WindowController.fromWindowId(windowId).show();
+            }
             registerActiveWindow(windowId);
             return MultiWindowCallResult(windowId, null);
           }
         }
       }
-      final windowId = await newSessionWindow(type, remoteId, msg, windows);
+      final windowId = await newSessionWindow(
+          type, remoteId, msg, windows, screenRect != null);
       return MultiWindowCallResult(windowId, null);
     }
   }
@@ -129,6 +228,8 @@ class RustDeskMultiWindowManager {
     bool? forceRelay,
     String? switchUuid,
     bool? isRDP,
+    bool? isSharedPassword,
+    String? connToken,
   }) async {
     var params = {
       "type": type.index,
@@ -141,6 +242,12 @@ class RustDeskMultiWindowManager {
     }
     if (isRDP != null) {
       params['isRDP'] = isRDP;
+    }
+    if (isSharedPassword != null) {
+      params['isSharedPassword'] = isSharedPassword;
+    }
+    if (connToken != null) {
+      params['connToken'] = connToken;
     }
     final msg = jsonEncode(params);
 
@@ -163,6 +270,7 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newRemoteDesktop(
     String remoteId, {
     String? password,
+    bool? isSharedPassword,
     String? switchUuid,
     bool? forceRelay,
   }) async {
@@ -174,11 +282,17 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       switchUuid: switchUuid,
+      isSharedPassword: isSharedPassword,
     );
   }
 
-  Future<MultiWindowCallResult> newFileTransfer(String remoteId,
-      {String? password, bool? forceRelay}) async {
+  Future<MultiWindowCallResult> newFileTransfer(
+    String remoteId, {
+    String? password,
+    bool? isSharedPassword,
+    bool? forceRelay,
+    String? connToken,
+  }) async {
     return await newSession(
       WindowType.FileTransfer,
       kWindowEventNewFileTransfer,
@@ -186,11 +300,40 @@ class RustDeskMultiWindowManager {
       _fileTransferWindows,
       password: password,
       forceRelay: forceRelay,
+      isSharedPassword: isSharedPassword,
+      connToken: connToken,
     );
   }
 
-  Future<MultiWindowCallResult> newPortForward(String remoteId, bool isRDP,
-      {String? password, bool? forceRelay}) async {
+  Future<MultiWindowCallResult> newViewCamera(
+    String remoteId, {
+    String? password,
+    bool? isSharedPassword,
+    String? switchUuid,
+    bool? forceRelay,
+    String? connToken,
+  }) async {
+    return await newSession(
+      WindowType.ViewCamera,
+      kWindowEventNewViewCamera,
+      remoteId,
+      _viewCameraWindows,
+      password: password,
+      forceRelay: forceRelay,
+      switchUuid: switchUuid,
+      isSharedPassword: isSharedPassword,
+      connToken: connToken,
+    );
+  }
+
+  Future<MultiWindowCallResult> newPortForward(
+    String remoteId,
+    bool isRDP, {
+    String? password,
+    bool? isSharedPassword,
+    bool? forceRelay,
+    String? connToken,
+  }) async {
     return await newSession(
       WindowType.PortForward,
       kWindowEventNewPortForward,
@@ -199,7 +342,45 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       isRDP: isRDP,
+      isSharedPassword: isSharedPassword,
+      connToken: connToken,
     );
+  }
+
+  Future<MultiWindowCallResult> newTerminal(
+    String remoteId, {
+    String? password,
+    bool? isSharedPassword,
+    bool? forceRelay,
+    String? connToken,
+  }) async {
+    // Iterate through terminal windows in reverse order to prioritize
+    // the most recently added or used windows, as they are more likely
+    // to have an active session.
+    for (final windowId in _terminalWindows.reversed) {
+      if (await DesktopMultiWindow.invokeMethod(
+          windowId, kWindowEventActiveSession, remoteId)) {
+        return MultiWindowCallResult(windowId, null);
+      }
+    }
+
+    // Terminal windows should always create new windows, not reuse
+    // This avoids the MissingPluginException when trying to invoke
+    // new_terminal on an inactive window
+    var params = {
+      "type": WindowType.Terminal.index,
+      "id": remoteId,
+      "password": password,
+      "forceRelay": forceRelay,
+      "isSharedPassword": isSharedPassword,
+      "connToken": connToken,
+    };
+    final msg = jsonEncode(params);
+
+    // Always create a new window for terminal
+    final windowId = await newSessionWindow(
+        WindowType.Terminal, remoteId, msg, _terminalWindows, false);
+    return MultiWindowCallResult(windowId, null);
   }
 
   Future<MultiWindowCallResult> call(
@@ -228,8 +409,12 @@ class RustDeskMultiWindowManager {
         return _remoteDesktopWindows;
       case WindowType.FileTransfer:
         return _fileTransferWindows;
+      case WindowType.ViewCamera:
+        return _viewCameraWindows;
       case WindowType.PortForward:
         return _portForwardWindows;
+      case WindowType.Terminal:
+        return _terminalWindows;
       case WindowType.Unknown:
         break;
     }
@@ -246,9 +431,14 @@ class RustDeskMultiWindowManager {
       case WindowType.FileTransfer:
         _fileTransferWindows.clear();
         break;
+      case WindowType.ViewCamera:
+        _viewCameraWindows.clear();
+        break;
       case WindowType.PortForward:
         _portForwardWindows.clear();
         break;
+      case WindowType.Terminal:
+        _terminalWindows.clear();
       case WindowType.Unknown:
         break;
     }
@@ -260,10 +450,10 @@ class RustDeskMultiWindowManager {
   }
 
   Future<void> closeAllSubWindows() async {
-    await Future.wait(WindowType.values.map((e) => closeWindows(e)));
+    await Future.wait(WindowType.values.map((e) => _closeWindows(e)));
   }
 
-  Future<void> closeWindows(WindowType type) async {
+  Future<void> _closeWindows(WindowType type) async {
     if (type == WindowType.Main) {
       // skip main window, use window manager instead
       return;
@@ -271,7 +461,7 @@ class RustDeskMultiWindowManager {
 
     List<int> windows = [];
     try {
-      windows = await DesktopMultiWindow.getAllSubWindowIds();
+      windows = _findWindowsByType(type);
     } catch (e) {
       debugPrint('Failed to getAllSubWindowIds of $type, $e');
       return;
@@ -280,15 +470,14 @@ class RustDeskMultiWindowManager {
     if (windows.isEmpty) {
       return;
     }
-    for (final wId in windows) {
-      debugPrint("closing multi window: ${type.toString()}");
-      await saveWindowPosition(type, windowId: wId);
+    for (int i = 0; i < windows.length; i++) {
+      final wId = windows[i];
+      final shouldSavePos = type != WindowType.Terminal || i == windows.length - 1;
+      if (shouldSavePos) {
+        debugPrint("closing multi window, type: ${type.toString()} id: $wId");
+        await saveWindowPosition(type, windowId: wId);
+      }
       try {
-        // final ids = await DesktopMultiWindow.getAllSubWindowIds();
-        // if (!ids.contains(wId)) {
-        //   // no such window already
-        //   return;
-        // }
         await WindowController.fromWindowId(wId).setPreventClose(false);
         await WindowController.fromWindowId(wId).close();
         _activeWindows.remove(wId);
@@ -297,7 +486,6 @@ class RustDeskMultiWindowManager {
         return;
       }
     }
-    await _notifyActiveWindow();
     clearWindowType(type);
   }
 
@@ -330,14 +518,6 @@ class RustDeskMultiWindowManager {
     await _notifyActiveWindow();
   }
 
-  Future<void> destroyWindow(int windowId) async {
-    await WindowController.fromWindowId(windowId).setPreventClose(false);
-    await WindowController.fromWindowId(windowId).close();
-    _remoteDesktopWindows.remove(windowId);
-    _fileTransferWindows.remove(windowId);
-    _portForwardWindows.remove(windowId);
-  }
-
   /// Remove active window which has [`windowId`]
   ///
   /// [Availability]
@@ -358,6 +538,39 @@ class RustDeskMultiWindowManager {
 
   void unregisterActiveWindowListener(AsyncCallback callback) {
     _windowActiveCallbacks.remove(callback);
+  }
+
+  // This function is called from the main window.
+  // It will query the active remote windows to get their coords.
+  Future<List<String>> getOtherRemoteWindowCoords(int wId) async {
+    List<String> coords = [];
+    for (final windowId in _remoteDesktopWindows) {
+      if (windowId != wId) {
+        if (_activeWindows.contains(windowId)) {
+          final res = await DesktopMultiWindow.invokeMethod(
+              windowId, kWindowEventRemoteWindowCoords, '');
+          if (res != null) {
+            coords.add(res);
+          }
+        }
+      }
+    }
+    return coords;
+  }
+
+  // This function is called from one remote window.
+  // Only the main window knows `_remoteDesktopWindows` and `_activeWindows`.
+  // So we need to call the main window to get the other remote windows' coords.
+  Future<List<RemoteWindowCoords>> getOtherRemoteWindowCoordsFromMain() async {
+    List<RemoteWindowCoords> coords = [];
+    // Call the main window to get the coords of other remote windows.
+    String res = await DesktopMultiWindow.invokeMethod(
+        kMainWindowId, kWindowEventRemoteWindowCoords, kWindowId.toString());
+    List<dynamic> list = jsonDecode(res);
+    for (var item in list) {
+      coords.add(RemoteWindowCoords.fromJson(jsonDecode(item)));
+    }
+    return coords;
   }
 }
 

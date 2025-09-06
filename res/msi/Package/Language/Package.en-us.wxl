@@ -1,0 +1,56 @@
+﻿<!--
+This file contains the declaration of all the localizable strings.
+-->
+<WixLocalization Culture="en-us" Codepage="1252"
+	xmlns="http://wixtoolset.org/schemas/v4/wxl">
+
+	<String Id="SummaryCodepage" Value="1252" />
+	<String Id="ProductLanguage" Value="1033" />
+
+	<!-- General strings -->
+	<String Id="DowngradeError" Value="A newer version of [ProductName] is already installed." />
+
+	<String Id="AR_Comment" Value="RustDesk" />
+
+	<String Id="F_App" Value="RustDesk" />
+	<String Id="F_App_Desc" Value="RustDesk - Main programs installations." />
+
+	<String Id="SC_Uninstall" Value="Uninstall RustDesk" />
+	<String Id="SC_Uninstall_Desc" Value="Removes RustDesk or parts of it from the computer" />
+
+	<!-- Client related strings -->
+	<String Id="F_Client" Value="Client" />
+	<String Id="F_Client_Desc" Value="The user interface. Plays media files." />
+	<String Id="F_Client_Plugins" Value="Plugins" />
+	<String Id="F_Client_Plugins_Desc" Value="Plugins for the client." />
+	<String Id="F_LAVFilters" Value="LAV Filters" />
+	<String Id="F_LAVFilters_Desc" Value="Recommended directshow filters for best audio and video playback experience." />
+
+	<String Id="SC_Client" Value="RustDesk" />
+	<String Id="SC_Client_Desc" Value="Start RustDesk." />
+
+	<String Id="SC_Client_Tray" Value="RustDesk Tray" />
+	<String Id="SC_Client_Tray_Desc" Value="Start RustDesk tray." />
+
+	<!-- Server related strings -->
+	<String Id="F_Server" Value="Server" />
+	<String Id="F_Server_Desc" Value="The server part of RustDesk. Provides the MediaLibrary and other services." />
+	<String Id="F_Server_Plugins" Value="Plugins" />
+	<String Id="F_Server_Plugins_Desc" Value="Plugins for the server." />
+
+	<String Id="Service_DisplayName" Value="RustDesk Service" />
+	<String Id="Service_Description" Value="This service runs the RustDesk Server." />
+
+	<!-- Launch Conditions -->
+	<String Id="LC_OS" Value="[ProductName] requires minimum Windows 7 / 2008 R2 as operating system." />
+	<String Id="LC_ADMIN" Value="You need to be an administrator to install [ProductName]." />
+
+	<!-- User Interfaces -->
+	<String Id="AnotherAppDialogTitle" Value="Cancel installation."/>
+	<String Id="AnotherAppDialogDescription" Value="The application is installed by self-installation method, please uninstall it first."/>
+
+	<String Id="MyInstallDirDlgDesktopShortcuts" Value="Create desktop icon" />
+	<String Id="MyInstallDirDlgStartMenuShortcuts" Value="Create start menu shortcuts" />
+	<String Id="MyInstallDirDlgPrinter" Value="Install RustDesk Printer" />
+
+</WixLocalization>

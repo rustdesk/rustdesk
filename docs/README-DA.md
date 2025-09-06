@@ -9,23 +9,15 @@
   <b>Vi har brug for din hjælp til at oversætte denne README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> og <a href=" https://github.com/rustdesk/doc.rustdesk.com">Dokument</a> til dit modersmål</b>
 </p>
 
-Chat med os: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Chat med os: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Avancerede%20Funktioner-blue)](https://rustdesk.com/pricing.html)
 
 Endnu en fjernskrivebordssoftware, skrevet i Rust. Fungerer ud af æsken, ingen konfiguration påkrævet. Du har fuld kontrol over dine data uden bekymringer om sikkerhed. Du kan bruge vores rendezvous/relay-server, [opsætte din egen](https://rustdesk.com/server), eller [skrive din egen rendezvous/relay-server](https://github.com/rustdesk/rustdesk- server-demo).
 
-RustDesk hilser bidrag fra alle velkommen. Se [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for at få hjælp til at komme i gang.
+RustDesk hilser bidrag fra alle velkommen. Se [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) for at få hjælp til at komme i gang.
 
 [**PROGRAM DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
-
-## Gratis offentlige servere
-
-Nedenfor er de servere, du bruger gratis, det kan ændre sig med tiden. Hvis du ikke er tæt på en af disse, kan dit netværk være langsomt.
-
-| Beliggenhed | Udbyder | Specifikation |
-| ---------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
 
 ## Afhængigheder
 
@@ -108,33 +100,6 @@ mv libsciter-gtk.so target/debug
 cargo run
 ```
 
-### Skift Wayland til X11 (Xorg)
-
-RustDesk understøtter ikke Wayland. Tjek [dette](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) for at konfigurere Xorg som standard GNOME-session.
-
-## Wayland-support
-
-Wayland ser ikke ud til at levere nogen API til at sende tastetryk til andre vinduer. Derfor bruger rustdesk et API fra et lavere niveau, nemlig `/dev/uinput`-enheden (Linux-kerneniveau).
-
-Når wayland er den kontrollerede side, skal du starte på følgende måde:
-```bash
-# Start uinput service
-$ sudo rustdesk --service
-$ rustdesk
-```
-**Bemærk**: Wayland-skærmoptagelse bruger forskellige grænseflader. RustDesk understøtter i øjeblikket kun org.freedesktop.portal.ScreenCast.
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Not support
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Support
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
-```
 ## Sådan bygger du med Docker
 
 ```sh

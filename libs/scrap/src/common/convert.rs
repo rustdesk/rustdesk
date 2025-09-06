@@ -1,547 +1,236 @@
-use super::vpx::*;
-use std::os::raw::c_int;
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+#![allow(non_upper_case_globals)]
+#![allow(improper_ctypes)]
+#![allow(dead_code)]
 
-extern "C" {
-    // seems libyuv uses reverse byte order compared with our view
+include!(concat!(env!("OUT_DIR"), "/yuv_ffi.rs"));
 
-    pub fn ARGBRotate(
-        src_argb: *const u8,
-        src_stride_argb: c_int,
-        dst_argb: *mut u8,
-        dst_stride_argb: c_int,
-        src_width: c_int,
-        src_height: c_int,
-        mode: c_int,
-    ) -> c_int;
+#[cfg(not(target_os = "ios"))]
+use crate::PixelBuffer;
+use crate::{generate_call_macro, EncodeYuvFormat, TraitPixelBuffer};
+use hbb_common::{bail, log, ResultType};
 
-    pub fn ARGBMirror(
-        src_argb: *const u8,
-        src_stride_argb: c_int,
-        dst_argb: *mut u8,
-        dst_stride_argb: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
+generate_call_macro!(call_yuv, false);
 
-    pub fn ARGBToI420(
-        src_bgra: *const u8,
-        src_stride_bgra: c_int,
-        dst_y: *mut u8,
-        dst_stride_y: c_int,
-        dst_u: *mut u8,
-        dst_stride_u: c_int,
-        dst_v: *mut u8,
-        dst_stride_v: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-
-    pub fn ABGRToI420(
-        src_rgba: *const u8,
-        src_stride_rgba: c_int,
-        dst_y: *mut u8,
-        dst_stride_y: c_int,
-        dst_u: *mut u8,
-        dst_stride_u: c_int,
-        dst_v: *mut u8,
-        dst_stride_v: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-
-    pub fn ARGBToNV12(
-        src_bgra: *const u8,
-        src_stride_bgra: c_int,
-        dst_y: *mut u8,
-        dst_stride_y: c_int,
-        dst_uv: *mut u8,
-        dst_stride_uv: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-
-    pub fn NV12ToI420(
-        src_y: *const u8,
-        src_stride_y: c_int,
-        src_uv: *const u8,
-        src_stride_uv: c_int,
-        dst_y: *mut u8,
-        dst_stride_y: c_int,
-        dst_u: *mut u8,
-        dst_stride_u: c_int,
-        dst_v: *mut u8,
-        dst_stride_v: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-
-    // I420ToRGB24: RGB little endian (bgr in memory)
-    // I420ToRaw: RGB big endian (rgb in memory) to RGBA.
-    pub fn I420ToRAW(
-        src_y: *const u8,
-        src_stride_y: c_int,
-        src_u: *const u8,
-        src_stride_u: c_int,
-        src_v: *const u8,
-        src_stride_v: c_int,
-        dst_rgba: *mut u8,
-        dst_stride_raw: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-
-    pub fn I420ToARGB(
-        src_y: *const u8,
-        src_stride_y: c_int,
-        src_u: *const u8,
-        src_stride_u: c_int,
-        src_v: *const u8,
-        src_stride_v: c_int,
-        dst_rgba: *mut u8,
-        dst_stride_rgba: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-
-    pub fn I420ToABGR(
-        src_y: *const u8,
-        src_stride_y: c_int,
-        src_u: *const u8,
-        src_stride_u: c_int,
-        src_v: *const u8,
-        src_stride_v: c_int,
-        dst_rgba: *mut u8,
-        dst_stride_rgba: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-
-    pub fn NV12ToARGB(
-        src_y: *const u8,
-        src_stride_y: c_int,
-        src_uv: *const u8,
-        src_stride_uv: c_int,
-        dst_rgba: *mut u8,
-        dst_stride_rgba: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-
-    pub fn NV12ToABGR(
-        src_y: *const u8,
-        src_stride_y: c_int,
-        src_uv: *const u8,
-        src_stride_uv: c_int,
-        dst_rgba: *mut u8,
-        dst_stride_rgba: c_int,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-}
-
-// https://github.com/webmproject/libvpx/blob/master/vpx/src/vpx_image.c
-#[inline]
-fn get_vpx_i420_stride(
-    width: usize,
-    height: usize,
-    stride_align: usize,
-) -> (usize, usize, usize, usize, usize, usize) {
-    let mut img = Default::default();
-    unsafe {
-        vpx_img_wrap(
-            &mut img,
-            vpx_img_fmt::VPX_IMG_FMT_I420,
-            width as _,
-            height as _,
-            stride_align as _,
-            0x1 as _,
-        );
-    }
-    (
-        img.w as _,
-        img.h as _,
-        img.stride[0] as _,
-        img.stride[1] as _,
-        img.planes[1] as usize - img.planes[0] as usize,
-        img.planes[2] as usize - img.planes[0] as usize,
-    )
-}
-
-pub fn i420_to_rgb(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
-    let (_, _, src_stride_y, src_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
-    let src_y = src.as_ptr();
-    let src_u = src[u..].as_ptr();
-    let src_v = src[v..].as_ptr();
-    dst.resize(width * height * 3, 0);
-    unsafe {
-        super::I420ToRAW(
-            src_y,
-            src_stride_y as _,
-            src_u,
-            src_stride_uv as _,
-            src_v,
-            src_stride_uv as _,
-            dst.as_mut_ptr(),
-            (width * 3) as _,
-            width as _,
-            height as _,
-        );
-    };
-}
-
-pub fn i420_to_bgra(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
-    let (_, _, src_stride_y, src_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
-    let src_y = src.as_ptr();
-    let src_u = src[u..].as_ptr();
-    let src_v = src[v..].as_ptr();
-    dst.resize(width * height * 4, 0);
-    unsafe {
-        super::I420ToARGB(
-            src_y,
-            src_stride_y as _,
-            src_u,
-            src_stride_uv as _,
-            src_v,
-            src_stride_uv as _,
-            dst.as_mut_ptr(),
-            (width * 3) as _,
-            width as _,
-            height as _,
-        );
-    };
-}
-
-pub fn bgra_to_i420(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
-    let (_, h, dst_stride_y, dst_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
-    dst.resize(h * dst_stride_y * 2, 0); // waste some memory to ensure memory safety
-    let dst_y = dst.as_mut_ptr();
-    let dst_u = dst[u..].as_mut_ptr();
-    let dst_v = dst[v..].as_mut_ptr();
-    unsafe {
-        ARGBToI420(
-            src.as_ptr(),
-            (src.len() / height) as _,
-            dst_y,
-            dst_stride_y as _,
-            dst_u,
-            dst_stride_uv as _,
-            dst_v,
-            dst_stride_uv as _,
-            width as _,
-            height as _,
-        );
-    }
-}
-
-pub fn rgba_to_i420(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
-    let (_, h, dst_stride_y, dst_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
-    dst.resize(h * dst_stride_y * 2, 0); // waste some memory to ensure memory safety
-    let dst_y = dst.as_mut_ptr();
-    let dst_u = dst[u..].as_mut_ptr();
-    let dst_v = dst[v..].as_mut_ptr();
-    unsafe {
-        ABGRToI420(
-            src.as_ptr(),
-            (src.len() / height) as _,
-            dst_y,
-            dst_stride_y as _,
-            dst_u,
-            dst_stride_uv as _,
-            dst_v,
-            dst_stride_uv as _,
-            width as _,
-            height as _,
-        );
-    }
-}
-
-pub unsafe fn nv12_to_i420(
-    src_y: *const u8,
-    src_stride_y: c_int,
-    src_uv: *const u8,
-    src_stride_uv: c_int,
-    width: usize,
-    height: usize,
+#[cfg(not(target_os = "ios"))]
+pub fn convert_to_yuv(
+    captured: &PixelBuffer,
+    dst_fmt: EncodeYuvFormat,
     dst: &mut Vec<u8>,
-) {
-    let (_, h, dst_stride_y, dst_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
-    dst.resize(h * dst_stride_y * 2, 0); // waste some memory to ensure memory safety
-    let dst_y = dst.as_mut_ptr();
-    let dst_u = dst[u..].as_mut_ptr();
-    let dst_v = dst[v..].as_mut_ptr();
-    NV12ToI420(
-        src_y,
-        src_stride_y,
-        src_uv,
-        src_stride_uv,
-        dst_y,
-        dst_stride_y as _,
-        dst_u,
-        dst_stride_uv as _,
-        dst_v,
-        dst_stride_uv as _,
-        width as _,
-        height as _,
+    mid_data: &mut Vec<u8>,
+) -> ResultType<()> {
+    let src = captured.data();
+    let src_stride = captured.stride();
+    let src_pixfmt = captured.pixfmt();
+    let src_width = captured.width();
+    let src_height = captured.height();
+    if src_width > dst_fmt.w || src_height > dst_fmt.h {
+        bail!(
+            "src rect > dst rect: ({src_width}, {src_height}) > ({},{})",
+            dst_fmt.w,
+            dst_fmt.h
+        );
+    }
+    if src_pixfmt == crate::Pixfmt::BGRA
+        || src_pixfmt == crate::Pixfmt::RGBA
+        || src_pixfmt == crate::Pixfmt::RGB565LE
+    {
+        // stride is calculated, not real, so we need to check it
+        if src_stride[0] < src_width * src_pixfmt.bytes_per_pixel() {
+            bail!(
+                "src_stride too small: {} < {}",
+                src_stride[0],
+                src_width * src_pixfmt.bytes_per_pixel()
+            );
+        }
+        if src.len() < src_stride[0] * src_height {
+            bail!(
+                "wrong src len, {} < {} * {}",
+                src.len(),
+                src_stride[0],
+                src_height
+            );
+        }
+    }
+    let align = |x: usize| (x + 63) / 64 * 64;
+    let unsupported = format!(
+        "unsupported pixfmt conversion: {src_pixfmt:?} -> {:?}",
+        dst_fmt.pixfmt
     );
+
+    match (src_pixfmt, dst_fmt.pixfmt) {
+        (crate::Pixfmt::BGRA, crate::Pixfmt::I420)
+        | (crate::Pixfmt::RGBA, crate::Pixfmt::I420)
+        | (crate::Pixfmt::RGB565LE, crate::Pixfmt::I420) => {
+            let dst_stride_y = dst_fmt.stride[0];
+            let dst_stride_uv = dst_fmt.stride[1];
+            dst.resize(dst_fmt.h * dst_stride_y * 2, 0); // waste some memory to ensure memory safety
+            let dst_y = dst.as_mut_ptr();
+            let dst_u = dst[dst_fmt.u..].as_mut_ptr();
+            let dst_v = dst[dst_fmt.v..].as_mut_ptr();
+            let f = match src_pixfmt {
+                crate::Pixfmt::BGRA => ARGBToI420,
+                crate::Pixfmt::RGBA => ABGRToI420,
+                crate::Pixfmt::RGB565LE => RGB565ToI420,
+                _ => bail!(unsupported),
+            };
+            call_yuv!(f(
+                src.as_ptr(),
+                src_stride[0] as _,
+                dst_y,
+                dst_stride_y as _,
+                dst_u,
+                dst_stride_uv as _,
+                dst_v,
+                dst_stride_uv as _,
+                src_width as _,
+                src_height as _,
+            ));
+        }
+        (crate::Pixfmt::BGRA, crate::Pixfmt::NV12)
+        | (crate::Pixfmt::RGBA, crate::Pixfmt::NV12)
+        | (crate::Pixfmt::RGB565LE, crate::Pixfmt::NV12) => {
+            let dst_stride_y = dst_fmt.stride[0];
+            let dst_stride_uv = dst_fmt.stride[1];
+            dst.resize(
+                align(dst_fmt.h) * (align(dst_stride_y) + align(dst_stride_uv / 2)),
+                0,
+            );
+            let dst_y = dst.as_mut_ptr();
+            let dst_uv = dst[dst_fmt.u..].as_mut_ptr();
+            let (input, input_stride) = match src_pixfmt {
+                crate::Pixfmt::BGRA => (src.as_ptr(), src_stride[0]),
+                crate::Pixfmt::RGBA => (src.as_ptr(), src_stride[0]),
+                crate::Pixfmt::RGB565LE => {
+                    let mid_stride = src_width * 4;
+                    mid_data.resize(mid_stride * src_height, 0);
+                    call_yuv!(RGB565ToARGB(
+                        src.as_ptr(),
+                        src_stride[0] as _,
+                        mid_data.as_mut_ptr(),
+                        mid_stride as _,
+                        src_width as _,
+                        src_height as _,
+                    ));
+                    (mid_data.as_ptr(), mid_stride)
+                }
+                _ => bail!(unsupported),
+            };
+            let f = match src_pixfmt {
+                crate::Pixfmt::BGRA => ARGBToNV12,
+                crate::Pixfmt::RGBA => ABGRToNV12,
+                crate::Pixfmt::RGB565LE => ARGBToNV12,
+                _ => bail!(unsupported),
+            };
+            call_yuv!(f(
+                input,
+                input_stride as _,
+                dst_y,
+                dst_stride_y as _,
+                dst_uv,
+                dst_stride_uv as _,
+                src_width as _,
+                src_height as _,
+            ));
+        }
+        (crate::Pixfmt::BGRA, crate::Pixfmt::I444)
+        | (crate::Pixfmt::RGBA, crate::Pixfmt::I444)
+        | (crate::Pixfmt::RGB565LE, crate::Pixfmt::I444) => {
+            let dst_stride_y = dst_fmt.stride[0];
+            let dst_stride_u = dst_fmt.stride[1];
+            let dst_stride_v = dst_fmt.stride[2];
+            dst.resize(
+                align(dst_fmt.h)
+                    * (align(dst_stride_y) + align(dst_stride_u) + align(dst_stride_v)),
+                0,
+            );
+            let dst_y = dst.as_mut_ptr();
+            let dst_u = dst[dst_fmt.u..].as_mut_ptr();
+            let dst_v = dst[dst_fmt.v..].as_mut_ptr();
+            let (input, input_stride) = match src_pixfmt {
+                crate::Pixfmt::BGRA => (src.as_ptr(), src_stride[0]),
+                crate::Pixfmt::RGBA => {
+                    mid_data.resize(src.len(), 0);
+                    call_yuv!(ABGRToARGB(
+                        src.as_ptr(),
+                        src_stride[0] as _,
+                        mid_data.as_mut_ptr(),
+                        src_stride[0] as _,
+                        src_width as _,
+                        src_height as _,
+                    ));
+                    (mid_data.as_ptr(), src_stride[0])
+                }
+                crate::Pixfmt::RGB565LE => {
+                    let mid_stride = src_width * 4;
+                    mid_data.resize(mid_stride * src_height, 0);
+                    call_yuv!(RGB565ToARGB(
+                        src.as_ptr(),
+                        src_stride[0] as _,
+                        mid_data.as_mut_ptr(),
+                        mid_stride as _,
+                        src_width as _,
+                        src_height as _,
+                    ));
+                    (mid_data.as_ptr(), mid_stride)
+                }
+                _ => bail!(unsupported),
+            };
+
+            call_yuv!(ARGBToI444(
+                input,
+                input_stride as _,
+                dst_y,
+                dst_stride_y as _,
+                dst_u,
+                dst_stride_u as _,
+                dst_v,
+                dst_stride_v as _,
+                src_width as _,
+                src_height as _,
+            ));
+        }
+        _ => {
+            bail!(unsupported);
+        }
+    }
+    Ok(())
 }
 
-#[cfg(feature = "hwcodec")]
-pub mod hw {
-    use crate::ImageFormat;
-    use hbb_common::{anyhow::anyhow, ResultType};
-    #[cfg(target_os = "windows")]
-    use hwcodec::{ffmpeg::ffmpeg_linesize_offset_length, AVPixelFormat};
+#[cfg(not(target_os = "ios"))]
+pub fn convert(captured: &PixelBuffer, pixfmt: crate::Pixfmt, dst: &mut Vec<u8>) -> ResultType<()> {
+    if captured.pixfmt() == pixfmt {
+        dst.extend_from_slice(captured.data());
+        return Ok(());
+    }
 
-    pub fn hw_bgra_to_i420(
-        width: usize,
-        height: usize,
-        stride: &[i32],
-        offset: &[i32],
-        length: i32,
-        src: &[u8],
-        dst: &mut Vec<u8>,
-    ) {
-        let stride_y = stride[0] as usize;
-        let stride_u = stride[1] as usize;
-        let stride_v = stride[2] as usize;
-        let offset_u = offset[0] as usize;
-        let offset_v = offset[1] as usize;
+    let src = captured.data();
+    let src_stride = captured.stride();
+    let src_pixfmt = captured.pixfmt();
+    let src_width = captured.width();
+    let src_height = captured.height();
 
-        dst.resize(length as _, 0);
-        let dst_y = dst.as_mut_ptr();
-        let dst_u = dst[offset_u..].as_mut_ptr();
-        let dst_v = dst[offset_v..].as_mut_ptr();
-        unsafe {
-            super::ARGBToI420(
+    let unsupported = format!(
+        "unsupported pixfmt conversion: {src_pixfmt:?} -> {:?}",
+        pixfmt
+    );
+
+    match (src_pixfmt, pixfmt) {
+        (crate::Pixfmt::BGRA, crate::Pixfmt::RGBA) | (crate::Pixfmt::RGBA, crate::Pixfmt::BGRA) => {
+            dst.resize(src.len(), 0);
+            call_yuv!(ABGRToARGB(
                 src.as_ptr(),
-                (src.len() / height) as _,
-                dst_y,
-                stride_y as _,
-                dst_u,
-                stride_u as _,
-                dst_v,
-                stride_v as _,
-                width as _,
-                height as _,
-            );
+                src_stride[0] as _,
+                dst.as_mut_ptr(),
+                src_stride[0] as _,
+                src_width as _,
+                src_height as _,
+            ));
+        }
+        _ => {
+            bail!(unsupported);
         }
     }
-
-    pub fn hw_bgra_to_nv12(
-        width: usize,
-        height: usize,
-        stride: &[i32],
-        offset: &[i32],
-        length: i32,
-        src: &[u8],
-        dst: &mut Vec<u8>,
-    ) {
-        let stride_y = stride[0] as usize;
-        let stride_uv = stride[1] as usize;
-        let offset_uv = offset[0] as usize;
-
-        dst.resize(length as _, 0);
-        let dst_y = dst.as_mut_ptr();
-        let dst_uv = dst[offset_uv..].as_mut_ptr();
-        unsafe {
-            super::ARGBToNV12(
-                src.as_ptr(),
-                (src.len() / height) as _,
-                dst_y,
-                stride_y as _,
-                dst_uv,
-                stride_uv as _,
-                width as _,
-                height as _,
-            );
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    pub fn hw_nv12_to(
-        fmt: ImageFormat,
-        width: usize,
-        height: usize,
-        src_y: &[u8],
-        src_uv: &[u8],
-        src_stride_y: usize,
-        src_stride_uv: usize,
-        dst: &mut Vec<u8>,
-        i420: &mut Vec<u8>,
-        align: usize,
-    ) -> ResultType<()> {
-        let nv12_stride_y = src_stride_y;
-        let nv12_stride_uv = src_stride_uv;
-        if let Ok((linesize_i420, offset_i420, i420_len)) =
-            ffmpeg_linesize_offset_length(AVPixelFormat::AV_PIX_FMT_YUV420P, width, height, align)
-        {
-            dst.resize(width * height * 4, 0);
-            let i420_stride_y = linesize_i420[0];
-            let i420_stride_u = linesize_i420[1];
-            let i420_stride_v = linesize_i420[2];
-            i420.resize(i420_len as _, 0);
-
-            unsafe {
-                let i420_offset_y = i420.as_ptr().add(0) as _;
-                let i420_offset_u = i420.as_ptr().add(offset_i420[0] as _) as _;
-                let i420_offset_v = i420.as_ptr().add(offset_i420[1] as _) as _;
-                super::NV12ToI420(
-                    src_y.as_ptr(),
-                    nv12_stride_y as _,
-                    src_uv.as_ptr(),
-                    nv12_stride_uv as _,
-                    i420_offset_y,
-                    i420_stride_y,
-                    i420_offset_u,
-                    i420_stride_u,
-                    i420_offset_v,
-                    i420_stride_v,
-                    width as _,
-                    height as _,
-                );
-                match fmt {
-                    ImageFormat::ARGB => {
-                        super::I420ToARGB(
-                            i420_offset_y,
-                            i420_stride_y,
-                            i420_offset_u,
-                            i420_stride_u,
-                            i420_offset_v,
-                            i420_stride_v,
-                            dst.as_mut_ptr(),
-                            (width * 4) as _,
-                            width as _,
-                            height as _,
-                        );
-                    }
-                    ImageFormat::ABGR => {
-                        super::I420ToABGR(
-                            i420_offset_y,
-                            i420_stride_y,
-                            i420_offset_u,
-                            i420_stride_u,
-                            i420_offset_v,
-                            i420_stride_v,
-                            dst.as_mut_ptr(),
-                            (width * 4) as _,
-                            width as _,
-                            height as _,
-                        );
-                    }
-                    _ => {
-                        return Err(anyhow!("unsupported image format"));
-                    }
-                }
-                return Ok(());
-            };
-        }
-        return Err(anyhow!("get linesize offset failed"));
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    pub fn hw_nv12_to(
-        fmt: ImageFormat,
-        width: usize,
-        height: usize,
-        src_y: &[u8],
-        src_uv: &[u8],
-        src_stride_y: usize,
-        src_stride_uv: usize,
-        dst: &mut Vec<u8>,
-        _i420: &mut Vec<u8>,
-        _align: usize,
-    ) -> ResultType<()> {
-        dst.resize(width * height * 4, 0);
-        unsafe {
-            match fmt {
-                ImageFormat::ARGB => {
-                    match super::NV12ToARGB(
-                        src_y.as_ptr(),
-                        src_stride_y as _,
-                        src_uv.as_ptr(),
-                        src_stride_uv as _,
-                        dst.as_mut_ptr(),
-                        (width * 4) as _,
-                        width as _,
-                        height as _,
-                    ) {
-                        0 => Ok(()),
-                        _ => Err(anyhow!("NV12ToARGB failed")),
-                    }
-                }
-                ImageFormat::ABGR => {
-                    match super::NV12ToABGR(
-                        src_y.as_ptr(),
-                        src_stride_y as _,
-                        src_uv.as_ptr(),
-                        src_stride_uv as _,
-                        dst.as_mut_ptr(),
-                        (width * 4) as _,
-                        width as _,
-                        height as _,
-                    ) {
-                        0 => Ok(()),
-                        _ => Err(anyhow!("NV12ToABGR failed")),
-                    }
-                }
-                _ => Err(anyhow!("unsupported image format")),
-            }
-        }
-    }
-
-    pub fn hw_i420_to(
-        fmt: ImageFormat,
-        width: usize,
-        height: usize,
-        src_y: &[u8],
-        src_u: &[u8],
-        src_v: &[u8],
-        src_stride_y: usize,
-        src_stride_u: usize,
-        src_stride_v: usize,
-        dst: &mut Vec<u8>,
-    ) {
-        let src_y = src_y.as_ptr();
-        let src_u = src_u.as_ptr();
-        let src_v = src_v.as_ptr();
-        dst.resize(width * height * 4, 0);
-        unsafe {
-            match fmt {
-                ImageFormat::ARGB => {
-                    super::I420ToARGB(
-                        src_y,
-                        src_stride_y as _,
-                        src_u,
-                        src_stride_u as _,
-                        src_v,
-                        src_stride_v as _,
-                        dst.as_mut_ptr(),
-                        (width * 4) as _,
-                        width as _,
-                        height as _,
-                    );
-                }
-                ImageFormat::ABGR => {
-                    super::I420ToABGR(
-                        src_y,
-                        src_stride_y as _,
-                        src_u,
-                        src_stride_u as _,
-                        src_v,
-                        src_stride_v as _,
-                        dst.as_mut_ptr(),
-                        (width * 4) as _,
-                        width as _,
-                        height as _,
-                    );
-                }
-                _ => {}
-            }
-        };
-    }
+    Ok(())
 }
