@@ -140,7 +140,7 @@ class AbModel {
           debugPrint("pull ab list");
           List<AbProfile> abProfiles = List.empty(growable: true);
           abProfiles.add(AbProfile(_personalAbGuid!, _personalAddressBookName,
-              gFFI.userModel.userName.value, null, ShareRule.read.value));
+              gFFI.userModel.userName.value, null, ShareRule.read.value, null));
           // get all address book name
           await _getSharedAbProfiles(abProfiles);
           addressbooks.removeWhere((key, value) =>
@@ -609,7 +609,7 @@ class AbModel {
             if (name == null || guid == null) {
               continue;
             }
-            ab = Ab(AbProfile(guid, name, '', '', ShareRule.read.value),
+            ab = Ab(AbProfile(guid, name, '', '', ShareRule.read.value, null),
                 name == _personalAddressBookName);
           }
           addressbooks[name] = ab;
@@ -765,6 +765,28 @@ class AbModel {
 
   void removePeerUpdateListener(String key) {
     _peerIdUpdateListeners.remove(key);
+  }
+
+  String? getdefaultSharedPassword() {
+    if (current.isPersonal()) {
+      return null;
+    }
+    final profile = current.sharedProfile();
+    if (profile == null) {
+      return null;
+    }
+    try {
+      if (profile.info is Map) {
+        final password = (profile.info as Map)['password'];
+        if (password is String && password.isNotEmpty) {
+          return password;
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint("getdefaultSharedPassword: $e");
+      return null;
+    }
   }
 
 // #endregion
