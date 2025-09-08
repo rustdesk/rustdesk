@@ -91,6 +91,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -312,6 +314,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Install LLVM and Clang
         uses: rustdesk-org/install-llvm-action-32bit@master
@@ -455,6 +459,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -580,6 +586,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
@@ -875,6 +883,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -1145,6 +1155,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -1308,6 +1320,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Set Swap Space
         if: ${{ matrix.job.arch == 'x86_64' }}
@@ -1637,6 +1651,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Modify vcpkg.json for armv7
         if: matrix.job.vcpkg-triplet == 'arm-linux'
@@ -1838,6 +1854,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -1911,6 +1929,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -1972,6 +1992,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}  # 关键：给子模块用的 PAT
+          persist-credentials: false
 
       - name: Prepare env
         run: |
