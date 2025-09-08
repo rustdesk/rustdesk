@@ -819,23 +819,33 @@ void enterPasswordDialog(
 }
 
 void enterUserLoginDialog(
-    SessionID sessionId, OverlayDialogManager dialogManager) async {
+    SessionID sessionId,
+    OverlayDialogManager dialogManager,
+    String osAccountDescTip,
+    bool canRememberAccount) async {
   await _connectDialog(
     sessionId,
     dialogManager,
     osUsernameController: TextEditingController(),
     osPasswordController: TextEditingController(),
+    osAccountDescTip: osAccountDescTip,
+    canRememberAccount: canRememberAccount,
   );
 }
 
 void enterUserLoginAndPasswordDialog(
-    SessionID sessionId, OverlayDialogManager dialogManager) async {
+    SessionID sessionId,
+    OverlayDialogManager dialogManager,
+    String osAccountDescTip,
+    bool canRememberAccount) async {
   await _connectDialog(
     sessionId,
     dialogManager,
     osUsernameController: TextEditingController(),
     osPasswordController: TextEditingController(),
     passwordController: TextEditingController(),
+    osAccountDescTip: osAccountDescTip,
+    canRememberAccount: canRememberAccount,
   );
 }
 
@@ -845,17 +855,28 @@ _connectDialog(
   TextEditingController? osUsernameController,
   TextEditingController? osPasswordController,
   TextEditingController? passwordController,
+  String? osAccountDescTip,
+  bool canRememberAccount = true,
 }) async {
+  final errUsername = ''.obs;
   var rememberPassword = false;
   if (passwordController != null) {
     rememberPassword =
         await bind.sessionGetRemember(sessionId: sessionId) ?? false;
   }
   var rememberAccount = false;
-  if (osUsernameController != null) {
+  if (canRememberAccount && osUsernameController != null) {
     rememberAccount =
         await bind.sessionGetRemember(sessionId: sessionId) ?? false;
   }
+  if (osUsernameController != null) {
+    osUsernameController.addListener(() {
+      if (errUsername.value.isNotEmpty) {
+        errUsername.value = '';
+      }
+    });
+  }
+
   dialogManager.dismissAll();
   dialogManager.show((setState, close, context) {
     cancel() {
@@ -864,6 +885,13 @@ _connectDialog(
     }
 
     submit() {
+      if (osUsernameController != null) {
+        if (osUsernameController.text.trim().isEmpty) {
+          errUsername.value = translate('Empty Username');
+          setState(() {});
+          return;
+        }
+      }
       final osUsername = osUsernameController?.text.trim() ?? '';
       final osPassword = osPasswordController?.text.trim() ?? '';
       final password = passwordController?.text.trim() ?? '';
@@ -927,26 +955,39 @@ _connectDialog(
       }
       return Column(
         children: [
-          descWidget(translate('login_linux_tip')),
+          if (osAccountDescTip != null) descWidget(translate(osAccountDescTip)),
           DialogTextField(
             title: translate(DialogTextField.kUsernameTitle),
             controller: osUsernameController,
             prefixIcon: DialogTextField.kUsernameIcon,
             errorText: null,
           ),
+          if (errUsername.value.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                errUsername.value,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                ),
+                textAlign: TextAlign.left,
+              ).paddingOnly(left: 12, bottom: 2),
+            ),
           PasswordWidget(
             controller: osPasswordController,
             autoFocus: false,
           ),
-          rememberWidget(
-            translate('remember_account_tip'),
-            rememberAccount,
-            (v) {
-              if (v != null) {
-                setState(() => rememberAccount = v);
-              }
-            },
-          ),
+          if (canRememberAccount)
+            rememberWidget(
+              translate('remember_account_tip'),
+              rememberAccount,
+              (v) {
+                if (v != null) {
+                  setState(() => rememberAccount = v);
+                }
+              },
+            ),
         ],
       );
     }
@@ -1136,7 +1177,7 @@ void showRequestElevationDialog(
               DialogTextField(
                 controller: userController,
                 title: translate('Username'),
-                hintText: translate('eg: admin'),
+                hintText: translate('elevation_username_tip'),
                 prefixIcon: DialogTextField.kUsernameIcon,
                 errorText: errUser.isEmpty ? null : errUser.value,
               ),

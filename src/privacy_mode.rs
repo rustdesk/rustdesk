@@ -1,17 +1,13 @@
-#[cfg(windows)]
-use crate::platform::is_installed;
 use crate::ui_interface::get_option;
 #[cfg(windows)]
 use crate::{
     display_service,
     ipc::{connect, Data},
+    platform::is_installed,
 };
-use hbb_common::{
-    anyhow::anyhow,
-    bail, lazy_static,
-    tokio::{self, sync::oneshot},
-    ResultType,
-};
+#[cfg(windows)]
+use hbb_common::tokio;
+use hbb_common::{anyhow::anyhow, bail, lazy_static, tokio::sync::oneshot, ResultType};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -39,7 +35,8 @@ pub const TURN_OFF_OTHER_ID: &'static str =
 pub const NO_PHYSICAL_DISPLAYS: &'static str = "no_need_privacy_mode_no_physical_displays_tip";
 
 pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = "privacy_mode_impl_mag";
-pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str = "privacy_mode_impl_exclude_from_capture";
+pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str =
+    "privacy_mode_impl_exclude_from_capture";
 pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = "privacy_mode_impl_virtual_display";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -219,9 +216,10 @@ async fn turn_on_privacy_async(impl_key: String, conn_id: i32) -> Option<ResultT
         let res = turn_on_privacy_sync(&impl_key, conn_id);
         let _ = tx.send(res);
     });
-    // Wait at most 5 seconds for the result.
+    // Wait at most 7.5 seconds for the result.
     // Because it may take a long time to turn on the privacy mode with amyuni idd.
-    match hbb_common::timeout(5000, rx).await {
+    // Some laptops may take time to plug in a virtual display.
+    match hbb_common::timeout(7500, rx).await {
         Ok(res) => match res {
             Ok(res) => res,
             Err(e) => Some(Err(anyhow!(e.to_string()))),

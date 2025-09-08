@@ -4,6 +4,10 @@
     <dict>
         <key>Label</key>
         <string>com.carriez.RustDesk_service</string>
+
+	<key>AssociatedBundleIdentifiers</key>
+	<string>com.carriez.rustdesk</string>
+    
         <key>KeepAlive</key>
         <true/>
         <key>ThrottleInterval</key>

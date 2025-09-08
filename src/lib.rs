@@ -56,6 +56,9 @@ pub mod plugin;
 mod tray;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod whiteboard;
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod updater;
 
 mod ui_cm_interface;
@@ -71,3 +74,5 @@ pub mod privacy_mode;
 
 #[cfg(windows)]
 pub mod virtual_display_manager;
+
+mod kcp_stream;

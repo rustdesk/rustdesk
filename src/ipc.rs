@@ -104,7 +104,9 @@ pub enum FS {
         file_size: u64,
         last_modified: u64,
         is_upload: bool,
+        is_resume: bool,
     },
+    SendConfirm(Vec<u8>),
     Rename {
         id: i32,
         path: String,
@@ -175,7 +177,7 @@ pub enum DataPortableService {
     Ping,
     Pong,
     ConnCount(Option<usize>),
-    Mouse((Vec<u8>, i32)),
+    Mouse((Vec<u8>, i32, String, u32, bool, bool)),
     Pointer((Vec<u8>, i32)),
     Key(Vec<u8>),
     RequestStart,
@@ -190,6 +192,7 @@ pub enum Data {
         id: i32,
         is_file_transfer: bool,
         is_view_camera: bool,
+        is_terminal: bool,
         peer_id: String,
         name: String,
         authorized: bool,
@@ -281,9 +284,13 @@ pub enum Data {
         not(any(target_os = "android", target_os = "ios"))
     ))]
     ControllingSessionCount(usize),
+    #[cfg(target_os = "linux")]
+    TerminalSessionCount(usize),
     #[cfg(target_os = "windows")]
     PortForwardSessionCount(Option<usize>),
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    Whiteboard((String, crate::whiteboard::CustomEvent)),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -640,6 +647,11 @@ async fn handle(data: Data, stream: &mut Connection) {
         ))]
         Data::ControllingSessionCount(count) => {
             crate::updater::update_controlling_session_count(count);
+        }
+        #[cfg(target_os = "linux")]
+        Data::TerminalSessionCount(_) => {
+            let count = crate::terminal_service::get_terminal_session_count(true);
+            allow_err!(stream.send(&Data::TerminalSessionCount(count)).await);
         }
         #[cfg(feature = "hwcodec")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1385,6 +1397,18 @@ pub async fn update_controlling_session_count(count: usize) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(&Data::ControllingSessionCount(count)).await?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn get_terminal_session_count() -> ResultType<usize> {
+    let ms_timeout = 1_000;
+    let mut c = connect(ms_timeout, "").await?;
+    c.send(&Data::TerminalSessionCount(0)).await?;
+    if let Some(Data::TerminalSessionCount(c)) = c.next_timeout(ms_timeout).await? {
+        return Ok(c);
+    }
+    Ok(0)
 }
 
 async fn handle_wayland_screencast_restore_token(

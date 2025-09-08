@@ -16,6 +16,7 @@ KillMode=mixed
 TimeoutStopSec=30
 User=root
 LimitNOFILE=100000
+Environment="PULSE_LATENCY_MSEC=60" "PIPEWIRE_LATENCY=1024/48000"
 
 [Install]
 WantedBy=multi-user.target

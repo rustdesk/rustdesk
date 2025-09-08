@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
@@ -94,6 +93,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _hideNetwork = false;
   var _hideWebSocket = false;
   var _enableTrustedDevices = false;
+  var _enableUdpPunch = false;
+  var _enableIpv6Punch = false;
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -124,8 +125,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _hideNetwork =
         bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
     _hideWebSocket =
-        true; //bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y';
+        bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y' ||
+            isWeb;
     _enableTrustedDevices = mainGetBoolOptionSync(kOptionEnableTrustedDevices);
+    _enableUdpPunch = mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
+    _enableIpv6Punch = mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
   }
 
   @override
@@ -374,7 +378,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         },
       ),
       SettingsTile.switchTile(
-        title: Text('${translate('Adaptive bitrate')} (beta)'),
+        title: Text(translate('Adaptive bitrate')),
         initialValue: _enableAbr,
         onToggle: isOptionFixed(kOptionEnableAbr)
             ? null
@@ -536,7 +540,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     enhancementsTiles.add(SettingsTile.switchTile(
         initialValue: _enableStartOnBoot,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text("${translate('Start on boot')} (beta)"),
+          Text(translate('Start on boot')),
           Text(
               '* ${translate('Start the screen sharing service on boot, requires special permissions')}',
               style: Theme.of(context).textTheme.bodySmall),
@@ -687,6 +691,32 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       });
                     },
             ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
+              title: Text(translate('Enable UDP hole punching')),
+              initialValue: _enableUdpPunch,
+              onToggle: (v) async {
+                await mainSetLocalBoolOption(kOptionEnableUdpPunch, v);
+                final newValue =
+                    mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
+                setState(() {
+                  _enableUdpPunch = newValue;
+                });
+              },
+            ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
+              title: Text(translate('Enable IPv6 P2P connection')),
+              initialValue: _enableIpv6Punch,
+              onToggle: (v) async {
+                await mainSetLocalBoolOption(kOptionEnableIpv6Punch, v);
+                final newValue =
+                    mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
+                setState(() {
+                  _enableIpv6Punch = newValue;
+                });
+              },
+            ),
           SettingsTile(
               title: Text(translate('Language')),
               leading: Icon(Icons.translate),
@@ -785,7 +815,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             !outgoingOnly &&
             !hideSecuritySettings)
           SettingsSection(
-            title: Text(translate("Share Screen")),
+            title: Text(translate("Share screen")),
             tiles: shareScreenTiles,
           ),
         if (!bind.isIncomingOnly()) defaultDisplaySection(),

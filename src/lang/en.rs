@@ -77,12 +77,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Canvas Move", "Canvas move"),
         ("Pinch to Zoom", "Pinch to zoom"),
         ("Canvas Zoom", "Canvas zoom"),
-        ("Share Screen", "Share screen"),
         ("Screen Capture", "Screen capture"),
         ("Input Control", "Input control"),
         ("Audio Capture", "Audio capture"),
-        ("File Connection", "File connection"),
-        ("Screen Connection", "Screen connection"),
         ("Open System Setting", "Open system setting"),
         ("android_input_permission_tip1", "In order for a remote device to control your Android device via mouse or touch, you need to allow RustDesk to use the \"Accessibility\" service."),
         ("android_input_permission_tip2", "Please go to the next system settings page, find and enter [Installed Services], turn on [RustDesk Input] service."),
@@ -259,5 +256,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("download-new-version-failed-tip", "Download failed. You can try again or click the \"Download\" button to download from the release page and upgrade manually."),
         ("update-failed-check-msi-tip", "Installation method check failed. Please click the \"Download\" button to download from the release page and upgrade manually."),
         ("websocket_tip", "When using WebSocket, only relay connections are supported."),
+        ("terminal-admin-login-tip", "Please input the administrator username and password of the controlled side."),
+        ("elevation_username_tip", "Input username or domain\\username"),
     ].iter().cloned().collect();
 }

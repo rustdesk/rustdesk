@@ -5,7 +5,9 @@ use crate::lang::translate;
 use gtk::{glib, prelude::*};
 use hbb_common::{
     anyhow::{bail, Error},
-    log, ResultType,
+    log,
+    platform::linux::CMD_SH,
+    ResultType,
 };
 use nix::{
     libc::{fcntl, kill},
@@ -463,12 +465,12 @@ fn ui_parent(
 fn child(su_user: Option<String>, args: Vec<String>) -> ResultType<()> {
     // https://doc.rust-lang.org/std/env/consts/constant.OS.html
     let os = std::env::consts::OS;
-    let bsd = os == "freebsd" || os == "dragonfly" || os == "netbsd" || os == "openbad";
+    let bsd = os == "freebsd" || os == "dragonfly" || os == "netbsd" || os == "openbsd";
     let mut params = vec!["sudo".to_string()];
     if su_user.is_some() {
         params.push("-S".to_string());
     }
-    params.push("/bin/sh".to_string());
+    params.push(CMD_SH.to_string());
     params.push("-c".to_string());
 
     let command = args

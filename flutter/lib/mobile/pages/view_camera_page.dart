@@ -39,12 +39,17 @@ void _disableAndroidSoftKeyboard({bool? isKeyboardVisible}) {
 
 class ViewCameraPage extends StatefulWidget {
   ViewCameraPage(
-      {Key? key, required this.id, this.password, this.isSharedPassword})
+      {Key? key,
+      required this.id,
+      this.password,
+      this.isSharedPassword,
+      this.forceRelay})
       : super(key: key);
 
   final String id;
   final String? password;
   final bool? isSharedPassword;
+  final bool? forceRelay;
 
   @override
   State<ViewCameraPage> createState() => _ViewCameraPageState(id);
@@ -88,6 +93,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       isViewCamera: true,
       password: widget.password,
       isSharedPassword: widget.isSharedPassword,
+      forceRelay: widget.forceRelay,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
@@ -577,7 +583,7 @@ void showOptions(
     BuildContext context, String id, OverlayDialogManager dialogManager) async {
   var displays = <Widget>[];
   final pi = gFFI.ffiModel.pi;
-  final image = gFFI.ffiModel.getConnectionImage();
+  final image = gFFI.ffiModel.getConnectionImageText();
   if (image != null) {
     displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
   }

@@ -49,7 +49,7 @@ def make_parser():
         "--dist-dir",
         type=str,
         default="../../rustdesk",
-        help="The dist direcotry to install.",
+        help="The dist directory to install.",
     )
     parser.add_argument(
         "--arp",

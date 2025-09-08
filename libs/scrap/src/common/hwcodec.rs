@@ -678,6 +678,8 @@ impl HwCodecConfig {
 }
 
 pub fn check_available_hwcodec() -> String {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    hwcodec::common::setup_parent_death_signal();
     let ctx = EncodeContext {
         name: String::from(""),
         mc_name: None,
@@ -724,6 +726,8 @@ pub fn start_check_process() {
             if let Some(_) = exe.file_name().to_owned() {
                 let arg = "--check-hwcodec-config";
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
+                    #[cfg(windows)]
+                    hwcodec::common::child_exit_when_parent_exit(child.id());
                     // wait up to 30 seconds, it maybe slow on windows startup for poorly performing machines
                     for _ in 0..30 {
                         std::thread::sleep(std::time::Duration::from_secs(1));

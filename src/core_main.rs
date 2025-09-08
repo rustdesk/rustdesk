@@ -149,7 +149,6 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
-    log::info!("main start args: {:?}, env: {:?}", args, std::env::args());
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]
@@ -345,7 +344,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
             }
             #[cfg(windows)]
-            crate::privacy_mode::restore_reg_connectivity(true);
+            crate::privacy_mode::restore_reg_connectivity(true, false);
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 crate::start_server(true, false);
@@ -454,7 +453,9 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--assign" {
-            if crate::platform::is_installed() && is_root() {
+            if config::Config::no_register_device() {
+                println!("Cannot assign an unregistrable device!");
+            } else if crate::platform::is_installed() && is_root() {
                 let max = args.len() - 1;
                 let pos = args.iter().position(|x| x == "--token").unwrap_or(max);
                 if pos < max {
@@ -571,6 +572,12 @@ pub fn core_main() -> Option<Vec<String>> {
             {
                 crate::ui_interface::start_option_status_sync();
                 crate::flutter::connection_manager::start_cm_no_ui();
+            }
+            return None;
+        } else if args[0] == "--whiteboard" {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                crate::whiteboard::run();
             }
             return None;
         } else if args[0] == "-gtk-sudo" {

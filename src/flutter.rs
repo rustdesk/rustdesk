@@ -15,11 +15,11 @@ use hbb_common::{
 };
 use serde::Serialize;
 use serde_json::json;
-
+#[cfg(target_os = "windows")]
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::{
     collections::{HashMap, HashSet},
     ffi::CString,
-    io::{Error as IoError, ErrorKind as IoErrorKind},
     os::raw::{c_char, c_int, c_void},
     str::FromStr,
     sync::{
@@ -111,6 +111,7 @@ pub extern "C" fn rustdesk_core_main() -> bool {
         #[cfg(target_os = "macos")]
         std::process::exit(0);
     }
+    #[cfg(not(target_os = "macos"))]
     false
 }
 
@@ -716,12 +717,13 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
-    fn set_connection_type(&self, is_secured: bool, direct: bool) {
+    fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str) {
         self.push_event(
             "connection_ready",
             &[
                 ("secure", &is_secured.to_string()),
                 ("direct", &direct.to_string()),
+                ("stream_type", &stream_type.to_string()),
             ],
             &[],
         );
@@ -1105,6 +1107,63 @@ impl InvokeUiSession for FlutterHandler {
             }
         }
     }
+
+    fn handle_terminal_response(&self, response: TerminalResponse) {
+        use hbb_common::message_proto::terminal_response::Union;
+
+        match response.union {
+            Some(Union::Opened(opened)) => {
+                let mut event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("type", json!("opened")),
+                    ("terminal_id", json!(opened.terminal_id)),
+                    ("success", json!(opened.success)),
+                    ("message", json!(&opened.message)),
+                    ("pid", json!(opened.pid)),
+                    ("service_id", json!(&opened.service_id)),
+                ];
+                if !opened.persistent_sessions.is_empty() {
+                    event_data.push(("persistent_sessions", json!(opened.persistent_sessions)));
+                }
+                self.push_event_("terminal_response", &event_data, &[], &[]);
+            }
+            Some(Union::Data(data)) => {
+                // Decompress data if needed
+                let output_data = if data.compressed {
+                    hbb_common::compress::decompress(&data.data)
+                } else {
+                    data.data.to_vec()
+                };
+
+                let encoded = crate::encode64(&output_data);
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("type", json!("data")),
+                    ("terminal_id", json!(data.terminal_id)),
+                    ("data", json!(&encoded)),
+                ];
+                self.push_event_("terminal_response", &event_data, &[], &[]);
+            }
+            Some(Union::Closed(closed)) => {
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("type", json!("closed")),
+                    ("terminal_id", json!(closed.terminal_id)),
+                    ("exit_code", json!(closed.exit_code)),
+                ];
+                self.push_event_("terminal_response", &event_data, &[], &[]);
+            }
+            Some(Union::Error(error)) => {
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("type", json!("error")),
+                    ("terminal_id", json!(error.terminal_id)),
+                    ("message", json!(&error.message)),
+                ];
+                self.push_event_("terminal_response", &event_data, &[], &[]);
+            }
+            None => {}
+            Some(_) => {
+                log::warn!("Unhandled terminal response type");
+            }
+        }
+    }
 }
 
 impl FlutterHandler {
@@ -1221,6 +1280,7 @@ pub fn session_add(
     is_view_camera: bool,
     is_port_forward: bool,
     is_rdp: bool,
+    is_terminal: bool,
     switch_uuid: &str,
     force_relay: bool,
     password: String,
@@ -1231,6 +1291,8 @@ pub fn session_add(
         ConnType::FILE_TRANSFER
     } else if is_view_camera {
         ConnType::VIEW_CAMERA
+    } else if is_terminal {
+        ConnType::TERMINAL
     } else if is_port_forward {
         if is_rdp {
             ConnType::RDP

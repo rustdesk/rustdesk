@@ -3,14 +3,32 @@ use hbb_common::{fs, log, message_proto::*};
 use super::{Data, Interface};
 
 pub trait FileManager: Interface {
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    )))]
     fn get_home_dir(&self) -> String {
         fs::get_home_as_string()
     }
 
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    )))]
     fn get_next_job_id(&self) -> i32 {
         fs::get_next_job_id()
     }
 
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    )))]
     fn update_next_job_id(&self, id: i32) {
         fs::update_next_job_id(id);
     }
@@ -30,20 +48,6 @@ pub trait FileManager: Interface {
                 m.set_item("path", path);
                 m
             }
-        }
-    }
-
-    #[cfg(any(
-        target_os = "android",
-        target_os = "ios",
-        feature = "cli",
-        feature = "flutter"
-    ))]
-    fn read_dir(&self, path: &str, include_hidden: bool) -> String {
-        use crate::common::make_fd_to_json;
-        match fs::read_dir(&fs::get_path(path), include_hidden) {
-            Ok(fd) => make_fd_to_json(fd.id, fd.path, &fd.entries),
-            Err(_) => "".into(),
         }
     }
 
@@ -83,10 +87,22 @@ pub trait FileManager: Interface {
         self.send(Data::RemoveDirAll((id, path, is_remote, include_hidden)));
     }
 
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    )))]
     fn confirm_delete_files(&self, id: i32, file_num: i32) {
         self.send(Data::ConfirmDeleteFiles((id, file_num)));
     }
 
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    )))]
     fn set_no_confirm(&self, id: i32) {
         self.send(Data::SetNoConfirm(id));
     }

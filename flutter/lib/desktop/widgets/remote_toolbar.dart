@@ -1593,6 +1593,9 @@ class _KeyboardMenu extends StatelessWidget {
               inputSource(),
               Divider(),
               viewMode(),
+              if ([kPeerPlatformWindows, kPeerPlatformMacOS, kPeerPlatformLinux]
+                  .contains(pi.platform))
+                showMyCursor(),
               Divider(),
               ...toolbarToggles(),
               ...mouseSpeed(),
@@ -1749,10 +1752,41 @@ class _KeyboardMenu extends StatelessWidget {
                 final viewOnly = await bind.sessionGetToggleOption(
                     sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
                 ffiModel.setViewOnly(id, viewOnly ?? value);
+                final showMyCursor = await bind.sessionGetToggleOption(
+                    sessionId: ffi.sessionId, arg: kOptionToggleShowMyCursor);
+                ffiModel.setShowMyCursor(showMyCursor ?? value);
               }
             : null,
         ffi: ffi,
         child: Text(translate('View Mode')));
+  }
+
+  showMyCursor() {
+    final ffiModel = ffi.ffiModel;
+    return CkbMenuButton(
+            value: ffiModel.showMyCursor,
+            onChanged: (value) async {
+              if (value == null) return;
+              await bind.sessionToggleOption(
+                  sessionId: ffi.sessionId, value: kOptionToggleShowMyCursor);
+              final showMyCursor = await bind.sessionGetToggleOption(
+                      sessionId: ffi.sessionId,
+                      arg: kOptionToggleShowMyCursor) ??
+                  value;
+              ffiModel.setShowMyCursor(showMyCursor);
+
+              // Also set view only if showMyCursor is enabled and viewOnly is not enabled.
+              if (showMyCursor && !ffiModel.viewOnly) {
+                await bind.sessionToggleOption(
+                    sessionId: ffi.sessionId, value: kOptionToggleViewOnly);
+                final viewOnly = await bind.sessionGetToggleOption(
+                    sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
+                ffiModel.setViewOnly(id, viewOnly ?? value);
+              }
+            },
+            ffi: ffi,
+            child: Text(translate('Show my cursor')))
+        .paddingOnly(left: 26.0);
   }
 
   mobileActions() {

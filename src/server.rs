@@ -33,6 +33,8 @@ use video_service::VideoSource;
 use crate::ipc::Data;
 
 pub mod audio_service;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod terminal_service;
 cfg_if::cfg_if! {
 if #[cfg(not(target_os = "ios"))] {
 mod clipboard_service;
@@ -146,6 +148,7 @@ pub fn new() -> ServerPtr {
             }
         }
     }
+    // Terminal service is created per connection, not globally
     Arc::new(RwLock::new(server))
 }
 
@@ -228,11 +231,13 @@ pub async fn create_tcp_connection(
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        Command::new("/usr/bin/caffeinate")
+        if let Ok(task) = Command::new("/usr/bin/caffeinate")
             .arg("-u")
             .arg("-t 5")
             .spawn()
-            .ok();
+        {
+            super::CHILD_PROCESS.lock().unwrap().push(task);
+        }
         log::info!("wake up macos");
     }
     Connection::start(addr, stream, id, Arc::downgrade(&server)).await;
@@ -246,7 +251,7 @@ pub async fn accept_connection(
     secure: bool,
 ) {
     if let Err(err) = accept_connection_(server, socket, secure).await {
-        log::error!("Failed to accept connection from {}: {}", peer_addr, err);
+        log::warn!("Failed to accept connection from {}: {}", peer_addr, err);
     }
 }
 

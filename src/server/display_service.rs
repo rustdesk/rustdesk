@@ -133,12 +133,13 @@ pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), cha
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn reset_resolutions() {
+pub fn restore_resolutions() {
     for (name, res) in CHANGED_RESOLUTIONS.read().unwrap().iter() {
         let (w, h) = res.original;
+        log::info!("Restore resolution of display '{}' to ({}, {})", name, w, h);
         if let Err(e) = crate::platform::change_resolution(name, w as _, h as _) {
             log::error!(
-                "Failed to reset resolution of display '{}' to ({},{}): {}",
+                "Failed to restore resolution of display '{}' to ({},{}): {}",
                 name,
                 w,
                 h,
@@ -146,7 +147,7 @@ pub fn reset_resolutions() {
             );
         }
     }
-    // Can be cleared because reset resolutions is called when there is no client connected.
+    // Can be cleared because restore resolutions is called when there is no client connected.
     CHANGED_RESOLUTIONS.write().unwrap().clear();
 }
 
@@ -403,7 +404,6 @@ fn no_displays(displays: &Vec<Display>) -> bool {
         false
     }
 }
-
 
 #[inline]
 #[cfg(not(windows))]

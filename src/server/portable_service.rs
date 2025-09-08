@@ -476,9 +476,9 @@ pub mod server {
                                             break;
                                         }
                                     }
-                                    Mouse((v, conn)) => {
+                                    Mouse((v, conn, username, argb, simulate, show_cursor)) => {
                                         if let Ok(evt) = MouseEvent::parse_from_bytes(&v) {
-                                            crate::input_service::handle_mouse_(&evt, conn);
+                                            crate::input_service::handle_mouse_(&evt, conn, username, argb, simulate, show_cursor);
                                         }
                                     }
                                     Pointer((v, conn)) => {
@@ -875,11 +875,23 @@ pub mod client {
         }
     }
 
-    fn handle_mouse_(evt: &MouseEvent, conn: i32) -> ResultType<()> {
+    fn handle_mouse_(
+        evt: &MouseEvent,
+        conn: i32,
+        username: String,
+        argb: u32,
+        simulate: bool,
+        show_cursor: bool,
+    ) -> ResultType<()> {
         let mut v = vec![];
         evt.write_to_vec(&mut v)?;
         ipc_send(Data::DataPortableService(DataPortableService::Mouse((
-            v, conn,
+            v,
+            conn,
+            username,
+            argb,
+            simulate,
+            show_cursor,
         ))))
     }
 
@@ -927,12 +939,19 @@ pub mod client {
         }
     }
 
-    pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
+    pub fn handle_mouse(
+        evt: &MouseEvent,
+        conn: i32,
+        username: String,
+        argb: u32,
+        simulate: bool,
+        show_cursor: bool,
+    ) {
         if RUNNING.lock().unwrap().clone() {
             crate::input_service::update_latest_input_cursor_time(conn);
-            handle_mouse_(evt, conn).ok();
+            handle_mouse_(evt, conn, username, argb, simulate, show_cursor).ok();
         } else {
-            crate::input_service::handle_mouse_(evt, conn);
+            crate::input_service::handle_mouse_(evt, conn, username, argb, simulate, show_cursor);
         }
     }
 

@@ -11,9 +11,9 @@
   <b>Chúng tôi rất hoan nghênh sự hỗ trợ của bạn trong việc dịch trang README, trang giao diện người dùng của RustDesk - <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> và trang tài liệu của RustDesk - <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Doc</a> sang Tiếng Việt</b>
 </p>
 
-Hãy trao đổi với chúng tôi qua: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Hãy trao đổi với chúng tôi qua: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-T%C3%ADnh%20N%C4%83ng%20N%C3%A2ng%20Cao-blue)](https://rustdesk.com/pricing.html)
 
 RustDesk là một phần mềm điểu khiển máy tính từ xa mã nguồn mở, được viết bằng Rust. Nó hoạt động ngay sau khi cài đặt, không yêu cầu cấu hình phức tạp. Bạn có toàn quyền kiểm soát với dữ liệu của mình mà không cần phải lo lắng về vấn đề bảo mật. Bạn có thể sử dụng máy chủ rendezvous/relay của chúng tôi hoặc [tự cài đặt máy chủ của riêng mình](https://rustdesk.com/server) hay thậm chí [tự tạo máy chủ rendezvous/relay cho riêng bạn](https://github.com/rustdesk/rustdesk-server-demo).
 

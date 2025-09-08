@@ -154,36 +154,38 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         onPressed: () => ffi.cursorModel.reset()));
   }
 
+  // https://github.com/rustdesk/rustdesk/pull/9731
+  // Does not work for connection established by "accept".
   connectWithToken(
       {bool isFileTransfer = false,
       bool isViewCamera = false,
-      bool isTcpTunneling = false}) {
+      bool isTcpTunneling = false,
+      bool isTerminal = false}) {
     final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
     connect(context, id,
         isFileTransfer: isFileTransfer,
         isViewCamera: isViewCamera,
+        isTerminal: isTerminal,
         isTcpTunneling: isTcpTunneling,
         connToken: connToken);
   }
 
-  // transferFile
   if (isDefaultConn && isDesktop) {
     v.add(
       TTextMenu(
           child: Text(translate('Transfer file')),
           onPressed: () => connectWithToken(isFileTransfer: true)),
     );
-  }
-  // viewCamera
-  if (isDefaultConn && isDesktop) {
     v.add(
       TTextMenu(
           child: Text(translate('View camera')),
           onPressed: () => connectWithToken(isViewCamera: true)),
     );
-  }
-  // tcpTunneling
-  if (isDefaultConn && isDesktop) {
+    v.add(
+      TTextMenu(
+          child: Text('${translate('Terminal')} (beta)'),
+          onPressed: () => connectWithToken(isTerminal: true)),
+    );
     v.add(
       TTextMenu(
           child: Text(translate('TCP tunneling')),

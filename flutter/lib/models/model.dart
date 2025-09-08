@@ -23,6 +23,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
+import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/plugin/event.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desc_ui.dart';
@@ -60,6 +61,7 @@ class CachedPeerData {
 
   bool secure = false;
   bool direct = false;
+  String streamType = '';
 
   CachedPeerData();
 
@@ -73,6 +75,7 @@ class CachedPeerData {
       'permissions': permissions,
       'secure': secure,
       'direct': direct,
+      'streamType': streamType,
     });
   }
 
@@ -91,6 +94,7 @@ class CachedPeerData {
       });
       data.secure = map['secure'];
       data.direct = map['direct'];
+      data.streamType = map['streamType'];
       return data;
     } catch (e) {
       debugPrint('Failed to parse CachedPeerData: $e');
@@ -112,6 +116,7 @@ class FfiModel with ChangeNotifier {
   Timer? _timer;
   var _reconnects = 1;
   bool _viewOnly = false;
+  bool _showMyCursor = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
 
@@ -150,6 +155,7 @@ class FfiModel with ChangeNotifier {
   bool get isPeerMobile => isPeerAndroid;
 
   bool get viewOnly => _viewOnly;
+  bool get showMyCursor => _showMyCursor;
 
   set inputBlocked(v) {
     _inputBlocked = v;
@@ -222,27 +228,45 @@ class FfiModel with ChangeNotifier {
     timerScreenshot?.cancel();
   }
 
-  setConnectionType(String peerId, bool secure, bool direct) {
+  setConnectionType(
+      String peerId, bool secure, bool direct, String streamType) {
     cachedPeerData.secure = secure;
     cachedPeerData.direct = direct;
+    cachedPeerData.streamType = streamType;
     _secure = secure;
     _direct = direct;
     try {
       var connectionType = ConnectionTypeState.find(peerId);
       connectionType.setSecure(secure);
       connectionType.setDirect(direct);
+      connectionType.setStreamType(streamType);
     } catch (e) {
       //
     }
   }
 
-  Widget? getConnectionImage() {
+  Widget? getConnectionImageText() {
     if (secure == null || direct == null) {
       return null;
     } else {
       final icon =
           '${secure == true ? 'secure' : 'insecure'}${direct == true ? '' : '_relay'}';
-      return SvgPicture.asset('assets/$icon.svg', width: 48, height: 48);
+      final iconWidget =
+          SvgPicture.asset('assets/$icon.svg', width: 48, height: 48);
+      String connectionText =
+          getConnectionText(secure!, direct!, cachedPeerData.streamType);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          iconWidget,
+          SizedBox(height: 4),
+          Text(
+            connectionText,
+            style: TextStyle(fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
     }
   }
 
@@ -259,7 +283,7 @@ class FfiModel with ChangeNotifier {
       'link': '',
     }, sessionId, peerId);
     updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
-    setConnectionType(peerId, data.secure, data.direct);
+    setConnectionType(peerId, data.secure, data.direct, data.streamType);
     await handlePeerInfo(data.peerInfo, peerId, true);
     for (final element in data.cursorDataList) {
       updateLastCursorId(element);
@@ -288,8 +312,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'sync_platform_additions') {
         handlePlatformAdditions(evt, sessionId, peerId);
       } else if (name == 'connection_ready') {
-        setConnectionType(
-            peerId, evt['secure'] == 'true', evt['direct'] == 'true');
+        setConnectionType(peerId, evt['secure'] == 'true',
+            evt['direct'] == 'true', evt['stream_type'] ?? '');
       } else if (name == 'switch_display') {
         // switch display is kept for backward compatibility
         handleSwitchDisplay(evt, sessionId, peerId);
@@ -311,6 +335,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'chat_server_mode') {
         parent.target?.chatModel
             .receive(int.parse(evt['id'] as String), evt['text'] ?? '');
+      } else if (name == 'terminal_response') {
+        parent.target?.routeTerminalResponse(evt);
       } else if (name == 'file_dir') {
         parent.target?.fileModel.receiveFileDir(evt);
       } else if (name == 'empty_dirs') {
@@ -833,10 +859,16 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'input-password') {
       enterPasswordDialog(sessionId, dialogManager);
     } else if (type == 'session-login' || type == 'session-re-login') {
-      enterUserLoginDialog(sessionId, dialogManager);
-    } else if (type == 'session-login-password' ||
-        type == 'session-login-password') {
-      enterUserLoginAndPasswordDialog(sessionId, dialogManager);
+      enterUserLoginDialog(sessionId, dialogManager, 'login_linux_tip', true);
+    } else if (type == 'session-login-password') {
+      enterUserLoginAndPasswordDialog(
+          sessionId, dialogManager, 'login_linux_tip', true);
+    } else if (type == 'terminal-admin-login') {
+      enterUserLoginDialog(
+          sessionId, dialogManager, 'terminal-admin-login-tip', false);
+    } else if (type == 'terminal-admin-login-password') {
+      enterUserLoginAndPasswordDialog(
+          sessionId, dialogManager, 'terminal-admin-login-tip', false);
     } else if (type == 'restarting') {
       showMsgBox(sessionId, type, title, text, link, false, dialogManager,
           hasCancel: false);
@@ -991,17 +1023,12 @@ class FfiModel with ChangeNotifier {
       String link,
       bool hasRetry,
       OverlayDialogManager dialogManager) {
-    if (text == 'no_need_privacy_mode_no_physical_displays_tip' ||
-        text == 'Enter privacy mode') {
-      // There are display changes on the remote side,
-      // which will cause some messages to refresh the canvas and dismiss dialogs.
-      // So we add a delay here to ensure the dialog is displayed.
-      Future.delayed(Duration(milliseconds: 3000), () {
-        showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
-      });
-    } else {
+    // There are display changes on the remote side,
+    // which will cause some messages to refresh the canvas and dismiss dialogs.
+    // So we add a delay here to ensure the dialog is displayed.
+    Future.delayed(Duration(milliseconds: 3000), () {
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
-    }
+    });
   }
 
   _updateSessionWidthHeight(SessionID sessionId) {
@@ -1081,9 +1108,14 @@ class FfiModel with ChangeNotifier {
               sessionId: sessionId, arg: kOptionTouchMode) !=
           '';
     }
-    // FIXME: handle ViewCamera ConnType independently.
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
+    } else if (connType == ConnType.terminal) {
+      // Call onReady on all registered terminal models
+      final models = parent.target?._terminalModels.values ?? [];
+      for (final model in models) {
+        model.onReady();
+      }
     } else if (connType == ConnType.defaultConn ||
         connType == ConnType.viewCamera) {
       List<Display> newDisplays = [];
@@ -1114,6 +1146,8 @@ class FfiModel with ChangeNotifier {
           peerId,
           bind.sessionGetToggleOptionSync(
               sessionId: sessionId, arg: kOptionToggleViewOnly));
+      setShowMyCursor(bind.sessionGetToggleOptionSync(
+          sessionId: sessionId, arg: kOptionToggleShowMyCursor));
     }
     if (connType == ConnType.defaultConn || connType == ConnType.viewCamera) {
       final platformAdditions = evt['platform_additions'];
@@ -1461,6 +1495,13 @@ class FfiModel with ChangeNotifier {
     }
     if (_viewOnly != value) {
       _viewOnly = value;
+      notifyListeners();
+    }
+  }
+
+  void setShowMyCursor(bool value) {
+    if (_showMyCursor != value) {
+      _showMyCursor = value;
       notifyListeners();
     }
   }
@@ -2833,7 +2874,14 @@ class ElevationModel with ChangeNotifier {
 }
 
 // The index values of `ConnType` are same as rust protobuf.
-enum ConnType { defaultConn, fileTransfer, portForward, rdp, viewCamera }
+enum ConnType {
+  defaultConn,
+  fileTransfer,
+  portForward,
+  rdp,
+  viewCamera,
+  terminal
+}
 
 /// Flutter state manager and data communication with the Rust core.
 class FFI {
@@ -2867,6 +2915,12 @@ class FFI {
   late final Peers recentPeersModel; // global
   late final Peers favoritePeersModel; // global
   late final Peers lanPeersModel; // global
+
+  // Terminal model registry for multiple terminals
+  final Map<int, TerminalModel> _terminalModels = {};
+
+  // Getter for terminal models
+  Map<int, TerminalModel> get terminalModels => _terminalModels;
 
   FFI(SessionID? sId) {
     sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
@@ -2915,6 +2969,7 @@ class FFI {
     bool isViewCamera = false,
     bool isPortForward = false,
     bool isRdp = false,
+    bool isTerminal = false,
     String? switchUuid,
     String? password,
     bool? isSharedPassword,
@@ -2930,7 +2985,10 @@ class FFI {
     assert(
         (!(isPortForward && isViewCamera)) &&
             (!(isViewCamera && isPortForward)) &&
-            (!(isPortForward && isFileTransfer)),
+            (!(isPortForward && isFileTransfer)) &&
+            (!(isTerminal && isFileTransfer)) &&
+            (!(isTerminal && isViewCamera)) &&
+            (!(isTerminal && isPortForward)),
         'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
@@ -2938,6 +2996,8 @@ class FFI {
       connType = ConnType.viewCamera;
     } else if (isPortForward) {
       connType = ConnType.portForward;
+    } else if (isTerminal) {
+      connType = ConnType.terminal;
     } else {
       chatModel.resetClientMode();
       connType = ConnType.defaultConn;
@@ -2958,6 +3018,7 @@ class FFI {
         isViewCamera: isViewCamera,
         isPortForward: isPortForward,
         isRdp: isRdp,
+        isTerminal: isTerminal,
         switchUuid: switchUuid ?? '',
         forceRelay: forceRelay ?? false,
         password: password ?? '',
@@ -3137,6 +3198,11 @@ class FFI {
   Future<void> close({bool closeSession = true}) async {
     closed = true;
     chatModel.close();
+    // Close all terminal models
+    for (final model in _terminalModels.values) {
+      model.dispose();
+    }
+    _terminalModels.clear();
     if (imageModel.image != null && !isWebDesktop) {
       await setCanvasConfig(
           sessionId,
@@ -3166,6 +3232,27 @@ class FFI {
 
   Future<bool> invokeMethod(String method, [dynamic arguments]) async {
     return await platformFFI.invokeMethod(method, arguments);
+  }
+
+  // Terminal model management
+  void registerTerminalModel(int terminalId, TerminalModel model) {
+    debugPrint('[FFI] Registering terminal model for terminal $terminalId');
+    _terminalModels[terminalId] = model;
+  }
+
+  void unregisterTerminalModel(int terminalId) {
+    debugPrint('[FFI] Unregistering terminal model for terminal $terminalId');
+    _terminalModels.remove(terminalId);
+  }
+
+  void routeTerminalResponse(Map<String, dynamic> evt) {
+    final int terminalId = TerminalModel.getTerminalIdFromEvt(evt);
+
+    // Route to specific terminal model if it exists
+    final model = _terminalModels[terminalId];
+    if (model != null) {
+      model.handleTerminalResponse(evt);
+    }
   }
 }
 
@@ -3212,7 +3299,8 @@ class Display {
       originalWidth == kVirtualDisplayResolutionValue &&
       originalHeight == kVirtualDisplayResolutionValue;
   bool get isOriginalResolution =>
-      width == originalWidth && height == originalHeight;
+      width == (originalWidth * scale).round() &&
+      height == (originalHeight * scale).round();
 }
 
 class Resolution {
@@ -3269,9 +3357,6 @@ class PeerInfo with ChangeNotifier {
       platformAdditions[kPlatformAdditionsIddImpl] == 'rustdesk_idd';
   bool get isAmyuniIdd =>
       platformAdditions[kPlatformAdditionsIddImpl] == 'amyuni_idd';
-
-  bool get isSupportViewCamera =>
-      platformAdditions[kPlatformAdditionsSupportViewCamera] == true;
 
   Display? tryGetDisplay({int? display}) {
     if (displays.isEmpty) {

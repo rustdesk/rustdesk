@@ -70,7 +70,7 @@ class InputService : AccessibilityService() {
 
     private val logTag = "input service"
     private var leftIsDown = false
-    private val touchPath = Path()
+    private var touchPath = Path()
     private var stroke: GestureDescription.StrokeDescription? = null
     private var lastTouchGestureStartTime = 0L
     private var mouseX = 0
@@ -278,7 +278,11 @@ class InputService : AccessibilityService() {
     }
 
     private fun startGesture(x: Int, y: Int) {
-        touchPath.reset()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            touchPath.reset()
+        } else {
+            touchPath = Path()
+        }
         touchPath.moveTo(x.toFloat(), y.toFloat())
         lastTouchGestureStartTime = System.currentTimeMillis()
         lastX = x
@@ -294,14 +298,31 @@ class InputService : AccessibilityService() {
         }
         try {
             if (stroke == null) {
-                stroke = GestureDescription.StrokeDescription(
-                    touchPath,
-                    0,
-                    duration,
-                    willContinue
-                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    stroke = GestureDescription.StrokeDescription(
+                        touchPath,
+                        0,
+                        duration,
+                        willContinue
+                    )
+                } else {
+                    stroke = GestureDescription.StrokeDescription(
+                        touchPath,
+                        0,
+                        duration
+                    )
+                }
             } else {
-                stroke = stroke?.continueStroke(touchPath, 0, duration, willContinue)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    stroke = stroke?.continueStroke(touchPath, 0, duration, willContinue)
+                } else {
+                    stroke = null
+                    stroke = GestureDescription.StrokeDescription(
+                        touchPath,
+                        0,
+                        duration
+                    )
+                }
             }
             stroke?.let {
                 val builder = GestureDescription.Builder()
@@ -316,19 +337,49 @@ class InputService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun continueGesture(x: Int, y: Int) {
-        doDispatchGesture(x, y, true)
-        touchPath.reset()
-        touchPath.moveTo(x.toFloat(), y.toFloat())
-        lastTouchGestureStartTime = System.currentTimeMillis()
-        lastX = x
-        lastY = y
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            doDispatchGesture(x, y, true)
+            touchPath.reset()
+            touchPath.moveTo(x.toFloat(), y.toFloat())
+            lastTouchGestureStartTime = System.currentTimeMillis()
+            lastX = x
+            lastY = y
+        } else {
+            touchPath.lineTo(x.toFloat(), y.toFloat())
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun endGestureBelowO(x: Int, y: Int) {
+        try {
+            touchPath.lineTo(x.toFloat(), y.toFloat())
+            var duration = System.currentTimeMillis() - lastTouchGestureStartTime
+            if (duration <= 0) {
+                duration = 1
+            }
+            val stroke = GestureDescription.StrokeDescription(
+                touchPath,
+                0,
+                duration
+            )
+            val builder = GestureDescription.Builder()
+            builder.addStroke(stroke)
+            Log.d(logTag, "end gesture x:$x y:$y time:$duration")
+            dispatchGesture(builder.build(), null, null)
+        } catch (e: Exception) {
+            Log.e(logTag, "endGesture error:$e")
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun endGesture(x: Int, y: Int) {
-        doDispatchGesture(x, y, false)
-        touchPath.reset()
-        stroke = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            doDispatchGesture(x, y, false)
+            touchPath.reset()
+            stroke = null
+        } else {
+            endGestureBelowO(x, y)
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
