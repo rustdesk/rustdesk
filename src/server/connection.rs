@@ -649,6 +649,9 @@ impl Connection {
                         }
                         #[cfg(target_os = "windows")]
                         ipc::Data::ClipboardFile(clip) => {
+                            if !conn.is_remote() {
+                                continue;
+                            }
                             match clip {
                                 clipboard::ClipboardFile::Files { files } => {
                                     let files = files.into_iter().map(|(f, s)| {
