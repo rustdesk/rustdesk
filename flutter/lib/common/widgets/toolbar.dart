@@ -496,6 +496,25 @@ Future<List<TToggleMenu>> toolbarCursor(
               }
             : null));
   }
+
+  // mobile virtual mouse
+  if (isMobile && !ffiModel.isPeerMobile && ffiModel.touchMode) {
+    final enabled = !ffiModel.viewOnly;
+    v.add(TToggleMenu(
+      child: Text(translate('Show virtual mouse')),
+      value: ffiModel.showVirtualMouse,
+      onChanged: enabled
+          ? (value) async {
+              if (value == null) return;
+              await bind.sessionToggleOption(
+                  sessionId: sessionId, value: kOptionShowVirtualMouse);
+              ffiModel.setShowVirtualMouse(bind.sessionGetToggleOptionSync(
+                  sessionId: sessionId, arg: kOptionShowVirtualMouse));
+            }
+          : null,
+    ));
+  }
+
   // follow remote cursor
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&

@@ -714,5 +714,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Custom scale slider", "自訂縮放滑桿"),
         ("Decrease", "縮小"),
         ("Increase", "放大"),
+        ("Show virtual mouse", ""),
     ].iter().cloned().collect();
 }
