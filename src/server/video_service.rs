@@ -325,7 +325,7 @@ fn get_capturer_monitor(
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
-            return super::wayland::get_capturer();
+            return super::wayland::get_capturer_for_display(current);
         }
     }
 
@@ -473,11 +473,20 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
     #[cfg(target_os = "linux")]
-    let _wayland_call_on_ret = SimpleCallOnReturn {
-        b: true,
-        f: Box::new(|| {
-            super::wayland::clear();
-        }),
+    let _wayland_call_on_ret = {
+        // Increment active display count when starting
+        let _display_count = super::wayland::increment_active_display_count();
+        
+        SimpleCallOnReturn {
+            b: true,
+            f: Box::new(|| {
+                // Decrement active display count and only clear if this was the last display
+                let remaining_count = super::wayland::decrement_active_display_count();
+                if remaining_count == 0 {
+                    super::wayland::clear();
+                }
+            }),
+        }
     };
 
     #[cfg(windows)]
