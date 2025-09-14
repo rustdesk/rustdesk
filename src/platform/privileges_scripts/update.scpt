@@ -4,7 +4,7 @@ on run {daemon_file, agent_file, user, cur_pid, source_dir}
 
   set kill_others to "pgrep -x 'RustDesk' | grep -v " & cur_pid & " | xargs kill -9;"
 
-  set copy_files to "rm -rf /Applications/RustDesk.app && cp -r " & source_dir & " /Applications && chown -R " & quoted form of user & ":staff /Applications/RustDesk.app;"
+  set copy_files to "rm -rf /Applications/RustDesk.app && ditto " & source_dir & " /Applications/RustDesk.app && chown -R " & quoted form of user & ":staff /Applications/RustDesk.app && xattr -r -d com.apple.quarantine /Applications/RustDesk.app;"
 
   set sh1 to "echo " & quoted form of daemon_file & " > /Library/LaunchDaemons/com.carriez.RustDesk_service.plist && chown root:wheel /Library/LaunchDaemons/com.carriez.RustDesk_service.plist;"
 

@@ -148,7 +148,7 @@ impl OidcSession {
         id: &str,
         uuid: &str,
     ) -> ResultType<HbbHttpResponse<OidcAuthUrl>> {
-        Ok(OIDC_SESSION
+        let resp = OIDC_SESSION
             .read()
             .unwrap()
             .client
@@ -159,8 +159,14 @@ impl OidcSession {
                 "uuid": uuid,
                 "deviceInfo": crate::ui_interface::get_login_device_info(),
             }))
-            .send()?
-            .try_into()?)
+            .send()?;
+        let status = resp.status();
+        match resp.try_into() {
+            Ok(v) => Ok(v),
+            Err(err) => {
+                hbb_common::bail!("Http status: {}, err: {}", status, err);
+            }
+        }
     }
 
     fn query(

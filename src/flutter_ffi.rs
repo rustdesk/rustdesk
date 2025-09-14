@@ -37,7 +37,11 @@ lazy_static::lazy_static! {
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
     flutter::async_tasks::start_flutter_async_runner();
-    *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    // `APP_DIR` is set in `main_get_data_dir_ios()` on iOS.
+    #[cfg(not(target_os = "ios"))]
+    {
+        *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    }
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
     if custom_client_config.is_empty() {
         crate::load_custom_client();
@@ -269,7 +273,7 @@ pub fn session_take_screenshot(session_id: SessionID, display: usize) {
     }
 }
 
-pub fn session_handle_screenshot(session_id: SessionID, action: String) -> String {
+pub fn session_handle_screenshot(#[allow(unused_variables)] session_id: SessionID, action: String) -> String {
     crate::client::screenshot::handle_screenshot(action)
 }
 
@@ -629,7 +633,10 @@ pub fn session_open_terminal(session_id: SessionID, terminal_id: i32, rows: u32,
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.open_terminal(terminal_id, rows, cols);
     } else {
-        log::error!("[flutter_ffi] Session not found for session_id: {}", session_id);
+        log::error!(
+            "[flutter_ffi] Session not found for session_id: {}",
+            session_id
+        );
     }
 }
 
@@ -1799,7 +1806,8 @@ pub fn main_set_home_dir(_home: String) {
 }
 
 // This is a temporary method to get data dir for ios
-pub fn main_get_data_dir_ios() -> SyncReturn<String> {
+pub fn main_get_data_dir_ios(app_dir: String) -> SyncReturn<String> {
+    *config::APP_DIR.write().unwrap() = app_dir;
     let data_dir = config::Config::path("data");
     if !data_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&data_dir) {
@@ -2651,6 +2659,21 @@ pub fn main_set_common(_key: String, _value: String) {
                     fs::remove_file(f).ok();
                 }
             }
+        } else if _key == "extract-update-dmg" {
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(new_version_file) = get_download_file_from_url(&_value) {
+                    if let Some(f) = new_version_file.to_str() {
+                        crate::platform::macos::extract_update_dmg(f);
+                    } else {
+                        // unreachable!()
+                        log::error!("Failed to get the new version file path");
+                    }
+                } else {
+                    // unreachable!()
+                    log::error!("Failed to get the new version file from url: {}", _value);
+                }
+            }
         }
     }
 
@@ -2669,7 +2692,7 @@ pub fn session_get_common_sync(
     SyncReturn(session_get_common(session_id, key, param))
 }
 
-pub fn session_get_common(session_id: SessionID, key: String, param: String) -> Option<String> {
+pub fn session_get_common(session_id: SessionID, key: String, #[allow(unused_variables)] param: String) -> Option<String> {
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         let v = if key == "is_screenshot_supported" {
             s.is_screenshot_supported().to_string()

@@ -1,9 +1,9 @@
 #[cfg(target_os = "linux")]
 use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;
-#[cfg(target_os = "macos")]
-use crate::common::is_server;
 use crate::input::*;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::whiteboard;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
@@ -19,7 +19,7 @@ use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
 use scrap::wayland::pipewire::RDP_SESSION_INFO;
 use std::{
     convert::TryFrom,
-    ops::{Deref, DerefMut, Sub},
+    ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{self, Duration, Instant},
@@ -204,6 +204,7 @@ impl LockModesHandler {
         }
 
         let mut num_lock_changed = false;
+        #[allow(unused)]
         let mut event_num_enabled = false;
         if is_numpad_key {
             let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
@@ -699,21 +700,30 @@ fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
     }
 }
 
-pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
+#[allow(unreachable_code)]
+pub fn handle_mouse(
+    evt: &MouseEvent,
+    conn: i32,
+    username: String,
+    argb: u32,
+    simulate: bool,
+    show_cursor: bool,
+) {
     #[cfg(target_os = "macos")]
     {
         // having GUI (--server has tray, it is GUI too), run main GUI thread, otherwise crash
         let evt = evt.clone();
-        QUEUE.exec_async(move || handle_mouse_(&evt, conn));
+        QUEUE.exec_async(move || handle_mouse_(&evt, conn, username, argb, simulate, show_cursor));
         return;
     }
     #[cfg(windows)]
-    crate::portable_service::client::handle_mouse(evt, conn);
+    crate::portable_service::client::handle_mouse(evt, conn, username, argb, simulate, show_cursor);
     #[cfg(not(windows))]
-    handle_mouse_(evt, conn);
+    handle_mouse_(evt, conn, username, argb, simulate, show_cursor);
 }
 
 // to-do: merge handle_mouse and handle_pointer
+#[allow(unreachable_code)]
 pub fn handle_pointer(evt: &PointerDeviceEvent, conn: i32) {
     #[cfg(target_os = "macos")]
     {
@@ -894,7 +904,7 @@ fn get_last_input_cursor_pos() -> (i32, i32) {
 }
 
 // check if mouse is moved by the controlled side user to make controlled side has higher mouse priority than remote.
-fn active_mouse_(conn: i32) -> bool {
+fn active_mouse_(_conn: i32) -> bool {
     true
     /* this method is buggy (not working on macOS, making fast moving mouse event discarded here) and added latency (this is blocking way, must do in async way), so we disable it for now
     // out of time protection
@@ -979,7 +989,24 @@ pub fn handle_pointer_(evt: &PointerDeviceEvent, conn: i32) {
     }
 }
 
-pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
+pub fn handle_mouse_(
+    evt: &MouseEvent,
+    conn: i32,
+    _username: String,
+    _argb: u32,
+    simulate: bool,
+    _show_cursor: bool,
+) {
+    if simulate {
+        handle_mouse_simulation_(evt, conn);
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if _show_cursor {
+        handle_mouse_show_cursor_(evt, conn, _username, _argb);
+    }
+}
+
+pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     if !active_mouse_(conn) {
         return;
     }
@@ -1119,6 +1146,41 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     #[cfg(not(target_os = "macos"))]
     for key in to_release {
         en.key_up(key.clone());
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn handle_mouse_show_cursor_(evt: &MouseEvent, conn: i32, username: String, argb: u32) {
+    let buttons = evt.mask >> 3;
+    let evt_type = evt.mask & 0x7;
+    match evt_type {
+        MOUSE_TYPE_MOVE => {
+            whiteboard::update_whiteboard(
+                whiteboard::get_key_cursor(conn),
+                whiteboard::CustomEvent::Cursor(whiteboard::Cursor {
+                    x: evt.x as _,
+                    y: evt.y as _,
+                    argb,
+                    btns: 0,
+                    text: username,
+                }),
+            );
+        }
+        MOUSE_TYPE_UP => {
+            if buttons == MOUSE_BUTTON_LEFT {
+                whiteboard::update_whiteboard(
+                    whiteboard::get_key_cursor(conn),
+                    whiteboard::CustomEvent::Cursor(whiteboard::Cursor {
+                        x: evt.x as _,
+                        y: evt.y as _,
+                        argb,
+                        btns: buttons,
+                        text: username,
+                    }),
+                );
+            }
+        }
+        _ => {}
     }
 }
 
@@ -1264,7 +1326,7 @@ fn sim_rdev_rawkey_virtual(code: u32, keydown: bool) {
 fn simulate_(event_type: &EventType) {
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(input) = &VIRTUAL_INPUT_STATE {
+        if let Some(input) = VIRTUAL_INPUT_STATE.as_ref() {
             let _ = input.simulate(&event_type);
         }
     }
@@ -1276,7 +1338,7 @@ fn press_capslock() {
     let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(input) = &mut VIRTUAL_INPUT_STATE {
+        if let Some(input) = VIRTUAL_INPUT_STATE.as_mut() {
             if input.simulate(&EventType::KeyPress(caps_key)).is_ok() {
                 input.capslock_down = true;
                 key_sleep();
@@ -1291,7 +1353,7 @@ fn release_capslock() {
     let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(input) = &mut VIRTUAL_INPUT_STATE {
+        if let Some(input) = VIRTUAL_INPUT_STATE.as_mut() {
             if input.simulate(&EventType::KeyRelease(caps_key)).is_ok() {
                 input.capslock_down = false;
                 key_sleep();

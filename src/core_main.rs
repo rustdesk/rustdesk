@@ -149,7 +149,6 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
-    log::info!("main start args: {:?}, env: {:?}", args, std::env::args());
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]
@@ -573,6 +572,12 @@ pub fn core_main() -> Option<Vec<String>> {
             {
                 crate::ui_interface::start_option_status_sync();
                 crate::flutter::connection_manager::start_cm_no_ui();
+            }
+            return None;
+        } else if args[0] == "--whiteboard" {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                crate::whiteboard::run();
             }
             return None;
         } else if args[0] == "-gtk-sudo" {

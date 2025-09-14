@@ -122,7 +122,7 @@ class GroupModel {
         final resp = await http.get(uri, headers: getHttpHeaders());
         _statusCode = resp.statusCode;
         Map<String, dynamic> json =
-            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeResp(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         }
@@ -180,7 +180,7 @@ class GroupModel {
         final resp = await http.get(uri, headers: getHttpHeaders());
         _statusCode = resp.statusCode;
         Map<String, dynamic> json =
-            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeResp(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           if (json['error'] == 'Admin required!' ||
               json['error']
@@ -246,7 +246,7 @@ class GroupModel {
         _statusCode = resp.statusCode;
 
         Map<String, dynamic> json =
-            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
+            _jsonDecodeResp(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         }

@@ -28,6 +28,7 @@ use objc::rc::autoreleasepool;
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
 use std::{
+    collections::HashMap,
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -170,6 +171,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     let agent = format!("{}_server.plist", crate::get_full_name());
     let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
     if !prompt {
+        // in macos 13, there is new way to check if they are running or enabled, https://developer.apple.com/documentation/servicemanagement/updating-helper-executables-from-earlier-versions-of-macos#Respond-to-changes-in-System-Settings
         if !std::path::Path::new(&format!("/Library/LaunchDaemons/{}", daemon)).exists() {
             return false;
         }
@@ -252,7 +254,7 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
 
     let func = move || {
         let mut binding = std::process::Command::new("osascript");
-        let mut cmd = binding
+        let cmd = binding
             .arg("-e")
             .arg(update_script_body)
             .arg(daemon_plist_body)
@@ -293,8 +295,12 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
 }
 
 fn correct_app_name(s: &str) -> String {
-    let s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
-    let s = s.replace("RustDesk", &crate::get_app_name());
+    let mut s = s.to_owned();
+    if let Some(bundleid) = get_bundle_id() {
+        s = s.replace("com.carriez.rustdesk", &bundleid);
+    }
+    s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
+    s = s.replace("RustDesk", &crate::get_app_name());
     s
 }
 
@@ -743,7 +749,7 @@ pub fn update_me() -> ResultType<()> {
         let update_body = format!(
             r#"
 do shell script "
-pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDesk.app && cp -R '{}' /Applications/ && chown -R {}:staff /Applications/RustDesk.app
+pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDesk.app && ditto '{}' /Applications/RustDesk.app && chown -R {}:staff /Applications/RustDesk.app && xattr -r -d com.apple.quarantine /Applications/RustDesk.app
 " with prompt "RustDesk wants to update itself" with administrator privileges
     "#,
             std::process::id(),
@@ -774,10 +780,26 @@ pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDes
     Ok(())
 }
 
-pub fn update_to(file: &str) -> ResultType<()> {
-    extract_dmg(file, UPDATE_TEMP_DIR)?;
+pub fn update_to(_file: &str) -> ResultType<()> {
     update_extracted(UPDATE_TEMP_DIR)?;
     Ok(())
+}
+
+pub fn extract_update_dmg(file: &str) {
+    let mut evt: HashMap<&str, String> =
+        HashMap::from([("name", "extract-update-dmg".to_string())]);
+    match extract_dmg(file, UPDATE_TEMP_DIR) {
+        Ok(_) => {
+            log::info!("Extracted dmg file to {}", UPDATE_TEMP_DIR);
+        }
+        Err(e) => {
+            evt.insert("err", e.to_string());
+            log::error!("Failed to extract dmg file {}: {}", file, e);
+        }
+    }
+    let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
+    #[cfg(feature = "flutter")]
+    crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
 }
 
 fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
@@ -807,8 +829,8 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
     let src_path = format!("{}/{}", mount_point, app_name);
     let dest_path = format!("{}/{}", target_dir, app_name);
 
-    let copy_status = Command::new("cp")
-        .args(&["-R", &src_path, &dest_path])
+    let copy_status = Command::new("ditto")
+        .args(&[&src_path, &dest_path])
         .status()?;
 
     if !copy_status.success() {
@@ -854,6 +876,7 @@ pub fn hide_dock() {
 }
 
 #[inline]
+#[allow(dead_code)]
 fn get_server_start_time_of(p: &Process, path: &Path) -> Option<i64> {
     let cmd = p.cmd();
     if cmd.len() <= 1 {
@@ -872,6 +895,7 @@ fn get_server_start_time_of(p: &Process, path: &Path) -> Option<i64> {
 }
 
 #[inline]
+#[allow(dead_code)]
 fn get_server_start_time(sys: &mut System, path: &Path) -> Option<(i64, Pid)> {
     sys.refresh_processes_specifics(ProcessRefreshKind::new());
     for (_, p) in sys.processes() {
@@ -1033,5 +1057,29 @@ impl WakeLock {
             .as_mut()
             .map(|h| h.set_display(display))
             .ok_or(anyhow!("no AwakeHandle"))?
+    }
+}
+
+fn get_bundle_id() -> Option<String> {
+    unsafe {
+        let bundle: id = msg_send![class!(NSBundle), mainBundle];
+        if bundle.is_null() {
+            return None;
+        }
+
+        let bundle_id: id = msg_send![bundle, bundleIdentifier];
+        if bundle_id.is_null() {
+            return None;
+        }
+
+        let c_str: *const std::os::raw::c_char = msg_send![bundle_id, UTF8String];
+        if c_str.is_null() {
+            return None;
+        }
+
+        let bundle_id_str = std::ffi::CStr::from_ptr(c_str)
+            .to_string_lossy()
+            .to_string();
+        Some(bundle_id_str)
     }
 }

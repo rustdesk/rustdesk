@@ -15,11 +15,11 @@ use hbb_common::{
 };
 use serde::Serialize;
 use serde_json::json;
-
+#[cfg(target_os = "windows")]
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::{
     collections::{HashMap, HashSet},
     ffi::CString,
-    io::{Error as IoError, ErrorKind as IoErrorKind},
     os::raw::{c_char, c_int, c_void},
     str::FromStr,
     sync::{
@@ -111,6 +111,7 @@ pub extern "C" fn rustdesk_core_main() -> bool {
         #[cfg(target_os = "macos")]
         std::process::exit(0);
     }
+    #[cfg(not(target_os = "macos"))]
     false
 }
 
@@ -716,12 +717,13 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
-    fn set_connection_type(&self, is_secured: bool, direct: bool) {
+    fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str) {
         self.push_event(
             "connection_ready",
             &[
                 ("secure", &is_secured.to_string()),
                 ("direct", &direct.to_string()),
+                ("stream_type", &stream_type.to_string()),
             ],
             &[],
         );

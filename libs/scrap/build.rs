@@ -62,21 +62,15 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
     }
     path.push(target);
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-lib=static={}",
-            name.trim_start_matches("lib")
-        )
+        "cargo:rustc-link-lib=static={}",
+        name.trim_start_matches("lib")
     );
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-search={}",
-            path.join("lib").to_str().unwrap()
-        )
+        "cargo:rustc-link-search={}",
+        path.join("lib").to_str().unwrap()
     );
     let include = path.join("include");
-    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
+    println!("cargo:include={}", include.to_str().unwrap());
     include
 }
 
@@ -111,23 +105,17 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
     path.push(directories.pop().unwrap());
     // Link the library.
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-lib=static={}",
-            name.trim_start_matches("lib")
-        )
+        "cargo:rustc-link-lib=static={}",
+        name.trim_start_matches("lib")
     );
     // Add the library path.
     println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-search={}",
-            path.join("lib").to_str().unwrap()
-        )
+        "cargo:rustc-link-search={}",
+        path.join("lib").to_str().unwrap()
     );
     // Add the include path.
     let include = path.join("include");
-    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
+    println!("cargo:include={}", include.to_str().unwrap());
     include
 }
 
@@ -239,6 +227,24 @@ fn ffmpeg() {
 */
 
 fn main() {
+    // there is problem with cfg(target_os) in build.rs, so use our workaround
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+
+    // We check if is macos, because macos uses rust 1.8.1.
+    // `cargo::rustc-check-cfg` is new with Cargo 1.80.
+    // No need to run `cargo version` to get the version here, because:
+    // The following lines are used to suppress the lint warnings.
+    //          warning: unexpected `cfg` condition name: `quartz`
+    if cfg!(target_os = "macos") {
+        if target_os != "ios" {
+            println!("cargo::rustc-check-cfg=cfg(android)");
+            println!("cargo::rustc-check-cfg=cfg(dxgi)");
+            println!("cargo::rustc-check-cfg=cfg(quartz)");
+            println!("cargo::rustc-check-cfg=cfg(x11)");
+            //        ^^^^^^^^^^^^^^^^^^^^^^ new with Cargo 1.80
+        }
+    }
+
     // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,
     // please install x64 toolchain by "rustup toolchain install stable-x86_64-pc-windows-msvc",
@@ -256,8 +262,6 @@ fn main() {
     gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
     // ffmpeg();
 
-    // there is problem with cfg(target_os) in build.rs, so use our workaround
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "ios" {
         // nothing
     } else if target_os == "android" {
