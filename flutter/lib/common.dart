@@ -75,6 +75,9 @@ bool _ignoreDevicePixelRatio = true;
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
 
+// Tolerance used for floating-point position comparisons to avoid precision errors.
+const double _kPositionEpsilon = 1e-6;
+
 bool get isMainDesktopWindow =>
     desktopType == DesktopType.main || desktopType == DesktopType.cm;
 
@@ -104,6 +107,10 @@ enum DesktopType {
   terminal,
   cm,
   portForward,
+}
+
+bool isDoubleEqual(double a, double b) {
+  return (a - b).abs() < _kPositionEpsilon;
 }
 
 class IconFont {

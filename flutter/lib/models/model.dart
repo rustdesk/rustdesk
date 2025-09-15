@@ -114,7 +114,8 @@ class FfiModel with ChangeNotifier {
   bool? _secure;
   bool? _direct;
   bool _touchMode = false;
-  bool _showVirtualMouse = false;
+  bool _showVirtualMouseTouchMode = false;
+  bool _showVirtualMouseMouseMode = false;
   Timer? _timer;
   var _reconnects = 1;
   bool _viewOnly = false;
@@ -152,7 +153,8 @@ class FfiModel with ChangeNotifier {
   bool get inputBlocked => _inputBlocked;
 
   bool get touchMode => _touchMode;
-  bool get showVirtualMouse => _showVirtualMouse;
+  bool get showVirtualMouseTouchMode => _showVirtualMouseTouchMode;
+  bool get showVirtualMouseMouseMode => _showVirtualMouseMouseMode;
 
   bool get isPeerAndroid => _pi.platform == kPeerPlatformAndroid;
   bool get isPeerMobile => isPeerAndroid;
@@ -204,10 +206,18 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  setShowVirtualMouse(bool b) {
-    if (b == _showVirtualMouse) return;
+  setShowVirtualMouseTouchMode(bool b) {
+    if (b == _showVirtualMouseTouchMode) return;
     if (!isPeerAndroid) {
-      _showVirtualMouse = b;
+      _showVirtualMouseTouchMode = b;
+      notifyListeners();
+    }
+  }
+
+  setShowVirtualMouseMouseMode(bool b) {
+    if (b == _showVirtualMouseMouseMode) return;
+    if (!isPeerAndroid) {
+      _showVirtualMouseMouseMode = b;
       notifyListeners();
     }
   }
@@ -1120,9 +1130,14 @@ class FfiModel with ChangeNotifier {
           '';
     }
     if (isMobile) {
-      _showVirtualMouse = await bind.sessionGetToggleOption(
-              sessionId: sessionId, arg: kOptionShowVirtualMouse) ??
-          false;
+      final results = await Future.wait([
+        bind.sessionGetToggleOption(
+            sessionId: sessionId, arg: kOptionShowVirtualMouseTouchMode),
+        bind.sessionGetToggleOption(
+            sessionId: sessionId, arg: kOptionShowVirtualMouseMouseMode),
+      ]);
+      _showVirtualMouseTouchMode = results[0] ?? false;
+      _showVirtualMouseMouseMode = results[1] ?? false;
     }
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
@@ -2281,7 +2296,7 @@ class CursorModel with ChangeNotifier {
   double _displayOriginY = 0;
   DateTime? _firstUpdateMouseTime;
   Rect? _windowRect;
-  final List<RemoteWindowCoords> _remoteWindowCoords = [];
+  List<RemoteWindowCoords> _remoteWindowCoords = [];
   bool gotMouseControl = true;
   DateTime _lastPeerMouse = DateTime.now()
       .subtract(Duration(milliseconds: 3000 * kMouseControlTimeoutMSec));
@@ -2332,12 +2347,10 @@ class CursorModel with ChangeNotifier {
 
   addBlockedRect(Rect rect) {
     _blockedRects.add(rect);
-    notifyListeners();
   }
 
   removeBlockedRect(Rect rect) {
     _blockedRects.remove(rect);
-    notifyListeners();
   }
 
   get lastIsBlocked => _lastIsBlocked;
@@ -2409,18 +2422,20 @@ class CursorModel with ChangeNotifier {
     if (_blockEvents) {
       return true;
     }
-    if (!(parent.target?.ffiModel.touchMode ?? false)) {
-      return false;
-    }
     final offset = Offset(x, y);
-    if (_keyHelpToolsRect != null &&
-        isPointInRect(offset, _keyHelpToolsRect!)) {
-      return true;
-    }
     for (final rect in _blockedRects) {
       if (isPointInRect(offset, rect)) {
         return true;
       }
+    }
+
+    // For help tools rectangle, only block touch event when in touch mode.
+    if (!(parent.target?.ffiModel.touchMode ?? false)) {
+      return false;
+    }
+    if (_keyHelpToolsRect != null &&
+        isPointInRect(offset, _keyHelpToolsRect!)) {
+      return true;
     }
     return false;
   }

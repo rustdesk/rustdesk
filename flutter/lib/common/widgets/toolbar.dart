@@ -498,18 +498,32 @@ Future<List<TToggleMenu>> toolbarCursor(
   }
 
   // mobile virtual mouse
-  if (isMobile && !ffiModel.isPeerMobile && ffiModel.touchMode) {
+  if (isMobile && !ffiModel.isPeerMobile) {
     final enabled = !ffiModel.viewOnly;
     v.add(TToggleMenu(
       child: Text(translate('Show virtual mouse')),
-      value: ffiModel.showVirtualMouse,
+      value: ffiModel.touchMode
+          ? ffiModel.showVirtualMouseTouchMode
+          : ffiModel.showVirtualMouseMouseMode,
       onChanged: enabled
           ? (value) async {
               if (value == null) return;
               await bind.sessionToggleOption(
-                  sessionId: sessionId, value: kOptionShowVirtualMouse);
-              ffiModel.setShowVirtualMouse(bind.sessionGetToggleOptionSync(
-                  sessionId: sessionId, arg: kOptionShowVirtualMouse));
+                  sessionId: sessionId,
+                  value: ffiModel.touchMode
+                      ? kOptionShowVirtualMouseTouchMode
+                      : kOptionShowVirtualMouseMouseMode);
+              if (ffiModel.touchMode) {
+                ffiModel.setShowVirtualMouseTouchMode(
+                    bind.sessionGetToggleOptionSync(
+                        sessionId: sessionId,
+                        arg: kOptionShowVirtualMouseTouchMode));
+              } else {
+                ffiModel.setShowVirtualMouseMouseMode(
+                    bind.sessionGetToggleOptionSync(
+                        sessionId: sessionId,
+                        arg: kOptionShowVirtualMouseMouseMode));
+              }
             }
           : null,
     ));
