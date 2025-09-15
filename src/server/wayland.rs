@@ -3,10 +3,9 @@ use hbb_common::{
     allow_err,
     platform::linux::{CMD_SH, DISTRO},
 };
-use scrap::{is_cursor_embedded, set_map_err, Capturer, Display};
+use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::collections::HashMap;
 use std::io;
-use std::sync::Arc;
 use std::process::{Command, Output};
 
 use crate::{
@@ -17,7 +16,8 @@ use crate::{
 };
 
 lazy_static::lazy_static! {
-    static ref CAP_DISPLAY_INFO: RwLock<HashMap<usize, Arc<CapDisplayInfo>>> = RwLock::new(HashMap::new());
+    static ref CAP_DISPLAY_INFO: RwLock<HashMap<usize, u64>> = RwLock::new(HashMap::new());
+    static ref PIPEWIRE_INITIALIZED: RwLock<bool> = RwLock::new(false);
     static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
     static ref ACTIVE_DISPLAY_COUNT: RwLock<usize> = RwLock::new(0);
 }
@@ -78,12 +78,27 @@ fn try_log(err: &String) {
     *lock_count += 1;
 }
 
+struct CapturerPtr(*mut Capturer);
+
+impl Clone for CapturerPtr {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl TraitCapturer for CapturerPtr {
+    fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
+        unsafe { (*self.0).frame(timeout) }
+    }
+}
 
 struct CapDisplayInfo {
     rects: Vec<((i32, i32), usize, usize)>,
     displays: Vec<DisplayInfo>,
     num: usize,
     primary: usize,
+    current: usize,
+    capturer: CapturerPtr,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -129,6 +144,10 @@ fn get_max_desktop_resolution() -> Option<String> {
 }
 
 fn calculate_max_resolution_from_displays(displays: &[Display]) -> (i32, i32) {
+    // TODO: this doesn't work in most situations other than sharing all displays
+    //  this is because the function only gets called with the displays being shared with pipewire
+    //  the xrandr method does work otherwise we could get this correctly using xdg-output-unstable-v1 when xrandr isn't available
+    log::warn!("using incorrect max resolution calculation uinput may not work correctly");
     let (mut max_x, mut max_y) = (0, 0);
     for d in displays {
         let (x, y) = d.origin();
@@ -149,7 +168,14 @@ pub(super) async fn check_init() -> ResultType<()> {
         if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
             let mut lock = CAP_DISPLAY_INFO.write().unwrap();
             if lock.is_empty() {
+                // Check if PipeWire is already initialized to prevent duplicate recorder creation
+                if *PIPEWIRE_INITIALIZED.read().unwrap() {
+                    log::warn!("wayland_diag: Preventing duplicate PipeWire initialization");
+                    return Ok(());
+                }
+                
                 let all = Display::all()?;
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 super::display_service::check_update_displays(&all);
@@ -190,16 +216,23 @@ pub(super) async fn check_init() -> ResultType<()> {
                     maxy = max_height;
                 }
 
-                // Store shared display info - each display index will reference this same shared data
-                let cap_display_info = Arc::new(CapDisplayInfo {
-                    rects: rects.clone(),
-                    displays: displays.clone(),
-                    num,
-                    primary,
-                });
-                
-                for idx in 0..all.len() {
-                    lock.insert(idx, cap_display_info.clone());
+                // Create individual CapDisplayInfo for each display with its own capturer
+                for (idx, display) in all.into_iter().enumerate() {
+                    let capturer = Box::into_raw(Box::new(
+                        Capturer::new(display).with_context(|| format!("Failed to create capturer for display {}", idx))?,
+                    ));
+                    let capturer = CapturerPtr(capturer);
+                    
+                    let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
+                        rects: rects.clone(),
+                        displays: displays.clone(),
+                        num,
+                        primary,
+                        current: idx,
+                        capturer,
+                    }));
+                    
+                    lock.insert(idx, cap_display_info as u64);
                 }
             }
         }
@@ -223,8 +256,12 @@ pub(super) async fn check_init() -> ResultType<()> {
 pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
     check_init().await?;
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    if let Some(cap_display_info) = cap_map.values().next() {
-        Ok(cap_display_info.displays.clone())
+    if let Some(addr) = cap_map.values().next() {
+        let cap_display_info: *const CapDisplayInfo = *addr as _;
+        unsafe {
+            let cap_display_info = &*cap_display_info;
+            Ok(cap_display_info.displays.clone())
+        }
     } else {
         bail!("Failed to get capturer display info");
     }
@@ -232,8 +269,12 @@ pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
 
 pub(super) fn get_primary() -> ResultType<usize> {
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    if let Some(cap_display_info) = cap_map.values().next() {
-        Ok(cap_display_info.primary)
+    if let Some(addr) = cap_map.values().next() {
+        let cap_display_info: *const CapDisplayInfo = *addr as _;
+        unsafe {
+            let cap_display_info = &*cap_display_info;
+            Ok(cap_display_info.primary)
+        }
     } else {
         bail!("Failed to get capturer display info");
     }
@@ -243,47 +284,44 @@ pub fn clear() {
     if is_x11() {
         return;
     }
-
     let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
+    for (_, addr) in write_lock.iter() {
+        let cap_display_info: *mut CapDisplayInfo = *addr as _;
+        unsafe {
+            let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
+            let _box_cap_display_info = Box::from_raw(cap_display_info);
+        }
+    }
     write_lock.clear();
+    
+    // Reset PipeWire initialization flag to allow recreation on next init
+    *PIPEWIRE_INITIALIZED.write().unwrap() = false;
 }
 
 pub(super) fn get_capturer_for_display(display_idx: usize) -> ResultType<super::video_service::CapturerInfo> {
     if is_x11() {
         bail!("Do not call this function if not wayland");
     }
-    
-    let (rect, num) = {
-        let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-        if let Some(cap_display_info) = cap_map.get(&display_idx) {
-            if display_idx >= cap_display_info.rects.len() {
-                bail!("Display index {} out of bounds for available displays {}", display_idx, cap_display_info.rects.len());
-            }
-            (cap_display_info.rects[display_idx], cap_display_info.num)
-        } else {
-            bail!("Failed to get capturer display info for display {}", display_idx);
+    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+    if let Some(addr) = cap_map.get(&display_idx) {
+        let cap_display_info: *const CapDisplayInfo = *addr as _;
+        unsafe {
+            let cap_display_info = &*cap_display_info;
+            let rect = cap_display_info.rects[cap_display_info.current];          
+            Ok(super::video_service::CapturerInfo {
+                origin: rect.0,
+                width: rect.1,
+                height: rect.2,
+                ndisplay: cap_display_info.num,
+                current: cap_display_info.current,
+                privacy_mode_id: 0,
+                _capturer_privacy_mode_id: 0,
+                capturer: Box::new(cap_display_info.capturer.clone()),
+            })
         }
-    };
-        
-    let all_displays = Display::all().context("Failed to get display list")?;
-        
-    if display_idx >= all_displays.len() {
-        bail!("Display index {} no longer available", display_idx);
+    } else {
+        bail!("Failed to get capturer display info for display {}", display_idx);
     }
-    
-    let capturer = Capturer::new(all_displays.into_iter().nth(display_idx).unwrap())
-        .with_context(|| format!("Failed to create capturer for display {}", display_idx))?;
-    
-    Ok(super::video_service::CapturerInfo {
-        origin: rect.0,
-        width: rect.1,
-        height: rect.2,
-        ndisplay: num,
-        current: display_idx,
-        privacy_mode_id: 0,
-        _capturer_privacy_mode_id: 0,
-        capturer: Box::new(capturer),
-    })
 }
 
 pub fn common_get_error() -> String {
