@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <iostream>
 
+#include "win32_desktop.h"
 #include "flutter_window.h"
 #include "utils.h"
 
@@ -125,9 +126,19 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   command_line_arguments.insert(command_line_arguments.end(), rust_args.begin(), rust_args.end());
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
+  Win32Window::Point workarea_origin(0, 0);
+  Win32Window::Size workarea_size(0, 0);
+
+  Win32Desktop::GetWorkArea(workarea_origin, workarea_size);
+
   FlutterWindow window(project);
-  Win32Window::Point origin(10, 10);
-  Win32Window::Size size(800, 600);
+
+  // NB: If, in the future, this is persisted across runs, make sure that the saved
+  //     origin is relative to the work area, and that it is translated back into
+  //     the work area on load.
+  Win32Window::Point origin(workarea_origin.x + 10, workarea_origin.y + 10);
+  Win32Window::Size size(min(800u, workarea_size.width - origin.x), min(600u, workarea_size.height - origin.y));
+
   std::wstring window_title;
   if (is_cm_page) {
     window_title = app_name + L" - Connection Manager";
