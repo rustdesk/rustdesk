@@ -6,6 +6,13 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  # Custom server configuration - 自定义服务器配置
+  # To use custom servers, set these secrets in your GitHub repository:
+  # Settings -> Secrets and variables -> Actions -> New repository secret
+  RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
+  API_SERVER: "${{ secrets.API_SERVER }}"
+  RELAY_SERVER: "${{ secrets.RELAY_SERVER }}"
+  RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}"
 
 on:
   workflow_dispatch:
