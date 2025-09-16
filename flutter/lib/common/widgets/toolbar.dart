@@ -508,21 +508,20 @@ Future<List<TToggleMenu>> toolbarCursor(
       onChanged: enabled
           ? (value) async {
               if (value == null) return;
-              await bind.sessionToggleOption(
-                  sessionId: sessionId,
-                  value: ffiModel.touchMode
-                      ? kOptionShowVirtualMouseTouchMode
-                      : kOptionShowVirtualMouseMouseMode);
               if (ffiModel.touchMode) {
-                ffiModel.setShowVirtualMouseTouchMode(
-                    bind.sessionGetToggleOptionSync(
-                        sessionId: sessionId,
-                        arg: kOptionShowVirtualMouseTouchMode));
+                bind.mainSetLocalOption(
+                    key: kOptionShowVirtualMouseTouchMode,
+                    value: ffiModel.showVirtualMouseTouchMode ? 'N' : 'Y');
+                ffiModel.setShowVirtualMouseTouchMode(bind.mainGetLocalOption(
+                        key: kOptionShowVirtualMouseTouchMode) !=
+                    'N');
               } else {
-                ffiModel.setShowVirtualMouseMouseMode(
-                    bind.sessionGetToggleOptionSync(
-                        sessionId: sessionId,
-                        arg: kOptionShowVirtualMouseMouseMode));
+                bind.mainSetLocalOption(
+                    key: kOptionShowVirtualMouseMouseMode,
+                    value: ffiModel.showVirtualMouseMouseMode ? 'N' : 'Y');
+                ffiModel.setShowVirtualMouseMouseMode(bind.mainGetLocalOption(
+                        key: kOptionShowVirtualMouseTouchMode) ==
+                    'Y');
               }
             }
           : null,

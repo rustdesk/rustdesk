@@ -8,10 +8,12 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/utils/image.dart';
+import 'package:provider/provider.dart';
 
 const int _kDotCount = 60;
 const double _kDotAngle = 2 * pi / _kDotCount;
 final Color _kDefaultColor = Colors.grey.withOpacity(0.7);
+final Color _kDefaultHighlightColor = Colors.white24.withOpacity(0.7);
 final Color _kTapDownColor = Colors.blue.withOpacity(0.7);
 final double _baseMouseWidth = 112.0;
 final double _baseMouseHeight = 138.0;
@@ -185,7 +187,8 @@ class _CanvasScrollState {
 
 class _FloatingMouseState extends State<FloatingMouse> {
   Rect? _lastBlockedRect;
-  final GlobalKey _scrollWheelKey = GlobalKey();
+  final GlobalKey _scrollWheelUpKey = GlobalKey();
+  final GlobalKey _scrollWheelDownKey = GlobalKey();
   final GlobalKey _mouseWidgetKey = GlobalKey();
   final GlobalKey _cursorPaintKey = GlobalKey();
 
@@ -198,6 +201,24 @@ class _FloatingMouseState extends State<FloatingMouse> {
   double _snappedPointerAngle = 0.0;
   double? _lastSnappedAngle;
   late final _CanvasScrollState _canvasScrollState;
+  Orientation? _previousOrientation;
+  Timer? _collapseTimer;
+
+  void _resetCollapseTimer() {
+    _collapseTimer?.cancel();
+    if (_isExpanded) {
+      _collapseTimer = Timer(const Duration(seconds: 7), () {
+        if (mounted && _isExpanded) {
+          final minMouseScale = (_getInitMouseScale() * 0.3);
+          setState(() {
+            _mouseScale = minMouseScale;
+            _isExpanded = false;
+            _position += _expandOffset;
+          });
+        }
+      });
+    }
+  }
 
   double get mouseWidth => _baseMouseWidth * _mouseScale;
   double get mouseHeight => _baseMouseHeight * _mouseScale;
@@ -212,6 +233,11 @@ class _FloatingMouseState extends State<FloatingMouse> {
   double _getInitMouseScale() {
     if (_initMouseScale == null) {
       final size = MediaQuery.of(context).size;
+      // It's better to get the size of the display image in the canvas.
+      // But the canvas scale is not updated at this time.
+      // We need to calulate the canvas scale if we really need it.
+      //
+      // Current scale calculation here is Ok for now.
       final scaleWidth = size.width * 0.3 / _baseMouseWidth;
       final scaleHeight = size.height * 0.3 / _baseMouseHeight;
       final scale = scaleWidth < scaleHeight ? scaleWidth : scaleHeight;
@@ -228,14 +254,33 @@ class _FloatingMouseState extends State<FloatingMouse> {
         _CanvasScrollState(inputModel: _inputModel, canvasModel: _canvasModel);
     _cursorModel.blockEvents = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _updateBlockedRect();
+      _resetPosition();
+      _resetCollapseTimer();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final currentOrientation = MediaQuery.of(context).orientation;
+    if (_previousOrientation != null &&
+        _previousOrientation != currentOrientation) {
+      _initMouseScale = null;
+      _resetPosition();
+    }
+    _previousOrientation = currentOrientation;
+  }
+
+  void _resetPosition() {
+    setState(() {
       final size = MediaQuery.of(context).size;
-      setState(() {
-        _position = Offset(
-          (size.width - _baseMouseWidth * _getInitMouseScale()) / 2,
-          (size.height - _baseMouseHeight * _getInitMouseScale()) / 2,
-        );
-      });
+      _position = Offset(
+        (size.width - _baseMouseWidth * _getInitMouseScale()) / 2,
+        (size.height - _baseMouseHeight * _getInitMouseScale()) / 2,
+      );
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _updateBlockedRect();
     });
   }
 
@@ -246,6 +291,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
     }
     _canvasScrollState.tryCancel();
     _cursorModel.blockEvents = false;
+    _collapseTimer?.cancel();
     super.dispose();
   }
 
@@ -295,6 +341,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
   }
 
   void _onMoveUpdateDelta(Offset delta) {
+    _resetCollapseTimer();
     final context = this.context;
     final size = MediaQuery.of(context).size;
     Offset newPosition = _position + delta;
@@ -322,7 +369,9 @@ class _FloatingMouseState extends State<FloatingMouse> {
             InputModel.getMouseEventMove(), mouseGlobalPosition,
             moveCanvas: false);
         positionInRemoteDisplay = _getPositionFromMouseRetEvt(evt);
-        _updateBlockedRect();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _updateBlockedRect();
+        });
       }
 
       // Get the display rect
@@ -388,20 +437,21 @@ class _FloatingMouseState extends State<FloatingMouse> {
   void _onBodyPointerMoveUpdate(PointerMoveEvent event) =>
       _onMoveUpdateDelta(event.delta);
 
-  void _handlePointerDown(PointerDownEvent event) {
-    if (_isScrolling) return;
-
-    // Get the RenderObject of the scroll wheel key and mouse widget. If unavailable, return directly and do not enter scroll mode.
-    final contextScroll = _scrollWheelKey.currentContext;
-    if (contextScroll == null) return;
+  bool _containsPosition(GlobalKey key, Offset pos) {
+    final contextScroll = key.currentContext;
+    if (contextScroll == null) return false;
     final RenderBox? scrollWheelBox =
         contextScroll.findRenderObject() as RenderBox?;
-    if (scrollWheelBox == null || !scrollWheelBox.attached) return;
+    if (scrollWheelBox == null || !scrollWheelBox.attached) return false;
+    Rect rect = scrollWheelBox.localToGlobal(Offset.zero) & scrollWheelBox.size;
+    return rect.contains(pos);
+  }
 
-    final Rect scrollWheelRect =
-        scrollWheelBox.localToGlobal(Offset.zero) & scrollWheelBox.size;
-
-    if (scrollWheelRect.contains(event.position)) {
+  void _handlePointerDown(PointerDownEvent event) {
+    _resetCollapseTimer();
+    if (_isScrolling) return;
+    if (_containsPosition(_scrollWheelUpKey, event.position) ||
+        _containsPosition(_scrollWheelDownKey, event.position)) {
       final contextMouse = _mouseWidgetKey.currentContext;
       if (contextMouse == null) return;
       final RenderBox? mouseBox = contextMouse.findRenderObject() as RenderBox?;
@@ -429,6 +479,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    _resetCollapseTimer();
     if (!_isScrolling || _scrollCenter == null || _lastSnappedAngle == null) {
       return;
     }
@@ -457,6 +508,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
   }
 
   void _tryCancelScrolling() {
+    _resetCollapseTimer();
     if (!_isScrolling) return;
     setState(() {
       _isScrolling = false;
@@ -524,16 +576,21 @@ class _FloatingMouseState extends State<FloatingMouse> {
           height: mouseHeight,
           child: GestureDetector(
             onPanUpdate: _onDragHandleUpdate,
-            onTap: () => setState(() {
-              _mouseScale = _getInitMouseScale();
-              _isExpanded = true;
-              _position -= _expandOffset;
-            }),
+            onTap: () {
+              setState(() {
+                _mouseScale = _getInitMouseScale();
+                _isExpanded = true;
+                _position -= _expandOffset;
+              });
+              _resetCollapseTimer();
+            },
             child: MouseBody(
-              scrollWheelKey: _scrollWheelKey,
+              scrollWheelUpKey: _scrollWheelUpKey,
+              scrollWheelDownKey: _scrollWheelDownKey,
               mouseWidgetKey: _mouseWidgetKey,
               inputModel: _isExpanded ? _inputModel : null,
               scale: _mouseScale,
+              resetCollapseTimer: _resetCollapseTimer,
             ),
           ));
     } else {
@@ -547,11 +604,12 @@ class _FloatingMouseState extends State<FloatingMouse> {
               children: [
                 CursorPaint(
                   key: _cursorPaintKey,
-                  cursorModel: _cursorModel,
+                  scale: _mouseScale,
                 ),
                 const Spacer(),
                 GestureDetector(
                   onTap: () {
+                    _collapseTimer?.cancel();
                     setState(() {
                       _mouseScale = minMouseScale;
                       _isExpanded = false;
@@ -581,7 +639,8 @@ class _FloatingMouseState extends State<FloatingMouse> {
             Padding(
                 padding: EdgeInsets.only(left: 14 * _mouseScale),
                 child: MouseBody(
-                  scrollWheelKey: _scrollWheelKey,
+                  scrollWheelUpKey: _scrollWheelUpKey,
+                  scrollWheelDownKey: _scrollWheelDownKey,
                   mouseWidgetKey: _mouseWidgetKey,
                   onPointerMoveUpdate: _onBodyPointerMoveUpdate,
                   cancelCanvasScroll: _canvasScrollState.tryCancel,
@@ -589,6 +648,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
                   setCanvasScrollReleased: _canvasScrollState.setReleasedSpeed,
                   inputModel: _isExpanded ? _inputModel : null,
                   scale: _mouseScale,
+                  resetCollapseTimer: _resetCollapseTimer,
                 )),
           ],
         ),
@@ -598,7 +658,8 @@ class _FloatingMouseState extends State<FloatingMouse> {
 }
 
 class MouseBody extends StatefulWidget {
-  final GlobalKey scrollWheelKey;
+  final GlobalKey scrollWheelUpKey;
+  final GlobalKey scrollWheelDownKey;
   final GlobalKey mouseWidgetKey;
   final Function(PointerMoveEvent)? onPointerMoveUpdate;
   final Function()? cancelCanvasScroll;
@@ -606,9 +667,11 @@ class MouseBody extends StatefulWidget {
   final Function()? setCanvasScrollReleased;
   final InputModel? inputModel;
   final double scale;
+  final Function()? resetCollapseTimer;
   const MouseBody({
     super.key,
-    required this.scrollWheelKey,
+    required this.scrollWheelUpKey,
+    required this.scrollWheelDownKey,
     required this.mouseWidgetKey,
     required this.scale,
     this.inputModel,
@@ -616,6 +679,7 @@ class MouseBody extends StatefulWidget {
     this.cancelCanvasScroll,
     this.setCanvasScrollPressed,
     this.setCanvasScrollReleased,
+    this.resetCollapseTimer,
   });
 
   @override
@@ -644,6 +708,79 @@ class _MouseBodyState extends State<MouseBody> {
   bool _rightDown = false;
   bool _midDown = false;
   bool _dragDown = false;
+
+  Widget _buildScrollUpDown(GlobalKey key, IconData iconData, double s) {
+    return Container(
+      key: key,
+      height: 17 * s,
+      child: Icon(
+        iconData,
+        color: _kDefaultHighlightColor,
+        size: 14 * s,
+      ),
+    );
+  }
+
+  Widget _buildScrollMidButton(double s) {
+    return Listener(
+      onPointerDown: widget.inputModel != null
+          ? (event) {
+              widget.resetCollapseTimer?.call();
+              setState(() {
+                _midDown = true;
+                widget.inputModel?.tapDown(MouseButtons.wheel);
+              });
+            }
+          : null,
+      onPointerUp: widget.inputModel != null
+          ? (event) {
+              setState(() {
+                _midDown = false;
+                widget.inputModel?.tapUp(MouseButtons.wheel);
+                widget.cancelCanvasScroll?.call();
+              });
+            }
+          : null,
+      onPointerCancel: widget.inputModel != null
+          ? (event) {
+              setState(() {
+                _midDown = false;
+                widget.inputModel?.tapUp(MouseButtons.wheel);
+                widget.cancelCanvasScroll?.call();
+              });
+            }
+          : null,
+      onPointerMove: widget.onPointerMoveUpdate,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 28 * s,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6 * s,
+                height: 2 * s,
+                color: _kDefaultHighlightColor,
+              ),
+              SizedBox(height: 3 * s),
+              Container(
+                width: 8 * s,
+                height: 2 * s,
+                color: _kDefaultHighlightColor,
+              ),
+              SizedBox(height: 3 * s),
+              Container(
+                width: 6 * s,
+                height: 2 * s,
+                color: _kDefaultHighlightColor,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -677,11 +814,14 @@ class _MouseBodyState extends State<MouseBody> {
                             child: Listener(
                               onPointerMove: widget.onPointerMoveUpdate,
                               onPointerDown: widget.inputModel != null
-                                  ? (event) => setState(() {
+                                  ? (event) {
+                                      widget.resetCollapseTimer?.call();
+                                      setState(() {
                                         _leftDown = true;
                                         widget.inputModel
                                             ?.tapDown(MouseButtons.left);
-                                      })
+                                      });
+                                    }
                                   : null,
                               onPointerUp: widget.inputModel != null
                                   ? (event) => setState(() {
@@ -722,11 +862,14 @@ class _MouseBodyState extends State<MouseBody> {
                             child: Listener(
                               onPointerMove: widget.onPointerMoveUpdate,
                               onPointerDown: widget.inputModel != null
-                                  ? (event) => setState(() {
+                                  ? (event) {
+                                      widget.resetCollapseTimer?.call();
+                                      setState(() {
                                         _rightDown = true;
                                         widget.inputModel
                                             ?.tapDown(MouseButtons.right);
-                                      })
+                                      });
+                                    }
                                   : null,
                               onPointerUp: widget.inputModel != null
                                   ? (event) => setState(() {
@@ -779,92 +922,11 @@ class _MouseBodyState extends State<MouseBody> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Container(
-                                    key: widget.scrollWheelKey,
-                                    width: 14 * s,
-                                    height: 28 * s,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.withOpacity(0.9),
-                                      borderRadius:
-                                          BorderRadius.circular(7 * s),
-                                    ),
-                                  ),
-                                  Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          width: 6 * s,
-                                          height: 2 * s,
-                                          color: Colors.white60,
-                                        ),
-                                        SizedBox(height: 3 * s),
-                                        Container(
-                                          width: 8 * s,
-                                          height: 2 * s,
-                                          color: Colors.white60,
-                                        ),
-                                        SizedBox(height: 3 * s),
-                                        Container(
-                                          width: 6 * s,
-                                          height: 2 * s,
-                                          color: Colors.white60,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Listener(
-                                onPointerDown: widget.inputModel != null
-                                    ? (event) {
-                                        setState(() {
-                                          _midDown = true;
-                                          widget.inputModel
-                                              ?.tapDown(MouseButtons.wheel);
-                                        });
-                                      }
-                                    : null,
-                                onPointerUp: widget.inputModel != null
-                                    ? (event) {
-                                        setState(() {
-                                          _midDown = false;
-                                          widget.inputModel
-                                              ?.tapUp(MouseButtons.wheel);
-                                          widget.cancelCanvasScroll?.call();
-                                        });
-                                      }
-                                    : null,
-                                onPointerCancel: widget.inputModel != null
-                                    ? (event) {
-                                        setState(() {
-                                          _midDown = false;
-                                          widget.inputModel
-                                              ?.tapUp(MouseButtons.wheel);
-                                          widget.cancelCanvasScroll?.call();
-                                        });
-                                      }
-                                    : null,
-                                onPointerMove: widget.onPointerMoveUpdate,
-                                child: Container(
-                                  width: 14 * midScale.scale,
-                                  height: 14 * midScale.scale,
-                                  decoration: BoxDecoration(
-                                    color: _midDown
-                                        ? _kTapDownColor
-                                        : _kDefaultColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: CustomPaint(
-                                    size: Size(14 * midScale.scale,
-                                        14 * midScale.scale),
-                                    painter: FourArrowsPainter(midScale.scale),
-                                  ),
-                                ),
-                              ),
+                              _buildScrollUpDown(widget.scrollWheelUpKey,
+                                  Icons.keyboard_arrow_up, midScale.scale),
+                              _buildScrollMidButton(midScale.scale),
+                              _buildScrollUpDown(widget.scrollWheelDownKey,
+                                  Icons.keyboard_arrow_down, midScale.scale),
                             ],
                           ),
                         ),
@@ -881,6 +943,7 @@ class _MouseBodyState extends State<MouseBody> {
                   onPointerMove: widget.onPointerMoveUpdate,
                   onPointerDown: widget.inputModel != null
                       ? (event) {
+                          widget.resetCollapseTimer?.call();
                           setState(() {
                             _dragDown = true;
                           });
@@ -911,8 +974,11 @@ class _MouseBodyState extends State<MouseBody> {
                     child: Container(
                       width: 80 * s,
                       alignment: Alignment.center,
-                      child: Icon(Icons.drag_handle,
-                          color: Colors.black54, size: 18 * s),
+                      child: Transform.rotate(
+                        angle: pi / 2,
+                        child: Icon(Icons.drag_indicator,
+                            color: _kDefaultHighlightColor, size: 18 * s),
+                      ),
                     ),
                   ),
                 ),
@@ -1037,57 +1103,13 @@ class DragAreaTopIndentPainter extends CustomPainter {
   }
 }
 
-class FourArrowsPainter extends CustomPainter {
-  final double scale;
-  final Color? color;
-  FourArrowsPainter(this.scale, {this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double s = scale;
-    final Paint arrowPaint = Paint()
-      ..color = color ?? Colors.white60
-      ..style = PaintingStyle.fill;
-    final Offset center = Offset(size.width / 2, size.height / 2);
-    final double arrowW = 4 * s;
-    final double arrowH = 3 * s;
-    final double offset = 2.5 * s;
-    final Path up = Path()
-      ..moveTo(center.dx, center.dy - offset - arrowH)
-      ..lineTo(center.dx - arrowW / 2, center.dy - offset)
-      ..lineTo(center.dx + arrowW / 2, center.dy - offset)
-      ..close();
-    canvas.drawPath(up, arrowPaint);
-    final Path down = Path()
-      ..moveTo(center.dx, center.dy + offset + arrowH)
-      ..lineTo(center.dx - arrowW / 2, center.dy + offset)
-      ..lineTo(center.dx + arrowW / 2, center.dy + offset)
-      ..close();
-    canvas.drawPath(down, arrowPaint);
-    final Path left = Path()
-      ..moveTo(center.dx - offset - arrowH, center.dy)
-      ..lineTo(center.dx - offset, center.dy - arrowW / 2)
-      ..lineTo(center.dx - offset, center.dy + arrowW / 2)
-      ..close();
-    canvas.drawPath(left, arrowPaint);
-    final Path right = Path()
-      ..moveTo(center.dx + offset + arrowH, center.dy)
-      ..lineTo(center.dx + offset, center.dy - arrowW / 2)
-      ..lineTo(center.dx + offset, center.dy + arrowW / 2)
-      ..close();
-    canvas.drawPath(right, arrowPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class CursorPaint extends StatelessWidget {
-  final CursorModel cursorModel;
-  CursorPaint({super.key, required this.cursorModel});
+  final double scale;
+  CursorPaint({super.key, required this.scale});
 
   @override
   Widget build(BuildContext context) {
+    final cursorModel = Provider.of<CursorModel>(context);
     double hotx = cursorModel.hotx;
     double hoty = cursorModel.hoty;
     var image = cursorModel.image;
@@ -1101,9 +1123,12 @@ class CursorPaint extends StatelessWidget {
     if (image == null) {
       return const Offstage();
     }
-
+    assert(scale > 0, 'canvasModel.scale should always be positive');
+    if (scale <= 0) {
+      return const Offstage();
+    }
     return CustomPaint(
-      painter: ImagePainter(image: image, x: -hotx, y: -hoty, scale: 1.0),
+      painter: ImagePainter(image: image, x: -hotx, y: -hoty, scale: scale),
     );
   }
 }

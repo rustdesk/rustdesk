@@ -1130,14 +1130,13 @@ class FfiModel with ChangeNotifier {
           '';
     }
     if (isMobile) {
-      final results = await Future.wait([
-        bind.sessionGetToggleOption(
-            sessionId: sessionId, arg: kOptionShowVirtualMouseTouchMode),
-        bind.sessionGetToggleOption(
-            sessionId: sessionId, arg: kOptionShowVirtualMouseMouseMode),
-      ]);
-      _showVirtualMouseTouchMode = results[0] ?? false;
-      _showVirtualMouseMouseMode = results[1] ?? false;
+      // `mainGetLocalBoolOptionSync` is not used here.
+      // Because `kOptionShowVirtualMouseTouchMode` and `kOptionShowVirtualMouseMouseMode` are similar options,
+      // while the default values are different.
+      _showVirtualMouseTouchMode =
+          bind.mainGetLocalOption(key: kOptionShowVirtualMouseTouchMode) != 'N';
+      _showVirtualMouseMouseMode =
+          bind.mainGetLocalOption(key: kOptionShowVirtualMouseMouseMode) == 'Y';
     }
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
@@ -2452,6 +2451,10 @@ class CursorModel with ChangeNotifier {
     }
     await parent.target?.inputModel.moveMouse(_x, _y);
     return true;
+  }
+
+  Future<void> syncCursorPosition() async {
+    await parent.target?.inputModel.moveMouse(_x, _y);
   }
 
   bool isInRemoteRect(Offset offset) {
