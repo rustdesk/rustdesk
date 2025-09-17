@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "AstartaSupport"
 version = "1.4.2"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+default-run = "AstartaSupport"
 rust-version = "1.75"
 
 [lib]
@@ -221,7 +221,7 @@ hound = "3.5"
 docopt = "1.1"
 
 [package.metadata.bundle]
-name = "RustDesk"
+name = "AstartaSupport"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
