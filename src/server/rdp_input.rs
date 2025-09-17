@@ -83,7 +83,7 @@ pub mod client {
             // https://github.com/rustdesk/rustdesk/pull/9019#issuecomment-2295252388
             // There may be a bug in Rdp input on Gnome util Ubuntu 24.04 (Gnome 46)
             //
-            // eg. Resultion 800x600, Fractional scale: 200% (logic size: 400x300)
+            // eg. Resolution 800x600, Fractional scale: 200% (logic size: 400x300)
             // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.impl.portal.RemoteDesktop.html#:~:text=new%20pointer%20position-,in%20the%20streams%20logical%20coordinate%20space,-.
             // Then (x,y) in `mouse_move_to()` and `mouse_move_relative()` should be scaled to the logic size(stream.get_size()), which is from (0,0) to (400,300).
             // For Ubuntu 24.04(Gnome 46), (x,y) is restricted from (0,0) to (400,300), but the actual range in screen is:

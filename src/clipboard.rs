@@ -257,7 +257,7 @@ impl ClipboardContext {
             let mut i = 1;
             loop {
                 // Try 5 times to create clipboard
-                // Arboard::new() connect to X server or Wayland compositor, which shoud be ok at most time
+                // Arboard::new() connect to X server or Wayland compositor, which should be OK most times
                 // But sometimes, the connection may fail, so we retry here.
                 match arboard::Clipboard::new() {
                     Ok(x) => {
@@ -314,7 +314,7 @@ impl ClipboardContext {
 
     pub fn get(&mut self, side: ClipboardSide, force: bool) -> ResultType<Vec<ClipboardData>> {
         let data = self.get_formats_filter(SUPPORTED_FORMATS, side, force)?;
-        // We have a seperate service named `file-clipboard` to handle file copy-paste.
+        // We have a separate service named `file-clipboard` to handle file copy-paste.
         // We need to read the file urls because file copy may set the other clipboard formats such as text.
         #[cfg(feature = "unix-file-copy-paste")]
         {
@@ -757,7 +757,7 @@ pub fn get_clipboards_msg(client: bool) -> Option<Message> {
 }
 
 // We need this mod to notify multiple subscribers when the clipboard changes.
-// Because only one clipboard master(listener) can tigger the clipboard change event multiple listeners are created on Linux(x11).
+// Because only one clipboard master(listener) can trigger the clipboard change event multiple listeners are created on Linux(x11).
 // https://github.com/rustdesk-org/clipboard-master/blob/4fb62e5b62fb6350d82b571ec7ba94b3cd466695/src/master/x11.rs#L226
 #[cfg(not(target_os = "android"))]
 pub mod clipboard_listener {
