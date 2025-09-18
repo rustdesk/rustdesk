@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/remote_input.dart';
 import 'package:flutter_hbb/models/input_model.dart';
@@ -23,10 +24,12 @@ const double _kSpaceToVerticalEdge = 15;
 const double _kSpaceBetweenLeftRightButtons = 40;
 const double _kLeftRightButtonWidth = 55;
 const double _kLeftRightButtonHeight = 40;
-const double _kBoarderWidth = 1;
+const double _kBorderWidth = 1;
 final Color _kDefaultBorderColor = Colors.white.withOpacity(0.7);
 final Color _kDefaultColor = Colors.black.withOpacity(0.4);
 final Color _kTapDownColor = Colors.blue.withOpacity(0.7);
+final Color _kWidgetHighlightColor = Colors.white.withOpacity(0.9);
+const int _kInputTimerIntervalMillis = 100;
 
 class FloatingMouseWidgets extends StatefulWidget {
   final FFI ffi;
@@ -42,16 +45,26 @@ class FloatingMouseWidgets extends StatefulWidget {
 class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
   InputModel get _inputModel => widget.ffi.inputModel;
   CursorModel get _cursorModel => widget.ffi.cursorModel;
+  late final VirtualMouseMode _virtualMouseMode;
 
   @override
   void initState() {
     super.initState();
+    _virtualMouseMode = widget.ffi.ffiModel.virtualMouseMode;
+    _virtualMouseMode.addListener(_onVirtualMouseModeChanged);
     _cursorModel.blockEvents = false;
     isSpecialHoldDragActive = false;
   }
 
+  void _onVirtualMouseModeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
+    _virtualMouseMode.removeListener(_onVirtualMouseModeChanged);
     super.dispose();
     _cursorModel.blockEvents = false;
     isSpecialHoldDragActive = false;
@@ -59,12 +72,18 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
 
   @override
   Widget build(BuildContext context) {
+    final virtualMouseMode = _virtualMouseMode;
+    if (!virtualMouseMode.showVirtualMouseMouseMode) {
+      return const Offstage();
+    }
     return Stack(
       children: [
         FloatingWheel(
           inputModel: _inputModel,
           cursorModel: _cursorModel,
         ),
+        if (virtualMouseMode.showVirtualJoystick)
+          VirtualJoystick(cursorModel: _cursorModel),
         FloatingLeftRightButton(
           isLeft: true,
           inputModel: _inputModel,
@@ -139,6 +158,9 @@ class _FloatingWheelState extends State<FloatingWheel> {
   @override
   void dispose() {
     _scrollTimer?.cancel();
+    if (_lastBlockedRect != null) {
+      _cursorModel.removeBlockedRect(_lastBlockedRect!);
+    }
     super.dispose();
   }
 
@@ -246,7 +268,7 @@ class _FloatingWheelState extends State<FloatingWheel> {
                     vertical: BorderSide(
                         color:
                             _isMidDown ? _kTapDownColor : _kDefaultBorderColor,
-                        width: _kBoarderWidth)),
+                        width: _kBorderWidth)),
               ),
               child: Center(
                 child: Container(
@@ -311,7 +333,8 @@ class _FloatingWheelState extends State<FloatingWheel> {
   void _startScrollTimer(int direction) {
     _scrollTimer?.cancel();
     _inputModel.scroll(direction);
-    _scrollTimer = Timer.periodic(Duration(milliseconds: 100), (timer) {
+    _scrollTimer = Timer.periodic(
+        Duration(milliseconds: _kInputTimerIntervalMillis), (timer) {
       _inputModel.scroll(direction);
     });
   }
@@ -345,6 +368,11 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   Orientation? _previousOrientation;
   Offset _preSavedPos = Offset.zero;
 
+  // Gesture ambiguity resolution
+  Timer? _tapDownTimer;
+  final Duration _pressTimeout = const Duration(milliseconds: 200);
+  bool _isDragging = false;
+
   bool get _isLeft => widget.isLeft;
   InputModel get _inputModel => widget.inputModel;
   CursorModel get _cursorModel => widget.cursorModel;
@@ -364,6 +392,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     if (_lastBlockedRect != null) {
       _cursorModel.removeBlockedRect(_lastBlockedRect!);
     }
+    _tapDownTimer?.cancel();
     _trySavePosition();
     super.dispose();
   }
@@ -402,16 +431,14 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
       final m = jsonDecode(s);
       return Offset(m['x'], m['y']);
     } catch (e) {
-      debugPrintStack(label: 'Failed to load position "$s" ${e.toString()}');
+      debugPrintStack(label: 'Failed to load position "$s" $e');
       return null;
     }
   }
 
   void _trySavePosition() {
     if (_previousOrientation == null) return;
-    if ((Offset(_position.dx - _preSavedPos.dx, _position.dy - _preSavedPos.dy))
-            .distanceSquared <
-        0.1) return;
+    if (((_position - _preSavedPos)).distanceSquared < 0.1) return;
     final pos = jsonEncode({
       'x': _position.dx,
       'y': _position.dy,
@@ -477,8 +504,15 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     }
   }
 
-  void _onBodyPointerMoveUpdate(PointerMoveEvent event) =>
-      _onMoveUpdateDelta(event.delta);
+  void _onBodyPointerMoveUpdate(PointerMoveEvent event) {
+    _cursorModel.blockEvents = true;
+    // If move, it's a drag, not a tap.
+    _isDragging = true;
+    // Cancel the timer to prevent it from being recognized as a tap/hold.
+    _tapDownTimer?.cancel();
+    _tapDownTimer = null;
+    _onMoveUpdateDelta(event.delta);
+  }
 
   Widget _buildButtonIcon() {
     final double w = _kLeftRightButtonWidth * 0.45;
@@ -517,33 +551,72 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     return Positioned(
       left: _position.dx,
       top: _position.dy,
+      // We can't use the GestureDetector here, because `onTapDown` may be
+      // triggered sometimes when dragging.
       child: Listener(
         onPointerMove: _onBodyPointerMoveUpdate,
         onPointerDown: (event) async {
+          _isDragging = false;
           setState(() {
             _isDown = true;
           });
-          isSpecialHoldDragActive = true;
-          // Sync cursor position to avoid the jumpy behavior.
-          await _cursorModel.syncCursorPosition();
-          await _inputModel
-              .tapDown(_isLeft ? MouseButtons.left : MouseButtons.right);
+          // Start a timer. If it fires, it's a hold.
+          _tapDownTimer?.cancel();
+          _tapDownTimer = Timer(_pressTimeout, () {
+            isSpecialHoldDragActive = true;
+            () async {
+              await _cursorModel.syncCursorPosition();
+              await _inputModel
+                  .tapDown(_isLeft ? MouseButtons.left : MouseButtons.right);
+            }();
+            _tapDownTimer = null;
+          });
         },
         onPointerUp: (event) {
+          _cursorModel.blockEvents = false;
           setState(() {
             _isDown = false;
           });
+          // If timer is active, it's a quick tap.
+          if (_tapDownTimer != null) {
+            _tapDownTimer!.cancel();
+            _tapDownTimer = null;
+            // Fire tap down and up quickly.
+            _inputModel
+                .tapDown(_isLeft ? MouseButtons.left : MouseButtons.right)
+                .then(
+                    (_) => Future.delayed(const Duration(milliseconds: 50), () {
+                          _inputModel.tapUp(
+                              _isLeft ? MouseButtons.left : MouseButtons.right);
+                        }));
+          } else {
+            // If it's not a quick tap, it could be a hold or drag.
+            // If it was a hold, isSpecialHoldDragActive is true.
+            if (isSpecialHoldDragActive) {
+              _inputModel
+                  .tapUp(_isLeft ? MouseButtons.left : MouseButtons.right);
+            }
+          }
+
+          if (_isDragging) {
+            _trySavePosition();
+          }
           isSpecialHoldDragActive = false;
-          _inputModel.tapUp(_isLeft ? MouseButtons.left : MouseButtons.right);
-          _trySavePosition();
         },
         onPointerCancel: (event) {
+          _cursorModel.blockEvents = false;
           setState(() {
             _isDown = false;
           });
+          _tapDownTimer?.cancel();
+          _tapDownTimer = null;
+          if (isSpecialHoldDragActive) {
+            _inputModel.tapUp(_isLeft ? MouseButtons.left : MouseButtons.right);
+          }
           isSpecialHoldDragActive = false;
-          _inputModel.tapUp(_isLeft ? MouseButtons.left : MouseButtons.right);
-          _trySavePosition();
+          if (_isDragging) {
+            _trySavePosition();
+          }
         },
         child: Container(
           width: _kLeftRightButtonWidth,
@@ -553,7 +626,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
             color: _kDefaultColor,
             border: Border.all(
                 color: _isDown ? _kTapDownColor : _kDefaultBorderColor,
-                width: _kBoarderWidth),
+                width: _kBorderWidth),
             borderRadius: _isLeft
                 ? BorderRadius.horizontal(
                     left: Radius.circular(_kLeftRightButtonHeight * 0.5))
@@ -589,4 +662,202 @@ class _QuarterCirclePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
+
+class VirtualJoystick extends StatefulWidget {
+  final CursorModel cursorModel;
+
+  const VirtualJoystick({super.key, required this.cursorModel});
+
+  @override
+  State<VirtualJoystick> createState() => _VirtualJoystickState();
+}
+
+class _VirtualJoystickState extends State<VirtualJoystick> {
+  Offset _position = Offset.zero;
+  Offset _offset = Offset.zero;
+  final double _joystickRadius = 50.0;
+  final double _thumbRadius = 20.0;
+  final double _moveStep = 3.0;
+  final double _speed = 1.0;
+
+  // One-shot timer to detect a drag gesture
+  Timer? _dragStartTimer;
+  // Periodic timer for continuous movement
+  Timer? _continuousMoveTimer;
+  Size? _lastScreenSize;
+  bool _isPressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.cursorModel.blockEvents = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _lastScreenSize = MediaQuery.of(context).size;
+      _resetPosition();
+    });
+  }
+
+  @override
+  void dispose() {
+    _stopSendEventTimer();
+    widget.cursorModel.blockEvents = false;
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final currentScreenSize = MediaQuery.of(context).size;
+    if (_lastScreenSize != null && _lastScreenSize != currentScreenSize) {
+      _resetPosition();
+    }
+    _lastScreenSize = currentScreenSize;
+  }
+
+  void _resetPosition() {
+    final size = MediaQuery.of(context).size;
+    setState(() {
+      _position = Offset(
+        _kSpaceToHorizontalEdge + _joystickRadius,
+        size.height * 0.5 + _joystickRadius * 1.5,
+      );
+    });
+  }
+
+  Offset _offsetToPanDelta(Offset offset) {
+    return Offset(
+      offset.dx / _joystickRadius,
+      offset.dy / _joystickRadius,
+    );
+  }
+
+  void _stopSendEventTimer() {
+    _dragStartTimer?.cancel();
+    _continuousMoveTimer?.cancel();
+    _dragStartTimer = null;
+    _continuousMoveTimer = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: _position.dx - _joystickRadius,
+      top: _position.dy - _joystickRadius,
+      child: GestureDetector(
+        onPanStart: (details) {
+          setState(() {
+            _isPressed = true;
+          });
+          widget.cursorModel.blockEvents = true;
+          _updateOffset(details.localPosition);
+
+          // 1. Send a single, small pan event immediately for responsiveness.
+          //    The movement is small for a gentle start.
+          final initialDelta = _offsetToPanDelta(_offset);
+          if (initialDelta.distance > 0) {
+            widget.cursorModel.updatePan(initialDelta, Offset.zero, false);
+          }
+
+          // 2. Start a one-shot timer to check if the user is holding for a drag.
+          _dragStartTimer?.cancel();
+          _dragStartTimer = Timer(const Duration(milliseconds: 120), () {
+            // 3. If the timer fires, it's a drag. Start the continuous movement timer.
+            _continuousMoveTimer?.cancel();
+            _continuousMoveTimer =
+                periodic_immediate(const Duration(milliseconds: 20), () async {
+              if (_offset != Offset.zero) {
+                widget.cursorModel.updatePan(
+                    _offsetToPanDelta(_offset) * _moveStep * _speed,
+                    Offset.zero,
+                    false);
+              }
+            });
+          });
+        },
+        onPanUpdate: (details) {
+          _updateOffset(details.localPosition);
+        },
+        onPanEnd: (details) {
+          setState(() {
+            _offset = Offset.zero;
+            _isPressed = false;
+          });
+          widget.cursorModel.blockEvents = false;
+
+          // 4. Critical step: On pan end, cancel all timers.
+          //    If it was a flick, this cancels the drag detection before it fires.
+          //    If it was a drag, this stops the continuous movement.
+          _stopSendEventTimer();
+        },
+        child: CustomPaint(
+          size: Size(_joystickRadius * 2, _joystickRadius * 2),
+          painter: _JoystickPainter(
+              _offset, _joystickRadius, _thumbRadius, _isPressed),
+        ),
+      ),
+    );
+  }
+
+  void _updateOffset(Offset localPosition) {
+    final center = Offset(_joystickRadius, _joystickRadius);
+    final offset = localPosition - center;
+    final distance = offset.distance;
+
+    if (distance <= _joystickRadius) {
+      setState(() {
+        _offset = offset;
+      });
+    } else {
+      final clampedOffset = offset / distance * _joystickRadius;
+      setState(() {
+        _offset = clampedOffset;
+      });
+    }
+  }
+}
+
+class _JoystickPainter extends CustomPainter {
+  final Offset _offset;
+  final double _joystickRadius;
+  final double _thumbRadius;
+  final bool _isPressed;
+
+  _JoystickPainter(
+      this._offset, this._joystickRadius, this._thumbRadius, this._isPressed);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final joystickColor = _kDefaultColor;
+    final borderColor = _isPressed ? _kTapDownColor : _kDefaultBorderColor;
+    final thumbColor = _kWidgetHighlightColor;
+
+    final joystickPaint = Paint()
+      ..color = joystickColor
+      ..style = PaintingStyle.fill;
+
+    final borderPaint = Paint()
+      ..color = borderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    final thumbPaint = Paint()
+      ..color = thumbColor
+      ..style = PaintingStyle.fill;
+
+    // Draw joystick base and border
+    canvas.drawCircle(center, _joystickRadius, joystickPaint);
+    canvas.drawCircle(center, _joystickRadius, borderPaint);
+
+    // Draw thumb
+    final thumbCenter = center + _offset;
+    canvas.drawCircle(thumbCenter, _thumbRadius, thumbPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _JoystickPainter oldDelegate) {
+    return oldDelegate._offset != _offset ||
+        oldDelegate._isPressed != _isPressed;
+  }
 }

@@ -126,6 +126,8 @@ class _RawTouchGestureDetectorRegionState
     return !kTouchBasedDeviceKinds.contains(lastDeviceKind);
   }
 
+  // Mobile, mouse mode.
+  // Check if should block the mouse tap event (`_lastTapDownPositionForMouseMode`).
   bool shouldBlockMouseModeEvent() {
     return _lastTapDownPositionForMouseMode != null &&
         ffi.cursorModel.shouldBlock(_lastTapDownPositionForMouseMode!.dx,
@@ -169,8 +171,8 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (!handleTouch) {
-      // We can't use `_lastTapDownDetails` here,
-      // because `onTapUp` is called before `onTap`, so `_lastTapDownDetails` is always null here.
+      // Cannot use `_lastTapDownDetails` because Flutter calls `onTapUp` before `onTap`, clearing the cached details.
+      // Using `_lastTapDownPositionForMouseMode` instead.
       if (shouldBlockMouseModeEvent()) {
         return;
       }

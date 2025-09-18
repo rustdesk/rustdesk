@@ -15,9 +15,11 @@ const double _kDotAngle = 2 * pi / _kDotCount;
 final Color _kDefaultColor = Colors.grey.withOpacity(0.7);
 final Color _kDefaultHighlightColor = Colors.white24.withOpacity(0.7);
 final Color _kTapDownColor = Colors.blue.withOpacity(0.7);
-final double _baseMouseWidth = 112.0;
-final double _baseMouseHeight = 138.0;
+const double _baseMouseWidth = 112.0;
+const double _baseMouseHeight = 138.0;
 const double _kShowPressedScale = 1.2;
+const double kScaleMax = 1.8;
+const double kScaleMin = 0.8;
 
 double? _tryParseCoordinateFromEvt(Map<String, dynamic>? evt, String key) {
   if (evt == null) return null;
@@ -112,14 +114,17 @@ class _CanvasScrollState {
         final evt = inputModel.processEventToPeer(
             InputModel.getMouseEventMove(), _mouseGlobalPosition,
             moveCanvas: false);
-        if (evt == null || shouldCancelScrollTimer(evt)) {
+        if (shouldCancelScrollTimer(evt)) {
           tryCancel();
         }
       }
     });
   }
 
-  bool shouldCancelScrollTimer(Map<String, dynamic> evt) {
+  bool shouldCancelScrollTimer(Map<String, dynamic>? evt) {
+    if (evt == null) {
+      return true;
+    }
     double s = canvasModel.scale;
     assert(s > 0, 'canvasModel.scale should always be positive');
     if (s <= 0) {
@@ -193,7 +198,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
   final GlobalKey _cursorPaintKey = GlobalKey();
 
   Offset _position = Offset.zero;
-  double? _initMouseScale;
+  double _baseMouseScale = 1.0;
   double _mouseScale = 1.0;
   bool _isExpanded = true;
   bool _isScrolling = false;
@@ -203,13 +208,14 @@ class _FloatingMouseState extends State<FloatingMouse> {
   late final _CanvasScrollState _canvasScrollState;
   Orientation? _previousOrientation;
   Timer? _collapseTimer;
+  late final VirtualMouseMode _virtualMouseMode;
 
   void _resetCollapseTimer() {
     _collapseTimer?.cancel();
     if (_isExpanded) {
       _collapseTimer = Timer(const Duration(seconds: 7), () {
         if (mounted && _isExpanded) {
-          final minMouseScale = (_getInitMouseScale() * 0.3);
+          final minMouseScale = (_baseMouseScale * 0.3);
           setState(() {
             _mouseScale = minMouseScale;
             _isExpanded = false;
@@ -228,28 +234,13 @@ class _FloatingMouseState extends State<FloatingMouse> {
   CanvasModel get _canvasModel => widget.ffi.canvasModel;
 
   Offset get _expandOffset =>
-      Offset(84 * _getInitMouseScale(), 12 * _getInitMouseScale());
-
-  double _getInitMouseScale() {
-    if (_initMouseScale == null) {
-      final size = MediaQuery.of(context).size;
-      // It's better to get the size of the display image in the canvas.
-      // But the canvas scale is not updated at this time.
-      // We need to calulate the canvas scale if we really need it.
-      //
-      // Current scale calculation here is Ok for now.
-      final scaleWidth = size.width * 0.3 / _baseMouseWidth;
-      final scaleHeight = size.height * 0.3 / _baseMouseHeight;
-      final scale = scaleWidth < scaleHeight ? scaleWidth : scaleHeight;
-      _initMouseScale = scale.clamp(0.8, 1.8);
-      _mouseScale = _initMouseScale!;
-    }
-    return _initMouseScale!;
-  }
+      Offset(84 * _baseMouseScale, 12 * _baseMouseScale);
 
   @override
   void initState() {
     super.initState();
+    _virtualMouseMode = widget.ffi.ffiModel.virtualMouseMode;
+    _virtualMouseMode.addListener(_onVirtualMouseModeChanged);
     _canvasScrollState =
         _CanvasScrollState(inputModel: _inputModel, canvasModel: _canvasModel);
     _cursorModel.blockEvents = false;
@@ -259,13 +250,23 @@ class _FloatingMouseState extends State<FloatingMouse> {
     });
   }
 
+  void _onVirtualMouseModeChanged() {
+    if (mounted) {
+      setState(() {
+        if (_virtualMouseMode.showVirtualMouseTouchMode) {
+          _isExpanded = true;
+          _resetCollapseTimer();
+        }
+      });
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final currentOrientation = MediaQuery.of(context).orientation;
     if (_previousOrientation != null &&
         _previousOrientation != currentOrientation) {
-      _initMouseScale = null;
       _resetPosition();
     }
     _previousOrientation = currentOrientation;
@@ -275,8 +276,8 @@ class _FloatingMouseState extends State<FloatingMouse> {
     setState(() {
       final size = MediaQuery.of(context).size;
       _position = Offset(
-        (size.width - _baseMouseWidth * _getInitMouseScale()) / 2,
-        (size.height - _baseMouseHeight * _getInitMouseScale()) / 2,
+        (size.width - _baseMouseWidth * _mouseScale) / 2,
+        (size.height - _baseMouseHeight * _mouseScale) / 2,
       );
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -289,6 +290,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
     if (_lastBlockedRect != null) {
       _cursorModel.removeBlockedRect(_lastBlockedRect!);
     }
+    _virtualMouseMode.removeListener(_onVirtualMouseModeChanged);
     _canvasScrollState.tryCancel();
     _cursorModel.blockEvents = false;
     _collapseTimer?.cancel();
@@ -330,14 +332,30 @@ class _FloatingMouseState extends State<FloatingMouse> {
   }
 
   // Returns true if [value] is within 2.01 pixels of [edge].
-  // Used to determine if the mouse position is visually at the edge of the screen.
+  // We need this near check because it can make the auto scroll easier to trigger and control.
   bool _isValueNearEdge(double edge, double value) {
     return (value - edge).abs() < 2.01;
+  }
+
+  bool _isValueAtEdge(double edge, double value) {
+    return (value - edge).abs() < 0.01;
   }
 
   bool _isValueAtOrOutsideEdge(double edge, double? value) {
     // If value is null, then consider it outside the edge.
     return value == null || isDoubleEqual(value, edge);
+  }
+
+  // If the mouse is very close to the edge of the display,
+  // we can only start auto scroll when the mouse is at the edge of the screen.
+  bool _shouldAutoScrollIfCursorNearRemoteEdge(double remoteEdge,
+      double remoteValue, double localEdge, double localValue) {
+    if ((remoteEdge - remoteValue).abs() < 100.0) {
+      if (!_isValueAtEdge(localEdge, localValue)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _onMoveUpdateDelta(Offset delta) {
@@ -394,31 +412,73 @@ class _FloatingMouseState extends State<FloatingMouse> {
       // If:
       // 1. The mouse is near the edge of the screen.
       // 2. The position in remote display is in the rect of the display.
+      // 3. If the remote cursor is near the edge of the remote display,
+      //    then the local mouse must be at the edge of the screen.
       // Then start auto canvas scroll.
       if (_isValueNearEdge(minX, _position.dx)) {
+        bool shouldStartScroll = true;
         if (_isValueAtOrOutsideEdge(
             displayRect.left, positionInRemoteDisplay?.dx)) {
+          shouldStartScroll = false;
+        }
+        if (positionInRemoteDisplay != null) {
+          if (!_shouldAutoScrollIfCursorNearRemoteEdge(displayRect.left,
+              positionInRemoteDisplay.dx, minX, _position.dx)) {
+            shouldStartScroll = false;
+          }
+        }
+        if (!shouldStartScroll) {
           _canvasScrollState.tryCancel();
           return;
         }
         _canvasScrollState.scrollX = 1.0 * _CanvasScrollState.speedPressed;
       } else if (_isValueNearEdge(minY, _position.dy)) {
+        bool shouldStartScroll = true;
         if (_isValueAtOrOutsideEdge(
             displayRect.top, positionInRemoteDisplay?.dy)) {
+          shouldStartScroll = false;
+        }
+        if (positionInRemoteDisplay != null) {
+          if (!_shouldAutoScrollIfCursorNearRemoteEdge(displayRect.top,
+              positionInRemoteDisplay.dy, minY, _position.dy)) {
+            shouldStartScroll = false;
+          }
+        }
+        if (!shouldStartScroll) {
           _canvasScrollState.tryCancel();
           return;
         }
         _canvasScrollState.scrollY = 1.0 * _CanvasScrollState.speedPressed;
       } else if (_isValueNearEdge(maxX, _position.dx)) {
+        bool shouldStartScroll = true;
         if (_isValueAtOrOutsideEdge(
             displayRect.right - 1, positionInRemoteDisplay?.dx)) {
+          shouldStartScroll = false;
+        }
+        if (positionInRemoteDisplay != null) {
+          if (!_shouldAutoScrollIfCursorNearRemoteEdge(displayRect.right - 1,
+              positionInRemoteDisplay.dx, maxX, _position.dx)) {
+            shouldStartScroll = false;
+          }
+        }
+        if (!shouldStartScroll) {
           _canvasScrollState.tryCancel();
           return;
         }
         _canvasScrollState.scrollX = -1.0 * _CanvasScrollState.speedPressed;
       } else if (_isValueNearEdge(maxY, _position.dy)) {
+        bool shouldStartScroll = true;
         if (_isValueAtOrOutsideEdge(
             displayRect.bottom - 1, positionInRemoteDisplay?.dy)) {
+          shouldStartScroll = false;
+        }
+        if (positionInRemoteDisplay != null) {
+          if (!_shouldAutoScrollIfCursorNearRemoteEdge(displayRect.bottom - 1,
+              positionInRemoteDisplay.dy, maxY, _position.dy)) {
+            shouldStartScroll = false;
+          }
+        }
+        if (!shouldStartScroll) {
           _canvasScrollState.tryCancel();
           return;
         }
@@ -523,6 +583,17 @@ class _FloatingMouseState extends State<FloatingMouse> {
 
   @override
   Widget build(BuildContext context) {
+    final virtualMouseMode = _virtualMouseMode;
+    if (!virtualMouseMode.showVirtualMouseTouchMode) {
+      return const Offstage();
+    }
+    _baseMouseScale = virtualMouseMode.virtualMouseTouchScale;
+    if (_isExpanded) {
+      _mouseScale = _baseMouseScale;
+    } else {
+      final minMouseScale = (_baseMouseScale * 0.3);
+      _mouseScale = minMouseScale;
+    }
     return Listener(
       onPointerDown: _isExpanded ? _handlePointerDown : null,
       onPointerMove: _handlePointerMove,
@@ -569,7 +640,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
   }
 
   Widget _buildMouseWithHide() {
-    double minMouseScale = (_getInitMouseScale() * 0.3);
+    double minMouseScale = (_baseMouseScale * 0.3);
     if (!_isExpanded) {
       return SizedBox(
           width: mouseWidth,
@@ -578,7 +649,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
             onPanUpdate: _onDragHandleUpdate,
             onTap: () {
               setState(() {
-                _mouseScale = _getInitMouseScale();
+                _mouseScale = _baseMouseScale;
                 _isExpanded = true;
                 _position -= _expandOffset;
               });
@@ -1123,7 +1194,7 @@ class CursorPaint extends StatelessWidget {
     if (image == null) {
       return const Offstage();
     }
-    assert(scale > 0, 'canvasModel.scale should always be positive');
+    assert(scale > 0, 'scale should always be positive');
     if (scale <= 0) {
       return const Offstage();
     }

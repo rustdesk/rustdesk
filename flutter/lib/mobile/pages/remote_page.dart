@@ -619,13 +619,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           if (showCursorPaint) {
             paints.add(CursorPaint(widget.id));
           }
-          if (gFFI.ffiModel.touchMode &&
-              gFFI.ffiModel.showVirtualMouseTouchMode) {
+          if (gFFI.ffiModel.touchMode) {
             paints.add(FloatingMouse(
               ffi: gFFI,
             ));
-          } else if (gFFI.ffiModel.touchMode == false &&
-              gFFI.ffiModel.showVirtualMouseMouseMode) {
+          } else {
             paints.add(FloatingMouseWidgets(
               ffi: gFFI,
             ));
@@ -1229,21 +1227,30 @@ void showOptions(
       if (codecRadios.isNotEmpty) const Divider(color: MyTheme.border),
     ];
     final rxCursorToggleValues = cursorToggles.map((e) => e.value.obs).toList();
-    final cursorTogglesList = cursorToggles
-        .asMap()
-        .entries
-        .map((e) => Obx(() => CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            value: rxCursorToggleValues[e.key].value,
-            onChanged: e.value.onChanged != null
-                ? (v) {
-                    e.value.onChanged?.call(v);
-                    if (v != null) rxCursorToggleValues[e.key].value = v;
-                  }
-                : null,
-            title: e.value.child)))
-        .toList();
+    final cursorTogglesList = cursorToggles.asMap().entries.map((e) {
+      if (e.value.hasCheckbox) {
+        return Obx(() => e.value.hide.isFalse
+            ? CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                value: rxCursorToggleValues[e.key].value,
+                onChanged: e.value.onChanged != null
+                    ? (v) {
+                        e.value.onChanged?.call(v);
+                        if (v != null) rxCursorToggleValues[e.key].value = v;
+                      }
+                    : null,
+                title: e.value.child)
+            : Offstage());
+      } else {
+        return Obx(() => e.value.hide.isFalse
+            ? ListTile(
+                contentPadding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                title: e.value.child)
+            : Offstage());
+      }
+    }).toList();
 
     final rxToggleValues = displayToggles.map((e) => e.value.obs).toList();
     final displayTogglesList = displayToggles
