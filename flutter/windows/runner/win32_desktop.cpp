@@ -20,7 +20,7 @@ namespace Win32Desktop
     if (hMonitor == NULL)
       hMonitor = MonitorFromWindow(NULL, MONITOR_DEFAULTTOPRIMARY);
 
-    RECT workAreaRect;
+    RECT workAreaRect = {0};
     bool haveWorkAreaRect = false;
 
     if (hMonitor != NULL)
