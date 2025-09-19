@@ -21,7 +21,10 @@ namespace Win32Desktop
       hMonitor = MonitorFromWindow(NULL, MONITOR_DEFAULTTOPRIMARY);
 
     RECT workAreaRect;
-    bool haveWorkAreaRect = false;
+    workAreaRect.left = 0;
+    workAreaRect.top = 0;
+    workAreaRect.right = 1280;
+    workAreaRect.bottom = 1024 - 40; // default Windows 10 task bar height
 
     if (hMonitor != NULL)
     {
@@ -32,18 +35,7 @@ namespace Win32Desktop
       if (GetMonitorInfoW(hMonitor, &monitorInfo))
       {
         workAreaRect = monitorInfo.rcWork;
-        haveWorkAreaRect = true;
       }
-    }
-
-    if (!haveWorkAreaRect)
-    {
-      // I don't think this is possible, but just in case, some
-      // reasonably sane fallbacks.
-      workAreaRect.left = 0;
-      workAreaRect.top = 0;
-      workAreaRect.right = 1280;
-      workAreaRect.bottom = 1024 - 40; // default Windows 10 task bar height
     }
 
     origin.x = workAreaRect.left;
