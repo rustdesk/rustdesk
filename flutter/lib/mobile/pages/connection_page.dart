@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:auto_size_text_field/auto_size_text_field.dart';
 import 'package:flutter/material.dart';
@@ -177,9 +178,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           tags: [],
                           hash: '',
                           password: '',
+                          sharedPassword:
+                              HashSalt(hash: Uint8List(0), salt: ''),
                           forceAlwaysRelay: false,
                           rdpPort: '',
                           rdpUsername: '',
+                          user: '',
                           loginName: '',
                           device_group_name: '',
                         );

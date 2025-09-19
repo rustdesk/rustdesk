@@ -899,7 +899,8 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 }
 
 pub fn check_software_update() {
-    if is_custom_client() {
+    if is_custom_client() || !hbb_common::is_standard() {
+        // TODO: do check update for other versions after first release
         return;
     }
     let opt = LocalConfig::get_option(keys::OPTION_ENABLE_CHECK_UPDATE);
@@ -942,11 +943,6 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
 #[inline]
 pub fn get_app_name() -> String {
     hbb_common::config::APP_NAME.read().unwrap().clone()
-}
-
-#[inline]
-pub fn is_rustdesk() -> bool {
-    hbb_common::config::APP_NAME.read().unwrap().eq("RustDesk")
 }
 
 #[inline]
@@ -1032,6 +1028,14 @@ pub fn is_public(url: &str) -> bool {
     url.contains("rustdesk.com")
 }
 
+pub fn with_public() -> bool {
+    let url = crate::get_api_server(
+        Config::get_option("api-server"),
+        Config::get_option("custom-rendezvous-server"),
+    );
+    is_public(&url)
+}
+
 pub fn get_udp_punch_enabled() -> bool {
     config::option2bool(
         keys::OPTION_ENABLE_UDP_PUNCH,
@@ -1060,6 +1064,7 @@ pub fn get_local_option(key: &str) -> String {
 
 pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
     let url = get_api_server(api, custom);
+    // TODO: remove is_public in the future
     if url.is_empty() || is_public(&url) {
         return "".to_owned();
     }
@@ -1730,7 +1735,16 @@ pub fn get_hwid() -> Bytes {
 
 #[inline]
 pub fn get_builtin_option(key: &str) -> String {
-    config::BUILTIN_SETTINGS
+    let v = config::BUILTIN_SETTINGS
+        .read()
+        .unwrap()
+        .get(key)
+        .cloned()
+        .unwrap_or_default();
+    if !v.is_empty() {
+        return v;
+    }
+    config::STRATEGY_OVERRIDE_SETTINGS
         .read()
         .unwrap()
         .get(key)
@@ -1740,7 +1754,7 @@ pub fn get_builtin_option(key: &str) -> String {
 
 #[inline]
 pub fn is_custom_client() -> bool {
-    get_app_name() != "RustDesk"
+    hbb_common::is_standard() && get_app_name() != "RustDesk"
 }
 
 pub fn verify_login(_raw: &str, _id: &str) -> bool {

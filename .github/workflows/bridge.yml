@@ -4,6 +4,12 @@ name: Build flutter-rust-bridge
 
 on:
   workflow_call:
+    inputs:
+      artifact-name:
+        description: 'Artifact name'
+        required: false
+        type: string
+        default: 'bridge-artifact'
 
 env:
   CARGO_EXPAND_VERSION: "1.0.95"
@@ -88,7 +94,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@master
         with:
-          name: bridge-artifact
+          name: ${{ inputs.artifact-name }}
           path: |
             ./src/bridge_generated.rs
             ./src/bridge_generated.io.rs

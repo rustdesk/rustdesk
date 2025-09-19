@@ -37,6 +37,7 @@ class GroupModel {
   }
 
   Future<void> pull({force = true, quiet = false}) async {
+    if (bind.isDisableAccount()) return;
     if (bind.isDisableGroupPanel()) return;
     if (!gFFI.userModel.isLogin || groupLoading.value) return;
     if (gFFI.userModel.networkError.isNotEmpty) return;
@@ -78,14 +79,15 @@ class GroupModel {
     }
     deviceGroups.value = tmpDeviceGroups;
     // me first
-    var index = tmpUsers
-        .indexWhere((user) => user.name == gFFI.userModel.userName.value);
+    var index = tmpUsers.indexWhere((user) => withPublic()
+        ? user.email == gFFI.userModel.email.value
+        : user.name == gFFI.userModel.userName.value);
     if (index != -1) {
       var user = tmpUsers.removeAt(index);
       tmpUsers.insert(0, user);
     }
     users.value = tmpUsers;
-    if (!users.any((u) => u.name == selectedAccessibleItemName.value) &&
+    if (!users.any((u) => u.guid == selectedAccessibleItemName.value) &&
         !deviceGroups.any((d) => d.name == selectedAccessibleItemName.value)) {
       selectedAccessibleItemName.value = '';
     }
@@ -201,7 +203,8 @@ class GroupModel {
             if (data is List) {
               for (final user in data) {
                 final u = UserPayload.fromJson(user);
-                int index = tmpUsers.indexWhere((e) => e.name == u.name);
+                int index = tmpUsers.indexWhere((e) =>
+                    withPublic() ? e.email == u.email : e.name == u.name);
                 if (index < 0) {
                   tmpUsers.add(u);
                 } else {
@@ -310,6 +313,7 @@ class GroupModel {
 
   Future<void> loadCache() async {
     try {
+      if (bind.isDisableAccount() || bind.isDisableGroupPanel()) return;
       if (_cacheLoadOnceFlag || groupLoading.value || initialized) return;
       _cacheLoadOnceFlag = true;
       final access_token = bind.mainGetLocalOption(key: 'access_token');

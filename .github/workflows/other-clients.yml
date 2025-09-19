@@ -1,0 +1,52 @@
+name: Build Other Clients (Host, Client, SOS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_host:
+        description: 'Build Host Version'
+        type: boolean
+        default: true
+      build_client:
+        description: 'Build Client Version'
+        type: boolean
+        default: true
+      build_sos:
+        description: 'Build SOS Version'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  
+  build-host-version:
+    if: ${{ inputs.build_host }}
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: "rustdesk-host"
+      appname: "RustDesk-Host"
+      appname-lower: "rustdesk-host"
+  
+  build-client-version:
+    if: ${{ inputs.build_client }}
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: "rustdesk-client"
+      appname: "RustDesk-Client"
+      appname-lower: "rustdesk-client"
+  
+  build-sos-version:
+    if: ${{ inputs.build_sos }}
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: "rustdesk-sos"
+      appname: "RustDesk-SOS"
+      appname-lower: "rustdesk-sos"

@@ -6,6 +6,11 @@ on:
         upload-artifact:
           type: boolean
           default: true
+        artifact-name:
+          description: 'Artifact name'
+          required: false
+          type: string
+          default: 'topmostwindow-artifacts'
         target:
             description: 'Target'
             required: true
@@ -55,6 +60,6 @@ jobs:
         uses: actions/upload-artifact@master
         if: ${{ inputs.upload-artifact }}
         with:
-            name: topmostwindow-artifacts
+            name: ${{ inputs.artifact-name }}
             path: |
               ./${{ env.build_output_dir }}/WindowInjection.dll

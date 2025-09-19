@@ -24,6 +24,7 @@ else:
     flutter_build_dir = 'build/linux/x64/release/bundle/'
 flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
+flutter_deb_name = "debian.deb"
 
 
 def get_deb_arch() -> str:
@@ -150,6 +151,12 @@ def make_parser():
             action='store_true',
             help='Enable feature screencapturekit'
         )
+    parser.add_argument(
+        "--appname",
+        type=str,
+        default="",
+        help="App name, default is RustDesk"
+    )
     return parser
 
 
@@ -401,6 +408,48 @@ def build_deb_from_folder(version, binary_folder):
     os.chdir("..")
 
 
+def set_deb_appname(appname, version):
+    app_name0 = appname
+    app_name = app_name0.lower()
+    name = f"{app_name}-{version}.deb"
+    os.rename('rustdesk-%s.deb' % version, f'{flutter_deb_name}')
+    os.system(
+        f"""
+    rm -rf tmpdeb; dpkg-deb -R {flutter_deb_name} tmpdeb
+    mkdir -p tmpdeb
+    cd tmpdeb
+    mv etc/rustdesk etc/{app_name}
+    mv etc/pam.d/rustdesk etc/pam.d/{app_name}
+    mv usr/share/rustdesk/files/systemd/rustdesk.service usr/share/rustdesk/files/systemd/{app_name}.service
+    mv usr/share/rustdesk/rustdesk usr/share/rustdesk/{app_name}
+    mv usr/share/rustdesk usr/share/{app_name}
+    mv usr/share/applications/rustdesk.desktop usr/share/applications/{app_name}.desktop
+    mv usr/share/applications/rustdesk-link.desktop usr/share/applications/{app_name}-link.desktop
+    mv usr/share/icons/hicolor/256x256/apps/rustdesk.png usr/share/icons/hicolor/256x256/apps/{app_name}.png
+    rm -rf usr/share/icons/hicolor/scalable
+    find . -type f -exec grep -Il -w RustDesk {{}} \\; | xargs perl -pi -e 's/(?<!Maintainer: )RustDesk(?!-|\.com)/{app_name0}/g'
+    find . -type f -exec grep -Il -w rustdesk {{}} \\; | xargs perl -pi -e 's/(?<!Maintainer: )rustdesk(?!-|\.com)/{app_name}/g'
+    cd ..
+    dpkg-deb -b -Zxz tmpdeb {name}
+    """
+    )
+
+def compile_arch_common(appname):
+    app_name0 = appname
+    app_name = app_name0.lower()
+    arch2 = "arm64" if os.environ.get("DEB_ARCH") == "arm64" else "x64"
+    os.system(
+        f"""
+    rm -rf tmpdeb
+    dpkg-deb -R {flutter_deb_name} tmpdeb
+    # handle flutter build
+    rm -rf flutter/build
+    mkdir -p flutter/build/linux/{arch2}/release/bundle
+    cp -rf tmpdeb/usr/share/rustdesk/* flutter/build/linux/{arch2}/release/bundle/
+    mv flutter/build/linux/{arch2}/release/bundle/rustdesk flutter/build/linux/{arch2}/release/bundle/{app_name}
+    """
+    )
+
 def build_flutter_dmg(version, features):
     if not skip_cargo:
         # set minimum osx build target, now is 10.14, which is the same as the flutter xcode project
@@ -473,6 +522,9 @@ def main():
         system2('git checkout src/ui/common.tis')
     version = get_version()
     features = ','.join(get_features(args))
+    appname = args.appname
+    if appname == "":
+        appname = "RustDesk"
     flutter = args.flutter
     if not flutter:
         system2('python3 res/inline-sciter.py')
@@ -556,6 +608,9 @@ def main():
                 # system2(
                 #     'mv target/release/bundle/deb/rustdesk*.deb ./flutter/rustdesk.deb')
                 build_flutter_deb(version, features)
+                if appname != "RustDesk":
+                    set_deb_appname(appname, version)
+                    compile_arch_common(appname)
         else:
             system2('cargo bundle --release --features ' + features)
             if osx:

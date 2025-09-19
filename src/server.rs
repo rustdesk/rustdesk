@@ -673,6 +673,7 @@ async fn sync_and_watch_config_dir() {
                                 Data::SyncConfig(Some(configs)) => {
                                     let (config, config2) = *configs;
                                     let _chk = crate::ipc::CheckIfRestart::new();
+                                    let _public = crate::hbbs_http::sync::CheckPublicServer::new();
                                     if !config.is_empty() {
                                         if cfg0.0 != config {
                                             cfg0.0 = config.clone();

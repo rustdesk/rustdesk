@@ -15,7 +15,9 @@ import 'platform_model.dart';
 bool refreshingUser = false;
 
 class UserModel {
+  final RxString teamName = ''.obs;
   final RxString userName = ''.obs;
+  final RxString email = ''.obs;
   final RxBool isAdmin = false.obs;
   final RxString networkError = ''.obs;
   bool get isLogin => userName.isNotEmpty;
@@ -28,6 +30,11 @@ class UserModel {
       //  For _updateLocalUserInfo, network error will be set later
       //  For login success, should clear network error
       networkError.value = '';
+      if (p0.isNotEmpty && bind.isStandard()) {
+        if (!gFFI.deployModel.isDeployed.value) {
+          gFFI.deployModel.checkDeploy();
+        }
+      }
     });
   }
 
@@ -41,10 +48,6 @@ class UserModel {
     }
     _updateLocalUserInfo();
     final url = await bind.mainGetApiServer();
-    final body = {
-      'id': await bind.mainGetMyId(),
-      'uuid': await bind.mainGetUuid()
-    };
     if (refreshingUser) return;
     try {
       refreshingUser = true;
@@ -55,7 +58,7 @@ class UserModel {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $token'
             },
-            body: json.encode(body));
+            body: await _getBody());
       } catch (e) {
         networkError.value = e.toString();
         rethrow;
@@ -114,6 +117,8 @@ class UserModel {
 
   _parseAndUpdateUser(UserPayload user) {
     userName.value = user.name;
+    teamName.value = user.teamName;
+    email.value = user.email;
     isAdmin.value = user.isAdmin;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
     if (isWeb) {
@@ -138,11 +143,7 @@ class UserModel {
       authHeaders['Content-Type'] = "application/json";
       await http
           .post(Uri.parse('$url/api/logout'),
-              body: jsonEncode({
-                'id': await bind.mainGetMyId(),
-                'uuid': await bind.mainGetUuid(),
-              }),
-              headers: authHeaders)
+              body: await _getBody(), headers: authHeaders)
           .timeout(Duration(seconds: 2));
     } catch (e) {
       debugPrint("request /api/logout failed: err=$e");
@@ -220,5 +221,12 @@ class UserModel {
           "queryOidcLoginOptions: jsonDecode resp body failed: ${e.toString()}");
       return [];
     }
+  }
+
+  Future<String> _getBody() async {
+    return bind.isClient() && withPublic()
+        ? jsonEncode({})
+        : jsonEncode(
+            {'id': await bind.mainGetMyId(), 'uuid': await bind.mainGetUuid()});
   }
 }
