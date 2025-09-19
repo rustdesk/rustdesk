@@ -293,6 +293,7 @@ class DesktopTab extends StatefulWidget {
 class _DesktopTabState extends State<DesktopTab>
     with MultiWindowListener, WindowListener {
   final _saveFrameDebounce = Debouncer(delay: Duration(seconds: 1));
+  bool _frameIsDirty = false;
   Timer? _macOSCheckRestoreTimer;
   int _macOSCheckRestoreCounter = 0;
 
@@ -370,7 +371,7 @@ class _DesktopTabState extends State<DesktopTab>
 
   void _setMaximized(bool maximize) {
     stateGlobal.setMaximized(maximize);
-    _saveFrameDebounce.call(_saveFrame);
+    _scheduleSaveFrame();
     setState(() {});
   }
 
@@ -405,23 +406,32 @@ class _DesktopTabState extends State<DesktopTab>
     super.onWindowUnmaximize();
   }
 
-  _saveFrame() async {
-    if (tabType == DesktopTabType.main) {
-      await saveWindowPosition(WindowType.Main);
-    } else if (kWindowType != null && kWindowId != null) {
-      await saveWindowPosition(kWindowType!, windowId: kWindowId);
+  _scheduleSaveFrame() {
+    _frameIsDirty = true;
+    _saveFrameDebounce.call(_saveFrameIfDirty);
+  }
+
+  _saveFrameIfDirty() async {
+    if (_frameIsDirty) {
+      if (tabType == DesktopTabType.main) {
+        await saveWindowPosition(WindowType.Main);
+      } else if (kWindowType != null && kWindowId != null) {
+        await saveWindowPosition(kWindowType!, windowId: kWindowId);
+      }
+
+      _frameIsDirty = false;
     }
   }
 
   @override
   void onWindowMoved() {
-    _saveFrameDebounce.call(_saveFrame);
+    _scheduleSaveFrame();
     super.onWindowMoved();
   }
 
   @override
   void onWindowResized() {
-    _saveFrameDebounce.call(_saveFrame);
+    _scheduleSaveFrame();
     super.onWindowMoved();
   }
 
@@ -459,6 +469,9 @@ class _DesktopTabState extends State<DesktopTab>
         }
       });
     }
+
+    // if the window frame has changed and the resulting _saveFrameIfDirty call hasn't happened yet, save it now
+    await _saveFrameIfDirty();
 
     // hide window on close
     if (isMainWindow) {
