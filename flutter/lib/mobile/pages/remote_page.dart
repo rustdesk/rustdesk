@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
+import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
@@ -617,6 +619,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           if (showCursorPaint) {
             paints.add(CursorPaint(widget.id));
           }
+          if (gFFI.ffiModel.touchMode) {
+            paints.add(FloatingMouse(
+              ffi: gFFI,
+            ));
+          } else {
+            paints.add(FloatingMouseWidgets(
+              ffi: gFFI,
+            ));
+          }
           return paints;
         }()));
   }
@@ -1216,21 +1227,30 @@ void showOptions(
       if (codecRadios.isNotEmpty) const Divider(color: MyTheme.border),
     ];
     final rxCursorToggleValues = cursorToggles.map((e) => e.value.obs).toList();
-    final cursorTogglesList = cursorToggles
-        .asMap()
-        .entries
-        .map((e) => Obx(() => CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            value: rxCursorToggleValues[e.key].value,
-            onChanged: e.value.onChanged != null
-                ? (v) {
-                    e.value.onChanged?.call(v);
-                    if (v != null) rxCursorToggleValues[e.key].value = v;
-                  }
-                : null,
-            title: e.value.child)))
-        .toList();
+    final cursorTogglesList = cursorToggles.asMap().entries.map((e) {
+      if (e.value.hasCheckbox) {
+        return Obx(() => e.value.hide.isFalse
+            ? CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                value: rxCursorToggleValues[e.key].value,
+                onChanged: e.value.onChanged != null
+                    ? (v) {
+                        e.value.onChanged?.call(v);
+                        if (v != null) rxCursorToggleValues[e.key].value = v;
+                      }
+                    : null,
+                title: e.value.child)
+            : Offstage());
+      } else {
+        return Obx(() => e.value.hide.isFalse
+            ? ListTile(
+                contentPadding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                title: e.value.child)
+            : Offstage());
+      }
+    }).toList();
 
     final rxToggleValues = displayToggles.map((e) => e.value.obs).toList();
     final displayTogglesList = displayToggles
