@@ -24,7 +24,7 @@
 
     <application
         android:icon="@mipmap/ic_launcher"
-        android:label="RustDesk"
+        android:label="佳影远程协助"
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true">
@@ -45,7 +45,7 @@
             android:name=".InputService"
             android:enabled="true"
             android:exported="false"
-            android:label="RustDesk Input"
+            android:label="佳影远程助手"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -75,7 +75,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="rustdesk" />
+                <data android:scheme="jyycxz" />
             </intent-filter>
         </activity>
 
