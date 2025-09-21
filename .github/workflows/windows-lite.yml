@@ -1,50 +1,37 @@
 name: Windows Lite RustDesk
+
 on:
   workflow_dispatch:
     inputs:
-      relay: { description: 'Relay server host:port', required: true }
-      idserver: { description: 'ID server host:port', required: true }
-      api: { description: 'API server URL', required: true }
-      key: { description: 'Server key', required: true }
+      relay:
+        description: 'Relay server host:port'
+        required: true
+        type: string
+        default: 'rust.zont.uk:21117'
+      idserver:
+        description: 'ID server host:port'
+        required: true
+        type: string
+        default: 'rust.zont.uk:21116'
+      api:
+        description: 'API server URL'
+        required: true
+        type: string
+        default: 'http://rust.zont.uk:21114'
+      key:
+        description: 'Server key'
+        required: true
+        type: string
 
 jobs:
-  build:
+  build-lite:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.0'
-          channel: 'stable'
-      - name: Apply Lite Patch
-        run: git apply rustdesk-lite.patch
-      - name: Env
-        shell: pwsh
-        run: |
-          echo "RDLITE_RELAY=${{ github.event.inputs.relay }}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "RDLITE_ID_SERVER=${{ github.event.inputs.idserver }}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "RDLITE_API=${{ github.event.inputs.api }}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "RDLITE_KEY=${{ github.event.inputs.key }}" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Build core (incoming_only)
-        run: cargo build --release --features incoming_only
-      - name: Build Flutter (Windows)
-        run: |
-          cd flutter
-          flutter config --enable-windows-desktop
-          flutter pub get
-          flutter build windows --dart-define=RDLITE_INCOMING_ONLY=true
-      - name: Package
-        shell: pwsh
-        run: |
-          mkdir dist\lite-win
-          Copy-Item target\release\rustdesk.exe dist\lite-win\
-          Copy-Item -Recurse flutter\build\windows\x64\runner\Release\* dist\lite-win\ -ErrorAction SilentlyContinue
-          Compress-Archive -Path dist\lite-win\* -DestinationPath rustdesk-lite-win-x64.zip
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rustdesk-lite-win-x64
-          path: rustdesk-lite-win-x64.zip
