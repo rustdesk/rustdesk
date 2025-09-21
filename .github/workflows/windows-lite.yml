@@ -6,6 +6,7 @@ on:
       idserver: { description: 'ID server host:port', required: true }
       api: { description: 'API server URL', required: true }
       key: { description: 'Server key', required: true }
+
 jobs:
   build:
     runs-on: windows-2022
@@ -19,8 +20,7 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
       - name: Apply Lite Patch
-        run: |
-          git apply rustdesk-lite.patch
+        run: git apply rustdesk-lite.patch
       - name: Env
         shell: pwsh
         run: |
