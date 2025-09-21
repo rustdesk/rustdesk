@@ -1,0 +1,156 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 1111111..2222222 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,5 +1,9 @@
+ [package]
+ name = "rustdesk"
++
++[features]
++# Gate for the minimal incoming‑only build
++incoming_only = []
+ 
+diff --git a/src/common/config.rs b/src/common/config.rs
+index 1111111..2222222 100644
+--- a/src/common/config.rs
++++ b/src/common/config.rs
+@@ -1,6 +1,37 @@
+ impl Config {
+     pub fn init() -> Self {
+         let mut c = Self::default();
++        // BEGIN: Lite Support overrides (compile‑time)
++        // These constants are replaced by build script.
++        #[cfg(feature = "incoming_only")]
++        {
++            // Hard defaults; user settings ignored.
++            c.options.direct_server = Some(true);
++            c.options.custom_rendezvous_server = Some(env!("RDLITE_ID_SERVER").to_string());
++            c.options.relay_server = Some(env!("RDLITE_RELAY").to_string());
++            c.options.api_server = Some(env!("RDLITE_API").to_string());
++            c.options.key = Some(env!("RDLITE_KEY").to_string());
++            // Do not load/save from disk in incoming_only mode.
++            c.read_only = true;
++        }
++        // END: Lite Support overrides
+         c
+     }
+ }
++
++#[cfg(feature = "incoming_only")]
++pub fn outgoing_allowed() -> bool { false }
++#[cfg(not(feature = "incoming_only"))]
++pub fn outgoing_allowed() -> bool { true }
+ 
+diff --git a/flutter/lib/pages/home_page.dart b/flutter/lib/pages/home_page.dart
+index 1111111..2222222 100644
+--- a/flutter/lib/pages/home_page.dart
++++ b/flutter/lib/pages/home_page.dart
+@@ -1,6 +1,18 @@
+ class HomePage extends StatelessWidget {
+   @override
+   Widget build(BuildContext context) {
++    const incomingOnly = bool.fromEnvironment('RDLITE_INCOMING_ONLY', defaultValue: false);
++    // Hide connect tab & quick connect.
++    if (incomingOnly) {
++      return IdAndPasswordOnly(); // a small widget showing ID/Pass and tray tips
++    }
+     return FullHomePage();
+   }
+ }
+ 
+diff --git a/flutter/lib/pages/settings/network_page.dart b/flutter/lib/pages/settings/network_page.dart
+index 1111111..2222222 100644
+--- a/flutter/lib/pages/settings/network_page.dart
++++ b/flutter/lib/pages/settings/network_page.dart
+@@ -1,6 +1,14 @@
+ class NetworkPage extends StatelessWidget {
+   @override
+   Widget build(BuildContext context) {
++    const incomingOnly = bool.fromEnvironment('RDLITE_INCOMING_ONLY', defaultValue: false);
++    if (incomingOnly) {
++      // Completely hide content, show read‑only note.
++      return Center(child: Text('Network settings are managed by your organization.'));
++    }
+     return RealNetworkPage();
+   }
+ }
+ 
+diff --git a/src/ui/session/connect.rs b/src/ui/session/connect.rs
+index 1111111..2222222 100644
+--- a/src/ui/session/connect.rs
++++ b/src/ui/session/connect.rs
+@@ -1,6 +1,12 @@
+ pub fn start_outgoing_session(target: &str) -> Result<()> {
++    #[cfg(feature = "incoming_only")]
++    {
++        // Refuse any outgoing attempts in lite build.
++        return Err(anyhow::anyhow!("Outgoing connections are disabled in this build"));
++    }
+     real_start_outgoing_session(target)
+ }
+ 
+diff --git a/build.rs b/build.rs
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/build.rs
+@@ -0,0 +1,36 @@
++// Inject compile‑time env values for servers/key in incoming_only mode.
++use std::env;
++fn main() {
++    if env::var("CARGO_FEATURE_INCOMING_ONLY").is_ok() {
++        for (k, fallback) in [
++            ("RDLITE_ID_SERVER", "127.0.0.1:21116"),
++            ("RDLITE_RELAY", "127.0.0.1:21117"),
++            ("RDLITE_API", "http://127.0.0.1:21114"),
++            ("RDLITE_KEY", "CHANGE_ME"),
++        ] {
++            let v = env::var(k).unwrap_or_else(|_| fallback.to_string());
++            println!("cargo:rustc-env={}={}", k, v);
++        }
++    }
++}
+diff --git a/packaging/windows/lite_launcher/RustDeskLite.cpp b/packaging/windows/lite_launcher/RustDeskLite.cpp
+new file mode 100644
+index 0000000..4444444
+--- /dev/null
++++ b/packaging/windows/lite_launcher/RustDeskLite.cpp
+@@ -0,0 +1,40 @@
++#include <windows.h>
++int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
++  // Start minimized to tray; just launch rustdesk.exe with safe flags.
++  STARTUPINFO si = { sizeof(si) };
++  PROCESS_INFORMATION pi;
++  const char* cmd = "rustdesk.exe --tray --disable-update";
++  if (!CreateProcessA(NULL, (LPSTR)cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) return 1;
++  CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
++  return 0;
++}
+diff --git a/flutter/lib/widgets/id_password_only.dart b/flutter/lib/widgets/id_password_only.dart
+new file mode 100644
+index 0000000..5555555
+--- /dev/null
++++ b/flutter/lib/widgets/id_password_only.dart
+@@ -0,0 +1,24 @@
++import 'package:flutter/material.dart';
++class IdAndPasswordOnly extends StatelessWidget {
++  @override
++  Widget build(BuildContext context) {
++    // TODO: wire existing widgets that show local ID & password
++    return Padding(
++      padding: EdgeInsets.all(16),
++      child: Column(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          Text('Your ID', style: Theme.of(context).textTheme.headlineSmall),
++          // ... actual ID widget from existing code
++          SizedBox(height: 12),
++          Text('Password', style: Theme.of(context).textTheme.titleMedium),
++          // ... actual password widget from existing code
++          SizedBox(height: 24),
++          Text('Waiting for incoming support session…'),
++        ],
++      ),
++    );
++  }
++}

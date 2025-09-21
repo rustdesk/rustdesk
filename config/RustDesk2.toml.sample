@@ -1,0 +1,9 @@
+rendezvous_server = 'chat.zont.uk:21116'
+nat_type = 1
+serial = 0
+
+[options]
+custom-rendezvous-server = 'chat.zont.uk:21116'
+key = 'REPLACE_WITH_YOUR_KEY'
+relay-server = 'chat.zont.uk:21117'
+api-server = 'http://chat.zont.uk:21114'
