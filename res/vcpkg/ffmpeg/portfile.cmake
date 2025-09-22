@@ -185,6 +185,11 @@ elseif(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "Android")
 --enable-decoder=h264_mediacodec \
 --enable-decoder=hevc_mediacodec \
 ")
+    if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
+        string(APPEND OPTIONS "\
+--disable-iconv \
+")
+    endif()
 endif()
 
 if(VCPKG_TARGET_IS_OSX)
