@@ -4,6 +4,7 @@ use hbb_common::{
     platform::linux::{CMD_SH, DISTRO},
 };
 use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
+use std::collections::HashMap;
 use std::io;
 use std::process::{Command, Output};
 
@@ -15,12 +16,28 @@ use crate::{
 };
 
 lazy_static::lazy_static! {
-    static ref CAP_DISPLAY_INFO: RwLock<u64> = RwLock::new(0);
+    static ref CAP_DISPLAY_INFO: RwLock<HashMap<usize, u64>> = RwLock::new(HashMap::new());
+    static ref PIPEWIRE_INITIALIZED: RwLock<bool> = RwLock::new(false);
     static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
+    static ref ACTIVE_DISPLAY_COUNT: RwLock<usize> = RwLock::new(0);
 }
 
 pub fn init() {
     set_map_err(map_err_scrap);
+}
+
+pub(super) fn increment_active_display_count() -> usize {
+    let mut count = ACTIVE_DISPLAY_COUNT.write().unwrap();
+    *count += 1;
+    *count
+}
+
+pub(super) fn decrement_active_display_count() -> usize {
+    let mut count = ACTIVE_DISPLAY_COUNT.write().unwrap();
+    if *count > 0 {
+        *count -= 1;
+    }
+    *count
 }
 
 fn map_err_scrap(err: String) -> io::Error {
@@ -70,7 +87,7 @@ impl Clone for CapturerPtr {
 }
 
 impl TraitCapturer for CapturerPtr {
-    fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
+    fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
         unsafe { (*self.0).frame(timeout) }
     }
 }
@@ -93,7 +110,7 @@ pub(super) fn is_inited() -> Option<Message> {
     if is_x11() {
         None
     } else {
-        if *CAP_DISPLAY_INFO.read().unwrap() == 0 {
+        if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
             let mut msg_out = Message::new();
             let res = MessageBox {
                 msgtype: "nook-nocancel-hasclose".to_owned(),
@@ -126,6 +143,20 @@ fn get_max_desktop_resolution() -> Option<String> {
     }
 }
 
+fn calculate_max_resolution_from_displays(displays: &[Display]) -> (i32, i32) {
+    // TODO: this doesn't work in most situations other than sharing all displays
+    //  this is because the function only gets called with the displays being shared with pipewire
+    //  the xrandr method does work otherwise we could get this correctly using xdg-output-unstable-v1 when xrandr isn't available
+    // log::warn!("using incorrect max resolution calculation uinput may not work correctly");
+    let (mut max_x, mut max_y) = (0, 0);
+    for d in displays {
+        let (x, y) = d.origin();
+        max_x = max_x.max(x + d.width() as i32);
+        max_y = max_y.max(y + d.height() as i32);
+    }
+    (max_x, max_y)
+}
+
 pub(super) async fn check_init() -> ResultType<()> {
     if !is_x11() {
         let mut minx = 0;
@@ -134,13 +165,19 @@ pub(super) async fn check_init() -> ResultType<()> {
         let mut maxy = 0;
         let use_uinput = crate::input_service::wayland_use_uinput();
 
-        if *CAP_DISPLAY_INFO.read().unwrap() == 0 {
+        if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
             let mut lock = CAP_DISPLAY_INFO.write().unwrap();
-            if *lock == 0 {
-                let mut all = Display::all()?;
+            if lock.is_empty() {
+                // Check if PipeWire is already initialized to prevent duplicate recorder creation
+                if *PIPEWIRE_INITIALIZED.read().unwrap() {
+                    log::warn!("wayland_diag: Preventing duplicate PipeWire initialization");
+                    return Ok(());
+                }
+                
+                let all = Display::all()?;
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
-                let current = primary;
                 super::display_service::check_update_displays(&all);
                 let mut displays = super::display_service::get_sync_displays();
                 for display in displays.iter_mut() {
@@ -152,35 +189,25 @@ pub(super) async fn check_init() -> ResultType<()> {
                     rects.push((d.origin(), d.width(), d.height()));
                 }
 
-                let display = all.remove(current);
-                let (origin, width, height) = (display.origin(), display.width(), display.height());
-                log::debug!(
-                    "#displays={}, current={}, origin: {:?}, width={}, height={}, cpus={}/{}",
-                    num,
-                    current,
-                    &origin,
-                    width,
-                    height,
-                    num_cpus::get_physical(),
-                    num_cpus::get(),
-                );
+                log::debug!("#displays={}, primary={}, rects: {:?}, cpus={}/{}", num, primary, rects, num_cpus::get_physical(), num_cpus::get());
 
                 if use_uinput {
                     let (max_width, max_height) = match get_max_desktop_resolution() {
                         Some(result) if !result.is_empty() => {
                             let resolution: Vec<&str> = result.split(" ").collect();
-                            let w: i32 = resolution[0].parse().unwrap_or(origin.0 + width as i32);
-                            let h: i32 = resolution[2]
-                                .trim_end_matches(",")
-                                .parse()
-                                .unwrap_or(origin.1 + height as i32);
-                            if w < origin.0 + width as i32 || h < origin.1 + height as i32 {
-                                (origin.0 + width as i32, origin.1 + height as i32)
-                            } else {
+                            if let (Ok(w), Ok(h)) = (
+                                resolution[0].parse::<i32>(),
+                                resolution.get(2)
+                                    .unwrap_or(&"0")
+                                    .trim_end_matches(",")
+                                    .parse::<i32>()
+                            ) {
                                 (w, h)
+                            } else {
+                                calculate_max_resolution_from_displays(&all)
                             }
                         }
-                        _ => (origin.0 + width as i32, origin.1 + height as i32),
+                        _ => calculate_max_resolution_from_displays(&all),
                     };
 
                     minx = 0;
@@ -189,19 +216,24 @@ pub(super) async fn check_init() -> ResultType<()> {
                     maxy = max_height;
                 }
 
-                let capturer = Box::into_raw(Box::new(
-                    Capturer::new(display).with_context(|| "Failed to create capturer")?,
-                ));
-                let capturer = CapturerPtr(capturer);
-                let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
-                    rects,
-                    displays,
-                    num,
-                    primary,
-                    current,
-                    capturer,
-                }));
-                *lock = cap_display_info as _;
+                // Create individual CapDisplayInfo for each display with its own capturer
+                for (idx, display) in all.into_iter().enumerate() {
+                    let capturer = Box::into_raw(Box::new(
+                        Capturer::new(display).with_context(|| format!("Failed to create capturer for display {}", idx))?,
+                    ));
+                    let capturer = CapturerPtr(capturer);
+                    
+                    let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
+                        rects: rects.clone(),
+                        displays: displays.clone(),
+                        num,
+                        primary,
+                        current: idx,
+                        capturer,
+                    }));
+                    
+                    lock.insert(idx, cap_display_info as u64);
+                }
             }
         }
 
@@ -223,9 +255,9 @@ pub(super) async fn check_init() -> ResultType<()> {
 
 pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
     check_init().await?;
-    let addr = *CAP_DISPLAY_INFO.read().unwrap();
-    if addr != 0 {
-        let cap_display_info: *const CapDisplayInfo = addr as _;
+    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+    if let Some(addr) = cap_map.values().next() {
+        let cap_display_info: *const CapDisplayInfo = *addr as _;
         unsafe {
             let cap_display_info = &*cap_display_info;
             Ok(cap_display_info.displays.clone())
@@ -236,9 +268,9 @@ pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
 }
 
 pub(super) fn get_primary() -> ResultType<usize> {
-    let addr = *CAP_DISPLAY_INFO.read().unwrap();
-    if addr != 0 {
-        let cap_display_info: *const CapDisplayInfo = addr as _;
+    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+    if let Some(addr) = cap_map.values().next() {
+        let cap_display_info: *const CapDisplayInfo = *addr as _;
         unsafe {
             let cap_display_info = &*cap_display_info;
             Ok(cap_display_info.primary)
@@ -253,26 +285,29 @@ pub fn clear() {
         return;
     }
     let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
-    if *write_lock != 0 {
-        let cap_display_info: *mut CapDisplayInfo = *write_lock as _;
+    for (_, addr) in write_lock.iter() {
+        let cap_display_info: *mut CapDisplayInfo = *addr as _;
         unsafe {
             let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
             let _box_cap_display_info = Box::from_raw(cap_display_info);
-            *write_lock = 0;
         }
     }
+    write_lock.clear();
+    
+    // Reset PipeWire initialization flag to allow recreation on next init
+    *PIPEWIRE_INITIALIZED.write().unwrap() = false;
 }
 
-pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
+pub(super) fn get_capturer_for_display(display_idx: usize) -> ResultType<super::video_service::CapturerInfo> {
     if is_x11() {
         bail!("Do not call this function if not wayland");
     }
-    let addr = *CAP_DISPLAY_INFO.read().unwrap();
-    if addr != 0 {
-        let cap_display_info: *const CapDisplayInfo = addr as _;
+    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+    if let Some(addr) = cap_map.get(&display_idx) {
+        let cap_display_info: *const CapDisplayInfo = *addr as _;
         unsafe {
             let cap_display_info = &*cap_display_info;
-            let rect = cap_display_info.rects[cap_display_info.current];
+            let rect = cap_display_info.rects[cap_display_info.current];          
             Ok(super::video_service::CapturerInfo {
                 origin: rect.0,
                 width: rect.1,
@@ -285,7 +320,7 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
             })
         }
     } else {
-        bail!("Failed to get capturer display info");
+        bail!("Failed to get capturer display info for display {}", display_idx);
     }
 }
 
