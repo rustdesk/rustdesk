@@ -147,7 +147,7 @@ fn calculate_max_resolution_from_displays(displays: &[Display]) -> (i32, i32) {
     // TODO: this doesn't work in most situations other than sharing all displays
     //  this is because the function only gets called with the displays being shared with pipewire
     //  the xrandr method does work otherwise we could get this correctly using xdg-output-unstable-v1 when xrandr isn't available
-    log::warn!("using incorrect max resolution calculation uinput may not work correctly");
+    // log::warn!("using incorrect max resolution calculation uinput may not work correctly");
     let (mut max_x, mut max_y) = (0, 0);
     for d in displays {
         let (x, y) = d.origin();
