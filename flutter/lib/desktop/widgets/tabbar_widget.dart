@@ -422,7 +422,7 @@ class _DesktopTabState extends State<DesktopTab>
   @override
   void onWindowResized() {
     _saveFrameDebounce.call(_saveFrame);
-    super.onWindowMoved();
+    super.onWindowResized();
   }
 
   @override
