@@ -1514,14 +1514,12 @@ class FfiModel with ChangeNotifier {
 }
 
 class VirtualMouseMode with ChangeNotifier {
-  bool _showVirtualMouseTouchMode = false;
-  double _virtualMouseTouchScale = 1.0;
-  bool _showVirtualMouseMouseMode = false;
+  bool _showVirtualMouse = false;
+  double _virtualMouseScale = 1.0;
   bool _showVirtualJoystick = false;
 
-  bool get showVirtualMouseTouchMode => _showVirtualMouseTouchMode;
-  double get virtualMouseTouchScale => _virtualMouseTouchScale;
-  bool get showVirtualMouseMouseMode => _showVirtualMouseMouseMode;
+  bool get showVirtualMouse => _showVirtualMouse;
+  double get virtualMouseScale => _virtualMouseScale;
   bool get showVirtualJoystick => _showVirtualJoystick;
 
   FfiModel ffiModel;
@@ -1530,29 +1528,20 @@ class VirtualMouseMode with ChangeNotifier {
 
   bool _shouldShow() => !ffiModel.isPeerAndroid;
 
-  setShowVirtualMouseTouchMode(bool b) {
-    if (b == _showVirtualMouseTouchMode) return;
+  setShowVirtualMouse(bool b) {
+    if (b == _showVirtualMouse) return;
     if (_shouldShow()) {
-      _showVirtualMouseTouchMode = b;
+      _showVirtualMouse = b;
       notifyListeners();
     }
   }
 
-  setVirtualMouseTouchScale(double s) {
+  setVirtualMouseScale(double s) {
     if (s <= 0) return;
-    if (s == _virtualMouseTouchScale) return;
-    _virtualMouseTouchScale = s;
-    bind.mainSetLocalOption(
-        key: kOptionVirtualMouseTouchModeScale, value: s.toString());
+    if (s == _virtualMouseScale) return;
+    _virtualMouseScale = s;
+    bind.mainSetLocalOption(key: kOptionVirtualMouseScale, value: s.toString());
     notifyListeners();
-  }
-
-  setShowVirtualMouseMouseMode(bool b) {
-    if (b == _showVirtualMouseMouseMode) return;
-    if (_shouldShow()) {
-      _showVirtualMouseMouseMode = b;
-      notifyListeners();
-    }
   }
 
   setShowVirtualJoystick(bool b) {
@@ -1564,36 +1553,21 @@ class VirtualMouseMode with ChangeNotifier {
   }
 
   void loadOptions() {
-    // `mainGetLocalBoolOptionSync` is not used here.
-    // Because `kOptionShowVirtualMouseTouchMode` and `kOptionShowVirtualMouseMouseMode` are similar options,
-    // but their default behaviors are different:
-    //   TouchMode defaults to true unless set to 'N', while MouseMode defaults to false unless set to 'Y'.
-    _showVirtualMouseTouchMode =
-        bind.mainGetLocalOption(key: kOptionShowVirtualMouseTouchMode) != 'N';
-    _virtualMouseTouchScale = double.tryParse(
-            bind.mainGetLocalOption(key: kOptionVirtualMouseTouchModeScale)) ??
+    _showVirtualMouse =
+        bind.mainGetLocalOption(key: kOptionShowVirtualMouse) == 'Y';
+    _virtualMouseScale = double.tryParse(
+            bind.mainGetLocalOption(key: kOptionVirtualMouseScale)) ??
         1.0;
-    _showVirtualMouseMouseMode =
-        bind.mainGetLocalOption(key: kOptionShowVirtualMouseMouseMode) == 'Y';
     _showVirtualJoystick =
         bind.mainGetLocalOption(key: kOptionShowVirtualJoystick) == 'Y';
     notifyListeners();
   }
 
-  Future<void> toggleVirtualMouseTouchMode() async {
+  Future<void> toggleVirtualMouse() async {
     await bind.mainSetLocalOption(
-        key: kOptionShowVirtualMouseTouchMode,
-        value: showVirtualMouseTouchMode ? 'N' : 'Y');
-    setShowVirtualMouseTouchMode(
-        bind.mainGetLocalOption(key: kOptionShowVirtualMouseTouchMode) != 'N');
-  }
-
-  Future<void> toggleVirtualMouseMouseMode() async {
-    await bind.mainSetLocalOption(
-        key: kOptionShowVirtualMouseMouseMode,
-        value: showVirtualMouseMouseMode ? 'N' : 'Y');
-    setShowVirtualMouseMouseMode(
-        bind.mainGetLocalOption(key: kOptionShowVirtualMouseMouseMode) == 'Y');
+        key: kOptionShowVirtualMouse, value: showVirtualMouse ? 'N' : 'Y');
+    setShowVirtualMouse(
+        bind.mainGetLocalOption(key: kOptionShowVirtualMouse) == 'Y');
   }
 
   Future<void> toggleVirtualJoystick() async {

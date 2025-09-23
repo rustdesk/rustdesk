@@ -1,6 +1,6 @@
-// This floating mouse widgets are used to simulate a physical mouse
+// These floating mouse widgets are used to simulate a physical mouse
 // when "mobile" -> "desktop" in mouse mode.
-// This file does not contain a whole mouse widgets, it only contains
+// This file does not contain whole mouse widgets, it only contains
 // parts that help to control, such as wheel scroll and wheel button.
 
 import 'dart:async';
@@ -73,7 +73,7 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
   @override
   Widget build(BuildContext context) {
     final virtualMouseMode = _virtualMouseMode;
-    if (!virtualMouseMode.showVirtualMouseMouseMode) {
+    if (!virtualMouseMode.showVirtualMouse) {
       return const Offstage();
     }
     return Stack(
@@ -111,6 +111,7 @@ class FloatingWheel extends StatefulWidget {
 
 class _FloatingWheelState extends State<FloatingWheel> {
   Offset _position = Offset.zero;
+  bool _isInitialized = false;
   Rect? _lastBlockedRect;
 
   bool _isUpDown = false;
@@ -139,6 +140,7 @@ class _FloatingWheelState extends State<FloatingWheel> {
         size.width - _wheelWidth - _kSpaceToHorizontalEdge,
         (size.height - _wheelHeight) / 2,
       );
+      _isInitialized = true;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _updateBlockedRect();
@@ -204,6 +206,9 @@ class _FloatingWheelState extends State<FloatingWheel> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return Positioned(child: Offstage());
+    }
     return Positioned(
       left: _position.dx,
       top: _position.dy,
@@ -362,6 +367,7 @@ class FloatingLeftRightButton extends StatefulWidget {
 
 class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   Offset _position = Offset.zero;
+  bool _isInitialized = false;
   bool _isDown = false;
   Rect? _lastBlockedRect;
 
@@ -464,6 +470,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   void _resetPosition(Orientation ori) {
     setState(() {
       _restorePosition(ori);
+      _isInitialized = true;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _updateBlockedRect();
@@ -548,6 +555,9 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return Positioned(child: Offstage());
+    }
     return Positioned(
       left: _position.dx,
       top: _position.dy,
@@ -664,6 +674,8 @@ class _QuarterCirclePainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
+// Virtual joystick sends the absolute movement for now.
+// Maybe we need to change it to relative movement in the future.
 class VirtualJoystick extends StatefulWidget {
   final CursorModel cursorModel;
 
@@ -675,6 +687,7 @@ class VirtualJoystick extends StatefulWidget {
 
 class _VirtualJoystickState extends State<VirtualJoystick> {
   Offset _position = Offset.zero;
+  bool _isInitialized = false;
   Offset _offset = Offset.zero;
   final double _joystickRadius = 50.0;
   final double _thumbRadius = 20.0;
@@ -722,6 +735,7 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
         _kSpaceToHorizontalEdge + _joystickRadius,
         size.height * 0.5 + _joystickRadius * 1.5,
       );
+      _isInitialized = true;
     });
   }
 
@@ -741,6 +755,9 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return Positioned(child: Offstage());
+    }
     return Positioned(
       left: _position.dx - _joystickRadius,
       top: _position.dy - _joystickRadius,
