@@ -198,6 +198,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
   final GlobalKey _cursorPaintKey = GlobalKey();
 
   Offset _position = Offset.zero;
+  bool _isInitialized = false;
   double _baseMouseScale = 1.0;
   double _mouseScale = 1.0;
   bool _isExpanded = true;
@@ -279,6 +280,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
         (size.width - _baseMouseWidth * _mouseScale) / 2,
         (size.height - _baseMouseHeight * _mouseScale) / 2,
       );
+      _isInitialized = true;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _updateBlockedRect();
@@ -583,6 +585,9 @@ class _FloatingMouseState extends State<FloatingMouse> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return const Offstage();
+    }
     final virtualMouseMode = _virtualMouseMode;
     if (!virtualMouseMode.showVirtualMouseTouchMode) {
       return const Offstage();

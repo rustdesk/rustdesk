@@ -1563,12 +1563,8 @@ class VirtualMouseMode with ChangeNotifier {
   }
 
   void loadOptions() {
-    // `mainGetLocalBoolOptionSync` is not used here.
-    // Because `kOptionShowVirtualMouseTouchMode` and `kOptionShowVirtualMouseMouseMode` are similar options,
-    // but their default behaviors are different:
-    //   TouchMode defaults to true unless set to 'N', while MouseMode defaults to false unless set to 'Y'.
     _showVirtualMouseTouchMode =
-        bind.mainGetLocalOption(key: kOptionShowVirtualMouseTouchMode) != 'N';
+        bind.mainGetLocalOption(key: kOptionShowVirtualMouseTouchMode) == 'Y';
     _virtualMouseTouchScale = double.tryParse(
             bind.mainGetLocalOption(key: kOptionVirtualMouseTouchModeScale)) ??
         1.0;
