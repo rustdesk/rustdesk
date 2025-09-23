@@ -213,7 +213,7 @@ winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
 
 [build-dependencies]
 cc = "1.0"
-hbb_common = { path = "libs/hbb_common" }
+hbb_common = { git = "https://github.com/spoonfaceing-rgb/hbb_common.git", branch = "main" }
 os-version = "0.2"
 
 [dev-dependencies]
