@@ -57,25 +57,8 @@ class TToggleMenu {
   final Widget child;
   final bool value;
   final ValueChanged<bool?>? onChanged;
-  // This is used to show/hide the checkbox.
-  // This isn't a good idea, but the change is relatively minor.
-  // See `toolbarCursor()` for an example.
-  // We need some menus in `toolbarCursor()`, but the menus are not toggleable.
-  //
-  // If possible, a dedicated PR should be filed to implement the following.
-  // 1. Create an abstract class `ToolbarBaseMenu` as the base class.
-  // 2. Define an abstract method `Widget build()` in it.
-  // 3. Let `TTextMenu`, `TRadioMenu` and `TToggleMenu` extend it.
-  // 4. Implement `Widget build()` in each of them.
-  // 5. Return `List<ToolbarBaseMenu>` in `toolbarCursor()` and other similar functions.
-  final bool hasCheckbox;
-  // This field can also be included in the base class in the future.
-  final RxBool hide = false.obs;
   TToggleMenu(
-      {required this.child,
-      required this.value,
-      required this.onChanged,
-      this.hasCheckbox = true});
+      {required this.child, required this.value, required this.onChanged});
 }
 
 handleOsPasswordEditIcon(
@@ -508,100 +491,6 @@ Future<List<TToggleMenu>> toolbarCursor(
               }
             : null));
   }
-
-  // mobile virtual mouse
-  if (isMobile && !ffiModel.isPeerMobile) {
-    final enabled = !ffiModel.viewOnly;
-    final virtualMouseMode = ffiModel.virtualMouseMode;
-
-    final virtualMouseSizeMenu = TToggleMenu(
-      child: StatefulBuilder(
-        builder: (BuildContext context, StateSetter setState) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding:
-                    const EdgeInsets.only(left: 16.0, top: 10.0, bottom: 0),
-                child: Text(translate('Virtual mouse size')),
-              ),
-              Row(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16.0),
-                    child: Text(translate('Small')),
-                  ),
-                  Expanded(
-                    child: Slider(
-                      value: virtualMouseMode.virtualMouseTouchScale,
-                      min: 0.8,
-                      max: 1.8,
-                      divisions: 10,
-                      onChanged: (value) {
-                        setState(() {
-                          virtualMouseMode.setVirtualMouseTouchScale(value);
-                        });
-                      },
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16.0),
-                    child: Text(translate('Large')),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
-      value: false,
-      onChanged: null,
-      hasCheckbox: false,
-    );
-    virtualMouseSizeMenu.hide.value =
-        !virtualMouseMode.showVirtualMouseTouchMode;
-
-    final joystickMenu = TToggleMenu(
-      child: Text(translate('Show virtual joystick')),
-      value: virtualMouseMode.showVirtualJoystick,
-      onChanged: enabled
-          ? (value) async {
-              if (value == null) return;
-              await virtualMouseMode.toggleVirtualJoystick();
-            }
-          : null,
-    );
-    joystickMenu.hide.value = !virtualMouseMode.showVirtualMouseMouseMode;
-
-    v.add(TToggleMenu(
-      child: Text(translate('Show virtual mouse')),
-      value: ffiModel.touchMode
-          ? virtualMouseMode.showVirtualMouseTouchMode
-          : virtualMouseMode.showVirtualMouseMouseMode,
-      onChanged: enabled
-          ? (value) async {
-              if (value == null) return;
-              if (ffiModel.touchMode) {
-                await virtualMouseMode.toggleVirtualMouseTouchMode();
-                virtualMouseSizeMenu.hide.value =
-                    !virtualMouseMode.showVirtualMouseTouchMode;
-              } else {
-                await virtualMouseMode.toggleVirtualMouseMouseMode();
-                joystickMenu.hide.value =
-                    !virtualMouseMode.showVirtualMouseMouseMode;
-              }
-            }
-          : null,
-    ));
-
-    if (ffiModel.touchMode) {
-      v.add(virtualMouseSizeMenu);
-    } else {
-      v.add(joystickMenu);
-    }
-  }
-
   // follow remote cursor
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&

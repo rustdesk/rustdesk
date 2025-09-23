@@ -800,13 +800,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             controller: ScrollController(),
             padding: EdgeInsets.symmetric(vertical: 10),
             child: GestureHelp(
-                touchMode: gFFI.ffiModel.touchMode,
-                onTouchModeChange: (t) {
-                  gFFI.ffiModel.toggleTouchMode();
-                  final v = gFFI.ffiModel.touchMode ? 'Y' : '';
-                  bind.sessionPeerOption(
-                      sessionId: sessionId, name: kOptionTouchMode, value: v);
-                })));
+              touchMode: gFFI.ffiModel.touchMode,
+              onTouchModeChange: (t) {
+                gFFI.ffiModel.toggleTouchMode();
+                final v = gFFI.ffiModel.touchMode ? 'Y' : '';
+                bind.sessionPeerOption(
+                    sessionId: sessionId, name: kOptionTouchMode, value: v);
+              },
+              virtualMouseMode: gFFI.ffiModel.virtualMouseMode,
+            )));
   }
 
   // * Currently mobile does not enable map mode
@@ -1227,30 +1229,21 @@ void showOptions(
       if (codecRadios.isNotEmpty) const Divider(color: MyTheme.border),
     ];
     final rxCursorToggleValues = cursorToggles.map((e) => e.value.obs).toList();
-    final cursorTogglesList = cursorToggles.asMap().entries.map((e) {
-      if (e.value.hasCheckbox) {
-        return Obx(() => e.value.hide.isFalse
-            ? CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-                value: rxCursorToggleValues[e.key].value,
-                onChanged: e.value.onChanged != null
-                    ? (v) {
-                        e.value.onChanged?.call(v);
-                        if (v != null) rxCursorToggleValues[e.key].value = v;
-                      }
-                    : null,
-                title: e.value.child)
-            : Offstage());
-      } else {
-        return Obx(() => e.value.hide.isFalse
-            ? ListTile(
-                contentPadding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-                title: e.value.child)
-            : Offstage());
-      }
-    }).toList();
+    final cursorTogglesList = cursorToggles
+        .asMap()
+        .entries
+        .map((e) => Obx(() => CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            value: rxCursorToggleValues[e.key].value,
+            onChanged: e.value.onChanged != null
+                ? (v) {
+                    e.value.onChanged?.call(v);
+                    if (v != null) rxCursorToggleValues[e.key].value = v;
+                  }
+                : null,
+            title: e.value.child)))
+        .toList();
 
     final rxToggleValues = displayToggles.map((e) => e.value.obs).toList();
     final displayTogglesList = displayToggles
