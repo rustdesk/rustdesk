@@ -1796,14 +1796,17 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId, bool? flush}) a
 
   final WindowKey key = (type: type, windowId: windowId);
 
+  final bool haveNewWindowPosition = (_lastWindowPosition == null) || !pos.equals(_lastWindowPosition!);
+  final bool isPreviousNewWindowPositionPending = _saveWindowDebounce.isRunning;
 
-  if ((_lastWindowPosition == null) || !pos.equals(_lastWindowPosition!) || _saveWindowDebounce.isRunning) {
+  if (haveNewWindowPosition || isPreviousNewWindowPositionPending) {
     _lastWindowPosition = pos;
 
     if (flush ?? false) {
+      // If a previous update is pending, replace it.
       _saveWindowDebounce.cancel();
       await _saveWindowPositionActual(key);
-    } else if (!_saveWindowDebounce.isRunning) {
+    } else if (haveNewWindowPosition) {
       _saveWindowDebounce.call(() => _saveWindowPositionActual(key));
     }
   }
