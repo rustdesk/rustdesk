@@ -710,5 +710,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "Podaj nazwę użytkownika lub domena\\użytkownik"),
         ("Preparing for installation ...", "Przygotowywanie do instalacji ..."),
         ("Show my cursor", ""),
+        ("Show virtual mouse", ""),
+        ("Virtual mouse size", ""),
+        ("Small", ""),
+        ("Large", ""),
+        ("Show virtual joystick", ""),
     ].iter().cloned().collect();
 }

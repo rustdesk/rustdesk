@@ -119,6 +119,10 @@ const String kOptionAllowNumericOneTimePassword =
     "allow-numeric-one-time-password";
 const String kOptionCollapseToolbar = "collapse_toolbar";
 const String kOptionShowRemoteCursor = "show_remote_cursor";
+const String kOptionShowVirtualMouseTouchMode = "show_virtual_mouse_touch_mode";
+const String kOptionVirtualMouseTouchModeScale = "virtual_mouse_touch_mode_scale";
+const String kOptionShowVirtualMouseMouseMode = "show_virtual_mouse_mouse_mode";
+const String kOptionShowVirtualJoystick = "show_virtual_joystick";
 const String kOptionFollowRemoteCursor = "follow_remote_cursor";
 const String kOptionFollowRemoteWindow = "follow_remote_window";
 const String kOptionZoomCursor = "zoom-cursor";
