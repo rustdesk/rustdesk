@@ -1803,7 +1803,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId, bool? flush}) a
     if (flush ?? false) {
       _saveWindowDebounce.cancel();
       await _saveWindowPositionActual(key);
-    } else {
+    } else if (!_saveWindowDebounce.isRunning) {
       _saveWindowDebounce.call(() => _saveWindowPositionActual(key));
     }
   }
