@@ -1701,11 +1701,6 @@ class ViewStyle {
       }
     } else if (style == kRemoteViewStyleCustom) {
       // Read custom scale percent from flutter option; fallback to 100%
-      try {
-        // This is synchronous context; we cache via canvas config or use default here.
-        // CanvasModel will set _scale after updateViewStyle; we rely on external setter to refresh.
-        // Keep default here; actual application happens in CanvasModel.updateViewStyle via external setter.
-      } catch (_) {}
     }
     return s;
   }
