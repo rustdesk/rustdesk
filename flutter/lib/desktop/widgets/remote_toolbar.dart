@@ -1045,9 +1045,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   String get id => widget.id;
 
   @override
-  Widget build(BuildContext context) {
-    _screenAdjustor.updateScreen();
-    // Initialize custom percent from stored option once after build starts.
+  void initState() {
+    super.initState();
+    // Initialize custom percent from stored option once
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         final opt = await bind.sessionGetFlutterOption(
@@ -1060,6 +1060,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         }
       } catch (_) {}
     });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _screenAdjustor.updateScreen();
     menuChildrenGetter() {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
@@ -1316,7 +1321,7 @@ class _RectValueThumbShape extends SliderComponentShape {
 
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) {
-    return const Size(44, 24);
+    return const Size(52, 28);
   }
 
   @override
@@ -1336,7 +1341,7 @@ class _RectValueThumbShape extends SliderComponentShape {
   }) {
     final Canvas canvas = context.canvas;
     final RRect rrect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: center, width: 44, height: 24),
+      Rect.fromCenter(center: center, width: 52, height: 28),
       const Radius.circular(4),
     );
     final Paint paint = Paint()..color = fillColor;
@@ -1352,8 +1357,8 @@ class _RectValueThumbShape extends SliderComponentShape {
       textAlign: TextAlign.center,
       textDirection: textDirection,
     );
-    tp.layout(minWidth: 44, maxWidth: 44);
-    tp.paint(canvas, Offset(center.dx - 22, center.dy - tp.height / 2));
+    tp.layout(maxWidth: 48);
+    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
   }
 }
 
@@ -1411,6 +1416,12 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
     });
     widget.onChanged?.call(next);
     _debouncerScale.value = next;
+  }
+
+  @override
+  void dispose() {
+    _debouncerScale.dispose();
+    super.dispose();
   }
 
   @override
