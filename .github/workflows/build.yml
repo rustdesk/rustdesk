@@ -32,13 +32,18 @@ jobs:
           choco install -y pkgconfiglite nasm
           git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
           C:\vcpkg\bootstrap-vcpkg.bat
-          C:\vcpkg\vcpkg.exe install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+          C:\vcpkg\vcpkg.exe install libvpx:x64-windows-static libyuv:x64-windows-static opus[core,codec]:x64-windows-static aom:x64-windows-static
           C:\vcpkg\vcpkg.exe integrate install
         shell: powershell
 
       - name: Install Visual Studio Build Tools with Clang
         run: |
           choco install -y visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang"
+        shell: powershell
+
+      - name: Debug Opus headers
+        run: |
+          dir C:\vcpkg\installed\x64-windows-static\include\opus
         shell: powershell
 
       - name: Build RustDesk
@@ -48,6 +53,7 @@ jobs:
           $env:LIBCLANG_PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin"
           $env:INCLUDE = "C:\vcpkg\installed\x64-windows-static\include"
           $env:OPUS_INCLUDE_DIR = "C:\vcpkg\installed\x64-windows-static\include"
+          $env:CFLAGS = "/IC:\vcpkg\installed\x64-windows-static\include /IC:\vcpkg\installed\x64-windows-static\include\opus"
           $env:RUST_BACKTRACE = "1"
           cargo build --release --target x86_64-pc-windows-msvc --verbose
         env:
