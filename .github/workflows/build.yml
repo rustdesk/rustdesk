@@ -28,8 +28,10 @@ jobs:
           choco install -y pkgconfiglite nasm
           git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
           C:\vcpkg\bootstrap-vcpkg.bat
-          C:\vcpkg\vcpkg.exe install libvpx:x64-windows libyuv:x64-windows opus[core,codec]:x64-windows aom:x64-windows
+          C:\vcpkg\vcpkg.exe install libvpx:x64-windows libyuv:x64-windows opus:x64-windows aom:x64-windows
           C:\vcpkg\vcpkg.exe integrate install
+          dir C:\vcpkg\installed\x64-windows
+          type C:\vcpkg\buildtrees\opus\install-x64-windows-out.log
         shell: powershell
       - name: Install Visual Studio Build Tools with Clang
         run: |
@@ -37,6 +39,7 @@ jobs:
         shell: powershell
       - name: Debug Opus headers
         run: |
+          dir C:\vcpkg\installed\x64-windows\include
           dir C:\vcpkg\installed\x64-windows\include\opus
         shell: powershell
       - name: Build RustDesk
