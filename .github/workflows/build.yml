@@ -15,19 +15,28 @@ jobs:
         with:
           toolchain: stable
           targets: x86_64-pc-windows-msvc
+      - name: Install Chocolatey
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force;
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072;
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        shell: powershell
       - name: Install dependencies
         run: |
           choco install -y pkgconfiglite
-          vcpkg install libvpx libyuv opus
+          vcpkg install libvpx:x64-windows libyuv:x64-windows opus:x64-windows
           vcpkg integrate
         shell: powershell
-      - name: Build
-        run: cargo build --release --target x86_64-pc-windows-msvc
+      - name: Build RustDesk
+        run: |
+          $env:VCPKG_ROOT = "C:\vcpkg"
+          cargo build --release --target x86_64-pc-windows-msvc
         env:
           RENDEZVOUS_SERVER: rustdesk.getdevnet.com:21116
           RELAY_SERVER: rustdesk.getdevnet.com:21117
           RS_PUB_KEY: hMIWToeeSHrfJLZPWApfwLRm3P15T8hvwrxAskPwjPg=
           API_SERVER: http://rustdesk.getdevnet.com:21114
+        shell: powershell
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
