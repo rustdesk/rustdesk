@@ -1,0 +1,33 @@
+name: Build RustDesk
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-pc-windows-msvc
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ pkg-config libx11-dev libxtst-dev libgtk-3-dev
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-msvc
+        env:
+          RENDEZVOUS_SERVER: rustdesk.getdevnet.com:21116
+          RELAY_SERVER: rustdesk.getdevnet.com:21117
+          RS_PUB_KEY: hMIWToeeSHrfJLZPWApfwLRm3P15T8hvwrxAskPwjPg=
+          API_SERVER: http://rustdesk.getdevnet.com:21114
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: rustdesk-windows
+          path: target/x86_64-pc-windows-msvc/release/rustdesk.exe
