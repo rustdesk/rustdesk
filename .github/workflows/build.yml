@@ -31,9 +31,9 @@ jobs:
           C:\vcpkg\vcpkg.exe install libvpx:x64-windows libyuv:x64-windows opus:x64-windows
           C:\vcpkg\vcpkg.exe integrate install
         shell: powershell
-      - name: Install Visual Studio Build Tools
+      - name: Install Visual Studio Build Tools with Clang
         run: |
-          choco install -y visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools"
+          choco install -y visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang"
         shell: powershell
       - name: Build RustDesk
         run: |
