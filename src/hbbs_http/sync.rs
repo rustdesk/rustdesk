@@ -140,6 +140,18 @@ async fn start_hbbs_sync_async() {
                     if !ab_tag.is_empty() {
                         v[keys::OPTION_PRESET_ADDRESS_BOOK_TAG] = json!(ab_tag);
                     }
+                    let ab_alias = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_ALIAS);
+                    if !ab_alias.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_ALIAS] = json!(ab_alias);
+                    }
+                    let ab_password = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD);
+                    if !ab_password.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD] = json!(ab_password);
+                    }
+                    let ab_note = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NOTE);
+                    if !ab_note.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_NOTE] = json!(ab_note);
+                    }
                     let username = get_builtin_option(keys::OPTION_PRESET_USERNAME);
                     if !username.is_empty() {
                         v[keys::OPTION_PRESET_USERNAME] = json!(username);
@@ -151,6 +163,18 @@ async fn start_hbbs_sync_async() {
                     let device_group_name = get_builtin_option(keys::OPTION_PRESET_DEVICE_GROUP_NAME);
                     if !device_group_name.is_empty() {
                         v[keys::OPTION_PRESET_DEVICE_GROUP_NAME] = json!(device_group_name);
+                    }
+                    let device_username = Config::get_option(keys::OPTION_PRESET_DEVICE_USERNAME);
+                    if !device_username.is_empty() {
+                        v["username"] = json!(device_username);
+                    }
+                    let device_name = Config::get_option(keys::OPTION_PRESET_DEVICE_NAME);
+                    if !device_name.is_empty() {
+                        v["hostname"] = json!(device_name);
+                    }
+                    let note = Config::get_option(keys::OPTION_PRESET_NOTE);
+                    if !note.is_empty() {
+                        v[keys::OPTION_PRESET_NOTE] = json!(note);
                     }
                     let v = v.to_string();
                     let mut hash = "".to_owned();
