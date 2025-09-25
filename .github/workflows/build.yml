@@ -28,7 +28,7 @@ jobs:
           choco install -y pkgconfiglite nasm
           git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
           C:\vcpkg\bootstrap-vcpkg.bat
-          C:\vcpkg\vcpkg.exe install libvpx:x64-windows libyuv:x64-windows opus:x64-windows
+          C:\vcpkg\vcpkg.exe install libvpx:x64-windows libyuv:x64-windows opus:x64-windows-static
           C:\vcpkg\vcpkg.exe integrate install
         shell: powershell
       - name: Install Visual Studio Build Tools with Clang
@@ -38,8 +38,9 @@ jobs:
       - name: Build RustDesk
         run: |
           $env:VCPKG_ROOT = "C:\vcpkg"
-          $env:PKG_CONFIG_PATH = "C:\vcpkg\installed\x64-windows\lib\pkgconfig"
+          $env:PKG_CONFIG_PATH = "C:\vcpkg\installed\x64-windows\lib\pkgconfig;C:\vcpkg\installed\x64-windows-static\lib\pkgconfig"
           $env:LIBCLANG_PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin"
+          $env:INCLUDE = "C:\vcpkg\installed\x64-windows-static\include;C:\vcpkg\installed\x64-windows\include"
           cargo build --release --target x86_64-pc-windows-msvc --verbose
         env:
           RENDEZVOUS_SERVER: rustdesk.getdevnet.com:21116
