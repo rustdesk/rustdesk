@@ -175,6 +175,12 @@ class RemoteMenuEntry {
           dismissOnClicked: true,
           dismissCallback: dismissCallback,
         ),
+        MenuEntryRadioOption(
+          text: translate('Scale custom'),
+          value: kRemoteViewStyleCustom,
+          dismissOnClicked: true,
+          dismissCallback: dismissCallback,
+        ),
       ],
       curOptionGetter: () async {
         // null means peer id is not found, which there's no need to care about
@@ -1037,6 +1043,75 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   FFI get ffi => widget.ffi;
   String get id => widget.id;
 
+  Widget _inlineCustomScaleControls() {
+    return futureBuilder(future: () async {
+      int initPercent = 100;
+      final opt = await bind.sessionGetFlutterOption(
+          sessionId: ffi.sessionId, k: kCustomScalePercentKey);
+      if (opt != null) {
+        initPercent = int.tryParse(opt) ?? initPercent;
+      }
+      if (initPercent < 5 || initPercent > 1000) initPercent = 100;
+      return initPercent;
+    }(), hasData: (data) {
+      final current = SimpleWrapper<int>(data as int);
+      final controller = TextEditingController(text: current.value.toString());
+
+      Future<void> apply(int v) async {
+        if (v < 5) v = 5;
+        if (v > 1000) v = 1000;
+        current.value = v;
+        controller.text = v.toString();
+        await bind.sessionSetFlutterOption(
+            sessionId: ffi.sessionId,
+            k: kCustomScalePercentKey,
+            v: current.value.toString());
+        await bind.sessionSetViewStyle(
+            sessionId: ffi.sessionId, value: kRemoteViewStyleCustom);
+        await ffi.canvasModel.updateViewStyle();
+      }
+
+      return Row(children: [
+        SizedBox(
+          width: 68,
+          child: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              labelText: translate('Percentage'),
+              isDense: true,
+            ),
+            onChanged: (v) {
+              final n = int.tryParse(v);
+              if (n != null) apply(n);
+            },
+          ).paddingOnly(left: 6, right: 6),
+        ),
+        MenuButton(
+          child: const Icon(Icons.remove, size: 18),
+          onPressed: () => apply(current.value - 1),
+          ffi: ffi,
+        ),
+        MenuButton(
+          child: const Icon(Icons.add, size: 18),
+          onPressed: () => apply(current.value + 1),
+          ffi: ffi,
+        ),
+        Expanded(
+          child: Slider(
+            value: current.value.toDouble(),
+            min: 5,
+            max: 1000,
+            divisions: 995,
+            label: '${current.value}%',
+            onChanged: (v) => apply(v.round()),
+          ),
+        ),
+      ]);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     _screenAdjustor.updateScreen();
@@ -1123,8 +1198,20 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                     ffi: ffi))
                 .toList(),
             Divider(),
+            _customControlsIfCustomSelected(),
           ]);
         });
+  }
+
+  Widget _customControlsIfCustomSelected() {
+    return futureBuilder(future: () async {
+      final current = await bind.sessionGetViewStyle(sessionId: ffi.sessionId);
+      return current == kRemoteViewStyleCustom;
+    }(), hasData: (data) {
+      final isCustom = data as bool;
+      if (!isCustom) return Offstage();
+      return _CustomScaleMenuControls(ffi: ffi);
+    });
   }
 
   scrollStyle() {
@@ -1242,6 +1329,84 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                       ffi: ffi))
                   .toList());
         });
+  }
+}
+
+class _CustomScaleMenuControls extends StatefulWidget {
+  final FFI ffi;
+  const _CustomScaleMenuControls({Key? key, required this.ffi}) : super(key: key);
+
+  @override
+  State<_CustomScaleMenuControls> createState() => _CustomScaleMenuControlsState();
+}
+
+class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
+  late int _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = 100;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final opt = await bind.sessionGetFlutterOption(
+          sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
+      int v = int.tryParse(opt ?? '') ?? 100;
+      if (v < 5) v = 5;
+      if (v > 1000) v = 1000;
+      setState(() {
+        _value = v;
+      });
+    });
+  }
+
+  Future<void> _apply(int v) async {
+    if (v < 5) v = 5;
+    if (v > 1000) v = 1000;
+    setState(() {
+      _value = v;
+    });
+    await bind.sessionSetFlutterOption(
+        sessionId: widget.ffi.sessionId,
+        k: kCustomScalePercentKey,
+        v: v.toString());
+    await bind.sessionSetViewStyle(
+        sessionId: widget.ffi.sessionId, value: kRemoteViewStyleCustom);
+    await widget.ffi.canvasModel.updateViewStyle();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6.0),
+        child: Row(children: [
+          Text(translate('Scale ')).paddingOnly(right: 4),
+          Text('$_value%').paddingOnly(right: 10),
+          IconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            onPressed: () => _apply(_value - 1),
+            tooltip: translate('Decrease'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, size: 18),
+            onPressed: () => _apply(_value + 1),
+            tooltip: translate('Increase'),
+          ),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        child: Slider(
+        value: _value.toDouble(),
+        min: 5,
+        max: 1000,
+        divisions: 995,
+        label: '$_value%',
+        onChanged: (v) => _apply(v.round()),
+        ),
+      ),
+      Divider(),
+    ]);
   }
 }
 

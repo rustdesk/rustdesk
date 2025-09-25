@@ -177,6 +177,86 @@ void changeIdDialog() {
   });
 }
 
+showCustomScaleDialog(SessionID sessionId, String id, FFI ffi) async {
+  int initPercent = 100;
+  final opt = await bind.sessionGetFlutterOption(
+      sessionId: sessionId, k: kCustomScalePercentKey);
+  if (opt != null) {
+    initPercent = int.tryParse(opt) ?? initPercent;
+  }
+  if (initPercent < 5 || initPercent > 1000) initPercent = 100;
+
+  final current = SimpleWrapper(initPercent);
+  final controller = TextEditingController(text: initPercent.toString());
+  Future<void> clampAndSet(int v) async {
+    if (v < 5) v = 5;
+    if (v > 1000) v = 1000;
+    current.value = v;
+    controller.text = v.toString();
+    // live apply
+    await bind.sessionSetFlutterOption(
+        sessionId: sessionId,
+        k: kCustomScalePercentKey,
+        v: current.value.toString());
+    final style = await bind.sessionGetViewStyle(sessionId: sessionId) ?? '';
+    if (style != kRemoteViewStyleCustom) {
+      await bind.sessionSetViewStyle(
+          sessionId: sessionId, value: kRemoteViewStyleCustom);
+    }
+    await ffi.canvasModel.updateViewStyle();
+  }
+  final btnClose = dialogButton('Close', onPressed: () async {
+    await bind.sessionSetFlutterOption(
+        sessionId: sessionId,
+        k: kCustomScalePercentKey,
+        v: current.value.toString());
+    await bind.sessionSetViewStyle(
+        sessionId: sessionId, value: kRemoteViewStyleCustom);
+    await ffi.canvasModel.updateViewStyle();
+    ffi.dialogManager.dismissAll();
+  });
+
+  final content = Column(mainAxisSize: MainAxisSize.min, children: [
+    Row(children: [
+      Expanded(
+        child: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(labelText: translate('Percentage')),
+          onChanged: (v) {
+            final n = int.tryParse(v);
+            if (n != null) clampAndSet(n);
+          },
+        ),
+      ),
+      const SizedBox(width: 8),
+      IconButton(
+        icon: const Icon(Icons.remove),
+        onPressed: () => clampAndSet(current.value - 1),
+        tooltip: translate('Decrease'),
+      ),
+      IconButton(
+        icon: const Icon(Icons.add),
+        onPressed: () => clampAndSet(current.value + 1),
+        tooltip: translate('Increase'),
+      ),
+    ]),
+    const SizedBox(height: 8),
+    Slider(
+      value: current.value.toDouble(),
+      min: 5,
+      max: 1000,
+      divisions: 995,
+      label: '${current.value}%',
+      onChanged: (v) {
+        clampAndSet(v.round());
+      },
+    ),
+  ]);
+  msgBoxCommon(ffi.dialogManager, 'Custom Scale', content, [btnClose]);
+}
+
 void changeWhiteList({Function()? callback}) async {
   final curWhiteList = await bind.mainGetOption(key: kOptionWhitelist);
   var newWhiteListField = curWhiteList == defaultOptionWhitelist

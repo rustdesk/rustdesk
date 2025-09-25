@@ -313,6 +313,12 @@ const kRemoteViewStyleOriginal = 'original';
 /// [kRemoteViewStyleAdaptive] Show remote image scaling by ratio factor.
 const kRemoteViewStyleAdaptive = 'adaptive';
 
+/// [kRemoteViewStyleCustom] Show remote image at a user-defined scale percent.
+const kRemoteViewStyleCustom = 'custom';
+
+/// Flutter option key for storing custom scale percent (integer 5-1000)
+const String kCustomScalePercentKey = 'custom_scale_percent';
+
 /// [kRemoteScrollStyleAuto] Scroll image auto by position.
 const kRemoteScrollStyleAuto = 'scrollauto';
 

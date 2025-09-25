@@ -1699,6 +1699,13 @@ class ViewStyle {
         final s2 = height / displayHeight;
         s = s1 < s2 ? s1 : s2;
       }
+    } else if (style == kRemoteViewStyleCustom) {
+      // Read custom scale percent from flutter option; fallback to 100%
+      try {
+        // This is synchronous context; we cache via canvas config or use default here.
+        // CanvasModel will set _scale after updateViewStyle; we rely on external setter to refresh.
+        // Keep default here; actual application happens in CanvasModel.updateViewStyle via external setter.
+      } catch (_) {}
     }
     return s;
   }
@@ -1815,7 +1822,9 @@ class CanvasModel with ChangeNotifier {
       displayWidth: displayWidth,
       displayHeight: displayHeight,
     );
-    if (_lastViewStyle == viewStyle) {
+    // If only the Custom scale percent changed, proceed to update even if
+    // the basic ViewStyle fields are equal.
+    if (_lastViewStyle == viewStyle && style != kRemoteViewStyleCustom) {
       return;
     }
     if (_lastViewStyle.style != viewStyle.style) {
@@ -1823,6 +1832,20 @@ class CanvasModel with ChangeNotifier {
     }
     _lastViewStyle = viewStyle;
     _scale = viewStyle.scale;
+
+    // Apply custom scale percent when in Custom mode
+    if (style == kRemoteViewStyleCustom) {
+      try {
+        final opt = await bind.sessionGetFlutterOption(
+            sessionId: sessionId, k: kCustomScalePercentKey);
+        int percent = int.tryParse(opt ?? '') ?? 100;
+        if (percent < 5) percent = 5;
+        if (percent > 1000) percent = 1000;
+        _scale = percent / 100.0;
+      } catch (_) {
+        _scale = 1.0;
+      }
+    }
 
     _devicePixelRatio = ui.window.devicePixelRatio;
     if (kIgnoreDpi && style == kRemoteViewStyleOriginal) {
@@ -1850,7 +1873,7 @@ class CanvasModel with ChangeNotifier {
   tryUpdateScrollStyle(Duration duration, String? style) async {
     if (_scrollStyle != ScrollStyle.scrollbar) return;
     style ??= await bind.sessionGetViewStyle(sessionId: sessionId);
-    if (style != kRemoteViewStyleOriginal) {
+    if (style != kRemoteViewStyleOriginal && style != kRemoteViewStyleCustom) {
       return;
     }
 
