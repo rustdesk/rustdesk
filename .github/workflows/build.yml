@@ -23,21 +23,30 @@ jobs:
         shell: powershell
       - name: Install dependencies
         run: |
-          choco install -y pkgconfiglite
-          vcpkg install libvpx:x64-windows libyuv:x64-windows opus:x64-windows
-          vcpkg integrate
+          choco install -y pkgconfiglite nasm
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+          C:\vcpkg\vcpkg.exe install libvpx:x64-windows libyuv:x64-windows opus:x64-windows
+          C:\vcpkg\vcpkg.exe integrate install
+        shell: powershell
+      - name: Install Visual Studio Build Tools
+        run: |
+          choco install -y visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools"
         shell: powershell
       - name: Build RustDesk
         run: |
           $env:VCPKG_ROOT = "C:\vcpkg"
-          cargo build --release --target x86_64-pc-windows-msvc
+          $env:PKG_CONFIG_PATH = "C:\vcpkg\installed\x64-windows\lib\pkgconfig"
+          $env:LIBCLANG_PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin"
+          cargo build --release --target x86_64-pc-windows-msvc --verbose
         env:
           RENDEZVOUS_SERVER: rustdesk.getdevnet.com:21116
           RELAY_SERVER: rustdesk.getdevnet.com:21117
           RS_PUB_KEY: hMIWToeeSHrfJLZPWApfwLRm3P15T8hvwrxAskPwjPg=
-          API_SERVER: http://rustdesk.getdevnet.com:21114
+          API_SERVER: http://10.0.0.93:21114
         shell: powershell
       - name: Upload Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-windows
