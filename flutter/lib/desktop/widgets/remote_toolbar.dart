@@ -1030,6 +1030,7 @@ class _DisplayMenu extends StatefulWidget {
 }
 
 class _DisplayMenuState extends State<_DisplayMenu> {
+  final RxInt _customPercent = 100.obs;
   late final ScreenAdjustor _screenAdjustor = ScreenAdjustor(
     id: widget.id,
     ffi: widget.ffi,
@@ -1046,10 +1047,23 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   @override
   Widget build(BuildContext context) {
     _screenAdjustor.updateScreen();
+    // Initialize custom percent from stored option once after build starts.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final opt = await bind.sessionGetFlutterOption(
+            sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
+        int v = int.tryParse(opt ?? '') ?? 100;
+        if (v < 5) v = 5;
+        if (v > 1000) v = 1000;
+        if (_customPercent.value != v) {
+          _customPercent.value = v;
+        }
+      } catch (_) {}
+    });
     menuChildrenGetter() {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
-        viewStyle(),
+        viewStyle(customPercent: _customPercent),
         scrollStyle(),
         imageQuality(),
         codec(),
@@ -1114,34 +1128,46 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     );
   }
 
-  viewStyle() {
+  viewStyle({required RxInt customPercent}) {
     return futureBuilder(
         future: toolbarViewStyle(context, widget.id, widget.ffi),
         hasData: (data) {
           final v = data as List<TRadioMenu<String>>;
+          final bool isCustomSelected = v.isNotEmpty
+              ? v.first.groupValue == kRemoteViewStyleCustom
+              : false;
           return Column(children: [
-            ...v
-                .map((e) => RdoMenuButton<String>(
-                    value: e.value,
-                    groupValue: e.groupValue,
-                    onChanged: e.onChanged,
-                    child: e.child,
-                    ffi: ffi))
-                .toList(),
-            Divider(),
-            _customControlsIfCustomSelected(),
+            ...v.map((e) {
+              final isCustom = e.value == kRemoteViewStyleCustom;
+              final child = isCustom
+                  ? Text(translate('Scale custom'))
+                  : e.child;
+              return RdoMenuButton<String>(
+                  value: e.value,
+                  groupValue: e.groupValue,
+                  onChanged: e.onChanged,
+                  child: child,
+                  ffi: ffi);
+            }).toList(),
+            // Only show a divider when custom is NOT selected
+            if (!isCustomSelected) Divider(),
+            _customControlsIfCustomSelected(onChanged: (v) => customPercent.value = v),
           ]);
         });
   }
 
-  Widget _customControlsIfCustomSelected() {
+  Widget _customControlsIfCustomSelected({ValueChanged<int>? onChanged}) {
     return futureBuilder(future: () async {
       final current = await bind.sessionGetViewStyle(sessionId: ffi.sessionId);
       return current == kRemoteViewStyleCustom;
     }(), hasData: (data) {
       final isCustom = data as bool;
-      if (!isCustom) return Offstage();
-      return _CustomScaleMenuControls(ffi: ffi);
+      return AnimatedSwitcher(
+        duration: Duration(milliseconds: 220),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: isCustom ? _CustomScaleMenuControls(ffi: ffi, onChanged: onChanged) : SizedBox.shrink(),
+      );
     });
   }
 
@@ -1149,7 +1175,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     return futureBuilder(future: () async {
       final viewStyle =
           await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
-      final visible = viewStyle == kRemoteViewStyleOriginal;
+      final visible = viewStyle == kRemoteViewStyleOriginal ||
+          viewStyle == kRemoteViewStyleCustom;
       final scrollStyle =
           await bind.sessionGetScrollStyle(sessionId: ffi.sessionId) ?? '';
       return {'visible': visible, 'scrollStyle': scrollStyle};
@@ -1164,24 +1191,26 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         widget.ffi.canvasModel.updateScrollStyle();
       }
 
-      final enabled = widget.ffi.canvasModel.imageOverflow.value;
-      return Column(children: [
-        RdoMenuButton<String>(
-          child: Text(translate('ScrollAuto')),
-          value: kRemoteScrollStyleAuto,
-          groupValue: groupValue,
-          onChanged: enabled ? (value) => onChange(value) : null,
-          ffi: widget.ffi,
-        ),
-        RdoMenuButton<String>(
-          child: Text(translate('Scrollbar')),
-          value: kRemoteScrollStyleBar,
-          groupValue: groupValue,
-          onChanged: enabled ? (value) => onChange(value) : null,
-          ffi: widget.ffi,
-        ),
-        Divider(),
-      ]);
+      return Obx(() {
+        final enabled = widget.ffi.canvasModel.imageOverflow.value;
+        return Column(children: [
+          RdoMenuButton<String>(
+            child: Text(translate('ScrollAuto')),
+            value: kRemoteScrollStyleAuto,
+            groupValue: groupValue,
+            onChanged: enabled ? (value) => onChange(value) : null,
+            ffi: widget.ffi,
+          ),
+          RdoMenuButton<String>(
+            child: Text(translate('Scrollbar')),
+            value: kRemoteScrollStyleBar,
+            groupValue: groupValue,
+            onChanged: enabled ? (value) => onChange(value) : null,
+            ffi: widget.ffi,
+          ),
+          Divider(),
+        ]);
+      });
     });
   }
 
@@ -1265,19 +1294,84 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
 class _CustomScaleMenuControls extends StatefulWidget {
   final FFI ffi;
-  const _CustomScaleMenuControls({Key? key, required this.ffi}) : super(key: key);
+  final ValueChanged<int>? onChanged;
+  const _CustomScaleMenuControls({Key? key, required this.ffi, this.onChanged}) : super(key: key);
 
   @override
   State<_CustomScaleMenuControls> createState() => _CustomScaleMenuControlsState();
 }
 
+class _RectValueThumbShape extends SliderComponentShape {
+  final double min;
+  final double max;
+  final Color fillColor;
+  final Color textColor;
+
+  const _RectValueThumbShape({
+    required this.min,
+    required this.max,
+    required this.fillColor,
+    required this.textColor,
+  });
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return const Size(44, 24);
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final Canvas canvas = context.canvas;
+    final RRect rrect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: 44, height: 24),
+      const Radius.circular(4),
+    );
+    final Paint paint = Paint()..color = fillColor;
+    canvas.drawRRect(rrect, paint);
+
+    final int percent = (min + value * (max - min)).round();
+    final TextSpan span = TextSpan(
+      text: '$percent%',
+      style: TextStyle(color: textColor, fontSize: 12, fontWeight: FontWeight.w600),
+    );
+    final TextPainter tp = TextPainter(
+      text: span,
+      textAlign: TextAlign.center,
+      textDirection: textDirection,
+    );
+    tp.layout(minWidth: 44, maxWidth: 44);
+    tp.paint(canvas, Offset(center.dx - 22, center.dy - tp.height / 2));
+  }
+}
+
 class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
   late int _value;
+  late final Debouncer<int> _debouncerScale;
 
   @override
   void initState() {
     super.initState();
     _value = 100;
+    _debouncerScale = Debouncer<int>(
+      Duration(milliseconds: 300),
+      onChanged: (v) async {
+        await _apply(v);
+      },
+      initialValue: _value,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final opt = await bind.sessionGetFlutterOption(
           sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
@@ -1290,9 +1384,10 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
     });
   }
 
+  int _clamp(int v) => v.clamp(5, 1000);
+
   Future<void> _apply(int v) async {
-    if (v < 5) v = 5;
-    if (v > 1000) v = 1000;
+    v = _clamp(v);
     setState(() {
       _value = v;
     });
@@ -1303,38 +1398,89 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
     await bind.sessionSetViewStyle(
         sessionId: widget.ffi.sessionId, value: kRemoteViewStyleCustom);
     await widget.ffi.canvasModel.updateViewStyle();
+    if (isMobile) {
+      HapticFeedback.selectionClick();
+    }
+    widget.onChanged?.call(v);
+  }
+
+  void _nudge(int delta) {
+    final next = _clamp(_value + delta);
+    setState(() {
+      _value = next;
+    });
+    widget.onChanged?.call(next);
+    _debouncerScale.value = next;
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    const smallBtnConstraints = BoxConstraints(minWidth: 28, minHeight: 28);
+
+    final sliderControl = Semantics(
+      label: translate('Custom scale slider'),
+      value: '$_value%',
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          activeTrackColor: colorScheme.primary,
+          thumbColor: colorScheme.primary,
+          overlayColor: colorScheme.primary.withOpacity(0.1),
+          showValueIndicator: ShowValueIndicator.never,
+          thumbShape: _RectValueThumbShape(
+            min: 5,
+            max: 1000,
+            fillColor: colorScheme.primary,
+            textColor: colorScheme.onPrimary,
+          ),
+          trackHeight: 4,
+        ),
+        child: Slider(
+          value: _value.toDouble(),
+          min: 5,
+          max: 1000,
+          divisions: 995,
+          label: '$_value%',
+          onChanged: (v) {
+            final next = _clamp(v.round());
+            if (next != _value) {
+              setState(() {
+                _value = next;
+              });
+              widget.onChanged?.call(next);
+              _debouncerScale.value = next;
+            }
+          },
+        ),
+      ),
+    );
+
     return Column(children: [
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
         child: Row(children: [
-          Text(translate('Scale ')).paddingOnly(right: 4),
-          Text('$_value%').paddingOnly(right: 10),
-          IconButton(
-            icon: const Icon(Icons.remove, size: 18),
-            onPressed: () => _apply(_value - 1),
-            tooltip: translate('Decrease'),
+          Tooltip(
+            message: translate('Decrease'),
+            child: IconButton(
+              iconSize: 16,
+              padding: EdgeInsets.all(4),
+              constraints: smallBtnConstraints,
+              icon: const Icon(Icons.remove),
+              onPressed: () => _nudge(-1),
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.add, size: 18),
-            onPressed: () => _apply(_value + 1),
-            tooltip: translate('Increase'),
+          Expanded(child: sliderControl),
+          Tooltip(
+            message: translate('Increase'),
+            child: IconButton(
+              iconSize: 16,
+              padding: EdgeInsets.all(4),
+              constraints: smallBtnConstraints,
+              icon: const Icon(Icons.add),
+              onPressed: () => _nudge(1),
+            ),
           ),
         ]),
-      ),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-        child: Slider(
-        value: _value.toDouble(),
-        min: 5,
-        max: 1000,
-        divisions: 995,
-        label: '$_value%',
-        onChanged: (v) => _apply(v.round()),
-        ),
       ),
       Divider(),
     ]);
