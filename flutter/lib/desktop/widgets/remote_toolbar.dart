@@ -25,6 +25,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
+import 'package:flutter_hbb/utils/scale.dart';
 
 class ToolbarState {
   late RxBool _pin;
@@ -1051,11 +1052,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     // Initialize custom percent from stored option once
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        final opt = await bind.sessionGetFlutterOption(
-            sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
-        int v = int.tryParse(opt ?? '') ?? 100;
-        if (v < 5) v = 5;
-        if (v > 1000) v = 1000;
+        final v = await getSessionCustomScalePercent(widget.ffi.sessionId);
         if (_customPercent.value != v) {
           _customPercent.value = v;
         }

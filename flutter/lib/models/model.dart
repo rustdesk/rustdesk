@@ -42,6 +42,7 @@ import '../utils/image.dart' as img;
 import '../common/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
+import 'package:flutter_hbb/utils/scale.dart';
 
 import 'package:flutter_hbb/generated_bridge.dart'
     if (dart.library.html) 'package:flutter_hbb/web/bridge.dart';
@@ -1700,7 +1701,7 @@ class ViewStyle {
         s = s1 < s2 ? s1 : s2;
       }
     } else if (style == kRemoteViewStyleCustom) {
-      // Read custom scale percent from flutter option; fallback to 100%
+      // Custom scale is session-scoped and applied in CanvasModel.updateViewStyle()
     }
     return s;
   }
@@ -1831,12 +1832,7 @@ class CanvasModel with ChangeNotifier {
     // Apply custom scale percent when in Custom mode
     if (style == kRemoteViewStyleCustom) {
       try {
-        final opt = await bind.sessionGetFlutterOption(
-            sessionId: sessionId, k: kCustomScalePercentKey);
-        int percent = int.tryParse(opt ?? '') ?? 100;
-        if (percent < 5) percent = 5;
-        if (percent > 1000) percent = 1000;
-        _scale = percent / 100.0;
+        _scale = await getSessionCustomScale(sessionId);
       } catch (_) {
         _scale = 1.0;
       }
