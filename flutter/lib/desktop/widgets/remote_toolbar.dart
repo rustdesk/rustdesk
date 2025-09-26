@@ -1211,7 +1211,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       }
 
       final enabled = _scrollEnabled;
-      debugPrint('[ScrollMenu] build enabled=$enabled');
       return Column(children: [
         RdoMenuButton<String>(
           child: Text(translate('ScrollAuto')),
