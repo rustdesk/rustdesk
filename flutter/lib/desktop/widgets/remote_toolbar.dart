@@ -1315,7 +1315,6 @@ class _CustomScaleMenuControls extends StatefulWidget {
   State<_CustomScaleMenuControls> createState() => _CustomScaleMenuControlsState();
 }
 
-
 class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
   late int _value;
   late final Debouncer<int> _debouncerScale;
