@@ -32,5 +32,3 @@ Future<double> getSessionCustomScale(UuidValue sessionId) async {
   final p = await getSessionCustomScalePercent(sessionId);
   return percentToScale(p);
 }
-
-
