@@ -1,0 +1,51 @@
+name: Build RustDesk Android APK
+
+on:
+  workflow_dispatch:   # 手动触发
+  push:
+    branches: [ main ]
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 安装 Flutter
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.3'   # RustDesk 支持的稳定 Flutter 版本，可根据官方调整
+
+      # 安装 Java（Android 构建需要 JDK）
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # 安装 Android SDK & NDK
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev cmake ninja-build pkg-config
+
+      # 拉取 Flutter 依赖
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # 构建 APK
+      - name: Build Android APK
+        run: flutter build apk --release
+
+      # 上传 APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: rustdesk-android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
