@@ -1502,7 +1502,9 @@ class _RectValueThumbShape extends SliderComponentShape {
       begin: sliderTheme.disabledThumbColor,
       end: sliderTheme.thumbColor,
     );
-    final Color fillColor = colorTween.evaluate(enableAnimation) ?? (sliderTheme.thumbColor ?? Colors.blueAccent);
+    final Color? evaluatedColor = colorTween.evaluate(enableAnimation);
+    final Color? thumbColor = sliderTheme.thumbColor;
+    final Color fillColor = evaluatedColor ?? thumbColor ?? Colors.blueAccent;
 
     final RRect rrect = RRect.fromRectAndRadius(
       Rect.fromCenter(center: center, width: width, height: height),
