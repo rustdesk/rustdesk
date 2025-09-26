@@ -1847,7 +1847,10 @@ class CanvasModel with ChangeNotifier {
       _scale = 1.0 / _devicePixelRatio;
     }
     _resetCanvasOffset(displayWidth, displayHeight);
-    _imageOverflow.value = _x < 0 || y < 0;
+    final overflow = _x < 0 || y < 0;
+    if (_imageOverflow.value != overflow) {
+      _imageOverflow.value = overflow;
+    }
     if (notify) {
       notifyListeners();
     }
