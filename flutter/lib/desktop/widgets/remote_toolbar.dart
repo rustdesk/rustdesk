@@ -1334,18 +1334,16 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
       final opt = await bind.sessionGetFlutterOption(
           sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
       int v = int.tryParse(opt ?? '') ?? 100;
-      if (v < 5) v = 5;
-      if (v > 1000) v = 1000;
+      v = clampCustomScalePercent(v);
       setState(() {
         _value = v;
       });
     });
   }
 
-  int _clamp(int v) => v.clamp(5, 1000);
 
   Future<void> _apply(int v) async {
-    v = _clamp(v);
+    v = clampCustomScalePercent(v);
     setState(() {
       _value = v;
     });
