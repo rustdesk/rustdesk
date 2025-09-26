@@ -1820,6 +1820,10 @@ class CanvasModel with ChangeNotifier {
     );
     // If only the Custom scale percent changed, proceed to update even if
     // the basic ViewStyle fields are equal.
+    // In Custom scale mode, the scale percent can change independently of the other
+    // ViewStyle fields and is not captured by the equality check. Therefore, we must
+    // allow updates to proceed when style == kRemoteViewStyleCustom, even if the
+    // rest of the ViewStyle fields are unchanged.
     if (_lastViewStyle == viewStyle && style != kRemoteViewStyleCustom) {
       return;
     }
