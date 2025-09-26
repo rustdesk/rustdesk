@@ -1833,7 +1833,8 @@ class CanvasModel with ChangeNotifier {
     if (style == kRemoteViewStyleCustom) {
       try {
         _scale = await getSessionCustomScale(sessionId);
-      } catch (_) {
+      } catch (e, stack) {
+        print('Error in getSessionCustomScale: \$e\n\$stack');
         _scale = 1.0;
       }
     }
