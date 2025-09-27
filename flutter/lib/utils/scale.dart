@@ -1,5 +1,4 @@
 import 'package:flutter_hbb/consts.dart';
-import 'package:uuid/uuid.dart';
 
 import 'package:flutter_hbb/generated_bridge.dart'
     if (dart.library.html) 'package:flutter_hbb/web/bridge.dart';
