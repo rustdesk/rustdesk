@@ -1318,6 +1318,53 @@ class _CustomScaleMenuControls extends StatefulWidget {
 class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
   late int _value;
   late final Debouncer<int> _debouncerScale;
+  // Normalized slider position in [0, 1]. We map it nonlinearly to percent.
+  double _pos = 0.0;
+
+  // Piecewise mapping constants
+  static const int _minPercent = 10;
+  static const int _pivotPercent = 100; // 100% should be at 1/3 of track
+  static const int _maxPercent = 1000;
+  static const double _pivotPos = 1.0 / 3.0; // first 1/3 → up to 100%
+  static const double _detentEpsilon = 0.006; // snap range around pivot (~0.6%)
+
+  // Clamp helper for local use
+  int _clamp(int v) => clampCustomScalePercent(v);
+
+  // Map normalized position [0,1] → percent [5,1000] with 100 at 1/3 width.
+  int _mapPosToPercent(double p) {
+    if (p <= 0.0) return _minPercent;
+    if (p >= 1.0) return _maxPercent;
+    if (p <= _pivotPos) {
+      final q = p / _pivotPos; // 0..1
+      final v = _minPercent + q * (_pivotPercent - _minPercent);
+      return _clamp(v.round());
+    } else {
+      final q = (p - _pivotPos) / (1.0 - _pivotPos); // 0..1
+      final v = _pivotPercent + q * (_maxPercent - _pivotPercent);
+      return _clamp(v.round());
+    }
+  }
+
+  // Map percent [5,1000] → normalized position [0,1]
+  double _mapPercentToPos(int percent) {
+    final p = _clamp(percent);
+    if (p <= _pivotPercent) {
+      final q = (p - _minPercent) / (_pivotPercent - _minPercent);
+      return q * _pivotPos;
+    } else {
+      final q = (p - _pivotPercent) / (_maxPercent - _pivotPercent);
+      return _pivotPos + q * (1.0 - _pivotPos);
+    }
+  }
+
+  // Snap normalized position to the pivot when close to it
+  double _snapNormalizedPos(double p) {
+    if ((p - _pivotPos).abs() <= _detentEpsilon) return _pivotPos;
+    if (p < 0.0) return 0.0;
+    if (p > 1.0) return 1.0;
+    return p;
+  }
 
   @override
   void initState() {
@@ -1337,6 +1384,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
       v = clampCustomScalePercent(v);
       setState(() {
         _value = v;
+        _pos = _mapPercentToPos(v);
       });
     });
   }
@@ -1372,6 +1420,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
     final next = _clamp(_value + delta);
     setState(() {
       _value = next;
+      _pos = _mapPercentToPos(next);
     });
     widget.onChanged?.call(next);
     _debouncerScale.value = next;
@@ -1398,22 +1447,26 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
           overlayColor: colorScheme.primary.withOpacity(0.1),
           showValueIndicator: ShowValueIndicator.never,
           thumbShape: _RectValueThumbShape(
-            min: 5,
-            max: 1000,
+            min: _minPercent.toDouble(),
+            max: _maxPercent.toDouble(),
             width: 52,
             height: 24,
             radius: 4,
+            // Display the mapped percent for the current normalized value
+            displayValueForNormalized: (t) => _mapPosToPercent(t),
           ),
         ),
         child: Slider(
-          value: _value.toDouble(),
-          min: 5,
-          max: 1000,
-          divisions: 995,
+          value: _pos,
+          min: 0.0,
+          max: 1.0,
+          divisions: 999,
           onChanged: (v) {
-            final next = _clamp(v.round());
-            if (next != _value) {
+            final snapped = _snapNormalizedPos(v);
+            final next = _mapPosToPercent(snapped);
+            if (next != _value || snapped != _pos) {
               setState(() {
+                _pos = snapped;
                 _value = next;
               });
               widget.onChanged?.call(next);
@@ -1464,6 +1517,9 @@ class _RectValueThumbShape extends SliderComponentShape {
   final double width;
   final double height;
   final double radius;
+  // Optional mapper to compute display value from normalized position [0,1]
+  // If null, falls back to linear interpolation between min and max.
+  final int Function(double normalized)? displayValueForNormalized;
 
   const _RectValueThumbShape({
     required this.min,
@@ -1471,6 +1527,7 @@ class _RectValueThumbShape extends SliderComponentShape {
     required this.width,
     required this.height,
     required this.radius,
+    this.displayValueForNormalized,
   });
 
   @override
@@ -1512,7 +1569,9 @@ class _RectValueThumbShape extends SliderComponentShape {
     canvas.drawRRect(rrect, paint);
 
     // Compute displayed percent from normalized slider value.
-    final int percent = (min + value * (max - min)).round();
+    final int percent = displayValueForNormalized != null
+        ? displayValueForNormalized!(value)
+        : (min + value * (max - min)).round();
     final TextSpan span = TextSpan(
       text: '$percent%',
       style: const TextStyle(
