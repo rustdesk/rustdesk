@@ -25,6 +25,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
+import 'package:flutter_hbb/utils/scale.dart';
 
 class ToolbarState {
   late RxBool _pin;
@@ -172,6 +173,12 @@ class RemoteMenuEntry {
         MenuEntryRadioOption(
           text: translate('Scale adaptive'),
           value: kRemoteViewStyleAdaptive,
+          dismissOnClicked: true,
+          dismissCallback: dismissCallback,
+        ),
+        MenuEntryRadioOption(
+          text: translate('Scale custom'),
+          value: kRemoteViewStyleCustom,
           dismissOnClicked: true,
           dismissCallback: dismissCallback,
         ),
@@ -1024,6 +1031,8 @@ class _DisplayMenu extends StatefulWidget {
 }
 
 class _DisplayMenuState extends State<_DisplayMenu> {
+  final RxInt _customPercent = 100.obs;
+  bool _scrollEnabled = false;
   late final ScreenAdjustor _screenAdjustor = ScreenAdjustor(
     id: widget.id,
     ffi: widget.ffi,
@@ -1038,12 +1047,38 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   String get id => widget.id;
 
   @override
+  void initState() {
+    super.initState();
+    // Initialize custom percent from stored option once
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final v = await getSessionCustomScalePercent(widget.ffi.sessionId);
+        if (_customPercent.value != v) {
+          _customPercent.value = v;
+        }
+      } catch (_) {}
+    });
+    // Initialize scroll enabled snapshot and listen for changes
+    _scrollEnabled = widget.ffi.canvasModel.imageOverflow.value;
+    widget.ffi.canvasModel.addListener(_onCanvasModelChanged);
+  }
+
+  void _onCanvasModelChanged() {
+    final next = widget.ffi.canvasModel.imageOverflow.value;
+    if (next != _scrollEnabled && mounted) {
+      setState(() {
+        _scrollEnabled = next;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     _screenAdjustor.updateScreen();
     menuChildrenGetter() {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
-        viewStyle(),
+        viewStyle(customPercent: _customPercent),
         scrollStyle(),
         imageQuality(),
         codec(),
@@ -1108,33 +1143,59 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     );
   }
 
-  viewStyle() {
+  viewStyle({required RxInt customPercent}) {
     return futureBuilder(
         future: toolbarViewStyle(context, widget.id, widget.ffi),
         hasData: (data) {
           final v = data as List<TRadioMenu<String>>;
+          final bool isCustomSelected = v.isNotEmpty
+              ? v.first.groupValue == kRemoteViewStyleCustom
+              : false;
           return Column(children: [
-            ...v
-                .map((e) => RdoMenuButton<String>(
-                    value: e.value,
-                    groupValue: e.groupValue,
-                    onChanged: e.onChanged,
-                    child: e.child,
-                    ffi: ffi))
-                .toList(),
-            Divider(),
+            ...v.map((e) {
+              final isCustom = e.value == kRemoteViewStyleCustom;
+              final child = isCustom
+                  ? Text(translate('Scale custom'))
+                  : e.child;
+              return RdoMenuButton<String>(
+                  value: e.value,
+                  groupValue: e.groupValue,
+                  onChanged: e.onChanged,
+                  child: child,
+                  ffi: ffi);
+            }).toList(),
+            // Only show a divider when custom is NOT selected
+            if (!isCustomSelected) Divider(),
+            _customControlsIfCustomSelected(onChanged: (v) => customPercent.value = v),
           ]);
         });
+  }
+
+  Widget _customControlsIfCustomSelected({ValueChanged<int>? onChanged}) {
+    return futureBuilder(future: () async {
+      final current = await bind.sessionGetViewStyle(sessionId: ffi.sessionId);
+      return current == kRemoteViewStyleCustom;
+    }(), hasData: (data) {
+      final isCustom = data as bool;
+      return AnimatedSwitcher(
+        duration: Duration(milliseconds: 220),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: isCustom ? _CustomScaleMenuControls(ffi: ffi, onChanged: onChanged) : SizedBox.shrink(),
+      );
+    });
   }
 
   scrollStyle() {
     return futureBuilder(future: () async {
       final viewStyle =
           await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
-      final visible = viewStyle == kRemoteViewStyleOriginal;
+      final visible = viewStyle == kRemoteViewStyleOriginal ||
+          viewStyle == kRemoteViewStyleCustom;
       final scrollStyle =
           await bind.sessionGetScrollStyle(sessionId: ffi.sessionId) ?? '';
-      return {'visible': visible, 'scrollStyle': scrollStyle};
+      final enabled = widget.ffi.canvasModel.imageOverflow.value;
+      return {'visible': visible, 'scrollStyle': scrollStyle, 'enabled': enabled};
     }(), hasData: (data) {
       final visible = data['visible'] as bool;
       if (!visible) return Offstage();
@@ -1146,7 +1207,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         widget.ffi.canvasModel.updateScrollStyle();
       }
 
-      final enabled = widget.ffi.canvasModel.imageOverflow.value;
+      final enabled = _scrollEnabled;
       return Column(children: [
         RdoMenuButton<String>(
           child: Text(translate('ScrollAuto')),
@@ -1242,6 +1303,231 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                       ffi: ffi))
                   .toList());
         });
+  }
+}
+
+class _CustomScaleMenuControls extends StatefulWidget {
+  final FFI ffi;
+  final ValueChanged<int>? onChanged;
+  const _CustomScaleMenuControls({Key? key, required this.ffi, this.onChanged}) : super(key: key);
+
+  @override
+  State<_CustomScaleMenuControls> createState() => _CustomScaleMenuControlsState();
+}
+
+class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
+  late int _value;
+  late final Debouncer<int> _debouncerScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = 100;
+    _debouncerScale = Debouncer<int>(
+       Duration(milliseconds: 300),
+       onChanged: (v) async {
+         await _apply(v);
+       },
+       initialValue: _value,
+     );
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final opt = await bind.sessionGetFlutterOption(
+          sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
+      int v = int.tryParse(opt ?? '') ?? 100;
+      v = clampCustomScalePercent(v);
+      setState(() {
+        _value = v;
+      });
+    });
+  }
+
+
+  Future<void> _apply(int v) async {
+    v = clampCustomScalePercent(v);
+    setState(() {
+      _value = v;
+    });
+    try {
+      await bind.sessionSetFlutterOption(
+          sessionId: widget.ffi.sessionId,
+          k: kCustomScalePercentKey,
+          v: v.toString());
+      final curStyle = await bind.sessionGetViewStyle(sessionId: widget.ffi.sessionId);
+      if (curStyle != kRemoteViewStyleCustom) {
+        await bind.sessionSetViewStyle(
+            sessionId: widget.ffi.sessionId, value: kRemoteViewStyleCustom);
+      }
+      await widget.ffi.canvasModel.updateViewStyle();
+      if (isMobile) {
+        HapticFeedback.selectionClick();
+      }
+      widget.onChanged?.call(v);
+    } catch (e, st) {
+      debugPrint('[CustomScale] Apply failed: $e');
+      debugPrintStack(stackTrace: st);
+    }
+  }
+
+  void _nudge(int delta) {
+    final next = _clamp(_value + delta);
+    setState(() {
+      _value = next;
+    });
+    widget.onChanged?.call(next);
+    _debouncerScale.value = next;
+  }
+
+  @override
+  void dispose() {
+    _debouncerScale.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    const smallBtnConstraints = BoxConstraints(minWidth: 28, minHeight: 28);
+
+    final sliderControl = Semantics(
+      label: translate('Custom scale slider'),
+      value: '$_value%',
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          activeTrackColor: colorScheme.primary,
+          thumbColor: colorScheme.primary,
+          overlayColor: colorScheme.primary.withOpacity(0.1),
+          showValueIndicator: ShowValueIndicator.never,
+          thumbShape: _RectValueThumbShape(
+            min: 5,
+            max: 1000,
+            width: 52,
+            height: 24,
+            radius: 4,
+          ),
+        ),
+        child: Slider(
+          value: _value.toDouble(),
+          min: 5,
+          max: 1000,
+          divisions: 995,
+          onChanged: (v) {
+            final next = _clamp(v.round());
+            if (next != _value) {
+              setState(() {
+                _value = next;
+              });
+              widget.onChanged?.call(next);
+              _debouncerScale.value = next;
+            }
+          },
+        ),
+      ),
+    );
+
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        child: Row(children: [
+          Tooltip(
+            message: translate('Decrease'),
+            child: IconButton(
+              iconSize: 16,
+              padding: EdgeInsets.all(1),
+              constraints: smallBtnConstraints,
+              icon: const Icon(Icons.remove),
+              onPressed: () => _nudge(-1),
+            ),
+          ),
+          Expanded(child: sliderControl),
+          Tooltip(
+            message: translate('Increase'),
+            child: IconButton(
+              iconSize: 16,
+              padding: EdgeInsets.all(1),
+              constraints: smallBtnConstraints,
+              icon: const Icon(Icons.add),
+              onPressed: () => _nudge(1),
+            ),
+          ),
+        ]),
+      ),
+      Divider(),
+    ]);
+  }
+}
+
+// Lightweight rectangular thumb that paints the current percentage.
+// Stateless and uses only SliderTheme colors; avoids allocations beyond a TextPainter per frame.
+class _RectValueThumbShape extends SliderComponentShape {
+  final double min;
+  final double max;
+  final double width;
+  final double height;
+  final double radius;
+
+  const _RectValueThumbShape({
+    required this.min,
+    required this.max,
+    required this.width,
+    required this.height,
+    required this.radius,
+  });
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return Size(width, height);
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final Canvas canvas = context.canvas;
+
+    // Resolve color based on enabled/disabled animation, with safe fallbacks.
+    final ColorTween colorTween = ColorTween(
+      begin: sliderTheme.disabledThumbColor,
+      end: sliderTheme.thumbColor,
+    );
+    final Color? evaluatedColor = colorTween.evaluate(enableAnimation);
+    final Color? thumbColor = sliderTheme.thumbColor;
+    final Color fillColor = evaluatedColor ?? thumbColor ?? Colors.blueAccent;
+
+    final RRect rrect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: width, height: height),
+      Radius.circular(radius),
+    );
+    final Paint paint = Paint()..color = fillColor;
+    canvas.drawRRect(rrect, paint);
+
+    // Compute displayed percent from normalized slider value.
+    final int percent = (min + value * (max - min)).round();
+    final TextSpan span = TextSpan(
+      text: '$percent%',
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final TextPainter tp = TextPainter(
+      text: span,
+      textAlign: TextAlign.center,
+      textDirection: textDirection,
+    );
+    tp.layout(maxWidth: width - 4);
+    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
   }
 }
 

@@ -42,6 +42,7 @@ import '../utils/image.dart' as img;
 import '../common/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
+import 'package:flutter_hbb/utils/scale.dart';
 
 import 'package:flutter_hbb/generated_bridge.dart'
     if (dart.library.html) 'package:flutter_hbb/web/bridge.dart';
@@ -1699,6 +1700,8 @@ class ViewStyle {
         final s2 = height / displayHeight;
         s = s1 < s2 ? s1 : s2;
       }
+    } else if (style == kRemoteViewStyleCustom) {
+      // Custom scale is session-scoped and applied in CanvasModel.updateViewStyle()
     }
     return s;
   }
@@ -1815,7 +1818,13 @@ class CanvasModel with ChangeNotifier {
       displayWidth: displayWidth,
       displayHeight: displayHeight,
     );
-    if (_lastViewStyle == viewStyle) {
+    // If only the Custom scale percent changed, proceed to update even if
+    // the basic ViewStyle fields are equal.
+    // In Custom scale mode, the scale percent can change independently of the other
+    // ViewStyle fields and is not captured by the equality check. Therefore, we must
+    // allow updates to proceed when style == kRemoteViewStyleCustom, even if the
+    // rest of the ViewStyle fields are unchanged.
+    if (_lastViewStyle == viewStyle && style != kRemoteViewStyleCustom) {
       return;
     }
     if (_lastViewStyle.style != viewStyle.style) {
@@ -1824,12 +1833,25 @@ class CanvasModel with ChangeNotifier {
     _lastViewStyle = viewStyle;
     _scale = viewStyle.scale;
 
+    // Apply custom scale percent when in Custom mode
+    if (style == kRemoteViewStyleCustom) {
+      try {
+        _scale = await getSessionCustomScale(sessionId);
+      } catch (e, stack) {
+        print('Error in getSessionCustomScale: \$e\n\$stack');
+        _scale = 1.0;
+      }
+    }
+
     _devicePixelRatio = ui.window.devicePixelRatio;
     if (kIgnoreDpi && style == kRemoteViewStyleOriginal) {
       _scale = 1.0 / _devicePixelRatio;
     }
     _resetCanvasOffset(displayWidth, displayHeight);
-    _imageOverflow.value = _x < 0 || y < 0;
+    final overflow = _x < 0 || y < 0;
+    if (_imageOverflow.value != overflow) {
+      _imageOverflow.value = overflow;
+    }
     if (notify) {
       notifyListeners();
     }
@@ -1850,7 +1872,7 @@ class CanvasModel with ChangeNotifier {
   tryUpdateScrollStyle(Duration duration, String? style) async {
     if (_scrollStyle != ScrollStyle.scrollbar) return;
     style ??= await bind.sessionGetViewStyle(sessionId: sessionId);
-    if (style != kRemoteViewStyleOriginal) {
+    if (style != kRemoteViewStyleOriginal && style != kRemoteViewStyleCustom) {
       return;
     }
 
