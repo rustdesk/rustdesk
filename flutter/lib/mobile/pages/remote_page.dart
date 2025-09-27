@@ -792,9 +792,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 touchMode: gFFI.ffiModel.touchMode,
                 onTouchModeChange: (t) {
                   gFFI.ffiModel.toggleTouchMode();
-                  final v = gFFI.ffiModel.touchMode ? 'Y' : '';
                   bind.sessionPeerOption(
-                      sessionId: sessionId, name: kOptionTouchMode, value: v);
+                      sessionId: sessionId, name: kOptionTouchMode, value: '');
+                  final v = gFFI.ffiModel.touchMode ? 'Y' : '';
+                  bind.mainSetLocalOption(key: kOptionTouchMode, value: v);
                 })));
   }
 

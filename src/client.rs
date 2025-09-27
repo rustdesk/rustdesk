@@ -1908,10 +1908,21 @@ impl LoginConfigHandler {
     /// * `v` - value of option
     pub fn set_option(&mut self, k: String, v: String) {
         let mut config = self.load_config();
-        if v == self.get_option(&k) {
-            return;
+        // Erase peer option for "touch-mode".
+        // Because we want to move this option to local config.
+        if k == keys::OPTION_TOUCH_MODE {
+            let contains_key = config.options.contains_key(k.as_str())
+                || self.config.options.contains_key(k.as_str());
+            if !contains_key {
+                return;
+            }
+            config.options.remove(k.as_str());
+        } else {
+            if v == self.get_option(&k) {
+                return;
+            }
+            config.options.insert(k, v);
         }
-        config.options.insert(k, v);
         self.save_config(config);
     }
 
@@ -2438,7 +2449,13 @@ impl LoginConfigHandler {
 
     pub fn get_option(&self, k: &str) -> String {
         if let Some(v) = self.config.options.get(k) {
-            v.clone()
+            // For touch-mode option
+            // Change "" to "N", then "" means not set, "N" means off, "Y" means on.
+            if k == keys::OPTION_TOUCH_MODE && v.is_empty() {
+                "N".to_owned()
+            } else {
+                v.clone()
+            }
         } else {
             "".to_owned()
         }

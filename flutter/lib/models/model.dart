@@ -1104,9 +1104,16 @@ class FfiModel with ChangeNotifier {
     if (isPeerAndroid) {
       _touchMode = true;
     } else {
-      _touchMode = await bind.sessionGetOption(
-              sessionId: sessionId, arg: kOptionTouchMode) !=
-          '';
+      // '' or null means not set
+      // 'Y' means enabled
+      // 'N' means disabled
+      final sessionOpt = await bind.sessionGetOption(
+          sessionId: sessionId, arg: kOptionTouchMode);
+      if (sessionOpt == null || sessionOpt == '') {
+        _touchMode = bind.mainGetLocalOption(key: kOptionTouchMode) != '';
+      } else {
+        _touchMode = sessionOpt == 'Y';
+      }
     }
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
