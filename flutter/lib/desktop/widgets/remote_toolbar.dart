@@ -1322,7 +1322,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
   double _pos = 0.0;
 
   // Piecewise mapping constants
-  static const int _minPercent = 10;
+  static const int _minPercent = 5;
   static const int _pivotPercent = 100; // 100% should be at 1/3 of track
   static const int _maxPercent = 1000;
   static const double _pivotPos = 1.0 / 3.0; // first 1/3 → up to 100%

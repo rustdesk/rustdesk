@@ -2,13 +2,12 @@ import 'package:flutter_hbb/consts.dart';
 
 import 'package:flutter_hbb/generated_bridge.dart'
     if (dart.library.html) 'package:flutter_hbb/web/bridge.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:uuid/uuid.dart';
 
 /// Clamp custom scale percent to supported bounds.
 /// Keep this in sync with the slider's minimum in the desktop toolbar UI.
 int clampCustomScalePercent(int percent) {
-  if (percent < 10) return 10;
+  if (percent < 5) return 5;
   if (percent > 1000) return 1000;
   return percent;
 }
