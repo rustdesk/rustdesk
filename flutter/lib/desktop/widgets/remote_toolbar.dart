@@ -1460,7 +1460,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
           value: _pos,
           min: 0.0,
           max: 1.0,
-          divisions: 999,
+          divisions: (_maxPercent - _minPercent).round(),
           onChanged: (v) {
             final snapped = _snapNormalizedPos(v);
             final next = _mapPosToPercent(snapped);
