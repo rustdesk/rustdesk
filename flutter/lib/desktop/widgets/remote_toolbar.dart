@@ -1157,12 +1157,26 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               final child = isCustom
                   ? Text(translate('Scale custom'))
                   : e.child;
+              // Whether the current selection is already custom
+              final bool isGroupCustomSelected =
+                  e.groupValue == kRemoteViewStyleCustom;
+              // Keep menu open when switching INTO custom so the slider is visible immediately
+              final bool keepOpenForThisItem = isCustom && !isGroupCustomSelected;
               return RdoMenuButton<String>(
                   value: e.value,
                   groupValue: e.groupValue,
-                  onChanged: e.onChanged,
+                  onChanged: (value) {
+                    // Perform the original change
+                    e.onChanged?.call(value);
+                    // Only force a rebuild when we keep the menu open to reveal the slider
+                    if (keepOpenForThisItem) {
+                      setState(() {});
+                    }
+                  },
                   child: child,
-                  ffi: ffi);
+                  ffi: ffi,
+                  // When entering custom, keep submenu open to show the slider controls
+                  closeOnActivate: !keepOpenForThisItem);
             }).toList(),
             // Only show a divider when custom is NOT selected
             if (!isCustomSelected) Divider(),
@@ -2611,6 +2625,8 @@ class RdoMenuButton<T> extends StatelessWidget {
   final ValueChanged<T?>? onChanged;
   final Widget? child;
   final FFI? ffi;
+  // When true, submenu will be dismissed on activate; when false, it stays open.
+  final bool closeOnActivate;
   const RdoMenuButton({
     Key? key,
     required this.value,
@@ -2618,6 +2634,7 @@ class RdoMenuButton<T> extends StatelessWidget {
     required this.child,
     this.ffi,
     this.onChanged,
+    this.closeOnActivate = true,
   }) : super(key: key);
 
   @override
@@ -2626,9 +2643,10 @@ class RdoMenuButton<T> extends StatelessWidget {
       value: value,
       groupValue: groupValue,
       child: child,
+      closeOnActivate: closeOnActivate,
       onChanged: onChanged != null
           ? (T? value) {
-              if (ffi != null) {
+              if (ffi != null && closeOnActivate) {
                 _menuDismissCallback(ffi!);
               }
               onChanged?.call(value);
