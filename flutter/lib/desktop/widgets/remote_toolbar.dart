@@ -1321,12 +1321,12 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
   // Normalized slider position in [0, 1]. We map it nonlinearly to percent.
   double _pos = 0.0;
 
-  // Piecewise mapping constants
-  static const int _minPercent = 5;
-  static const int _pivotPercent = 100; // 100% should be at 1/3 of track
-  static const int _maxPercent = 1000;
-  static const double _pivotPos = 1.0 / 3.0; // first 1/3 → up to 100%
-  static const double _detentEpsilon = 0.006; // snap range around pivot (~0.6%)
+  // Piecewise mapping constants (moved to consts.dart)
+  static const int _minPercent = kScaleCustomMinPercent;
+  static const int _pivotPercent = kScaleCustomPivotPercent; // 100% should be at 1/3 of track
+  static const int _maxPercent = kScaleCustomMaxPercent;
+  static const double _pivotPos = kScaleCustomPivotPos; // first 1/3 → up to 100%
+  static const double _detentEpsilon = kScaleCustomDetentEpsilon; // snap range around pivot (~0.6%)
 
   // Clamp helper for local use
   int _clamp(int v) => clampCustomScalePercent(v);
@@ -1371,7 +1371,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
     super.initState();
     _value = 100;
     _debouncerScale = Debouncer<int>(
-       Duration(milliseconds: 300),
+       kDebounceCustomScaleDuration,
        onChanged: (v) async {
          await _apply(v);
        },

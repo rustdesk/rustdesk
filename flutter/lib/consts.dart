@@ -316,8 +316,6 @@ const kRemoteViewStyleAdaptive = 'adaptive';
 /// [kRemoteViewStyleCustom] Show remote image at a user-defined scale percent.
 const kRemoteViewStyleCustom = 'custom';
 
-/// Flutter option key for storing custom scale percent (integer 5-1000)
-const String kCustomScalePercentKey = 'custom_scale_percent';
 
 /// [kRemoteScrollStyleAuto] Scroll image auto by position.
 const kRemoteScrollStyleAuto = 'scrollauto';
@@ -350,6 +348,15 @@ const Set<PointerDeviceKind> kTouchBasedDeviceKinds = {
   PointerDeviceKind.stylus,
   PointerDeviceKind.invertedStylus,
 };
+
+// Scale custom related constants
+const int kScaleCustomMinPercent = 5;
+const int kScaleCustomPivotPercent = 100; // 100% should be at 1/3 of track
+const int kScaleCustomMaxPercent = 1000;
+const double kScaleCustomPivotPos = 1.0 / 3.0; // first 1/3 → up to 100%
+const double kScaleCustomDetentEpsilon = 0.006; // snap range around pivot (~0.6%)
+const Duration kDebounceCustomScaleDuration = Duration(milliseconds: 300);
+const String kCustomScalePercentKey = 'custom_scale_percent'; // Flutter option key for storing custom scale percent (integer 5-1000)
 
 // ================================ mobile ================================
 
