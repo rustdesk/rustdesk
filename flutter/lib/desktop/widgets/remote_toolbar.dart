@@ -1032,7 +1032,6 @@ class _DisplayMenu extends StatefulWidget {
 
 class _DisplayMenuState extends State<_DisplayMenu> {
   final RxInt _customPercent = 100.obs;
-  bool _scrollEnabled = false;
   late final ScreenAdjustor _screenAdjustor = ScreenAdjustor(
     id: widget.id,
     ffi: widget.ffi,
@@ -1058,18 +1057,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         }
       } catch (_) {}
     });
-    // Initialize scroll enabled snapshot and listen for changes
-    _scrollEnabled = widget.ffi.canvasModel.imageOverflow.value;
-    widget.ffi.canvasModel.addListener(_onCanvasModelChanged);
-  }
-
-  void _onCanvasModelChanged() {
-    final next = widget.ffi.canvasModel.imageOverflow.value;
-    if (next != _scrollEnabled && mounted) {
-      setState(() {
-        _scrollEnabled = next;
-      });
-    }
   }
 
   @override
@@ -1208,8 +1195,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           viewStyle == kRemoteViewStyleCustom;
       final scrollStyle =
           await bind.sessionGetScrollStyle(sessionId: ffi.sessionId) ?? '';
-      final enabled = widget.ffi.canvasModel.imageOverflow.value;
-      return {'visible': visible, 'scrollStyle': scrollStyle, 'enabled': enabled};
+      return {'visible': visible, 'scrollStyle': scrollStyle};
     }(), hasData: (data) {
       final visible = data['visible'] as bool;
       if (!visible) return Offstage();
@@ -1221,24 +1207,27 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         widget.ffi.canvasModel.updateScrollStyle();
       }
 
-      final enabled = _scrollEnabled;
-      return Column(children: [
-        RdoMenuButton<String>(
-          child: Text(translate('ScrollAuto')),
-          value: kRemoteScrollStyleAuto,
-          groupValue: groupValue,
-          onChanged: enabled ? (value) => onChange(value) : null,
-          ffi: widget.ffi,
-        ),
-        RdoMenuButton<String>(
-          child: Text(translate('Scrollbar')),
-          value: kRemoteScrollStyleBar,
-          groupValue: groupValue,
-          onChanged: enabled ? (value) => onChange(value) : null,
-          ffi: widget.ffi,
-        ),
-        Divider(),
-      ]);
+      return Obx(() => Column(children: [
+            RdoMenuButton<String>(
+              child: Text(translate('ScrollAuto')),
+              value: kRemoteScrollStyleAuto,
+              groupValue: groupValue,
+              onChanged: widget.ffi.canvasModel.imageOverflow.value
+                  ? (value) => onChange(value)
+                  : null,
+              ffi: widget.ffi,
+            ),
+            RdoMenuButton<String>(
+              child: Text(translate('Scrollbar')),
+              value: kRemoteScrollStyleBar,
+              groupValue: groupValue,
+              onChanged: widget.ffi.canvasModel.imageOverflow.value
+                  ? (value) => onChange(value)
+                  : null,
+              ffi: widget.ffi,
+            ),
+            Divider(),
+          ]));
     });
   }
 
