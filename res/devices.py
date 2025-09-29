@@ -95,8 +95,17 @@ def delete(url, token, guid, id):
 
 def assign(url, token, guid, id, type, value):
     print("assign", id, type, value)
-    if type != "ab" and type != "strategy_name" and type != "user_name":
-        print("Invalid type, it must be 'ab', 'strategy_name' or 'user_name'")
+    valid_types = [
+        "ab",
+        "strategy_name",
+        "user_name",
+        "device_group_name",
+        "note",
+        "device_username",
+        "device_name",
+    ]
+    if type not in valid_types:
+        print(f"Invalid type, it must be one of: {', '.join(valid_types)}")
         return
     data = {"type": type, "value": value}
     headers = {"Authorization": f"Bearer {token}"}
@@ -124,7 +133,7 @@ def main():
     parser.add_argument("--device_group_name", help="Device group name")
     parser.add_argument(
         "--assign_to",
-        help="<type>=<value>, e.g. user_name=mike, strategy_name=test, ab=ab1, ab=ab1,tag1",
+        help="<type>=<value>, e.g. user_name=mike, strategy_name=test, device_group_name=group1, note=note1, device_username=username1, device_name=name1, ab=ab1, ab=ab1,tag1,alias1,password1,note1"
     )
     parser.add_argument(
         "--offline_days", type=int, help="Offline duration in days, e.g., 7"
@@ -148,28 +157,37 @@ def main():
     if args.command == "view":
         for device in devices:
             print(device)
-    elif args.command == "disable":
-        for device in devices:
-            response = disable(args.url, args.token, device["guid"], device["id"])
-            print(response)
-    elif args.command == "enable":
-        for device in devices:
-            response = enable(args.url, args.token, device["guid"], device["id"])
-            print(response)
-    elif args.command == "delete":
-        for device in devices:
-            response = delete(args.url, args.token, device["guid"], device["id"])
-            print(response)
-    elif args.command == "assign":
-        if "=" not in args.assign_to:
-            print("Invalid assign_to format, it must be <type>=<value>")
-            return
-        type, value = args.assign_to.split("=", 1)
-        for device in devices:
-            response = assign(
-                args.url, args.token, device["guid"], device["id"], type, value
-            )
-            print(response)
+    elif args.command in ["disable", "enable", "delete", "assign"]:
+        # Check if we need user confirmation for multiple devices
+        if len(devices) > 1:
+            print(f"Found {len(devices)} devices. Do you want to proceed with {args.command} operation on the devices? (Y/N)")
+            confirmation = input("Type 'Y' to confirm: ").strip()
+            if confirmation.upper() != 'Y':
+                print("Operation cancelled.")
+                return
+        
+        if args.command == "disable":
+            for device in devices:
+                response = disable(args.url, args.token, device["guid"], device["id"])
+                print(response)
+        elif args.command == "enable":
+            for device in devices:
+                response = enable(args.url, args.token, device["guid"], device["id"])
+                print(response)
+        elif args.command == "delete":
+            for device in devices:
+                response = delete(args.url, args.token, device["guid"], device["id"])
+                print(response)
+        elif args.command == "assign":
+            if "=" not in args.assign_to:
+                print("Invalid assign_to format, it must be <type>=<value>")
+                return
+            type, value = args.assign_to.split("=", 1)
+            for device in devices:
+                response = assign(
+                    args.url, args.token, device["guid"], device["id"], type, value
+                )
+                print(response)
 
 
 if __name__ == "__main__":
