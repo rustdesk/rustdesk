@@ -710,5 +710,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "لطفاً نام کاربری مدیریتی را برای ارتقاء دسترسی وارد کنید."),
         ("Preparing for installation ...", "در حال آماده‌سازی برای نصب..."),
         ("Show my cursor", "نمایش نشانگر من"),
+        ("Scale custom", ""),
+        ("Custom scale slider", ""),
+        ("Decrease", ""),
+        ("Increase", ""),
     ].iter().cloned().collect();
 }
