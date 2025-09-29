@@ -1374,12 +1374,12 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
     super.initState();
     _value = 100;
     _debouncerScale = Debouncer<int>(
-       kDebounceCustomScaleDuration,
-       onChanged: (v) async {
-         await _apply(v);
-       },
-       initialValue: _value,
-     );
+      kDebounceCustomScaleDuration,
+      onChanged: (v) async {
+        await _apply(v);
+      },
+      initialValue: _value,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final opt = await bind.sessionGetFlutterOption(
           sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
