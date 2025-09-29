@@ -1381,14 +1381,21 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
       initialValue: _value,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final opt = await bind.sessionGetFlutterOption(
-          sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
-      int v = int.tryParse(opt ?? '') ?? 100;
-      v = clampCustomScalePercent(v);
-      setState(() {
-        _value = v;
-        _pos = _mapPercentToPos(v);
-      });
+      try {
+        final opt = await bind.sessionGetFlutterOption(
+            sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
+        int v = int.tryParse(opt ?? '') ?? 100;
+        v = clampCustomScalePercent(v);
+        if (mounted) {
+          setState(() {
+            _value = v;
+            _pos = _mapPercentToPos(v);
+          });
+        }
+      } catch (e, st) {
+        debugPrint('[CustomScale] Failed to get initial value: $e');
+        debugPrintStack(stackTrace: st);
+      }
     });
   }
 
