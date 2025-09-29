@@ -711,8 +711,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Preparing for installation ...", ""),
         ("Show my cursor", ""),
         ("Scale custom", "Scalare personalizată"),
-        ("Custom scale slider", ""),
-        ("Decrease", ""),
-        ("Increase", ""),
+        ("Custom scale slider", "Glisor pentru scalare personalizată"),
+        ("Decrease", "Micșorează"),
+        ("Increase", "Mărește"),
     ].iter().cloned().collect();
 }
