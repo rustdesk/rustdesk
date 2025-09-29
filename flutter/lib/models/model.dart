@@ -1838,7 +1838,8 @@ class CanvasModel with ChangeNotifier {
       try {
         _scale = await getSessionCustomScale(sessionId);
       } catch (e, stack) {
-        debugPrint('Error in getSessionCustomScale: $e\n$stack');
+        debugPrint('Error in getSessionCustomScale: $e');
+        debugPrintStack(stackTrace: stack);
         _scale = 1.0;
       }
     }
