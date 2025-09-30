@@ -1382,10 +1382,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        final opt = await bind.sessionGetFlutterOption(
-            sessionId: widget.ffi.sessionId, k: kCustomScalePercentKey);
-        int v = int.tryParse(opt ?? '') ?? 100;
-        v = clampCustomScalePercent(v);
+        final v = await getSessionCustomScalePercent(widget.ffi.sessionId);
         if (mounted) {
           setState(() {
             _value = v;
