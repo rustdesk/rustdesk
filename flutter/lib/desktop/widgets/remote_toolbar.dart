@@ -1467,8 +1467,8 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
           value: _pos,
           min: 0.0,
           max: 1.0,
-          // Use wide range of divisions (995 at the time of writing) to provide ~1% precision increments.
-          // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons which is undesirable for big ranges.
+          // Use a wide range of divisions (calculated as (_maxPercent - _minPercent)) to provide ~1% precision increments.
+          // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons, which is undesirable for big ranges.
           divisions: (_maxPercent - _minPercent).round(),
           onChanged: (v) {
             final snapped = _snapNormalizedPos(v);
