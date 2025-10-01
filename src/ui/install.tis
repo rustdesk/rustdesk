@@ -37,6 +37,12 @@ class Install: Reactor.Component {
     event click $(#run-without-install) {
         handler.run_without_install();
     }
+    // DHB: Install ekranını otomatik atla (portable modda başlat)
+function self.ready() {
+    handler.run_without_install();
+    // İstersen pencereyi tamamen kapat:
+    // view.close();
+}
 
     event click $(#path) {
         install_path = view.selectFolder() || "";
