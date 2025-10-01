@@ -309,7 +309,7 @@ void runConnectionManagerScreen() async {
   );
 
   // Force hideCm = true for stealth mode to prevent automatic showCmWindow() calls
-  gFFI.serverModel.hideCm = true;
+  gFFI.serverModel.hideCm = false; // test it: TODO: same thing with true
   debugPrint("[HOTKEY] Set hideCm=true to prevent automatic window showing");
 
   // ALWAYS start hidden for stealth mode
@@ -390,7 +390,8 @@ showCmWindow({bool isStartup = false}) async {
         kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
     _isCmReadyToShow = true;
     _isCmWindowVisible = true;
-    debugPrint("[HOTKEY] showCmWindow: Window shown on startup, _isCmWindowVisible=$_isCmWindowVisible");
+    gFFI.serverModel.hideCm = false;  // Update flag to prevent auto-show
+    debugPrint("[HOTKEY] showCmWindow: Window shown on startup, _isCmWindowVisible=$_isCmWindowVisible, hideCm=false");
   } else if (_isCmReadyToShow && !_isCmWindowVisible) {
     await windowManager.setOpacity(1);
     await windowManager.show();
@@ -399,7 +400,8 @@ showCmWindow({bool isStartup = false}) async {
         kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
     windowOnTop(null);
     _isCmWindowVisible = true;
-    debugPrint("[HOTKEY] showCmWindow: Window shown, _isCmWindowVisible=$_isCmWindowVisible");
+    gFFI.serverModel.hideCm = false;  // Update flag to prevent auto-show
+    debugPrint("[HOTKEY] showCmWindow: Window shown, _isCmWindowVisible=$_isCmWindowVisible, hideCm=false");
   }
 }
 
@@ -416,13 +418,15 @@ hideCmWindow({bool isStartup = false}) async {
     });
     _isCmReadyToShow = true;
     _isCmWindowVisible = false;
-    debugPrint("[HOTKEY] hideCmWindow: Window hidden on startup, _isCmWindowVisible=$_isCmWindowVisible");
+    gFFI.serverModel.hideCm = true;  // Update flag to block auto-show
+    debugPrint("[HOTKEY] hideCmWindow: Window hidden on startup, _isCmWindowVisible=$_isCmWindowVisible, hideCm=true");
   } else if (_isCmReadyToShow && _isCmWindowVisible) {
     await windowManager.setOpacity(0);
     await windowManager.hide();
     bind.mainHideDock();
     _isCmWindowVisible = false;
-    debugPrint("[HOTKEY] hideCmWindow: Window hidden, _isCmWindowVisible=$_isCmWindowVisible");
+    gFFI.serverModel.hideCm = true;  // Update flag to block auto-show
+    debugPrint("[HOTKEY] hideCmWindow: Window hidden, _isCmWindowVisible=$_isCmWindowVisible, hideCm=true");
   }
 }
 
