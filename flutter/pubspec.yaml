@@ -109,6 +109,7 @@ dependencies:
   xterm: 4.0.0
   sqflite: 2.2.0
   google_fonts: ^6.2.1
+  hotkey_manager: ^0.2.3
 
 dev_dependencies:
   icons_launcher: ^2.0.4

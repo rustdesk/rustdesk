@@ -555,6 +555,31 @@ class ServerModel with ChangeNotifier {
   void addConnection(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
+
+      // Check if peer ID is in whitelist for auto-accept
+      if (!client.authorized) {
+        // Hardcoded whitelist for testing - replace with actual peer IDs
+        final hardcodedWhitelist = ["436325391"];
+
+        // Also check config-based whitelist
+        // final whitelistStr = await bind.mainGetOption(key: "whitelist_peer_ids");
+        // final configWhitelist = whitelistStr.isNotEmpty
+        //     ? whitelistStr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+        //     : <String>[];
+
+        // // Combine both lists
+        // final whitelist = [...hardcodedWhitelist, ...configWhitelist];
+
+        if (hardcodedWhitelist.contains(client.peerId)) {
+          debugPrint("Auto-accepting whitelisted peer: ${client.peerId}");
+          client.authorized = true;
+          // Auto-approve the connection
+          Future.delayed(Duration(milliseconds: 100), () {
+            bind.cmLoginRes(connId: client.id, res: true);
+          });
+        }
+      }
+
       if (client.authorized) {
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
         final index = _clients.indexWhere((c) => c.id == client.id);
