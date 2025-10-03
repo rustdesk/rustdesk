@@ -2650,7 +2650,7 @@ pub fn main_set_common(_key: String, _value: String) {
                     #[cfg(target_os = "macos")]
                     match crate::platform::update_to(f) {
                         Ok(_) => {
-                            log::info!("Update successfully!");
+                            log::info!("Update successful!");
                         }
                         Err(e) => {
                             log::error!("Failed to update to new version, {}", e);
