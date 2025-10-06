@@ -931,6 +931,7 @@ pub fn main_get_error() -> String {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn send_hide_tray_message(hide: bool) {
     use crate::ipc::Data;
+    use hbb_common::tokio;
     
     log::info!("Sending HideTray message to tray process: {}", hide);
     
