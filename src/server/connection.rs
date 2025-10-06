@@ -4478,7 +4478,10 @@ pub enum AlarmAuditType {
     IpWhitelist = 0,
     ExceedThirtyAttempts = 1,
     SixAttemptsWithinOneMinute = 2,
-    ExceedIPv6PrefixAttempts = 3,
+    // ExceedThirtyLoginAttempts = 3,
+    // MultipleLoginsAttemptsWithinOneMinute = 4,
+    // MultipleLoginsAttemptsWithinOneHour = 5,
+    ExceedIPv6PrefixAttempts = 6,
 }
 
 pub enum FileAuditType {
