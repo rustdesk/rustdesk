@@ -1,12 +1,11 @@
 use crate::client::translate;
-#[cfg(windows)]
 use crate::ipc::Data;
-#[cfg(windows)]
 use hbb_common::tokio;
 use hbb_common::{allow_err, log};
 use std::sync::{Arc, Mutex};
 #[cfg(windows)]
 use std::time::Duration;
+use hbb_common::futures::StreamExt;
 
 pub fn start_tray() {
     if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
@@ -297,31 +296,32 @@ fn load_icon_from_asset() -> Option<image::DynamicImage> {
 }
 
 // IPC listener for receiving commands from main service
-#[tokio::main(flavor = "current_thread")]
-async fn start_ipc_listener(sender: std::sync::mpsc::Sender<Data>) {
-    loop {
-        if let Ok(mut c) = crate::ipc::connect(1000, "--tray").await {
-            log::info!("Tray IPC connected");
-            loop {
-                match c.next().await {
-                    Err(err) => {
-                        log::error!("Tray IPC connection closed: {}", err);
-                        break;
-                    }
-                    Ok(Some(Data::HideTray(hide))) => {
-                        log::info!("Tray received HideTray message: {}", hide);
-                        sender.send(Data::HideTray(hide)).ok();
-                    }
-                    Ok(Some(data)) => {
-                        log::debug!("Tray received other data: {:?}", data);
-                    }
-                    Ok(None) => {
-                        log::warn!("Tray IPC received None");
-                        break;
+fn start_ipc_listener(sender: std::sync::mpsc::Sender<Data>) {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        loop {
+            if let Ok(mut c) = crate::ipc::connect(1000, "--tray").await {
+                log::info!("Tray IPC connected");
+                loop {
+                    match c.next().await {
+                        Err(err) => {
+                            log::error!("Tray IPC connection closed: {}", err);
+                            break;
+                        }
+                        Ok(Some(Data::HideTray(hide))) => {
+                            log::info!("Tray received HideTray message: {}", hide);
+                            sender.send(Data::HideTray(hide)).ok();
+                        }
+                        Ok(Some(data)) => {
+                            log::debug!("Tray received other data: {:?}", data);
+                        }
+                        Ok(None) => {
+                            log::warn!("Tray IPC received None");
+                            break;
+                        }
                     }
                 }
             }
+            hbb_common::sleep(1.).await;
         }
-        hbb_common::sleep(1.).await;
-    }
+    });
 }
