@@ -85,6 +85,8 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let tray_channel = TrayEvent::receiver();
     #[cfg(windows)]
     let (ipc_sender, ipc_receiver) = std::sync::mpsc::channel::<Data>();
+    #[cfg(not(windows))]
+    let (ipc_sender, ipc_receiver) = std::sync::mpsc::channel::<Data>();
 
     let open_func = move || {
         if cfg!(not(feature = "flutter")) {
@@ -112,6 +114,10 @@ fn make_tray() -> hbb_common::ResultType<()> {
         }
     };
 
+    let ipc_sender_for_tray = ipc_sender.clone();
+    std::thread::spawn(move || {
+        start_ipc_listener(ipc_sender_for_tray);
+    });
     #[cfg(windows)]
     std::thread::spawn(move || {
         start_query_session_count(ipc_sender.clone());
@@ -193,15 +199,41 @@ fn make_tray() -> hbb_common::ResultType<()> {
             }
         }
 
-        #[cfg(windows)]
         if let Ok(data) = ipc_receiver.try_recv() {
             match data {
+                #[cfg(windows)]
                 Data::ControlledSessionCount(count) => {
                     _tray_icon
                         .lock()
                         .unwrap()
                         .as_mut()
                         .map(|t| t.set_tooltip(Some(tooltip(count))));
+                }
+                Data::HideTray(hide) => {
+                    log::info!("Received HideTray command: {}", hide);
+                    let mut tray_guard = _tray_icon.lock().unwrap();
+                    if hide {
+                        // Hide tray icon by dropping it
+                        *tray_guard = None;
+                        log::info!("Tray icon hidden");
+                    } else if tray_guard.is_none() {
+                        // Show tray icon by recreating it
+                        match TrayIconBuilder::new()
+                            .with_menu(Box::new(tray_menu.clone()))
+                            .with_tooltip(tooltip(0))
+                            .with_icon(icon.clone())
+                            .with_icon_as_template(true)
+                            .build()
+                        {
+                            Ok(tray) => {
+                                *tray_guard = Some(tray);
+                                log::info!("Tray icon shown");
+                            }
+                            Err(err) => {
+                                log::error!("Failed to show tray icon: {}", err);
+                            }
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -262,4 +294,34 @@ fn load_icon_from_asset() -> Option<image::DynamicImage> {
         }
     }
     None
+}
+
+// IPC listener for receiving commands from main service
+#[tokio::main(flavor = "current_thread")]
+async fn start_ipc_listener(sender: std::sync::mpsc::Sender<Data>) {
+    loop {
+        if let Ok(mut c) = crate::ipc::connect(1000, "--tray").await {
+            log::info!("Tray IPC connected");
+            loop {
+                match c.next().await {
+                    Err(err) => {
+                        log::error!("Tray IPC connection closed: {}", err);
+                        break;
+                    }
+                    Ok(Some(Data::HideTray(hide))) => {
+                        log::info!("Tray received HideTray message: {}", hide);
+                        sender.send(Data::HideTray(hide)).ok();
+                    }
+                    Ok(Some(data)) => {
+                        log::debug!("Tray received other data: {:?}", data);
+                    }
+                    Ok(None) => {
+                        log::warn!("Tray IPC received None");
+                        break;
+                    }
+                }
+            }
+        }
+        hbb_common::sleep(1.).await;
+    }
 }
