@@ -1185,6 +1185,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             //修复隐藏CM功能：      
             if (usePassword)
                hide_cm(!locked).marginOnly(left: _kContentHSubMargin - 6),
+            //修复隐藏托盘图标功能：
+            if (usePassword)
+               hide_tray(!locked).marginOnly(left: _kContentHSubMargin - 6),
             if (usePassword) radios[2],
           ]);
         })));
@@ -1384,6 +1387,46 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                         style: TextStyle(
                             color: disabledTextColor(
                                 context, enabled && enableHideCm)),
+                      ),
+                    ),
+                  ],
+                ),
+              ));
+        }));
+  }
+  //修复隐藏托盘图标功能：
+  Widget hide_tray(bool enabled) {
+    return ChangeNotifierProvider.value(
+        value: gFFI.serverModel,
+        child: Consumer<ServerModel>(builder: (context, model, child) {
+          final enableHideTray = model.approveMode == 'password' &&
+              model.verificationMethod == kUsePermanentPassword;
+          onHideTrayChanged(bool? b) {
+            if (b != null) {
+              bind.mainSetOption(
+                  key: 'hide-tray', value: bool2option('hide-tray', b));
+            }
+          }
+
+          return Tooltip(
+              message: enableHideTray ? "" : translate('hide_cm_tip'),
+              child: GestureDetector(
+                onTap:
+                    enableHideTray ? () => onHideTrayChanged(!model.hideTray) : null,
+                child: Row(
+                  children: [
+                    Checkbox(
+                            value: model.hideTray,
+                            onChanged: enabled && enableHideTray
+                                ? onHideTrayChanged
+                                : null)
+                        .marginOnly(right: 5),
+                    Expanded(
+                      child: Text(
+                        translate('Hide Tray'),
+                        style: TextStyle(
+                            color: disabledTextColor(
+                                context, enabled && enableHideTray)),
                       ),
                     ),
                   ],

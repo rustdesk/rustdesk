@@ -9,6 +9,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Established", "已建立"),
         ("connecting_status", "正在接入 RustDesk 网络..."),
         ("Enable service", "允许服务"),
+        //修复隐藏托盘图标功能：
+        ("Hide Tray", "隐藏托盘图标"),
         ("Start service", "启动服务"),
         ("Service is running", "服务正在运行"),
         ("Service is not running", "服务未运行"),
