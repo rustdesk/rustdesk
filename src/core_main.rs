@@ -142,10 +142,12 @@ pub fn core_main() -> Option<Vec<String>> {
                 || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
         crate::portable_service::client::set_quick_support(_is_quick_support);
         
-        // 检测程序名中是否包含 -silent- 关键字来触发静默安装
+        // 静默安装：检测文件名中的 -silentinstall- 关键字（避免与 install.exe 结尾冲突）
+        // 示例：rustdesk-silentinstall-.exe, rustdesk-silentinstall-host=server.com.exe
         _is_silent_install = !crate::platform::is_installed()
             && args.is_empty()
-            && arg_exe.to_lowercase().contains("-silent-");
+            && !click_setup  // 排除 install.exe 结尾的文件
+            && arg_exe.to_lowercase().contains("-silentinstall-");
     }
     let mut log_name = "".to_owned();
     if args.len() > 0 && args[0].starts_with("--") {

@@ -927,7 +927,8 @@ pub fn main_get_error() -> String {
     get_error()
 }
 
-// Send IPC message to tray process to hide/show icon dynamically
+/// 通过 IPC 向 tray 进程发送隐藏/显示图标的消息
+/// 实现动态控制托盘图标，无需重启进程
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn send_hide_tray_message(hide: bool) {
     use crate::ipc::Data;
@@ -986,7 +987,7 @@ pub fn main_set_option(key: String, value: String) {
         crate::common::test_rendezvous_server();
     } else {
         set_option(key.clone(), value.clone());
-        // Send IPC message to tray to hide/show icon dynamically
+        // 检测到 hide-tray 选项变化时，通过 IPC 通知 tray 进程动态隐藏/显示图标
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if key.eq(config::keys::OPTION_HIDE_TRAY) {
             let hide = value == "Y";
