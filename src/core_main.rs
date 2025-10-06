@@ -115,16 +115,23 @@ pub fn core_main() -> Option<Vec<String>> {
     if _is_flutter_invoke_new_connection {
         return core_main_invoke_new_connection(std::env::args());
     }
+    // 检查文件名中是否包含 -silentinstall- 以触发静默安装（优先级高于普通安装）
+    #[cfg(windows)]
+    let auto_silent_install = args.is_empty() 
+        && arg_exe.to_lowercase().contains("-silentinstall-") 
+        && !config::is_disable_installation();
+    
+    #[cfg(windows)]
+    if auto_silent_install {
+        args.push("--silent-install".to_owned());
+    }
+    
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
     if click_setup && !config::is_disable_installation() {
         args.push("--install".to_owned());
         flutter_args.push("--install".to_string());
     }
-    // Check if exe filename contains -silentinstall- for auto silent installation
-    #[cfg(windows)]
-    if args.is_empty() && arg_exe.to_lowercase().contains("-silentinstall-") && !config::is_disable_installation() {
-        args.push("--silent-install".to_owned());
-    }
+    
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
     }
