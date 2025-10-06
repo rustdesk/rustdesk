@@ -930,41 +930,35 @@ pub fn main_get_error() -> String {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn restart_tray() {
     use hbb_common::config::Config;
+    use hbb_common::sysinfo::System;
     
     // Kill existing tray process
     let app_name = crate::get_app_name();
+    log::info!("Restarting tray for app: {}", app_name);
+    
+    let mut system = System::new_all();
+    system.refresh_all();
     
     #[cfg(target_os = "windows")]
-    {
-        let app_exe_name = format!("{}.exe", app_name);
-        let tray_pids = crate::platform::get_pids_of_process_with_args(&app_exe_name, &["--tray"]);
-        //添加隐藏托盘图标功能：
-        if !tray_pids.is_empty() {
-            log::info!("Killing {} tray processes for restart", tray_pids.len());
-            use sysinfo::{System, SystemExt, ProcessExt, Pid};
-            let s = System::new_all();
-            for pid in tray_pids {
-                if let Some(process) = s.process(pid) {
-                    process.kill();
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(500));
+    let process_name = format!("{}.exe", app_name).to_lowercase();
+    #[cfg(not(target_os = "windows"))]
+    let process_name = app_name.to_lowercase();
+    
+    let mut killed_count = 0;
+    for (pid, process) in system.processes() {
+        let name_matches = process.name().to_lowercase() == process_name;
+        let has_tray_arg = process.cmd().len() == 2 && 
+                          process.cmd().iter().any(|arg| arg.to_lowercase() == "--tray");
+        
+        if name_matches && has_tray_arg {
+            log::info!("Killing tray process {} for restart", pid);
+            process.kill();
+            killed_count += 1;
         }
     }
     
-    #[cfg(not(target_os = "windows"))]
-    {
-        use sysinfo::{System, SystemExt, ProcessExt};
-        let mut system = System::new_all();
-        system.refresh_all();
-        
-        let name = app_name.to_lowercase();
-        for (pid, process) in system.processes() {
-            if process.name().to_lowercase() == name && process.cmd().iter().any(|arg| arg == "--tray") {
-                log::info!("Killing tray process {} for restart", pid);
-                process.kill();
-            }
-        }
+    if killed_count > 0 {
+        log::info!("Killed {} tray process(es)", killed_count);
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
     
