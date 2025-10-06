@@ -42,7 +42,6 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut _is_run_as_system = false;
     let mut _is_quick_support = false;
     let mut _is_flutter_invoke_new_connection = false;
-    let mut _is_silent_install = false;
     let mut no_server = false;
     let mut arg_exe = Default::default();
     for arg in std::env::args() {
@@ -141,17 +140,6 @@ pub fn core_main() -> Option<Vec<String>> {
                 || config::LocalConfig::get_option("pre-elevate-service") == "Y"
                 || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
         crate::portable_service::client::set_quick_support(_is_quick_support);
-        
-        // 静默安装：检测文件名中的 -silentinstall- 关键字（避免与 install.exe 结尾冲突）
-        // 示例：rustdesk-silentinstall-.exe, rustdesk-silentinstall-host=server.com.exe
-        // 注意：提权后会传递 --silent-install 参数,所以需要检查 args 是否为空或只包含 --silent-install
-        let is_args_valid = args.is_empty() 
-            || (args.len() == 1 && args[0] == "--silent-install");
-        
-        _is_silent_install = !crate::platform::is_installed()
-            && is_args_valid
-            && !click_setup  // 排除 install.exe 结尾的文件
-            && arg_exe.to_lowercase().contains("-silentinstall-");
     }
     let mut log_name = "".to_owned();
     if args.len() > 0 && args[0].starts_with("--") {
@@ -161,21 +149,6 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
-
-    // 调试信息：打印静默安装检查结果
-    #[cfg(windows)]
-    {
-        log::info!("=== Silent Install Check ===");
-        log::info!("exe path: {}", arg_exe);
-        log::info!("args: {:?}", args);
-        log::info!("is_installed: {}", crate::platform::is_installed());
-        log::info!("args.is_empty: {}", args.is_empty());
-        log::info!("click_setup: {}", click_setup);
-        log::info!("contains -silentinstall-: {}", arg_exe.to_lowercase().contains("-silentinstall-"));
-        log::info!("_is_silent_install: {}", _is_silent_install);
-        log::info!("is_disable_installation: {}", config::is_disable_installation());
-        log::info!("========================");
-    }
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]
@@ -199,61 +172,6 @@ pub fn core_main() -> Option<Vec<String>> {
     if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
         crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
         return None;
-    }
-    
-    // 处理 -silentinstall- 关键字触发的静默安装
-    #[cfg(windows)]
-    if _is_silent_install && !config::is_disable_installation() {
-        log::info!(">>> SILENT INSTALL MODE ACTIVATED <<<");
-        // 如果没有提权，先进行提权
-        let is_elevated = crate::platform::is_elevated(None).unwrap_or(false);
-        log::info!("Current elevated status: {}", is_elevated);
-        
-        if !is_elevated {
-            log::info!("Silent install triggered from exe name, elevating...");
-            match crate::platform::elevate("--silent-install") {
-                Ok(true) => {
-                    log::info!("Elevated successfully, will continue in elevated process");
-                    return None;
-                }
-                Ok(false) => {
-                    log::error!("Failed to elevate: elevate returned false");
-                }
-                Err(e) => {
-                    log::error!("Failed to elevate: {:?}", e);
-                }
-            }
-        } else {
-            // 已经提权，执行静默安装
-            log::info!(">>> Running silent installation with elevated privileges <<<");
-            #[cfg(not(windows))]
-            let options = "desktopicon startmenu";
-            #[cfg(windows)]
-            let options = "desktopicon startmenu printer";
-            
-            let res = crate::platform::install_me(options, "".to_owned(), true, false);
-            let text = match res {
-                Ok(_) => {
-                    log::info!("Silent installation completed successfully");
-                    translate("Installation Successful!".to_string())
-                },
-                Err(err) => {
-                    log::error!("Silent installation failed: {}", err);
-                    translate("Installation failed!".to_string())
-                }
-            };
-            
-            #[cfg(any(target_os = "windows", target_os = "macos"))]
-            Toast::new(Toast::POWERSHELL_APP_ID)
-                .title(&config::APP_NAME.read().unwrap())
-                .text1(&text)
-                .sound(Some(Sound::Default))
-                .duration(Duration::Short)
-                .show()
-                .ok();
-            
-            return None;
-        }
     }
     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
