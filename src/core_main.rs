@@ -144,8 +144,12 @@ pub fn core_main() -> Option<Vec<String>> {
         
         // 静默安装：检测文件名中的 -silentinstall- 关键字（避免与 install.exe 结尾冲突）
         // 示例：rustdesk-silentinstall-.exe, rustdesk-silentinstall-host=server.com.exe
+        // 注意：提权后会传递 --silent-install 参数,所以需要检查 args 是否为空或只包含 --silent-install
+        let is_args_valid = args.is_empty() 
+            || (args.len() == 1 && args[0] == "--silent-install");
+        
         _is_silent_install = !crate::platform::is_installed()
-            && args.is_empty()
+            && is_args_valid
             && !click_setup  // 排除 install.exe 结尾的文件
             && arg_exe.to_lowercase().contains("-silentinstall-");
     }
@@ -157,6 +161,21 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
+
+    // 调试信息：打印静默安装检查结果
+    #[cfg(windows)]
+    {
+        log::info!("=== Silent Install Check ===");
+        log::info!("exe path: {}", arg_exe);
+        log::info!("args: {:?}", args);
+        log::info!("is_installed: {}", crate::platform::is_installed());
+        log::info!("args.is_empty: {}", args.is_empty());
+        log::info!("click_setup: {}", click_setup);
+        log::info!("contains -silentinstall-: {}", arg_exe.to_lowercase().contains("-silentinstall-"));
+        log::info!("_is_silent_install: {}", _is_silent_install);
+        log::info!("is_disable_installation: {}", config::is_disable_installation());
+        log::info!("========================");
+    }
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]
@@ -182,21 +201,31 @@ pub fn core_main() -> Option<Vec<String>> {
         return None;
     }
     
-    // 处理 -silent- 关键字触发的静默安装
+    // 处理 -silentinstall- 关键字触发的静默安装
     #[cfg(windows)]
     if _is_silent_install && !config::is_disable_installation() {
+        log::info!(">>> SILENT INSTALL MODE ACTIVATED <<<");
         // 如果没有提权，先进行提权
-        if !crate::platform::is_elevated(None).unwrap_or(false) {
+        let is_elevated = crate::platform::is_elevated(None).unwrap_or(false);
+        log::info!("Current elevated status: {}", is_elevated);
+        
+        if !is_elevated {
             log::info!("Silent install triggered from exe name, elevating...");
-            if let Ok(true) = crate::platform::elevate("--silent-install") {
-                log::info!("Elevated successfully, will continue in elevated process");
-                return None;
-            } else {
-                log::error!("Failed to elevate for silent install");
+            match crate::platform::elevate("--silent-install") {
+                Ok(true) => {
+                    log::info!("Elevated successfully, will continue in elevated process");
+                    return None;
+                }
+                Ok(false) => {
+                    log::error!("Failed to elevate: elevate returned false");
+                }
+                Err(e) => {
+                    log::error!("Failed to elevate: {:?}", e);
+                }
             }
         } else {
             // 已经提权，执行静默安装
-            log::info!("Running silent installation with elevated privileges");
+            log::info!(">>> Running silent installation with elevated privileges <<<");
             #[cfg(not(windows))]
             let options = "desktopicon startmenu";
             #[cfg(windows)]
