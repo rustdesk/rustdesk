@@ -1277,9 +1277,20 @@ pub fn copy_raw_cmd(src_raw: &str, _raw: &str, _path: &str) -> ResultType<String
 
 pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> {
     let main_exe = copy_raw_cmd(src_exe, exe, path)?;
+    // 确保主程序 exe 文件名与 APP_NAME 匹配
+    let exe_name = format!("{}.exe", crate::get_app_name());
+    let rename_exe = if std::path::Path::new(src_exe).file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("") != exe_name {
+        format!("\nren \"{path}\\{}\" \"{exe_name}\"", 
+            std::path::Path::new(src_exe).file_name().unwrap().to_string_lossy())
+    } else {
+        "".to_owned()
+    };
+    
     Ok(format!(
         "
-        {main_exe}
+        {main_exe}{rename_exe}
         copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
         ",
         ORIGIN_PROCESS_EXE = win_topmost_window::ORIGIN_PROCESS_EXE,
