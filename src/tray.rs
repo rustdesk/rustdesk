@@ -211,32 +211,22 @@ fn make_tray() -> hbb_common::ResultType<()> {
                         .map(|t| t.set_tooltip(Some(tooltip(count))));
                 }
                 Data::HideTray(hide) => {
-                    // 处理隐藏/显示托盘图标的 IPC 消息
-                    log::info!("Received HideTray command: {}", hide);
                     let mut tray_guard = _tray_icon.lock().unwrap();
                     if hide {
-                        // 销毁 TrayIcon 对象来隐藏图标
+                        // 销毁图标对象以隐藏
                         *tray_guard = None;
-                        log::info!("Tray icon hidden");
-                        // Windows 需要强制刷新托盘区域以移除幽灵图标
                         #[cfg(windows)]
                         refresh_tray_area();
                     } else if tray_guard.is_none() {
-                        // 重新创建 TrayIcon 对象来显示图标
-                        match TrayIconBuilder::new()
+                        // 重建图标对象以显示
+                        if let Ok(tray) = TrayIconBuilder::new()
                             .with_menu(Box::new(tray_menu.clone()))
                             .with_tooltip(tooltip(0))
                             .with_icon(icon.clone())
                             .with_icon_as_template(true)
                             .build()
                         {
-                            Ok(tray) => {
-                                *tray_guard = Some(tray);
-                                log::info!("Tray icon shown");
-                            }
-                            Err(err) => {
-                                log::error!("Failed to show tray icon: {}", err);
-                            }
+                            *tray_guard = Some(tray);
                         }
                     }
                 }
@@ -366,35 +356,27 @@ fn encode_wide(s: &str) -> Vec<u16> {
     OsStr::new(s).encode_wide().chain(Some(0)).collect()
 }
 
-/// IPC 监听器：接收主服务发送的命令（如 HideTray）
-/// 通过 channel 将消息转发到事件循环处理
+/// 启动 IPC 服务器接收控制消息并转发到事件循环
 fn start_ipc_listener(sender: std::sync::mpsc::Sender<Data>) {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
-        loop {
-            if let Ok(mut c) = crate::ipc::connect(1000, "--tray").await {
-                log::info!("Tray IPC connected");
-                loop {
-                    match c.next().await {
-                        Err(err) => {
-                            log::error!("Tray IPC connection closed: {}", err);
-                            break;
+        if let Ok(mut incoming) = crate::ipc::new_listener("hide-tray").await {
+            loop {
+                if let Some(Ok(stream)) = incoming.next().await {
+                    let sender_clone = sender.clone();
+                    tokio::spawn(async move {
+                        let mut stream = crate::ipc::Connection::new(stream);
+                        loop {
+                            match stream.next().await {
+                                Ok(Some(Data::HideTray(hide))) => {
+                                    sender_clone.send(Data::HideTray(hide)).ok();
+                                }
+                                Ok(None) | Err(_) => break,
+                                _ => {}
+                            }
                         }
-                        Ok(Some(Data::HideTray(hide))) => {
-                            // 接收到隐藏/显示托盘图标的命令
-                            log::info!("Tray received HideTray message: {}", hide);
-                            sender.send(Data::HideTray(hide)).ok();
-                        }
-                        Ok(Some(data)) => {
-                            log::debug!("Tray received other data: {:?}", data);
-                        }
-                        Ok(None) => {
-                            log::warn!("Tray IPC received None");
-                            break;
-                        }
-                    }
+                    });
                 }
             }
-            hbb_common::sleep(1.).await;
         }
     });
 }

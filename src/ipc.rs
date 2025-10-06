@@ -278,7 +278,7 @@ pub enum Data {
     ClearTrustedDevices,
     #[cfg(all(target_os = "windows", feature = "flutter"))]
     PrinterData(Vec<u8>),
-    /// 控制托盘图标的显示/隐藏状态: true=隐藏, false=显示
+    // 控制托盘图标的显示/隐藏状态: true=隐藏, false=显示
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     HideTray(bool),
     InstallOption(Option<(String, String)>),

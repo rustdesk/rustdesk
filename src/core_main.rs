@@ -120,6 +120,11 @@ pub fn core_main() -> Option<Vec<String>> {
         args.push("--install".to_owned());
         flutter_args.push("--install".to_string());
     }
+    // Check if exe filename contains -silentinstall- for auto silent installation
+    #[cfg(windows)]
+    if args.is_empty() && arg_exe.to_lowercase().contains("-silentinstall-") && !config::is_disable_installation() {
+        args.push("--silent-install".to_owned());
+    }
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
     }
