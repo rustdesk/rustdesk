@@ -31,7 +31,7 @@ install = open('src/ui/install.html').read().replace('include "install.tis";', o
 
 cm = open('src/ui/cm.html').read() \
     .replace('@import url(cm.css);', open('src/ui/cm.css').read()) \
-    .replace('include "cm.tis";', open('src/ui/cm.tis').read())
+    .replace('include "cm.tis";', open('src/ui/cm.tis', encoding='UTF8').read())
 
 
 def compress(s):
