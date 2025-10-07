@@ -915,6 +915,8 @@ class PasswordArea: Reactor.Component {
         var method = handler.get_option('verification-method');
         var approve_mode= handler.get_option('approve-mode');
         var show_password = approve_mode != 'click';
+        // 判断是否启用 hide-cm 和 hide-tray 选项（只有在使用固定密码时才启用）
+        var enable_hide_options = approve_mode == 'password' && method == 'use-permanent-password';
         return <popup><menu.context #edit-password-context>
             <li #approve-mode-password><span>{svg_checkmark}</span>{translate('Accept sessions via password')}</li>
             <li #approve-mode-click><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
@@ -926,6 +928,9 @@ class PasswordArea: Reactor.Component {
             { !show_password ? '' : <div .separator /> }
             { !show_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
             { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
+            { !show_password ? '' : <div .separator /> }
+            { !show_password ? '' : <li #allow-hide-cm disabled={ enable_hide_options ? "false" : "true" }><span>{svg_checkmark}</span>{translate('Hide connection management window')}</li> }
+            { !show_password ? '' : <li #hide-tray disabled={ enable_hide_options ? "false" : "true" }><span>{svg_checkmark}</span>{translate('Hide Tray')}</li> }
             <div .separator />
             <li #tfa><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
         </menu></popup>;
@@ -944,6 +949,9 @@ class PasswordArea: Reactor.Component {
         if (pwd_id != 'use-temporary-password' && pwd_id != 'use-permanent-password')
             pwd_id = 'use-both-passwords';
         var has_valid_2fa = handler.has_valid_2fa();
+        // 获取 allow-hide-cm 和 hide-tray 的选项值
+        var allow_hide_cm = handler.get_option('allow-hide-cm') == 'Y';
+        var hide_tray = handler.get_option('hide-tray') == 'Y';
         for (var el in this.$$(menu#edit-password-context>li)) {
             if (el.id.indexOf("approve-mode-") == 0)
                 el.attributes.toggleClass("selected", el.id == mode_id);
@@ -951,6 +959,11 @@ class PasswordArea: Reactor.Component {
                 el.attributes.toggleClass("selected", el.id == pwd_id);
             if (el.id == "tfa")
                 el.attributes.toggleClass("selected", has_valid_2fa);
+            // 设置 allow-hide-cm 和 hide-tray 的选中状态
+            if (el.id == "allow-hide-cm")
+                el.attributes.toggleClass("selected", allow_hide_cm);
+            if (el.id == "hide-tray")
+                el.attributes.toggleClass("selected", hide_tray);
         }
     }
 
@@ -1001,6 +1014,14 @@ class PasswordArea: Reactor.Component {
             handler.set_option('approve-mode', approve_mode);
             this.toggleMenuState();
             passwordArea.update();
+        } else if (me.id == 'allow-hide-cm') {
+            // 切换"隐藏连接管理窗口"选项（'Y' 表示启用，'' 表示禁用）
+            handler.set_option('allow-hide-cm', handler.get_option('allow-hide-cm') == 'Y' ? '' : 'Y');
+            this.toggleMenuState();
+        } else if (me.id == 'hide-tray') {
+            // 切换"隐藏托盘图标"选项（'Y' 表示启用，'' 表示禁用）
+            handler.set_option('hide-tray', handler.get_option('hide-tray') == 'Y' ? '' : 'Y');
+            this.toggleMenuState();
         }
     }
 
