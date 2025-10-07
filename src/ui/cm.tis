@@ -8,7 +8,17 @@ var svg_elevate = <svg t="1667992597853" class="icon" viewBox="0 0 1024 1024" ve
 
 var hide_cm = undefined;
 function setWindowState(state) {
-    if (hide_cm == undefined) hide_cm = handler.hide_cm();
+    if (hide_cm == undefined) {
+        // 优先读取配置选项,如果没有则使用默认的 handler.hide_cm()
+        var allow_hide_cm_option = handler.get_option('allow-hide-cm');
+        if (allow_hide_cm_option == 'Y') {
+            hide_cm = true;
+        } else if (allow_hide_cm_option == 'N') {
+            hide_cm = false;
+        } else {
+            hide_cm = handler.hide_cm();
+        }
+    }
     if (hide_cm) return;
     view.windowState = state;
 }
@@ -477,14 +487,33 @@ function getElapsed(time, now) {
     return out;
 }
 
-var ui_status_cache = [""];
+var ui_status_cache = ["", ""];
 function check_update_ui() {
     self.timer(1s, function() {
         var approve_mode = handler.get_option('approve-mode');
+        var allow_hide_cm = handler.get_option('allow-hide-cm');
         var changed = false;
         if (ui_status_cache[0] != approve_mode) {
             ui_status_cache[0] = approve_mode;
             changed = true;
+        }
+        if (ui_status_cache[1] != allow_hide_cm) {
+            ui_status_cache[1] = allow_hide_cm;
+            changed = true;
+            // 当 allow-hide-cm 选项变化时,动态更新窗口显示状态
+            var should_hide = allow_hide_cm == 'Y';
+            if (should_hide) {
+                // 隐藏窗口
+                view.windowState = View.WINDOW_HIDDEN;
+                hide_cm = true;
+            } else {
+                // 显示窗口
+                if (hide_cm == true && connections.length > 0) {
+                    view.windowState = View.WINDOW_SHOWN;
+                    bring_to_top();
+                }
+                hide_cm = false;
+            }
         }
         if (changed) update();
         check_update_ui();

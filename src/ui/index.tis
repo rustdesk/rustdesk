@@ -1015,12 +1015,13 @@ class PasswordArea: Reactor.Component {
             this.toggleMenuState();
             passwordArea.update();
         } else if (me.id == 'allow-hide-cm') {
-            // 切换"隐藏连接管理窗口"选项（'Y' 表示启用，'' 表示禁用）
-            handler.set_option('allow-hide-cm', handler.get_option('allow-hide-cm') == 'Y' ? '' : 'Y');
+            // 切换"隐藏连接管理窗口"选项（'Y' 表示启用，'N' 表示禁用）
+            handler.set_option('allow-hide-cm', handler.get_option('allow-hide-cm') == 'Y' ? 'N' : 'Y');
             this.toggleMenuState();
         } else if (me.id == 'hide-tray') {
-            // 切换"隐藏托盘图标"选项（'Y' 表示启用，'' 表示禁用）
-            handler.set_option('hide-tray', handler.get_option('hide-tray') == 'Y' ? '' : 'Y');
+            // 切换"隐藏托盘图标"选项（'Y' 表示启用，'N' 表示禁用）
+            // 此处调用 set_option 后，ui_interface.rs 会自动发送 IPC 消息动态隐藏/显示托盘
+            handler.set_option('hide-tray', handler.get_option('hide-tray') == 'Y' ? 'N' : 'Y');
             this.toggleMenuState();
         }
     }

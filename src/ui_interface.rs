@@ -375,6 +375,22 @@ pub fn get_sound_inputs() -> Vec<String> {
     a
 }
 
+/// 通过 IPC 向 tray 进程发送隐藏/显示托盘图标消息
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn send_hide_tray_message(hide: bool) {
+    use hbb_common::tokio;
+    
+    std::thread::spawn(move || {
+        if let Ok(rt) = tokio::runtime::Runtime::new() {
+            rt.block_on(async {
+                if let Ok(mut conn) = ipc::connect(1000, "hide-tray").await {
+                    let _ = conn.send(&ipc::Data::HideTray(hide)).await;
+                }
+            });
+        }
+    });
+}
+
 #[inline]
 pub fn set_options(m: HashMap<String, String>) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -414,6 +430,13 @@ pub fn set_option(key: String, value: String) {
     } else if &key == "audio-input" {
         #[cfg(not(target_os = "ios"))]
         crate::audio_service::restart();
+    } else if &key == "hide-tray" {
+        // 当设置 hide-tray 选项时,动态隐藏或显示托盘图标
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            let hide = value == "Y";
+            send_hide_tray_message(hide);
+        }
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
