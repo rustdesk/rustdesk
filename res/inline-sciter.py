@@ -10,7 +10,7 @@ common_tis = open('src/ui/common.tis', encoding='UTF8').read()
 
 index = open('src/ui/index.html').read() \
     .replace('@import url(index.css);', open('src/ui/index.css').read()) \
-    .replace('include "index.tis";', open('src/ui/index.tis').read()) \
+    .replace('include "index.tis";', open('src/ui/index.tis', encoding='UTF8').read()) \
     .replace('include "msgbox.tis";', open('src/ui/msgbox.tis').read()) \
     .replace('include "ab.tis";', open('src/ui/ab.tis').read())
 
