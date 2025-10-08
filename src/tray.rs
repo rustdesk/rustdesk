@@ -57,7 +57,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .context("Failed to open icon")?;
 
-    let mut event_loop = EventLoopBuilder::new().build();
+    let event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
     let quit_i = MenuItem::new(translate("Stop service".to_owned()), true, None);

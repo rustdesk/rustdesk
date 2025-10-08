@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "flutter")]
 use crate::flutter;
 #[cfg(target_os = "windows")]
@@ -13,8 +14,6 @@ use hbb_common::message_proto::*;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use rdev::KeyCode;
 use rdev::{Event, EventType, Key};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
