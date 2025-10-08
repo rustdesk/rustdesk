@@ -123,7 +123,10 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let hide_tray = crate::ui_interface::get_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y";
     #[cfg(windows)]
     if hide_tray {
-        let _ = ipc_sender.send(Data::HideTray(true));
+        // 销毁图标对象以隐藏
+        *tray_guard = None;
+        #[cfg(windows)]
+        refresh_tray_area();
     }
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(
