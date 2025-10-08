@@ -633,6 +633,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Unlock with PIN", "使用 PIN 码解锁设置"),
         ("Requires at least {} characters", "不少于{}个字符"),
         ("Wrong PIN", "PIN 码错误"),
+        ("PIN Code", "PIN 码"),
+        ("Verify PIN", "验证 PIN 码"),
         ("Set PIN", "设置 PIN 码"),
         ("Enable trusted devices", "启用信任设备"),
         ("Manage trusted devices", "管理信任设备"),

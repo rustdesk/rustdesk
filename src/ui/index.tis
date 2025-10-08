@@ -460,7 +460,9 @@ class MyIdMenu: Reactor.Component {
                 menu_unlocked = true;
             }
             
+            // 同时更新两个菜单组件
             me.update();
+            if (passwordArea) passwordArea.update();
         });
     }
 
@@ -480,9 +482,10 @@ class MyIdMenu: Reactor.Component {
                 return translate("Wrong PIN code");
             }
             
-            // PIN 验证成功: 解锁菜单
+            // PIN 验证成功: 解锁菜单,同时更新两个菜单组件
             menu_unlocked = true;
             me.update();
+            if (passwordArea) passwordArea.update();
         });
     }
 
@@ -1219,7 +1222,9 @@ class PasswordArea: Reactor.Component {
                 menu_unlocked = true;
             }
             
+            // 同时更新两个菜单组件
             me.update();
+            if (myIdMenu) myIdMenu.update();
         });
     }
 
@@ -1239,9 +1244,10 @@ class PasswordArea: Reactor.Component {
                 return translate("Wrong PIN code");
             }
             
-            // PIN 验证成功: 解锁菜单
+            // PIN 验证成功: 解锁菜单,同时更新两个菜单组件
             menu_unlocked = true;
             me.update();
+            if (myIdMenu) myIdMenu.update();
         });
     }
 
