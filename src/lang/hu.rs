@@ -711,5 +711,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "Felhasználónév vagy tartománynév megadása\\felhasználónév"),
         ("Preparing for installation ...", "Felkészülés a telepítésre ..."),
         ("Show my cursor", "Kurzor megjelenítése"),
+        ("Scale custom", ""),
+        ("Custom scale slider", ""),
+        ("Decrease", ""),
+        ("Increase", ""),
     ].iter().cloned().collect();
 }

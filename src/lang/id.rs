@@ -710,5 +710,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "panduan_elevasi_nama_pengguna"),
         ("Preparing for installation ...", "Mempersiapkan instalasi ..."),
         ("Show my cursor", "Tampilkan kursor saya"),
+        ("Scale custom", ""),
+        ("Custom scale slider", ""),
+        ("Decrease", ""),
+        ("Increase", ""),
     ].iter().cloned().collect();
 }
