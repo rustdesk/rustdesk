@@ -1502,27 +1502,12 @@ pub fn check_hwcodec() {
     }
 }
 
-// PIN 锁定功能: 获取已保存的 PIN 码
-#[cfg(not(feature = "flutter"))]
-pub fn get_unlock_pin() -> String {
-    ipc::get_unlock_pin()
-}
-
 #[cfg(feature = "flutter")]
 pub fn get_unlock_pin() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return String::default();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return ipc::get_unlock_pin();
-}
-
-// PIN 锁定功能: 设置 PIN 码 (空字符串表示删除 PIN)
-#[cfg(not(feature = "flutter"))]
-pub fn set_unlock_pin(pin: String) -> String {
-    match ipc::set_unlock_pin(pin, true) {
-        Ok(_) => String::default(),
-        Err(err) => err.to_string(),
-    }
 }
 
 #[cfg(feature = "flutter")]

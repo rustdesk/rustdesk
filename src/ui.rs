@@ -666,12 +666,15 @@ impl UI {
 
     // PIN 锁定功能: 获取已保存的 PIN 码
     fn get_unlock_pin(&self) -> String {
-        get_unlock_pin()
+        ipc::get_unlock_pin()
     }
 
     // PIN 锁定功能: 设置 PIN 码 (空字符串表示删除 PIN)
     fn set_unlock_pin(&self, pin: String) -> String {
-        set_unlock_pin(pin)
+        match ipc::set_unlock_pin(pin, true) {
+            Ok(_) => String::new(),
+            Err(e) => e.to_string(),
+        }
     }
 }
 
