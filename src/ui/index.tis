@@ -318,7 +318,7 @@ class MyIdMenu: Reactor.Component {
         var pin_locked = has_pin && !menu_unlocked;
         return <popup>
             <menu.context #config-options>
-                <li #unlock-pin><span>{svg_checkmark}</span>{translate('Use PIN to unlock settings')}</li>
+                <li #unlock-pin><span>{svg_checkmark}</span>{translate('Unlock with PIN')}</li>
                 <div .separator />
                 <li #enable-keyboard disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable keyboard/mouse')}</li>
                 <li #enable-clipboard disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable clipboard')}</li>
@@ -479,7 +479,7 @@ class MyIdMenu: Reactor.Component {
             
             // 验证输入的 PIN 是否正确
             if (input_pin != current_pin) {
-                return translate("Wrong PIN code");
+                return translate("Wrong PIN");
             }
             
             // PIN 验证成功: 解锁菜单,同时更新两个菜单组件
@@ -1027,7 +1027,7 @@ class PasswordArea: Reactor.Component {
         var has_pin = pin && pin.length > 0;
         var pin_locked = has_pin && !menu_unlocked;
         return <popup><menu.context #edit-password-context>
-            <li #unlock-pin-password><span>{svg_checkmark}</span>{translate('Use PIN to unlock settings')}</li>
+            <li #unlock-pin-password><span>{svg_checkmark}</span>{translate('Unlock with PIN')}</li>
             <div .separator />
             <li #approve-mode-password disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Accept sessions via password')}</li>
             <li #approve-mode-click disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
@@ -1241,7 +1241,7 @@ class PasswordArea: Reactor.Component {
             
             // 验证输入的 PIN 是否正确
             if (input_pin != current_pin) {
-                return translate("Wrong PIN code");
+                return translate("Wrong PIN");
             }
             
             // PIN 验证成功: 解锁菜单,同时更新两个菜单组件
