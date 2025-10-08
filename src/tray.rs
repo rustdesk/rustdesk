@@ -102,16 +102,19 @@ fn make_tray() -> hbb_common::ResultType<()> {
         }
     };
     // 定义托盘图标的 IPC 监听器
-    #[cfg(windows)]{
+    #[cfg(windows)] {
         let ipc_sender_for_tray = ipc_sender.clone();
         std::thread::spawn(move || {
             start_ipc_listener(ipc_sender_for_tray);
         });
     }
     #[cfg(windows)]
-    std::thread::spawn(move || {
-        start_query_session_count(ipc_sender.clone());
-    });
+    {
+        let ipc_sender_for_count = ipc_sender.clone();
+        std::thread::spawn(move || {
+            start_query_session_count(ipc_sender_for_count);
+        });
+    }
     #[cfg(windows)]
     let mut last_click = std::time::Instant::now();
     #[cfg(target_os = "macos")]
@@ -123,10 +126,8 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let hide_tray = crate::ui_interface::get_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y";
     #[cfg(windows)]
     if hide_tray {
-        // 销毁图标对象以隐藏
-        *tray_guard = None;
-        #[cfg(windows)]
-        refresh_tray_area();
+        // 通过 IPC 向事件循环发送隐藏托盘指令
+        ipc_sender.send(Data::HideTray(true)).ok();
     }
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(
