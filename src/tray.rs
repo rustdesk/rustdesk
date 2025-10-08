@@ -11,20 +11,7 @@ use std::time::Duration;
 use hbb_common::futures::StreamExt;
 
 pub fn start_tray() {
-    //获取hide-cmd参数，决定是否显示托盘图标
-    if crate::ui_interface::get_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
-        #[cfg(target_os = "macos")]
-        {
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            return;
-        }
-    }
-
+    // 总是创建托盘，若配置为隐藏则创建后立即销毁并刷新
     #[cfg(target_os = "linux")]
     crate::server::check_zombie();
 
@@ -132,6 +119,12 @@ fn make_tray() -> hbb_common::ResultType<()> {
         use tao::platform::macos::EventLoopExtMacOS;
         event_loop.set_activation_policy(tao::platform::macos::ActivationPolicy::Accessory);
     }
+    // 若配置为隐藏托盘，初始化后立即通过IPC通知事件循环隐藏托盘
+    let hide_tray = crate::ui_interface::get_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y";
+    #[cfg(windows)]
+    if hide_tray {
+        let _ = ipc_sender.send(Data::HideTray(true));
+    }
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(
             std::time::Instant::now() + std::time::Duration::from_millis(100),
@@ -152,7 +145,6 @@ fn make_tray() -> hbb_common::ResultType<()> {
                     log::error!("Failed to create tray icon: {}", err);
                 }
             };
-
             // We have to request a redraw here to have the icon actually show up.
             // Tao only exposes a redraw method on the Window so we use core-foundation directly.
             #[cfg(target_os = "macos")]

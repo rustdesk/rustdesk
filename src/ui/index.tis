@@ -1141,6 +1141,9 @@ class PasswordArea: Reactor.Component {
                 approve_mode = 'password';
             else if (me.id == 'approve-mode-click')
                 approve_mode = 'click';
+            // 与后端持久化一致，approve-mode-both 映射为 'password-click'
+            else if (me.id == 'approve-mode-both')
+                approve_mode = 'password-click';
             else
                 approve_mode = '';
             handler.set_option('approve-mode', approve_mode);
