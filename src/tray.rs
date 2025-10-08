@@ -15,7 +15,7 @@ pub fn start_tray() {
     let has_tray_arg = std::env::args().any(|arg| arg == "--tray");
     
     // 获取配置项
-    let hide_tray_option = crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY);
+    let hide_tray_option = crate::ui_interface::get_option(hbb_common::config::keys::OPTION_HIDE_TRAY);
     
     // 优先级顺序：
     // 1. 有启动参数 --tray：忽略配置，强制显示

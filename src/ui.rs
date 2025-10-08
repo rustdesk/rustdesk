@@ -663,6 +663,16 @@ impl UI {
     pub fn check_hwcodec(&self) {
         check_hwcodec()
     }
+
+    // PIN 锁定功能: 获取已保存的 PIN 码
+    fn get_unlock_pin(&self) -> String {
+        get_unlock_pin()
+    }
+
+    // PIN 锁定功能: 设置 PIN 码 (空字符串表示删除 PIN)
+    fn set_unlock_pin(&self, pin: String) -> String {
+        set_unlock_pin(pin)
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -756,6 +766,8 @@ impl sciter::EventHandler for UI {
         fn verify2fa(String);
         fn check_hwcodec();
         fn verify_login(String, String);
+        fn get_unlock_pin();
+        fn set_unlock_pin(String);
     }
 }
 

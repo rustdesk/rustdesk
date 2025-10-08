@@ -27,6 +27,9 @@ function get_id() {
   return my_id;
 }
 
+// PIN 锁定功能: 控制设置菜单的访问权限,两个菜单共享同一个解锁状态
+var menu_unlocked = false;
+
 class ConnectStatus: Reactor.Component {
     function render() {
         return
@@ -309,24 +312,30 @@ class MyIdMenu: Reactor.Component {
 
     function renderPop() {
         var username = handler.get_local_option("access_token") ? getUserName() : '';
+        // PIN 锁定检查: 获取 PIN 并判断菜单是否需要锁定
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
         return <popup>
             <menu.context #config-options>
-                <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable keyboard/mouse')}</li>
-                <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable clipboard')}</li>
-                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable file transfer')}</li>
-                <li #enable-camera><span>{svg_checkmark}</span>{translate('Enable camera')}</li>
-                <li #enable-terminal><span>{svg_checkmark}</span>{translate('Enable terminal')}</li>
-                <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable remote restart')}</li> 
-                <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP tunneling')}</li>
-                {is_win ? <li #enable-block-input><span>{svg_checkmark}</span>{translate('Enable blocking user input')}</li> : ""}
-                <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN discovery')}</li>
+                <li #unlock-pin><span>{svg_checkmark}</span>{translate('Use PIN to unlock settings')}</li>
+                <div .separator />
+                <li #enable-keyboard disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable keyboard/mouse')}</li>
+                <li #enable-clipboard disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable clipboard')}</li>
+                <li #enable-file-transfer disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable file transfer')}</li>
+                <li #enable-camera disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable camera')}</li>
+                <li #enable-terminal disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable terminal')}</li>
+                <li #enable-remote-restart disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable remote restart')}</li> 
+                <li #enable-tunnel disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable TCP tunneling')}</li>
+                {is_win ? <li #enable-block-input disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable blocking user input')}</li> : ""}
+                <li #enable-lan-discovery disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable LAN discovery')}</li>
                 <AudioInputs />
                 <Enhancements />
-                <li #allow-remote-config-modification><span>{svg_checkmark}</span>{translate('Enable remote configuration modification')}</li>
+                <li #allow-remote-config-modification disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Enable remote configuration modification')}</li>
                 <div .separator />
-                <li #custom-server>{translate('ID/Relay Server')}</li>
-                <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
-                <li #socks5-server>{translate('Socks5 Proxy')}</li>
+                <li #custom-server disabled={pin_locked ? "true" : "false"}>{translate('ID/Relay Server')}</li>
+                <li #whitelist disabled={pin_locked ? "true" : "false"} title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
+                <li #socks5-server disabled={pin_locked ? "true" : "false"}>{translate('Socks5 Proxy')}</li>
                 { false && <li #allow-websocket><span>{svg_checkmark}</span>{translate('Use WebSocket')}</li> }
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
@@ -368,7 +377,13 @@ class MyIdMenu: Reactor.Component {
     }
 
     function toggleMenuState() {
+        // 更新 PIN 菜单项的勾选状态
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
         for (var el in $$(menu#config-options>li)) {
+            if (el.id == "unlock-pin") {
+                el.attributes.toggleClass("selected", has_pin && menu_unlocked);
+            }
             if (el.id && el.id.indexOf("enable-") == 0) {
                 var enabled = handler.get_option(el.id) != "N";
                 el.attributes.toggleClass("selected", enabled);
@@ -400,13 +415,100 @@ class MyIdMenu: Reactor.Component {
         }, 400);
     }
 
+    // PIN 功能: 处理 PIN 菜单项点击,根据状态切换设置/验证模式
+    function handleUnlockPin() {
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        
+        if (!has_pin || menu_unlocked) {
+            // 无 PIN 或已解锁状态: 进入设置 PIN 模式
+            this.setupNewPin();
+        } else {
+            // 有 PIN 且未解锁状态: 进入验证模式
+            this.verifyPin();
+        }
+    }
+
+    // PIN 功能: 设置新 PIN 或修改/删除现有 PIN
+    function setupNewPin() {
+        var me = this;
+        msgbox("custom-password", translate("Set PIN"), "<div .form .set-password> \
+            <div><span>" + translate('PIN Code') + ":</span><input|password(pin1) .outline-focus /></div> \
+            <div><span>" + translate('Confirmation') + ":</span><input|password(pin2) /></div> \
+        </div> \
+        ", "", function(res=null) {
+            if (!res) return;
+            var p1 = (res.pin1 || "").trim();
+            var p2 = (res.pin2 || "").trim();
+            
+            // 验证两次输入是否一致
+            if (p1 != p2) {
+                return translate("The confirmation is not identical.");
+            }
+            
+            // 调用后端接口设置 PIN (空值表示删除 PIN)
+            var err = handler.set_unlock_pin(p1);
+            if (err) {
+                return err;
+            }
+            
+            if (p1.length == 0) {
+                // 清空 PIN: 取消锁定状态
+                menu_unlocked = false;
+            } else {
+                // 设置成功: 自动解锁菜单
+                menu_unlocked = true;
+            }
+            
+            me.update();
+        });
+    }
+
+    // PIN 功能: 验证 PIN 码以解锁菜单
+    function verifyPin() {
+        var me = this;
+        msgbox("custom-password", translate("Verify PIN"), "<div .form .set-password> \
+            <div><span>" + translate('PIN Code') + ":</span><input|password(pin) .outline-focus /></div> \
+        </div> \
+        ", "", function(res=null) {
+            if (!res) return;
+            var input_pin = (res.pin || "").trim();
+            var current_pin = handler.get_unlock_pin();
+            
+            // 验证输入的 PIN 是否正确
+            if (input_pin != current_pin) {
+                return translate("Wrong PIN code");
+            }
+            
+            // PIN 验证成功: 解锁菜单
+            menu_unlocked = true;
+            me.update();
+        });
+    }
+
     event click $(menu#config-options>li) (_, me) {
+        // PIN 功能: 处理 PIN 锁定菜单项点击
+        if (me.id == "unlock-pin") {
+            this.handleUnlockPin();
+            return;
+        }
+        
+        // PIN 功能: 检查菜单是否被锁定,锁定状态下不允许操作其他项
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        if (has_pin && !menu_unlocked) {
+            return;
+        }
+        
+        // 原有功能: 处理 enable-* 菜单项的开关
         if (me.id && me.id.indexOf("enable-") == 0) {
             handler.set_option(me.id, handler.get_option(me.id) == "N" ? "" : "N");
         }
+        // 原有功能: 处理 allow-* 菜单项的开关
         if (me.id && me.id.indexOf("allow-") == 0) {
             handler.set_option(me.id, handler.get_option(me.id) == "Y" ? "" : "Y");
         }
+        // 原有功能: 处理白名单设置
         if (me.id == "whitelist") {
             var old_value = handler.get_option("whitelist").split(",").join("\n");
             msgbox("custom-whitelist", translate("IP Whitelisting"), "<div .form> \
@@ -915,24 +1017,30 @@ class PasswordArea: Reactor.Component {
         var method = handler.get_option('verification-method');
         var approve_mode= handler.get_option('approve-mode');
         var show_password = approve_mode != 'click';
-        // 判断是否启用 hide-cm 和 hide-tray 选项（只有在使用固定密码时才启用）
+        // 原有功能: 判断是否启用 hide 选项(只有密码模式+固定密码时启用)
         var enable_hide_options = approve_mode == 'password' && method == 'use-permanent-password';
+        // PIN 功能: 检查 PIN 并判断菜单是否需要锁定
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
         return <popup><menu.context #edit-password-context>
-            <li #approve-mode-password><span>{svg_checkmark}</span>{translate('Accept sessions via password')}</li>
-            <li #approve-mode-click><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
-            <li #approve-mode-both><span>{svg_checkmark}</span>{translate('Accept sessions via both')}</li>
+            <li #unlock-pin-password><span>{svg_checkmark}</span>{translate('Use PIN to unlock settings')}</li>
+            <div .separator />
+            <li #approve-mode-password disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Accept sessions via password')}</li>
+            <li #approve-mode-click disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
+            <li #approve-mode-both disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Accept sessions via both')}</li>
             { !show_password ? '' : <div .separator /> }
-            { !show_password ? '' : <li #use-temporary-password><span>{svg_checkmark}</span>{translate('Use one-time password')}</li> }
-            { !show_password ? '' : <li #use-permanent-password><span>{svg_checkmark}</span>{translate('Use permanent password')}</li> }
-            { !show_password ? '' : <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li> }
+            { !show_password ? '' : <li #use-temporary-password disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Use one-time password')}</li> }
+            { !show_password ? '' : <li #use-permanent-password disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Use permanent password')}</li> }
+            { !show_password ? '' : <li #use-both-passwords disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Use both passwords')}</li> }
             { !show_password ? '' : <div .separator /> }
-            { !show_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
+            { !show_password ? '' : <li #set-password  disabled={ pin_locked || method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
             { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
             { !show_password ? '' : <div .separator /> }
-            { !show_password ? '' : <li #allow-hide-cm disabled={ enable_hide_options ? "false" : "true" }><span>{svg_checkmark}</span>{translate('Hide connection management window')}</li> }
-            { !show_password ? '' : <li #hide-tray disabled={ enable_hide_options ? "false" : "true" }><span>{svg_checkmark}</span>{translate('Hide Tray')}</li> }
+            { !show_password ? '' : <li #allow-hide-cm disabled={ pin_locked || !enable_hide_options ? "true" : "false" }><span>{svg_checkmark}</span>{translate('Hide connection management window')}</li> }
+            { !show_password ? '' : <li #hide-tray disabled={ pin_locked || !enable_hide_options ? "true" : "false" }><span>{svg_checkmark}</span>{translate('Hide Tray')}</li> }
             <div .separator />
-            <li #tfa><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
+            <li #tfa disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
         </menu></popup>;
     }
 
@@ -949,17 +1057,22 @@ class PasswordArea: Reactor.Component {
         if (pwd_id != 'use-temporary-password' && pwd_id != 'use-permanent-password')
             pwd_id = 'use-both-passwords';
         var has_valid_2fa = handler.has_valid_2fa();
-        // 获取 allow-hide-cm 和 hide-tray 的选项值
+        // 原有功能: 获取 hide 选项的当前值
         var allow_hide_cm = handler.get_option('allow-hide-cm') == 'Y';
         var hide_tray = handler.get_option('hide-tray') == 'Y';
+        // PIN 功能: 更新 PIN 菜单项的勾选状态
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
         for (var el in this.$$(menu#edit-password-context>li)) {
+            if (el.id == "unlock-pin-password")
+                el.attributes.toggleClass("selected", has_pin && menu_unlocked);
             if (el.id.indexOf("approve-mode-") == 0)
                 el.attributes.toggleClass("selected", el.id == mode_id);
             if (el.id.indexOf("use-") == 0)
                 el.attributes.toggleClass("selected", el.id == pwd_id);
             if (el.id == "tfa")
                 el.attributes.toggleClass("selected", has_valid_2fa);
-            // 设置 allow-hide-cm 和 hide-tray 的选中状态
+            // 原有功能: 更新 hide 选项的勾选状态
             if (el.id == "allow-hide-cm")
                 el.attributes.toggleClass("selected", allow_hide_cm);
             if (el.id == "hide-tray")
@@ -999,8 +1112,24 @@ class PasswordArea: Reactor.Component {
     }
 
     event click $(menu#edit-password-context>li) (_, me) {
+        // PIN 功能: 处理 PIN 锁定菜单项点击
+        if (me.id == "unlock-pin-password") {
+            this.handleUnlockPinPassword();
+            return;
+        }
+        
+        // PIN 功能: 检查菜单是否被锁定,锁定状态下不允许操作其他项
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        if (has_pin && !menu_unlocked) {
+            return;
+        }
+        
+        // 原有功能: 处理验证方式选择
         if (me.id.indexOf('use-') == 0) {
             handler.set_option('verification-method', me.id);
+            // 原有功能: 检查条件,不满足时自动禁用 hide 选项
+            this.checkAndDisableHideOptions();
             this.toggleMenuState();
             passwordArea.update();
         } else if (me.id.indexOf('approve-mode') == 0) {
@@ -1012,18 +1141,108 @@ class PasswordArea: Reactor.Component {
             else
                 approve_mode = '';
             handler.set_option('approve-mode', approve_mode);
+            // 原有功能: 检查条件,不满足时自动禁用 hide 选项
+            this.checkAndDisableHideOptions();
             this.toggleMenuState();
             passwordArea.update();
         } else if (me.id == 'allow-hide-cm') {
-            // 切换"隐藏连接管理窗口"选项（'Y' 表示启用，'N' 表示禁用）
+            // 原有功能: 切换"隐藏连接管理窗口"选项
             handler.set_option('allow-hide-cm', handler.get_option('allow-hide-cm') == 'Y' ? 'N' : 'Y');
             this.toggleMenuState();
         } else if (me.id == 'hide-tray') {
-            // 切换"隐藏托盘图标"选项（'Y' 表示启用，'N' 表示禁用）
-            // 此处调用 set_option 后，ui_interface.rs 会自动发送 IPC 消息动态隐藏/显示托盘
+            // 原有功能: 切换"隐藏托盘图标"选项,通过 IPC 自动同步
             handler.set_option('hide-tray', handler.get_option('hide-tray') == 'Y' ? 'N' : 'Y');
             this.toggleMenuState();
         }
+    }
+
+    // 原有功能: 检查条件,自动禁用不符合条件的 hide 选项
+    function checkAndDisableHideOptions() {
+        var approve_mode = handler.get_option('approve-mode');
+        var method = handler.get_option('verification-method');
+        // 只有密码模式+固定密码时才允许隐藏选项
+        var enable_hide_options = approve_mode == 'password' && method == 'use-permanent-password';
+        
+        if (!enable_hide_options) {
+            // 不满足条件: 强制禁用
+            if (handler.get_option('allow-hide-cm') == 'Y') {
+                handler.set_option('allow-hide-cm', 'N');
+            }
+            if (handler.get_option('hide-tray') == 'Y') {
+                handler.set_option('hide-tray', 'N');
+            }
+        }
+    }
+
+    // PIN 功能: 处理密码菜单 PIN 项点击,根据状态切换设置/验证模式
+    function handleUnlockPinPassword() {
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        
+        if (!has_pin || menu_unlocked) {
+            // 无 PIN 或已解锁状态: 进入设置 PIN 模式
+            this.setupNewPinPassword();
+        } else {
+            // 有 PIN 且未解锁状态: 进入验证模式
+            this.verifyPinPassword();
+        }
+    }
+
+    // PIN 功能: 设置新 PIN 或修改/删除现有 PIN (与 ID 菜单功能相同)
+    function setupNewPinPassword() {
+        var me = this;
+        msgbox("custom-password", translate("Set PIN"), "<div .form .set-password> \
+            <div><span>" + translate('PIN Code') + ":</span><input|password(pin1) .outline-focus /></div> \
+            <div><span>" + translate('Confirmation') + ":</span><input|password(pin2) /></div> \
+        </div> \
+        ", "", function(res=null) {
+            if (!res) return;
+            var p1 = (res.pin1 || "").trim();
+            var p2 = (res.pin2 || "").trim();
+            
+            // 验证两次输入是否一致
+            if (p1 != p2) {
+                return translate("The confirmation is not identical.");
+            }
+            
+            // 调用后端接口设置 PIN (空值表示删除 PIN)
+            var err = handler.set_unlock_pin(p1);
+            if (err) {
+                return err;
+            }
+            
+            if (p1.length == 0) {
+                // 清空 PIN: 取消锁定状态
+                menu_unlocked = false;
+            } else {
+                // 设置成功: 自动解锁菜单
+                menu_unlocked = true;
+            }
+            
+            me.update();
+        });
+    }
+
+    // PIN 功能: 验证 PIN 码以解锁菜单 (与 ID 菜单功能相同)
+    function verifyPinPassword() {
+        var me = this;
+        msgbox("custom-password", translate("Verify PIN"), "<div .form .set-password> \
+            <div><span>" + translate('PIN Code') + ":</span><input|password(pin) .outline-focus /></div> \
+        </div> \
+        ", "", function(res=null) {
+            if (!res) return;
+            var input_pin = (res.pin || "").trim();
+            var current_pin = handler.get_unlock_pin();
+            
+            // 验证输入的 PIN 是否正确
+            if (input_pin != current_pin) {
+                return translate("Wrong PIN code");
+            }
+            
+            // PIN 验证成功: 解锁菜单
+            menu_unlocked = true;
+            me.update();
+        });
     }
 
     event click $(li#tfa) {
