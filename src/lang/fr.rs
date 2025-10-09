@@ -714,5 +714,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Custom scale slider", "Curseur d’échelle personnalisée"),
         ("Decrease", "Diminuer"),
         ("Increase", "Augmenter"),
+        ("Show virtual mouse", ""),
+        ("Virtual mouse size", ""),
+        ("Small", ""),
+        ("Large", ""),
+        ("Show virtual joystick", ""),
     ].iter().cloned().collect();
 }

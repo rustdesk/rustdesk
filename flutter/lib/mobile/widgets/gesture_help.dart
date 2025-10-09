@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
 class GestureIcons {
@@ -35,20 +36,27 @@ typedef OnTouchModeChange = void Function(bool);
 
 class GestureHelp extends StatefulWidget {
   GestureHelp(
-      {Key? key, required this.touchMode, required this.onTouchModeChange})
+      {Key? key,
+      required this.touchMode,
+      required this.onTouchModeChange,
+      required this.virtualMouseMode})
       : super(key: key);
   final bool touchMode;
   final OnTouchModeChange onTouchModeChange;
+  final VirtualMouseMode virtualMouseMode;
 
   @override
-  State<StatefulWidget> createState() => _GestureHelpState(touchMode);
+  State<StatefulWidget> createState() =>
+      _GestureHelpState(touchMode, virtualMouseMode);
 }
 
 class _GestureHelpState extends State<GestureHelp> {
   late int _selectedIndex;
   late bool _touchMode;
+  final VirtualMouseMode _virtualMouseMode;
 
-  _GestureHelpState(bool touchMode) {
+  _GestureHelpState(bool touchMode, VirtualMouseMode virtualMouseMode)
+      : _virtualMouseMode = virtualMouseMode {
     _touchMode = touchMode;
     _selectedIndex = _touchMode ? 1 : 0;
   }
@@ -68,31 +76,144 @@ class _GestureHelpState extends State<GestureHelp> {
             padding: const EdgeInsets.symmetric(vertical: 12.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                ToggleSwitch(
-                  initialLabelIndex: _selectedIndex,
-                  activeFgColor: Colors.white,
-                  inactiveFgColor: Colors.white60,
-                  activeBgColor: [MyTheme.accent],
-                  inactiveBgColor: Theme.of(context).hintColor,
-                  totalSwitches: 2,
-                  minWidth: 150,
-                  fontSize: 15,
-                  iconSize: 18,
-                  labels: [translate("Mouse mode"), translate("Touch mode")],
-                  icons: [Icons.mouse, Icons.touch_app],
-                  onToggle: (index) {
-                    setState(() {
-                      if (_selectedIndex != index) {
-                        _selectedIndex = index ?? 0;
-                        _touchMode = index == 0 ? false : true;
-                        widget.onTouchModeChange(_touchMode);
-                      }
-                    });
-                  },
+                Center(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ToggleSwitch(
+                        initialLabelIndex: _selectedIndex,
+                        activeFgColor: Colors.white,
+                        inactiveFgColor: Colors.white60,
+                        activeBgColor: [MyTheme.accent],
+                        inactiveBgColor: Theme.of(context).hintColor,
+                        totalSwitches: 2,
+                        minWidth: 150,
+                        fontSize: 15,
+                        iconSize: 18,
+                        labels: [
+                          translate("Mouse mode"),
+                          translate("Touch mode")
+                        ],
+                        icons: [Icons.mouse, Icons.touch_app],
+                        onToggle: (index) {
+                          setState(() {
+                            if (_selectedIndex != index) {
+                              _selectedIndex = index ?? 0;
+                              _touchMode = index == 0 ? false : true;
+                              widget.onTouchModeChange(_touchMode);
+                            }
+                          });
+                        },
+                      ),
+                      Transform.translate(
+                        offset: const Offset(-10.0, 0.0),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: _virtualMouseMode.showVirtualMouse,
+                              onChanged: (value) async {
+                                if (value == null) return;
+                                await _virtualMouseMode.toggleVirtualMouse();
+                                setState(() {});
+                              },
+                            ),
+                            InkWell(
+                              onTap: () async {
+                                await _virtualMouseMode.toggleVirtualMouse();
+                                setState(() {});
+                              },
+                              child: Text(translate('Show virtual mouse')),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_touchMode && _virtualMouseMode.showVirtualMouse)
+                        Padding(
+                          // Indent "Virtual mouse size"
+                          padding: const EdgeInsets.only(left: 24.0),
+                          child: SizedBox(
+                            width: 260,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      top: 0.0, bottom: 0),
+                                  child: Text(translate('Virtual mouse size')),
+                                ),
+                                Transform.translate(
+                                  offset: Offset(-0.0, -6.0),
+                                  child: Row(
+                                    children: [
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(left: 0.0),
+                                        child: Text(translate('Small')),
+                                      ),
+                                      Expanded(
+                                        child: Slider(
+                                          value: _virtualMouseMode
+                                              .virtualMouseScale,
+                                          min: 0.8,
+                                          max: 1.8,
+                                          divisions: 10,
+                                          onChanged: (value) {
+                                            _virtualMouseMode
+                                                .setVirtualMouseScale(value);
+                                            setState(() {});
+                                          },
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(right: 16.0),
+                                        child: Text(translate('Large')),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (!_touchMode && _virtualMouseMode.showVirtualMouse)
+                        Transform.translate(
+                          offset: const Offset(-10.0, -12.0),
+                          child: Padding(
+                              // Indent "Show virtual joystick"
+                              padding: const EdgeInsets.only(left: 24.0),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Checkbox(
+                                    value:
+                                        _virtualMouseMode.showVirtualJoystick,
+                                    onChanged: (value) async {
+                                      if (value == null) return;
+                                      await _virtualMouseMode
+                                          .toggleVirtualJoystick();
+                                      setState(() {});
+                                    },
+                                  ),
+                                  InkWell(
+                                    onTap: () async {
+                                      await _virtualMouseMode
+                                          .toggleVirtualJoystick();
+                                      setState(() {});
+                                    },
+                                    child: Text(
+                                        translate("Show virtual joystick")),
+                                  ),
+                                ],
+                              )),
+                        ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 30),
                 Container(
                     child: Wrap(
                   spacing: space,

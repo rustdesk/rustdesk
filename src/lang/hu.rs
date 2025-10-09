@@ -715,5 +715,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Custom scale slider", "Egyéni méretarány-csúszka"),
         ("Decrease", "Csökkentés"),
         ("Increase", "Növelés"),
+        ("Show my cursor", ""),
+        ("Show virtual mouse", ""),
+        ("Virtual mouse size", ""),
+        ("Small", ""),
+        ("Large", ""),
+        ("Show virtual joystick", ""),
     ].iter().cloned().collect();
 }

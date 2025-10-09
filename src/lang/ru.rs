@@ -714,5 +714,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Custom scale slider", "Ползунок пользовательского масштаба"),
         ("Decrease", "Уменьшить"),
         ("Increase", "Увеличить"),
+        ("Show virtual mouse", ""),
+        ("Virtual mouse size", ""),
+        ("Small", ""),
+        ("Large", ""),
+        ("Show virtual joystick", ""),
     ].iter().cloned().collect();
 }
