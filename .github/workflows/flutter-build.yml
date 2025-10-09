@@ -988,6 +988,19 @@ jobs:
           name: librustdesk.so.${{ matrix.job.target }}
           path: ./target/${{ matrix.job.target }}/release/liblibrustdesk.so
 
+      # 替换 Android 应用名称
+      # 如果在 GitHub Secrets 中设置了 APP_NAME 变量，则使用该变量替换 strings.xml 中的默认应用名称
+      # 如果未设置 APP_NAME，则保持 strings.xml 中的原始默认值 "RustDesk"
+      # 这样可以在构建时自定义应用显示名称，而无需修改源代码
+      - name: Replace app name
+        if: env.APP_NAME != ''
+        shell: bash
+        run: |
+          # 使用自定义的 APP_NAME 替换 strings.xml 中的 app_name 值
+          echo "Using custom APP_NAME: ${{ env.APP_NAME }}"
+          sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">${{ env.APP_NAME }}<\/string>/g" ./flutter/android/app/src/main/res/values/strings.xml
+          echo "App name set to: ${{ env.APP_NAME }}"
+
       - name: Build rustdesk
         shell: bash
         env:
@@ -1194,6 +1207,19 @@ jobs:
         with:
           name: librustdesk.so.i686-linux-android
           path: ./flutter/android/app/src/main/jniLibs/x86
+
+      # 替换 Android 应用名称（Universal APK）
+      # 如果在 GitHub Secrets 中设置了 APP_NAME 变量，则使用该变量替换 strings.xml 中的默认应用名称
+      # 如果未设置 APP_NAME，则保持 strings.xml 中的原始默认值 "RustDesk"
+      # 这样可以在构建通用 APK 时自定义应用显示名称，而无需修改源代码
+      - name: Replace app name
+        if: env.APP_NAME != ''
+        shell: bash
+        run: |
+          # 使用自定义的 APP_NAME 替换 strings.xml 中的 app_name 值
+          echo "Using custom APP_NAME: ${{ env.APP_NAME }}"
+          sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">${{ env.APP_NAME }}<\/string>/g" ./flutter/android/app/src/main/res/values/strings.xml
+          echo "App name set to: ${{ env.APP_NAME }}"
 
       - name: Build rustdesk
         shell: bash
