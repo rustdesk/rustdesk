@@ -140,9 +140,12 @@ class AudioInputs: Reactor.Component {
         var inputs = handler.get_sound_inputs();
         if (is_win) inputs = ["System Sound"].concat(inputs);
         if (!inputs.length) return <li style="display:hidden" />;
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>{translate('Audio Input')}
+        return <li disabled={pin_locked ? "true" : "false"}>{translate('Audio Input')}
             <menu #audio-input key={inputs.length}>
                 <li #enable-audio><span>{svg_checkmark}</span>{translate("Mute")}</li>
                 <div .separator />
@@ -175,6 +178,11 @@ class AudioInputs: Reactor.Component {
     }
 
     event click $(menu#audio-input>li) (_, me) {
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        if (has_pin && !menu_unlocked) {
+            return;
+        }
         var v = me.id;
         if (v == 'enable-audio') {
             handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
@@ -239,9 +247,12 @@ class Enhancements: Reactor.Component {
         var has_hwcodec = handler.has_hwcodec();
         var has_vram = handler.has_vram();
         var support_remove_wallpaper = handler.support_remove_wallpaper();
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>{translate('Enhancements')}
+        return <li disabled={pin_locked ? "true" : "false"}>{translate('Enhancements')}
             <menu #enhancements-menu>
                 {(has_hwcodec || has_vram) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
@@ -265,6 +276,11 @@ class Enhancements: Reactor.Component {
     }
 
     event click $(menu#enhancements-menu>li) (_, me) {
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        if (has_pin && !menu_unlocked) {
+            return;
+        }
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
             var set_value = handler.get_option(v) != 'N' ? 'N' : '';
