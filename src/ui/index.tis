@@ -80,10 +80,19 @@ class ShareRdp: Reactor.Component {
     function render() {
         var rdp_shared_string = translate("Enable RDP session sharing");
         var cls = handler.is_share_rdp()  ? "selected" : "line-through";
-        return <li class={cls}><span>{svg_checkmark}</span>{rdp_shared_string}</li>;
+        // PIN锁定: 计算锁定状态
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
+        return <li disabled={pin_locked ? "true" : "false"} class={cls}><span>{svg_checkmark}</span>{rdp_shared_string}</li>;
     }
     
     function onClick() {
+        // PIN锁定: 检查并阻止锁定状态下的操作
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
+        if (pin_locked) return;
         handler.set_share_rdp(!handler.is_share_rdp());
         this.update();
     }
@@ -99,7 +108,11 @@ class DirectServer: Reactor.Component {
         var text = translate("Enable direct IP access");
         var enabled = handler.get_option("direct-server") == "Y";
         var cls = enabled ? "selected" : "line-through";
-        return <li class={cls}><span>{svg_checkmark}</span>{text}{enabled && <EditDirectAccessPort />}</li>;
+        // PIN锁定: 计算锁定状态
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
+        return <li disabled={pin_locked ? "true" : "false"} class={cls}><span>{svg_checkmark}</span>{text}{enabled && <EditDirectAccessPort />}</li>;
     }
     
     function onClick() {
@@ -107,6 +120,11 @@ class DirectServer: Reactor.Component {
             is_edit_rdp_port = false;
             return;
         }
+        // PIN锁定: 检查并阻止锁定状态下的操作
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
+        if (pin_locked) return;
         handler.set_option("direct-server", handler.get_option("direct-server") == "Y" ? "" : "Y");
         this.update();
     }
@@ -125,8 +143,12 @@ class AudioInputs: Reactor.Component {
         if (is_win) inputs = ["System Sound"].concat(inputs);
         if (!inputs.length) return <li style="display:hidden" />;
         var me = this;
+        // PIN锁定: 计算锁定状态
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>{translate('Audio Input')}
+        return <li disabled={pin_locked ? "true" : "false"}>{translate('Audio Input')}
             <menu #audio-input key={inputs.length}>
                 <li #enable-audio><span>{svg_checkmark}</span>{translate("Mute")}</li>
                 <div .separator />
@@ -159,6 +181,10 @@ class AudioInputs: Reactor.Component {
     }
 
     event click $(menu#audio-input>li) (_, me) {
+        // PIN锁定: 检查并阻止锁定状态下的操作
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        if (has_pin && !menu_unlocked) return;
         var v = me.id;
         if (v == 'enable-audio') {
             handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
@@ -216,8 +242,12 @@ class Enhancements: Reactor.Component {
         var has_vram = handler.has_vram();
         var support_remove_wallpaper = handler.support_remove_wallpaper();
         var me = this;
+        // PIN锁定: 计算锁定状态
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        var pin_locked = has_pin && !menu_unlocked;
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>{translate('Enhancements')}
+        return <li disabled={pin_locked ? "true" : "false"}>{translate('Enhancements')}
             <menu #enhancements-menu>
                 {(has_hwcodec || has_vram) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
@@ -241,6 +271,10 @@ class Enhancements: Reactor.Component {
     }
 
     event click $(menu#enhancements-menu>li) (_, me) {
+        // PIN锁定: 检查并阻止锁定状态下的操作
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        if (has_pin && !menu_unlocked) return;
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
             var set_value = handler.get_option(v) != 'N' ? 'N' : '';
@@ -338,20 +372,20 @@ class MyIdMenu: Reactor.Component {
                 <li #socks5-server disabled={pin_locked ? "true" : "false"}>{translate('Socks5 Proxy')}</li>
                 { false && <li #allow-websocket><span>{svg_checkmark}</span>{translate('Use WebSocket')}</li> }
                 <div .separator />
-                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
+                <li #stop-service disabled={pin_locked ? "true" : "false"} class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li> <!-- PIN锁定保护 -->
                 {is_win && handler.is_installed() ? <ShareRdp /> : ""}
                 <DirectServer />
                 {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
                 {username ? 
-                <li #logout>{translate('Logout')} ({username})</li> :
-                <li #login>{translate('Login')}</li>}
-                {handler.is_ok_change_id() && key_confirmed && connect_status > 0 ? <li #change-id>{translate('Change ID')}</li> : ""}
+                <li #logout disabled={pin_locked ? "true" : "false"}>{translate('Logout')} ({username})</li> : <!-- PIN锁定保护 -->
+                <li #login disabled={pin_locked ? "true" : "false"}>{translate('Login')}</li>} <!-- PIN锁定保护 -->
+                {handler.is_ok_change_id() && key_confirmed && connect_status > 0 ? <li #change-id disabled={pin_locked ? "true" : "false"}>{translate('Change ID')}</li> : ""} <!-- PIN锁定保护 -->
                 <div .separator />
-                <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
-                <Languages />
-                <li #allow-auto-update><span>{svg_checkmark}</span>{translate('Auto update')}</li> 
-                <li #about>{translate('About')} {" "}{handler.get_app_name()}</li>
+                <li #allow-darktheme disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Dark Theme')}</li> <!-- PIN锁定保护 -->
+                <Languages /> <!-- 不受PIN锁定影响 -->
+                <li #allow-auto-update disabled={pin_locked ? "true" : "false"}><span>{svg_checkmark}</span>{translate('Auto update')}</li> <!-- PIN锁定保护 -->
+                <li #about>{translate('About')} {" "}{handler.get_app_name()}</li> <!-- 不受PIN锁定影响 -->
             </menu>
         </popup>;
     }
@@ -369,10 +403,18 @@ class MyIdMenu: Reactor.Component {
     }
 
     event click $(li#login) () {
+        // PIN锁定: 检查并阻止锁定状态下的登录操作
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        if (has_pin && !menu_unlocked) return;
         login();
     }
 
     event click $(li#logout) () {
+        // PIN锁定: 检查并阻止锁定状态下的登出操作
+        var pin = handler.get_unlock_pin();
+        var has_pin = pin && pin.length > 0;
+        if (has_pin && !menu_unlocked) return;
         logout();
     }
 
@@ -490,13 +532,19 @@ class MyIdMenu: Reactor.Component {
     }
 
     event click $(menu#config-options>li) (_, me) {
-        // PIN 功能: 处理 PIN 锁定菜单项点击
+        // PIN锁定: 处理PIN解锁菜单项(始终可用)
         if (me.id == "unlock-pin") {
             this.handleUnlockPin();
             return;
         }
         
-        // PIN 功能: 检查菜单是否被锁定,锁定状态下不允许操作其他项
+        // PIN锁定: 关于菜单项不受锁定影响(始终可用)
+        if (me.id == "about") {
+            this.showAbout();
+            return;
+        }
+        
+        // PIN锁定: 检查菜单是否被锁定,锁定状态下阻止其他菜单项操作
         var pin = handler.get_unlock_pin();
         var has_pin = pin && pin.length > 0;
         if (has_pin && !menu_unlocked) {
@@ -622,8 +670,6 @@ class MyIdMenu: Reactor.Component {
             });
         } else if (me.id == "allow-darktheme") {
             updateTheme();
-        } else if (me.id == "about") {
-            this.showAbout()
         }
     }
 }
