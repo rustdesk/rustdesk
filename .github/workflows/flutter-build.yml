@@ -1002,7 +1002,7 @@ jobs:
             ;;
             armv7-linux-androideabi)
               mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
-              cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
+              cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/lifnux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
               # build flutter
               pushd flutter
