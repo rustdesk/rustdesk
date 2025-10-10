@@ -319,8 +319,8 @@ class AbModel {
 // #endregion
 
 // #region peer
-  Future<String?> addIdToCurrent(
-      String id, String alias, String password, List<dynamic> tags) async {
+  Future<String?> addIdToCurrent(String id, String alias, String password,
+      List<dynamic> tags, String note) async {
     if (currentAbPeers.where((element) => element.id == id).isNotEmpty) {
       return "$id already exists in address book $_currentName";
     }
@@ -332,6 +332,9 @@ class AbModel {
     // avoid set existing password to empty
     if (password.isNotEmpty) {
       peer['password'] = password;
+    }
+    if (note.isNotEmpty) {
+      peer['note'] = note;
     }
     final ret = await addPeersTo([peer], _currentName.value);
     _syncAllFromRecent = true;
@@ -373,6 +376,14 @@ class AbModel {
     await pullNonLegacyAfterChange();
     currentAbPeers.refresh();
     _saveCache();
+    return res;
+  }
+
+  Future<bool> changeNote({required String id, required String note}) async {
+    bool res = await current.changeNote(id: id, note: note);
+    await pullNonLegacyAfterChange();
+    currentAbPeers.refresh();
+    // no need to save cache
     return res;
   }
 
@@ -658,6 +669,15 @@ class AbModel {
     }
   }
 
+  String getPeerNote(String id) {
+    final it = currentAbPeers.where((p0) => p0.id == id);
+    if (it.isEmpty) {
+      return '';
+    } else {
+      return it.first.note;
+    }
+  }
+
   Color getCurrentAbTagColor(String tag) {
     if (tag == kUntagged) {
       return MyTheme.accent;
@@ -862,6 +882,8 @@ abstract class BaseAb {
   Future<bool> changeTagForPeers(List<String> ids, List<dynamic> tags);
 
   Future<bool> changeAlias({required String id, required String alias});
+
+  Future<bool> changeNote({required String id, required String note});
 
   Future<bool> changePersonalHashPassword(String id, String hash);
 
@@ -1088,6 +1110,12 @@ class LegacyAb extends BaseAb {
     }
     it.first.alias = alias;
     return await pushAb();
+  }
+
+  @override
+  Future<bool> changeNote({required String id, required String note}) async {
+    // no need to implement
+    return false;
   }
 
   @override
@@ -1549,6 +1577,27 @@ class Ab extends BaseAb {
     }
   }
 
+  @override
+  Future<bool> changeNote({required String id, required String note}) async {
+    try {
+      final api =
+          "${await bind.mainGetApiServer()}/api/ab/peer/update/${profile.guid}";
+      var headers = getHttpHeaders();
+      headers['Content-Type'] = "application/json";
+      final body = jsonEncode({"id": id, "note": note});
+      final resp = await http.put(Uri.parse(api), headers: headers, body: body);
+      final errMsg = _jsonDecodeActionResp(resp);
+      if (errMsg.isNotEmpty) {
+        BotToast.showText(contentColor: Colors.red, text: errMsg);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      debugPrint('changeNote err: ${err.toString()}');
+      return false;
+    }
+  }
+
   Future<bool> _setPassword(Object bodyContent) async {
     try {
       final api =
@@ -1812,6 +1861,11 @@ class DummyAb extends BaseAb {
 
   @override
   Future<bool> changeAlias({required String id, required String alias}) async {
+    return false;
+  }
+
+  @override
+  Future<bool> changeNote({required String id, required String note}) async {
     return false;
   }
 

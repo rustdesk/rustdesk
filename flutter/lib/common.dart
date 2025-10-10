@@ -13,6 +13,7 @@ import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
@@ -1629,7 +1630,8 @@ bool mainGetPeerBoolOptionSync(String id, String key) {
 // Use `sessionGetToggleOption()` and `sessionToggleOption()` instead.
 // Because all session options use `Y` and `<Empty>` as values.
 
-Future<bool> matchPeer(String searchText, Peer peer) async {
+Future<bool> matchPeer(
+    String searchText, Peer peer, PeerTabIndex peerTabIndex) async {
   if (searchText.isEmpty) {
     return true;
   }
@@ -1640,11 +1642,14 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
       peer.username.toLowerCase().contains(searchText)) {
     return true;
   }
-  final alias = peer.alias;
-  if (alias.isEmpty) {
-    return false;
+  if (peer.alias.toLowerCase().contains(searchText)) {
+    return true;
   }
-  return alias.toLowerCase().contains(searchText);
+  if (peerTabShowNote(peerTabIndex) &&
+      peer.note.toLowerCase().contains(searchText)) {
+    return true;
+  }
+  return false;
 }
 
 /// Get the image for the current [platform].
@@ -3967,4 +3972,8 @@ String decode_http_response(http.Response resp) {
     // Fallback to bodyString which handles encoding automatically
     return resp.body;
   }
+}
+
+bool peerTabShowNote(PeerTabIndex peerTabIndex) {
+  return peerTabIndex == PeerTabIndex.ab || peerTabIndex == PeerTabIndex.group;
 }
