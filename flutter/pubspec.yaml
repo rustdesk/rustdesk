@@ -120,6 +120,7 @@ dev_dependencies:
   ffigen: ^8.0.2
 
 dependency_overrides:
+  extended_text: ^15.0.0
   intl: ^0.19.0
   flutter_plugin_android_lifecycle: 2.0.17
 
