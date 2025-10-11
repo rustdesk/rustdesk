@@ -13,16 +13,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+      - name: Install Rust toolchain
+        shell: pwsh
+        run: |
+          irm https://sh.rustup.rs -OutFile rustup-init.exe
+          Start-Process -FilePath .\rustup-init.exe -ArgumentList "-y --default-toolchain stable" -NoNewWindow -Wait
+          RefreshEnv.cmd
+          rustup target add x86_64-pc-windows-msvc
 
       - name: Install dependencies
-        run: |
-          choco install -y llvm
-          rustup target add x86_64-pc-windows-msvc
+        run: choco install -y llvm
 
       - name: Set server info (environment vars)
         shell: pwsh
@@ -32,6 +32,7 @@ jobs:
           Add-Content $env:GITHUB_ENV 'RUSTDESK_KEY=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICa+NPuA55i85fZSxOljTdjHlQJ04UeZTru7KtFBx6c2 root@n8n-cislink-u35624'
 
       - name: Build release
+        shell: pwsh
         run: cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Upload EXE artifact
