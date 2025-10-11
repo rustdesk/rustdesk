@@ -18,6 +18,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:provider/provider.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1674,6 +1675,16 @@ class LastWindowPosition {
   LastWindowPosition(this.width, this.height, this.offsetWidth,
       this.offsetHeight, this.isMaximized, this.isFullscreen);
 
+  bool equals(LastWindowPosition other) {
+    return (
+      (width == other.width) &&
+      (height == other.height) &&
+      (offsetWidth == other.offsetWidth) &&
+      (offsetHeight == other.offsetHeight) &&
+      (isMaximized == other.isMaximized) &&
+      (isFullscreen == other.isFullscreen));
+  }
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       "width": width,
@@ -1713,9 +1724,14 @@ String get windowFramePrefix =>
         ? "incoming_"
         : (bind.isOutgoingOnly() ? "outgoing_" : ""));
 
+typedef WindowKey = ({WindowType type, int? windowId});
+
+LastWindowPosition? _lastWindowPosition = null;
+final Debouncer _saveWindowDebounce = Debouncer(delay: Duration(seconds: 1));
+
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
-Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
+Future<void> saveWindowPosition(WindowType type, {int? windowId, bool? flush}) async {
   if (type != WindowType.Main && windowId == null) {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
@@ -1784,16 +1800,40 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 
   final pos = LastWindowPosition(
       sz.width, sz.height, position.dx, position.dy, isMaximized, isFullscreen);
-  debugPrint(
-      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
 
-  await bind.setLocalFlutterOption(
-      k: windowFramePrefix + type.name, v: pos.toString());
+  final WindowKey key = (type: type, windowId: windowId);
 
-  if ((type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) &&
-      windowId != null) {
-    await _saveSessionWindowPosition(
-        type, windowId, isMaximized, isFullscreen, pos);
+  final bool haveNewWindowPosition = (_lastWindowPosition == null) || !pos.equals(_lastWindowPosition!);
+  final bool isPreviousNewWindowPositionPending = _saveWindowDebounce.isRunning;
+
+  if (haveNewWindowPosition || isPreviousNewWindowPositionPending) {
+    _lastWindowPosition = pos;
+
+    if (flush ?? false) {
+      // If a previous update is pending, replace it.
+      _saveWindowDebounce.cancel();
+      await _saveWindowPositionActual(key);
+    } else if (haveNewWindowPosition) {
+      _saveWindowDebounce.call(() => _saveWindowPositionActual(key));
+    }
+  }
+}
+
+Future<void> _saveWindowPositionActual(WindowKey key) async {
+  LastWindowPosition? pos = _lastWindowPosition;
+
+  if (pos != null) {
+    debugPrint(
+        "Saving frame: ${key.windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
+
+    await bind.setLocalFlutterOption(
+        k: windowFramePrefix + key.type.name, v: pos.toString());
+
+    if ((key.type == WindowType.RemoteDesktop || key.type == WindowType.ViewCamera) &&
+        key.windowId != null) {
+      await _saveSessionWindowPosition(
+          key.type, key.windowId!, pos.isMaximized ?? false, pos.isFullscreen ?? false, pos);
+    }
   }
 }
 
