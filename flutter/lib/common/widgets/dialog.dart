@@ -1783,6 +1783,49 @@ void editAbTagDialog(
   });
 }
 
+void editAbPeerNoteDialog(String id) {
+  var isInProgress = false;
+  final currentNote = gFFI.abModel.getPeerNote(id);
+  var controller = TextEditingController(text: currentNote);
+
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      setState(() {
+        isInProgress = true;
+      });
+      await gFFI.abModel.changeNote(id: id, note: controller.text);
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate("Edit note")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: controller,
+            autofocus: true,
+            maxLines: 3,
+            minLines: 1,
+            maxLength: 300,
+            decoration: InputDecoration(
+              labelText: translate('Note'),
+            ),
+          ).workaroundFreezeLinuxMint(),
+          // NOT use Offstage to wrap LinearProgressIndicator
+          if (isInProgress) const LinearProgressIndicator(),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
 void renameDialog(
     {required String oldName,
     FormFieldValidator<String>? validator,

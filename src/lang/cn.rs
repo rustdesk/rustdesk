@@ -719,5 +719,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Small", "小"),
         ("Large", "大"),
         ("Show virtual joystick", "显示虚拟摇杆"),
+        ("Edit note", "编辑备注"),
+        ("Alias", "别名"),
     ].iter().cloned().collect();
 }
