@@ -1,47 +1,61 @@
-<<<<<<< HEAD
-# 排除可执行文件和输出目录
-rustdesk.exe
-Output/
-*.exe
-
-# 排除测试文件
-test_*.toml
-start.bat
-=======
+# Build and target directories
 /build
 /target
 .vscode
 .idea
 .DS_Store
+
+# Sciter related
 libsciter-gtk.so
+libsciter.dylib
+sciter.dll
+
+# Generated files
 src/ui/inline.rs
-extractor
-__pycache__
 src/version.rs
+src/bridge_generated.rs
+src/bridge_generated.io.rs
+lib/generated_bridge.dart
+flutter/lib/generated_plugin_registrant.dart
+
+# Executables and packages
+rustdesk.exe
+Output/
+*.exe
 *dmg
-*exe
 *tgz
+*deb
+rustdesk
+extractor
+
+# Python
+__pycache__
+
+# Certificates and keys
 cert.pfx
 *.bak
+
+# Media files
 *png
 *svg
 *jpg
-sciter.dll
+
+# Debug files
 **pdb
-src/bridge_generated.rs
-src/bridge_generated.io.rs
-*deb
-rustdesk
 *.cache
-# appimage
+
+# AppImage
 appimage/AppDir
 appimage/*.AppImage
 appimage/appimage-build
 appimage/*.xz
-# flutter
+
+# Flutter
 flutter/linux/build/**
 flutter/linux/cmake-build-debug/**
-# flatpak
+flutter/web/
+
+# Flatpak
 flatpak/.flatpak-builder/**
 flatpak/ccache/**
 flatpak/.flatpak-builder/build/**
@@ -51,18 +65,42 @@ flatpak/.flatpak-builder/debian-binary
 flatpak/build/**
 flatpak/repo/**
 flatpak/*.flatpak
-# bridge file
-lib/generated_bridge.dart
-# vscode devcontainer
+
+# VS Code devcontainer
 .gitconfig
 .vscode-server/
 .ssh
 .devcontainer/.*
-# build cache in examples
+
+# Build cache
 examples/**/target/
-# ===
 vcpkg_installed
-flutter/lib/generated_plugin_registrant.dart
-libsciter.dylib
-flutter/web/
->>>>>>> 8643f0593d33870e646b5f65b985f540a2c1e796
+
+# Test files
+test_*.toml
+start.bat
+
+# ========================================
+# 🔒 安全敏感文件 - 绝对不能提交！
+# ========================================
+*.ppk
+*.pem
+*.key
+*_private_key*
+cislink.*
+id_ed25519
+id_ed25519.pub
+id_rsa
+id_rsa.pub
+
+# 临时调试文件
+debug_*.txt
+*_test.toml
+extract_*.txt
+find_*.txt
+generate_*.txt
+regenerate_*.txt
+server_check_commands.txt
+
+# 服务器敏感信息
+server_public_key.txt

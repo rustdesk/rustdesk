@@ -46,9 +46,9 @@ RustDesk_Config_Installer.exe /VERYSILENT /NORESTART
 ## 📋 部署的配置信息
 
 **服务器配置:**
-- Rendezvous Server: `hbbs.cislink.nl`
-- Relay Server: `hbbr.cislink.nl`
-- Public Key: `wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=`
+- Rendezvous Server: `hbbs.cislink.nl` (142.132.187.134)
+- Relay Server: `hbbr.cislink.nl` (142.132.187.134)
+- Public Key: `AAAAC3NzaC1lZDI1NTE5AAAAIO08lDeKuMjZRzfSkGQ65QaXptqsBMtvUmbvB8Unhpco`
 
 **部署位置:**
 - `%APPDATA%\RustDesk\config\`
