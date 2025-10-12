@@ -466,6 +466,7 @@ class _AddressBookState extends State<AddressBook> {
     IDTextEditingController idController = IDTextEditingController(text: '');
     TextEditingController aliasController = TextEditingController(text: '');
     TextEditingController passwordController = TextEditingController(text: '');
+    TextEditingController noteController = TextEditingController(text: '');
     final tags = List.of(gFFI.abModel.currentAbTags);
     var selectedTag = List<dynamic>.empty(growable: true).obs;
     final style = TextStyle(fontSize: 14.0);
@@ -494,7 +495,11 @@ class _AddressBookState extends State<AddressBook> {
             password = passwordController.text;
           }
           String? errMsg2 = await gFFI.abModel.addIdToCurrent(
-              id, aliasController.text.trim(), password, selectedTag);
+              id,
+              aliasController.text.trim(),
+              password,
+              selectedTag,
+              noteController.text);
           if (errMsg2 != null) {
             setState(() {
               isInProgress = false;
@@ -600,6 +605,24 @@ class _AddressBookState extends State<AddressBook> {
                           ),
                         ).workaroundFreezeLinuxMint(),
                       )),
+                row(
+                    label: Text(
+                      translate('Note'),
+                      style: style,
+                    ),
+                    input: Obx(
+                      () => TextField(
+                        controller: noteController,
+                        maxLines: 3,
+                        minLines: 1,
+                        maxLength: 300,
+                        decoration: InputDecoration(
+                          labelText: stateGlobal.isPortrait.isFalse
+                              ? null
+                              : translate('Note'),
+                        ),
+                      ).workaroundFreezeLinuxMint(),
+                    )),
                 if (gFFI.abModel.currentAbTags.isNotEmpty)
                   Align(
                     alignment: Alignment.centerLeft,
