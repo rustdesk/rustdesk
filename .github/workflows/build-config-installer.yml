@@ -1,0 +1,334 @@
+name: Build RustDesk Client Config Installer
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'Deploy-RustDeskConfig.ps1'
+      - 'Deploy-RustDesk2Config.ps1'
+      - 'Deploy-Config.iss'
+      - 'RustDesk.toml'
+      - 'RustDesk2.toml'
+      - '.github/workflows/build-config-installer.yml'
+  
+  pull_request:
+    branches:
+      - master
+      - main
+    paths:
+      - 'Deploy-RustDeskConfig.ps1'
+      - 'Deploy-RustDesk2Config.ps1'
+      - 'Deploy-Config.iss'
+      - 'RustDesk.toml'
+      - 'RustDesk2.toml'
+  
+  workflow_dispatch:
+    inputs:
+      public_key:
+        description: 'RustDesk Server Public Key (optional - will use existing config if not provided)'
+        required: false
+        type: string
+      version:
+        description: 'Installer Version (e.g., 1.4.0)'
+        required: false
+        default: '1.4.0'
+        type: string
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Inno Setup
+        run: |
+          Write-Host "Downloading Inno Setup..." -ForegroundColor Cyan
+          $innoSetupUrl = "https://jrsoftware.org/download.php/is.exe"
+          $innoSetupInstaller = "$env:TEMP\innosetup.exe"
+          
+          Invoke-WebRequest -Uri $innoSetupUrl -OutFile $innoSetupInstaller -UseBasicParsing
+          
+          Write-Host "Installing Inno Setup..." -ForegroundColor Cyan
+          Start-Process -FilePath $innoSetupInstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-" -Wait
+          
+          Write-Host "Inno Setup installed successfully" -ForegroundColor Green
+        shell: pwsh
+      
+      - name: Update Public Key (if provided)
+        if: github.event.inputs.public_key != ''
+        run: |
+          $newKey = "${{ github.event.inputs.public_key }}"
+          Write-Host "Updating configuration with new Public Key..." -ForegroundColor Cyan
+          
+          # Update RustDesk.toml
+          if (Test-Path "RustDesk.toml") {
+            $content = Get-Content "RustDesk.toml" -Raw
+            $content = $content -replace 'key = "[^"]*"', "key = `"$newKey`""
+            Set-Content -Path "RustDesk.toml" -Value $content -NoNewline
+            Write-Host "✓ Updated RustDesk.toml" -ForegroundColor Green
+          }
+          
+          # Update RustDesk2.toml
+          if (Test-Path "RustDesk2.toml") {
+            $content = Get-Content "RustDesk2.toml" -Raw
+            $content = $content -replace "key = '[^']*'", "key = '$newKey'"
+            Set-Content -Path "RustDesk2.toml" -Value $content -NoNewline
+            Write-Host "✓ Updated RustDesk2.toml" -ForegroundColor Green
+          }
+          
+          # Update Deploy-RustDesk2Config.ps1
+          if (Test-Path "Deploy-RustDesk2Config.ps1") {
+            $content = Get-Content "Deploy-RustDesk2Config.ps1" -Raw
+            $content = $content -replace 'Key = "[^"]*"', "Key = `"$newKey`""
+            Set-Content -Path "Deploy-RustDesk2Config.ps1" -Value $content -NoNewline
+            Write-Host "✓ Updated Deploy-RustDesk2Config.ps1" -ForegroundColor Green
+          }
+          
+          Write-Host "Configuration updated with new key" -ForegroundColor Green
+        shell: pwsh
+      
+      - name: Display Current Configuration
+        run: |
+          Write-Host "=========================================="
+          Write-Host "  Current RustDesk Configuration"
+          Write-Host "=========================================="
+          Write-Host ""
+          
+          if (Test-Path "RustDesk2.toml") {
+            Write-Host "RustDesk2.toml:" -ForegroundColor Cyan
+            Get-Content "RustDesk2.toml"
+            Write-Host ""
+          }
+          
+          # Extract key from config
+          $config = Get-Content "RustDesk2.toml" -Raw
+          if ($config -match "key = '([^']+)'") {
+            $key = $matches[1]
+            Write-Host "Public Key: $key" -ForegroundColor Green
+          }
+          
+          Write-Host "=========================================="
+        shell: pwsh
+      
+      - name: Build Config Installer
+        id: build
+        run: |
+          Write-Host "=========================================="
+          Write-Host "  Building RustDesk Config Installer"
+          Write-Host "=========================================="
+          Write-Host ""
+          
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $issFile = "Deploy-Config.iss"
+          
+          if (-not (Test-Path $iscc)) {
+            Write-Host "❌ Error: Inno Setup not found at $iscc" -ForegroundColor Red
+            exit 1
+          }
+          
+          if (-not (Test-Path $issFile)) {
+            Write-Host "❌ Error: ISS file not found: $issFile" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "Compiling installer..." -ForegroundColor Cyan
+          & $iscc $issFile
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✓ Installer compiled successfully" -ForegroundColor Green
+            
+            $installerPath = "Output\RustDesk_Config_Installer.exe"
+            if (Test-Path $installerPath) {
+              $fileInfo = Get-Item $installerPath
+              $sizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+              
+              Write-Host ""
+              Write-Host "Installer Info:" -ForegroundColor Cyan
+              Write-Host "  Path: $installerPath"
+              Write-Host "  Size: $sizeMB MB"
+              Write-Host "  Created: $($fileInfo.CreationTime)"
+              
+              # Set output for next steps
+              echo "installer_path=$installerPath" >> $env:GITHUB_OUTPUT
+              echo "installer_size=$sizeMB" >> $env:GITHUB_OUTPUT
+            } else {
+              Write-Host "❌ Error: Installer not found after compilation" -ForegroundColor Red
+              exit 1
+            }
+          } else {
+            Write-Host "❌ Error: Compilation failed with exit code $LASTEXITCODE" -ForegroundColor Red
+            exit 1
+          }
+        shell: pwsh
+      
+      - name: Calculate Checksums
+        id: checksums
+        run: |
+          $installerPath = "Output\RustDesk_Config_Installer.exe"
+          
+          Write-Host "Calculating checksums..." -ForegroundColor Cyan
+          
+          # SHA256
+          $sha256 = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash
+          Write-Host "SHA256: $sha256" -ForegroundColor Green
+          
+          # MD5
+          $md5 = (Get-FileHash -Path $installerPath -Algorithm MD5).Hash
+          Write-Host "MD5: $md5" -ForegroundColor Green
+          
+          # Save to file
+          $checksumFile = "Output\CHECKSUMS.txt"
+          @"
+RustDesk Config Installer Checksums
+=====================================
+
+File: RustDesk_Config_Installer.exe
+Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Version: ${{ github.event.inputs.version }}
+
+SHA256: $sha256
+MD5: $md5
+
+Verify with:
+  PowerShell: (Get-FileHash -Path RustDesk_Config_Installer.exe -Algorithm SHA256).Hash
+  Linux/Mac: shasum -a 256 RustDesk_Config_Installer.exe
+"@ | Out-File -FilePath $checksumFile -Encoding UTF8
+          
+          Write-Host "✓ Checksums saved to $checksumFile" -ForegroundColor Green
+          
+          # Set outputs
+          echo "sha256=$sha256" >> $env:GITHUB_OUTPUT
+          echo "md5=$md5" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+      
+      - name: Create Release Notes
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          $date = Get-Date -Format "yyyy-MM-dd"
+          
+          $releaseNotes = @"
+# RustDesk Config Installer v$version
+
+Build Date: $date
+Build ID: ${{ github.run_number }}
+Commit: ${{ github.sha }}
+
+## Configuration
+
+- Server: hbbs.cislink.nl
+- Relay: hbbr.cislink.nl
+- Public Key: $(if (Test-Path "RustDesk2.toml") { $config = Get-Content "RustDesk2.toml" -Raw; if ($config -match "key = '([^']+)'") { $matches[1] } else { "See config files" } } else { "See config files" })
+
+## Installation
+
+### Silent Installation (Recommended for Batch Deployment)
+``````
+RustDesk_Config_Installer.exe /VERYSILENT /NORESTART
+``````
+
+### Interactive Installation
+``````
+RustDesk_Config_Installer.exe
+``````
+
+### Batch Deployment via PowerShell
+``````powershell
+`$computers = @("PC001", "PC002", "PC003")
+foreach (`$pc in `$computers) {
+    Copy-Item "RustDesk_Config_Installer.exe" -Destination "\\`$pc\C$\Temp\"
+    Invoke-Command -ComputerName `$pc -ScriptBlock {
+        Start-Process "C:\Temp\RustDesk_Config_Installer.exe" -ArgumentList "/VERYSILENT" -Wait
+    }
+}
+``````
+
+## Features
+
+✅ Smart config merge (preserves existing client settings)
+✅ Automatic backup before deployment
+✅ Updates RustDesk2.toml (persistent configuration)
+✅ Detailed logging
+✅ Configuration verification
+✅ Supports silent installation
+
+## Files Deployed
+
+- RustDesk2.toml (Server configuration - persistent)
+
+## Configuration Path
+
+``````
+%APPDATA%\RustDesk\config\RustDesk2.toml
+``````
+
+## Verification
+
+After installation, verify configuration:
+``````powershell
+notepad `$env:APPDATA\RustDesk\config\RustDesk2.toml
+``````
+
+## Checksums
+
+SHA256: ${{ steps.checksums.outputs.sha256 }}
+MD5: ${{ steps.checksums.outputs.md5 }}
+
+## Support
+
+For issues or questions, please create an issue in the repository.
+"@
+          
+          $releaseNotes | Out-File -FilePath "Output\RELEASE_NOTES.md" -Encoding UTF8
+          Write-Host "✓ Release notes created" -ForegroundColor Green
+        shell: pwsh
+      
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-config-installer-v${{ github.event.inputs.version || '1.4.0' }}
+          path: |
+            Output/RustDesk_Config_Installer.exe
+            Output/CHECKSUMS.txt
+            Output/RELEASE_NOTES.md
+          retention-days: 90
+      
+      - name: Upload to Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Output/RustDesk_Config_Installer.exe
+            Output/CHECKSUMS.txt
+            Output/RELEASE_NOTES.md
+          body_path: Output/RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build Summary
+        run: |
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "  ✅ Build Completed Successfully!"
+          Write-Host "=========================================="
+          Write-Host ""
+          Write-Host "📦 Artifact Information:" -ForegroundColor Cyan
+          Write-Host "  Name: rustdesk-config-installer-v${{ github.event.inputs.version || '1.4.0' }}"
+          Write-Host "  Size: ${{ steps.build.outputs.installer_size }} MB"
+          Write-Host "  SHA256: ${{ steps.checksums.outputs.sha256 }}"
+          Write-Host ""
+          Write-Host "📥 Download:" -ForegroundColor Cyan
+          Write-Host "  Artifacts tab in this workflow run"
+          Write-Host ""
+          Write-Host "🚀 Deployment:" -ForegroundColor Cyan
+          Write-Host "  1. Download the installer from artifacts"
+          Write-Host "  2. Deploy to client machines"
+          Write-Host "  3. Run: RustDesk_Config_Installer.exe /VERYSILENT"
+          Write-Host ""
+          Write-Host "=========================================="
+        shell: pwsh

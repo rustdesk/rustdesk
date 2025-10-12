@@ -1,0 +1,126 @@
+🎯 解决方案总结: RustDesk 配置持久化
+═══════════════════════════════════════════════════════════════════════
+
+🔍 问题根因
+───────────────────────────────────────────────────────────────────────
+RustDesk 使用两个配置文件:
+1. RustDesk.toml  - 客户端本地设置 (会被自动重写!)
+2. RustDesk2.toml - 服务器连接设置 ⭐ (不会被覆盖)
+
+原部署脚本只更新 RustDesk.toml,导致配置在客户端重启后丢失。
+
+
+✅ 最终解决方案
+───────────────────────────────────────────────────────────────────────
+使用 Deploy-RustDesk2Config.ps1 脚本专门部署 RustDesk2.toml
+
+优势:
+✓ 配置持久化 - 不会被客户端覆盖
+✓ 智能合并 - 保留现有设置
+✓ 自动备份 - 部署前备份原配置
+✓ 详细日志 - 记录部署过程
+✓ 配置验证 - 确保部署成功
+
+
+📋 RustDesk2.toml 配置内容
+───────────────────────────────────────────────────────────────────────
+rendezvous_server = 'hbbs.cislink.nl:21116'
+nat_type = 1
+serial = 0
+unlock_pin = ''
+trusted_devices = ''
+
+[options]
+relay-server = 'hbbr.cislink.nl'
+key = '3LyfStjRsPhYPBqqpPQN7Tamhkk1L2Mw6ksqpiLaj1s='
+custom-rendezvous-server = 'hbbs.cislink.nl'
+
+
+🚀 使用新脚本部署
+───────────────────────────────────────────────────────────────────────
+
+方法 1: 交互式运行
+  powershell -ExecutionPolicy Bypass -File "Deploy-RustDesk2Config.ps1"
+
+方法 2: 静默运行
+  powershell -ExecutionPolicy Bypass -File "Deploy-RustDesk2Config.ps1" -Silent
+
+方法 3: 批量部署
+  $computers = @("PC001", "PC002", "PC003")
+  foreach ($pc in $computers) {
+      Invoke-Command -ComputerName $pc -FilePath "Deploy-RustDesk2Config.ps1" -ArgumentList "-Silent"
+  }
+
+
+📦 创建新的安装程序
+───────────────────────────────────────────────────────────────────────
+需要更新 Inno Setup 脚本,使用新的部署脚本:
+
+1. 修改 Deploy-Config.iss:
+   - 替换 Deploy-RustDeskConfig.ps1 为 Deploy-RustDesk2Config.ps1
+   - 源文件: Deploy-RustDesk2Config.ps1
+
+2. 重新编译:
+   & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "Deploy-Config.iss"
+
+
+🔄 部署流程
+───────────────────────────────────────────────────────────────────────
+1. ✓ 停止 RustDesk 进程
+2. ✓ 备份现有配置
+3. ✓ 读取现有 RustDesk2.toml
+4. ✓ 智能合并配置 (保留 nat_type, serial 等设置)
+5. ✓ 写入新配置
+6. ✓ 验证配置 (检查 [options], key, server)
+7. ✓ 重启 RustDesk 客户端
+
+
+✅ 验证测试
+───────────────────────────────────────────────────────────────────────
+1. 运行 RustDesk
+2. 打开设置 → 网络 → ID/中继服务器
+3. 应该看到:
+   - ID 服务器: hbbs.cislink.nl
+   - 中继服务器: hbbr.cislink.nl
+   - Key: 3LyfStjRsPhYPBqqpPQN7Tamhkk1L2Mw6ksqpiLaj1s=
+4. 关闭并重新打开 RustDesk
+5. 配置应该保持不变 ⭐
+
+
+⚠️ 重要提示
+───────────────────────────────────────────────────────────────────────
+• RustDesk2.toml 是持久化配置文件
+• 不要修改 RustDesk.toml (会被覆盖)
+• 所有服务器配置应写入 RustDesk2.toml
+• 部署后需要重启 RustDesk 客户端
+
+
+📊 文件对比
+───────────────────────────────────────────────────────────────────────
+RustDesk.toml:
+  - 存储客户端本地设置
+  - enc_id, password, salt, key_pair
+  - keys_confirmed
+  - ⚠️ 会被客户端自动重写
+
+RustDesk2.toml:
+  - 存储服务器连接设置
+  - rendezvous_server, nat_type, serial
+  - [options] 部分 (relay-server, key, custom-rendezvous-server)
+  - ✅ 不会被客户端覆盖
+
+
+📝 部署日志位置
+───────────────────────────────────────────────────────────────────────
+日志: %TEMP%\RustDesk2_Config_Deploy.log
+备份: %TEMP%\RustDesk_Backup_[timestamp]\
+
+
+🎉 问题已彻底解决!
+───────────────────────────────────────────────────────────────────────
+版本: 1.4 (Deploy-RustDesk2Config.ps1)
+日期: 2025-10-12
+状态: ✅ 生产可用
+测试: ✅ 配置持久化验证通过
+
+═══════════════════════════════════════════════════════════════════════
