@@ -1,0 +1,269 @@
+div#file-transfer-wrapper {
+    size:*;
+    display: none;
+}
+
+div#file-transfer {
+    size: *;
+    margin: 0;
+    flow: horizontal;
+    background: color(gray-bg);
+    padding: 0.5em;
+}
+
+table
+{
+  font: system;
+  border: 1px solid color(border);
+  flow: table-fixed;
+  prototype: Grid;
+  size: *;
+  padding:0;
+  border-spacing: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+table > thead {
+  behavior: column-resizer;
+  border-bottom: color(border) solid 1px;
+}
+
+table > tbody {
+  behavior: select-multiple;
+  overflow-y: scroll-indicator;
+  size: *;
+  background: white;
+}
+
+table th {
+  background-color: color(gray-bg);
+}
+
+table th
+{
+  padding: 4px;
+  foreground-repeat: no-repeat;
+  foreground-position: 50% 3px auto auto;
+  border-left: color(border) solid 1px;
+}
+
+table th.sortable[sort=asc]
+{
+  foreground-image: url(stock:arrow-down);
+}
+
+table th.sortable[sort=desc]
+{
+  foreground-image: url(stock:arrow-up);
+}
+
+table th:nth-child(1)  {
+    width: 32px;
+}
+
+table th:nth-child(2)  {
+    width: *;
+}
+
+table th:nth-child(3)  {
+    width: *;
+}
+
+table th:nth-child(4)  {
+  width: 45px;
+}
+
+table.has_current thead th:current {
+  font-weight: bold;
+}
+
+table tr:nth-child(odd) { background-color: white; } /* each odd row */
+table tr:nth-child(even) { background-color: #F4F5F6; } /* each even row */
+
+table.has_current tr:current /* current row */
+{
+  background-color: color(accent);
+}
+
+table.has_current tbody tr:checked
+{
+  background-color: color(accent);
+}
+
+table.has_current tbody tr:checked td {
+  color: highlighttext;
+}
+
+table td
+{
+  padding: 4px;
+  text-align: left;
+  font-size: 1em;
+  height: 1.4em;
+  @ELLIPSIS;
+}
+
+table.folder-view td:nth-child(1) {
+  behavior:shell-icon;
+}
+
+table td:nth-child(3), table td:nth-child(4) {
+  color: color(lighter-text);
+  font-size: 0.9em;
+}
+
+table.has_current tr:current td {
+  color: white;
+}
+
+table td:nth-child(4) {
+  text-align: right;
+}
+
+section {
+  size: *;
+  margin: 1em;
+  border-spacing: 0.5em;
+}
+
+table td:nth-child(1)  {
+  foreground-repeat: no-repeat;
+  foreground-position: 50% 50%
+}
+
+div.toolbar {
+  flow: horizontal;
+}
+
+div.toolbar svg {
+  size: 16px;
+}
+
+div.toolbar .spacer {
+  width: *;
+}
+
+div.toolbar > div.button {
+  padding: 4px 8px;
+  opacity: 0.66;
+}
+
+div.toolbar > div.button:active {
+  opacity: 1;
+  background-color: #ddd;
+}
+
+div.toolbar > div.button:hover {
+  opacity: 1;
+}
+
+div.toolbar > div.send {
+  flow: horizontal;
+  border-spacing: 0.5em;
+}
+
+div.remote > div.send svg {
+  transform: scale(-1, 1);
+}
+
+div.navbar {
+  border: color(border) solid 1px;
+  padding: 4px 0;
+}
+
+select.select-dir {
+  width: *;
+  padding: 0 4px;
+}
+
+div.title {
+  flow: horizontal;
+  border-spacing: 1em;
+  position: relative;
+}
+
+div.title svg.computer {
+  size: 48px;
+}
+
+div.title div {
+  margin: * 0;
+  color: color(light-text);
+}
+
+div.title div.platform {
+  position: absolute;
+  left: 12px;
+  top: 7px;
+}
+
+div.title div.platform svg {
+  size: 24px;
+}
+
+table.job-table tr td {
+  width: *;
+  padding: 0.5em 1em;
+  border-bottom: color(border) 1px solid;
+  flow: horizontal;
+  border-spacing: 1em;
+  height: 3em;
+  overflow-x: hidden;
+}
+
+table.job-table tr svg {
+  size: 16px;
+}
+
+table.job-table tr.is_remote svg {
+  transform: scale(-1, 1);
+}
+
+table.job-table tr.is_remote div.svg_continue svg {
+  transform: scale(1, 1);
+}
+
+table.job-table tr td div.text {
+  width: *;
+  overflow-x: hidden;
+}
+
+table.job-table tr td div.path {
+  width: *;
+  color: color(light-text);
+  @ELLIPSIS;
+}
+
+table.job-table tr:current td div.path {
+  color: white;
+}
+
+table#port-forward thead tr th {
+  padding-left: 1em;
+  size: *;
+}
+
+table#port-forward tr td {
+  height: 3em;
+  text-align: left;
+}
+
+table#port-forward input[type=text], table#port-forward input[type=number] {
+  font-size: 1.2em;
+}
+
+table#port-forward td.right-arrow svg {
+  size: 1.2em;
+  transform: rotate(180deg);
+}
+
+table#port-forward td.remove svg {
+  size: 0.8em;
+}
+
+table#port-forward tr.value td {
+  padding-left: 1em;
+  font-size: 1.5em;
+  color: black;
+}

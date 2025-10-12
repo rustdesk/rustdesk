@@ -1,0 +1,83 @@
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+	<Fragment>
+
+		<?include ..\Includes.wxi?>
+
+		<!--
+		Properties and related actions for specifying whether to install start menu/desktop shortcuts.
+		-->
+
+		<!-- These are the actual properties that get used in conditions to determine whether to
+				 install start menu shortcuts, they are initialized with a default value to install shortcuts.
+				 They should not be set directly from the command line or registry, instead the CREATE* properties
+				 below should be set, then they will update these properties with their values only if set. -->
+		<Property Id="STARTMENUSHORTCUTS" Value="1" Secure="yes"></Property>
+		<Property Id="DESKTOPSHORTCUTS" Value="1" Secure="yes"></Property>
+		<Property Id="STARTUPSHORTCUTS" Value="1" Secure="yes"></Property>
+		<Property Id="PRINTER" Value="1" Secure="yes"></Property>
+
+		<!-- These properties get set from either the command line, bundle or registry value,
+				 if set they update the properties above with their value. -->
+		<Property Id="CREATESTARTMENUSHORTCUTS" Secure="yes">
+			<RegistrySearch Id="CreateStartMenuShortcutsSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="STARTMENUSHORTCUTS" Type="raw" />
+		</Property>
+		<Property Id="CREATEDESKTOPSHORTCUTS" Secure="yes">
+			<RegistrySearch Id="CreateDesktopShortcutsSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="DESKTOPSHORTCUTS" Type="raw" />
+		</Property>
+		<Property Id="INSTALLPRINTER" Secure="yes">
+			<RegistrySearch Id="InstallPrinterSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="PRINTER" Type="raw" />
+		</Property>
+
+		<!-- Component that persists the property values to the registry so they are available during an upgrade/modify -->
+		<DirectoryRef Id="INSTALLFOLDER_INNER">
+			<Component Id="Product.Registry.PersistedStartMenuShortcutProperties1" Guid="62F79BCF-3367-4ACF-950F-F8BCABACDDC0" Condition="STARTMENUSHORTCUTS = 1 OR STARTMENUSHORTCUTS = &quot;Y&quot; OR STARTMENUSHORTCUTS = &quot;y&quot;">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="STARTMENUSHORTCUTS" Value="1" KeyPath="yes" />
+				</RegistryKey>
+			</Component>
+			<Component Id="Product.Registry.PersistedStartMenuShortcutProperties0" Guid="8EA2D5A8-6E5D-4BDD-9019-2099297FF519"  Condition="NOT (STARTMENUSHORTCUTS = 1 OR STARTMENUSHORTCUTS = &quot;Y&quot; OR STARTMENUSHORTCUTS = &quot;y&quot;)">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="STARTMENUSHORTCUTS" Value="0" KeyPath="yes" />
+				</RegistryKey>
+			</Component>
+			<Component Id="Product.Registry.PersistedDesktopShortcutProperties1" Guid="1BBAD054-6EC2-4362-BF1B-E8BDE988B597" Condition="DESKTOPSHORTCUTS = 1 OR DESKTOPSHORTCUTS = &quot;Y&quot; OR DESKTOPSHORTCUTS = &quot;y&quot;">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="DESKTOPSHORTCUTS" Value="1" />
+				</RegistryKey>
+			</Component>
+			<Component Id="Product.Registry.PersistedDesktopShortcutProperties0" Guid="FA992614-D2E1-4795-9696-D45A5EF1B9C8" Condition="NOT (DESKTOPSHORTCUTS = 1 OR DESKTOPSHORTCUTS = &quot;Y&quot; OR DESKTOPSHORTCUTS = &quot;y&quot;)">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="DESKTOPSHORTCUTS" Value="0" />
+				</RegistryKey>
+			</Component>
+			<Component Id="Product.Registry.PersistedPrinterProperties1" Guid="AF617116-2502-EB3D-5B52-B47AA89EB4B0" Condition="PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="PRINTER" Value="1" />
+				</RegistryKey>
+			</Component>
+			<Component Id="Product.Registry.PersistedPrinterProperties0" Guid="51F944D3-AAEB-F167-03A1-081A38E9468A" Condition="NOT (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="PRINTER" Value="0" />
+				</RegistryKey>
+			</Component>
+		</DirectoryRef>
+
+		<!-- If a property value has been passed via the command line (which includes when set from the bundle), the registry search will
+				 overwrite the command line value, these actions temporarily store the command line value before the registry search
+				 is performed so they can be restored after the registry search is complete -->
+		<SetProperty Id="SavedStartMenuShortcutsCmdLineValue" Value="[CREATESTARTMENUSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS" />
+		<SetProperty Id="SavedDesktopShortcutsCmdLineValue" Value="[CREATEDESKTOPSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS" />
+		<SetProperty Id="SavedPrinterCmdLineValue" Value="[INSTALLPRINTER]" Before="AppSearch" Sequence="first" Condition="INSTALLPRINTER" />
+
+		<!-- If a command line value was stored, restore it after the registry search has been performed -->
+		<SetProperty Action="RestoreSavedStartMenuShortcutsValue" Id="CREATESTARTMENUSHORTCUTS" Value="[SavedStartMenuShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedStartMenuShortcutsCmdLineValue" />
+		<SetProperty Action="RestoreSavedDesktopShortcutsValue" Id="CREATEDESKTOPSHORTCUTS" Value="[SavedDesktopShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedDesktopShortcutsCmdLineValue" />
+		<SetProperty Action="RestoreSavedPrinterValue" Id="INSTALLPRINTER" Value="[SavedPrinterCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedPrinterCmdLineValue" />
+
+		<!-- If a command line value or registry value was set, update the main properties with the value -->
+		<SetProperty Id="STARTMENUSHORTCUTS" Value="" After="RestoreSavedStartMenuShortcutsValue" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS AND NOT (CREATESTARTMENUSHORTCUTS = 1 OR CREATESTARTMENUSHORTCUTS = &quot;Y&quot; OR CREATESTARTMENUSHORTCUTS = &quot;y&quot;)" />
+		<SetProperty Id="DESKTOPSHORTCUTS" Value="" After="RestoreSavedDesktopShortcutsValue" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS AND NOT (CREATEDESKTOPSHORTCUTS = 1 OR CREATEDESKTOPSHORTCUTS = &quot;Y&quot; OR CREATEDESKTOPSHORTCUTS = &quot;y&quot;)" />
+		<SetProperty Id="PRINTER" Value="" After="RestoreSavedPrinterValue" Sequence="first" Condition="INSTALLPRINTER AND NOT (INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;)" />
+
+	</Fragment>
+</Wix>

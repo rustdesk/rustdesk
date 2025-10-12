@@ -1,0 +1,422 @@
+html {
+    background-color: transparent;
+}
+
+body {
+    overflow: hidden;
+}
+
+@media platform != "OSX" {
+    body {
+        border-top: color(border) solid 1px;
+    }
+}
+
+.title {
+    font-size: 1.4em;
+}
+
+.app {
+    flow: horizontal;
+    size: *;
+}
+
+.lighter-text {
+    color: color(lighter-text);
+    font-size: 0.9em;
+}
+
+.left-pane {
+    width: 200px;
+    height: *;
+    background: color(bg);
+    border-right: color(border) 1px solid;
+}
+
+#ab .left-pane {
+    border-radius: 1em;
+    padding: 1em;
+}
+
+#ab .right-pane {
+    background: none;
+}
+
+#ab .right-content {
+    overflow: unset;
+}
+
+.left-pane > div:nth-child(1) {
+    border-spacing: 1em;
+    padding: 20px;
+}
+
+.left-pane div {
+  word-wrap: break-word;
+}
+
+div.sessions-bar {
+    color: color(light-text);
+    padding-top: 0.5em;
+    border-top: color(border) solid 1px;
+    margin-bottom: 1em;
+    position: relative;
+    flow: horizontal;
+}
+
+div.sessions-tab span {
+    display: inline-block;
+    padding: 6px 8px;
+    cursor: pointer;
+    @ELLIPSIS;
+}
+
+div.sessions-tab svg {
+    size: 14px;
+}
+
+div.sessions-tab span.active {
+    cursor: default;
+    border-radius: 3px;
+    background: color(bg);
+    color: color(text);
+}
+
+div.search-id {
+    width: 120px;
+    padding: 0;
+    position: relative;
+    display: inline-block;
+}
+
+div.search-id input {
+    font-size: 1em;
+    height: 20px;
+    border: none;
+    padding-left: 26px;
+}
+
+div.search-id span {
+    position: absolute;
+    top: 0px;
+    padding: 6px;
+    color: color(border);
+}
+
+div.search-id svg {
+    size: 14px;
+}
+
+span.search-icon {
+    left: 0px;
+}
+
+span.clear-input {
+    display: none;
+    right: 0px;
+}
+
+div.search-id:hover span.clear-input {
+    display: inline-block;
+}
+
+span.clear-input:hover {
+    color: black;
+}
+
+.your-desktop {
+    border-spacing: 0.5em;
+    border-left: color(accent) solid 2px;
+    padding-left: 0.5em;
+}
+
+.your-desktop input[type=text] {
+    padding: 0;
+    border: none;
+    height: 1.5em;
+}
+
+.your-desktop > div {
+    color: color(light-text);
+}
+
+.right-pane {
+    size: *;
+    background: color(gray-bg);
+}
+
+.right-content {
+    overflow: scroll-indicator;
+    padding: 1.6em;
+    border-spacing: 1.6em;
+    size: *;
+    flow: vertical;
+}
+
+@media platform == "OSX" {
+    .right-pane {
+        background: color(gray-bg-osx);
+    }
+}
+
+@mixin CARD {
+    padding: 1.6em;
+    border-spacing: 1em;
+    background: color(bg);
+    border-radius: 1em;
+}
+
+.card-connect {
+    @CARD;
+    width: 320px;
+}
+
+.right-buttons {
+    text-align: right;
+}
+
+.right-buttons>button {
+    margin-left: 1.6em;
+}
+
+div.connect-status {
+    left: 240px;
+    border-top: color(border) solid 1px;
+    width: 100%;
+    padding: 1em;
+}
+
+div.connect-status > span.connect-status-icon {
+    border-radius: 4px;
+    width: 8px;
+    height: 8px;
+    display: inline-block;
+    margin-right: 1em;
+}
+
+div.connect-status > span.link {
+  margin-left: 1em;
+  display: inline-block;
+}
+
+span.connect-status-1 {
+    background: #e04f5f;
+}
+
+span.connect-status1 {
+    background: #32bea6;
+}
+
+span.connect-status0 {
+    background: #F5853B;
+}
+
+div.recent-sessions-content {
+    border-spacing: 1em;
+    flow: horizontal-flow;
+}
+
+div.remote-session {
+    border-radius: 1em;
+    height: 140px;
+    width: 220px;
+    padding: 0;
+    position: relative;
+    border: none;
+}
+
+div.remote-session:hover, div.remote-session-list:hover {
+    outline: color(button) solid 2px -2px;
+}
+
+div.remote-session .platform {
+    width: *;
+    height: 120px;
+    padding: *;
+    position: relative;
+}
+
+div.remote-session .platform .username{
+    left: 0;
+    color: #eee;
+    position: absolute;
+    bottom: 38px;
+    font-size: 0.8em;
+    width: 220px;
+    text-align: center;
+}
+
+div.remote-session .platform svg {
+    width: 60px;
+    height: 60px;
+    background: none;
+}
+
+div.remote-session-list {
+    background: color(bg);
+    width: 220px;
+    flow: horizontal;
+}
+
+div.remote-session-list .platform {
+    size: 42px;
+}
+
+div.remote-session-list .platform svg {
+    width: 30px;
+    height: 30px;
+    background: none;
+    padding: 6px;
+}
+
+div.remote-session-list .name {
+    size: *;
+    padding-left: 1em;
+}
+
+div.remote-session-list .name >div {
+    margin-top: *;
+    margin-bottom: *;
+    width: *;
+}
+
+div.remote-session-list .name .username {
+    margin-top: 3px;
+    font-size: 0.8em;
+    color: color(lighter-text);
+}
+
+div.remote-session .text {
+    background: color(bg);
+    position: absolute;
+    height: 3em;
+    width: 100%;
+    border-radius: 0 0 1em 1em;
+    bottom: 0;
+    flow: horizontal;
+}
+
+div.remote-session .text > div {
+    padding-top: 1em;
+    padding-left: 1em;
+    width: *;
+}
+
+svg#menu {
+    size: 1em;
+    background: none;
+    padding: 0.5em;
+    margin: 0.5em;
+    color: color(light-text);
+}
+
+.remote-session-list svg#menu {
+    margin-right: 0;
+}
+
+svg#menu:hover {
+    color: color(text);
+    border-radius: 1em;
+    background: color(gray-bg);
+}
+
+svg#edit:hover {
+    color: color(text);
+}
+
+svg#edit {
+    display: inline-block;
+}
+
+div.install-me, div.trust-me {
+    margin-top: 0.5em;
+    padding: 20px;
+    color: white;
+    background: linear-gradient(left,#e242bc,#f4727c);
+}
+
+div.trust-me > div:nth-child(1),
+div.install-me > div:nth-child(1) {
+    font-size: 1.2em;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 0.5em;
+}
+
+div.install-me > div:nth-child(2) {
+    line-height: 1.4em;
+}
+
+#install-me.link {
+    margin-top: 0.5em;
+}
+
+div.trust-me > div:nth-child(2) {
+    font-size: 0.9em;
+    margin-bottom: 1em;
+}
+
+div.install-me > div:nth-child(3),
+div.trust-me > div:nth-child(3) {
+    text-align: center;
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+div.trust-me > div:nth-child(4),
+div.trust-me > div:nth-child(5) {
+    margin-top: 0.5em;
+    text-align: center;
+}
+
+div#myid, div#tags-label {
+    position: relative;
+}
+
+div#myid svg#menu, div#tags-label svg#menu {
+    position: absolute;
+    right: -1em;
+}
+
+div#tags-label svg#menu:hover {
+    background-color: #ddd;
+}
+
+div.remote-session svg#menu {
+    position: absolute;
+    right: 0;
+    top: 0;
+}
+
+.install-me .button {
+    height: 2em;
+    line-height: 2em;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1em;
+    margin-top: 1em;
+    border-color: white;
+    border: 1px;
+    background: none;
+    color: white;
+}
+
+svg#refresh-password {
+    display: inline-block;
+    stroke:#ddd;
+}
+
+svg#refresh-password:hover {
+    stroke:color(text);
+}
+
+li:disabled, li:disabled:hover {
+    color: color(lighter-text);
+    background: color(menu);
+}
+
+@media platform == "OSX" {
+    div.eye-area > input {
+        font-size: 1em;
+    }
+}

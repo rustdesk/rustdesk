@@ -1,0 +1,16 @@
+{
+  "name": "mfx-dispatch",
+  "version": "1.35.1",
+  "port-version": 5,
+  "description": "Open source Intel media sdk dispatcher",
+  "homepage": "https://github.com/lu-zero/mfx_dispatch",
+  "license": "BSD-3-Clause",
+  "supports": "((x86 | x64) & (android | linux)) | (windows & !uwp)",
+  "dependencies": [
+    {
+    "name": "vcpkg-cmake",
+    "host": true,
+    "platform": "windows & !mingw"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+header div {
+  word-wrap: normal;
+}
+
+header #screens {
+  background: white;
+  border: #A9A9A9 1px solid;
+  height: 22px;
+  border-radius: 4px;
+  flow: horizontal;
+  border-spacing: 0.5em;
+  padding-right: 1em;
+  position: relative;
+}
+
+header #screen {
+  text-align: center;
+  margin: 3px 0;
+  width: 18px;
+  height: 14px;
+  border: color(border) solid 1px;
+  font-size: 11px;
+  color: color(light-text);
+}
+
+@media platform == "OSX" {
+  header #screen {
+    line-height: 11px;
+  }
+}
+
+header #secure {
+  position: absolute;
+  left: -10px;
+  top: -2px;
+}
+
+header #secure svg {
+  size: 18px;
+}
+
+header .remote-id {
+  width: 80px;
+  @ELLIPSIS;
+  padding-left: 30px;
+  padding-right: 4em;
+  margin: * 0;
+}
+
+header span:hover {
+  background: #f7f7f7;
+}
+
+@media platform != "OSX" {
+header span:hover {
+  background: #d9d9d9;
+}
+}
+
+header #screen:hover {
+  background: #d9d9d9;
+}
+
+header #secure:hover {
+  background: unset;
+}
+
+header span:active, header #screen:active {
+  color: black;
+  background: color(gray-bg);
+}
+
+div#global-screens {
+  position: relative;
+  margin: 2px 0;
+}
+
+div#global-screens > div {
+  position: absolute;
+  border: color(border) solid 1px;
+  text-align: center;
+  color: color(light-text);
+}
+
+header #screen.current, div#global-screens > div.current {
+  background: #666;
+  color: white;
+}
+
+span#fullscreen.active {
+  border: color(border) solid 1px;
+}
+
+button:disabled {
+  opacity: 0.3;
+}
+

@@ -1,0 +1,30 @@
+From 595f0468e127f204741b6c37a479d71daaf571eb Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Tue, 10 Dec 2024 21:17:14 +0800
+Subject: [PATCH] fix linux configure
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ configure | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/configure b/configure
+index d77a55b653..48ca90ac5e 100755
+--- a/configure
++++ b/configure
+@@ -7071,12 +7071,6 @@ enabled mmal              && { check_lib mmal interface/mmal/mmal.h mmal_port_co
+                                  check_lib mmal interface/mmal/mmal.h mmal_port_connect -lmmal_core -lmmal_util -lmmal_vc_client -lbcm_host; } ||
+                                die "ERROR: mmal not found" &&
+                                check_func_headers interface/mmal/mmal.h "MMAL_PARAMETER_VIDEO_MAX_NUM_CALLBACKS"; }
+-enabled openal            && { check_pkg_config openal "openal >= 1.1" "AL/al.h" alGetError ||
+-                               { for al_extralibs in "${OPENAL_LIBS}" "-lopenal" "-lOpenAL32"; do
+-                               check_lib openal 'AL/al.h' alGetError "${al_extralibs}" && break; done } ||
+-                               die "ERROR: openal not found"; } &&
+-                             { test_cpp_condition "AL/al.h" "defined(AL_VERSION_1_1)" ||
+-                               die "ERROR: openal must be installed and version must be 1.1 or compatible"; }
+ enabled opencl            && { check_pkg_config opencl OpenCL CL/cl.h clEnqueueNDRangeKernel ||
+                                check_lib opencl OpenCL/cl.h clEnqueueNDRangeKernel "-framework OpenCL" ||
+                                check_lib opencl CL/cl.h clEnqueueNDRangeKernel -lOpenCL ||
+-- 
+2.34.1
+

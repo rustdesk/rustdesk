@@ -1,0 +1,24 @@
+name: Full Flutter CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+    - "docs/**"
+    - "README.md"
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - ".github/**"
+      - "docs/**"
+      - "README.md"
+      - "res/**"
+      - "appimage/**"
+      - "flatpak/**"
+
+jobs:
+  run-ci:
+    uses: ./.github/workflows/flutter-build.yml
+    with:
+      upload-artifact: false

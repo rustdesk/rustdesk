@@ -1,0 +1,46 @@
+body {
+    margin: 0;
+    color: black;
+    overflow: scroll-indicator;
+}
+
+div#video-wrapper {
+    size: *;
+    background: #212121;
+}
+
+div#quality-monitor {
+    top: 20px;
+    right: 20px;
+    background: #7571719c;
+    padding: 5px;
+    min-width: 150px;
+    color: azure;
+    border: 0.5px solid azure;
+}
+
+video#handler {
+    behavior: native-remote video;
+    size: *;
+    margin: *;
+    foreground-size: contain;
+}
+
+img#cursor {
+    position: absolute;
+    display: none;
+    //opacity: 0.66,
+    //transform: scale(0.8);
+}
+
+.goup {
+    transform: rotate(90deg);
+}
+
+table#remote-folder-view {
+    context-menu: selector(menu#remote-folder-view);
+}
+
+table#local-folder-view {
+    context-menu: selector(menu#local-folder-view);
+}

@@ -1,0 +1,44 @@
+<html window-resizable window-frame="extended">
+
+<head>
+    <style>
+        @import url(common.css);
+        @import url(remote.css);
+        @import url(file_transfer.css);
+        @import url(header.css);
+    </style>
+    <script type="text/tiscript">
+            include "common.tis";
+            include "msgbox.tis";
+            include "remote.tis";
+            include "file_transfer.tis";
+            include "port_forward.tis";
+            include "grid.tis";
+            include "header.tis";
+            include "printer.tis";
+        </script>
+</head>
+<header>
+    <div.window-icon role="window-icon">
+        <icon />
+        </div>
+        <caption role="window-caption" />
+        <div.window-toolbar />
+        <div.window-buttons />
+</header>
+
+<body>
+    <div #video-wrapper>
+        <video #handler>
+            <div #quality-monitor style="position: absolute; display: none" />
+            <div style="position: relative">
+                <img #cursor src="in-memory:cursor" />
+            </div>
+        </video>
+    </div>
+    <div #file-transfer-wrapper>
+    </div>
+    <div #msgbox />
+</body>
+
+</html>

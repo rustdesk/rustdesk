@@ -1,0 +1,15 @@
+name: Publish to WinGet
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: RustDesk.RustDesk
+          version: "1.4.2"
+          release-tag: "1.4.2"
+          token: ${{ secrets.WINGET_TOKEN }}

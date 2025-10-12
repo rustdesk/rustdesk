@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Debug",
+            "type": "gdb",
+            "request": "launch",
+            "target": "./target/debug/examples/keyboard",
+            "cwd": "${workspaceRoot}"
+        }
+    ]
+}

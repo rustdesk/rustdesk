@@ -1,0 +1,26 @@
+{
+  "name": "libvpx",
+  "version": "1.15.2",
+  "description": "The reference software implementation for the video coding formats VP8 and VP9.",
+  "homepage": "https://github.com/webmproject/libvpx",
+  "license": "BSD-3-Clause",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake-get-vars",
+      "host": true
+    },
+    {
+      "name": "vcpkg-msbuild",
+      "host": true,
+      "platform": "windows & !mingw"
+    }
+  ],
+  "features": {
+    "highbitdepth": {
+      "description": "use VP9 high bit depth (10/12) profiles"
+    },
+    "realtime": {
+      "description": "enable this option while building for real-time encoding"
+    }
+  }
+}

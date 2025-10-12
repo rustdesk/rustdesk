@@ -1,0 +1,15 @@
+name: Flutter Nightly Build
+
+on:
+  schedule:
+    # schedule build every night
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  run-flutter-nightly-build:
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: "nightly"

@@ -1,0 +1,42 @@
+name: Build RustDesk Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        shell: pwsh
+        run: |
+          irm https://sh.rustup.rs -OutFile rustup-init.exe
+          Start-Process -FilePath .\rustup-init.exe -ArgumentList "-y --default-toolchain stable" -NoNewWindow -Wait
+          RefreshEnv.cmd
+          rustup target add x86_64-pc-windows-msvc
+
+      - name: Install dependencies
+        run: choco install -y llvm
+
+      - name: Set server info (environment vars)
+        shell: pwsh
+        run: |
+          Add-Content $env:GITHUB_ENV "RUSTDESK_SERVER=hbbs.cislink.nl:21115"
+          Add-Content $env:GITHUB_ENV "RUSTDESK_RELAY=hbbr.cislink.nl:21116"
+          Add-Content $env:GITHUB_ENV 'RUSTDESK_KEY=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICa+NPuA55i85fZSxOljTdjHlQJ04UeZTru7KtFBx6c2 root@n8n-cislink-u35624'
+
+      - name: Build release
+        shell: pwsh
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-client
+          path: target/x86_64-pc-windows-msvc/release/rustdesk.exe

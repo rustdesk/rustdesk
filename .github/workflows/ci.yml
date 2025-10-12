@@ -1,0 +1,236 @@
+name: CI
+
+env:
+#   MIN_SUPPORTED_RUST_VERSION: "1.46.0"
+#   CICD_INTERMEDIATES_DIR: "_cicd-intermediates"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # for multiarch gcc compatibility
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - ".github/**"
+      - "docs/**"
+      - "README.md"
+      - "res/**"
+      - "appimage/**"
+      - "flatpak/**"
+
+jobs:
+  # ensure_cargo_fmt:
+  #   name: Ensure 'cargo fmt' has been run
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #   - uses: actions-rs/toolchain@v1
+  #     with:
+  #       toolchain: stable
+  #       default: true
+  #       profile: minimal
+  #       components: rustfmt
+  #   - uses: actions/checkout@v3
+  #   - run: cargo fmt -- --check
+
+  # min_version:
+  #   name: Minimum supported rust version
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #   - name: Checkout source code
+  #     uses: actions/checkout@v3
+  #     with:
+  #       submodules: recursive
+
+  #   - name: Install rust toolchain (v${{ env.MIN_SUPPORTED_RUST_VERSION }})
+  #     uses: actions-rs/toolchain@v1
+  #     with:
+  #       toolchain: ${{ env.MIN_SUPPORTED_RUST_VERSION }}
+  #       default: true
+  #       profile: minimal # minimal component installation (ie, no documentation)
+  #       components: clippy
+  #   - name: Run clippy (on minimum supported rust version to prevent warnings we can't fix)
+  #     uses: actions-rs/cargo@v1
+  #     with:
+  #       command: clippy
+  #       args: --locked --all-targets --all-features -- --allow clippy::unknown_clippy_lints
+  #   - name: Run tests
+  #     uses: actions-rs/cargo@v1
+  #     with:
+  #       command: test
+  #       args: --locked
+
+  build:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true }
+          # - { target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true }
+          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
+          # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
+          # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
+          # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
+          # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
+          # - { target: x86_64-pc-windows-msvc      , os: windows-2022                  }
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-22.04                  }
+          # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
+    steps:
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@v6
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: Checkout source code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install prerequisites
+      shell: bash
+      run: |
+        case ${{ matrix.job.target }} in
+          x86_64-unknown-linux-gnu)
+            sudo apt-get -y update
+            sudo apt-get install -y \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libpam0g-dev \
+               libasound2-dev \
+               libunwind-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpulse-dev \
+               libva-dev \
+               libvdpau-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               nasm \
+               wget
+            ;;
+          # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
+          # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+        esac
+
+    - name: Setup vcpkg with Github Actions binary cache
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgDirectory: /opt/artifacts/vcpkg
+        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+    - name: Install vcpkg dependencies
+      run: |
+        $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+      shell: bash
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+        targets: ${{ matrix.job.target }}
+        components: ''
+
+    - name: Show version information (Rust, cargo, GCC)
+      shell: bash
+      run: |
+        gcc --version || true
+        rustup -V
+        rustup toolchain list
+        rustup default
+        cargo -V
+        rustc -V
+
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: ${{ matrix.job.use-cross }}
+        command: build
+        args: --locked --target=${{ matrix.job.target }}
+
+    - name: clean
+      shell: bash
+      run: |
+        cargo clean
+
+    # - name: Strip debug information from executable
+    #   id: strip
+    #   shell: bash
+    #   run: |
+    #     # Figure out suffix of binary
+    #     EXE_suffix=""
+    #     case ${{ matrix.job.target }} in
+    #       *-pc-windows-*) EXE_suffix=".exe" ;;
+    #     esac;
+
+    #     # Figure out what strip tool to use if any
+    #     STRIP="strip"
+    #     case ${{ matrix.job.target }} in
+    #       arm-unknown-linux-*) STRIP="arm-linux-gnueabihf-strip" ;;
+    #       aarch64-unknown-linux-gnu) STRIP="aarch64-linux-gnu-strip" ;;
+    #       *-pc-windows-msvc) STRIP="" ;;
+    #     esac;
+
+    #     # Setup paths
+    #     BIN_DIR="${{ env.CICD_INTERMEDIATES_DIR }}/stripped-release-bin/"
+    #     mkdir -p "${BIN_DIR}"
+    #     BIN_NAME="${{ env.PROJECT_NAME }}${EXE_suffix}"
+    #     BIN_PATH="${BIN_DIR}/${BIN_NAME}"
+
+    #     # Copy the release build binary to the result location
+    #     cp "target/${{ matrix.job.target }}/release/${BIN_NAME}" "${BIN_DIR}"
+
+    #     # Also strip if possible
+    #     if [ -n "${STRIP}" ]; then
+    #       "${STRIP}" "${BIN_PATH}"
+    #     fi
+
+    #     # Let subsequent steps know where to find the (stripped) bin
+    #     echo ::set-output name=BIN_PATH::${BIN_PATH}
+    #     echo ::set-output name=BIN_NAME::${BIN_NAME}
+
+    - name: Set testing options
+      id: test-options
+      shell: bash
+      run: |
+        # test only library unit tests and binary for arm-type targets
+        unset CARGO_TEST_OPTIONS
+
+        case ${{ matrix.job.target }} in
+          arm-* | aarch64-*)
+            CARGO_TEST_OPTIONS="--lib --bin ${PROJECT_NAME}"
+            ;;
+          *)
+            CARGO_TEST_OPTIONS="--workspace --no-fail-fast -- --skip test_get_cursor_pos --skip test_get_key_state"
+            ;;
+        esac;
+
+        #deprecated echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+        echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_ENV
+        echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_OUTPUT
+
+    - name: Run tests
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: ${{ matrix.job.use-cross }}
+        command: test
+        args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}

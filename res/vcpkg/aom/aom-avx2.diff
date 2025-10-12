@@ -1,0 +1,60 @@
+diff --git a/build/cmake/cpu.cmake b/build/cmake/cpu.cmake
+index acebe20..8c67d89 100644
+--- a/build/cmake/cpu.cmake
++++ b/build/cmake/cpu.cmake
+@@ -120,6 +120,19 @@ elseif("${AOM_TARGET_CPU}" MATCHES "^x86")
+     set(RTCD_ARCH_X86_64 "yes")
+   endif()
+ 
++  # AVX2 requires __m256i definition starting v3.9.0
++
++  if(ENABLE_AVX2)
++    aom_check_source_compiles("x86_64_avx2_m256i_available" "
++#include <emmintrin.h>
++#ifndef __m256i
++#error 1
++#endif" HAVE_AVX2_M256I)
++    if(HAVE_AVX2_M256I EQUAL 0)
++      set(ENABLE_AVX2 0)
++    endif()
++  endif()
++
+   set(X86_FLAVORS "MMX;SSE;SSE2;SSE3;SSSE3;SSE4_1;SSE4_2;AVX;AVX2")
+   foreach(flavor ${X86_FLAVORS})
+     if(ENABLE_${flavor} AND NOT disable_remaining_flavors)
+diff --git a/aom_dsp/x86/synonyms.h b/aom_dsp/x86/synonyms.h
+index 0d51cdf..6744ec5 100644
+--- a/aom_dsp/x86/synonyms.h
++++ b/aom_dsp/x86/synonyms.h
+@@ -46,13 +46,6 @@ static INLINE __m128i xx_loadu_128(const void *a) {
+   return _mm_loadu_si128((const __m128i *)a);
+ }
+ 
+-// Load 64 bits from each of hi and low, and pack into an SSE register
+-// Since directly loading as `int64_t`s and using _mm_set_epi64 may violate
+-// the strict aliasing rule, this takes a different approach
+-static INLINE __m128i xx_loadu_2x64(const void *hi, const void *lo) {
+-  return _mm_unpacklo_epi64(_mm_loadu_si64(lo), _mm_loadu_si64(hi));
+-}
+-
+ static INLINE void xx_storel_32(void *const a, const __m128i v) {
+   const int val = _mm_cvtsi128_si32(v);
+   memcpy(a, &val, sizeof(val));
+diff --git a/aom_dsp/x86/synonyms_avx2.h b/aom_dsp/x86/synonyms_avx2.h
+index d4e8f69..45be17e 100644
+--- a/aom_dsp/x86/synonyms_avx2.h
++++ b/aom_dsp/x86/synonyms_avx2.h
+@@ -25,6 +25,13 @@
+  * Intrinsics prefixed with yy_ operate on or return 256bit YMM registers.
+  */
+ 
++// Load 64 bits from each of hi and low, and pack into an SSE register
++// Since directly loading as `int64_t`s and using _mm_set_epi64 may violate
++// the strict aliasing rule, this takes a different approach
++static INLINE __m128i xx_loadu_2x64(const void *hi, const void *lo) {
++  return _mm_unpacklo_epi64(_mm_loadu_si64(lo), _mm_loadu_si64(hi));
++}
++
+ // Loads and stores to do away with the tedium of casting the address
+ // to the right type.
+ static INLINE __m256i yy_load_256(const void *a) {

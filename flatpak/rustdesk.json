@@ -1,0 +1,66 @@
+{
+  "id": "com.rustdesk.RustDesk",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "24.08",
+  "sdk": "org.freedesktop.Sdk",
+  "command": "rustdesk",
+  "cleanup": ["/include", "/lib/pkgconfig", "/share/gtk-doc"],
+  "rename-desktop-file": "rustdesk.desktop",
+  "rename-icon": "rustdesk",
+  "modules": [
+    "shared-modules/libappindicator/libappindicator-gtk3-12.10.json",
+    {
+      "name": "xdotool",
+      "no-autogen": true,
+      "make-install-args": ["PREFIX=${FLATPAK_DEST}"],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/jordansissel/xdotool/releases/download/v3.20211022.1/xdotool-3.20211022.1.tar.gz",
+          "sha256": "96f0facfde6d78eacad35b91b0f46fecd0b35e474c03e00e30da3fdd345f9ada"
+        }
+      ]
+    },
+    {
+      "name": "pam",
+      "buildsystem": "autotools",
+      "config-opts": ["--disable-selinux"],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/linux-pam/linux-pam/releases/download/v1.3.1/Linux-PAM-1.3.1.tar.xz",
+          "sha256": "eff47a4ecd833fbf18de9686632a70ee8d0794b79aecb217ebd0ce11db4cd0db"
+        }
+      ]
+    },
+    {
+      "name": "rustdesk",
+      "buildsystem": "simple",
+      "build-commands": [
+        "bsdtar -Oxf rustdesk.deb data.tar.xz | bsdtar -xf -",
+        "cp -r usr/* /app/",
+        "mkdir -p /app/bin && ln -s /app/share/rustdesk/rustdesk /app/bin/rustdesk"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "path": "rustdesk.deb"
+        },
+        {
+          "type": "file",
+          "path": "com.rustdesk.RustDesk.metainfo.xml"
+        }
+      ]
+    }
+  ],
+  "finish-args": [
+    "--share=ipc",
+    "--socket=fallback-x11",
+    "--socket=wayland",
+    "--share=network",
+    "--filesystem=home",
+    "--device=dri",
+    "--socket=pulseaudio",
+    "--talk-name=org.freedesktop.Flatpak"
+  ]
+}

@@ -1,0 +1,56 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Web related
+
+# Symbolication related
+app.*.symbols
+# Obfuscation related
+app.*.map.json
+jniLibs
+.vscode
+
+# flutter rust bridge
+lib/generated_bridge.dart
+lib/generated_bridge.freezed.dart
+
+# Flutter Generated Files
+**/GeneratedPluginRegistrant.swift
+**/flutter/generated_plugin_registrant.cc
+**/flutter/generated_plugin_registrant.h
+**/flutter/generated_plugins.cmake
+**/Runner/bridge_generated.h
+flutter_export_environment.sh
+Flutter-Generated.xcconfig
+key.jks
+macos/rustdesk.xcodeproj/project.xcworkspace/

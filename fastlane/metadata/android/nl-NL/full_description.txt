@@ -1,0 +1,11 @@
+Een open-source toepassing voor bureaublad op afstand, het open-source alternatief voor TeamViewer.
+Bron code: https://github.com/rustdesk/rustdesk
+Doc: https://rustdesk.com/docs/en/manual/mobile/
+
+Om ervoor te zorgen dat een extern apparaat uw Android-apparaat via muis of aanraking kan besturen, moet u RustDesk toestaan de "Toegankelijkheid" service te gebruiken. RustDesk gebruikt AccessibilityService API om Android afstandsbediening te kunnen implementeren.
+
+Naast bediening op afstand kunt u met RustDesk ook eenvoudig bestanden overzetten tussen Android-apparaten en pc's.
+
+U hebt volledige controle over uw gegevens, en u hoeft zich geen zorgen te maken over de veiligheid. U kunt onze rendez-vous/relay server gebruiken, of zelf hosten, of uw eigen rendez-vous/relay server schrijven. Self-hosting server is gratis en open source: https://github.com/rustdesk/rustdesk-server
+
+Download en installeer de desktop versie vanaf: https://rustdesk.com, dan kunt u uw desktop benaderen en bedienen vanaf uw mobiel, of uw mobiel bedienen vanaf uw desktop.

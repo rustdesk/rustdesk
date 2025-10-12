@@ -1,0 +1,772 @@
+var selectTags = [];
+var ab = { tags: [], peers: [] };
+var abLoading;
+var abError;
+var current_menu_peer_id = '';
+var current_menu_tag = '';
+
+class AddressBook: Reactor.Component
+{
+    this var style;
+    this var selectedTags = function() {
+        var tags = handler.get_local_option("selected-tags");
+        if (tags) return tags.split(",");
+        return [];
+    }();
+    
+    function render() {
+        if (!handler.get_local_option("access_token")) {
+            return <div style="margin: *"><div #login-link .link style="margin: *; width: 100px; text-align: center; font-size: 1.2em;">{translate("Login")}</div></div>;
+        }
+        if (abLoading) {
+            return <div style="margin: *"><progress style="color: #0071ff" /></div>;
+        } else if (abError) {
+            return <div style="margin: *; text-align: center;">{abError}
+                <div #retry .link style="margin-left: 1em;">{translate("Retry")}</div>
+            </div>;
+        }
+        var peers = this.getPeers();
+        var me = this;
+        return <div .app #ab style="size:*">
+            <popup>
+                <menu.context #ab-context>
+                    <li #add-id>{translate('Add ID')}</li>
+                    <li #add-tag>{translate('Add Tag')}</li>
+                    <li #unselect-tags>{translate('Unselect all tags')}</li>
+                </menu>
+                <menu.context #tag-context>
+                    <li #remove-tag>{translate('Remove')}</li>
+                </menu>
+            </popup>
+            <div .left-pane>
+                <div style="padding: 0; padding-bottom: 1em" #tags-label>{translate('Tags')}{svg_menu}</div>
+                <div #tags>
+                    {ab.tags.map(function(t) {
+                        return <span class={me.selectedTags.indexOf(t) >= 0 ? "active" : "inactive"}>{t}</span>;
+                    })}
+                </div>
+            </div>
+            <div .right-pane>
+                <div .right-content style="padding-top:0; padding-right: 0;">
+                    <SessionList sessions={peers} type="ab" />
+                </div>
+            </div>
+        </div>;
+    }
+
+    event mouseup $(#tags span) (evt, me) { 
+        if(evt.propButton) {
+            current_menu_tag = me.text;
+            me.popup($(#tag-context));
+            return true;
+        }
+    }
+    
+    event click $(#retry) (_, __) {
+        refreshCurrentUser();
+    }
+
+    event click $(#login-link) (_, __) {
+        login();
+    }
+
+    event click $(#tags-label svg#menu) (_, me) {
+        me.popup($(#ab-context));
+    }
+    
+    event click $(#add-id) (_, __) {
+        var me = this;
+        msgbox(
+            "custom-add-id",
+            translate("Add ID"),
+            <div .form>
+            <div>{translate("whitelist_sep")}</div> 
+            <textarea .outline-focus spellcheck="false" name="text" style="overflow: scroll-indicator; width:*; height: 160px; font-size: 1.2em; padding: 0.5em;"></textarea>
+            </div>,
+            "",
+            function(res=null) {
+                if (!res) return;
+                var value = (res.text || "").trim();
+                var values = value.split(/[\s,;\n]+/g);
+                if (values.length == 0) return;
+                for (var v in values) {
+                    var found;
+                    for (var i = 0; i < ab.peers.length; ++i) {
+                        if (ab.peers[i].id == v) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) continue;
+                    ab.peers.push({ id: v });
+                }
+                updateAb();
+                me.update();
+            },
+        300);
+    }
+    
+    event click $(#add-tag) (_, __) {
+        var me = this;
+        msgbox("custom-add-tag", translate("Add Tag"), <div .form>
+            <div>{translate("whitelist_sep")}</div> 
+            <textarea .outline-focus spellcheck="false" name="text" style="overflow: scroll-indicator; width:*; height: 160px; font-size: 1.2em; padding: 0.5em;"></textarea>
+            </div>, "", function(res=null) {
+            if (!res) return;
+            var value = (res.text || "").trim();
+            var values = value.split(/[\s,;\n]+/g);
+            if (values.length == 0) return;
+            for (var v in values) {
+                if (ab.tags.indexOf(v) < 0) {
+                    ab.tags.push(v);
+                }
+            }
+            updateAb();
+            me.update();
+        }, 300);
+    }
+    
+    event click $(#remove-tag) (_, me) {
+        var tag = current_menu_tag;
+        var i = ab.tags.indexOf(tag);
+        ab.tags.splice(i, 1);
+        for (var p in ab.peers) {
+            if (p.tags) {
+                i = p.tags.indexOf(tag);
+                if (i >= 0) p.tags.splice(i, 1);
+            }
+        }
+        updateAb();
+        this.update();
+    }
+    
+    event click $(#unselect-tags) (_, me) {
+        this.selectedTags = [];
+        handler.set_local_option("selected-tags", "");
+        this.update();
+    }
+
+    event click $(#tags span) (_, me) {
+        me.attributes.toggleClass('active');
+        if (me.attributes.hasClass('active')) {
+            this.selectedTags.push(me.text);
+        } else {
+            this.selectedTags.splice(this.selectedTags.indexOf(me.text), 1);
+        }
+        handler.set_local_option("selected-tags", this.selectedTags.join(','));
+        this.update();
+    }
+
+    function getPeers() {
+        var tags = [];
+        for (var t in this.selectedTags) {
+            if (ab.tags.indexOf(t) >= 0) tags.push(t);
+        }
+        if (tags.length != this.selectedTags.length) {
+            this.selectedTags = tags;
+            handler.set_local_option("selected-tags", tags.join(","));
+            stdout.println("updated selected tags");
+        }
+        if (tags.length == 0) return ab.peers;
+        var peers = [];
+        if (tags.length > 0) {
+            for (var p in ab.peers) {
+                for (var t in (p.tags || [])) {
+                    if (tags.indexOf(t) >= 0) {
+                        peers.push(p);
+                        break;
+                    }
+                }
+            }
+        } else {
+            peers = ab.peers;
+        }
+        return peers;
+    }
+}
+
+class SelectTags: Reactor.Component {
+    function this(params) {
+        selectTags = this;
+        this.tags = params.tags;
+    }
+    
+    function render() {
+        var me = this;
+        return <div #tags>
+            {ab.tags.map(function(t) {
+                return <span class={me.tags.indexOf(t) >= 0 ? "active" : "inactive"}>{t}</span>;
+            })}
+        </div>;
+    }
+
+    event click $(#tags span) (_, me) {
+        me.attributes.toggleClass('active');
+        var i = this.tags.indexOf(me.text);
+        if (i < 0) {
+            this.tags.push(me.text);
+        } else {
+            this.tags.splice(i, 1);
+        }
+    }
+}
+
+var svg_tile = <svg #session-tile viewBox="0 0 158.6 158.6"><path style="stroke-width:.309756" d="M5.4 157.7c-1-.3-2-1-3.2-2.1-2.8-2.8-2.6-1-2.5-32 0-26.7 0-27 .7-28.3a9.3 9.3 0 0 1 4-4.2c1.2-.6 2.3-.6 29-.7 27.5 0 27.6 0 29.1.6.8.4 2 1.2 2.7 2 2.4 2.5 2.3.7 2.2 31.6-.1 26.5-.1 27.6-.7 28.8a9.3 9.3 0 0 1-4.2 4c-1.4.6-1.6.6-28.5.7a235 235 0 0 1-28.6-.4zm91 0a8.5 8.5 0 0 1-5.7-5.4c-.2-.7-.3-8.3-.3-28.3V96.7l.7-1.6a8.9 8.9 0 0 1 4.6-4.3c1.2-.4 3.8-.5 28.9-.4 26.6.1 27.6.1 28.8.7 1.6.8 3.2 2.5 4 4.2.7 1.4.7 1.6.7 28.3.1 31 .3 29.2-2.5 32-2.8 2.7-1 2.6-31.4 2.6-21.4 0-26.8-.1-27.9-.5zM5.3 67a8.7 8.7 0 0 1-4-3C-.5 61.6-.5 62.3-.5 33.6-.4 3.2-.5 5 2.2 2.2 5-.6 3.2-.4 34.2-.3c26.7 0 27 0 28.3.7 1.7.8 3.4 2.4 4.2 4 .6 1.2.6 2.2.7 28.8 0 25.1 0 27.7-.4 29a9 9 0 0 1-4.3 4.5l-1.6.7H33.7c-20.2 0-27.7-.1-28.4-.4Zm89.8-.3a9 9 0 0 1-4.3-4.6c-.5-1.2-.5-3.8-.5-28.9.1-26.6.2-27.6.7-28.8a9.3 9.3 0 0 1 4.2-4c1.4-.7 1.6-.7 28.3-.7 31-.1 29.2-.3 32 2.5 2.8 2.8 2.6 1 2.5 32 0 26.7 0 26.9-.7 28.3a9.3 9.3 0 0 1-4 4.2c-1.2.5-2.2.6-29 .6l-27.7.1z" transform="translate(.4 .4)"/></svg>;
+var svg_list = <svg #session-list viewBox="0 0 246.8 185.8"><path style="stroke-width:.482473" d="M-69.2 102.7A16.5 16.5 0 0 1-67 70.4c7.3-1 15 4 17.3 11 1 3 1 8 0 10.8a16.7 16.7 0 0 1-19.5 10.5zm53-3.4a12.3 12.3 0 0 1-7-16.8c1.3-3 3.1-4.7 6-6 2.2-1 2.8-1 87.2-1 92.4 0 87-.2 90.6 2.6.9.7 2.2 2.4 3 3.7 1.2 2.2 1.4 3.1 1.4 6 0 4.8-2.3 8.6-6.8 11l-1.9 1-85.2.1c-71.9 0-85.5 0-87.3-.6zm-53.5-73c-4.7-1.5-8.6-5-10.6-9.1-1.8-4-1.8-9.8 0-13.7 1.6-3.3 4.4-6.2 7.8-8 2.2-1.2 3-1.3 7.1-1.3 4 0 5 .1 7.3 1.3a16.6 16.6 0 0 1 0 29.6c-2 1-3.4 1.4-6.5 1.5-2.2 0-4.5 0-5.1-.3zm52.3-4.8c-2.4-1.1-5.3-4-6.2-6.5-1-2.4-1-7.3.1-9.7.5-1.1 1.8-2.8 2.8-3.8 3.7-3.5-4-3.2 91-3.2h85.5l2.5 1.1a12 12 0 0 1 0 21.8l-2.5 1.2H70.2c-82.5 0-85.7 0-87.6-1zm-52.1-71.6a18 18 0 0 1-10-7.7 17 17 0 0 1-.7-15c2.3-5 5.8-7.9 11.4-9.3 9-2.3 18.3 4 19.8 13.4a16.4 16.4 0 0 1-15.2 19c-2.1.1-4.1 0-5.3-.4zm52.1-5.9c-1.3-.6-3-1.7-3.7-2.5-4.7-5-4.2-13.7 1-18 3.7-3.1-1.8-3 91.5-2.8l84.9.1 2 1a12 12 0 0 1 6.7 11c0 3-.2 3.9-1.4 6-.8 1.4-2.1 3-3 3.8-3.7 2.7 1.8 2.6-90.6 2.6h-85l-2.4-1.2z" transform="translate(81.7 82.6)"/></svg>;
+var search_icon = <svg viewBox="0 0 655.278 655.024"><g transform="translate(-24.497 -195.01)"><path d="m649.96 847.92c-2.9592-1.3629-27.183-24.243-63.36-59.846-32.213-31.702-70.814-69.663-85.78-84.357l-27.21-26.717-4.7897 3.5287c-66.337 48.872-145.32 66.878-224.31 51.138-72.966-14.539-136.58-58.184-178.47-122.44-15.945-24.462-30.723-61.471-36.413-91.191-8.9404-46.696-6.2422-90.39 8.3388-135.04 13.39-41.003 34.756-75.42 66.479-107.09 74.506-74.377 183.71-99.89 284.22-66.397 62.352 20.777 117.67 65.579 150.79 122.12 38.716 66.101 46.59 147.55 21.43 221.66-9.9038 29.171-29.788 63.725-49.916 86.743l-7.0583 8.0717 3.0992 2.919c1.7046 1.6054 40.675 39.928 86.602 85.161 89.007 87.664 87.558 86.034 85.619 96.293-1.2888 6.8209-5.2313 12.041-11.321 14.989-6.7901 3.287-11.55 3.4093-17.952 0.46117zm-316.64-154.63c32.373-5.0481 61.075-15.115 86.553-30.358 47.942-28.683 83.505-72.09 100.89-123.14 35.043-102.91-6.4362-214.07-100.89-270.37-52.514-31.302-117.76-40.564-178.06-25.277-81.183 20.579-145.19 82.918-166.86 162.52-5.5757 20.478-7.445 35.423-7.445 59.52s1.8693 39.042 7.445 59.52c21.409 78.63 85.366 141.52 164.81 162.05 29.22 7.5511 66.493 9.756 93.564 5.5347z" stroke-width="1.28"/></g></svg>;
+var clear_icon = <svg viewBox="0 0 478.94 479.03"><path d="M217.488 478.45c-30.264-3.146-55.348-10.265-82.714-23.477C62.54 420.1 14.214 353.763 1.824 272.463c-2.412-15.82-2.434-50.027-.043-66.058 16.004-107.32 97.008-188.28 204.71-204.6 14.33-2.172 49.054-2.447 63-.498C323.95 8.915 371.3 32.2 409.03 69.927c37.697 37.698 61.125 85.349 68.605 139.54 1.943 14.08 1.68 48.804-.478 63-6.616 43.533-24.01 83.859-50.468 117-37.556 47.046-92.812 78.608-153.26 87.54-12.553 1.855-44.144 2.671-55.936 1.445zm42.144-32.045c15.649-1.602 29.895-4.63 44.856-9.531 78.146-25.604 133.49-94.718 141.94-177.26 6.245-60.993-16.1-123.3-59.94-167.14-55.797-55.797-139.4-75.365-213.52-49.98-77.69 26.609-131.51 94.14-140.42 176.19-4.761 43.843 6.392 91.899 30.274 130.44 41.468 66.926 119.01 105.26 196.82 97.29zm-138.69-80.346c-4.096-1.784-8.225-6.874-9.022-11.123-1.676-8.935-3.495-6.761 52.877-63.221l52.17-52.25-52.17-52.25c-56.544-56.632-54.56-54.249-52.834-63.451.924-4.923 6.905-10.904 11.828-11.828 9.201-1.726 6.819-3.71 63.451 52.834l52.25 52.169 52.25-52.169c56.632-56.544 54.25-54.56 63.451-52.834 4.923.923 10.904 6.905 11.828 11.828 1.726 9.201 3.71 6.818-52.834 63.451l-52.169 52.25 52.17 52.25c56.543 56.632 54.56 54.249 52.833 63.451-.923 4.923-6.905 10.904-11.828 11.828-9.201 1.726-6.818 3.71-63.455-52.838l-52.255-52.173-51.745 51.696c-28.496 28.469-53.01 52.166-54.56 52.742-3.766 1.4-8.515 1.26-12.234-.36z"/></svg>;
+
+function getSessionsStyleOption(type) {
+    return (type || "recent") + "-sessions-style";
+}
+
+function getSessionsStyle(type) {
+    var v = handler.get_local_option(getSessionsStyleOption(type));
+    if (!v) v = type == "ab" ? "list" : "tile";
+    return v;
+}
+
+var searchPatterns = {};
+
+class SearchBar: Reactor.Component {
+    this var type = "";
+
+    function this(params) {
+        this.type = (params || {}).type || "";
+    }
+
+    function render() {
+        var value = searchPatterns[this.type] || "";
+        var me = this;
+        self.timer(1ms, function() { (me.search_id || {}).value = value; });
+        return <div .search-id style="margin-left: 12px">
+            <span .search-icon>{search_icon}</span>
+            <input|text @{this.search_id} novalue={translate("Search ID")} />
+            {value && <span .clear-input>{clear_icon}</span>}
+        </div>;
+    }
+
+    event click $(span.clear-input) {
+        this.onChange('');
+    }
+
+    event change $(input) (_, el) {
+        this.onChange(el.value.trim().toLowerCase());
+    }
+    
+    function onChange(v) {
+        searchPatterns[this.type] = v;
+        app.multipleSessions.update();
+    }
+}
+
+class SessionStyle: Reactor.Component {
+    this var type = ""; 
+
+    function this(params) {
+        this.type = (params || {}).type || "";
+    }
+
+    function render() {
+        var sessionsStyle = getSessionsStyle(this.type);
+        return <div .sessions-tab style="margin-left: 0.5em;">
+                <span class={sessionsStyle == "tile" ? "active" : "inactive"}>{svg_tile}</span>
+                <span class={sessionsStyle != "tile" ? "active" : "inactive"}>{svg_list}</span>
+            </div>;
+    }
+
+    event click $(span.inactive) {
+        var option = getSessionsStyleOption(this.type);
+        var sessionsStyle = getSessionsStyle(this.type);
+        handler.set_local_option(option, sessionsStyle == "tile" ? "list" : "tile");
+        if (is_linux) {
+            app.multipleSessions.stupidUpdate();
+        } else {
+            app.multipleSessions.update();
+        }
+    }
+}
+
+class SessionList: Reactor.Component {
+    this var sessions = [];
+    this var type = "";
+    this var style;
+    
+    function this(params) {
+        this.sessions = params.sessions;
+        this.type = params.type || "";
+        this.style = getSessionsStyle(this.type);
+    }
+
+    function getSessions() {
+        var p = searchPatterns[this.type];
+        if (!p) return this.sessions;
+        var tmp = [];
+        this.sessions.map(function(s) {
+            var name = (s[4] || s.alias || "").toLowerCase();
+            var id = (s[0] || s.id || "").toLowerCase();
+            var user = (s[1] || "").toLowerCase();
+            var hostname = (s[2] || "").toLowerCase();
+            if (name.indexOf(p) >= 0 || id.indexOf(p) >= 0 || user.indexOf(p) >= 0 || hostname.indexOf(p) >= 0) {
+                tmp.push(s);
+            }
+        });
+        return tmp;
+    }
+
+    function render() {
+        var sessions = this.getSessions();
+        if (sessions.length == 0) {
+            return <div style="margin: *; font-size: 1.6em; width: 100px; text-align: center;">{translate("Empty")}</div>;
+        }
+        var me = this;
+        sessions = sessions.map(function(x) { return me.getSession(x); });
+        return <div .recent-sessions-content key={sessions.length}>
+            <popup>
+                <menu.context #remote-context>
+                    <li #connect>{translate('Connect')}</li>
+                    <li #transfer>{translate('Transfer file')}</li>
+                    <li #tunnel>{translate('TCP tunneling')}</li>
+                    <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>
+                    <li #rdp>RDP<EditRdpPort /></li>
+                    <li #wol>{translate('WOL')}</li>
+                    <div .separator />
+                    {this.type != "lan" && <li #rename>{translate('Rename')}</li>}
+                    {this.type != "fav" && <li #remove>{translate('Remove')}</li>}
+                    {is_win && <li #shortcut>{translate('Create desktop shortcut')}</li>}
+                    <li #forget-password>{translate('Forget Password')}</li>
+                    {(!this.type || this.type == "fav") && <li #add-fav>{translate('Add to Favorites')}</li>}
+                    {(!this.type || this.type == "fav") && <li #remove-fav>{translate('Remove from Favorites')}</li>}
+                    {this.type == "ab" && <li #edit-tag>{translate('Edit Tag')}</li>}
+                </menu>
+            </popup>
+            {sessions}
+        </div>;
+    }
+
+    function getSession(s) {
+        var id = s[0] || s.id || "";
+        var username = s[1] || s.username || "";
+        var hostname = s[2] || s.hostname || "";
+        var platform = s[3] || s.platform || "";
+        var alias = s[4] || s.alias || "";
+        if (this.style == "list") {
+            return <div .remote-session-link .remote-session-list id={id} platform={platform} title={alias ? "ID: " + id : ""}>
+                <div .platform style={"background:"+string2RGB(id+platform, 0.5)}>
+                    {platform && platformSvg(platform, "white")}
+                </div>
+                <div .name>
+                    <div>
+                        <div #alias .ellipsis>{alias ? alias : formatId(id)}</div>
+                        <div .username .ellipsis>{username}@{hostname}</div>
+                    </div>
+                </div>
+                <div>
+                    {svg_menu}
+                </div>
+            </div>;
+        }
+        return <div .remote-session-link .remote-session id={id} platform={platform} title={alias ? "ID: " + id : ""} style={"background:"+string2RGB(id+platform, 0.5)}>
+            <div .platform>
+                {platform && platformSvg(platform, "white")}
+                <div .username .ellipsis>{username}@{hostname}</div>
+            </div>
+            <div .text>
+                <div #alias .ellipsis>{alias ? alias : formatId(id)}</div>
+                {svg_menu}
+            </div>
+        </div>;
+    }
+
+    event dblclick $(div.remote-session-link) (evt, me) {
+        createNewConnect(me.id, "connect");
+    }
+    
+    event click $(#menu) (_, me) {
+        var id = me.parent.parent.id;
+        var platform = me.parent.parent.attributes["platform"];
+        this.$(#rdp).style.set{
+            display: (platform == "Windows" && is_win) ? "block" : "none",
+        };
+        this.$(#forget-password).style.set{
+            display: handler.peer_has_password(id) ? "block" : "none",
+        };
+        if (!this.type || this.type == "fav") {
+            var in_fav = handler.get_fav().indexOf(id) >= 0;
+            this.$(#add-fav).style.set{
+                display: in_fav ? "none" : "block",
+            };
+            this.$(#remove-fav).style.set{
+                display: in_fav ? "block" : "none",
+            };
+        }
+        // https://sciter.com/forums/topic/replacecustomize-context-menu/
+        var menu = this.$(menu#remote-context);
+        current_menu_peer_id = id;
+        var el = this.$(li#force-always-relay);
+        if (el) {
+          var force = handler.get_peer_option(id, "force-always-relay");
+          el.attributes.toggleClass("selected", force == "Y");
+        }
+        var conn = this.$(menu #connect);
+        if (conn) {
+          var alias = me.parent.parent.$(#alias);
+          if (alias) {
+            alias = alias.text.replace(' ', '');
+            if (alias != id) {
+              conn.text = translate('Connect') + ' ' + id;
+            } else {
+              conn.text = translate('Connect');
+            }
+          }
+        }
+        me.popup(menu);
+    }
+
+    event click $(menu#remote-context li) (evt, me) {
+        var action = me.id;
+        var id = current_menu_peer_id;
+        if (action == "connect") {
+            createNewConnect(id, "connect");
+        } else if (action == "transfer") {
+            createNewConnect(id, "file-transfer");
+        } else if (action == "wol") {
+            handler.send_wol(id);
+        } else if (action == "remove") {
+            if (this.type == "ab") {
+                for (var i = 0; i < ab.peers.length; ++i) {
+                    if (ab.peers[i].id == id) {
+                        ab.peers.splice(i, 1);
+                        app.update();
+                        updateAb();
+                        break;
+                    }
+                }
+            } else if (this.type == "lan") {
+                handler.remove_discovered(id);
+                app.update();
+            } else {
+                handler.remove_peer(id);
+                app.update();
+            }
+        } else if (action == "forget-password") {
+            handler.forget_password(id);
+        } else if (action == "shortcut") {
+            handler.create_shortcut(id);
+        } else if (action == "rdp") {
+            if (is_edit_rdp_port) {
+                is_edit_rdp_port = false;
+                return;
+            }
+            createNewConnect(id, "rdp");
+        } else if (action == "add-fav") {
+            var favs = handler.get_fav();
+            if (favs.indexOf(id) < 0) {
+                favs = [id].concat(favs);
+                handler.store_fav(favs);
+            }
+            app.multipleSessions.update();
+            app.update();
+        } else if (action == "remove-fav") {
+            var favs = handler.get_fav();
+            var i = favs.indexOf(id);
+            favs.splice(i, 1);
+            handler.store_fav(favs);
+            app.multipleSessions.update();
+        } else if (action == "tunnel") {
+            createNewConnect(id, "port-forward");
+        } else if (action == "rename") {
+            var old_name = handler.get_peer_option(id, "alias");
+            var abPeer;
+            if (this.type == "ab") {
+                for (var v in ab.peers) {
+                    if (v.id == id) {
+                        abPeer = v;
+                        old_name = v.alias || "";
+                    }
+                }
+            }
+            msgbox("custom-rename", "Rename", "<div .form> \
+                <div><input|text name='name' .outline-focus style='width: *; height: 23px', value='" + old_name + "' /></div> \
+                </div> \
+                ", "", function(res=null) {
+                    if (!res) return;
+                    var name = (res.name || "").trim();
+                    if (name != old_name) {
+                        if (abPeer) {
+                            abPeer.alias = name;
+                            updateAb();
+                        }
+                        handler.set_peer_option(id, "alias", name);
+                    }
+                    app.update();
+                });
+        } else if (action == "force-always-relay") {
+            var force = handler.get_peer_option(id, "force-always-relay");
+            handler.set_peer_option(id, "force-always-relay", force == "Y" ? "" : "Y");
+        } else if (action == "edit-tag") {
+            var peer;
+            for (var v in ab.peers) {
+                if (v.id == id) {
+                    peer = v;
+                }
+            }
+            if (!peer) return;
+            msgbox("custom-edit-tag", "Edit Tag", <SelectTags tags={peer.tags || []} />, "", function(res=null) {
+                    if (!res) return;
+                    peer.tags = selectTags.tags;
+                    updateAb();
+                }, 260, 500, 0, "size: *; margin: 2em 0;");
+        }
+    }
+}
+
+function getSessionsType() {
+    return handler.get_local_option("show-sessions-type");
+}
+
+class Favorites: Reactor.Component {
+    function render() {
+        var sessions = handler.get_fav().map(function(f) {
+            return handler.get_peer(f);
+        });
+        return <SessionList sessions={sessions} type="fav" />;
+    }
+}
+
+class MultipleSessions: Reactor.Component {
+    function render() {
+        var type = getSessionsType();
+        return  <div style="size: *">
+                <div .sessions-bar>
+                    <div style="width:*" .sessions-tab #sessions-type>
+                        <span class={!type ? 'active' : 'inactive'}>{translate('Recent sessions')}</span>
+                        <span #fav class={type == "fav" ? 'active' : 'inactive'}>{translate('Favorites')}</span>
+                        {handler.is_installed() && <span #lan class={type == "lan" ? 'active' : 'inactive'}>{translate('Discovered')}</span>}
+                        <span #ab class={type == "ab" ? 'active' : 'inactive'}>{translate('Address book')}</span>
+                    </div>
+                    {!this.hidden && <SearchBar type={type} />}
+                    {!this.hidden && <SessionStyle type={type} />}
+                </div>
+                {!this.hidden && 
+                ((type == "fav" && <Favorites />) ||
+                (type == "lan" && handler.is_installed() && <LanPeers />) ||
+                (type == "ab" && <AddressBook />) ||
+                <SessionList sessions={handler.get_recent_sessions()} />)}
+            </div>;
+    }
+
+    function stupidUpdate() {
+        /* hidden is workaround of stupid sciter bug */
+        this.hidden = true;
+        this.update();
+        var me = this;
+        self.timer(60ms, function() {
+            me.hidden = false;
+            me.update();
+	    self.timer(30ms, function() { me.onSize(); });
+        });
+    }
+
+    event click $(div#sessions-type span.inactive) (_, el) {
+        if (el.id == "lan") {
+            discover();
+        }
+        handler.set_local_option('show-sessions-type', el.id || "");
+        this.stupidUpdate();
+    }
+
+    function onSize() {
+        var w = this.$(.sessions-bar .sessions-tab).box(#width);
+        var len = translate('Recent sessions').length;
+        var totalChars = 0;
+        var nEle = 0;
+        for (var el in this.$$(#sessions-type span)) {
+            nEle += 1;
+            totalChars += el.text.length;
+        }
+        for (var el in this.$$(#sessions-type span)) {
+            var maxWidth = (w - nEle * 2 * 8) * el.text.length / totalChars;
+            if (maxWidth < 0) maxWidth = 36;
+            el.style.set{
+                "max-width": maxWidth + "px",
+            };
+        }
+    }
+}
+
+function discover() {
+    handler.discover();
+    var tries = 15;
+    function update() {
+        self.timer(300ms, function() {
+            tries -= 1;
+            if (tries == 0) return;
+            update();
+            var p = (app || {}).multipleSessions;
+            if (p) {
+                p.update();
+            }
+        });
+    }
+    update();
+}
+
+if (getSessionsType() == "lan" && handler.is_installed()) {
+    discover();
+}
+
+class LanPeers: Reactor.Component {
+    function render() {
+        var sessions = [];
+        try {
+            sessions = JSON.parse(handler.get_lan_peers());
+        } catch (_) {}
+        return <SessionList sessions={sessions} type="lan" />;
+    }
+}
+
+view.on("size", function() { if (app && app.multipleSessions) app.multipleSessions.onSize(); });
+
+/*
+{
+    peers: [{id: "abcd", username: "", hostname: "", platform: "", alias: "", tags: ["", "", ...]}, ...],
+    tags: [],
+}
+*/
+
+function handleAbError(err) {
+    abLoading = false;
+    err = translate(err);
+    stderr.println(err);
+    abError = err;
+    app.update();
+}
+
+function getAb() {
+    abLoading = true;
+    abError = "";
+    app.update();
+    httpRequest(handler.get_api_server() + "/api/ab/get", #post, {}, function(data) {
+        if (data) {
+            if (data.error) {
+                handleAbError(data.error);
+                return;
+            }
+            var tm = data.updated_at;
+            ab = JSON.parse(data.data);
+            if (!ab.tags) ab.tags = [];
+            if (!ab.peers) ab.peers = [];
+        }
+        abLoading = false;
+        app.update();
+    }, function(err, status) {
+        handleAbError(err);
+    }, getHttpHeaders());
+}
+
+function updateAb() {
+    httpRequest(handler.get_api_server() + "/api/ab", #post, { data: JSON.stringify(ab) }, function(data) {
+    }, function(err, status) {
+    }, getHttpHeaders());
+}
+
+function resetAb() {
+    ab = { tags: [], peers: [] };
+    app.update();
+}
+
+function updateAbPeer() {
+    if (ab.peers.length == 0) return;
+    // to-do: inefficient
+    var sessions = handler.get_recent_sessions();
+    if (sessions.length == 0) return;
+    var s = sessions[0];
+    var id = s[0] || "";
+    var p;
+    for (var tmp in ab.peers) {
+        if (tmp.id == id) p = tmp;
+    }
+    if (!p) return;
+    var username = s[1] || "";
+    var hostname = s[2] || "";
+    var platform = s[3] || "";
+    var alias = s[4] || "";
+    var updated;
+    if (username != (p.username || "")) {
+        p.username = username;
+        updated = true;
+    }
+    if (hostname != (p.hostname || "")) {
+        p.hostname = hostname;
+        updated = true;
+    }
+    if (platform != (p.platform || "")) {
+        p.platform = platform;
+        updated = true;
+    }
+    if (alias != (p.alias || "")) {
+        if (alias) {
+            p.alias = alias;
+        } else if (p.alias) {
+            handler.set_peer_option(id, "alias", p.alias);
+        }
+        updated = true;
+    }
+    if (updated) {
+        updateAb();
+        stdout.println("Ab peer updated");
+    }
+}
+
+var is_edit_rdp_port;
+class EditRdpPort: Reactor.Component {
+    function render() {
+        return <span style="margin-left: 12px; padding: 0 6px; display: inline-block;" .link>{svg_edit}</span>;
+    }
+
+    function onMouse(evt) {
+        if (evt.type == Event.MOUSE_DOWN) {
+            is_edit_rdp_port = true;
+            editRdpPort();
+        }
+    }
+}
+
+function editRdpPort() {
+    var id = current_menu_peer_id;
+    var p0 = handler.get_peer_option(id, "rdp_port");
+    var port = p0 ? <input|text name='port' value={p0} /> : 
+                    <input|text name='port' novalue={3389} />;
+    var name0 = handler.get_peer_option(id, "rdp_username");
+    var pass0 = handler.get_peer_option(id, "rdp_password");
+    msgbox("custom-rdp-port", 'RDP ' + translate('Settings'), <div .form .set-password> 
+            <div><span>{translate('Port')}:</span>{port}</div> 
+            <div><span>{translate('Username')}:</span><input|text name="username" value={name0} /></div> 
+            <div><span>{translate('Password')}:</span><PasswordComponent value={pass0} /></div> 
+        </div>, "", function(res=null) {
+        if (!res) return;
+        var p = (res.port || '').trim();
+        if (p != p0) {
+            if (!p) p = '0';
+            p = p.toNumber();
+            if (p < 0 || p != p.toInteger()) {
+                return translate("Invalid port");
+            }
+            if (p == 0) p = "";
+            else p = p.toInteger() + '';
+            handler.set_peer_option(id, "rdp_port", p);
+        }
+
+        var name = (res.username || '').trim();
+        if (name != name0) {
+            handler.set_peer_option(id, "rdp_username", name);
+        }
+
+        var pass = (res.password || '').trim();
+        if (pass != pass0) {
+            handler.set_peer_option(id, "rdp_password", pass);
+        }
+      }, 240);
+}
+

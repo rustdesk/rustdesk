@@ -1,0 +1,566 @@
+view.windowFrame = is_osx ? #extended : #solid;
+
+var body;
+var connections = [];
+var show_chat = false;
+var show_elevation = true;
+var svg_elevate = <svg t="1667992597853" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1850" width="16" height="16" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M892.761 160.724v426.504c0 25.588-6.419 51.036-19.177 76.339-12.798 25.336-29.547 49.86-50.254 73.627-20.707 23.79-44.372 46.296-70.97 67.516-26.589 21.244-53.543 40.177-80.921 56.768-27.363 16.623-53.968 30.461-79.801 41.438-25.809 11.008-48.433 18.547-67.871 22.64l-9.203 1.53-8.43-1.53c-19.958-4.093-43.094-11.632-69.432-22.64-26.337-10.969-53.708-24.816-82.080-41.438-28.388-16.591-56.256-35.524-83.618-56.768-27.378-21.219-51.776-43.725-73.265-67.516-21.488-23.759-38.868-48.291-52.155-73.627-13.319-25.305-19.974-50.759-19.974-76.339v-426.504l31.455-4.629 352.892-65.97 359.784 65.97 23.017 4.629zM510.028 151.884l-4.211-0.844-302.89 51.476v269.101h307.102v-319.734zM815.434 471.634h-305.406v383.031c19.682-4.51 41.052-11.411 64.141-20.692 23.033-9.249 45.815-20.234 68.304-32.867 22.513-12.672 44.159-26.739 64.969-42.203 20.818-15.472 39.23-32.047 55.277-49.797 16.024-17.703 28.822-36.131 38.386-55.222 9.549-19.131 14.328-38.553 14.328-58.235v-124.015z" p-id="1851" fill="#ffffff"></path></svg>;
+
+var hide_cm = undefined;
+function setWindowState(state) {
+    if (hide_cm == undefined) hide_cm = handler.hide_cm();
+    if (hide_cm) return;
+    view.windowState = state;
+}
+
+class Body: Reactor.Component
+{
+    this var cur = 0;
+
+    function this() {
+        body = this;
+    }
+
+    function render() {
+        if (connections.length == 0)
+          return <div style="size:*; margin: * 0; text-align: center;">
+                Waiting for new connection ...
+                </div>;
+        var c = connections[this.cur];
+        this.connection = c;
+        this.cid = c.id;
+        var auth = c.authorized;
+        var me = this;
+        var callback = function(msg) {
+            me.sendMsg(msg);
+        };
+        var right_style = show_chat ? "" : "display: none";
+        var disconnected = c.disconnected;
+        var show_elevation_btn = handler.can_elevate() && show_elevation && !c.is_file_transfer && !c.is_view_camera && !c.is_terminal && c.port_forward.length == 0;
+        var show_accept_btn = handler.get_option('approve-mode') != 'password';
+       // below size:* is a workaround for Linux, it already set in css, but not work, shit sciter
+        return <div .content style="size:*">
+            <div .left-panel>
+                <div .icon-and-id>
+                    <div .icon style={"background: " + string2RGB(c.name, 1)}>
+                    {c.name[0].toUpperCase()}
+                    </div>
+                    <div>
+                        <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
+                        <div .id>({c.peer_id})</div>
+                        <div style="margin-top: 1.2em">{auth
+                            ? <span>{disconnected ? translate('Disconnected') : translate('Connected')}{" "}<span #time>{getElapsed(c.time, c.now)}</span></span> 
+                            : <span>{translate('Request access to your device')}{"..."}</span>}
+                        </div>
+                    </div>
+                </div>
+                <div />
+                {c.is_file_transfer || c.is_terminal || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
+                {c.is_file_transfer || c.is_terminal || c.port_forward || disconnected ? "" : <div> <div .permissions>
+                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Enable keyboard/mouse')}><icon .keyboard /></div>
+                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Enable clipboard')}><icon .clipboard /></div>
+                    <div class={!c.audio ? "disabled" : ""} title={translate('Enable audio')}><icon .audio /></div>
+                    <div class={!c.file ? "disabled" : ""} title={translate('Enable file copy and paste')}><icon .file /></div>
+                    <div class={!c.restart ? "disabled" : ""} title={translate('Enable remote restart')}><icon .restart /></div>
+                </div> <div .permissions style="margin-top:8px;" >
+                    <div class={!c.recording ? "disabled" : ""} title={translate('Enable recording session')}><icon .recording /></div>
+                    <div class={!c.block_input ? "disabled" : ""} title={translate('Enable blocking user input')} style={is_win ? "" : "display:none;"}><icon .block_input /></div>
+                </div></div>
+                }
+                {c.is_file_transfer ? <div>{translate('Transfer file')}</div> : ""}
+                {c.is_view_camera ? <div>{translate('View camera')}</div> : ""}
+                {c.is_terminal ? <div>{translate('Terminal')}</div> : ""}
+                {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
+                <div style="size:*"/>
+                <div .outer_buttons>
+                    {!auth && !disconnected && show_elevation_btn && show_accept_btn ? <button #elevate_accept .control .elevate .button><span><span><span>{svg_elevate}</span><span>{translate('Accept')}</span></span></span></button> : "" }
+                    {auth && !disconnected && show_elevation_btn ? <button #elevate .control .elevate .button><span><span><span>{svg_elevate}</span><span>{translate('Elevate')}</span></span></span></button> : "" }
+                    <div .inner_buttons style={auth ? "display:none;":""}>
+                        {!auth && show_accept_btn ? <button #accept .control .button>{translate('Accept')}</button> : "" }
+                        {!auth ? <button #dismiss .control .outline>{translate('Dismiss')}</button> : "" }
+                    </div>
+                    {auth && !disconnected ? <button #disconnect .control .button>{translate('Disconnect')}</button> : "" }
+                    {auth && disconnected ? <button #close .control .button>{translate('Close')}</button> : "" }
+                </div>
+                {c.is_file_transfer || c.is_terminal || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
+            </div>
+            <div .right-panel style={right_style}>
+                {c.is_file_transfer || c.is_terminal || c.port_forward ? "" : <ChatBox msgs={c.msgs} callback={callback} />}
+            </div>
+        </div>;
+    }
+
+    function sendMsg(text) {
+        if (!text) return;
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.msgs.push({ name: "me", text: text, time: getNowStr()});
+            handler.send_msg(cid, text);
+            body.update();
+        });
+    }
+
+    event click $(icon.keyboard) (e) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.keyboard = !connection.keyboard;
+            body.update();
+            handler.switch_permission(cid, "keyboard", connection.keyboard);
+        });
+    }
+
+    event click $(icon.clipboard) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.clipboard = !connection.clipboard;
+            body.update();
+            handler.switch_permission(cid, "clipboard", connection.clipboard);
+        });
+    }
+
+    event click $(icon.audio) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.audio = !connection.audio;
+            body.update();
+            handler.switch_permission(cid, "audio", connection.audio);
+        });
+    }
+
+    event click $(icon.file) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.file = !connection.file;
+            body.update();
+            handler.switch_permission(cid, "file", connection.file);
+        });
+    }
+
+    event click $(icon.restart) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.restart = !connection.restart;
+            body.update();
+            handler.switch_permission(cid, "restart", connection.restart);
+        });
+    }
+
+    event click $(icon.recording) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.recording = !connection.recording;
+            body.update();
+            handler.switch_permission(cid, "recording", connection.recording);
+        });
+    }
+
+    event click $(icon.block_input) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.block_input = !connection.block_input;
+            body.update();
+            handler.switch_permission(cid, "block_input", connection.block_input);
+        });
+    }
+
+    event click $(button#accept) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.authorized = true;
+            body.update();
+            handler.authorize(cid);
+            self.timer(30ms, function() {
+                setWindowState(View.WINDOW_MINIMIZED);
+            });
+        });
+    }
+
+    event click $(button#elevate_accept) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.authorized = true;
+            show_elevation = false;
+            body.update();
+            handler.elevate_portable(cid);
+            handler.authorize(cid);
+            self.timer(30ms, function() {
+                setWindowState(View.WINDOW_MINIMIZED);
+            });
+        });
+    }
+
+    event click $(button#elevate) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            show_elevation = false;
+            body.update();
+            handler.elevate_portable(cid);
+            self.timer(30ms, function() {
+                setWindowState(View.WINDOW_MINIMIZED);
+            });
+        });
+    }
+
+    event click $(button#dismiss) {
+        var cid = this.cid;
+        checkClickTime(function() {
+            handler.close(cid);
+        });
+    }
+
+    event click $(button#disconnect) {
+        var cid = this.cid;
+        checkClickTime(function() {
+            handler.close(cid);
+        });
+    }
+
+    event click $(button#close) {
+        var cid = this.cid;
+        if (this.cur >= 0 && this.cur < connections.length){
+            handler.remove_disconnected_connection(cid);
+            connections.splice(this.cur, 1);
+            if (connections.length > 0) {
+                if (this.cur > 0)
+                    this.cur -= 1; 
+                else
+                    this.cur = connections.length - 1;
+                header.update();
+                body.update();
+            } else {
+                handler.quit();
+            }
+        }
+        
+    }
+}
+
+$(body).content(<Body />);
+
+var header;
+
+class Header: Reactor.Component
+{
+    function this() {
+        header = this;
+    }
+
+    function render() {
+        var me = this;
+        var conn = connections[body.cur];
+        if (conn && conn.unreaded > 0) {;
+            var el = me.select("#unreaded" + conn.id);
+            if (el) el.style.set {
+                display: "inline-block",
+            };
+            self.timer(300ms, function() {
+                conn.unreaded = 0;
+                var el = me.select("#unreaded" + conn.id);
+                if (el) el.style.set {
+                    display: "none",
+                };
+            });
+        }
+        var tabs = connections.map(function(c, i) { return me.renderTab(c, i) });
+        return <div .tabs-wrapper><div .tabs>
+            {tabs}
+            </div>
+            <div .tab-arrows>
+                <span #left-arrow>&lt;</span>
+                <span #right-arrow>&gt;</span>
+            </div>
+        </div>;
+    }
+
+    function renderTab(c, i) {
+        var cur = body.cur;
+        return <div class={i == cur ? "active-tab tab" : "tab"}>
+            {c.name}
+            {c.unreaded > 0 ? <span .unreaded id={"unreaded" + c.id}>{c.unreaded}</span> : ""}
+        </div>;
+    }
+
+    function update_cur(idx) {
+        checkClickTime(function() {
+            body.cur = idx;
+            update();
+            self.timer(1ms, adjustHeader);
+        });
+    }
+
+    event click $(div.tab) (_, me) {
+        var idx = me.index;
+        if (idx == body.cur) return;
+        this.update_cur(idx);
+    }
+
+    event click $(span#left-arrow) {
+        var cur = body.cur;
+        if (cur == 0) return;
+        this.update_cur(cur - 1);
+    }
+
+    event click $(span#right-arrow) {
+        var cur = body.cur;
+        if (cur == connections.length - 1) return;
+        this.update_cur(cur + 1);
+    }
+}
+
+if (is_osx) {
+    $(header).content(<Header />);
+    $(header).attributes["role"] = "window-caption";
+} else {
+    $(div.window-toolbar).content(<Header />);
+    setWindowButontsAndIcon(true);
+}
+
+event click $(div.chaticon) {
+    checkClickTime(function() {
+        show_chat = !show_chat;
+        adaptSizeForChat();
+        if (show_chat) {
+            view.focus = $(.outline-focus);
+        }
+    });
+}
+
+function checkClickTime(callback) {
+    var click_callback_time = getTime();
+    handler.check_click_time(body.cid);
+    self.timer(120ms, function() {
+        var d = click_callback_time - handler.get_click_time();
+        if (d > 120)
+            callback();
+    });
+}
+
+function adaptSizeForChat() {
+    $(div.right-panel).style.set {
+        display: show_chat ? "block" : "none",
+    };
+    var (x, y, w, h) = view.box(#rectw, #border, #screen);
+    if (show_chat && w < scaleIt(600)) {
+        view.move(x - (scaleIt(600) - w), y, scaleIt(600), h);
+    } else if (!show_chat && w > scaleIt(450)) {
+        view.move(x + (w - scaleIt(300)), y, scaleIt(300), h);
+    }
+}
+
+function update() {
+    header.update();
+    body.update();
+}
+
+function bring_to_top(idx=-1) {
+    if (view.windowState == View.WINDOW_HIDDEN || view.windowState == View.WINDOW_MINIMIZED) {
+        if (is_linux) {
+            view.focus = self;
+        } else {
+            setWindowState(View.WINDOW_SHOWN);
+        }
+        if (idx >= 0) body.cur = idx;
+    } else {
+        view.windowTopmost = true;
+        view.windowTopmost = false;
+    }
+}
+
+handler.addConnection = function(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
+    stdout.println("new connection #" + id + ": " + peer_id);
+    var conn;
+    connections.map(function(c) {
+        if (c.id == id) conn = c;
+    });
+    if (conn) {
+        conn.authorized = authorized;
+        update();
+        return;
+    }
+    var idx = -1;
+    connections.map(function(c, i) {
+        if (c.disconnected && c.peer_id == peer_id) idx = i;
+    });
+    if (!name) name = "NA";
+    conn = {
+        id: id, is_file_transfer: is_file_transfer, is_view_camera: is_view_camera, is_terminal: is_terminal, peer_id: peer_id,
+        port_forward: port_forward,
+        name: name, authorized: authorized, time: new Date(), now: new Date(),
+        keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,
+        audio: audio, file: file, restart: restart, recording: recording,
+        block_input:block_input,
+        disconnected: false
+    };
+    if (idx < 0) {
+        connections.push(conn);
+        body.cur = connections.length - 1;
+    } else {
+        connections[idx] = conn;
+        body.cur = idx;
+    }
+    bring_to_top();
+    update();
+    self.timer(1ms, adjustHeader);
+    if (authorized) {
+        self.timer(3s, function() {
+            setWindowState(View.WINDOW_MINIMIZED);
+        });
+    }
+}
+
+handler.removeConnection = function(id, close) {
+    var i = -1;
+    connections.map(function(c, idx) {
+        if (c.id == id) i = idx;
+    });
+    if (i < 0) return;
+    if (close) {
+        connections.splice(i, 1);
+    } else {
+        var conn = connections[i];
+        conn.disconnected = true;
+    }
+    if (connections.length > 0) {
+        if (body.cur >= i && body.cur > 0 && close) body.cur -= 1;
+        update();
+    }
+}
+
+handler.newMessage = function(id, text) { 
+    var idx = -1;
+    connections.map(function(c, i) {
+        if (c.id == id) idx = i;
+    });
+    var conn = connections[idx];
+    if (!conn) return;
+    conn.msgs.push({name: conn.name, text: text, time: getNowStr()});
+    bring_to_top(idx);
+    if (idx == body.cur) {
+        var shouldAdapt = !show_chat;
+        show_chat = true;
+        if (shouldAdapt) adaptSizeForChat();
+    }
+    conn.unreaded += 1;
+    update();
+}
+
+handler.showElevation = function(show) {
+    if (show != show_elevation) {
+        show_elevation = show;
+        update();
+    }
+}
+
+view << event statechange {
+    adjustBorder();
+}
+
+function self.ready() {
+    adjustBorder();
+    var (sw, sh) = view.screenBox(#workarea, #dimension);
+    var w = scaleIt(300);
+    var h = scaleIt(400);
+    view.move(sw - w, 0, w, h);
+}
+
+function getElapsed(time, now) {
+    var seconds = Date.diff(time, now, #seconds);
+    var hours = seconds / 3600;
+    var days = hours / 24;
+    hours = hours % 24;
+    var minutes = seconds % 3600 / 60;
+    seconds = seconds % 60;
+    var out = String.printf("%02d:%02d:%02d", hours, minutes, seconds);
+    if (days > 0) {
+        out = String.printf("%d day%s %s", days, days > 1 ? "s" : "", out);
+    }
+    return out;
+}
+
+var ui_status_cache = [""];
+function check_update_ui() {
+    self.timer(1s, function() {
+        var approve_mode = handler.get_option('approve-mode');
+        var changed = false;
+        if (ui_status_cache[0] != approve_mode) {
+            ui_status_cache[0] = approve_mode;
+            changed = true;
+        }
+        if (changed) update();
+        check_update_ui();
+    });                          
+}
+check_update_ui();
+
+function updateTime() {
+    self.timer(1s, function() {
+        var now = new Date();
+        connections.map(function(c) {
+            if (!c.authorized) c.time = now;
+            if (!c.disconnected) c.now = now;
+        });
+        var el = $(#time);
+        if (el) {
+            var c = connections[body.cur];
+            if (c && c.authorized && !c.disconnected) {
+                el.text = getElapsed(c.time, c.now);
+            }
+        }
+        updateTime();
+    });
+}
+
+updateTime();
+
+var tm0 = getTime();
+
+function self.closing() {
+    if (connections.length == 0 && getTime() - tm0 > 30000) return true;
+    setWindowState(View.WINDOW_HIDDEN);
+    return false;
+}
+
+
+function adjustHeader() {
+    var hw = $(header).box(#width) / scaleFactor;
+    var tabswrapper = $(div.tabs-wrapper);
+    var tabs = $(div.tabs);
+    var arrows = $(div.tab-arrows);
+    if (!arrows) return;
+    var n = connections.length;
+    var wtab = 80;
+    var max = hw - 98;
+    var need_width = n * wtab + scaleIt(2); // include border of active tab
+    if (need_width < max) {
+        arrows.style.set {
+            display: "none",
+        };
+        tabs.style.set {
+            width: need_width,
+            margin-left: 0,
+        };
+        tabswrapper.style.set {
+            width: need_width,
+        };
+    } else {
+        var margin = (body.cur + 1) * wtab - max + 30;
+        if (margin < 0) margin = 0;
+        arrows.style.set {
+            display: "block",
+        };
+        tabs.style.set {
+            width: (max - 20 + margin) + 'px',
+            margin-left: -margin + 'px'
+        };
+        tabswrapper.style.set {
+            width: (max + 10) + 'px',
+        };
+    }
+}
+
+view.on("size", adjustHeader);
+
+// handler.addConnection(0, false, false, 0, "", "test1", true, false, false, true, true);
+// handler.addConnection(1, false, false, 0, "", "test2--------", true, false, false, false, false);
+// handler.addConnection(2, false, false, 0, "", "test3", true, false, false, false, false);
+// handler.newMessage(0, 'h');

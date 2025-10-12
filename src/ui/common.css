@@ -1,0 +1,478 @@
+html {
+    var(accent): #0071ff;
+    var(button): #2C8CFF;
+    var(gray-bg): #eee;
+    var(bg): white;
+    var(border): #ccc;
+    var(hover-border): #999;
+    var(text): #222;
+    var(placeholder): #aaa;
+    var(lighter-text): #888;
+    var(light-text): #666;
+    var(menu-hover): #D7E4F2;
+    var(dark-red): #A72145;
+    var(dark-yellow): #FBC732;
+    var(dark-blue): #2E2459;
+    var(green-blue): #197260;
+    var(gray-blue): #2B3439;
+    var(blue-green): #4299bf;
+    var(light-green): #D4EAB7;
+    var(dark-green): #5CB85C;
+    var(blood-red): #F82600;
+    var(gray-bg-osx): rgba(238, 238, 238, 0.75);
+}
+
+html.darktheme {
+    var(bg): #252525;
+    var(gray-bg): #141414;
+    var(menu-hover): #2D3033;
+    var(border): #555;
+
+    var(text): white;
+    var(light-text): #999;
+    var(lighter-text): #777;
+    var(placeholder): #555;
+    var(gray-bg-osx): rgba(37, 37, 37, 0.75);
+}
+
+body {
+    margin: 0;
+    color: color(text);
+}
+
+button.button {
+    height: 2em;
+    border-radius: 0.5em;
+    background: color(button);
+    color: color(bg);
+    border-color: color(button);
+    min-width: 40px;
+}
+
+button[type=checkbox], button[type=checkbox]:active {
+    background: none;
+    border: none;
+    color: unset;
+    height: 1.4em;
+}
+
+button.outline {
+    border: color(border) solid 1px;
+    background: transparent;
+    color: color(text);
+}
+
+button.button:active, button.active {
+    background: color(accent);
+    color: color(bg);
+    border-color: color(accent);
+}
+
+button.button:hover, button.outline:hover {
+  border-color: color(hover-border);
+}
+
+button.link {
+  background: none !important;
+  border: none;
+  padding: 0 !important;
+  color: color(button);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+input[type=text], input[type=password], input[type=number] {
+    width: *;
+    font-size: 1.5em;
+    border-color: color(border);
+    border-radius: 0;
+    color: color(text);
+    padding-left: 0.5em;
+    background: color(bg);
+}
+
+input:empty {
+    color: color(placeholder);
+}
+
+input.outline-focus:focus {
+    outline: color(button) solid 3px;
+}
+
+textarea {
+    background: color(bg);
+    color: color(text);
+}
+
+textarea:empty {
+    color: color(placeholder);
+}
+
+@set my-scrollbar
+{
+  .prev { display:none; }
+  .next { display:none; }
+  .base, .next-page, .prev-page { background: white;}
+  .slider { background: #bbb; border: white solid 4px; }
+  .base:disabled { background: transparent; }
+  .slider:hover  { background: grey; }
+  .slider:active { background: grey; }
+  .base { size: 16px; }
+  .corner { background: white; }
+}
+
+@mixin ELLIPSIS {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-x: hidden;
+}
+
+.ellipsis {
+  @ELLIPSIS;
+}
+
+div.password svg:not(.checkmark) {
+    padding-left: 1em;
+    size: 16px;
+    color: #ddd;
+    background: none;
+    padding-top: 4px!important;
+}
+
+div.password input {
+    font-family: Consolas, Menlo, Monaco, 'Courier New';
+    font-size: 1.2em;
+}
+
+div.username input {
+  font-size: 1.2em;
+}
+
+svg {
+    background: none;
+}
+
+header {
+  border-bottom: color(border) solid 1px;
+  height: 22px;
+  flow: horizontal;
+  overflow-x: hidden;
+  position: relative;
+}
+
+@media platform == "OSX" {
+    header {
+      background: linear-gradient(top,#E4E4E4,#D1D1D1);
+    }
+}
+
+header div.window-icon {
+  size: 22px;
+}
+
+@media platform != "OSX" {
+header {
+  background: white;
+  height: 30px;
+}
+
+header div.window-icon {
+  size: 30px;
+}
+}
+
+header div.window-icon icon {
+  display: block;
+  margin: *;
+  size: 16px;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+header caption {
+  size: *;
+}
+
+@media platform != "OSX" {
+  button.window {
+    top: 0;
+    padding: 0 10px;
+    width: 22px;
+    position: absolute;
+    color: black;
+    border: none;
+    background: none;
+    border-radius: 0;
+  }
+  button.window div {
+    size: 10px;
+    margin: *;
+    background-size: cover;
+    background-repeat: no-repeat;
+  }
+  button.window:hover {
+    background: color(gray-bg);
+  }
+  button.window#minimize {
+    right: 84px;
+  }
+  button.window#maximize {
+    right: 42px;
+  }
+  button.window#close {
+    right: 0px;
+  }
+  button.window#minimize div {
+    height: 3px;
+    border-bottom: black solid 1px;
+    width: 12px;
+  }
+  button.window#maximize div {
+    border: black solid 1px;
+  }
+  button.window#close:hover {
+    background: #F82600;
+  }
+  button.window#close:hover div {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMBAMAAACkW0HUAAAAD1BMVEUAAAD///////////////+PQt5oAAAABXRSTlMAO+hBqp3RzLsAAAAuSURBVAjXY3BkAAIRBiEDBgZGZRACMkEYxAJyQRwgV5EBSsEEoUqgGqDaoYYBALKmBEEnAGy8AAAAAElFTkSuQmCC');
+  }
+  button.window#close div {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMBAMAAACkW0HUAAAAD1BMVEUAAAAAAAAAAAAAAAAAAABPDueNAAAABXRSTlMAO+hBqp3RzLsAAAAuSURBVAjXY3BkAAIRBiEDBgZGZRACMkEYxAJyQRwgV5EBSsEEoUqgGqDaoYYBALKmBEEnAGy8AAAAAElFTkSuQmCC');
+    size: 12px;
+  }
+  button.window#maximize.restore div {
+    border: none;
+    size: 12px;
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMAQMAAABsu86kAAAABlBMVEUAAAAAAAClZ7nPAAAAAXRSTlMAQObYZgAAAB1JREFUCNdjsP/AoCDA8P8CQ0MABipgaHBg+H8AAMfSC36WAZteAAAAAElFTkSuQmCC');
+}
+}
+
+div.chatbox {
+  size: *;
+}
+
+div.chatbox div.send svg {
+  size: 16px;
+}
+
+div.chatbox div.send span:active {
+  opacity: 0.5;
+}
+
+div.chatbox div.send span {
+  display: inline-block;
+  padding: 6px;
+}
+
+div.chatbox .msgs {
+  border: none;
+  size: *;
+  border-bottom: color(border) 1px solid;
+  overflow-x: hidden;
+  overflow-y: scroll-indicator;
+  border-spacing: 1em;
+  padding: 1em;
+}
+
+div.chatbox div.send {
+  flow: horizontal;
+  height: 30px;
+  padding: 5px;
+}
+
+div.chatbox div.send input {
+  height: 20px !important;
+}
+
+div.chatbox div.name {
+  color: color(dark-green);
+}
+
+div.chatbox div.right-side div {
+  text-align: right;
+}
+
+div.chatbox div.text {
+    margin-top: 0.5em;
+}
+
+@media platform != "OSX" {
+header .window-toolbar {
+  width: max-content;
+  background: transparent;
+  position: absolute;
+  bottom: 4px;
+  height: 24px;
+}
+}
+
+header svg, menu svg {
+  size: 14px;
+}
+
+header span, menu span {
+  padding: 4px 8px;
+  margin: * 0.5em;
+  color: color(light-text);
+}
+
+progress {
+    display: inline-block;
+    aspect: Progress;
+    border: none;
+    margin-right: 1em;
+    height: 0.25em;
+    background: transparent;
+}
+
+menu {
+  background: color(bg);
+}
+
+menu div.separator {
+  height: 1px;
+  width: *;
+  margin: 5px 0;
+  background: color(gray-bg);
+  border: none;
+}
+
+menu li {
+  color: color(text);
+  position: relative;
+}
+
+menu li span {
+  display: none;
+}
+
+menu li.selected span:nth-child(1) {
+  display: inline-block;
+  position: absolute;
+  left: -10px;
+  top: 2px;
+}
+
+.link {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link:active {
+  opacity: 0.5;
+}
+
+menu li:hover {
+  background: color(menu-hover);
+  color: color(text);
+}
+
+menu li.line-through, menu li.line-through :hover {
+  text-decoration-line: line-through;
+  color: red;
+}
+
+#tags {
+    size: *;
+    padding: 0.5em;
+    overflow-y: scroll-indicator;
+    border-spacing: 0.5em;
+    flow: horizontal-flow;
+}
+
+#tags span {
+    background: color(gray-bg);
+    display: inline-block;
+    border-radius: 6px;
+    padding: 3px 0.5em;
+    word-wrap: normal;
+}
+
+#tags span.active {
+    background: color(button);
+    border-color: color(button);
+    color: white;
+}
+
+#tags span:hover {
+    border-color: color(hover-border);
+}
+
+div#msgbox .msgbox-icon svg {
+  size: 80px;
+  background: white;
+
+}
+
+div#msgbox .form {
+  border-spacing: 0.5em;
+}
+
+div#msgbox .caption {
+  @ELLIPSIS;
+  height: 2em;
+  line-height: 2em;
+  text-align: center;
+  color: color(bg);
+  font-weight: bold;
+}
+
+div#msgbox .form .text {
+  @ELLIPSIS;
+}
+
+div#msgbox button.button {
+  margin-left: 1.6em;
+}
+
+div#msgbox div.password {
+  position: relative;
+}
+
+div#msgbox div.password svg {
+  position: absolute;
+  right: 0.25em;
+  top: 0.25em;
+  padding: 0.5em;
+  color: color(text);
+}
+
+div#msgbox div.set-password > div {
+  flow: horizontal;
+}
+
+div#msgbox div.set-password > div > span {
+  width: 30%;
+  line-height: 2em;
+}
+
+div#msgbox div.set-password div.password {
+  width: *;
+}
+
+div#msgbox div.set-password div > input {
+  width: *;
+}
+
+div#msgbox div.set-password input {
+  font-size: 1em;
+}
+
+div#msgbox #error {
+  color: red;
+}
+
+div.user-session .title {
+  font-size: 1.2em;
+  margin-bottom: 2em;
+}
+
+div.user-session select {
+  width: 98%;
+  height: 2em;
+  border-radius: 0.5em;
+  border: color(border) solid 1px;
+  background: color(bg);
+  color: color(text);
+  padding-left: 0.5em;
+}
