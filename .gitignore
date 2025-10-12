@@ -1,0 +1,8 @@
+# 排除可执行文件和输出目录
+rustdesk.exe
+Output/
+*.exe
+
+# 排除测试文件
+test_*.toml
+start.bat
