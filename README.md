@@ -43,6 +43,8 @@
 
 ## 📚 文档索引
 
+- [程序名参数说明](./程序名参数说明.md)
+- [命令行参数说明](./命令行参数说明.md)
 - [unlock_pin 功能分析报告](./unlock_pin功能分析报告.md)
 - [allow-hide-cm 功能分析报告](./allow-hide-cm功能分析报告.md)
 - [hide-tray 功能分析报告](./hide-tray功能分析报告.md)
