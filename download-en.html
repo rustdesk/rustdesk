@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RustDesk - Cislink Remote Desktop Solution</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .feature-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .feature-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .feature-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #28a745;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .download-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .download-button {
+            display: inline-block;
+            background: white;
+            color: #667eea;
+            padding: 18px 50px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-size: 1.3em;
+            font-weight: bold;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .download-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .info-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .info-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .info-card p {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .steps {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        .step-content h4 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .step-content p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .support-section {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+
+        .support-section h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .support-section p {
+            color: #856404;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+        }
+
+        .version-badge {
+            background: #28a745;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            display: inline-block;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .download-button {
+                padding: 15px 30px;
+                font-size: 1.1em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖥️ RustDesk - Cislink Edition</h1>
+            <p>Secure, Fast, and Private Remote Desktop Solution</p>
+            <span class="version-badge">Version 1.4.2</span>
+        </div>
+
+        <div class="content">
+            <div class="feature-box">
+                <h3>🎯 Why Choose Cislink Edition?</h3>
+                <ul class="feature-list">
+                    <li><strong>Ready to Use</strong> - No configuration needed, install and start</li>
+                    <li><strong>Private Server</strong> - All connections through Cislink self-hosted server for better security</li>
+                    <li><strong>No Account Required</strong> - No registration needed, just use ID to connect</li>
+                    <li><strong>Completely Free</strong> - Free for customers without any limitations</li>
+                    <li><strong>Technical Support</strong> - Professional support from Cislink team</li>
+                </ul>
+            </div>
+
+            <div class="download-section">
+                <h2>📥 Download Installer</h2>
+                <p style="margin: 15px 0;">Windows Client Installer</p>
+                <a href="https://cislink.nl/radmin/RustDesk_Cislink_Setup.exe" class="download-button">
+                    ⬇️ Download RustDesk (23.6 MB)
+                </a>
+                <p style="font-size: 0.9em; opacity: 0.9; margin-top: 10px;">
+                    Compatible with Windows 7/8/10/11 (64-bit)
+                </p>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <h4>📦 File Size</h4>
+                    <p>23.6 MB</p>
+                </div>
+                <div class="info-card">
+                    <h4>🔐 Security</h4>
+                    <p>End-to-End Encrypted</p>
+                </div>
+                <div class="info-card">
+                    <h4>🚀 Performance</h4>
+                    <p>Low Latency</p>
+                </div>
+                <div class="info-card">
+                    <h4>💻 Compatibility</h4>
+                    <p>Windows/Mac/Linux</p>
+                </div>
+            </div>
+
+            <div class="steps">
+                <h3 style="margin-bottom: 25px; color: #333;">🚀 Installation & Usage Guide</h3>
+                
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Download and Install</h4>
+                        <p>Click the download button above, then run the installer and follow the setup wizard to complete installation.</p>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Set Permanent Password</h4>
+                        <p>When you first open RustDesk, find the "Password" setting on the right side of the main interface and set a permanent password. Recommended: use a strong password (at least 12 characters with uppercase, lowercase, and numbers).</p>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>Get Your ID</h4>
+                        <p>You can see your unique ID at the top of the RustDesk main interface (e.g., 123456789). Share this ID and password with people who need to remotely connect to you.</p>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>Connect to Other Computers</h4>
+                        <p>Enter the other person's ID in the "Remote Desktop" input box, click "Connect", and enter their password to establish a remote connection.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="feature-box">
+                <h3>💡 Use Cases</h3>
+                <ul class="feature-list">
+                    <li><strong>Remote Tech Support</strong> - Quickly connect to customer computers to solve issues</li>
+                    <li><strong>Remote Work</strong> - Access your office computer from home</li>
+                    <li><strong>Team Collaboration</strong> - Remote collaboration between team members</li>
+                    <li><strong>Device Management</strong> - Remotely manage and maintain servers</li>
+                </ul>
+            </div>
+
+            <div class="support-section">
+                <h3>📞 Need Help?</h3>
+                <p><strong>Technical Support:</strong> If you encounter any issues, please contact the Cislink support team</p>
+                <p><strong>Website:</strong> <a href="https://cislink.nl" style="color: #856404;">https://cislink.nl</a></p>
+            </div>
+
+            <div class="feature-box">
+                <h3>🔒 Security Features</h3>
+                <ul class="feature-list">
+                    <li>End-to-end encrypted connections</li>
+                    <li>Private server, data doesn't pass through third parties</li>
+                    <li>Support for permanent and one-time passwords</li>
+                    <li>No account registration required, privacy protected</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>RustDesk - Cislink Edition</strong></p>
+            <p>Based on RustDesk 1.4.2 | Pre-configured with Cislink Server</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                © 2025 Cislink | For internal and customer use only
+            </p>
+        </div>
+    </div>
+</body>
+</html>

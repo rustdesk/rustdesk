@@ -67,6 +67,14 @@ Write-Host "`n✓ 找到 RustDesk 客户端:" -ForegroundColor Green
 Write-Host "  文件大小: $([math]::Round($ExeInfo.Length / 1MB, 2)) MB" -ForegroundColor Gray
 Write-Host "  修改时间: $($ExeInfo.LastWriteTime)" -ForegroundColor Gray
 
+# 检查图标文件
+$IconFile = "res\icon.ico"
+if (Test-Path $IconFile) {
+    Write-Host "✓ 找到自定义图标: $IconFile" -ForegroundColor Green
+} else {
+    Write-Host "⚠ 未找到自定义图标，安装包将使用默认图标" -ForegroundColor Yellow
+}
+
 # 显示服务器配置
 Write-Host "`n服务器配置:" -ForegroundColor Cyan
 Write-Host "  ID 服务器: $ServerAddress" -ForegroundColor White

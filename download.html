@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RustDesk - Cislink 远程桌面解决方案</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .feature-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .feature-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .feature-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #28a745;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .download-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .download-button {
+            display: inline-block;
+            background: white;
+            color: #667eea;
+            padding: 18px 50px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-size: 1.3em;
+            font-weight: bold;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .download-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .info-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .info-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .info-card p {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .steps {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        .step-content h4 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .step-content p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .support-section {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+
+        .support-section h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .support-section p {
+            color: #856404;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+        }
+
+        .version-badge {
+            background: #28a745;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            display: inline-block;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .download-button {
+                padding: 15px 30px;
+                font-size: 1.1em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖥️ RustDesk - Cislink Edition</h1>
+            <p>安全、快速、私有的远程桌面解决方案</p>
+            <span class="version-badge">版本 1.4.2</span>
+        </div>
+
+        <div class="content">
+            <div class="feature-box">
+                <h3>🎯 为什么选择 Cislink 定制版？</h3>
+                <ul class="feature-list">
+                    <li><strong>开箱即用</strong> - 无需任何配置，安装即可使用</li>
+                    <li><strong>私有服务器</strong> - 所有连接通过 Cislink 自托管服务器，数据更安全</li>
+                    <li><strong>无需账号</strong> - 不需要注册任何账号，直接使用 ID 连接</li>
+                    <li><strong>完全免费</strong> - 客户可免费使用，无任何限制</li>
+                    <li><strong>技术支持</strong> - Cislink 提供专业技术支持</li>
+                </ul>
+            </div>
+
+            <div class="download-section">
+                <h2>📥 下载安装包</h2>
+                <p style="margin: 15px 0;">Windows 客户端安装程序</p>
+                <a href="https://cislink.nl/radmin/RustDesk_Cislink_Setup.exe" class="download-button">
+                    ⬇️ 下载 RustDesk (23.6 MB)
+                </a>
+                <p style="font-size: 0.9em; opacity: 0.9; margin-top: 10px;">
+                    支持 Windows 7/8/10/11 (64位)
+                </p>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <h4>📦 文件大小</h4>
+                    <p>23.6 MB</p>
+                </div>
+                <div class="info-card">
+                    <h4>🔐 安全保障</h4>
+                    <p>端到端加密</p>
+                </div>
+                <div class="info-card">
+                    <h4>🚀 性能</h4>
+                    <p>低延迟连接</p>
+                </div>
+                <div class="info-card">
+                    <h4>💻 兼容性</h4>
+                    <p>Windows/Mac/Linux</p>
+                </div>
+            </div>
+
+            <div class="steps">
+                <h3 style="margin-bottom: 25px; color: #333;">🚀 安装与使用步骤</h3>
+                
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>下载并安装</h4>
+                        <p>点击上方下载按钮，下载完成后双击运行安装程序，按照向导完成安装。</p>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>设置永久密码</h4>
+                        <p>首次打开 RustDesk，在主界面右侧找到"密码"设置，点击设置一个永久密码。建议使用强密码（至少12位，包含大小写字母和数字）。</p>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>获取你的 ID</h4>
+                        <p>在 RustDesk 主界面顶部可以看到你的唯一 ID（例如：123456789）。将这个 ID 和密码告知需要远程连接你的人。</p>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>连接其他电脑</h4>
+                        <p>在"远程桌面"输入框输入对方的 ID，点击"连接"，输入对方的密码即可建立远程连接。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="feature-box">
+                <h3>💡 使用场景</h3>
+                <ul class="feature-list">
+                    <li><strong>远程技术支持</strong> - 快速连接客户电脑解决问题</li>
+                    <li><strong>远程办公</strong> - 在家访问公司电脑</li>
+                    <li><strong>协同工作</strong> - 团队成员之间的远程协作</li>
+                    <li><strong>设备管理</strong> - 远程管理和维护服务器</li>
+                </ul>
+            </div>
+
+            <div class="support-section">
+                <h3>📞 需要帮助？</h3>
+                <p><strong>技术支持:</strong> 如遇到任何问题，请联系 Cislink 技术支持团队</p>
+                <p><strong>网站:</strong> <a href="https://cislink.nl" style="color: #856404;">https://cislink.nl</a></p>
+            </div>
+
+            <div class="feature-box">
+                <h3>🔒 安全特性</h3>
+                <ul class="feature-list">
+                    <li>端到端加密连接</li>
+                    <li>私有服务器，数据不经过第三方</li>
+                    <li>支持永久密码和一次性密码</li>
+                    <li>无需注册账号，保护隐私</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>RustDesk - Cislink Edition</strong></p>
+            <p>基于 RustDesk 1.4.2 | 预配置 Cislink 服务器</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                © 2025 Cislink | 仅供内部和客户使用
+            </p>
+        </div>
+    </div>
+</body>
+</html>
