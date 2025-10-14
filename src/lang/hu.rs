@@ -718,7 +718,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Virtual mouse size", "Virtuális egér mérete"),
         ("Small", "Kicsi"),
         ("Large", "Nagy"),
-        ("Show virtual joystick", "Virtuális botkormány megjelenítése"),
+        ("Show virtual joystick", "Virtuális vezérlő megjelenítése"),
         ("Edit note", "Jegyzet szerkesztése"),
         ("Alias", "Álnév"),
     ].iter().cloned().collect();
