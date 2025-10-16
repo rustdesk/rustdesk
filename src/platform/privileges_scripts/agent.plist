@@ -31,5 +31,7 @@
         </array>
         <key>WorkingDirectory</key>
         <string>/Applications/RustDesk.app/Contents/MacOS/</string>
+        <key>ProcessType</key>
+        <string>Interactive</string>
     </dict>
 </plist>
