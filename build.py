@@ -310,9 +310,12 @@ Description: A remote control software.
 
 
 def ffi_bindgen_function_refactor():
-    # workaround ffigen
-    system2(
-        'sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart')
+    # DEPRECATED: This workaround is not needed for flutter_rust_bridge 1.80.1+
+    # The library now correctly handles the Bool type without requiring modification
+    pass
+    # OLD CODE (kept for reference):
+    # system2(
+    #     'sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart')
 
 
 def build_flutter_deb(version, features):
