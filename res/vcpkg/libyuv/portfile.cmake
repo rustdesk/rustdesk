@@ -2,7 +2,7 @@ vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
 vcpkg_from_git(
     OUT_SOURCE_PATH SOURCE_PATH
-    URL https://chromium.googlesource.com/libyuv/libyuv
+    URL https://github.com/sezero/libyuv.git
     REF 0faf8dd0e004520a61a603a4d2996d5ecc80dc3f
     # Check https://chromium.googlesource.com/libyuv/libyuv/+/refs/heads/main/include/libyuv/version.h for a version!
     PATCHES

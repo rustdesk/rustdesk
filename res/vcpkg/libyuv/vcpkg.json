@@ -2,7 +2,7 @@
   "name": "libyuv",
   "version": "1857",
   "description": "libyuv is an open source project that includes YUV scaling and conversion functionality",
-  "homepage": "https://chromium.googlesource.com/libyuv/libyuv",
+  "homepage": "https://github.com/sezero/libyuv.git",
   "license": null,
   "dependencies": [
     "libjpeg-turbo",

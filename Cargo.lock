@@ -8831,7 +8831,7 @@ dependencies = [
 [[package]]
 name = "webm"
 version = "1.1.0"
-source = "git+https://github.com/rustdesk-org/rust-webm#d2c4d3ac133c7b0e4c0f656da710b48391981e64"
+source = "git+https://github.com/kylixs/rust-webm.git#e8f96f0037e3a28c6ff3bc4c0b6ecf8d602ac5de"
 dependencies = [
  "webm-sys",
 ]
@@ -8839,7 +8839,7 @@ dependencies = [
 [[package]]
 name = "webm-sys"
 version = "1.0.4"
-source = "git+https://github.com/rustdesk-org/rust-webm#d2c4d3ac133c7b0e4c0f656da710b48391981e64"
+source = "git+https://github.com/kylixs/rust-webm.git#e8f96f0037e3a28c6ff3bc4c0b6ecf8d602ac5de"
 dependencies = [
  "cc",
 ]
