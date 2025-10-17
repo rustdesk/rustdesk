@@ -10,7 +10,7 @@ rust-version = "1.75"
 
 [lib]
 name = "librustdesk"
-crate-type = ["cdylib", "staticlib", "rlib"]
+crate-type = ["cdylib"]
 
 [[bin]]
 name = "naming"
