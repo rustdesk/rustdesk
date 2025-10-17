@@ -1916,8 +1916,12 @@ class CanvasModel with ChangeNotifier {
     }
 
     _devicePixelRatio = ui.window.devicePixelRatio;
-    if (kIgnoreDpi && style == kRemoteViewStyleOriginal) {
-      _scale = 1.0 / _devicePixelRatio;
+    if (kIgnoreDpi) {
+      if (style == kRemoteViewStyleOriginal) {
+        _scale = 1.0 / _devicePixelRatio;
+      } else if (_scale != 0 && style == kRemoteViewStyleCustom) {
+        _scale /= _devicePixelRatio;
+      }
     }
     _resetCanvasOffset(displayWidth, displayHeight);
     final overflow = _x < 0 || y < 0;
