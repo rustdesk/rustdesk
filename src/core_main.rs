@@ -55,6 +55,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 "--file-transfer",
                 "--view-camera",
                 "--port-forward",
+                "--terminal",
                 "--rdp",
             ]
             .contains(&arg.as_str())
@@ -667,7 +668,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     let mut param_array = vec![];
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward"
+            "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward" | "--terminal"
             | "--rdp" => {
                 authority = Some((&arg.to_string()[2..]).to_owned());
                 id = args.next();

@@ -1107,9 +1107,20 @@ class FfiModel with ChangeNotifier {
     if (isPeerAndroid) {
       _touchMode = true;
     } else {
-      _touchMode = await bind.sessionGetOption(
-              sessionId: sessionId, arg: kOptionTouchMode) !=
-          '';
+      // `kOptionTouchMode` is originally peer option, but it is moved to local option later.
+      // We check local option first, if not set, then check peer option.
+      // Because if local option is not empty:
+      // 1. User has set the touch mode explicitly.
+      // 2. The advanced option (custom client) is set.
+      //    Then we choose to use the local option.
+      final optLocal = bind.mainGetLocalOption(key: kOptionTouchMode);
+      if (optLocal != '') {
+        _touchMode = optLocal == 'Y';
+      } else {
+        final optSession = await bind.sessionGetOption(
+            sessionId: sessionId, arg: kOptionTouchMode);
+        _touchMode = optSession != '';
+      }
     }
     if (isMobile) {
       virtualMouseMode.loadOptions();
@@ -1916,8 +1927,12 @@ class CanvasModel with ChangeNotifier {
     }
 
     _devicePixelRatio = ui.window.devicePixelRatio;
-    if (kIgnoreDpi && style == kRemoteViewStyleOriginal) {
-      _scale = 1.0 / _devicePixelRatio;
+    if (kIgnoreDpi) {
+      if (style == kRemoteViewStyleOriginal) {
+        _scale = 1.0 / _devicePixelRatio;
+      } else if (_scale != 0 && style == kRemoteViewStyleCustom) {
+        _scale /= _devicePixelRatio;
+      }
     }
     _resetCanvasOffset(displayWidth, displayHeight);
     final overflow = _x < 0 || y < 0;
