@@ -70,6 +70,8 @@
   <string>This app needs camera access to scan QR codes</string>
   <key>NSPhotoLibraryUsageDescription</key>
   <string>This app needs photo library access to get QR codes from image</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>This app needs microphone access for screen recording with audio</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
