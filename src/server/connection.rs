@@ -776,7 +776,9 @@ impl Connection {
                 }
                 Some((instant, value)) = rx_video.recv() => {
                     if !conn.video_ack_required {
-                        video_service::notify_video_frame_fetched(id, Some(instant.into()));
+                        if let Some(message::Union::VideoFrame(vf)) = &value.union {
+                            video_service::notify_video_frame_fetched(vf.display as usize, id, Some(instant.into()));
+                        }
                     }
                     if let Err(err) = conn.stream.send(&value as &Message).await {
                         conn.on_close(&err.to_string(), false).await;
@@ -924,7 +926,7 @@ impl Connection {
             crate::plugin::EVENT_ON_CONN_CLOSE_SERVER.to_owned(),
             conn.lr.my_id.clone(),
         );
-        video_service::notify_video_frame_fetched(id, None);
+        video_service::notify_video_frame_fetched_by_conn_id(id, None);
         if conn.authorized {
             password::update_temporary_password();
         }
@@ -2909,7 +2911,7 @@ impl Connection {
                         self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::VideoReceived(_)) => {
-                        video_service::notify_video_frame_fetched(
+                        video_service::notify_video_frame_fetched_by_conn_id(
                             self.inner.id,
                             Some(Instant::now().into()),
                         );
