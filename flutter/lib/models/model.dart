@@ -2109,6 +2109,10 @@ class CanvasModel with ChangeNotifier {
       return;
     }
 
+    if (!_horizontal.hasClients || !_vertical.hasClients) {
+      return;
+    }
+
     // Trigger scrolling when the cursor is close to an edge
     const double edgeThickness = 120;
 
