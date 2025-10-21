@@ -122,6 +122,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stretch", ""),
         ("Scrollbar", ""),
         ("ScrollAuto", ""),
+        ("ScrollEdge", ""),
         ("Good image quality", ""),
         ("Balanced", ""),
         ("Optimize reaction time", ""),

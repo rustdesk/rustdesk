@@ -1714,7 +1714,8 @@ class ImageModel with ChangeNotifier {
 
 enum ScrollStyle {
   scrollbar(kRemoteScrollStyleBar),
-  scrollauto(kRemoteScrollStyleAuto);
+  scrollauto(kRemoteScrollStyleAuto),
+  scrolledge(kRemoteScrollStyleEdge);
 
   const ScrollStyle(this.stringValue);
 
@@ -1728,6 +1729,7 @@ enum ScrollStyle {
     switch (json) {
       case 'scrollbar': return scrollbar;
       case 'scrollauto': return scrollauto;
+      case 'scrolledge': return scrolledge;
     }
 
     if (fallbackValue != null) {
@@ -1745,6 +1747,7 @@ enum ScrollStyle {
     switch (string) {
       case kRemoteScrollStyleBar: return scrollbar;
       case kRemoteScrollStyleAuto: return scrollauto;
+      case kRemoteScrollStyleEdge: return scrolledge;
     }
 
     if (fallbackValue != null) {
@@ -1995,13 +1998,14 @@ class CanvasModel with ChangeNotifier {
   }
 
   tryUpdateScrollStyle(Duration duration, String? style) async {
-    if (_scrollStyle != ScrollStyle.scrollbar) return;
+    if (_scrollStyle == ScrollStyle.scrollauto) return;
     style ??= await bind.sessionGetViewStyle(sessionId: sessionId);
     if (style != kRemoteViewStyleOriginal && style != kRemoteViewStyleCustom) {
       return;
     }
 
     _resetScroll();
+
     Future.delayed(duration, () async {
       updateScrollPercent();
     });

@@ -1089,6 +1089,15 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               ffi: widget.ffi,
             ),
             RdoMenuButton<String>(
+              child: Text(translate('ScrollEdge')),
+              value: kRemoteScrollStyleEdge,
+              groupValue: groupValue,
+              onChanged: widget.ffi.canvasModel.imageOverflow.value
+                  ? (value) => onChange(value)
+                  : null,
+              ffi: widget.ffi,
+            ),
+            RdoMenuButton<String>(
               child: Text(translate('Scrollbar')),
               value: kRemoteScrollStyleBar,
               groupValue: groupValue,

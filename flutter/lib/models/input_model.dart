@@ -1409,7 +1409,7 @@ class InputModel {
     var nearBottom = (canvas.size.height - y) < nearThr;
     final imageWidth = rect.width * canvas.scale;
     final imageHeight = rect.height * canvas.scale;
-    if (canvas.scrollStyle == ScrollStyle.scrollbar) {
+    if (canvas.scrollStyle != ScrollStyle.scrollauto) {
       x += imageWidth * canvas.scrollX;
       y += imageHeight * canvas.scrollY;
 
