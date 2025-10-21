@@ -24,11 +24,14 @@ class RustDeskViewController: FlutterViewController {
 }
 
 class MainFlutterWindow: NSWindow {
+    var rustDeskViewController: RustDeskViewController?
+
     override func awakeFromNib() {
         rustdesk_core_main();
         let flutterViewController = RustDeskViewController.init()
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
+        self.rustDeskViewController = flutterViewController
         self.setFrame(windowFrame, display: true)
         // register self method handler
         let registrar = flutterViewController.registrar(forPlugin: "RustDeskPlugin")
@@ -109,7 +112,7 @@ class MainFlutterWindow: NSWindow {
                     let dx = (arg["dx"] as? Int) ?? 0;
                     let dy = (arg["dy"] as? Int) ?? 0;
 
-                    if (let mouseLoc = flutterViewController.mouseLocation) {
+                    if (let mouseLoc = self.rustDeskViewController!.mouseLocation) {
                         mouseLoc.y = NSHeight(NSScreen.screens()![0].frame) - mouseLoc.y;
 
                         let newLoc = CGPoint(x: mouseLoc.x + dx, y: mouseLoc.y + dy);
