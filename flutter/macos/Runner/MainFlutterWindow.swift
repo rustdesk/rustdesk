@@ -19,10 +19,14 @@ import window_manager
 import window_size
 import texture_rgba_renderer
 
+class RustDeskViewController: FlutterViewController {
+    var mouseLocation: NSPoint? { self.view.window?.mouseLocationOutsideOfEventStream }
+}
+
 class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
         rustdesk_core_main();
-        let flutterViewController = FlutterViewController.init()
+        let flutterViewController = RustDeskViewController.init()
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
         self.setFrame(windowFrame, display: true)
@@ -99,6 +103,24 @@ class MainFlutterWindow: NSWindow {
                         result(granted)
                     })
                     break
+                case "bumpMouse":
+                    let arg = call.arguments as! [String: Any]
+
+                    let dx = (arg["dx"] as? Int) ?? 0;
+                    let dy = (arg["dy"] as? Int) ?? 0;
+
+                    if (let mouseLoc = flutterViewController.mouseLocation) {
+                        mouseLoc.y = NSHeight(NSScreen.screens()![0].frame) - mouseLoc.y;
+
+                        let newLoc = CGPoint(x: mouseLoc.x + dx, y: mouseLoc.y + dy);
+
+                        CGDisplayMoveCursorToPoint(0, newLoc);
+                    }
+
+                    result(nil)
+
+                    break
+
                 default:
                     result(FlutterMethodNotImplemented)
                 }

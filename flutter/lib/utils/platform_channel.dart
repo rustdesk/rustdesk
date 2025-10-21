@@ -16,6 +16,17 @@ class RdPlatformChannel {
   final MethodChannel _hostMethodChannel =
       MethodChannel("org.rustdesk.rustdesk/host");
 
+  /// Bump the position of the mouse cursor, if applicable
+  Future<void> bumpMouse({required int dx, required int dy}) {
+    if (kDebugMode) {
+      print(
+        "[Window ${kWindowId ?? 'Main'}] bump mouse cursor by ($dx, $dy)");
+    }
+
+    return _hostMethodChannel
+      .invokeMethod("bumpMouse", {"dx": dx, "dy": dy});
+  }
+
   /// Change the theme of the system window
   Future<void> changeSystemWindowTheme(SystemWindowTheme theme) {
     assert(isMacOS);

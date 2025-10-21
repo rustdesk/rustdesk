@@ -48,6 +48,38 @@ bool FlutterWindow::OnCreate() {
 
   channel.SetMethodCallHandler(
     [](const flutter::MethodCall<>& call, std::unique_ptr<flutter::MethodResult<>> result) {
+      if (call.method_name() == "bumpMouse") {
+        auto arguments = call.arguments();
+
+        int dx = 0, dy = 0
+
+        if (std::holds_alternative<flutter::EncodableMap>(*arguments)) {
+          auto argsMap = std::get<flutter::EncodableMap>(*arguments);
+
+          auto dxIt = argsMap.find(flutter::EncodableValue("dx"));
+          auto dyIt = argsMap.find(flutter::EncodableValue("dy"));
+
+          if ((dxIt != argsMap.end()) && std::holds_alternative<int>(dxIt->second)) {
+            dx = std::get<int>(dxIt->second);
+          }
+          if ((dyIt != argsMap.end()) && std::holds_alternative<int>(dyIt->second)) {
+            dy = std::get<int>(dyIt->second);
+          }
+        } else if (std::holds_alternative<flutter::EncodableList>(*arguments)) {
+          auto argsList = std::get<flutter::EncodableList>(*arguments);
+
+          if (std::holds_alternative<int>(argsList[0])) {
+            dx = std::get<int>(argsList[0]);
+          }
+          if (std::holds_alternative<int>(argsList[1])) {
+            dy = std::get<int>(argsList[1]);
+          }
+        }
+
+        Win32Desktop::BumpMouse(dx, dy);
+
+        result->Success(nullptr);
+      }
     });
 
   DesktopMultiWindowSetWindowCreatedCallback([](void *controller) {
