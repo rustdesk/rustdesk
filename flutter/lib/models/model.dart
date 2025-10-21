@@ -33,6 +33,7 @@ import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1851,6 +1852,9 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
+  // briefly set to true when the canvas detects a resize
+  bool _suppressEdgeScroll = false;
+  final Debouncer _suppressEdgeScrollDebounce = Debouncer(delay: Duration(milliseconds: 200));
   ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
   Timer? _timerMobileFocusCanvasCursor;
@@ -1876,8 +1880,20 @@ class CanvasModel with ChangeNotifier {
   double get devicePixelRatio => _devicePixelRatio;
   Size get size => _size;
   ScrollStyle get scrollStyle => _scrollStyle;
+  bool get suppressEdgeScroll => _suppressEdgeScroll;
   ViewStyle get viewStyle => _lastViewStyle;
   RxBool get imageOverflow => _imageOverflow;
+
+  void notifyResize()
+  {
+    _suppressEdgeScrollDebounce.cancel();
+    _suppressEdgeScroll = true;
+    _suppressEdgeScrollDebounce.call(
+      ()
+      {
+        _suppressEdgeScroll = false;
+      });
+  }
 
   _resetScroll() => setScrollPercent(0.0, 0.0);
 
@@ -2110,6 +2126,10 @@ class CanvasModel with ChangeNotifier {
     }
 
     if (!_horizontal.hasClients || !_vertical.hasClients) {
+      return;
+    }
+
+    if (_suppressEdgeScroll) {
       return;
     }
 
