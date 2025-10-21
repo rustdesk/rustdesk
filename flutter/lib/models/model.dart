@@ -1713,8 +1713,46 @@ class ImageModel with ChangeNotifier {
 }
 
 enum ScrollStyle {
-  scrollbar,
-  scrollauto,
+  scrollbar(kRemoteScrollStyleBar),
+  scrollauto(kRemoteScrollStyleAuto);
+
+  const ScrollStyle(this.stringValue);
+
+  final String stringValue;
+
+  String toJson() {
+    return name;
+  }
+
+  static ScrollStyle fromJson(String json, [ScrollStyle? fallbackValue]) {
+    switch (json) {
+      case 'scrollbar': return scrollbar;
+      case 'scrollauto': return scrollauto;
+    }
+
+    if (fallbackValue != null) {
+      return fallbackValue;
+    }
+
+    throw ArgumentError("Unknown ScrollStyle JSON value: '$json'");
+  }
+
+  @override String toString() {
+    return stringValue;
+  }
+
+  static ScrollStyle fromString(String string, [ScrollStyle? fallbackValue]) {
+    switch (string) {
+      case kRemoteScrollStyleBar: return scrollbar;
+      case kRemoteScrollStyleAuto: return scrollauto;
+    }
+
+    if (fallbackValue != null) {
+      return fallbackValue;
+    }
+
+    throw ArgumentError("Unknown ScrollStyle string value: '$string'");
+  }
 }
 
 class ViewStyle {
@@ -1971,12 +2009,13 @@ class CanvasModel with ChangeNotifier {
 
   updateScrollStyle() async {
     final style = await bind.sessionGetScrollStyle(sessionId: sessionId);
-    if (style == kRemoteScrollStyleBar) {
-      _scrollStyle = ScrollStyle.scrollbar;
+
+    _scrollStyle = ScrollStyle.fromString(style!);
+
+    if (_scrollStyle != ScrollStyle.scrollauto) {
       _resetScroll();
-    } else {
-      _scrollStyle = ScrollStyle.scrollauto;
     }
+
     notifyListeners();
   }
 

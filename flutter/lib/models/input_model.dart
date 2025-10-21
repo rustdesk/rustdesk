@@ -42,8 +42,7 @@ class CanvasCoords {
       'scale': scale,
       'scrollX': scrollX,
       'scrollY': scrollY,
-      'scrollStyle':
-          scrollStyle == ScrollStyle.scrollauto ? 'scrollauto' : 'scrollbar',
+      'scrollStyle': scrollStyle.toJson(),
       'size': {
         'w': size.width,
         'h': size.height,
@@ -58,9 +57,7 @@ class CanvasCoords {
     model.scale = json['scale'];
     model.scrollX = json['scrollX'];
     model.scrollY = json['scrollY'];
-    model.scrollStyle = json['scrollStyle'] == 'scrollauto'
-        ? ScrollStyle.scrollauto
-        : ScrollStyle.scrollbar;
+    model.scrollStyle = ScrollStyle.fromJson(json['scrollStyle'], ScrollStyle.scrollauto);
     model.size = Size(json['size']['w'], json['size']['h']);
     return model;
   }
