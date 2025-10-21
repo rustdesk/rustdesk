@@ -1886,6 +1886,15 @@ class CanvasModel with ChangeNotifier {
     _scrollY = y;
   }
 
+  pushScrollPositionToUI(double scrollPixelX, double scrollPixelY) {
+    if (_horizontal.hasClients) {
+      _horizontal.jumpTo(scrollPixelX);
+    }
+    if (_vertical.hasClients) {
+      _vertical.jumpTo(scrollPixelY);
+    }
+  }
+
   ScrollController get scrollHorizontal => _horizontal;
   ScrollController get scrollVertical => _vertical;
   double get scrollX => _scrollX;
@@ -2092,6 +2101,57 @@ class CanvasModel with ChangeNotifier {
           //
         }
       }
+    }
+  }
+
+  edgeScrollMouse(double x, double y) {
+    if (size.width == 0 || size.height == 0) {
+      return;
+    }
+
+    // Trigger scrolling when the cursor is close to an edge
+    const double edgeThickness = 120;
+
+    var dxOffset = 0.0;
+    var dyOffset = 0.0;
+
+    double scrollPixelX = _horizontal.position.pixels;
+    double scrollPixelY = _vertical.position.pixels;
+
+    final maxX = _horizontal.position.maxScrollExtent;
+    final maxY = _vertical.position.maxScrollExtent;
+
+    if (x < edgeThickness) {
+      dxOffset = x - edgeThickness;
+    } else if (x > size.width - edgeThickness) {
+      dxOffset = x - (size.width - edgeThickness);
+    }
+
+    if (y < edgeThickness) {
+      dyOffset = y - edgeThickness;
+    } else if (y > size.height - edgeThickness) {
+      dyOffset = y - (size.height - edgeThickness);
+    }
+
+    dxOffset = dxOffset.clamp(-scrollPixelX, maxX - scrollPixelX);
+    dyOffset = dyOffset.clamp(-scrollPixelY, maxY - scrollPixelY);
+
+    if (dxOffset != 0 || dyOffset != 0) {
+      scrollPixelX += dxOffset;
+      scrollPixelY += dyOffset;
+
+      setScrollPercent(scrollPixelX / maxX, scrollPixelY / maxY);
+      pushScrollPositionToUI(scrollPixelX, scrollPixelY);
+
+      notifyListeners();
+
+      dxOffset += dxOffset.sign * 0.5;
+      dyOffset += dyOffset.sign * 0.5;
+
+      rustDeskWinManager.call(
+        WindowType.Main,
+        kWindowBumpMouse,
+        {"dx": -dxOffset.round(), "dy": -dyOffset.round()});
     }
   }
 

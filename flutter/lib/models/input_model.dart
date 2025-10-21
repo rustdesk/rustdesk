@@ -372,6 +372,7 @@ class InputModel {
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
   bool get isViewCamera => parent.target!.connType == ConnType.viewCamera;
   int get trackpadSpeed => _trackpadSpeed;
+  bool get useEdgeScroll => parent.target!.canvasModel.scrollStyle == ScrollStyle.scrolledge;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
@@ -885,7 +886,7 @@ class InputModel {
       isPhysicalMouse.value = true;
     }
     if (isPhysicalMouse.value) {
-      handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position);
+      handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position, edgeScroll: useEdgeScroll);
     }
   }
 
@@ -1073,7 +1074,7 @@ class InputModel {
       _queryOtherWindowCoords = false;
     }
     if (isPhysicalMouse.value) {
-      handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position);
+      handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position, edgeScroll: useEdgeScroll);
     }
   }
 
@@ -1122,7 +1123,7 @@ class InputModel {
   void refreshMousePos() => handleMouse({
         'buttons': 0,
         'type': _kMouseEventMove,
-      }, lastMousePos);
+      }, lastMousePos, edgeScroll: useEdgeScroll);
 
   void tryMoveEdgeOnExit(Offset pos) => handleMouse(
         {
@@ -1229,6 +1230,7 @@ class InputModel {
     Offset offset, {
     bool onExit = false,
     bool moveCanvas = true,
+    bool edgeScroll = false,
   }) {
     if (isViewCamera) return null;
     double x = offset.dx;
@@ -1270,6 +1272,7 @@ class InputModel {
       onExit: onExit,
       buttons: evt['buttons'],
       moveCanvas: moveCanvas,
+      edgeScroll: edgeScroll,
     );
     if (pos == null) {
       return null;
@@ -1298,9 +1301,10 @@ class InputModel {
     Offset offset, {
     bool onExit = false,
     bool moveCanvas = true,
+    bool edgeScroll = false,
   }) {
     final evtToPeer =
-        processEventToPeer(evt, offset, onExit: onExit, moveCanvas: moveCanvas);
+        processEventToPeer(evt, offset, onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
     if (evtToPeer != null) {
       bind.sessionSendMouse(
           sessionId: sessionId, msg: json.encode(modify(evtToPeer)));
@@ -1317,6 +1321,7 @@ class InputModel {
     bool onExit = false,
     int buttons = kPrimaryMouseButton,
     bool moveCanvas = true,
+    bool edgeScroll = false,
   }) {
     final ffiModel = parent.target!.ffiModel;
     CanvasCoords canvas =
@@ -1345,8 +1350,12 @@ class InputModel {
 
     y -= CanvasModel.topToEdge;
     x -= CanvasModel.leftToEdge;
-    if (isMove && moveCanvas) {
-      parent.target!.canvasModel.moveDesktopMouse(x, y);
+    if (isMove) {
+      if (edgeScroll) {
+        parent.target!.canvasModel.edgeScrollMouse(x, y);
+      } else if (moveCanvas) {
+        parent.target!.canvasModel.moveDesktopMouse(x, y);
+      }
     }
 
     return _handlePointerDevicePos(
