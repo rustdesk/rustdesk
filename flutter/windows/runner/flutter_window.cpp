@@ -1,12 +1,23 @@
 #include "flutter_window.h"
 
-#include <optional>
-
 #include <desktop_multi_window/desktop_multi_window_plugin.h>
 #include <texture_rgba_renderer/texture_rgba_renderer_plugin_c_api.h>
 #include <flutter_gpu_texture_renderer/flutter_gpu_texture_renderer_plugin_c_api.h>
 
 #include "flutter/generated_plugin_registrant.h"
+
+#include <flutter/event_channel.h>
+#include <flutter/event_sink.h>
+#include <flutter/event_stream_handler_functions.h>
+#include <flutter/method_channel.h>
+#include <flutter-standard_method_codec.h>
+
+#include <windows.h>
+
+#include <optional>
+#include <memory>
+
+#include "win32_desktop.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -29,6 +40,16 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  flutter::MethodChannel<> channel(
+    flutter_controller_->engine()->messenger(),
+    "org.rustdesk.rustdesk/host",
+    &flutter::StandardMethodCodec::GetInstance());
+
+  channel.SetMethodCallHandler(
+    [](const flutter::MethodCall<>& call, std::unique_ptr<flutter::MethodResult<>> result) {
+    });
+
   DesktopMultiWindowSetWindowCreatedCallback([](void *controller) {
     auto *flutter_view_controller =
         reinterpret_cast<flutter::FlutterViewController *>(controller);

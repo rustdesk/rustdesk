@@ -10,9 +10,12 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  FlMethodChannel* host_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_call, gpointer user_data);
 
 GtkWidget *find_gl_area(GtkWidget *widget);
 void try_set_transparent(GtkWindow* window, GdkScreen* screen, FlView* view);
@@ -24,10 +27,11 @@ GtkWidget *find_gl_area(GtkWidget *widget);
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
   gtk_window_set_decorated(window, FALSE);
-  // try setting icon for rustdesk, which uses the system cache 
+  // try setting icon for rustdesk, which uses the system cache
   GtkIconTheme* theme = gtk_icon_theme_get_default();
   gint icons[4] = {256, 128, 64, 32};
   for (int i = 0; i < 4; i++) {
@@ -87,6 +91,17 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->host_channel = fl_method_channel_new(
+    fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+    "org.rustdesk.rustdesk/host",
+    FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+    self->host_channel,
+    host_channel_call_handler,
+    self,
+    nullptr);
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -113,6 +128,7 @@ static gboolean my_application_local_command_line(GApplication* application, gch
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->host_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
@@ -129,6 +145,10 @@ MyApplication* my_application_new() {
                                      "application-id", APPLICATION_ID,
                                      "flags", G_APPLICATION_NON_UNIQUE,
                                      nullptr));
+}
+
+void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_call, gpointer user_data)
+{
 }
 
 GtkWidget *find_gl_area(GtkWidget *widget)
@@ -160,7 +180,7 @@ void try_set_transparent(GtkWindow* window, GdkScreen* screen, FlView* view)
   GtkWidget *gl_area = NULL;
 
   printf("Try setting transparent\n");
-  
+
   gl_area = find_gl_area(GTK_WIDGET(view));
   if (gl_area != NULL) {
     gtk_gl_area_set_has_alpha(GTK_GL_AREA(gl_area), TRUE);
