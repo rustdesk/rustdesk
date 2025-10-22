@@ -10,7 +10,7 @@
 #include <flutter/event_sink.h>
 #include <flutter/event_stream_handler_functions.h>
 #include <flutter/method_channel.h>
-#include <flutter-standard_method_codec.h>
+#include <flutter/standard_method_codec.h>
 
 #include <windows.h>
 
@@ -51,7 +51,7 @@ bool FlutterWindow::OnCreate() {
       if (call.method_name() == "bumpMouse") {
         auto arguments = call.arguments();
 
-        int dx = 0, dy = 0
+        int dx = 0, dy = 0;
 
         if (std::holds_alternative<flutter::EncodableMap>(*arguments)) {
           auto argsMap = std::get<flutter::EncodableMap>(*arguments);
