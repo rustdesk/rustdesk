@@ -721,5 +721,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "Показать виртуальный джойстик"),
         ("Edit note", "Изменить заметку"),
         ("Alias", "Псевдоним"),
+        ("ScrollEdge", ""),
     ].iter().cloned().collect();
 }
