@@ -112,7 +112,7 @@ class MainFlutterWindow: NSWindow {
                     let dx = (arg["dx"] as? Int) ?? 0;
                     let dy = (arg["dy"] as? Int) ?? 0;
 
-                    if (let mouseLoc = self.rustDeskViewController!.mouseLocation) {
+                    if let mouseLoc = self.rustDeskViewController?.mouseLocation {
                         mouseLoc.y = NSHeight(NSScreen.screens()![0].frame) - mouseLoc.y;
 
                         let newLoc = CGPoint(x: mouseLoc.x + dx, y: mouseLoc.y + dy);
