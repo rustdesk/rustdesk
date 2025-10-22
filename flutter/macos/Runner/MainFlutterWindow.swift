@@ -105,13 +105,11 @@ class MainFlutterWindow: NSWindow {
                     let dx = (arg["dx"] as? Int) ?? 0;
                     let dy = (arg["dy"] as? Int) ?? 0;
 
-                    if let mouseLoc = NSEvent.mouseLocation {
-                        if let screenFrame = NSScreen.screens.first?.frame {
-                            let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
+                    let mouseLoc = NSEvent.mouseLocation;
 
-                            CGDisplayMoveCursorToPoint(0, newLoc);
-                        }
-                    }
+                    let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
+
+                    CGDisplayMoveCursorToPoint(0, newLoc);
 
                     result(nil)
 
