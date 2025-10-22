@@ -112,12 +112,16 @@ class MainFlutterWindow: NSWindow {
                     let dx = (arg["dx"] as? Int) ?? 0;
                     let dy = (arg["dy"] as? Int) ?? 0;
 
-                    if let mouseLoc = self.rustDeskViewController?.mouseLocation {
-                        mouseLoc.y = NSHeight(NSScreen.screens()![0].frame) - mouseLoc.y;
+                    if var mouseLoc = self.rustDeskViewController?.mouseLocation {
+                        if let screenFrame = NSScreen.screens.first?.frame {
+                            // NeXTStep: Origin is upper-left of primary screen, positive is down
+                            // Cocoa Graphics: Origin is lower-left of primary screen, positive is up
+                            mouseLoc.y = NSHeight(screenFrame) - mouseLoc.y;
 
-                        let newLoc = CGPoint(x: mouseLoc.x + dx, y: mouseLoc.y + dy);
+                            let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
 
-                        CGDisplayMoveCursorToPoint(0, newLoc);
+                            CGDisplayMoveCursorToPoint(0, newLoc);
+                        }
                     }
 
                     result(nil)
