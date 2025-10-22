@@ -19,19 +19,12 @@ import window_manager
 import window_size
 import texture_rgba_renderer
 
-class RustDeskViewController: FlutterViewController {
-    var mouseLocation: NSPoint? { self.view.window?.mouseLocationOutsideOfEventStream }
-}
-
 class MainFlutterWindow: NSWindow {
-    var rustDeskViewController: RustDeskViewController?
-
     override func awakeFromNib() {
         rustdesk_core_main();
-        let flutterViewController = RustDeskViewController.init()
+        let flutterViewController = flutterViewController.init()
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
-        self.rustDeskViewController = flutterViewController
         self.setFrame(windowFrame, display: true)
         // register self method handler
         let registrar = flutterViewController.registrar(forPlugin: "RustDeskPlugin")
@@ -112,12 +105,8 @@ class MainFlutterWindow: NSWindow {
                     let dx = (arg["dx"] as? Int) ?? 0;
                     let dy = (arg["dy"] as? Int) ?? 0;
 
-                    if var mouseLoc = self.rustDeskViewController?.mouseLocation {
+                    if let mouseLoc = NSEvent.mouseLocation {
                         if let screenFrame = NSScreen.screens.first?.frame {
-                            // NeXTStep: Origin is upper-left of primary screen, positive is down
-                            // Cocoa Graphics: Origin is lower-left of primary screen, positive is up
-                            mouseLoc.y = NSHeight(screenFrame) - mouseLoc.y;
-
                             let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
 
                             CGDisplayMoveCursorToPoint(0, newLoc);
