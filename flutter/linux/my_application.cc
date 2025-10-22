@@ -190,7 +190,7 @@ void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_ca
         int listSize = fl_value_get_length(args);
 
         dxValue = (listSize >= 1) ? fl_value_get_list_value(args, 0) : nullptr;
-        dyValue = (listSize >= 2) ? fl_value_get_list_value(args, 0) : nullptr;
+        dyValue = (listSize >= 2) ? fl_value_get_list_value(args, 1) : nullptr;
 
         break;
       }

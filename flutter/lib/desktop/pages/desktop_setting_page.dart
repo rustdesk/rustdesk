@@ -1692,7 +1692,7 @@ class _DisplayState extends State<_Display> {
           label: 'ScrollAuto',
           onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
-          value: kRemoteScrollStyleAuto,
+          value: kRemoteScrollStyleEdge,
           groupValue: groupValue,
           label: 'ScrollEdge',
           onChanged: isOptFixed ? null : onChanged),
