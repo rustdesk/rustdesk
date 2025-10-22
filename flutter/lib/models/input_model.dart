@@ -766,6 +766,11 @@ class InputModel {
         command: command);
   }
 
+  static Map<String, dynamic> getMouseEventMove() => {
+        'type': _kMouseEventMove,
+        'buttons': 0,
+      };
+
   Map<String, dynamic> _getMouseEvent(PointerEvent evt, String type) {
     final Map<String, dynamic> out = {};
 
@@ -1222,16 +1227,17 @@ class InputModel {
     return false;
   }
 
-  void handleMouse(
+  Map<String, dynamic>? processEventToPeer(
     Map<String, dynamic> evt,
     Offset offset, {
     bool onExit = false,
+    bool moveCanvas = true,
   }) {
-    if (isViewCamera) return;
+    if (isViewCamera) return null;
     double x = offset.dx;
     double y = max(0.0, offset.dy);
     if (_checkPeerControlProtected(x, y)) {
-      return;
+      return null;
     }
 
     var type = kMouseEventTypeDefault;
@@ -1248,7 +1254,7 @@ class InputModel {
         isMove = true;
         break;
       default:
-        return;
+        return null;
     }
     evt['type'] = type;
 
@@ -1266,9 +1272,10 @@ class InputModel {
       type,
       onExit: onExit,
       buttons: evt['buttons'],
+      moveCanvas: moveCanvas,
     );
     if (pos == null) {
-      return;
+      return null;
     }
     if (type != '') {
       evt['x'] = '0';
@@ -1286,7 +1293,22 @@ class InputModel {
       kForwardMouseButton: 'forward'
     };
     evt['buttons'] = mapButtons[evt['buttons']] ?? '';
-    bind.sessionSendMouse(sessionId: sessionId, msg: json.encode(modify(evt)));
+    return evt;
+  }
+
+  Map<String, dynamic>? handleMouse(
+    Map<String, dynamic> evt,
+    Offset offset, {
+    bool onExit = false,
+    bool moveCanvas = true,
+  }) {
+    final evtToPeer =
+        processEventToPeer(evt, offset, onExit: onExit, moveCanvas: moveCanvas);
+    if (evtToPeer != null) {
+      bind.sessionSendMouse(
+          sessionId: sessionId, msg: json.encode(modify(evtToPeer)));
+    }
+    return evtToPeer;
   }
 
   Point? handlePointerDevicePos(
@@ -1297,6 +1319,7 @@ class InputModel {
     String evtType, {
     bool onExit = false,
     int buttons = kPrimaryMouseButton,
+    bool moveCanvas = true,
   }) {
     final ffiModel = parent.target!.ffiModel;
     CanvasCoords canvas =
@@ -1325,7 +1348,7 @@ class InputModel {
 
     y -= CanvasModel.topToEdge;
     x -= CanvasModel.leftToEdge;
-    if (isMove) {
+    if (isMove && moveCanvas) {
       parent.target!.canvasModel.moveDesktopMouse(x, y);
     }
 

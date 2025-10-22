@@ -51,6 +51,13 @@ class RawKeyFocusScope extends StatelessWidget {
   }
 }
 
+// For virtual mouse when using the mouse mode on mobile.
+// Special hold-drag mode: one finger holds a button (left/right button), another finger pans.
+// This flag is to override the scale gesture to a pan gesture.
+bool isSpecialHoldDragActive = false;
+// Cache the last focal point to calculate deltas in special hold-drag mode.
+Offset _lastSpecialHoldDragFocalPoint = Offset.zero;
+
 class RawTouchGestureDetectorRegion extends StatefulWidget {
   final Widget child;
   final FFI ffi;
@@ -97,6 +104,10 @@ class _RawTouchGestureDetectorRegionState
   bool _touchModePanStarted = false;
   Offset _doubleFinerTapPosition = Offset.zero;
 
+  // For mouse mode, we need to block the events when the cursor is in a blocked area.
+  // So we need to cache the last tap down position.
+  Offset? _lastTapDownPositionForMouseMode;
+
   FFI get ffi => widget.ffi;
   FfiModel get ffiModel => widget.ffiModel;
   InputModel get inputModel => widget.inputModel;
@@ -112,7 +123,15 @@ class _RawTouchGestureDetectorRegionState
   }
 
   bool isNotTouchBasedDevice() {
-    return !kTouchBasedDeviceKinds.contains(lastDeviceKind); 
+    return !kTouchBasedDeviceKinds.contains(lastDeviceKind);
+  }
+
+  // Mobile, mouse mode.
+  // Check if should block the mouse tap event (`_lastTapDownPositionForMouseMode`).
+  bool shouldBlockMouseModeEvent() {
+    return _lastTapDownPositionForMouseMode != null &&
+        ffi.cursorModel.shouldBlock(_lastTapDownPositionForMouseMode!.dx,
+            _lastTapDownPositionForMouseMode!.dy);
   }
 
   onTapDown(TapDownDetails d) async {
@@ -124,6 +143,8 @@ class _RawTouchGestureDetectorRegionState
       _lastPosOfDoubleTapDown = d.localPosition;
       // Desktop or mobile "Touch mode"
       _lastTapDownDetails = d;
+    } else {
+      _lastTapDownPositionForMouseMode = d.localPosition;
     }
   }
 
@@ -150,6 +171,11 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (!handleTouch) {
+      // Cannot use `_lastTapDownDetails` because Flutter calls `onTapUp` before `onTap`, clearing the cached details.
+      // Using `_lastTapDownPositionForMouseMode` instead.
+      if (shouldBlockMouseModeEvent()) {
+        return;
+      }
       // Mobile, "Mouse mode"
       await inputModel.tap(MouseButtons.left);
     }
@@ -163,6 +189,8 @@ class _RawTouchGestureDetectorRegionState
     if (handleTouch) {
       _lastPosOfDoubleTapDown = d.localPosition;
       await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+    } else {
+      _lastTapDownPositionForMouseMode = d.localPosition;
     }
   }
 
@@ -176,6 +204,12 @@ class _RawTouchGestureDetectorRegionState
     if (handleTouch &&
         !ffi.cursorModel.isInRemoteRect(_lastPosOfDoubleTapDown)) {
       return;
+    }
+    // Check if the position is in a blocked area when using the mouse mode.
+    if (!handleTouch) {
+      if (shouldBlockMouseModeEvent()) {
+        return;
+      }
     }
     await inputModel.tap(MouseButtons.left);
     await inputModel.tap(MouseButtons.left);
@@ -198,6 +232,8 @@ class _RawTouchGestureDetectorRegionState
             .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
         await inputModel.tapDown(MouseButtons.left);
       }
+    } else {
+      _lastTapDownPositionForMouseMode = d.localPosition;
     }
   }
 
@@ -220,6 +256,10 @@ class _RawTouchGestureDetectorRegionState
         final isMoved = await ffi.cursorModel
             .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
         if (!isMoved) {
+          return;
+        }
+      } else {
+        if (shouldBlockMouseModeEvent()) {
           return;
         }
       }
@@ -274,6 +314,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (!handleTouch) {
+      if (isSpecialHoldDragActive) return;
       await inputModel.sendMouse('down', MouseButtons.left);
     }
   }
@@ -283,6 +324,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (!handleTouch) {
+      if (isSpecialHoldDragActive) return;
       await ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
     }
   }
@@ -377,12 +419,26 @@ class _RawTouchGestureDetectorRegionState
     if (isNotTouchBasedDevice()) {
       return;
     }
+    if (isSpecialHoldDragActive) {
+      // Initialize the last focal point to calculate deltas manually.
+      _lastSpecialHoldDragFocalPoint = d.focalPoint;
+    }
   }
 
   onTwoFingerScaleUpdate(ScaleUpdateDetails d) async {
     if (isNotTouchBasedDevice()) {
       return;
     }
+
+    // If in special drag mode, perform a pan instead of a scale.
+    if (isSpecialHoldDragActive) {
+      // Calculate delta manually to avoid the jumpy behavior.
+      final delta = d.focalPoint - _lastSpecialHoldDragFocalPoint;
+      _lastSpecialHoldDragFocalPoint = d.focalPoint;
+      await ffi.cursorModel.updatePan(delta * 2.0, d.focalPoint, handleTouch);
+      return;
+    }
+
     if ((isDesktop || isWebDesktop)) {
       final scale = ((d.scale - _scale) * 1000).toInt();
       _scale = d.scale;
@@ -420,7 +476,9 @@ class _RawTouchGestureDetectorRegionState
       // No idea why we need to set the view style to "" here.
       // bind.sessionSetViewStyle(sessionId: sessionId, value: "");
     }
-    await inputModel.sendMouse('up', MouseButtons.left);
+    if (!isSpecialHoldDragActive) {
+      await inputModel.sendMouse('up', MouseButtons.left);
+    }
   }
 
   get onHoldDragCancel => null;

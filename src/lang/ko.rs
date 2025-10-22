@@ -710,5 +710,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "사용자 이름 또는 도메인\\사용자 이름 입력"),
         ("Preparing for installation ...", "설치 준비 중 ..."),
         ("Show my cursor", "내 커서 표시"),
+        ("Scale custom", "사용자 지정 크기 조정"),
+        ("Custom scale slider", "사용자 지정 크기 조정 슬라이더"),
+        ("Decrease", "축소"),
+        ("Increase", "확대"),
+        ("Show virtual mouse", "가상 마우스 표시"),
+        ("Virtual mouse size", "가상 마우스 크기"),
+        ("Small", "작게"),
+        ("Large", "크게"),
+        ("Show virtual joystick", "가상 조이스틱 표시"),
+        ("Edit note", "노트 편집"),
+        ("Alias", "별명"),
     ].iter().cloned().collect();
 }
