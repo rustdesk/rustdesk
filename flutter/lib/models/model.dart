@@ -2136,6 +2136,10 @@ class CanvasModel with ChangeNotifier {
     // Trigger scrolling when the cursor is close to an edge
     const double edgeThickness = 120;
 
+    // But not right at the very edge, otherwise it could trigger by accident when
+    // hovering around the window border.
+    const double safeZoneThickness = 20;
+
     var dxOffset = 0.0;
     var dyOffset = 0.0;
 
@@ -2145,16 +2149,21 @@ class CanvasModel with ChangeNotifier {
     final maxX = _horizontal.position.maxScrollExtent;
     final maxY = _vertical.position.maxScrollExtent;
 
-    if (x < edgeThickness) {
-      dxOffset = x - edgeThickness;
-    } else if (x > size.width - edgeThickness) {
-      dxOffset = x - (size.width - edgeThickness);
-    }
+    Rect activeZone = Rect.fromLTWH(0, 0, size.width, size.height)
+      .deflate(safeZoneThickness);
 
-    if (y < edgeThickness) {
-      dyOffset = y - edgeThickness;
-    } else if (y > size.height - edgeThickness) {
-      dyOffset = y - (size.height - edgeThickness);
+    if (activeZone.contains(Offset(x, y))) {
+      if (x < edgeThickness) {
+        dxOffset = x - edgeThickness;
+      } else if ((x >= size.width - edgeThickness)) {
+        dxOffset = x - (size.width - edgeThickness);
+      }
+
+      if (y < edgeThickness) {
+        dyOffset = y - edgeThickness;
+      } else if ((y >= size.height - edgeThickness)) {
+        dyOffset = y - (size.height - edgeThickness);
+      }
     }
 
     dxOffset = dxOffset.clamp(-scrollPixelX, maxX - scrollPixelX);
