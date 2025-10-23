@@ -1736,22 +1736,29 @@ final Debouncer _saveWindowDebounce = Debouncer(delay: Duration(seconds: 1));
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
-Future<void> saveWindowPosition(WindowType type, {int? windowId, bool? flush}) async {
+Future<void> saveWindowPosition(WindowType type,
+    {int? windowId, bool? flush}) async {
   if (type != WindowType.Main && windowId == null) {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
   }
 
-  late Offset position;
-  late Size sz;
+  Offset? position;
+  Size? sz;
   late bool isMaximized;
   bool isFullscreen = stateGlobal.fullscreen.isTrue;
+
   setPreFrame() {
     final pos = bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
     var lpos = LastWindowPosition.loadFromString(pos);
-    position = Offset(
-        lpos?.offsetWidth ?? position.dx, lpos?.offsetHeight ?? position.dy);
-    sz = Size(lpos?.width ?? sz.width, lpos?.height ?? sz.height);
+    if (lpos != null) {
+      if (lpos.offsetWidth != null && lpos.offsetHeight != null) {
+        position = Offset(lpos.offsetWidth!, lpos.offsetHeight!);
+      }
+      if (lpos.width != null && lpos.height != null) {
+        sz = Size(lpos.width!, lpos.height!);
+      }
+    }
   }
 
   switch (type) {
@@ -1791,20 +1798,20 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId, bool? flush}) a
       }
       break;
   }
-  if (isWindows) {
+  if (isWindows && position != null) {
     const kMinOffset = -10000;
     const kMaxOffset = 10000;
-    if (position.dx < kMinOffset ||
-        position.dy < kMinOffset ||
-        position.dx > kMaxOffset ||
-        position.dy > kMaxOffset) {
+    if (position!.dx < kMinOffset ||
+        position!.dy < kMinOffset ||
+        position!.dx > kMaxOffset ||
+        position!.dy > kMaxOffset) {
       debugPrint("Invalid position: $position, ignore saving position");
       return;
     }
   }
 
-  final pos = LastWindowPosition(
-      sz.width, sz.height, position.dx, position.dy, isMaximized, isFullscreen);
+  final pos = LastWindowPosition(sz?.width, sz?.height, position?.dx,
+      position?.dy, isMaximized, isFullscreen);
 
   final WindowKey key = (type: type, windowId: windowId);
 

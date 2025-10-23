@@ -405,10 +405,15 @@ class _DesktopTabState extends State<DesktopTab>
   }
 
   _saveFrame({bool? flush}) async {
-    if (tabType == DesktopTabType.main) {
-      await saveWindowPosition(WindowType.Main, flush: flush);
-    } else if (kWindowType != null && kWindowId != null) {
-      await saveWindowPosition(kWindowType!, windowId: kWindowId, flush: flush);
+    try {
+      if (tabType == DesktopTabType.main) {
+        await saveWindowPosition(WindowType.Main, flush: flush);
+      } else if (kWindowType != null && kWindowId != null) {
+        await saveWindowPosition(kWindowType!,
+            windowId: kWindowId, flush: flush);
+      }
+    } catch (e) {
+      debugPrint('Error saving window position: $e');
     }
   }
 
