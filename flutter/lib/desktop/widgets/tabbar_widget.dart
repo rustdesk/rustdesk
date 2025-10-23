@@ -424,7 +424,7 @@ class _DesktopTabState extends State<DesktopTab>
   }
 
   @override
-  void onWindowResized() {
+  void onWindowResize() {
     _saveFrame();
 
     debugPrint("RECEIVED WINDOW RESIZE EVENT");
@@ -441,7 +441,7 @@ class _DesktopTabState extends State<DesktopTab>
       }
     }
 
-    super.onWindowResized();
+    super.onWindowResize();
   }
 
   @override
