@@ -105,11 +105,17 @@ class MainFlutterWindow: NSWindow {
                     let dx = (arg["dx"] as? Int) ?? 0;
                     let dy = (arg["dy"] as? Int) ?? 0;
 
-                    let mouseLoc = NSEvent.mouseLocation;
+                    var mouseLoc = NSEvent.mouseLocation;
 
-                    let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
+                    if let screenFrame = NSScreen.screens.first?.frame {
+                        // NeXTStep: Origin is upper-left of primary screen, positive is down
+                        // Cocoa Graphics: Origin is lower-left of primary screen, positive is up
+                        mouseLoc.y = NSHeight(screenFrame) - mouseLoc.y;
 
-                    CGDisplayMoveCursorToPoint(0, newLoc);
+                        let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
+
+                        CGDisplayMoveCursorToPoint(0, newLoc);
+                    }
 
                     result(nil)
 
