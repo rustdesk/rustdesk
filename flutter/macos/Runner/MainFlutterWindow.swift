@@ -126,7 +126,7 @@ class MainFlutterWindow: NSWindow {
                         // This function's main action is to toggle whether the mouse cursor is
                         // associated with the mouse position, but setting it to true when it's
                         // already true has the side-effect of cancelling this motion suppression.
-                        CGAssociateMouseAndMouseCursorPosition(true);
+                        CGAssociateMouseAndMouseCursorPosition(1 /* true */);
                     }
 
                     result(nil)
