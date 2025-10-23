@@ -22,7 +22,7 @@ import texture_rgba_renderer
 class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
         rustdesk_core_main();
-        let flutterViewController = flutterViewController.init()
+        let flutterViewController = FlutterViewController.init()
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
         self.setFrame(windowFrame, display: true)
