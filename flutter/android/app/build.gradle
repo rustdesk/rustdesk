@@ -1,4 +1,6 @@
 import com.google.protobuf.gradle.*
+import groovy.json.JsonSlurper
+
 plugins {
     id "com.google.protobuf" version "0.9.4"
     id "com.android.application"
@@ -30,8 +32,37 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
-dependencies {
-    implementation 'com.google.protobuf:protobuf-javalite:3.20.1'
+// Add rustls-platform-verifier Android support
+String findRustlsPlatformVerifierMavenDir() {
+    def dependencyText = providers.exec {
+        it.workingDir = new File("../..")
+        commandLine("cargo", "metadata", "--format-version", "1")
+    }.standardOutput.asText.get()
+
+    def dependencyJson = new JsonSlurper().parseText(dependencyText)
+    def pkg = dependencyJson.packages.find { it.name == "rustls-platform-verifier-android" }
+    
+    if (pkg == null) {
+        throw new GradleException("rustls-platform-verifier-android package not found in cargo metadata!")
+    }
+    
+    def manifestPath = file(pkg.manifest_path)
+    def mavenDir = new File(manifestPath.parentFile, "maven")
+    
+    if (!mavenDir.exists()) {
+        throw new GradleException("Maven directory not found at: ${mavenDir.path}")
+    }
+    
+    println("✓ Found rustls-platform-verifier maven repo at: ${mavenDir.path}")
+    return mavenDir.path
+}
+
+
+repositories {
+    maven {
+        url = findRustlsPlatformVerifierMavenDir()
+        metadataSources.artifact()
+    }
 }
 
 protobuf {
@@ -67,7 +98,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId "com.carriez.flutter_hbb"
-        minSdkVersion 21
+        minSdkVersion 22
         targetSdkVersion 33
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
@@ -97,8 +128,10 @@ flutter {
 }
 
 dependencies {
+    implementation 'com.google.protobuf:protobuf-javalite:3.20.1'
     implementation "androidx.media:media:1.6.0"
     implementation 'com.github.getActivity:XXPermissions:18.5'
     implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("1.9.10") } }
     implementation 'com.caverock:androidsvg-aar:1.4'
+    implementation "rustls:rustls-platform-verifier:0.1.1"
 }
