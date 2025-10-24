@@ -107,8 +107,8 @@ class MainFlutterWindow: NSWindow {
 
                     var mouseLoc: CGPoint;
 
-                    if let dummyEvent = CGEventCreate(nil) { // can this ever fail?
-                        mouseLoc = CGEventGetLocation(dummyEvent);
+                    if let dummyEvent = CGEvent(nil) { // can this ever fail?
+                        mouseLoc = dummyEvent.location;
                     }
                     else if let screenFrame = NSScreen.screens.first?.frame {
                         // NeXTStep: Origin is lower-left of primary screen, positive is up
