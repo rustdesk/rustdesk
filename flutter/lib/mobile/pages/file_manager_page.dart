@@ -424,7 +424,7 @@ class FileManagerView extends StatefulWidget {
 class _FileManagerViewState extends State<FileManagerView> {
   final _listScrollController = ScrollController();
   final _breadCrumbScroller = ScrollController();
-  final ascending = Rx<bool?>(null);
+  late final ascending = Rx<bool>(controller.sortAscending);
 
   bool get isLocal => widget.controller.isLocal;
   FileController get controller => widget.controller;
@@ -644,7 +644,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                         } else {
                           ascending.value = true;
                         }
-                        controller.changeSortStyle(sortBy, ascending: ascending.value!);
+                        controller.changeSortStyle(sortBy, ascending: ascending.value);
                       }
                   ),
                 ],
