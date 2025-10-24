@@ -100,34 +100,44 @@ class MainFlutterWindow: NSWindow {
                     })
                     break
                 case "bumpMouse":
-                    let arg = call.arguments as! [String: Any]
+                    let arg = call.arguments as! [String: Any];
 
                     let dx = (arg["dx"] as? Int) ?? 0;
                     let dy = (arg["dy"] as? Int) ?? 0;
 
-                    var mouseLoc = NSEvent.mouseLocation;
+                    var mouseLoc: CGPoint;
 
-                    if let screenFrame = NSScreen.screens.first?.frame {
-                        // NeXTStep: Origin is upper-left of primary screen, positive is down
-                        // Cocoa Core Graphics: Origin is lower-left of primary screen, positive is up
-                        mouseLoc.y = NSHeight(screenFrame) - mouseLoc.y;
-
-                        let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
-
-                        CGDisplayMoveCursorToPoint(0, newLoc);
-
-                        // By default, Cocoa suppresses mouse events briefly after a call to warp the
-                        // cursor to a new location. This is good if you want to draw the user's
-                        // attention to the fact that the mouse is now in a particular location, but
-                        // it's bad in this case; we get called as part of the handling of edge
-                        // scrolling, which means the mouse is typically still in motion, and we want
-                        // the cursor to keep moving smoothly uninterrupted.
-                        //
-                        // This function's main action is to toggle whether the mouse cursor is
-                        // associated with the mouse position, but setting it to true when it's
-                        // already true has the side-effect of cancelling this motion suppression.
-                        CGAssociateMouseAndMouseCursorPosition(1 /* true */);
+                    if let dummyEvent = CGEventCreate(nil) { // can this ever fail?
+                        mouseLoc = CGEventGetLocation(dummyEvent);
+                        CFRelease(dummyEvent);
                     }
+                    else if let screenFrame = NSScreen.screens.first?.frame {
+                        // NeXTStep: Origin is lower-left of primary screen, positive is up
+                        // Cocoa Core Graphics: Origin is upper-left of primary screen, positive is down
+                        let nsMouseLoc = NSEvent.mouseLocation;
+
+                        mouseLoc.x = nsMouseLoc.x;
+                        mouseLoc.y = NSHeight(screenFrame) - nsMouseLoc.y;
+                    }
+                    else {
+                        break;
+                    }
+
+                    let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
+
+                    CGDisplayMoveCursorToPoint(0, newLoc);
+
+                    // By default, Cocoa suppresses mouse events briefly after a call to warp the
+                    // cursor to a new location. This is good if you want to draw the user's
+                    // attention to the fact that the mouse is now in a particular location, but
+                    // it's bad in this case; we get called as part of the handling of edge
+                    // scrolling, which means the mouse is typically still in motion, and we want
+                    // the cursor to keep moving smoothly uninterrupted.
+                    //
+                    // This function's main action is to toggle whether the mouse cursor is
+                    // associated with the mouse position, but setting it to true when it's
+                    // already true has the side-effect of cancelling this motion suppression.
+                    CGAssociateMouseAndMouseCursorPosition(1 /* true */);
 
                     result(nil)
 
