@@ -115,8 +115,9 @@ class MainFlutterWindow: NSWindow {
                         // Cocoa Core Graphics: Origin is upper-left of primary screen, positive is down
                         let nsMouseLoc = NSEvent.mouseLocation;
 
-                        mouseLoc.x = nsMouseLoc.x;
-                        mouseLoc.y = NSHeight(screenFrame) - nsMouseLoc.y;
+                        mouseLoc = CGPoint(
+                            x: nsMouseLoc.x,
+                            y: NSHeight(screenFrame) - nsMouseLoc.y);
                     }
                     else {
                         break;
