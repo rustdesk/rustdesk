@@ -424,6 +424,7 @@ class FileManagerView extends StatefulWidget {
 class _FileManagerViewState extends State<FileManagerView> {
   final _listScrollController = ScrollController();
   final _breadCrumbScroller = ScrollController();
+  late final ascending = Rx<bool>(controller.sortAscending);
 
   bool get isLocal => widget.controller.isLocal;
   FileController get controller => widget.controller;
@@ -589,57 +590,67 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget headTools() => Container(
           child: Row(
-        children: [
-          Expanded(child: Obx(() {
-            final home = controller.options.value.home;
-            final isWindows = controller.options.value.isWindows;
-            return BreadCrumb(
-              items: getPathBreadCrumbItems(controller.shortPath, isWindows,
-                  () => controller.goToHomeDirectory(), (list) {
-                var path = "";
-                if (home.startsWith(list[0])) {
-                  // absolute path
-                  for (var item in list) {
-                    path = PathUtil.join(path, item, isWindows);
-                  }
-                } else {
-                  path += home;
-                  for (var item in list) {
-                    path = PathUtil.join(path, item, isWindows);
-                  }
-                }
-                controller.openDirectory(path);
-              }),
-              divider: Icon(Icons.chevron_right),
-              overflow: ScrollableOverflow(controller: _breadCrumbScroller),
-            );
-          })),
-          Row(
             children: [
-              IconButton(
-                icon: Icon(Icons.arrow_back),
-                onPressed: controller.goBack,
-              ),
-              IconButton(
-                icon: Icon(Icons.arrow_upward),
-                onPressed: controller.goToParentDirectory,
-              ),
-              PopupMenuButton<SortBy>(
-                  tooltip: "",
-                  icon: Icon(Icons.sort),
-                  itemBuilder: (context) {
-                    return SortBy.values
-                        .map((e) => PopupMenuItem(
-                              child: Text(translate(e.toString())),
-                              value: e,
-                            ))
-                        .toList();
-                  },
-                  onSelected: controller.changeSortStyle),
+              Expanded(child: Obx(() {
+                final home = controller.options.value.home;
+                final isWindows = controller.options.value.isWindows;
+                return BreadCrumb(
+                  items: getPathBreadCrumbItems(controller.shortPath, isWindows,
+                      () => controller.goToHomeDirectory(), (list) {
+                    var path = "";
+                    if (home.startsWith(list[0])) {
+                      // absolute path
+                      for (var item in list) {
+                        path = PathUtil.join(path, item, isWindows);
+                      }
+                    } else {
+                      path += home;
+                      for (var item in list) {
+                        path = PathUtil.join(path, item, isWindows);
+                      }
+                    }
+                    controller.openDirectory(path);
+                  }),
+                  divider: Icon(Icons.chevron_right),
+                  overflow: ScrollableOverflow(controller: _breadCrumbScroller),
+                );
+              })),
+              Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back),
+                    onPressed: controller.goBack,
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.arrow_upward),
+                    onPressed: controller.goToParentDirectory,
+                  ),
+                  PopupMenuButton<SortBy>(
+                      tooltip: "",
+                      icon: Icon(Icons.sort),
+                      itemBuilder: (context) {
+                        return SortBy.values
+                            .map((e) => PopupMenuItem(
+                                  child: Text(translate(e.toString())),
+                                  value: e,
+                                ))
+                            .toList();
+                      },
+                      onSelected: (sortBy) {
+                        // If selecting the same sort option, flip the order
+                        // If selecting a different sort option, use ascending order
+                        if (controller.sortBy.value == sortBy) {
+                          ascending.value = !controller.sortAscending;
+                        } else {
+                          ascending.value = true;
+                        }
+                        controller.changeSortStyle(sortBy, ascending: ascending.value);
+                      }
+                  ),
+                ],
+              )
             ],
-          )
-        ],
-      ));
+          ));
 
   Widget listTail() => Obx(() => Container(
         height: 100,
