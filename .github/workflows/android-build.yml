@@ -341,7 +341,7 @@ jobs:
             signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
   build-rustdesk-android-universal:
-    needs: [build-rustdesk-android]
+    needs: [build-android]
     name: build rustdesk android universal apk
     if: ${{ inputs.upload-artifact }}
     runs-on: ubuntu-24.04
