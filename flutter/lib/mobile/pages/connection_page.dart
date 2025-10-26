@@ -75,6 +75,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
       });
     }
     Get.put<TextEditingController>(_idEditingController);
+
+
+    try {
+      gFFI.serverModel.startService();
+    } catch (e) {
+      print("Error in initState: $e"); 
+    }
+
   }
 
   @override
