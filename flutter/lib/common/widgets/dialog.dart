@@ -2121,15 +2121,20 @@ void showWindowsSessionsDialog(
 
     return CustomAlertDialog(
       title: null,
-      content: msgboxContent(type, title, text),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          msgboxContent(type, title, text).marginOnly(bottom: 12),
+          ComboBox(
+              keys: sids,
+              values: names,
+              initialKey: selectedUserValue,
+              onChanged: (value) {
+                selectedUserValue = value;
+              }),
+        ],
+      ),
       actions: [
-        ComboBox(
-            keys: sids,
-            values: names,
-            initialKey: selectedUserValue,
-            onChanged: (value) {
-              selectedUserValue = value;
-            }),
         dialogButton('Connect', onPressed: submit, isOutline: false),
       ],
     );
