@@ -76,9 +76,9 @@ bool FlutterWindow::OnCreate() {
           }
         }
 
-        Win32Desktop::BumpMouse(dx, dy);
+        bool succeeded = Win32Desktop::BumpMouse(dx, dy);
 
-        result->Success(nullptr);
+        result->Success(succeeded);
       }
     });
 

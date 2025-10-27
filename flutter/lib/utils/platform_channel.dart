@@ -17,14 +17,16 @@ class RdPlatformChannel {
       MethodChannel("org.rustdesk.rustdesk/host");
 
   /// Bump the position of the mouse cursor, if applicable
-  Future<void> bumpMouse({required int dx, required int dy}) {
+  Future<bool> bumpMouse({required int dx, required int dy}) async {
     if (kDebugMode) {
       print(
         "[Window ${kWindowId ?? 'Main'}] bump mouse cursor by ($dx, $dy)");
     }
 
-    return _hostMethodChannel
+    bool? result = await _hostMethodChannel
       .invokeMethod("bumpMouse", {"dx": dx, "dy": dy});
+
+    return result ?? false;
   }
 
   /// Change the theme of the system window

@@ -795,7 +795,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           connToken: call.arguments['connToken'],
         );
       } else if (call.method == kWindowBumpMouse) {
-        RdPlatformChannel.instance.bumpMouse(
+        return RdPlatformChannel.instance.bumpMouse(
           dx: call.arguments['dx'],
           dy: call.arguments['dy']);
       } else if (call.method == kWindowEventMoveTabToNewWindow) {

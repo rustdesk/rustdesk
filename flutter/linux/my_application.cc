@@ -1,5 +1,7 @@
 #include "my_application.h"
 
+#include "bump_mouse.h"
+
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -147,27 +149,6 @@ MyApplication* my_application_new() {
                                      nullptr));
 }
 
-void bump_mouse(int dx, int dy)
-{
-  GdkDevice *mouse_device;
-
-#if GTK_CHECK_VERSION(3, 20, 0)
-  auto seat = gdk_display_get_default_seat(gdk_display_get_default());
-
-  mouse_device = gdk_seat_get_pointer(seat);
-#else
-  auto devman = gdk_display_get_device_manager(gdk_display_get_default());
-
-  mouse_device = gdk_device_manager_get_client_pointer(devman);
-#endif
-
-  GdkScreen* screen;
-  gint x, y;
-
-  gdk_device_get_position(mouse_device, &screen, &x, &y);
-  gdk_device_warp(mouse_device, screen, x + dx, y + dy);
-}
-
 void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_call, gpointer user_data)
 {
   if (strcmp(fl_method_call_get_name(method_call), "bumpMouse") == 0) {
@@ -208,13 +189,17 @@ void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_ca
       dy = fl_value_get_int(dyValue);
     }
 
-    bump_mouse(dx, dy);
+    bool result = bump_mouse(dx, dy);
+
+    FlValue *result_value = fl_value_new_bool(result);
 
     GError *error;
 
-    if (!fl_method_call_respond_success(method_call, nullptr, &error)) {
+    if (!fl_method_call_respond_success(method_call, result_value, &error)) {
       g_warning("Failed to send Flutter Platform Channel response: %s", error->message);
     }
+
+    fl_value_unref(result_value);
   }
 }
 

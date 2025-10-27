@@ -120,6 +120,7 @@ class MainFlutterWindow: NSWindow {
                             y: NSHeight(screenFrame) - nsMouseLoc.y);
                     }
                     else {
+                        result(false);
                         break;
                     }
 
@@ -139,7 +140,7 @@ class MainFlutterWindow: NSWindow {
                     // already true has the side-effect of cancelling this motion suppression.
                     CGAssociateMouseAndMouseCursorPosition(1 /* true */);
 
-                    result(nil)
+                    result(true)
 
                     break
 

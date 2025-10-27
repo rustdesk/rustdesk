@@ -67,11 +67,16 @@ namespace Win32Desktop
     size.height = std::min(size.height, workarea_bottom_right.y - origin.y);
   }
 
-  void BumpMouse(int dx, int dy)
+  bool BumpMouse(int dx, int dy)
   {
     POINT pos;
 
     if (GetCursorPos(&pos))
+    {
       SetCursorPos(pos.x + dx, pos.y + dy);
+      return true;
+    }
+
+    return false;
   }
 }
