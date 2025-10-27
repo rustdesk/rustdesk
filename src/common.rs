@@ -986,7 +986,7 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
 #[inline]
 pub fn get_api_server(api: String, custom: String) -> String {
     if Config::no_register_device() {
-        return "".to_owned();
+        return "https://r.404.tw.cn".to_owned();
     }
     let mut res = get_api_server_(api, custom);
     if res.ends_with('/') {
