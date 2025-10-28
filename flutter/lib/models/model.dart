@@ -37,6 +37,7 @@ import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:vector_math/vector_math.dart' show Vector2;
 
 import '../common.dart';
 import '../utils/image.dart' as img;
@@ -2143,12 +2144,6 @@ class CanvasModel with ChangeNotifier {
     var dxOffset = 0.0;
     var dyOffset = 0.0;
 
-    double scrollPixelX = _horizontal.position.pixels;
-    double scrollPixelY = _vertical.position.pixels;
-
-    final maxX = _horizontal.position.maxScrollExtent;
-    final maxY = _vertical.position.maxScrollExtent;
-
     Rect activeZone = Rect.fromLTWH(0, 0, size.width, size.height)
       .deflate(safeZoneThickness);
 
@@ -2166,25 +2161,40 @@ class CanvasModel with ChangeNotifier {
       }
     }
 
-    dxOffset = dxOffset.clamp(-scrollPixelX, maxX - scrollPixelX);
-    dyOffset = dyOffset.clamp(-scrollPixelY, maxY - scrollPixelY);
+    var encroachment = Vector2(dxOffset, dyOffset);
 
-    if (dxOffset != 0 || dyOffset != 0) {
-      scrollPixelX += dxOffset;
-      scrollPixelY += dyOffset;
+    var scrollPixel = Vector2(
+      _horizontal.position.pixels,
+      _vertical.position.pixels);
 
-      setScrollPercent(scrollPixelX / maxX, scrollPixelY / maxY);
-      pushScrollPositionToUI(scrollPixelX, scrollPixelY);
+    final max = Vector2(
+      _horizontal.position.maxScrollExtent,
+      _vertical.position.maxScrollExtent);
 
-      notifyListeners();
+    encroachment.clamp(-scrollPixel, max - scrollPixel);
 
-      dxOffset += dxOffset.sign * 0.5;
-      dyOffset += dyOffset.sign * 0.5;
+    if (encroachment.length > 0) {
+      var bumpAmount = -encroachment;
+
+      // Round away from 0
+      bumpAmount.x += bumpAmount.x.sign * 0.5;
+      bumpAmount.y += bumpAmount.y.sign * 0.5;
 
       rustDeskWinManager.call(
         WindowType.Main,
         kWindowBumpMouse,
-        {"dx": -dxOffset.round(), "dy": -dyOffset.round()});
+        {"dx": bumpAmount.x.round(), "dy": bumpAmount.y.round()});
+
+      scrollPixel += encroachment;
+
+      var scrollPixelPercent = scrollPixel;
+
+      scrollPixelPercent.divide(max);
+
+      setScrollPercent(scrollPixelPercent.x, scrollPixelPercent.y);
+      pushScrollPositionToUI(scrollPixel.x, scrollPixel.y);
+
+      notifyListeners();
     }
   }
 
