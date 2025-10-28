@@ -2222,9 +2222,10 @@ class CanvasModel with ChangeNotifier {
 
       scrollPixel += encroachment;
 
-      var scrollPixelPercent = scrollPixel;
+      var scrollPixelPercent = scrollPixel.clone();
 
       scrollPixelPercent.divide(max);
+      scrollPixelPercent.scale(100.0);
 
       setScrollPercent(scrollPixelPercent.x, scrollPixelPercent.y);
       pushScrollPositionToUI(scrollPixel.x, scrollPixel.y);
