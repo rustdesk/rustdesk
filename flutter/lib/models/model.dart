@@ -2121,7 +2121,22 @@ class CanvasModel with ChangeNotifier {
     }
   }
 
-  edgeScrollMouse(double x, double y) {
+  Timer? _edgeScrollTimer;
+  double _lastEdgeScrollX = 0.0, _lastEdgeScrollY = 0.0;
+  bool _bumpMouseIsWorking = true;
+
+  setEdgeScrollTimer() {
+    _edgeScrollTimer = Timer(
+      const Duration(milliseconds: 10),
+      () => edgeScrollMouse(_lastEdgeScrollX, _lastEdgeScrollY));
+  }
+
+  cancelEdgeScrollTimer() {
+    _edgeScrollTimer?.cancel();
+    _edgeScrollTimer = null;
+  }
+
+  edgeScrollMouse(double x, double y) async {
     if (size.width == 0 || size.height == 0) {
       return;
     }
@@ -2133,6 +2148,10 @@ class CanvasModel with ChangeNotifier {
     if (_suppressEdgeScroll) {
       return;
     }
+
+    // Latch current coordinate in case we're autorepeating
+    _lastEdgeScrollX = x;
+    _lastEdgeScrollY = y;
 
     // Trigger scrolling when the cursor is close to an edge
     const double edgeThickness = 120;
@@ -2180,10 +2199,26 @@ class CanvasModel with ChangeNotifier {
       bumpAmount.x += bumpAmount.x.sign * 0.5;
       bumpAmount.y += bumpAmount.y.sign * 0.5;
 
-      rustDeskWinManager.call(
-        WindowType.Main,
-        kWindowBumpMouse,
-        {"dx": bumpAmount.x.round(), "dy": bumpAmount.y.round()});
+      var bumpMouseSucceeded =
+        _bumpMouseIsWorking &&
+        (await rustDeskWinManager.call(
+          WindowType.Main,
+          kWindowBumpMouse,
+          {"dx": bumpAmount.x.round(), "dy": bumpAmount.y.round()})).result;
+
+      if (!bumpMouseSucceeded) {
+        // If we can't BumpMouse, then we switch to slower scrolling with autorepeat
+
+        // Don't keep hammering BumpMouse if it's not working.
+        _bumpMouseIsWorking = false;
+
+        // Keep scrolling as long as the user is overtop of an edge. Each time the
+        // timer fires sets a new timer.
+        setEdgeScrollTimer();
+
+        // When autorepeating, scale down the extent of the scroll, otherwise it'll be way too fast.
+        encroachment *= 0.2;
+      }
 
       scrollPixel += encroachment;
 
