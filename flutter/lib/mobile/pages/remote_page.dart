@@ -25,6 +25,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
 import '../widgets/dialog.dart';
+import '../widgets/custom_scale_widget.dart';
 
 final initText = '1' * 1024;
 
@@ -1201,6 +1202,14 @@ void showOptions(
                     if (v != null) viewStyle.value = v;
                   }
                 : null)),
+      // Show custom scale controls when custom view style is selected
+      Obx(() => viewStyle.value == kRemoteViewStyleCustom
+          ? GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {}, // Absorb tap events to prevent dialog dismiss
+              child: MobileCustomScaleControls(ffi: gFFI),
+            )
+          : SizedBox.shrink()),
       const Divider(color: MyTheme.border),
       for (var e in imageQualityRadios)
         Obx(() => getRadio<String>(
