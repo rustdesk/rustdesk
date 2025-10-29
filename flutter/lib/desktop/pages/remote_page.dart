@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -72,7 +73,7 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage>
-    with AutomaticKeepAliveClientMixin, MultiWindowListener {
+    with AutomaticKeepAliveClientMixin, MultiWindowListener, TickerProviderStateMixin {
   Timer? _timer;
   String keyboardMode = "legacy";
   bool _isWindowBlur = false;
@@ -117,6 +118,7 @@ class _RemotePageState extends State<RemotePage>
       _ffi.recordingModel
           .updateStatus(bind.sessionGetIsRecording(sessionId: _ffi.sessionId));
     });
+    _ffi.canvasModel.initializeEdgeScrollFallback(this);
     _ffi.start(
       widget.id,
       password: widget.password,
@@ -427,7 +429,7 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void leaveView(PointerExitEvent evt) {
-    _ffi.canvasModel.cancelEdgeScrollTimer();
+    _ffi.canvasModel.cancelEdgeScroll();
 
     if (_ffi.ffiModel.keyboard) {
       _ffi.inputModel.tryMoveEdgeOnExit(evt.position);

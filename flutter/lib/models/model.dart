@@ -9,6 +9,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
@@ -1832,6 +1833,54 @@ class ViewStyle {
   }
 }
 
+class EdgeScrollFallbackState {
+  final CanvasModel _owner;
+
+  late Ticker _ticker;
+
+  Duration _lastTotalElapsed = Duration.zero;
+  bool _nextEventIsFirst = true;
+  Vector2 _encroachment = Vector2.zero();
+
+  EdgeScrollFallbackState(this._owner, TickerProvider tickerProvider) {
+    _ticker = tickerProvider.createTicker(emitTick);
+  }
+
+  setEncroachment(Vector2 encroachment) {
+    _encroachment = encroachment;
+  }
+
+  emitTick(Duration totalElapsed) {
+    if (_nextEventIsFirst) {
+      _lastTotalElapsed = totalElapsed;
+      _nextEventIsFirst = false;
+    } else {
+      final thisTickElapsed = totalElapsed - _lastTotalElapsed;
+
+      const double FrameTime = 1000.0 / 60.0;
+      const double SpeedFactor = 0.1;
+
+      var delta = _encroachment * (SpeedFactor * thisTickElapsed.inMilliseconds / FrameTime);
+
+      _owner.performEdgeScroll(delta);
+
+      _lastTotalElapsed = totalElapsed;
+    }
+  }
+
+  start() {
+    if (!_ticker.isActive) {
+      debugPrint("RESTARTING TICKER");
+      _nextEventIsFirst = true;
+      _ticker.start();
+    }
+  }
+
+  stop() {
+    _ticker.stop();
+  }
+}
+
 class CanvasModel with ChangeNotifier {
   // image offset of canvas
   double _x = 0;
@@ -2121,19 +2170,15 @@ class CanvasModel with ChangeNotifier {
     }
   }
 
-  Timer? _edgeScrollTimer;
-  double _lastEdgeScrollX = 0.0, _lastEdgeScrollY = 0.0;
+  late EdgeScrollFallbackState _edgeScrollFallbackState;
   bool _bumpMouseIsWorking = true;
 
-  setEdgeScrollTimer() {
-    _edgeScrollTimer = Timer(
-      const Duration(milliseconds: 10),
-      () => edgeScrollMouse(_lastEdgeScrollX, _lastEdgeScrollY));
+  initializeEdgeScrollFallback(TickerProvider tickerProvider) {
+    _edgeScrollFallbackState = EdgeScrollFallbackState(this, tickerProvider);
   }
 
-  cancelEdgeScrollTimer() {
-    _edgeScrollTimer?.cancel();
-    _edgeScrollTimer = null;
+  cancelEdgeScroll() {
+    _edgeScrollFallbackState.stop();
   }
 
   edgeScrollMouse(double x, double y) async {
@@ -2149,10 +2194,6 @@ class CanvasModel with ChangeNotifier {
       return;
     }
 
-    // Latch current coordinate in case we're autorepeating
-    _lastEdgeScrollX = x;
-    _lastEdgeScrollY = y;
-
     // Trigger scrolling when the cursor is close to an edge
     const double edgeThickness = 120;
 
@@ -2163,8 +2204,12 @@ class CanvasModel with ChangeNotifier {
     var dxOffset = 0.0;
     var dyOffset = 0.0;
 
-    Rect activeZone = Rect.fromLTWH(0, 0, size.width, size.height)
-      .deflate(safeZoneThickness);
+    Rect activeZone = Rect.fromLTWH(0, 0, size.width, size.height);
+
+    // If we're not using BumpMouse then we don't need a safe zone.
+    if (_bumpMouseIsWorking) {
+      activeZone = activeZone.deflate(safeZoneThickness);
+    }
 
     if (activeZone.contains(Offset(x, y))) {
       if (x < edgeThickness) {
@@ -2206,32 +2251,43 @@ class CanvasModel with ChangeNotifier {
           kWindowBumpMouse,
           {"dx": bumpAmount.x.round(), "dy": bumpAmount.y.round()})).result;
 
-      if (!bumpMouseSucceeded) {
+      if (bumpMouseSucceeded) {
+        performEdgeScroll(encroachment);
+      } else {
         // If we can't BumpMouse, then we switch to slower scrolling with autorepeat
 
         // Don't keep hammering BumpMouse if it's not working.
         _bumpMouseIsWorking = false;
 
-        // Keep scrolling as long as the user is overtop of an edge. Each time the
-        // timer fires sets a new timer.
-        setEdgeScrollTimer();
-
-        // When autorepeating, scale down the extent of the scroll, otherwise it'll be way too fast.
-        encroachment *= 0.2;
+        // Keep scrolling as long as the user is overtop of an edge.
+        _edgeScrollFallbackState.setEncroachment(encroachment);
+        _edgeScrollFallbackState.start();
       }
-
-      scrollPixel += encroachment;
-
-      var scrollPixelPercent = scrollPixel.clone();
-
-      scrollPixelPercent.divide(max);
-      scrollPixelPercent.scale(100.0);
-
-      setScrollPercent(scrollPixelPercent.x, scrollPixelPercent.y);
-      pushScrollPositionToUI(scrollPixel.x, scrollPixel.y);
-
-      notifyListeners();
     }
+  }
+
+  performEdgeScroll(Vector2 delta) {
+    final max = Vector2(
+      _horizontal.position.maxScrollExtent,
+      _vertical.position.maxScrollExtent);
+
+    var scrollPixel = Vector2(
+      _horizontal.position.pixels,
+      _vertical.position.pixels);
+
+    scrollPixel += delta;
+
+    scrollPixel.clamp(Vector2.zero(), max);
+
+    var scrollPixelPercent = scrollPixel.clone();
+
+    scrollPixelPercent.divide(max);
+    scrollPixelPercent.scale(100.0);
+
+    setScrollPercent(scrollPixelPercent.x, scrollPixelPercent.y);
+    pushScrollPositionToUI(scrollPixel.x, scrollPixel.y);
+
+    notifyListeners();
   }
 
   set scale(v) {

@@ -1352,7 +1352,6 @@ class InputModel {
     x -= CanvasModel.leftToEdge;
     if (isMove) {
       if (edgeScroll) {
-        parent.target!.canvasModel.cancelEdgeScrollTimer();
         parent.target!.canvasModel.edgeScrollMouse(x, y);
       } else if (moveCanvas) {
         parent.target!.canvasModel.moveDesktopMouse(x, y);
