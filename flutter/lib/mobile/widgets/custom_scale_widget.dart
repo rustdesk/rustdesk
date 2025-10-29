@@ -177,7 +177,7 @@ class _MobileCustomScaleControlsState extends State<MobileCustomScaleControls> {
             children: [
               IconButton(
                 iconSize: 20,
-                padding: EdgeInsets.all(4),
+                padding: const EdgeInsets.all(4),
                 constraints: smallBtnConstraints,
                 icon: const Icon(Icons.remove),
                 tooltip: translate('Decrease'),
