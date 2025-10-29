@@ -62,6 +62,7 @@ class RemotePage extends StatefulWidget {
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
   final DesktopTabController? tabController;
 
+  bool get hasFFI => _lastState.value != null;
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
 
   @override

@@ -430,7 +430,9 @@ class _DesktopTabState extends State<DesktopTab>
     for (int i = 0; i < state.value.tabs.length; i++) {
       final tab = state.value.tabs[i];
 
-      if (tab.page is RemotePage) {
+      final remotePage = tab.page as RemotePage;
+
+      if ((remotePage != null) && remotePage.hasFFI) {
         final ffi = (tab.page as RemotePage).ffi;
 
         ffi.canvasModel.notifyResize();
