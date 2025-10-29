@@ -34,7 +34,6 @@ import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1833,6 +1832,12 @@ class ViewStyle {
   }
 }
 
+enum EdgeScrollState {
+  inactive,
+  armed,
+  active,
+}
+
 class EdgeScrollFallbackState {
   final CanvasModel _owner;
 
@@ -1901,9 +1906,15 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
+  // tracks whether edge scroll should be active, prevents spurious
+  // scrolling when the cursor enters the view from outside
+  EdgeScrollState _edgeScrollState = EdgeScrollState.inactive;
+  // fallback strategy for when Bump Mouse isn't available
+  late EdgeScrollFallbackState _edgeScrollFallbackState;
+  // to avoid hammering a non-functional Bump Mouse
+  bool _bumpMouseIsWorking = true;
   // briefly set to true when the canvas detects a resize
   bool _suppressEdgeScroll = false;
-  final Debouncer _suppressEdgeScrollDebounce = Debouncer(delay: Duration(milliseconds: 200));
   ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
   Timer? _timerMobileFocusCanvasCursor;
@@ -1932,17 +1943,6 @@ class CanvasModel with ChangeNotifier {
   bool get suppressEdgeScroll => _suppressEdgeScroll;
   ViewStyle get viewStyle => _lastViewStyle;
   RxBool get imageOverflow => _imageOverflow;
-
-  void notifyResize()
-  {
-    _suppressEdgeScrollDebounce.cancel();
-    _suppressEdgeScroll = true;
-    _suppressEdgeScrollDebounce.call(
-      ()
-      {
-        _suppressEdgeScroll = false;
-      });
-  }
 
   _resetScroll() => setScrollPercent(0.0, 0.0);
 
@@ -2169,11 +2169,17 @@ class CanvasModel with ChangeNotifier {
     }
   }
 
-  late EdgeScrollFallbackState _edgeScrollFallbackState;
-  bool _bumpMouseIsWorking = true;
-
   initializeEdgeScrollFallback(TickerProvider tickerProvider) {
     _edgeScrollFallbackState = EdgeScrollFallbackState(this, tickerProvider);
+  }
+
+  disableEdgeScroll() {
+    _edgeScrollState = EdgeScrollState.inactive;
+    cancelEdgeScroll();
+  }
+
+  rearmEdgeScroll() {
+    _edgeScrollState = EdgeScrollState.armed;
   }
 
   cancelEdgeScroll() {
@@ -2193,47 +2199,46 @@ class CanvasModel with ChangeNotifier {
   }
 
   edgeScrollMouse(double x, double y) async {
-    if (size.width == 0 || size.height == 0) {
-      return;
-    }
-
-    if (!(_horizontal.hasClients || _vertical.hasClients)) {
-      return;
-    }
-
-    if (_suppressEdgeScroll) {
+    if ((_edgeScrollState == EdgeScrollState.inactive)
+     || (size.width == 0 || size.height == 0)
+     || !(_horizontal.hasClients || _vertical.hasClients)) {
       return;
     }
 
     // Trigger scrolling when the cursor is close to an edge
-    const double edgeThickness = 120;
+    const double edgeThickness = 100;
 
-    // But not right at the very edge, otherwise it could trigger by accident when
-    // hovering around the window border.
-    const double safeZoneThickness = 20;
+    if (_edgeScrollState == EdgeScrollState.armed) {
+      // Edge scroll is armed to become active once the cursor
+      // is observed within the rectangle interior to the
+      // edge scroll regions. If the user has just moved the
+      // cursor in from outside of the window, edge scrolling
+      // doesn't happen yet.
+      final clientArea = Rect.fromLTWH(0, 0, size.width, size.height);
+
+      final innerZone = clientArea.deflate(edgeThickness);
+
+      if (innerZone.contains(Offset(x, y))) {
+        _edgeScrollState = EdgeScrollState.active;
+      } else {
+        // Not yet.
+        return;
+      }
+    }
 
     var dxOffset = 0.0;
     var dyOffset = 0.0;
 
-    Rect activeZone = Rect.fromLTWH(0, 0, size.width, size.height);
-
-    // If we're not using BumpMouse then we don't need a safe zone.
-    if (_bumpMouseIsWorking) {
-      activeZone = activeZone.deflate(safeZoneThickness);
+    if (x < edgeThickness) {
+      dxOffset = x - edgeThickness;
+    } else if ((x >= size.width - edgeThickness)) {
+      dxOffset = x - (size.width - edgeThickness);
     }
 
-    if (activeZone.contains(Offset(x, y))) {
-      if (x < edgeThickness) {
-        dxOffset = x - edgeThickness;
-      } else if ((x >= size.width - edgeThickness)) {
-        dxOffset = x - (size.width - edgeThickness);
-      }
-
-      if (y < edgeThickness) {
-        dyOffset = y - edgeThickness;
-      } else if ((y >= size.height - edgeThickness)) {
-        dyOffset = y - (size.height - edgeThickness);
-      }
+    if (y < edgeThickness) {
+      dyOffset = y - edgeThickness;
+    } else if ((y >= size.height - edgeThickness)) {
+      dyOffset = y - (size.height - edgeThickness);
     }
 
     var encroachment = Vector2(dxOffset, dyOffset);

@@ -424,22 +424,9 @@ class _DesktopTabState extends State<DesktopTab>
   }
 
   @override
-  void onWindowResize() {
+  void onWindowResized() {
     _saveFrame();
-
-    for (int i = 0; i < state.value.tabs.length; i++) {
-      final tab = state.value.tabs[i];
-
-      final remotePage = tab.page as RemotePage;
-
-      if ((remotePage != null) && remotePage.hasFFI) {
-        final ffi = (tab.page as RemotePage).ffi;
-
-        ffi.canvasModel.notifyResize();
-      }
-    }
-
-    super.onWindowResize();
+    super.onWindowResized();
   }
 
   @override

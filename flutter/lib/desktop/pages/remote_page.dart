@@ -411,6 +411,8 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void enterView(PointerEnterEvent evt) {
+    _ffi.canvasModel.rearmEdgeScroll();
+
     _cursorOverImage.value = true;
     _firstEnterImage.value = true;
     if (_onEnterOrLeaveImage4Toolbar != null) {
@@ -430,7 +432,7 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void leaveView(PointerExitEvent evt) {
-    _ffi.canvasModel.cancelEdgeScroll();
+    _ffi.canvasModel.disableEdgeScroll();
 
     if (_ffi.ffiModel.keyboard) {
       _ffi.inputModel.tryMoveEdgeOnExit(evt.position);
