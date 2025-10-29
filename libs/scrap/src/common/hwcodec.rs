@@ -687,7 +687,7 @@ pub fn check_available_hwcodec() -> String {
         height: 720,
         pixfmt: DEFAULT_PIXFMT,
         align: HW_STRIDE_ALIGN as _,
-        kbs: 0,
+        kbs: 1000,
         fps: DEFAULT_FPS,
         gop: DEFAULT_GOP,
         quality: DEFAULT_HW_QUALITY,

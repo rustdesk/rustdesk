@@ -364,11 +364,12 @@ Future<List<TRadioMenu<String>>> toolbarViewStyle(
         value: kRemoteViewStyleAdaptive,
         groupValue: groupValue,
         onChanged: onChanged),
-    TRadioMenu<String>(
-        child: Text(translate('Scale custom')),
-        value: kRemoteViewStyleCustom,
-        groupValue: groupValue,
-        onChanged: onChanged)
+    if (isDesktop || isWebDesktop)
+      TRadioMenu<String>(
+          child: Text(translate('Scale custom')),
+          value: kRemoteViewStyleCustom,
+          groupValue: groupValue,
+          onChanged: onChanged)
   ];
 }
 
