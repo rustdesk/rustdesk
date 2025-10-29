@@ -1870,7 +1870,6 @@ class EdgeScrollFallbackState {
 
   start() {
     if (!_ticker.isActive) {
-      debugPrint("RESTARTING TICKER");
       _nextEventIsFirst = true;
       _ticker.start();
     }
