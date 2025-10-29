@@ -29,6 +29,4 @@ jobs:
             echo "❌ Pull Request #$PR_NUMBER has NOT been merged yet."
             echo "merged=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Print result
-        run: echo "Merged: ${{ steps.check.outputs.merged }}"
+        
