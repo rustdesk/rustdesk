@@ -1226,7 +1226,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls>
           value: scalePos,
           min: 0.0,
           max: 1.0,
-          // Use a wide range of divisions (calculated as (maxPercent - minPercent)) to provide ~1% precision increments.
+          // Use a wide range of divisions (calculated as (CustomScaleControlsMixin.maxPercent - CustomScaleControlsMixin.minPercent)) to provide ~1% precision increments.
           // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons, which is undesirable for big ranges.
           divisions: (CustomScaleControlsMixin.maxPercent - CustomScaleControlsMixin.minPercent).round(),
           onChanged: onSliderChanged,
