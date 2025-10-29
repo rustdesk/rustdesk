@@ -1205,8 +1205,6 @@ void showOptions(
       // Show custom scale controls when custom view style is selected
       Obx(() => viewStyle.value == kRemoteViewStyleCustom
           ? GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {}, // Absorb tap events to prevent dialog dismiss
               child: MobileCustomScaleControls(ffi: gFFI),
             )
           : const SizedBox.shrink()),
