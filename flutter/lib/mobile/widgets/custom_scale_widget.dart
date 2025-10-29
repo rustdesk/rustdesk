@@ -6,7 +6,7 @@ import 'package:flutter_hbb/common/widgets/custom_scale_mixin.dart';
 class MobileCustomScaleControls extends StatefulWidget {
   final FFI ffi;
   final ValueChanged<int>? onChanged;
-  const MobileCustomScaleControls({Key? key, required this.ffi, this.onChanged}) : super(key: key);
+  const MobileCustomScaleControls({super.key, required this.ffi, this.onChanged});
 
   @override
   State<MobileCustomScaleControls> createState() => _MobileCustomScaleControlsState();
