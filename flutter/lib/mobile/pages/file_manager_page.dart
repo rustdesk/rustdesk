@@ -92,6 +92,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       gFFI.dialogManager.dismissAll();
       WakelockPlus.disable();
     });
+    model.jobController.clear();
     super.dispose();
   }
 

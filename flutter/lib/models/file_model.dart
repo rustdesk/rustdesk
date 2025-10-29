@@ -1033,30 +1033,54 @@ class JobController {
     await bind.sessionCancelJob(sessionId: sessionId, actId: id);
   }
 
-  void loadLastJob(Map<String, dynamic> evt) {
+  Future<void> loadLastJob(Map<String, dynamic> evt) async {
     debugPrint("load last job: $evt");
     Map<String, dynamic> jobDetail = json.decode(evt['value']);
-    // int id = int.parse(jobDetail['id']);
     String remote = jobDetail['remote'];
     String to = jobDetail['to'];
     bool showHidden = jobDetail['show_hidden'];
     int fileNum = jobDetail['file_num'];
     bool isRemote = jobDetail['is_remote'];
-    final currJobId = JobController.jobID.next();
-    String fileName = path.basename(isRemote ? remote : to);
-    var jobProgress = JobProgress()
-      ..type = JobType.transfer
-      ..fileName = fileName
-      ..jobName = isRemote ? remote : to
-      ..id = currJobId
-      ..isRemoteToLocal = isRemote
-      ..fileNum = fileNum
-      ..remote = remote
-      ..to = to
-      ..showHidden = showHidden
-      ..state = JobState.paused;
-    jobTable.add(jobProgress);
-    bind.sessionAddJob(
+    bool isAutoStart = jobDetail['auto_start'] == true;
+    int currJobId = -1;
+    if (isAutoStart) {
+      // Ensure jobDetail['id'] exists and is an int
+      if (jobDetail.containsKey('id') &&
+          jobDetail['id'] != null &&
+          jobDetail['id'] is int) {
+        currJobId = jobDetail['id'];
+      }
+    }
+    if (currJobId < 0) {
+      // If id is missing or invalid, disable auto-start and assign a new job id
+      isAutoStart = false;
+      currJobId = JobController.jobID.next();
+    }
+
+    if (!isAutoStart) {
+      if (!(isDesktop || isWebDesktop)) {
+        // Don't add to job table if not auto start on mobile.
+        // Because mobile does not support job list view now.
+        return;
+      }
+
+      // Add to job table if not auto start on desktop.
+      String fileName = path.basename(isRemote ? remote : to);
+      final jobProgress = JobProgress()
+        ..type = JobType.transfer
+        ..fileName = fileName
+        ..jobName = isRemote ? remote : to
+        ..id = currJobId
+        ..isRemoteToLocal = isRemote
+        ..fileNum = fileNum
+        ..remote = remote
+        ..to = to
+        ..showHidden = showHidden
+        ..state = JobState.paused;
+      jobTable.add(jobProgress);
+    }
+
+    await bind.sessionAddJob(
       sessionId: sessionId,
       isRemote: isRemote,
       includeHidden: showHidden,
@@ -1065,6 +1089,11 @@ class JobController {
       to: isRemote ? to : remote,
       fileNum: fileNum,
     );
+
+    if (isAutoStart) {
+      await bind.sessionResumeJob(
+          sessionId: sessionId, actId: currJobId, isRemote: isRemote);
+    }
   }
 
   void resumeJob(int jobId) {
@@ -1094,6 +1123,11 @@ class JobController {
       jobTable.refresh();
     }
     debugPrint("update folder files: $info");
+  }
+
+  void clear() {
+    jobTable.clear();
+    jobResultListener.clear();
   }
 }
 
