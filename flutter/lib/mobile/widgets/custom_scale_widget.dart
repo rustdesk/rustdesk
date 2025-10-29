@@ -170,14 +170,14 @@ class _MobileCustomScaleControlsState extends State<MobileCustomScaleControls> {
         children: [
           Text(
             '${translate("Scale custom")}: $_value%',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Row(
             children: [
               IconButton(
                 iconSize: 20,
-                padding: EdgeInsets.all(4),
+                padding: const EdgeInsets.all(4),
                 constraints: smallBtnConstraints,
                 icon: const Icon(Icons.remove),
                 tooltip: translate('Decrease'),
@@ -186,7 +186,7 @@ class _MobileCustomScaleControlsState extends State<MobileCustomScaleControls> {
               Expanded(child: sliderControl),
               IconButton(
                 iconSize: 20,
-                padding: EdgeInsets.all(4),
+                padding: const EdgeInsets.all(4),
                 constraints: smallBtnConstraints,
                 icon: const Icon(Icons.add),
                 tooltip: translate('Increase'),
