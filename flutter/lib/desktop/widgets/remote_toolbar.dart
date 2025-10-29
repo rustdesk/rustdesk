@@ -26,7 +26,7 @@ import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 import 'package:flutter_hbb/utils/scale.dart';
-import 'package:flutter_hbb/common/widgets/custom_scale_mixin.dart';
+import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
 class ToolbarState {
   late RxBool _pin;
@@ -1190,8 +1190,7 @@ class _CustomScaleMenuControls extends StatefulWidget {
   State<_CustomScaleMenuControls> createState() => _CustomScaleMenuControlsState();
 }
 
-class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls>
-    with CustomScaleControlsMixin {
+class _CustomScaleMenuControlsState extends CustomScaleControls<_CustomScaleMenuControls> {
   @override
   FFI get ffi => widget.ffi;
 
@@ -1213,12 +1212,11 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls>
           overlayColor: colorScheme.primary.withOpacity(0.1),
           showValueIndicator: ShowValueIndicator.never,
           thumbShape: _RectValueThumbShape(
-            min: CustomScaleControlsMixin.minPercent.toDouble(),
-            max: CustomScaleControlsMixin.maxPercent.toDouble(),
+            min: CustomScaleControls.minPercent.toDouble(),
+            max: CustomScaleControls.maxPercent.toDouble(),
             width: 52,
             height: 24,
             radius: 4,
-            // Display the mapped percent for the current normalized value
             displayValueForNormalized: (t) => mapPosToPercent(t),
           ),
         ),
@@ -1226,9 +1224,9 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls>
           value: scalePos,
           min: 0.0,
           max: 1.0,
-          // Use a wide range of divisions (calculated as (CustomScaleControlsMixin.maxPercent - CustomScaleControlsMixin.minPercent)) to provide ~1% precision increments.
+          // Use a wide range of divisions (calculated as (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)) to provide ~1% precision increments.
           // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons, which is undesirable for big ranges.
-          divisions: (CustomScaleControlsMixin.maxPercent - CustomScaleControlsMixin.minPercent).round(),
+          divisions: (CustomScaleControls.maxPercent - CustomScaleControls.minPercent).round(),
           onChanged: onSliderChanged,
         ),
       ),

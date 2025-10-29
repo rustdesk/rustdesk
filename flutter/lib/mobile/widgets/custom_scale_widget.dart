@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/common/widgets/custom_scale_mixin.dart';
+import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
 class MobileCustomScaleControls extends StatefulWidget {
   final FFI ffi;
@@ -12,8 +12,7 @@ class MobileCustomScaleControls extends StatefulWidget {
   State<MobileCustomScaleControls> createState() => _MobileCustomScaleControlsState();
 }
 
-class _MobileCustomScaleControlsState extends State<MobileCustomScaleControls>
-    with CustomScaleControlsMixin {
+class _MobileCustomScaleControlsState extends CustomScaleControls<MobileCustomScaleControls> {
   @override
   FFI get ffi => widget.ffi;
 
@@ -29,7 +28,7 @@ class _MobileCustomScaleControlsState extends State<MobileCustomScaleControls>
       value: scalePos,
       min: 0.0,
       max: 1.0,
-      divisions: (CustomScaleControlsMixin.maxPercent - CustomScaleControlsMixin.minPercent).round(),
+      divisions: (CustomScaleControls.maxPercent - CustomScaleControls.minPercent).round(),
       label: '$scaleValue%',
       onChanged: onSliderChanged,
     );
