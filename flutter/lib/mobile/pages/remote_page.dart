@@ -1209,7 +1209,7 @@ void showOptions(
               onTap: () {}, // Absorb tap events to prevent dialog dismiss
               child: MobileCustomScaleControls(ffi: gFFI),
             )
-          : SizedBox.shrink()),
+          : const SizedBox.shrink()),
       const Divider(color: MyTheme.border),
       for (var e in imageQualityRadios)
         Obx(() => getRadio<String>(
