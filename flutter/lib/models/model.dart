@@ -2181,12 +2181,24 @@ class CanvasModel with ChangeNotifier {
     _edgeScrollFallbackState.stop();
   }
 
+  (Vector2, Vector2) getScrollInfo() {
+    final scrollPixel = Vector2(
+      _horizontal.hasClients ? _horizontal.position.pixels : 0,
+      _vertical.hasClients ? _vertical.position.pixels : 0);
+
+    final max = Vector2(
+      _horizontal.hasClients ? _horizontal.position.maxScrollExtent : 0,
+      _vertical.hasClients ? _vertical.position.maxScrollExtent : 0);
+
+    return (scrollPixel, max);
+  }
+
   edgeScrollMouse(double x, double y) async {
     if (size.width == 0 || size.height == 0) {
       return;
     }
 
-    if (!_horizontal.hasClients || !_vertical.hasClients) {
+    if (!(_horizontal.hasClients || _vertical.hasClients)) {
       return;
     }
 
@@ -2227,13 +2239,7 @@ class CanvasModel with ChangeNotifier {
 
     var encroachment = Vector2(dxOffset, dyOffset);
 
-    var scrollPixel = Vector2(
-      _horizontal.position.pixels,
-      _vertical.position.pixels);
-
-    final max = Vector2(
-      _horizontal.position.maxScrollExtent,
-      _vertical.position.maxScrollExtent);
+    var (scrollPixel, max) = getScrollInfo();
 
     encroachment.clamp(-scrollPixel, max - scrollPixel);
 
@@ -2267,13 +2273,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   performEdgeScroll(Vector2 delta) {
-    final max = Vector2(
-      _horizontal.position.maxScrollExtent,
-      _vertical.position.maxScrollExtent);
-
-    var scrollPixel = Vector2(
-      _horizontal.position.pixels,
-      _vertical.position.pixels);
+    var (scrollPixel, max) = getScrollInfo();
 
     scrollPixel += delta;
 
