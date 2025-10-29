@@ -761,9 +761,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           'scaleFactor': screen.scaleFactor,
         };
 
+    bool isChattyMethod(methodName) {
+      switch (methodName) {
+        case kWindowBumpMouse: return true;
+      }
+
+      return false;
+    }
+
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
-      debugPrint(
+      if (!isChattyMethod(call.method)) {
+        debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+      }
       if (call.method == kWindowMainWindowOnTop) {
         windowOnTop(null);
       } else if (call.method == kWindowGetWindowInfo) {

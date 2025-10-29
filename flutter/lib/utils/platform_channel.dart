@@ -18,10 +18,7 @@ class RdPlatformChannel {
 
   /// Bump the position of the mouse cursor, if applicable
   Future<bool> bumpMouse({required int dx, required int dy}) async {
-    if (kDebugMode) {
-      print(
-        "[Window ${kWindowId ?? 'Main'}] bump mouse cursor by ($dx, $dy)");
-    }
+    // No debug output; this call is too chatty.
 
     bool? result = await _hostMethodChannel
       .invokeMethod("bumpMouse", {"dx": dx, "dy": dy});

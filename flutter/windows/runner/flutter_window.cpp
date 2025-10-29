@@ -68,10 +68,10 @@ bool FlutterWindow::OnCreate() {
         } else if (std::holds_alternative<flutter::EncodableList>(*arguments)) {
           auto argsList = std::get<flutter::EncodableList>(*arguments);
 
-          if (std::holds_alternative<int>(argsList[0])) {
+          if ((argsList.size() >= 1) && std::holds_alternative<int>(argsList[0])) {
             dx = std::get<int>(argsList[0]);
           }
-          if (std::holds_alternative<int>(argsList[1])) {
+          if ((argsList.size() >= 2) && std::holds_alternative<int>(argsList[1])) {
             dy = std::get<int>(argsList[1]);
           }
         }
