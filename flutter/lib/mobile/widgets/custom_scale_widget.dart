@@ -186,7 +186,7 @@ class _MobileCustomScaleControlsState extends State<MobileCustomScaleControls> {
               Expanded(child: sliderControl),
               IconButton(
                 iconSize: 20,
-                padding: EdgeInsets.all(4),
+                padding: const EdgeInsets.all(4),
                 constraints: smallBtnConstraints,
                 icon: const Icon(Icons.add),
                 tooltip: translate('Increase'),
