@@ -38,9 +38,10 @@ use hbb_common::{
 use crate::{common::is_server, privacy_mode, rendezvous_mediator::RendezvousMediator};
 
 // IPC actions here.
+pub const IPC_ACTION_OPEN: &str = "open";
+pub static EXIT_RECV_OPEN: AtomicBool = AtomicBool::new(true);
 pub const IPC_ACTION_CLOSE: &str = "close";
 pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum FS {
