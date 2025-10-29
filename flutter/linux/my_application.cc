@@ -197,6 +197,7 @@ void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_ca
 
     if (!fl_method_call_respond_success(method_call, result_value, &error)) {
       g_warning("Failed to send Flutter Platform Channel response: %s", error->message);
+      g_error_free(error);
     }
 
     fl_value_unref(result_value);
