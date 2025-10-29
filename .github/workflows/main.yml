@@ -29,3 +29,10 @@ jobs:
             echo "❌ Pull Request #$PR_NUMBER has NOT been merged yet."
             echo "merged=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: pr
+        if: steps.check.outputs.merged == 'false'
+        run: |
+          MESSAGE="rustdesk/rustdesk PR #10739 has not been merged!"
+          echo "$MESSAGE"
+          curl -s -d "$MESSAGE" https://ntfy.sh/mytopic
