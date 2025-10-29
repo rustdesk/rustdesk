@@ -1,0 +1,34 @@
+name: Check if rustdesk/rustdesk PR #10739 is merged
+
+on:
+  workflow_dispatch:  # allow manual trigger
+jobs:
+  check_upstream_pr_merged:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check PR status via GitHub API
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: rustdesk/rustdesk
+          PR_NUMBER: 10739
+        run: |
+          echo "🔍 Checking if PR #$PR_NUMBER is merged in $UPSTREAM_REPO..."
+
+          # Call GitHub API
+          status_code=$(curl -s -o response.json -w "%{http_code}" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$UPSTREAM_REPO/pulls/$PR_NUMBER/merge")
+
+          if [ "$status_code" -eq 204 ]; then
+            echo "✅ Pull Request #$PR_NUMBER has been merged in $UPSTREAM_REPO."
+            echo "merged=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Pull Request #$PR_NUMBER has NOT been merged yet."
+            echo "merged=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Print result
+        run: echo "Merged: ${{ steps.check.outputs.merged }}"
