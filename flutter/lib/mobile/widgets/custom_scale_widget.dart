@@ -172,7 +172,7 @@ class _MobileCustomScaleControlsState extends State<MobileCustomScaleControls> {
             '${translate("Scale custom")}: $_value%',
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Row(
             children: [
               IconButton(
