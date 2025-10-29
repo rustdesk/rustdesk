@@ -62,7 +62,13 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
-        thread { setCodecInfo() }
+        thread {
+            try {
+                setCodecInfo()
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to setCodecInfo: ${e.message}", e)
+            }
+        }
     }
 
     override fun onResume() {

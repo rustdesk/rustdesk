@@ -710,5 +710,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "Ievadiet lietotājvārdu vai domēnu\\lietotājvārdu"),
         ("Preparing for installation ...", "Gatavošanās instalēšanai..."),
         ("Show my cursor", "Rādīt manu kursoru"),
+        ("Scale custom", ""),
+        ("Custom scale slider", ""),
+        ("Decrease", ""),
+        ("Increase", ""),
+        ("Show virtual mouse", ""),
+        ("Virtual mouse size", ""),
+        ("Small", ""),
+        ("Large", ""),
+        ("Show virtual joystick", ""),
+        ("Edit note", ""),
+        ("Alias", ""),
     ].iter().cloned().collect();
 }

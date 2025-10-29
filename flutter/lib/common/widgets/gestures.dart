@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_hbb/common/widgets/remote_input.dart';
 
 enum GestureState {
   none,
@@ -95,6 +96,12 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
           debugPrint("TwoFingerState.scale onEnd");
           if (onTwoFingerScaleEnd != null) {
             onTwoFingerScaleEnd!(d);
+          }
+          if (isSpecialHoldDragActive) {
+            // If we are in special drag mode, we need to reset the state.
+            // Otherwise, the next `onTwoFingerScaleUpdate()` will handle a wrong `focalPoint`.
+            _currentState = GestureState.none;
+            return;
           }
           break;
         case GestureState.threeFingerVerticalDrag:

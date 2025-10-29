@@ -710,5 +710,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "لطفاً نام کاربری مدیریتی را برای ارتقاء دسترسی وارد کنید."),
         ("Preparing for installation ...", "در حال آماده‌سازی برای نصب..."),
         ("Show my cursor", "نمایش نشانگر من"),
+        ("Scale custom", "مقیاس سفارشی"),
+        ("Custom scale slider", "نوار لغزنده مقیاس سفارشی"),
+        ("Decrease", "کاهش"),
+        ("Increase", "افزایش"),
+        ("Show virtual mouse", "نمایش ماوس مجازی"),
+        ("Virtual mouse size", "اندازه ماوس مجازی"),
+        ("Small", "کوچک"),
+        ("Large", "بزرگ"),
+        ("Show virtual joystick", "نمایش جوی‌استیک مجازی"),
+        ("Edit note", ""),
+        ("Alias", ""),
     ].iter().cloned().collect();
 }

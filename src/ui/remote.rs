@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
-    sync::{Arc, Mutex, RwLock},
+    sync::{atomic::AtomicUsize, Arc, Mutex, RwLock},
 };
 
 use sciter::{
@@ -199,7 +199,7 @@ impl InvokeUiSession for SciterHandler {
         self.call("clearAllJobs", &make_args!());
     }
 
-    fn load_last_job(&self, cnt: i32, job_json: &str) {
+    fn load_last_job(&self, cnt: i32, job_json: &str, auto_start: bool) {
         let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(job_json);
         if let Ok(job) = job {
             let path;
@@ -213,7 +213,15 @@ impl InvokeUiSession for SciterHandler {
             }
             self.call(
                 "addJob",
-                &make_args!(cnt, path, to, job.file_num, job.show_hidden, job.is_remote),
+                &make_args!(
+                    cnt,
+                    path,
+                    to,
+                    job.file_num,
+                    job.show_hidden,
+                    job.is_remote,
+                    auto_start
+                ),
             );
         }
     }
@@ -570,6 +578,7 @@ impl SciterSession {
             server_keyboard_enabled: Arc::new(RwLock::new(true)),
             server_file_transfer_enabled: Arc::new(RwLock::new(true)),
             server_clipboard_enabled: Arc::new(RwLock::new(true)),
+            reconnect_count: Arc::new(AtomicUsize::new(0)),
             ..Default::default()
         };
 
