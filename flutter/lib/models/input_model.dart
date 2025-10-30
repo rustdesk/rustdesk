@@ -1351,11 +1351,15 @@ class InputModel {
     y -= CanvasModel.topToEdge;
     x -= CanvasModel.leftToEdge;
     if (isMove) {
+      final canvasModel = parent.target!.canvasModel;
+
       if (edgeScroll) {
-        parent.target!.canvasModel.edgeScrollMouse(x, y);
+        canvasModel.edgeScrollMouse(x, y);
       } else if (moveCanvas) {
-        parent.target!.canvasModel.moveDesktopMouse(x, y);
+        canvasModel.moveDesktopMouse(x, y);
       }
+
+      canvasModel.updateLocalCursor(x, y);
     }
 
     return _handlePointerDevicePos(

@@ -2131,7 +2131,33 @@ class CanvasModel with ChangeNotifier {
   static double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
   static double get tabBarHeight => stateGlobal.tabBarHeight;
 
-  moveDesktopMouse(double x, double y) {
+  void activateLocalCursor() {
+    if (isDesktop || isWebDesktop) {
+      try {
+        RemoteCursorMovedState.find(id).value = false;
+      } catch (e) {
+        //
+      }
+    }
+  }
+
+  void updateLocalCursor(double x, double y) {
+    // If keyboard is not permitted, do not move cursor when mouse is moving.
+    if (parent.target != null && parent.target!.ffiModel.keyboard) {
+      // Draw cursor if is not desktop.
+      if (!(isDesktop || isWebDesktop)) {
+        parent.target!.cursorModel.moveLocal(x, y);
+      } else {
+        try {
+          RemoteCursorMovedState.find(id).value = false;
+        } catch (e) {
+          //
+        }
+      }
+    }
+  }
+
+  void moveDesktopMouse(double x, double y) {
     if (size.width == 0 || size.height == 0) {
       return;
     }
@@ -2160,8 +2186,6 @@ class CanvasModel with ChangeNotifier {
     if (dxOffset != 0 || dyOffset != 0) {
       notifyListeners();
     }
-
-    activeLocalCursor(x, y);
   }
 
   void initializeEdgeScrollFallback(TickerProvider tickerProvider) {
@@ -2183,35 +2207,17 @@ class CanvasModel with ChangeNotifier {
 
   (Vector2, Vector2) getScrollInfo() {
     final scrollPixel = Vector2(
-        _horizontal.hasClients ? _horizontal.position.pixels : 0,
-        _vertical.hasClients ? _vertical.position.pixels : 0);
+      _horizontal.hasClients ? _horizontal.position.pixels : 0,
+      _vertical.hasClients ? _vertical.position.pixels : 0);
 
     final max = Vector2(
-        _horizontal.hasClients ? _horizontal.position.maxScrollExtent : 0,
-        _vertical.hasClients ? _vertical.position.maxScrollExtent : 0);
+      _horizontal.hasClients ? _horizontal.position.maxScrollExtent : 0,
+      _vertical.hasClients ? _vertical.position.maxScrollExtent : 0);
 
     return (scrollPixel, max);
   }
 
-  void activeLocalCursor(double x, double y) {
-    // If keyboard is not permitted, do not move cursor when mouse is moving.
-    if (parent.target != null && parent.target!.ffiModel.keyboard) {
-      // Draw cursor if is not desktop.
-      if (!(isDesktop || isWebDesktop)) {
-        parent.target!.cursorModel.moveLocal(x, y);
-      } else {
-        try {
-          RemoteCursorMovedState.find(id).value = false;
-        } catch (e) {
-          //
-        }
-      }
-    }
-  }
-
   void edgeScrollMouse(double x, double y) async {
-    activeLocalCursor(x, y);
-
     if ((_edgeScrollState == EdgeScrollState.inactive) ||
         (size.width == 0 || size.height == 0) ||
         !(_horizontal.hasClients || _vertical.hasClients)) {
