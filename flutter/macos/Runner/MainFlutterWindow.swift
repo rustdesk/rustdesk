@@ -100,40 +100,40 @@ class MainFlutterWindow: NSWindow {
                     })
                     break
                 case "bumpMouse":
-                    var dx = 0;
-                    var dy = 0;
+                    var dx = 0
+                    var dy = 0
 
                     if let argMap = call.arguments as? [String: Any] {
-                        dx = (argMap["dx"] as? Int) ?? 0;
-                        dy = (argMap["dy"] as? Int) ?? 0;
+                        dx = (argMap["dx"] as? Int) ?? 0
+                        dy = (argMap["dy"] as? Int) ?? 0
                     }
                     else if let argList = call.arguments as? [Any] {
-                        dx = (argList[0] as? Int) ?? 0;
-                        dy = (argList[1] as? Int) ?? 0;
+                        dx = (argList[0] as? Int) ?? 0
+                        dy = (argList[1] as? Int) ?? 0
                     }
 
-                    var mouseLoc: CGPoint;
+                    var mouseLoc: CGPoint
 
                     if let dummyEvent = CGEvent(source: nil) { // can this ever fail?
-                        mouseLoc = dummyEvent.location;
+                        mouseLoc = dummyEvent.location
                     }
                     else if let screenFrame = NSScreen.screens.first?.frame {
                         // NeXTStep: Origin is lower-left of primary screen, positive is up
                         // Cocoa Core Graphics: Origin is upper-left of primary screen, positive is down
-                        let nsMouseLoc = NSEvent.mouseLocation;
+                        let nsMouseLoc = NSEvent.mouseLocation
 
                         mouseLoc = CGPoint(
                             x: nsMouseLoc.x,
-                            y: NSHeight(screenFrame) - nsMouseLoc.y);
+                            y: NSHeight(screenFrame) - nsMouseLoc.y)
                     }
                     else {
-                        result(false);
-                        break;
+                        result(false)
+                        break
                     }
 
-                    let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy));
+                    let newLoc = CGPoint(x: mouseLoc.x + CGFloat(dx), y: mouseLoc.y + CGFloat(dy))
 
-                    CGDisplayMoveCursorToPoint(0, newLoc);
+                    CGDisplayMoveCursorToPoint(0, newLoc)
 
                     // By default, Cocoa suppresses mouse events briefly after a call to warp the
                     // cursor to a new location. This is good if you want to draw the user's
@@ -145,7 +145,7 @@ class MainFlutterWindow: NSWindow {
                     // This function's main action is to toggle whether the mouse cursor is
                     // associated with the mouse position, but setting it to true when it's
                     // already true has the side-effect of cancelling this motion suppression.
-                    CGAssociateMouseAndMouseCursorPosition(1 /* true */);
+                    CGAssociateMouseAndMouseCursorPosition(1 /* true */)
 
                     result(true)
 

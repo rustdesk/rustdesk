@@ -2244,7 +2244,7 @@ class CanvasModel with ChangeNotifier {
 
     encroachment.clamp(-scrollPixel, max - scrollPixel);
 
-    if (encroachment.length == 0) {
+    if (encroachment.length2 == 0) {
       _edgeScrollFallbackState.stop();
     } else {
       var bumpAmount = -encroachment;
