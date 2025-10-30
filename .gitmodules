@@ -1,3 +1,3 @@
 [submodule "libs/hbb_common"]
 	path = libs/hbb_common
-	url = https://github.com/duhuilai/hbb_common
+	url = https://github.com/duhuilai/hbb_common/tree/1.4.3.1
