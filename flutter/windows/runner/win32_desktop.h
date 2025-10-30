@@ -7,6 +7,7 @@ namespace Win32Desktop
 {
   void GetWorkArea(Win32Window::Point& origin, Win32Window::Size& size);
   void FitToWorkArea(Win32Window::Point& origin, Win32Window::Size& size);
+  bool BumpMouse(int dx, int dy);
 }
 
 #endif  // RUNNER_WIN32_DESKTOP_H_

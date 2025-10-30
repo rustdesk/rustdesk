@@ -109,6 +109,7 @@ dependencies:
   xterm: 4.0.0
   sqflite: 2.2.0
   google_fonts: ^6.2.1
+  vector_math: ^2.1.4
 
 dev_dependencies:
   icons_launcher: ^2.0.4
