@@ -108,8 +108,8 @@ class MainFlutterWindow: NSWindow {
                         dy = (argMap["dy"] as? Int) ?? 0
                     }
                     else if let argList = call.arguments as? [Any] {
-                        dx = (argList[0] as? Int) ?? 0
-                        dy = (argList[1] as? Int) ?? 0
+                        dx = argList.count >= 1 ? (argList[0] as? Int) ?? 0 : 0;
+                        dy = argList.count >= 2 ? (argList[1] as? Int) ?? 0 : 0;
                     }
 
                     var mouseLoc: CGPoint
