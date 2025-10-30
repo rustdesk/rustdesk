@@ -2263,7 +2263,7 @@ class CanvasModel with ChangeNotifier {
     } else {
       var bumpAmount = -encroachment;
 
-      // Round away from 0
+      // Round away from 0: this ensures the bump amount is always at least 1 pixel in the direction of movement.
       bumpAmount.x += bumpAmount.x.sign * 0.5;
       bumpAmount.y += bumpAmount.y.sign * 0.5;
 
