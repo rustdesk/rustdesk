@@ -1204,9 +1204,7 @@ void showOptions(
                 : null)),
       // Show custom scale controls when custom view style is selected
       Obx(() => viewStyle.value == kRemoteViewStyleCustom
-          ? GestureDetector(
-              child: MobileCustomScaleControls(ffi: gFFI),
-            )
+          ? MobileCustomScaleControls(ffi: gFFI)
           : const SizedBox.shrink()),
       const Divider(color: MyTheme.border),
       for (var e in imageQualityRadios)
