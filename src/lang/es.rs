@@ -714,12 +714,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Custom scale slider", "Control deslizante de escala personalizada"),
         ("Decrease", "Disminuir"),
         ("Increase", "Aumentar"),
-        ("Show virtual mouse", ""),
-        ("Virtual mouse size", ""),
-        ("Small", ""),
-        ("Large", ""),
-        ("Show virtual joystick", ""),
-        ("Edit note", ""),
+        ("Show virtual mouse", "Mostrar ratón virtual"),
+        ("Virtual mouse size", "Tamaño del ratón virtual"),
+        ("Small", "Pequeño"),
+        ("Large", "Grande"),
+        ("Show virtual joystick", "Mostrar joystick virtual"),
+        ("Edit note", "Editar nota"),
         ("Alias", ""),
     ].iter().cloned().collect();
 }
