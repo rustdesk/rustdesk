@@ -284,6 +284,18 @@ impl UI {
         crate::using_public_server()
     }
 
+    fn is_incoming_only(&self) -> bool {
+        hbb_common::config::is_incoming_only()
+    }
+
+    pub fn is_outgoing_only(&self) -> bool {
+        hbb_common::config::is_outgoing_only()
+    }
+
+    pub fn is_custom_client(&self) -> bool {
+        crate::common::is_custom_client()
+    }
+
     fn get_options(&self) -> Value {
         let hashmap: HashMap<String, String> =
             serde_json::from_str(&get_options()).unwrap_or_default();
@@ -671,6 +683,9 @@ impl sciter::EventHandler for UI {
         fn get_api_server();
         fn is_xfce();
         fn using_public_server();
+        fn is_custom_client();
+        fn is_outgoing_only();
+        fn is_incoming_only();
         fn get_id();
         fn temporary_password();
         fn update_temporary_password();
