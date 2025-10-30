@@ -112,7 +112,6 @@ class MainFlutterWindow: NSWindow {
                         dy = (argList[1] as? Int) ?? 0;
                     }
 
-
                     var mouseLoc: CGPoint;
 
                     if let dummyEvent = CGEvent(source: nil) { // can this ever fail?
