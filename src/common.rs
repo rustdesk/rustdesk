@@ -13,6 +13,7 @@ use hbb_common::whoami;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
+    async_recursion::async_recursion,
     bail, base64,
     bytes::Bytes,
     config::{
@@ -27,6 +28,7 @@ use hbb_common::{
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout,
+    tls::{get_cached_tls_accept_invalid_cert, get_cached_tls_type, upsert_tls_cache, TlsType},
     tokio::{
         self,
         net::UdpSocket,
@@ -36,7 +38,7 @@ use hbb_common::{
 };
 
 use crate::{
-    hbbs_http::create_http_client_async,
+    hbbs_http::{create_http_client_async, get_url_for_tls},
     ui_interface::{get_option, set_option},
 };
 
@@ -908,15 +910,35 @@ pub fn check_software_update() {
     }
 }
 
+// No need to check `danger_accept_invalid_cert` for now.
+// Because the url is always `https://api.rustdesk.com/version/latest`.
 #[tokio::main(flavor = "current_thread")]
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
     let (request, url) =
         hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
-    let latest_release_response = create_http_client_async()
-        .post(url)
-        .json(&request)
-        .send()
-        .await?;
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(&url, &proxy_conf);
+    let tls_type = get_cached_tls_type(tls_url);
+    let is_tls_not_cached = tls_type.is_none();
+    let tls_type = tls_type.unwrap_or(TlsType::NativeTls);
+    let client = create_http_client_async(tls_type, false);
+    let latest_release_response = match client.post(&url).json(&request).send().await {
+        Ok(resp) => {
+            upsert_tls_cache(tls_url, tls_type, false);
+            resp
+        }
+        Err(err) => {
+            if is_tls_not_cached && err.is_request() {
+                let tls_type = TlsType::Rustls;
+                let client = create_http_client_async(tls_type, false);
+                let resp = client.post(&url).json(&request).send().await?;
+                upsert_tls_cache(tls_url, TlsType::Rustls, false);
+                resp
+            } else {
+                return Err(err.into());
+            }
+        }
+    };
     let bytes = latest_release_response.bytes().await?;
     let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
     let response_url = resp.url;
@@ -1067,7 +1089,38 @@ pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
 }
 
 pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
-    let mut req = create_http_client_async().post(url);
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(&url, &proxy_conf);
+    let tls_type = get_cached_tls_type(tls_url);
+    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let response = post_request_(
+        &url,
+        tls_url,
+        body.clone(),
+        header,
+        tls_type,
+        danger_accept_invalid_cert,
+        danger_accept_invalid_cert,
+    )
+    .await?;
+    Ok(response.text().await?)
+}
+
+#[async_recursion]
+async fn post_request_(
+    url: &str,
+    tls_url: &str,
+    body: String,
+    header: &str,
+    tls_type: Option<TlsType>,
+    danger_accept_invalid_cert: Option<bool>,
+    original_danger_accept_invalid_cert: Option<bool>,
+) -> ResultType<reqwest::Response> {
+    let mut req = create_http_client_async(
+        tls_type.unwrap_or(TlsType::NativeTls),
+        danger_accept_invalid_cert.unwrap_or(false),
+    )
+    .post(url);
     if !header.is_empty() {
         let tmp: Vec<&str> = header.split(": ").collect();
         if tmp.len() == 2 {
@@ -1076,7 +1129,70 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
     }
     req = req.header("Content-Type", "application/json");
     let to = std::time::Duration::from_secs(12);
-    Ok(req.body(body).timeout(to).send().await?.text().await?)
+    if tls_type.is_some() && danger_accept_invalid_cert.is_some() {
+        // This branch is used to reduce a `clone()` when both `tls_type` and
+        // `danger_accept_invalid_cert` are cached.
+        match req.body(body.clone()).timeout(to).send().await {
+            Ok(resp) => {
+                upsert_tls_cache(
+                    tls_url,
+                    tls_type.unwrap_or(TlsType::NativeTls),
+                    danger_accept_invalid_cert.unwrap_or(false),
+                );
+                Ok(resp)
+            }
+            Err(e) => {
+                log::error!("HTTP request failed: {:?}", e);
+                Err(anyhow!("HTTP request failed: {}", e))
+            }
+        }
+    } else {
+        match req.body(body.clone()).timeout(to).send().await {
+            Ok(resp) => {
+                upsert_tls_cache(
+                    tls_url,
+                    tls_type.unwrap_or(TlsType::NativeTls),
+                    danger_accept_invalid_cert.unwrap_or(false),
+                );
+                Ok(resp)
+            }
+            Err(e) => {
+                if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
+                    if danger_accept_invalid_cert.is_none() {
+                        log::warn!(
+                            "HTTP request failed: {:?}, try again, danger accept invalid cert",
+                            e
+                        );
+                        post_request_(
+                            url,
+                            tls_url,
+                            body,
+                            header,
+                            tls_type,
+                            Some(true),
+                            original_danger_accept_invalid_cert,
+                        )
+                        .await
+                    } else {
+                        log::warn!("HTTP request failed: {:?}, try again with rustls", e);
+                        post_request_(
+                            url,
+                            tls_url,
+                            body,
+                            header,
+                            Some(TlsType::Rustls),
+                            original_danger_accept_invalid_cert,
+                            original_danger_accept_invalid_cert,
+                        )
+                        .await
+                    }
+                } else {
+                    log::error!("HTTP request failed: {:?}", e);
+                    Err(anyhow!("HTTP request failed: {}", e))
+                }
+            }
+        }
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -1084,22 +1200,29 @@ pub async fn post_request_sync(url: String, body: String, header: &str) -> Resul
     post_request(url, body, header).await
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn http_request_sync(
-    url: String,
-    method: String,
+#[async_recursion]
+async fn get_http_response_async(
+    url: &str,
+    tls_url: &str,
+    method: &str,
     body: Option<String>,
-    header: String,
-) -> ResultType<String> {
-    let http_client = create_http_client_async();
-    let mut http_client = match method.as_str() {
+    header: &str,
+    tls_type: Option<TlsType>,
+    danger_accept_invalid_cert: Option<bool>,
+    original_danger_accept_invalid_cert: Option<bool>,
+) -> ResultType<reqwest::Response> {
+    let http_client = create_http_client_async(
+        tls_type.unwrap_or(TlsType::NativeTls),
+        danger_accept_invalid_cert.unwrap_or(false),
+    );
+    let mut http_client = match method {
         "get" => http_client.get(url),
         "post" => http_client.post(url),
         "put" => http_client.put(url),
         "delete" => http_client.delete(url),
         _ => return Err(anyhow!("The HTTP request method is not supported!")),
     };
-    let v = serde_json::from_str(header.as_str())?;
+    let v = serde_json::from_str(header)?;
 
     if let Value::Object(obj) = v {
         for (key, value) in obj.iter() {
@@ -1109,15 +1232,109 @@ pub async fn http_request_sync(
         return Err(anyhow!("HTTP header information parsing failed!"));
     }
 
-    if let Some(b) = body {
-        http_client = http_client.body(b);
+    if tls_type.is_some() && danger_accept_invalid_cert.is_some() {
+        if let Some(b) = body {
+            http_client = http_client.body(b);
+        }
+        match http_client
+            .timeout(std::time::Duration::from_secs(12))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                upsert_tls_cache(
+                    tls_url,
+                    tls_type.unwrap_or(TlsType::NativeTls),
+                    danger_accept_invalid_cert.unwrap_or(false),
+                );
+                Ok(resp)
+            }
+            Err(e) => {
+                log::error!("HTTP request failed: {:?}", e);
+                Err(anyhow!("HTTP request failed: {}", e))
+            }
+        }
+    } else {
+        if let Some(b) = body.clone() {
+            http_client = http_client.body(b);
+        }
+
+        match http_client
+            .timeout(std::time::Duration::from_secs(12))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                upsert_tls_cache(
+                    tls_url,
+                    tls_type.unwrap_or(TlsType::NativeTls),
+                    danger_accept_invalid_cert.unwrap_or(false),
+                );
+                Ok(resp)
+            }
+            Err(e) => {
+                if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
+                    if danger_accept_invalid_cert.is_none() {
+                        log::warn!(
+                            "HTTP request failed: {:?}, try again, danger accept invalid cert",
+                            e
+                        );
+                        get_http_response_async(
+                            url,
+                            tls_url,
+                            method,
+                            body,
+                            header,
+                            tls_type,
+                            Some(true),
+                            original_danger_accept_invalid_cert,
+                        )
+                        .await
+                    } else {
+                        log::warn!("HTTP request failed: {:?}, try again with rustls", e);
+                        get_http_response_async(
+                            url,
+                            tls_url,
+                            method,
+                            body,
+                            header,
+                            Some(TlsType::Rustls),
+                            original_danger_accept_invalid_cert,
+                            original_danger_accept_invalid_cert,
+                        )
+                        .await
+                    }
+                } else {
+                    log::error!("HTTP request failed: {:?}", e);
+                    Err(anyhow!("HTTP request failed: {}", e))
+                }
+            }
+        }
     }
+}
 
-    let response = http_client
-        .timeout(std::time::Duration::from_secs(12))
-        .send()
-        .await?;
-
+#[tokio::main(flavor = "current_thread")]
+pub async fn http_request_sync(
+    url: String,
+    method: String,
+    body: Option<String>,
+    header: String,
+) -> ResultType<String> {
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(&url, &proxy_conf);
+    let tls_type = get_cached_tls_type(tls_url);
+    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let response = get_http_response_async(
+        &url,
+        tls_url,
+        &method,
+        body.clone(),
+        &header,
+        tls_type,
+        danger_accept_invalid_cert,
+        danger_accept_invalid_cert,
+    )
+    .await?;
     // Serialize response headers
     let mut response_headers = serde_json::map::Map::new();
     for (key, value) in response.headers() {
@@ -1772,7 +1989,7 @@ pub fn verify_login(_raw: &str, _id: &str) -> bool {
 
 #[inline]
 pub fn is_udp_disabled() -> bool {
-    get_builtin_option(keys::OPTION_DISABLE_UDP) == "Y"
+    Config::get_option(keys::OPTION_DISABLE_UDP) == "Y"
 }
 
 // this crate https://github.com/yoshd/stun-client supports nat type

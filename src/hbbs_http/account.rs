@@ -1,5 +1,5 @@
 use super::HbbHttpResponse;
-use crate::hbbs_http::create_http_client;
+use crate::hbbs_http::create_http_client_with_url;
 use hbb_common::{config::LocalConfig, log, ResultType};
 use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};
@@ -104,7 +104,7 @@ pub struct AuthBody {
 }
 
 pub struct OidcSession {
-    client: Client,
+    client: Option<Client>,
     state_msg: &'static str,
     failed_msg: String,
     code_url: Option<OidcAuthUrl>,
@@ -131,7 +131,7 @@ impl Default for UserStatus {
 impl OidcSession {
     fn new() -> Self {
         Self {
-            client: create_http_client(),
+            client: None,
             state_msg: REQUESTING_ACCOUNT_AUTH,
             failed_msg: "".to_owned(),
             code_url: None,
@@ -142,24 +142,36 @@ impl OidcSession {
         }
     }
 
+    fn ensure_client(api_server: &str) {
+        let mut write_guard = OIDC_SESSION.write().unwrap();
+        if write_guard.client.is_none() {
+            // This URL is used to detect the appropriate TLS implementation for the server.
+            let login_option_url = format!("{}/api/login-options", &api_server);
+            let client = create_http_client_with_url(&login_option_url);
+            write_guard.client = Some(client);
+        }
+    }
+
     fn auth(
         api_server: &str,
         op: &str,
         id: &str,
         uuid: &str,
     ) -> ResultType<HbbHttpResponse<OidcAuthUrl>> {
-        let resp = OIDC_SESSION
-            .read()
-            .unwrap()
-            .client
-            .post(format!("{}/api/oidc/auth", api_server))
-            .json(&serde_json::json!({
-                "op": op,
-                "id": id,
-                "uuid": uuid,
-                "deviceInfo": crate::ui_interface::get_login_device_info(),
-            }))
-            .send()?;
+        Self::ensure_client(api_server);
+        let resp = if let Some(client) = &OIDC_SESSION.read().unwrap().client {
+            client
+                .post(format!("{}/api/oidc/auth", api_server))
+                .json(&serde_json::json!({
+                    "op": op,
+                    "id": id,
+                    "uuid": uuid,
+                    "deviceInfo": crate::ui_interface::get_login_device_info(),
+                }))
+                .send()?
+        } else {
+            hbb_common::bail!("http client not initialized");
+        };
         let status = resp.status();
         match resp.try_into() {
             Ok(v) => Ok(v),
@@ -179,13 +191,12 @@ impl OidcSession {
             &format!("{}/api/oidc/auth-query", api_server),
             &[("code", code), ("id", id), ("uuid", uuid)],
         )?;
-        Ok(OIDC_SESSION
-            .read()
-            .unwrap()
-            .client
-            .get(url)
-            .send()?
-            .try_into()?)
+        Self::ensure_client(api_server);
+        if let Some(client) = &OIDC_SESSION.read().unwrap().client {
+            Ok(client.get(url).send()?.try_into()?)
+        } else {
+            hbb_common::bail!("http client not initialized")
+        }
     }
 
     fn reset(&mut self) {

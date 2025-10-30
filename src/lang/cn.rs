@@ -721,6 +721,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "显示虚拟摇杆"),
         ("Edit note", "编辑备注"),
         ("Alias", "别名"),
-        ("ScrollEdge", ""),
+        ("ScrollEdge", "边缘滚动"),
+        ("Allow insecure TLS fallback", "允许回退到不安全的 TLS 连接"),
+        ("allow-insecure-tls-fallback-tip", "启用后，应用程序将首先尝试安全的 TLS 连接。如果失败，它将自动回退到不安全的连接。这会降低安全性，应仅在必要时使用。"),
+        ("Disable UDP", "禁用 UDP"),
+        ("disable-udp-tip", "启用后，应用程序将使用 TCP 连接 ID 服务器。"),
     ].iter().cloned().collect();
 }

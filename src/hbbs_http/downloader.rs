@@ -1,4 +1,4 @@
-use super::create_http_client_async;
+use super::create_http_client_async_with_url;
 use hbb_common::{
     bail,
     lazy_static::lazy_static,
@@ -132,7 +132,7 @@ async fn do_download(
     auto_del_dur: Option<Duration>,
     mut rx_cancel: UnboundedReceiver<()>,
 ) -> ResultType<bool> {
-    let client = create_http_client_async();
+    let client = create_http_client_async_with_url(&url).await;
 
     let mut is_all_downloaded = false;
     tokio::select! {
