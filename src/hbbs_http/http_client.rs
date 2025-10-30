@@ -36,19 +36,13 @@ macro_rules! configure_http_client {
                     };
 
                     match proxy_setup {
-                        Ok(p) => {
-                            builder = builder.proxy(p);
+                        Ok(mut p) => {
                             if let Some(auth) = proxy.intercept.maybe_auth() {
-                                let basic_auth =
-                                    format!("Basic {}", auth.get_basic_authorization());
-                                if let Ok(auth) = basic_auth.parse() {
-                                    builder = builder.default_headers(
-                                        vec![(reqwest::header::PROXY_AUTHORIZATION, auth)]
-                                            .into_iter()
-                                            .collect(),
-                                    );
+                                if !auth.username().is_empty() && !auth.password().is_empty() {
+                                    p = p.basic_auth(auth.username(), auth.password());
                                 }
                             }
+                            builder = builder.proxy(p);
                             builder.build().unwrap_or_else(|e| {
                                 info!("Failed to create a proxied client: {}", e);
                                 <$Client>::new()
