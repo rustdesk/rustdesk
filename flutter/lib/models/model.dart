@@ -1729,9 +1729,12 @@ enum ScrollStyle {
 
   static ScrollStyle fromJson(String json, [ScrollStyle? fallbackValue]) {
     switch (json) {
-      case 'scrollbar': return scrollbar;
-      case 'scrollauto': return scrollauto;
-      case 'scrolledge': return scrolledge;
+      case 'scrollbar':
+        return scrollbar;
+      case 'scrollauto':
+        return scrollauto;
+      case 'scrolledge':
+        return scrolledge;
     }
 
     if (fallbackValue != null) {
@@ -1741,15 +1744,19 @@ enum ScrollStyle {
     throw ArgumentError("Unknown ScrollStyle JSON value: '$json'");
   }
 
-  @override String toString() {
+  @override
+  String toString() {
     return stringValue;
   }
 
   static ScrollStyle fromString(String string, [ScrollStyle? fallbackValue]) {
     switch (string) {
-      case kRemoteScrollStyleBar: return scrollbar;
-      case kRemoteScrollStyleAuto: return scrollauto;
-      case kRemoteScrollStyleEdge: return scrolledge;
+      case kRemoteScrollStyleBar:
+        return scrollbar;
+      case kRemoteScrollStyleAuto:
+        return scrollauto;
+      case kRemoteScrollStyleEdge:
+        return scrolledge;
     }
 
     if (fallbackValue != null) {
@@ -1865,7 +1872,8 @@ class EdgeScrollFallbackState {
       const double kFrameTime = 1000.0 / 60.0;
       const double kSpeedFactor = 0.1;
 
-      var delta = _encroachment * (kSpeedFactor * thisTickElapsed.inMilliseconds / kFrameTime);
+      var delta = _encroachment *
+          (kSpeedFactor * thisTickElapsed.inMilliseconds / kFrameTime);
 
       _owner.performEdgeScroll(delta);
 
@@ -2151,19 +2159,7 @@ class CanvasModel with ChangeNotifier {
       notifyListeners();
     }
 
-    // If keyboard is not permitted, do not move cursor when mouse is moving.
-    if (parent.target != null && parent.target!.ffiModel.keyboard) {
-      // Draw cursor if is not desktop.
-      if (!(isDesktop || isWebDesktop)) {
-        parent.target!.cursorModel.moveLocal(x, y);
-      } else {
-        try {
-          RemoteCursorMovedState.find(id).value = false;
-        } catch (e) {
-          //
-        }
-      }
-    }
+    activeLocalCursor(x, y);
   }
 
   void initializeEdgeScrollFallback(TickerProvider tickerProvider) {
@@ -2185,20 +2181,41 @@ class CanvasModel with ChangeNotifier {
 
   (Vector2, Vector2) getScrollInfo() {
     final scrollPixel = Vector2(
-      _horizontal.hasClients ? _horizontal.position.pixels : 0,
-      _vertical.hasClients ? _vertical.position.pixels : 0);
+        _horizontal.hasClients ? _horizontal.position.pixels : 0,
+        _vertical.hasClients ? _vertical.position.pixels : 0);
 
     final max = Vector2(
-      _horizontal.hasClients ? _horizontal.position.maxScrollExtent : 0,
-      _vertical.hasClients ? _vertical.position.maxScrollExtent : 0);
+        _horizontal.hasClients ? _horizontal.position.maxScrollExtent : 0,
+        _vertical.hasClients ? _vertical.position.maxScrollExtent : 0);
 
     return (scrollPixel, max);
   }
 
+  void activeLocalCursor(double x, double y) {
+    // If keyboard is not permitted, do not move cursor when mouse is moving.
+    if (parent.target != null && parent.target!.ffiModel.keyboard) {
+      // Draw cursor if is not desktop.
+      if (parent.target != null && parent.target!.ffiModel.keyboard) {
+        // Draw cursor if is not desktop.
+        if (!(isDesktop || isWebDesktop)) {
+          parent.target!.cursorModel.moveLocal(x, y);
+        } else {
+          try {
+            RemoteCursorMovedState.find(id).value = false;
+          } catch (e) {
+            //
+          }
+        }
+      }
+    }
+  }
+
   void edgeScrollMouse(double x, double y) async {
-    if ((_edgeScrollState == EdgeScrollState.inactive)
-     || (size.width == 0 || size.height == 0)
-     || !(_horizontal.hasClients || _vertical.hasClients)) {
+    activeLocalCursor(x, y);
+
+    if ((_edgeScrollState == EdgeScrollState.inactive) ||
+        (size.width == 0 || size.height == 0) ||
+        !(_horizontal.hasClients || _vertical.hasClients)) {
       return;
     }
 
@@ -2253,12 +2270,10 @@ class CanvasModel with ChangeNotifier {
       bumpAmount.x += bumpAmount.x.sign * 0.5;
       bumpAmount.y += bumpAmount.y.sign * 0.5;
 
-      var bumpMouseSucceeded =
-        _bumpMouseIsWorking &&
-        (await rustDeskWinManager.call(
-          WindowType.Main,
-          kWindowBumpMouse,
-          {"dx": bumpAmount.x.round(), "dy": bumpAmount.y.round()})).result;
+      var bumpMouseSucceeded = _bumpMouseIsWorking &&
+          (await rustDeskWinManager.call(WindowType.Main, kWindowBumpMouse,
+                  {"dx": bumpAmount.x.round(), "dy": bumpAmount.y.round()}))
+              .result;
 
       if (bumpMouseSucceeded) {
         performEdgeScroll(encroachment);
