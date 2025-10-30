@@ -2093,7 +2093,9 @@ class CanvasModel with ChangeNotifier {
   updateScrollStyle() async {
     final style = await bind.sessionGetScrollStyle(sessionId: sessionId);
 
-    _scrollStyle = ScrollStyle.fromString(style!);
+    _scrollStyle = style != null
+        ? ScrollStyle.fromString(style!)
+        : ScrollStyle.scrollauto;
 
     if (_scrollStyle != ScrollStyle.scrollauto) {
       _resetScroll();
