@@ -1219,7 +1219,6 @@ class InputModel {
       if (selfGetControl) {
         cursorModel.gotMouseControl = true;
       } else {
-        lastMousePos = ui.Offset(x, y);
         return true;
       }
     }
