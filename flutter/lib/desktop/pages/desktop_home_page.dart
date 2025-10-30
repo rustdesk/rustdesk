@@ -761,7 +761,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           'scaleFactor': screen.scaleFactor,
         };
 
-    bool isChattyMethod(methodName) {
+    bool isChattyMethod(String methodName) {
       switch (methodName) {
         case kWindowBumpMouse: return true;
       }

@@ -181,11 +181,11 @@ void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_ca
 
     int dx = 0, dy = 0;
 
-    if (dxValue) {
+    if (dxValue && (fl_value_get_type(dxValue) == FL_VALUE_TYPE_INT)) {
       dx = fl_value_get_int(dxValue);
     }
 
-    if (dyValue) {
+    if (dyValue && (fl_value_get_type(dyValue) == FL_VALUE_TYPE_INT)) {
       dy = fl_value_get_int(dyValue);
     }
 

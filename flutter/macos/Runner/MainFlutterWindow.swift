@@ -100,10 +100,18 @@ class MainFlutterWindow: NSWindow {
                     })
                     break
                 case "bumpMouse":
-                    let arg = call.arguments as! [String: Any];
+                    var dx = 0;
+                    var dy = 0;
 
-                    let dx = (arg["dx"] as? Int) ?? 0;
-                    let dy = (arg["dy"] as? Int) ?? 0;
+                    if let argMap = call.arguments as? [String: Any] {
+                        dx = (argMap["dx"] as? Int) ?? 0;
+                        dy = (argMap["dy"] as? Int) ?? 0;
+                    }
+                    else if let argList = call.arguments as? [Any] {
+                        dx = (argList[0] as? Int) ?? 0;
+                        dy = (argList[1] as? Int) ?? 0;
+                    }
+
 
                     var mouseLoc: CGPoint;
 

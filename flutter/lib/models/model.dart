@@ -1851,21 +1851,21 @@ class EdgeScrollFallbackState {
     _ticker = tickerProvider.createTicker(emitTick);
   }
 
-  setEncroachment(Vector2 encroachment) {
+  void setEncroachment(Vector2 encroachment) {
     _encroachment = encroachment;
   }
 
-  emitTick(Duration totalElapsed) {
+  void emitTick(Duration totalElapsed) {
     if (_nextEventIsFirst) {
       _lastTotalElapsed = totalElapsed;
       _nextEventIsFirst = false;
     } else {
       final thisTickElapsed = totalElapsed - _lastTotalElapsed;
 
-      const double FrameTime = 1000.0 / 60.0;
-      const double SpeedFactor = 0.1;
+      const double kFrameTime = 1000.0 / 60.0;
+      const double kSpeedFactor = 0.1;
 
-      var delta = _encroachment * (SpeedFactor * thisTickElapsed.inMilliseconds / FrameTime);
+      var delta = _encroachment * (kSpeedFactor * thisTickElapsed.inMilliseconds / kFrameTime);
 
       _owner.performEdgeScroll(delta);
 
@@ -1873,14 +1873,14 @@ class EdgeScrollFallbackState {
     }
   }
 
-  start() {
+  void start() {
     if (!_ticker.isActive) {
       _nextEventIsFirst = true;
       _ticker.start();
     }
   }
 
-  stop() {
+  void stop() {
     _ticker.stop();
   }
 }
@@ -1913,8 +1913,6 @@ class CanvasModel with ChangeNotifier {
   late EdgeScrollFallbackState _edgeScrollFallbackState;
   // to avoid hammering a non-functional Bump Mouse
   bool _bumpMouseIsWorking = true;
-  // briefly set to true when the canvas detects a resize
-  bool _suppressEdgeScroll = false;
   ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
   Timer? _timerMobileFocusCanvasCursor;
@@ -1946,12 +1944,12 @@ class CanvasModel with ChangeNotifier {
 
   _resetScroll() => setScrollPercent(0.0, 0.0);
 
-  setScrollPercent(double x, double y) {
+  void setScrollPercent(double x, double y) {
     _scrollX = x.isNaN ? 0.0 : x;
     _scrollY = y.isNaN ? 0.0 : y;
   }
 
-  pushScrollPositionToUI(double scrollPixelX, double scrollPixelY) {
+  void pushScrollPositionToUI(double scrollPixelX, double scrollPixelY) {
     if (_horizontal.hasClients) {
       _horizontal.jumpTo(scrollPixelX);
     }
@@ -2169,20 +2167,20 @@ class CanvasModel with ChangeNotifier {
     }
   }
 
-  initializeEdgeScrollFallback(TickerProvider tickerProvider) {
+  void initializeEdgeScrollFallback(TickerProvider tickerProvider) {
     _edgeScrollFallbackState = EdgeScrollFallbackState(this, tickerProvider);
   }
 
-  disableEdgeScroll() {
+  void disableEdgeScroll() {
     _edgeScrollState = EdgeScrollState.inactive;
     cancelEdgeScroll();
   }
 
-  rearmEdgeScroll() {
+  void rearmEdgeScroll() {
     _edgeScrollState = EdgeScrollState.armed;
   }
 
-  cancelEdgeScroll() {
+  void cancelEdgeScroll() {
     _edgeScrollFallbackState.stop();
   }
 
@@ -2198,7 +2196,7 @@ class CanvasModel with ChangeNotifier {
     return (scrollPixel, max);
   }
 
-  edgeScrollMouse(double x, double y) async {
+  void edgeScrollMouse(double x, double y) async {
     if ((_edgeScrollState == EdgeScrollState.inactive)
      || (size.width == 0 || size.height == 0)
      || !(_horizontal.hasClients || _vertical.hasClients)) {
@@ -2231,13 +2229,13 @@ class CanvasModel with ChangeNotifier {
 
     if (x < edgeThickness) {
       dxOffset = x - edgeThickness;
-    } else if ((x >= size.width - edgeThickness)) {
+    } else if (x >= size.width - edgeThickness) {
       dxOffset = x - (size.width - edgeThickness);
     }
 
     if (y < edgeThickness) {
       dyOffset = y - edgeThickness;
-    } else if ((y >= size.height - edgeThickness)) {
+    } else if (y >= size.height - edgeThickness) {
       dyOffset = y - (size.height - edgeThickness);
     }
 
@@ -2247,7 +2245,9 @@ class CanvasModel with ChangeNotifier {
 
     encroachment.clamp(-scrollPixel, max - scrollPixel);
 
-    if (encroachment.length > 0) {
+    if (encroachment.length == 0) {
+      _edgeScrollFallbackState.stop();
+    } else {
       var bumpAmount = -encroachment;
 
       // Round away from 0
@@ -2276,7 +2276,7 @@ class CanvasModel with ChangeNotifier {
     }
   }
 
-  performEdgeScroll(Vector2 delta) {
+  void performEdgeScroll(Vector2 delta) {
     var (scrollPixel, max) = getScrollInfo();
 
     scrollPixel += delta;
