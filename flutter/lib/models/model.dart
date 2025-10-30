@@ -1944,8 +1944,8 @@ class CanvasModel with ChangeNotifier {
   _resetScroll() => setScrollPercent(0.0, 0.0);
 
   void setScrollPercent(double x, double y) {
-    _scrollX = x.isNaN ? 0.0 : x;
-    _scrollY = y.isNaN ? 0.0 : y;
+    _scrollX = x.isFinite ? x : 0.0;
+    _scrollY = y.isFinite ? y : 0.0;
   }
 
   void pushScrollPositionToUI(double scrollPixelX, double scrollPixelY) {
