@@ -26,6 +26,7 @@ import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 import 'package:flutter_hbb/utils/scale.dart';
+import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
 class ToolbarState {
   late RxBool _pin;
@@ -1198,126 +1199,12 @@ class _CustomScaleMenuControls extends StatefulWidget {
   State<_CustomScaleMenuControls> createState() => _CustomScaleMenuControlsState();
 }
 
-class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
-  late int _value;
-  late final Debouncer<int> _debouncerScale;
-  // Normalized slider position in [0, 1]. We map it nonlinearly to percent.
-  double _pos = 0.0;
-
-  // Piecewise mapping constants (moved to consts.dart)
-  static const int _minPercent = kScaleCustomMinPercent;
-  static const int _pivotPercent = kScaleCustomPivotPercent; // 100% should be at 1/3 of track
-  static const int _maxPercent = kScaleCustomMaxPercent;
-  static const double _pivotPos = kScaleCustomPivotPos; // first 1/3 → up to 100%
-  static const double _detentEpsilon = kScaleCustomDetentEpsilon; // snap range around pivot (~0.6%)
-
-  // Clamp helper for local use
-  int _clamp(int v) => clampCustomScalePercent(v);
-
-  // Map normalized position [0,1] → percent [5,1000] with 100 at 1/3 width.
-  int _mapPosToPercent(double p) {
-    if (p <= 0.0) return _minPercent;
-    if (p >= 1.0) return _maxPercent;
-    if (p <= _pivotPos) {
-      final q = p / _pivotPos; // 0..1
-      final v = _minPercent + q * (_pivotPercent - _minPercent);
-      return _clamp(v.round());
-    } else {
-      final q = (p - _pivotPos) / (1.0 - _pivotPos); // 0..1
-      final v = _pivotPercent + q * (_maxPercent - _pivotPercent);
-      return _clamp(v.round());
-    }
-  }
-
-  // Map percent [5,1000] → normalized position [0,1]
-  double _mapPercentToPos(int percent) {
-    final p = _clamp(percent);
-    if (p <= _pivotPercent) {
-      final q = (p - _minPercent) / (_pivotPercent - _minPercent);
-      return q * _pivotPos;
-    } else {
-      final q = (p - _pivotPercent) / (_maxPercent - _pivotPercent);
-      return _pivotPos + q * (1.0 - _pivotPos);
-    }
-  }
-
-  // Snap normalized position to the pivot when close to it
-  double _snapNormalizedPos(double p) {
-    if ((p - _pivotPos).abs() <= _detentEpsilon) return _pivotPos;
-    if (p < 0.0) return 0.0;
-    if (p > 1.0) return 1.0;
-    return p;
-  }
+class _CustomScaleMenuControlsState extends CustomScaleControls<_CustomScaleMenuControls> {
+  @override
+  FFI get ffi => widget.ffi;
 
   @override
-  void initState() {
-    super.initState();
-    _value = 100;
-    _debouncerScale = Debouncer<int>(
-      kDebounceCustomScaleDuration,
-      onChanged: (v) async {
-        await _apply(v);
-      },
-      initialValue: _value,
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        final v = await getSessionCustomScalePercent(widget.ffi.sessionId);
-        if (mounted) {
-          setState(() {
-            _value = v;
-            _pos = _mapPercentToPos(v);
-          });
-        }
-      } catch (e, st) {
-        debugPrint('[CustomScale] Failed to get initial value: $e');
-        debugPrintStack(stackTrace: st);
-      }
-    });
-  }
-
-
-  Future<void> _apply(int v) async {
-    v = clampCustomScalePercent(v);
-    setState(() {
-      _value = v;
-    });
-    try {
-      await bind.sessionSetFlutterOption(
-          sessionId: widget.ffi.sessionId,
-          k: kCustomScalePercentKey,
-          v: v.toString());
-      final curStyle = await bind.sessionGetViewStyle(sessionId: widget.ffi.sessionId);
-      if (curStyle != kRemoteViewStyleCustom) {
-        await bind.sessionSetViewStyle(
-            sessionId: widget.ffi.sessionId, value: kRemoteViewStyleCustom);
-      }
-      await widget.ffi.canvasModel.updateViewStyle();
-      if (isMobile) {
-        HapticFeedback.selectionClick();
-      }
-      widget.onChanged?.call(v);
-    } catch (e, st) {
-      debugPrint('[CustomScale] Apply failed: $e');
-      debugPrintStack(stackTrace: st);
-    }
-  }
-
-  void _nudge(int delta) {
-    final next = _clamp(_value + delta);
-    setState(() {
-      _value = next;
-      _pos = _mapPercentToPos(next);
-    });
-    widget.onChanged?.call(next);
-    _debouncerScale.value = next;
-  }
-
-  @override
-  void dispose() {
-    _debouncerScale.cancel();
-    super.dispose();
-  }
+  ValueChanged<int>? get onScaleChanged => widget.onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1326,7 +1213,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
 
     final sliderControl = Semantics(
       label: translate('Custom scale slider'),
-      value: '$_value%',
+      value: '$scaleValue%',
       child: SliderTheme(
         data: SliderTheme.of(context).copyWith(
           activeTrackColor: colorScheme.primary,
@@ -1334,34 +1221,22 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
           overlayColor: colorScheme.primary.withOpacity(0.1),
           showValueIndicator: ShowValueIndicator.never,
           thumbShape: _RectValueThumbShape(
-            min: _minPercent.toDouble(),
-            max: _maxPercent.toDouble(),
+            min: CustomScaleControls.minPercent.toDouble(),
+            max: CustomScaleControls.maxPercent.toDouble(),
             width: 52,
             height: 24,
             radius: 4,
-            // Display the mapped percent for the current normalized value
-            displayValueForNormalized: (t) => _mapPosToPercent(t),
+            displayValueForNormalized: (t) => mapPosToPercent(t),
           ),
         ),
         child: Slider(
-          value: _pos,
+          value: scalePos,
           min: 0.0,
           max: 1.0,
-          // Use a wide range of divisions (calculated as (_maxPercent - _minPercent)) to provide ~1% precision increments.
+          // Use a wide range of divisions (calculated as (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)) to provide ~1% precision increments.
           // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons, which is undesirable for big ranges.
-          divisions: (_maxPercent - _minPercent).round(),
-          onChanged: (v) {
-            final snapped = _snapNormalizedPos(v);
-            final next = _mapPosToPercent(snapped);
-            if (next != _value || snapped != _pos) {
-              setState(() {
-                _pos = snapped;
-                _value = next;
-              });
-              widget.onChanged?.call(next);
-              _debouncerScale.value = next;
-            }
-          },
+          divisions: (CustomScaleControls.maxPercent - CustomScaleControls.minPercent).round(),
+          onChanged: onSliderChanged,
         ),
       ),
     );
@@ -1377,7 +1252,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
               padding: EdgeInsets.all(1),
               constraints: smallBtnConstraints,
               icon: const Icon(Icons.remove),
-              onPressed: () => _nudge(-1),
+              onPressed: () => nudgeScale(-1),
             ),
           ),
           Expanded(child: sliderControl),
@@ -1388,7 +1263,7 @@ class _CustomScaleMenuControlsState extends State<_CustomScaleMenuControls> {
               padding: EdgeInsets.all(1),
               constraints: smallBtnConstraints,
               icon: const Icon(Icons.add),
-              onPressed: () => _nudge(1),
+              onPressed: () => nudgeScale(1),
             ),
           ),
         ]),
