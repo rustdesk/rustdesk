@@ -4,14 +4,14 @@ import android.app.Application
 import android.util.Log
 import ffi.FFI
 
-class RustDeskApplication : Application() {
+class MainApplication : Application() {
     companion object {
-        private const val TAG = "RustDeskApplication"
+        private const val TAG = "MainApplication"
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "RustDeskApplication onCreate")
+        Log.d(TAG, "App start")
         FFI.onAppStart(applicationContext)
     }
 }
