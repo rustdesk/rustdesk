@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use crate::{
     common::{get_supported_keyboard_modes, is_keyboard_mode_supported},
     input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL},
