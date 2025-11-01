@@ -27,7 +27,20 @@ class TerminalModel with ChangeNotifier {
 
   bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
 
+  final _commandBuffer = StringBuffer();
+
   Future<void> _handleInput(String data) async {
+    // Ensures that special commands like 'clear' and 'cls' properly clear
+    // the terminal buffer, preventing residual output from remaining
+    // on the screen.
+    _commandBuffer.write(data);
+    if (data.contains('\r') || data.contains('\n')) {
+      final cmd = _commandBuffer.toString().replaceAll(RegExp(r'[\r\n]+$'), '').trim();
+      _commandBuffer.clear();
+      if (cmd == 'clear' || cmd == 'cls') {
+        terminal.buffer.clear();
+      }
+    }
     // If we press the `Enter` button on Android,
     // `data` can be '\r' or '\n' when using different keyboards.
     // Android -> Windows. '\r' works, but '\n' does not. '\n' is just a newline.
