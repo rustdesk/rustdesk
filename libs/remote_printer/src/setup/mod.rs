@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use hbb_common::{bail, ResultType};
 use std::{io, ptr::null_mut};
 use winapi::{
