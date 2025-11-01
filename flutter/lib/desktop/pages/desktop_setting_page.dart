@@ -1177,7 +1177,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     ],
                   ),
                   enabled: tmpEnabled && !locked),
-            numericOneTimePassword,
+            if (usePassword) numericOneTimePassword,
             if (usePassword) radios[1],
             if (usePassword)
               _SubButton('Set permanent password', setPasswordDialog,
