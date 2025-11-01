@@ -1,4 +1,4 @@
-use crate::{common::do_check_software_update, hbbs_http::create_http_client};
+use crate::{common::do_check_software_update, hbbs_http::create_http_client_with_url};
 use hbb_common::{bail, config, log, ResultType};
 use std::{
     io::Write,
@@ -146,7 +146,7 @@ fn check_update(manually: bool) -> ResultType<()> {
             format!("{}/rustdesk-{}-x86-sciter.exe", download_url, version)
         };
         log::debug!("New version available: {}", &version);
-        let client = create_http_client();
+        let client = create_http_client_with_url(&download_url);
         let Some(file_path) = get_download_file_from_url(&download_url) else {
             bail!("Failed to get the file path from the URL: {}", download_url);
         };

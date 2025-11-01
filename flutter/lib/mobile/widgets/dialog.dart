@@ -147,18 +147,22 @@ void setTemporaryPasswordLengthDialog(
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
-void showServerSettings(OverlayDialogManager dialogManager) async {
+void showServerSettings(OverlayDialogManager dialogManager,
+    void Function(VoidCallback) setState) async {
   Map<String, dynamic> options = {};
   try {
     options = jsonDecode(await bind.mainGetOptions());
   } catch (e) {
     print("Invalid server config: $e");
   }
-  showServerSettingsWithValue(ServerConfig.fromOptions(options), dialogManager);
+  showServerSettingsWithValue(
+      ServerConfig.fromOptions(options), dialogManager, setState);
 }
 
 void showServerSettingsWithValue(
-    ServerConfig serverConfig, OverlayDialogManager dialogManager) async {
+    ServerConfig serverConfig,
+    OverlayDialogManager dialogManager,
+    void Function(VoidCallback)? upSetState) async {
   var isInProgress = false;
   final idCtrl = TextEditingController(text: serverConfig.idServer);
   final relayCtrl = TextEditingController(text: serverConfig.relayServer);
@@ -288,6 +292,7 @@ void showServerSettingsWithValue(
             if (await submit()) {
               close();
               showToast(translate('Successful'));
+              upSetState?.call(() {});
             } else {
               showToast(translate('Failed'));
             }

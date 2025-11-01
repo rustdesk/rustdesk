@@ -273,7 +273,10 @@ pub fn session_take_screenshot(session_id: SessionID, display: usize) {
     }
 }
 
-pub fn session_handle_screenshot(#[allow(unused_variables)] session_id: SessionID, action: String) -> String {
+pub fn session_handle_screenshot(
+    #[allow(unused_variables)] session_id: SessionID,
+    action: String,
+) -> String {
     crate::client::screenshot::handle_screenshot(action)
 }
 
@@ -951,10 +954,19 @@ pub fn main_set_option(key: String, value: String) {
         );
     }
 
-    if key.eq("custom-rendezvous-server")
+    // If `is_allow_tls_fallback` and https proxy is used, we need to restart rendezvous mediator.
+    // No need to check if https proxy is used, because this option does not change frequently
+    // and restarting mediator is safe even https proxy is not used.
+    let is_allow_tls_fallback = key.eq(config::keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
+    if is_allow_tls_fallback
+        || key.eq("custom-rendezvous-server")
         || key.eq(config::keys::OPTION_ALLOW_WEBSOCKET)
+        || key.eq(config::keys::OPTION_DISABLE_UDP)
         || key.eq("api-server")
     {
+        if is_allow_tls_fallback {
+            hbb_common::tls::reset_tls_cache();
+        }
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
         crate::rendezvous_mediator::RendezvousMediator::restart();
@@ -2692,7 +2704,11 @@ pub fn session_get_common_sync(
     SyncReturn(session_get_common(session_id, key, param))
 }
 
-pub fn session_get_common(session_id: SessionID, key: String, #[allow(unused_variables)] param: String) -> Option<String> {
+pub fn session_get_common(
+    session_id: SessionID,
+    key: String,
+    #[allow(unused_variables)] param: String,
+) -> Option<String> {
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         let v = if key == "is_screenshot_supported" {
             s.is_screenshot_supported().to_string()

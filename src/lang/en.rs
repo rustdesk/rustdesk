@@ -258,5 +258,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("websocket_tip", "When using WebSocket, only relay connections are supported."),
         ("terminal-admin-login-tip", "Please input the administrator username and password of the controlled side."),
         ("elevation_username_tip", "Input username or domain\\username"),
+        ("allow-insecure-tls-fallback-tip", "When enabled, the application will first attempt a secure TLS connection. If that fails, it will automatically fall back to an insecure connection. This is less secure and should only be used when necessary."),
+        ("disable-udp-tip", "When enabled, the application will use TCP to connect the ID server."),
     ].iter().cloned().collect();
 }
