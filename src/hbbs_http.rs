@@ -13,6 +13,8 @@ pub use http_client::{
     get_url_for_tls,
 };
 
+// RustC doesn't recognize sites where this is used
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum HbbHttpResponse<T> {
     ErrorFormat,

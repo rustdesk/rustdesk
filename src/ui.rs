@@ -602,6 +602,8 @@ impl UI {
         change_id_shared(id, old_id);
     }
 
+    // RustC doesn't recognize some call sites
+    #[allow(dead_code)]
     fn http_request(&self, url: String, method: String, body: Option<String>, header: String) {
         http_request(url, method, body, header)
     }
@@ -618,6 +620,8 @@ impl UI {
         get_async_job_status()
     }
 
+    // RustC doesn't recognize some call sites
+    #[allow(dead_code)]
     fn get_http_status(&self, url: String) -> Option<String> {
         get_async_http_status(url)
     }

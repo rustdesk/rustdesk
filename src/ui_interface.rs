@@ -1,3 +1,6 @@
+// RustC doesn't recognize some call sites for some functions
+#![allow(dead_code)]
+
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use hbb_common::password_security;
 use hbb_common::{
