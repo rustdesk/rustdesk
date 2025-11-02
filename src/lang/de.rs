@@ -666,7 +666,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Incoming Print Job", "Eingehender Druckauftrag"),
         ("use-the-default-printer-tip", "Standarddrucker verwenden"),
         ("use-the-selected-printer-tip", "Ausgewählten Drucker verwenden"),
-        ("auto-print-tip", "Automatischer Druck mit dem ausgewählten Drucker."),
+        ("auto-print-tip", "Automatisch mit dem ausgewählten Drucker drucken"),
         ("print-incoming-job-confirm-tip", "Sie haben einen Druckauftrag aus der Ferne erhalten. Möchten Sie ihn bei sich selbst ausführen?"),
         ("remote-printing-disallowed-tile-tip", "Entferntes Drucken nicht erlaubt"),
         ("remote-printing-disallowed-text-tip", "Die Berechtigungseinstellungen der kontrollierten Seite verweigern den entfernten Druck."),
@@ -721,6 +721,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "Virtuellen Joystick anzeigen"),
         ("Edit note", "Hinweis bearbeiten"),
         ("Alias", "Alias"),
-        ("ScrollEdge", ""),
+        ("ScrollEdge", "Scrollen am Rand"),
     ].iter().cloned().collect();
 }
