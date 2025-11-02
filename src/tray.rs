@@ -57,6 +57,9 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .context("Failed to open icon")?;
 
+    #[cfg(target_os = "macos")]
+    let mut event_loop = EventLoopBuilder::new().build();
+    #[cfg(not(target_os = "macos"))]
     let event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
