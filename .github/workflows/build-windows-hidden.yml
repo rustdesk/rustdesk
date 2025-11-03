@@ -16,11 +16,9 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      # Секреты/значения по умолчанию
       RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
       RENDEZVOUS_FALLBACK: ${{ secrets.RENDEZVOUS }}
       RELAY_FALLBACK: ${{ secrets.RELAY }}
-      # Фиксируем статический триплет везде
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
     steps:
@@ -34,7 +32,7 @@ jobs:
         shell: powershell
         run: choco install -y llvm git
 
-      # 1) Устанавливаем vcpkg и тянем manifest-зависимости (в <repo>\vcpkg_installed\...)
+      # 1) Установим vcpkg и manifest-зависимости (в <repo>\vcpkg_installed\...)
       - name: Install vcpkg (manifest deps) for static
         shell: powershell
         run: |
@@ -43,7 +41,7 @@ jobs:
           $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
           & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows-static
 
-      # 2) ОБЯЗАТЕЛЬНО: доставляем кодеки в classic-режиме в $VCPKG_ROOT\installed\...
+      # 2) Обязательно доставим кодеки в classic-mode в $VCPKG_ROOT\installed
       - name: Ensure codecs in classic mode (to $VCPKG_ROOT\installed)
         shell: powershell
         run: |
@@ -52,7 +50,6 @@ jobs:
           & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip opus libvpx libyuv aom
           & $env:VCPKG_ROOT\vcpkg list --triplet $trip
 
-      # 3) Проверяем, что заголовки opus появились там, где их ищет magnum-opus/clang
       - name: Verify opus headers exist (classic path)
         shell: powershell
         run: |
@@ -61,7 +58,7 @@ jobs:
           $hdr = Join-Path $dir "opus_multistream.h"
           if (Test-Path $hdr) { Write-Host "Found: $hdr" } else { Write-Error "opus_multistream.h still missing under vcpkg\\installed"; exit 1 }
 
-      # 4) Собираем значения из inputs/секретов
+      # 3) Соберём входные параметры
       - name: Resolve inputs/secrets
         id: cfg
         shell: bash
@@ -74,8 +71,8 @@ jobs:
           echo "rdv=$RDV" >> $GITHUB_OUTPUT
           echo "rly=$RLY" >> $GITHUB_OUTPUT
 
-      # 5) Патч: вшиваем публичный ключ и сервера (RENDEZVOUS как массив)
-      - name: Patch 1 — зашиваем сервер/ключ (массив для RENDEZVOUS_SERVERS)
+      # 4) Патч: вшиваем публичный ключ и RENDEZVOUS (как массив строк!)
+      - name: Patch 1 — inject servers/key (RENDEZVOUS as array)
         shell: bash
         env:
           RDV_INPUT: ${{ steps.cfg.outputs.rdv }}
@@ -91,25 +88,18 @@ jobs:
           perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
           perl -0777 -pe "s#(?s)(pub const RENDEZVOUS_SERVERS:\s*[^=]+=\s*)[^;]*;#\${1}${RDV_ARRAY};#g" -i "$CFG" || true
 
-      # 6) Патч: блокируем пользовательские переопределения из конфигов
-      - name: Patch 2 — блокируем пользовательские переопределения
-        shell: bash
-        run: |
-          set -e
-          FILES=$(git grep -l -E 'id[_-]?server|relay[_-]?server|RustDesk2\.toml' || true)
-          for f in $FILES; do
-            sed -i.bak 's/\(id[_-]*server[^\n]*\)=.*/\1 = ""/g' "$f" || true
-            sed -i.bak 's/\(relay[_-]*server[^\n]*\)=.*/\1 = ""/g' "$f" || true
-          done
+      # ⚠️ БОЛЬШЕ НЕ ТРОГАЕМ исходники ради "обнуления" — это ломало сборку.
+      # Скрываем только UI раздел Network, чтобы строки не светились пользователю.
 
-      # 7) Патч: скрываем/удаляем UI "Settings → Network"
-      - name: Patch 3 — удаляем/прячем UI "Settings → Network"
+      # 5) Скрыть/удалить UI "Settings → Network"
+      - name: Patch 2 — hide/remove UI "Settings → Network"
         shell: bash
         run: |
           set -e
           git rm -f src/ui/settings/network* 2>/dev/null || true
           FILES=$(git grep -l -E 'Network|network' src/ui 2>/dev/null || true)
           for f in $FILES; do
+            sed -i.bak -E 's/.*Settings.*Network.*//g' "$f" || true
             sed -i.bak -E 's/.*Network.*//g' "$f" || true
             sed -i.bak -E 's/.*network.*//g' "$f" || true
           done
@@ -118,23 +108,21 @@ jobs:
           fi
           python -V >/dev/null 2>&1 && python res/inline-sciter.py || true
 
-      # 8) Кладём Sciter DLL для GUI
+      # 6) Sciter DLL для GUI
       - name: Place Sciter DLL
         shell: bash
         run: |
           mkdir -p target/debug
           curl -L -o target/debug/sciter.dll https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
 
-      # 9) Сборка релиза с подсказками для bindgen/clang
+      # 7) Сборка релиза (подсказки для bindgen/clang + статический триплет)
       - name: Build (release)
         shell: bash
         env:
           VCPKG_ROOT: ${{ github.workspace }}\vcpkg
           VCPKG_DEFAULT_TRIPLET: x64-windows-static
           LIBCLANG_PATH: "C:\\Program Files\\LLVM\\bin"
-          # 👇 Помогаем bindgen/clang видеть инклуды opus и прочего из vcpkg
           BINDGEN_EXTRA_CLANG_ARGS: -I${{ github.workspace }}/vcpkg/installed/x64-windows-static/include
-          # 👇 На случай, если зависимости пойдут через pkg-config
           PKG_CONFIG_PATH: ${{ github.workspace }}\vcpkg\installed\x64-windows-static\lib\pkgconfig
         run: |
           cargo build --release
