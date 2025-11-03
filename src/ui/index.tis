@@ -9,7 +9,9 @@ var app;
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
 var service_stopped = handler.get_option("stop-service") == "Y";
+var disable_udp = handler.get_option("disable-udp") == "Y";
 var using_public_server = handler.using_public_server();
+var outgoing_only = handler.is_outgoing_only();
 var software_update_url = "";
 var key_confirmed = tmp[1];
 var system_error = "";
@@ -326,8 +328,10 @@ class MyIdMenu: Reactor.Component {
                 <div .separator />
                 <li #custom-server>{translate('ID/Relay Server')}</li>
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
-                <li #socks5-server>{translate('Socks5 Proxy')}</li>
-                { false && <li #allow-websocket><span>{svg_checkmark}</span>{translate('Use WebSocket')}</li> }
+                <li #socks5-server>{translate('Socks5/Http(s) Proxy')}</li>
+                <li #allow-websocket><span>{svg_checkmark}</span>{translate('Use WebSocket')}</li>
+                {!using_public_server && !outgoing_only && <li #disable-udp class={disable_udp ? "selected" : "line-through"}><span>{svg_checkmark}</span>{translate('Disable UDP')}</li>}
+                {!using_public_server && <li #allow-insecure-tls-fallback><span>{svg_checkmark}</span>{translate('Allow insecure TLS fallback')}</li>}
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
                 {is_win && handler.is_installed() ? <ShareRdp /> : ""}
@@ -473,7 +477,7 @@ class MyIdMenu: Reactor.Component {
             var old_proxy = socks5[0] || "";
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
-            msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
+            msgbox("custom-server", "Socks5/Http(s) Proxy", <div .form .set-password> 
             <div><span>{translate("Server")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
             <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
@@ -485,11 +489,18 @@ class MyIdMenu: Reactor.Component {
                 var password = (res.password || "").trim();
                 if (proxy == old_proxy && username == old_username && password == old_password) return;
                 if (proxy) {
-                    var err = handler.test_if_valid_server(proxy, false);
+                    var domain_port = proxy;
+                    var protocol_index = domain_port.indexOf('://');
+                    if (protocol_index !== -1) {
+                        domain_port = domain_port.substring(protocol_index + 3);
+                    }
+                    var err = handler.test_if_valid_server(domain_port, false);
                     if (err) return translate("Server") + ": " + err;
                 }
                 handler.set_socks(proxy, username, password);
             }, 240);
+        } else if (me.id == "disable-udp") {
+            handler.set_option("disable-udp", handler.get_option("disable-udp") == "Y" ? "N" : "Y");
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
         } else if (me.id == "change-id") {
@@ -1194,6 +1205,11 @@ function checkConnectStatus() {
         if (handler.recent_sessions_updated()) {
             stdout.println("recent sessions updated");
             updateAbPeer();
+            app.update();
+        }
+        tmp = handler.get_option("disable-udp") == "Y";
+        if (tmp != disable_udp) {
+            disable_udp = tmp;
             app.update();
         }
         check_if_overlay();

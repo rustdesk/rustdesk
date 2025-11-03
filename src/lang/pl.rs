@@ -722,5 +722,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Edit note", "Edytuj notatkę"),
         ("Alias", "Alias"),
         ("ScrollEdge", ""),
+        ("Allow insecure TLS fallback", ""),
+        ("allow-insecure-tls-fallback-tip", ""),
+        ("Disable UDP", ""),
+        ("disable-udp-tip", ""),
+        ("oss-not-support-tip", ""),
     ].iter().cloned().collect();
 }
