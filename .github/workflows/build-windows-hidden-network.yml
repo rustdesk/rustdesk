@@ -54,19 +54,28 @@ jobs:
           echo "rdv=$RDV" >> $GITHUB_OUTPUT
           echo "rly=$RLY" >> $GITHUB_OUTPUT
 
-      - name: Patch 1 — жёстко зашиваем сервер/ключ
+      - name: Inject custom servers/key into sources
         shell: bash
+        env:
+         RDV_INPUT: ${{ steps.cfg.outputs.rdv }}
         run: |
-          set -e
-          CFG="libs/hbb_common/src/config.rs"
-          test -f "$CFG" || CFG=$(git grep -l 'RS_PUB_KEY' | head -n1)
-          [ -z "$CFG" ] && { echo "Не нашли файл с RS_PUB_KEY"; exit 1; }
+         set -e
+         CFG="libs/hbb_common/src/config.rs"
+         test -f "$CFG" || CFG=$(git grep -l 'RS_PUB_KEY' | head -n1)
+         [ -z "$CFG" ] && { echo "Не найден файл с RS_PUB_KEY"; exit 1; }
 
-          SAFE_KEY=$(printf '%s' "$RS_PUB_KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
-          SAFE_RDV=$(printf '%s' "${{ steps.cfg.outputs.rdv }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    # Экранируем кавычки/бэкслэши
+         SAFE_KEY=$(printf '%s' "$RS_PUB_KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
-          perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
-          perl -0777 -pe "s#(?s)pub const RENDEZVOUS_SERVERS:.*?;#pub const RENDEZVOUS_SERVERS: &'static str = \"$SAFE_RDV\";#g" -i "$CFG" || true
+    # Собираем массив из входа (разделитель — запятая). Пример: "id1:21116,id2:21116"
+         RDV_ARRAY=$(printf '%s' "$RDV_INPUT" | awk -v q='"' 'BEGIN{FS=","; ORS=""}{printf "&["; for(i=1;i<=NF;i++){gsub(/^ +| +$/, "", $i); if(i>1)printf ", "; printf q $i q} printf "]"}')
+
+    # 1) Патчим ключ — как и было
+         perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
+
+    # 2) Патчим RENDEZVOUS_SERVERS — сохраняем объявленный тип, меняем только правую часть на массив
+    # заменяем '... = <что-то>;' на '... = &[\"host:port\", ...];'
+         perl -0777 -pe "s#(?s)(pub const RENDEZVOUS_SERVERS:\s*[^=]+=\s*)[^;]*;#\${1}${RDV_ARRAY};#g" -i "$CFG" || true
 
       - name: Patch 2 — блокируем пользовательские переопределения
         shell: bash
