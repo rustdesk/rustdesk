@@ -1,4 +1,4 @@
-name: Build Windows client (servers hidden)
+name: Build Windows client (servers hidden, static triplet)
 
 on:
   workflow_dispatch:
@@ -16,9 +16,12 @@ jobs:
   build:
     runs-on: windows-latest
     env:
+      # ключи/секреты
       RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
       RENDEZVOUS_FALLBACK: ${{ secrets.RENDEZVOUS }}
       RELAY_FALLBACK: ${{ secrets.RELAY }}
+      # фиксируем статический триплет везде
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
     steps:
       - uses: actions/checkout@v4
@@ -31,16 +34,14 @@ jobs:
         shell: powershell
         run: choco install -y llvm git
 
-      # ✅ Исправленный шаг vcpkg (manifest mode)
-      - name: Install vcpkg and dependencies
+      - name: Install vcpkg and dependencies (static)
         shell: powershell
         run: |
           git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
           & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
           $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
-          # выберите один вариант:
-          & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows
-          # & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows-static
+          # ставим зависимости проекта по manifest для x64-windows-static
+          & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows-static
 
       - name: Resolve inputs/secrets
         id: cfg
@@ -54,7 +55,7 @@ jobs:
           echo "rdv=$RDV" >> $GITHUB_OUTPUT
           echo "rly=$RLY" >> $GITHUB_OUTPUT
 
-      - name: Patch 1 — зашиваем сервер/ключ (исправлен тип массива)
+      - name: Patch 1 — зашиваем сервер/ключ (массив для RENDEZVOUS_SERVERS)
         shell: bash
         env:
           RDV_INPUT: ${{ steps.cfg.outputs.rdv }}
@@ -65,13 +66,9 @@ jobs:
           [ -z "$CFG" ] && { echo "Не нашли файл с RS_PUB_KEY"; exit 1; }
 
           SAFE_KEY=$(printf '%s' "$RS_PUB_KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
-
-          # превращаем список серверов через запятую в Rust-массив строк
           RDV_ARRAY=$(printf '%s' "$RDV_INPUT" | awk -v q='"' 'BEGIN{FS=","; ORS=""}{printf "&["; for(i=1;i<=NF;i++){gsub(/^ +| +$/, "", $i); if(i>1)printf ", "; printf q $i q} printf "]"}')
 
-          # подставляем публичный ключ
           perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
-          # подставляем список серверов (массив)
           perl -0777 -pe "s#(?s)(pub const RENDEZVOUS_SERVERS:\s*[^=]+=\s*)[^;]*;#\${1}${RDV_ARRAY};#g" -i "$CFG" || true
 
       - name: Patch 2 — блокируем пользовательские переопределения
@@ -99,6 +96,16 @@ jobs:
           fi
           python -V >/dev/null 2>&1 && python res/inline-sciter.py || true
 
+      - name: Verify opus headers exist (debug aid)
+        shell: powershell
+        run: |
+          $inc = Join-Path $env:GITHUB_WORKSPACE "vcpkg\installed\x64-windows-static\include\opus\opus_multistream.h"
+          if (Test-Path $inc) {
+            Write-Host "Found: $inc"
+          } else {
+            Write-Error "opus_multistream.h not found! Check vcpkg install triplet and dependencies."
+          }
+
       - name: Place Sciter DLL
         shell: bash
         run: |
@@ -109,6 +116,7 @@ jobs:
         shell: bash
         env:
           VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+          VCPKG_DEFAULT_TRIPLET: x64-windows-static
           LIBCLANG_PATH: "C:\\Program Files\\LLVM\\bin"
         run: |
           cargo build --release
