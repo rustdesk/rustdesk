@@ -1680,7 +1680,8 @@ class _DisplayState extends State<_Display> {
     final isOptFixed = isOptionFixed(kOptionScrollStyle);
 
     final groupValue = bind.mainGetUserDefaultOption(key: kOptionScrollStyle);
-    final edgeScrollEdgeThickness = int.tryParse(bind.mainGetUserDefaultOption(key: kOptionEdgeScrollEdgeThickness));
+    final edgeScrollEdgeThickness = int.tryParse(bind.mainGetUserDefaultOption(key: kOptionEdgeScrollEdgeThickness))
+      ?? kDefaultEdgeScrollEdgeThickness;
     final edgeScrollEdgeThicknessTextController = TextEditingController();
 
     edgeScrollEdgeThicknessTextController.text = edgeScrollEdgeThickness.toString();

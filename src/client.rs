@@ -1993,10 +1993,6 @@ impl LoginConfigHandler {
     }
 
     /// Get edge scroll edge thickness from the current config if set.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The edge thickness to be saved.
     pub fn get_edge_scroll_edge_thickness(&self) -> Option<i32> {
         self.get_option("edge_scroll_edge_thickness").trim().parse().ok()
     }
