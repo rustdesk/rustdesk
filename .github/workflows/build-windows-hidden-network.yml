@@ -22,7 +22,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive }
+        with:
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -30,12 +31,16 @@ jobs:
         shell: powershell
         run: choco install -y llvm git
 
+      # ✅ Исправленный шаг vcpkg (manifest mode)
       - name: Install vcpkg and dependencies
         shell: powershell
         run: |
-         git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
-         & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
-         $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
+          git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
+          & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
+          $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
+          # выберите один вариант:
+          & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows
+          # & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows-static
 
       - name: Resolve inputs/secrets
         id: cfg
@@ -60,23 +65,15 @@ jobs:
           SAFE_KEY=$(printf '%s' "$RS_PUB_KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
           SAFE_RDV=$(printf '%s' "${{ steps.cfg.outputs.rdv }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
-          # Меняем константы (имена могли слегка меняться между версиями)
           perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
           perl -0777 -pe "s#(?s)pub const RENDEZVOUS_SERVERS:.*?;#pub const RENDEZVOUS_SERVERS: &'static str = \"$SAFE_RDV\";#g" -i "$CFG" || true
-          # Если найдётся отдельная константа для релея — раскомментируйте и подправьте имя:
-          # perl -0777 -pe "s#(?s)pub const RELAY_SERVER:.*?;#pub const RELAY_SERVER: &'static str = \"${{ steps.cfg.outputs.rly }}\";#g" -i "$CFG" || true
 
       - name: Patch 2 — блокируем пользовательские переопределения
         shell: bash
         run: |
           set -e
-          # В некоторых версиях клиент подтягивает значения ID/Relay/Key из TOML в %APPDATA%.
-          # Мы грубо "обнулим" чтение этих полей: ищем места, где из конфигов читаются id/relay/key,
-          # и подменяем на константы или пустые строки (чтобы в UI ничего не было видно).
-          # Универсальный приём — сгенерировать заглушки-геттеры и позвать их из найденных мест.
-          FILES=$(git grep -l -E 'id[_-]?server|relay[_-]?server|RS_PUB_KEY|RustDesk2\.toml' || true)
+          FILES=$(git grep -l -E 'id[_-]?server|relay[_-]?server|RustDesk2\.toml' || true)
           for f in $FILES; do
-            # Примерно маскируем возвращаемые значения для UI (не влияет на внутреннее соединение).
             sed -i.bak 's/\(id[_-]*server[^\n]*\)=.*/\1 = ""/g' "$f" || true
             sed -i.bak 's/\(relay[_-]*server[^\n]*\)=.*/\1 = ""/g' "$f" || true
           done
@@ -85,21 +82,15 @@ jobs:
         shell: bash
         run: |
           set -e
-          # Sciter-UI: ресурсы лежат в src/ui; просто выкинем страницу "network" и её пункт меню.
-          # Если файлов нет (Flutter-сборка) — шаги тихо пропустятся.
           git rm -f src/ui/settings/network* 2>/dev/null || true
-          # Убираем пункт меню/роут на "network"
           FILES=$(git grep -l -E 'Network|network' src/ui 2>/dev/null || true)
           for f in $FILES; do
             sed -i.bak -E 's/.*Network.*//g' "$f" || true
             sed -i.bak -E 's/.*network.*//g' "$f" || true
           done
-
-          # (опц.) Инлайним ресурсы в exe, чтобы не тащить внешние файлы UI.
           if grep -q '\[features\]' Cargo.toml; then
             perl -0777 -pe 's#default = \[(.*?)\]#default = [\1, "inline"]#s' -i Cargo.toml || true
           fi
-          # Сборка inline-ресурсов (скрипт есть в репозитории RustDesk Sciter)
           python -V >/dev/null 2>&1 && python res/inline-sciter.py || true
 
       - name: Place Sciter DLL
