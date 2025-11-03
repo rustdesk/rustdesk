@@ -1678,29 +1678,114 @@ class _DisplayState extends State<_Display> {
 
   Widget scrollStyle(BuildContext context) {
     final isOptFixed = isOptionFixed(kOptionScrollStyle);
-    onChanged(String value) async {
+
+    final groupValue = bind.mainGetUserDefaultOption(key: kOptionScrollStyle);
+    final edgeScrollEdgeThickness = int.tryParse(bind.mainGetUserDefaultOption(key: kOptionEdgeScrollEdgeThickness));
+    final edgeScrollEdgeThicknessTextController = TextEditingController();
+
+    edgeScrollEdgeThicknessTextController.text = edgeScrollEdgeThickness.toString();
+
+    updateSavedScrollStyle(String value) async {
       await bind.mainSetUserDefaultOption(
-          key: kOptionScrollStyle, value: value);
+        key: kOptionScrollStyle, value: value);
+    }
+
+    onScrollStyleChanged(String value) async {
+      await updateSavedScrollStyle(value);
       setState(() {});
     }
 
-    final groupValue = bind.mainGetUserDefaultOption(key: kOptionScrollStyle);
+    automaticallySwitchToEdgeScroll() async {
+      if (!isOptFixed && (groupValue != kRemoteScrollStyleEdge)) {
+        await updateSavedScrollStyle(kRemoteScrollStyleEdge);
+      }
+    }
+
+    onEdgeScrollEdgeThicknessChanged(double value) async {
+      var stringValue = value.round().toString();
+      await bind.mainSetUserDefaultOption(
+          key: kOptionEdgeScrollEdgeThickness, value: stringValue);
+      setState(() {});
+    }
+
+    onEdgeScrollEdgeThicknessTextSubmitted(String value) async {
+      int? intValue = int.tryParse(edgeScrollEdgeThicknessTextController.text);
+
+      if (intValue == null) {
+        intValue = kDefaultEdgeScrollEdgeThickness;
+      } else {
+        intValue = intValue.clamp(
+          kMinimumEdgeScrollEdgeThickness,
+          kMaximumEdgeScrollEdgeThickness);
+      }
+
+      await onEdgeScrollEdgeThicknessChanged(intValue.toDouble());
+    }
+
+    final edgeScrollEdgeThicknessFocusNode = FocusNode();
+
+    edgeScrollEdgeThicknessFocusNode.addListener(
+      () async {
+        if (edgeScrollEdgeThicknessFocusNode.hasFocus) {
+          automaticallySwitchToEdgeScroll();
+        } else {
+          await onEdgeScrollEdgeThicknessTextSubmitted(edgeScrollEdgeThicknessTextController.text);
+        }
+      });
+
     return _Card(title: 'Default Scroll Style', children: [
       _Radio(context,
           value: kRemoteScrollStyleAuto,
           groupValue: groupValue,
           label: 'ScrollAuto',
-          onChanged: isOptFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onScrollStyleChanged),
       _Radio(context,
           value: kRemoteScrollStyleEdge,
           groupValue: groupValue,
           label: 'ScrollEdge',
-          onChanged: isOptFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onScrollStyleChanged),
+      Container(
+          width: double.infinity,
+          margin: EdgeInsets.only(left: 30.0),
+          child: Column(
+            children: <Widget>[
+              Text(translate('Scroll region thickness'),
+                textAlign: TextAlign.left,
+                style: TextStyle(fontSize: 12)),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Semantics(
+                      label: translate('ScrollEdgeThicknessSlider'),
+                      value: edgeScrollEdgeThickness.toString(),
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          showValueIndicator: ShowValueIndicator.always,
+                          overlayShape: RoundSliderOverlayShape(overlayRadius: 15.0), // Smaller overlay
+                          thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10.0), // Smaller thumb
+                        ),
+                        child: Slider(
+                          value: (edgeScrollEdgeThickness ?? kDefaultEdgeScrollEdgeThickness)
+                            .clamp(kMinimumEdgeScrollEdgeThickness, kMaximumEdgeScrollEdgeThickness).toDouble(),
+                          min: kMinimumEdgeScrollEdgeThickness.toDouble(),
+                          max: kMaximumEdgeScrollEdgeThickness.toDouble(),
+                          divisions: (kMaximumEdgeScrollEdgeThickness - kMinimumEdgeScrollEdgeThickness).round(),
+                          onChangeStart: (x) { automaticallySwitchToEdgeScroll(); },
+                          onChanged: onEdgeScrollEdgeThicknessChanged)))),
+                  SizedBox(width: 65, child:
+                  TextField(
+                    controller: edgeScrollEdgeThicknessTextController,
+                    onSubmitted: onEdgeScrollEdgeThicknessTextSubmitted,
+                    focusNode: edgeScrollEdgeThicknessFocusNode)),
+                ],
+              ),
+            ],
+          )),
       _Radio(context,
           value: kRemoteScrollStyleBar,
           groupValue: groupValue,
           label: 'Scrollbar',
-          onChanged: isOptFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onScrollStyleChanged),
     ]);
   }
 

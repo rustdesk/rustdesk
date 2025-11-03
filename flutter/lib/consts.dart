@@ -79,6 +79,7 @@ const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
 const String kOptionViewStyle = "view_style";
 const String kOptionScrollStyle = "scroll_style";
+const String kOptionEdgeScrollEdgeThickness = "edge_scroll_edge_thickness";
 const String kOptionImageQuality = "image_quality";
 const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionTextureRender = "use-texture-render";
