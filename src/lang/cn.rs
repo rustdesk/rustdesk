@@ -722,5 +722,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Edit note", "编辑备注"),
         ("Alias", "别名"),
         ("ScrollEdge", ""),
+        ("ScrollEdgeThicknessSlider", ""),
+        ("Scroll region thickness", ""),
     ].iter().cloned().collect();
 }

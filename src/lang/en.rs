@@ -258,5 +258,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("websocket_tip", "When using WebSocket, only relay connections are supported."),
         ("terminal-admin-login-tip", "Please input the administrator username and password of the controlled side."),
         ("elevation_username_tip", "Input username or domain\\username"),
+        ("ScrollEdgeThicknessSlider", "Edge scroll edge thickness slider"),
+        ("Scroll region thickness", "Scroll region thickness"),
     ].iter().cloned().collect();
 }
