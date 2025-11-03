@@ -1281,6 +1281,7 @@ class _RectValueThumbShape extends SliderComponentShape {
   final double width;
   final double height;
   final double radius;
+  final String unit;
   // Optional mapper to compute display value from normalized position [0,1]
   // If null, falls back to linear interpolation between min and max.
   final int Function(double normalized)? displayValueForNormalized;
@@ -1292,6 +1293,7 @@ class _RectValueThumbShape extends SliderComponentShape {
     required this.height,
     required this.radius,
     this.displayValueForNormalized,
+    this.unit = '%',
   });
 
   @override
@@ -1332,12 +1334,12 @@ class _RectValueThumbShape extends SliderComponentShape {
     final Paint paint = Paint()..color = fillColor;
     canvas.drawRRect(rrect, paint);
 
-    // Compute displayed percent from normalized slider value.
-    final int percent = displayValueForNormalized != null
+    // Compute displayed value from normalized slider value.
+    final int displayValue = displayValueForNormalized != null
         ? displayValueForNormalized!(value)
         : (min + value * (max - min)).round();
     final TextSpan span = TextSpan(
-      text: '$percent%',
+      text: '$displayValue$unit',
       style: const TextStyle(
         color: Colors.white,
         fontSize: 12,
