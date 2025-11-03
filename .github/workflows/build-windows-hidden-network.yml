@@ -30,13 +30,12 @@ jobs:
         shell: powershell
         run: choco install -y llvm git
 
-      - name: Install vcpkg deps
+      - name: Install vcpkg and dependencies
         shell: powershell
         run: |
-          git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
-          & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
-          $env:VCPKG_ROOT="$env:GITHUB_WORKSPACE\vcpkg"
-          & $env:VCPKG_ROOT\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+         git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
+         & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
+         $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
 
       - name: Resolve inputs/secrets
         id: cfg
