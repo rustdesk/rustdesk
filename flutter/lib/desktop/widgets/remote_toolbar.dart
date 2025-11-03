@@ -511,7 +511,7 @@ class _MonitorMenu extends StatelessWidget {
         menuStyle: MenuStyle(
             padding:
                 MaterialStatePropertyAll(EdgeInsets.symmetric(horizontal: 6))),
-        menuChildrenGetter: () => [buildMonitorSubmenuWidget(context)]);
+        menuChildrenGetter: (state) => [buildMonitorSubmenuWidget(context)]);
   }
 
   Widget buildMultiMonitorMenu(BuildContext context) {
@@ -722,7 +722,7 @@ class _ControlMenu extends StatelessWidget {
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         ffi: ffi,
-        menuChildrenGetter: () => toolbarControls(context, id, ffi).map((e) {
+        menuChildrenGetter: (state) => toolbarControls(context, id, ffi).map((e) {
               if (e.divider) {
                 return Divider();
               } else {
@@ -934,7 +934,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   @override
   Widget build(BuildContext context) {
     _screenAdjustor.updateScreen();
-    menuChildrenGetter() {
+    menuChildrenGetter(_IconSubmenuButtonState state) {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
         viewStyle(customPercent: _customPercent),
@@ -1696,7 +1696,7 @@ class _KeyboardMenu extends StatelessWidget {
         ffi: ffi,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
-        menuChildrenGetter: () => [
+        menuChildrenGetter: (state) => [
               keyboardMode(),
               localKeyboardType(),
               inputSource(),
@@ -1961,7 +1961,7 @@ class _ChatMenuState extends State<_ChatMenu> {
           ffi: widget.ffi,
           color: _ToolbarTheme.blueColor,
           hoverColor: _ToolbarTheme.hoverBlueColor,
-          menuChildrenGetter: () => [textChat(), voiceCall()]);
+          menuChildrenGetter: (state) => [textChat(), voiceCall()]);
     }
   }
 
@@ -2017,7 +2017,7 @@ class _VoiceCallMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    menuChildrenGetter() {
+    menuChildrenGetter(_IconSubmenuButtonState state) {
       final audioInput = AudioInput(
         builder: (devices, currentDevice, setDevice) {
           return Column(
@@ -2217,7 +2217,7 @@ class _IconSubmenuButton extends StatefulWidget {
   final Widget? icon;
   final Color color;
   final Color hoverColor;
-  final List<Widget> Function() menuChildrenGetter;
+  final List<Widget> Function(_IconSubmenuButtonState state) menuChildrenGetter;
   final MenuStyle? menuStyle;
   final FFI? ffi;
   final double? width;
@@ -2241,6 +2241,11 @@ class _IconSubmenuButton extends StatefulWidget {
 
 class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
   bool hover = false;
+
+  @override // discard @protected
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2274,7 +2279,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
                         ),
                         child: icon))),
             menuChildren: widget
-                .menuChildrenGetter()
+                .menuChildrenGetter(this)
                 .map((e) => _buildPointerTrackWidget(e, widget.ffi))
                 .toList()));
     return MenuBar(children: [
