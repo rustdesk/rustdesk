@@ -1,0 +1,126 @@
+name: Build Windows client (servers hidden)
+
+on:
+  workflow_dispatch:
+    inputs:
+      rendezvous:
+        description: "hbbs host:port (пусто — из секретов)"
+        required: false
+        default: ""
+      relay:
+        description: "hbbr host:port (пусто — из секретов)"
+        required: false
+        default: ""
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
+      RENDEZVOUS_FALLBACK: ${{ secrets.RENDEZVOUS }}
+      RELAY_FALLBACK: ${{ secrets.RELAY }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM & Git
+        shell: powershell
+        run: choco install -y llvm git
+
+      - name: Install vcpkg deps
+        shell: powershell
+        run: |
+          git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
+          & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
+          $env:VCPKG_ROOT="$env:GITHUB_WORKSPACE\vcpkg"
+          & $env:VCPKG_ROOT\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+
+      - name: Resolve inputs/secrets
+        id: cfg
+        shell: bash
+        run: |
+          RDV="${{ github.event.inputs.rendezvous }}"
+          RLY="${{ github.event.inputs.relay }}"
+          [ -z "$RDV" ] && RDV="${RENDEZVOUS_FALLBACK}"
+          [ -z "$RLY" ] && RLY="${RELAY_FALLBACK}"
+          [ -z "$RS_PUB_KEY" ] && { echo "RS_PUB_KEY required"; exit 1; }
+          echo "rdv=$RDV" >> $GITHUB_OUTPUT
+          echo "rly=$RLY" >> $GITHUB_OUTPUT
+
+      - name: Patch 1 — жёстко зашиваем сервер/ключ
+        shell: bash
+        run: |
+          set -e
+          CFG="libs/hbb_common/src/config.rs"
+          test -f "$CFG" || CFG=$(git grep -l 'RS_PUB_KEY' | head -n1)
+          [ -z "$CFG" ] && { echo "Не нашли файл с RS_PUB_KEY"; exit 1; }
+
+          SAFE_KEY=$(printf '%s' "$RS_PUB_KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          SAFE_RDV=$(printf '%s' "${{ steps.cfg.outputs.rdv }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+          # Меняем константы (имена могли слегка меняться между версиями)
+          perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
+          perl -0777 -pe "s#(?s)pub const RENDEZVOUS_SERVERS:.*?;#pub const RENDEZVOUS_SERVERS: &'static str = \"$SAFE_RDV\";#g" -i "$CFG" || true
+          # Если найдётся отдельная константа для релея — раскомментируйте и подправьте имя:
+          # perl -0777 -pe "s#(?s)pub const RELAY_SERVER:.*?;#pub const RELAY_SERVER: &'static str = \"${{ steps.cfg.outputs.rly }}\";#g" -i "$CFG" || true
+
+      - name: Patch 2 — блокируем пользовательские переопределения
+        shell: bash
+        run: |
+          set -e
+          # В некоторых версиях клиент подтягивает значения ID/Relay/Key из TOML в %APPDATA%.
+          # Мы грубо "обнулим" чтение этих полей: ищем места, где из конфигов читаются id/relay/key,
+          # и подменяем на константы или пустые строки (чтобы в UI ничего не было видно).
+          # Универсальный приём — сгенерировать заглушки-геттеры и позвать их из найденных мест.
+          FILES=$(git grep -l -E 'id[_-]?server|relay[_-]?server|RS_PUB_KEY|RustDesk2\.toml' || true)
+          for f in $FILES; do
+            # Примерно маскируем возвращаемые значения для UI (не влияет на внутреннее соединение).
+            sed -i.bak 's/\(id[_-]*server[^\n]*\)=.*/\1 = ""/g' "$f" || true
+            sed -i.bak 's/\(relay[_-]*server[^\n]*\)=.*/\1 = ""/g' "$f" || true
+          done
+
+      - name: Patch 3 — удаляем/прячем UI "Settings → Network"
+        shell: bash
+        run: |
+          set -e
+          # Sciter-UI: ресурсы лежат в src/ui; просто выкинем страницу "network" и её пункт меню.
+          # Если файлов нет (Flutter-сборка) — шаги тихо пропустятся.
+          git rm -f src/ui/settings/network* 2>/dev/null || true
+          # Убираем пункт меню/роут на "network"
+          FILES=$(git grep -l -E 'Network|network' src/ui 2>/dev/null || true)
+          for f in $FILES; do
+            sed -i.bak -E 's/.*Network.*//g' "$f" || true
+            sed -i.bak -E 's/.*network.*//g' "$f" || true
+          done
+
+          # (опц.) Инлайним ресурсы в exe, чтобы не тащить внешние файлы UI.
+          if grep -q '\[features\]' Cargo.toml; then
+            perl -0777 -pe 's#default = \[(.*?)\]#default = [\1, "inline"]#s' -i Cargo.toml || true
+          fi
+          # Сборка inline-ресурсов (скрипт есть в репозитории RustDesk Sciter)
+          python -V >/dev/null 2>&1 && python res/inline-sciter.py || true
+
+      - name: Place Sciter DLL
+        shell: bash
+        run: |
+          mkdir -p target/debug
+          curl -L -o target/debug/sciter.dll https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
+
+      - name: Build (release)
+        shell: bash
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+          LIBCLANG_PATH: "C:\\Program Files\\LLVM\\bin"
+        run: |
+          cargo build --release
+          cp target/debug/sciter.dll target/release/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-win-hidden-network
+          path: |
+            target/release/rustdesk.exe
+            target/release/sciter.dll
