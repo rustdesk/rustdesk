@@ -393,6 +393,20 @@ pub fn session_set_scroll_style(session_id: SessionID, value: String) {
     }
 }
 
+pub fn session_get_edge_scroll_edge_thickness(session_id: SessionID) -> Option<i32> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.get_edge_scroll_edge_thickness()
+    } else {
+        None
+    }
+}
+
+pub fn session_set_edge_scroll_edge_thickness(session_id: SessionID, value: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_edge_scroll_edge_thickness(value);
+    }
+}
+
 pub fn session_get_image_quality(session_id: SessionID) -> Option<String> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_image_quality())

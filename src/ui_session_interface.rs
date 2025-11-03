@@ -238,6 +238,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().scroll_style.clone()
     }
 
+    pub fn get_edge_scroll_edge_thickness(&self) -> Option<i32> {
+        self.lc.read().unwrap().get_edge_scroll_edge_thickness()
+    }
+
     pub fn get_image_quality(&self) -> String {
         self.lc.read().unwrap().image_quality.clone()
     }
@@ -348,6 +352,10 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn save_scroll_style(&self, value: String) {
         self.lc.write().unwrap().save_scroll_style(value);
+    }
+
+    pub fn save_edge_scroll_edge_thickness(&self, value: i32) {
+        self.lc.write().unwrap().save_edge_scroll_edge_thickness(value);
     }
 
     pub fn save_flutter_option(&self, k: String, v: String) {

@@ -1976,11 +1976,29 @@ impl LoginConfigHandler {
     ///
     /// # Arguments
     ///
-    /// * `value` - The view style to be saved.
+    /// * `value` - The scroll style to be saved.
     pub fn save_scroll_style(&mut self, value: String) {
         let mut config = self.load_config();
         config.scroll_style = value;
         self.save_config(config);
+    }
+
+    /// Save edge scroll edge thickness to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The edge thickness to be saved.
+    pub fn save_edge_scroll_edge_thickness(&mut self, value: i32) {
+        self.set_option("edge_scroll_edge_thickness".to_string(), value.to_string());
+    }
+
+    /// Get edge scroll edge thickness from the current config if set.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The edge thickness to be saved.
+    pub fn get_edge_scroll_edge_thickness(&self) -> Option<i32> {
+        self.get_option("edge_scroll_edge_thickness").trim().parse().ok()
     }
 
     /// Set a ui config of flutter for handler's [`PeerConfig`].
