@@ -16,9 +16,11 @@ jobs:
   build:
     runs-on: windows-latest
     env:
+      # Секреты/значения по умолчанию
       RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
       RENDEZVOUS_FALLBACK: ${{ secrets.RENDEZVOUS }}
       RELAY_FALLBACK: ${{ secrets.RELAY }}
+      # Фиксируем статический триплет везде
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
     steps:
@@ -32,37 +34,34 @@ jobs:
         shell: powershell
         run: choco install -y llvm git
 
-      - name: Install vcpkg and manifest dependencies (static)
+      # 1) Устанавливаем vcpkg и тянем manifest-зависимости (в <repo>\vcpkg_installed\...)
+      - name: Install vcpkg (manifest deps) for static
         shell: powershell
         run: |
           git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
           & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
           $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
-          # Manifest-режим: подтягиваем то, что указано в vcpkg.json проекта, для статического триплета
           & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows-static
 
-      # ⛑️ Гарантируем наличие opus (+часто нужных кодеков) именно для x64-windows-static
-      - name: Ensure opus (and codecs) exist for x64-windows-static
+      # 2) ОБЯЗАТЕЛЬНО: доставляем кодеки в classic-режиме в $VCPKG_ROOT\installed\...
+      - name: Ensure codecs in classic mode (to $VCPKG_ROOT\installed)
         shell: powershell
         run: |
           $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
           $trip = "x64-windows-static"
-          $list = & $env:VCPKG_ROOT\vcpkg list --triplet $trip
-          if (-not ($list -match '^opus:')) {
-            Write-Host "opus not found for $trip -> installing in classic mode..."
-            & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip opus
-          }
-          # опционально — доставим популярные кодеки, если их нет
-          if (-not ($list -match '^libvpx:')) { & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip libvpx }
-          if (-not ($list -match '^libyuv:')) { & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip libyuv }
-          if (-not ($list -match '^aom:'))    { & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip aom }
+          & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip opus libvpx libyuv aom
+          & $env:VCPKG_ROOT\vcpkg list --triplet $trip
 
-      - name: Verify opus headers exist (debug)
+      # 3) Проверяем, что заголовки opus появились там, где их ищет magnum-opus/clang
+      - name: Verify opus headers exist (classic path)
         shell: powershell
         run: |
-          $hdr = Join-Path $env:GITHUB_WORKSPACE "vcpkg\installed\x64-windows-static\include\opus\opus_multistream.h"
-          if (Test-Path $hdr) { Write-Host "Found: $hdr" } else { Write-Error "opus_multistream.h still missing"; exit 1 }
+          $dir = Join-Path $env:GITHUB_WORKSPACE "vcpkg\installed\x64-windows-static\include\opus"
+          Get-ChildItem $dir -ErrorAction SilentlyContinue
+          $hdr = Join-Path $dir "opus_multistream.h"
+          if (Test-Path $hdr) { Write-Host "Found: $hdr" } else { Write-Error "opus_multistream.h still missing under vcpkg\\installed"; exit 1 }
 
+      # 4) Собираем значения из inputs/секретов
       - name: Resolve inputs/secrets
         id: cfg
         shell: bash
@@ -75,6 +74,7 @@ jobs:
           echo "rdv=$RDV" >> $GITHUB_OUTPUT
           echo "rly=$RLY" >> $GITHUB_OUTPUT
 
+      # 5) Патч: вшиваем публичный ключ и сервера (RENDEZVOUS как массив)
       - name: Patch 1 — зашиваем сервер/ключ (массив для RENDEZVOUS_SERVERS)
         shell: bash
         env:
@@ -91,6 +91,7 @@ jobs:
           perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
           perl -0777 -pe "s#(?s)(pub const RENDEZVOUS_SERVERS:\s*[^=]+=\s*)[^;]*;#\${1}${RDV_ARRAY};#g" -i "$CFG" || true
 
+      # 6) Патч: блокируем пользовательские переопределения из конфигов
       - name: Patch 2 — блокируем пользовательские переопределения
         shell: bash
         run: |
@@ -101,6 +102,7 @@ jobs:
             sed -i.bak 's/\(relay[_-]*server[^\n]*\)=.*/\1 = ""/g' "$f" || true
           done
 
+      # 7) Патч: скрываем/удаляем UI "Settings → Network"
       - name: Patch 3 — удаляем/прячем UI "Settings → Network"
         shell: bash
         run: |
@@ -116,18 +118,24 @@ jobs:
           fi
           python -V >/dev/null 2>&1 && python res/inline-sciter.py || true
 
+      # 8) Кладём Sciter DLL для GUI
       - name: Place Sciter DLL
         shell: bash
         run: |
           mkdir -p target/debug
           curl -L -o target/debug/sciter.dll https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
 
+      # 9) Сборка релиза с подсказками для bindgen/clang
       - name: Build (release)
         shell: bash
         env:
           VCPKG_ROOT: ${{ github.workspace }}\vcpkg
           VCPKG_DEFAULT_TRIPLET: x64-windows-static
           LIBCLANG_PATH: "C:\\Program Files\\LLVM\\bin"
+          # 👇 Помогаем bindgen/clang видеть инклуды opus и прочего из vcpkg
+          BINDGEN_EXTRA_CLANG_ARGS: -I${{ github.workspace }}/vcpkg/installed/x64-windows-static/include
+          # 👇 На случай, если зависимости пойдут через pkg-config
+          PKG_CONFIG_PATH: ${{ github.workspace }}\vcpkg\installed\x64-windows-static\lib\pkgconfig
         run: |
           cargo build --release
           cp target/debug/sciter.dll target/release/
