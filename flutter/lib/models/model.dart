@@ -2096,7 +2096,7 @@ class CanvasModel with ChangeNotifier {
     final style = await bind.sessionGetScrollStyle(sessionId: sessionId);
 
     _scrollStyle = style != null
-        ? ScrollStyle.fromString(style!)
+        ? ScrollStyle.fromString(style)
         : ScrollStyle.scrollauto;
 
     if (_scrollStyle != ScrollStyle.scrollauto) {
