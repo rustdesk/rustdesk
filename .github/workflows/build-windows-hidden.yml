@@ -16,11 +16,9 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      # ключи/секреты
       RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
       RENDEZVOUS_FALLBACK: ${{ secrets.RENDEZVOUS }}
       RELAY_FALLBACK: ${{ secrets.RELAY }}
-      # фиксируем статический триплет везде
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
     steps:
@@ -34,14 +32,36 @@ jobs:
         shell: powershell
         run: choco install -y llvm git
 
-      - name: Install vcpkg and dependencies (static)
+      - name: Install vcpkg and manifest dependencies (static)
         shell: powershell
         run: |
           git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
           & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
           $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
-          # ставим зависимости проекта по manifest для x64-windows-static
+          # Manifest-режим: подтягиваем то, что указано в vcpkg.json проекта, для статического триплета
           & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows-static
+
+      # ⛑️ Гарантируем наличие opus (+часто нужных кодеков) именно для x64-windows-static
+      - name: Ensure opus (and codecs) exist for x64-windows-static
+        shell: powershell
+        run: |
+          $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
+          $trip = "x64-windows-static"
+          $list = & $env:VCPKG_ROOT\vcpkg list --triplet $trip
+          if (-not ($list -match '^opus:')) {
+            Write-Host "opus not found for $trip -> installing in classic mode..."
+            & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip opus
+          }
+          # опционально — доставим популярные кодеки, если их нет
+          if (-not ($list -match '^libvpx:')) { & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip libvpx }
+          if (-not ($list -match '^libyuv:')) { & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip libyuv }
+          if (-not ($list -match '^aom:'))    { & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip aom }
+
+      - name: Verify opus headers exist (debug)
+        shell: powershell
+        run: |
+          $hdr = Join-Path $env:GITHUB_WORKSPACE "vcpkg\installed\x64-windows-static\include\opus\opus_multistream.h"
+          if (Test-Path $hdr) { Write-Host "Found: $hdr" } else { Write-Error "opus_multistream.h still missing"; exit 1 }
 
       - name: Resolve inputs/secrets
         id: cfg
@@ -95,16 +115,6 @@ jobs:
             perl -0777 -pe 's#default = \[(.*?)\]#default = [\1, "inline"]#s' -i Cargo.toml || true
           fi
           python -V >/dev/null 2>&1 && python res/inline-sciter.py || true
-
-      - name: Verify opus headers exist (debug aid)
-        shell: powershell
-        run: |
-          $inc = Join-Path $env:GITHUB_WORKSPACE "vcpkg\installed\x64-windows-static\include\opus\opus_multistream.h"
-          if (Test-Path $inc) {
-            Write-Host "Found: $inc"
-          } else {
-            Write-Error "opus_multistream.h not found! Check vcpkg install triplet and dependencies."
-          }
 
       - name: Place Sciter DLL
         shell: bash
