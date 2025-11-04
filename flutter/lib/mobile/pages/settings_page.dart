@@ -21,6 +21,10 @@ import '../widgets/dialog.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
 
+// === SAF Import Peers (nuevo) ===
+import '../../services/peer_importer.dart';
+// === FIN SAF Import Peers ===
+
 class SettingsPage extends StatefulWidget implements PageShape {
   @override
   final title = translate("Settings");
@@ -98,6 +102,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _disableUdp = false;
   var _enableIpv6Punch = false;
   var _isUsingPublicServer = false;
+
+  // === SAF Import Peers (nuevo) ===
+  bool _importBusy = false;
+  // === FIN SAF Import Peers ===
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -782,7 +790,44 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             onPressed: (context) {
               showThemeSettings(gFFI.dialogManager);
             },
-          )
+          ),
+
+          // === SAF Import Peers (nuevo): botón para importar peers (.toml) ===
+          if (isAndroid)
+            SettingsTile(
+              title: Text(translate('Import peers (.toml) from folder')),
+              leading: const Icon(Icons.file_upload),
+              trailing: _importBusy
+                  ? const SizedBox(
+                      width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.arrow_forward_ios),
+              onPressed: (context) async {
+                if (_importBusy) return;
+                setState(() => _importBusy = true);
+                String msg;
+                try {
+                  await PeerImporter.importPeersFromSafFolder();
+                  msg = translate('Import completed. Restart the app if you do not see changes.');
+                } catch (e) {
+                  msg = '${translate('Error')}: $e';
+                }
+                if (!mounted) return;
+                setState(() => _importBusy = false);
+                gFFI.dialogManager.show(
+                  (setState, close, ctx) => CustomAlertDialog(
+                    content: Text(msg),
+                    actions: [
+                      dialogButton('OK', onPressed: () => close()),
+                    ],
+                  ),
+                  backDismiss: true,
+                  clickMaskDismiss: true,
+                );
+                // Si el proyecto expone una recarga en caliente de peers, invócala aquí.
+                // p.ej.: await context.read<PeersProvider>().reload();
+              },
+            ),
+          // === FIN SAF Import Peers ===
         ]),
         if (isAndroid)
           SettingsSection(title: Text(translate('Hardware Codec')), tiles: [
