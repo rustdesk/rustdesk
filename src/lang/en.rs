@@ -260,6 +260,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "Input username or domain\\username"),
         ("allow-insecure-tls-fallback-tip", "By default, RustDesk verifies the server certificate for protocols using TLS.\nWith this option enabled, RustDesk will fall back to skipping the verification step and proceed in case of verification failure."),
         ("disable-udp-tip", "Controls whether to use TCP only.\nWhen this option enabled, RustDesk will not use UDP 21116 any more, TCP 21116 will be used instead."),
-        ("oss-not-support-tip", "NOTE: RustDesk server oss doesn't include this feature."),
+        ("server-oss-not-support-tip", "NOTE: RustDesk server OSS doesn't include this feature."),
     ].iter().cloned().collect();
 }
