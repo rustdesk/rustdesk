@@ -16,11 +16,9 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      # Дефолты/секреты
       RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
       RENDEZVOUS_FALLBACK: ${{ secrets.RENDEZVOUS }}
       RELAY_FALLBACK: ${{ secrets.RELAY }}
-      # Статический триплет vcpkg (совместим с magnum-opus/opus)
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
     steps:
@@ -33,34 +31,38 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install build tools (LLVM/Git/WiX)
-        shell: powershell
+        shell: pwsh
         run: |
           choco install -y llvm git wixtoolset
 
-      # -------- vcpkg: манифест + классик (кодеки) --------
+      # vcpkg: манифест + классик (кодеки)
       - name: Install vcpkg (manifest deps) for static
-        shell: powershell
+        shell: pwsh
         run: |
-          git clone https://github.com/microsoft/vcpkg $env:GITHUB_WORKSPACE\vcpkg
-          & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
+          git clone https://github.com/microsoft/vcpkg "$env:GITHUB_WORKSPACE\vcpkg"
+          & "$env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat"
           $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
-          & $env:VCPKG_ROOT\vcpkg install --triplet x64-windows-static
+          & "$env:VCPKG_ROOT\vcpkg" install --triplet x64-windows-static
 
       - name: Ensure codecs in classic mode (to $VCPKG_ROOT\installed)
-        shell: powershell
+        shell: pwsh
         run: |
           $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
           $trip = "x64-windows-static"
-          & $env:VCPKG_ROOT\vcpkg install --classic --triplet $trip opus libvpx libyuv aom
-          & $env:VCPKG_ROOT\vcpkg list --triplet $trip
+          & "$env:VCPKG_ROOT\vcpkg" install --classic --triplet $trip opus libvpx libyuv aom
+          & "$env:VCPKG_ROOT\vcpkg" list --triplet $trip
 
       - name: Verify opus headers exist (classic path)
-        shell: powershell
+        shell: pwsh
         run: |
           $hdr = Join-Path $env:GITHUB_WORKSPACE "vcpkg\installed\x64-windows-static\include\opus\opus_multistream.h"
-          if (Test-Path $hdr) { Write-Host "Found: $hdr" } else { Write-Error "opus_multistream.h missing"; exit 1 }
+          if (Test-Path $hdr) {
+            Write-Host "Found: $hdr"
+          } else {
+            Write-Error "opus_multistream.h missing under vcpkg\installed"
+          }
 
-      # -------- Патч: только дефолты (оставляем возможность менять в UI) --------
+      # Патч: только дефолты (оставляем возможность менять в UI)
       - name: Resolve inputs/secrets
         id: cfg
         shell: bash
@@ -86,22 +88,19 @@ jobs:
           SAFE_KEY=$(printf '%s' "$RS_PUB_KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
           RDV_ARRAY=$(printf '%s' "$RDV_INPUT" | awk -v q='"' 'BEGIN{FS=","; ORS=""}{printf "&["; for(i=1;i<=NF;i++){gsub(/^ +| +$/, "", $i); if(i>1)printf ", "; printf q $i q} printf "]"}')
 
-          # Публичный ключ сервера (дефолт)
           perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
-          # Дефолтные rendezvous сервера (массив строк). UI/конфиги всё равно могут переопределить.
           perl -0777 -pe "s#(?s)(pub const RENDEZVOUS_SERVERS:\s*[^=]+=\s*)[^;]*;#\${1}${RDV_ARRAY};#g" -i "$CFG" || true
 
-      # -------- Сборка exe --------
+      # Сборка exe
       - name: Build (release)
         shell: bash
         env:
-          VCPKG_ROOT: ${{ github.workspace }}\vcpkg
-          VCPKG_DEFAULT_TRIPLET: x64-windows-static
+          VCPKG_ROOT: "${{ github.workspace }}\vcpkg"
+          VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
           LIBCLANG_PATH: "C:\\Program Files\\LLVM\\bin"
-          BINDGEN_EXTRA_CLANG_ARGS: -I${{ github.workspace }}/vcpkg/installed/x64-windows-static/include
-          PKG_CONFIG_PATH: ${{ github.workspace }}\vcpkg\installed\x64-windows-static\lib\pkgconfig
+          BINDGEN_EXTRA_CLANG_ARGS: "-I${{ github.workspace }}/vcpkg/installed/x64-windows-static/include"
+          PKG_CONFIG_PATH: "${{ github.workspace }}\vcpkg\installed\x64-windows-static\lib\pkgconfig"
         run: |
-          # Sciter DLL нужна рядом с бинарём для запуска — включим её в MSI
           mkdir -p target/debug
           curl -L -o target/debug/sciter.dll https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
           cargo build --release
@@ -115,9 +114,9 @@ jobs:
             target/release/rustdesk.exe
             target/release/sciter.dll
 
-      # -------- WiX: упаковываем в один MSI --------
+      # WiX: один MSI
       - name: Generate minimal WiX Product.wxs
-        shell: powershell
+        shell: pwsh
         run: |
           $wxs = @"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -150,30 +149,24 @@ jobs:
   </Product>
 </Wix>
 "@
-          Set-Content -Encoding UTF8 -NoNewline Product.wxs $wxs
+          Set-Content -Encoding UTF8 -NoNewline -Path Product.wxs -Value $wxs
 
       - name: Harvest files with heat.exe
-        shell: powershell
+        shell: pwsh
         run: |
           $ReleaseDir = Join-Path $env:GITHUB_WORKSPACE "target\release"
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\heat.exe" dir $ReleaseDir `
-            -gg -sfrag -srd -sreg -dr INSTALLDIR -cg AppFiles -var var.SourceDir `
-            -out harvest.wxs
+          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\heat.exe" dir $ReleaseDir -gg -sfrag -srd -sreg -dr INSTALLDIR -cg AppFiles -var var.SourceDir -out harvest.wxs
 
       - name: Compile WiX (candle)
-        shell: powershell
+        shell: pwsh
         run: |
           $ReleaseDir = Join-Path $env:GITHUB_WORKSPACE "target\release"
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe" -arch x64 `
-            -dSourceDir="$ReleaseDir" Product.wxs harvest.wxs `
-            -ext WixUIExtension -ext WixUtilExtension
+          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe" -arch x64 -dSourceDir="$ReleaseDir" Product.wxs harvest.wxs -ext WixUIExtension -ext WixUtilExtension
 
       - name: Link WiX (light) -> MSI single file
-        shell: powershell
+        shell: pwsh
         run: |
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\light.exe" -cultures:en-us `
-            Product.wixobj harvest.wixobj -ext WixUIExtension -ext WixUtilExtension `
-            -out RustDesk-Custom-x64.msi
+          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\light.exe" -cultures:en-us Product.wixobj harvest.wixobj -ext WixUIExtension -ext WixUtilExtension -out RustDesk-Custom-x64.msi
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
