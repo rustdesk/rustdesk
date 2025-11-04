@@ -317,6 +317,15 @@ class TerminalModel with ChangeNotifier {
           return;
         }
 
+        // Check for any clear screen sequences in the terminal output
+        // This ensures a complete clear and provides a better terminal experience
+        if (text.contains('\x1b[2J') ||  // Clear entire screen, if env TERM = xterm-256color, for consistent behavior
+            text.contains('\x1b[J') ||   // Clear from cursor to end of screen, if env TERM = vt220
+            text.contains('\x1b[25l\x1b[H\x1b[?25h') || // Hide cursor, move home, show cursor, ssh through windows powershell
+            text.contains('\x1b[25l\x1b[?2004l\x1b[H\x1b[?25h')) { // Hide cursor, disable bracketed paste, move home, show cursor, ssh through windows powershell
+          terminal.buffer.clear(); // Clear the terminal buffer
+        }
+
         terminal.write(text);
       } catch (e) {
         debugPrint('[TerminalModel] Failed to process terminal data: $e');
