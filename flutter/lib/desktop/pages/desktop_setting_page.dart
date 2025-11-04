@@ -1631,7 +1631,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                 switchWidget(
                     Icons.web_asset_outlined,
                     'Use WebSocket',
-                    '${translate('websocket_tip')}\n\n${translate('oss-not-support-tip')}',
+                    '${translate('websocket_tip')}\n\n${translate('server-oss-not-support-tip')}',
                     kOptionAllowWebSocket),
               if (!isWeb)
                 futureBuilder(
@@ -1656,7 +1656,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                               title: 'Disable UDP',
                               showTooltip: true,
                               tooltipMessage:
-                                  '${translate('disable-udp-tip')}\n\n${translate('oss-not-support-tip')}',
+                                  '${translate('disable-udp-tip')}\n\n${translate('server-oss-not-support-tip')}',
                               trailing: Switch(
                                 value: bind.mainGetOptionSync(
                                         key: kOptionDisableUdp) ==

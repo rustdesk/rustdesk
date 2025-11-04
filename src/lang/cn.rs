@@ -726,6 +726,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("allow-insecure-tls-fallback-tip", "默认情况下，对于使用 TLS 的协议，RustDesk 会验证服务器证书。\n启用此选项后，在验证失败时，RustDesk 将转为跳过验证步骤并继续连接。"),
         ("Disable UDP", "禁用 UDP"),
         ("disable-udp-tip", "控制是否仅使用TCP。\n启用此选项后，RustDesk 将不再使用UDP 21116，而是使用TCP 21116。"),
-        ("oss-not-support-tip", "注意：RustDesk 开源服务器(oss server) 不包含此功能。"),
+        ("server-oss-not-support-tip", "注意：RustDesk 开源服务器(OSS server) 不包含此功能。"),
     ].iter().cloned().collect();
 }
