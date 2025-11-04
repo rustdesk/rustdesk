@@ -1,5 +1,7 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
+#[cfg(target_os = "linux")]
+use crate::platform::linux::is_x11;
 use crate::{
     client::file_trait::FileManager,
     common::{make_fd_to_json, make_vec_fd_to_json},
@@ -1471,19 +1473,45 @@ pub fn main_get_main_display() -> SyncReturn<String> {
     #[cfg(not(target_os = "ios"))]
     let mut display_info = "".to_owned();
     #[cfg(not(target_os = "ios"))]
-    if let Ok(displays) = crate::display_service::try_get_displays() {
-        // to-do: Need to detect current display index.
-        if let Some(display) = displays.iter().next() {
-            display_info = serde_json::to_string(&HashMap::from([
-                ("w", display.width()),
-                ("h", display.height()),
-            ]))
-            .unwrap_or_default();
+    {
+        #[cfg(not(target_os = "linux"))]
+        let is_linux_wayland = false;
+        #[cfg(target_os = "linux")]
+        let is_linux_wayland = !is_x11();
+
+        if !is_linux_wayland {
+            if let Ok(displays) = crate::display_service::try_get_displays() {
+                // to-do: Need to detect current display index.
+                if let Some(display) = displays.iter().next() {
+                    display_info = serde_json::to_string(&HashMap::from([
+                        ("w", display.width()),
+                        ("h", display.height()),
+                    ]))
+                    .unwrap_or_default();
+                }
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        if is_linux_wayland {
+            let displays = scrap::wayland::display::get_displays();
+            if let Some(display) = displays.displays.get(displays.primary) {
+                let logical_size = display
+                    .logical_size
+                    .unwrap_or((display.width, display.height));
+                display_info = serde_json::to_string(&HashMap::from([
+                    ("w", logical_size.0),
+                    ("h", logical_size.1),
+                ]))
+                .unwrap_or_default();
+            }
         }
     }
     SyncReturn(display_info)
 }
 
+// No need to check if is on Wayland in this function.
+// The Flutter side gets display information on Wayland using a different method.
 pub fn main_get_displays() -> SyncReturn<String> {
     #[cfg(target_os = "ios")]
     let display_info = "".to_owned();
