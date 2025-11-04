@@ -452,10 +452,8 @@ pub fn install_options() -> String {
 pub fn get_socks() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let s = ipc::get_socks();
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     let s = Config::get_socks();
-    #[cfg(target_os = "ios")]
-    let s: Option<config::Socks5Server> = None;
     match s {
         None => Vec::new(),
         Some(s) => {
@@ -477,7 +475,7 @@ pub fn set_socks(proxy: String, username: String, password: String) {
     };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::set_socks(socks).ok();
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _nat = crate::CheckTestNatType::new();
         if socks.proxy.is_empty() {
@@ -485,8 +483,11 @@ pub fn set_socks(proxy: String, username: String, password: String) {
         } else {
             Config::set_socks(Some(socks));
         }
-        crate::RendezvousMediator::restart();
         log::info!("socks updated");
+    }
+    #[cfg(target_os = "android")]
+    {
+        crate::RendezvousMediator::restart();
     }
 }
 
