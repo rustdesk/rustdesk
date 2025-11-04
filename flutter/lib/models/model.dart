@@ -158,6 +158,8 @@ class FfiModel with ChangeNotifier {
   bool get isPeerAndroid => _pi.platform == kPeerPlatformAndroid;
   bool get isPeerMobile => isPeerAndroid;
 
+  bool get isPeerLinux => _pi.platform == kPeerPlatformLinux;
+
   bool get viewOnly => _viewOnly;
   bool get showMyCursor => _showMyCursor;
 
@@ -177,6 +179,9 @@ class FfiModel with ChangeNotifier {
   Rect? _getDisplaysRect(List<Display> displays, bool useDisplayScale) {
     if (displays.isEmpty) {
       return null;
+    }
+    if (isPeerLinux) {
+      useDisplayScale = true;
     }
     int scale(int len, double s) {
       if (useDisplayScale) {
@@ -1325,8 +1330,17 @@ class FfiModel with ChangeNotifier {
     d.cursorEmbedded = evt['cursor_embedded'] == 1;
     d.originalWidth = evt['original_width'] ?? kInvalidResolutionValue;
     d.originalHeight = evt['original_height'] ?? kInvalidResolutionValue;
-    double v = (evt['scale']?.toDouble() ?? 100.0) / 100;
-    d._scale = v > 1.0 ? v : 1.0;
+    d._scale = 1.0;
+    final scaledWidth = evt['scaled_width'];
+    if (scaledWidth != null) {
+      final sw = int.tryParse(scaledWidth.toString());
+      if (sw != null && sw > 0 && d.width > 0) {
+        d._scale = max(d.width.toDouble() / sw, 1.0);
+      } else {
+        debugPrint(
+            "Warning: scaled_width or width has invalid value (scaled_width: $scaledWidth, width: ${d.width}) - both must be positive integers. Using default scale 1.0.");
+      }
+    }
     return d;
   }
 
@@ -2327,11 +2341,6 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  set scale(v) {
-    _scale = v;
-    notifyListeners();
-  }
-
   panX(double dx) {
     _x += dx;
     if (isMobile) {
@@ -2865,9 +2874,10 @@ class CursorModel with ChangeNotifier {
     var cx = r.center.dx;
     var cy = r.center.dy;
     var tryMoveCanvasX = false;
+    final displayRect = parent.target?.ffiModel.rect;
     if (dx > 0) {
       final maxCanvasCanMove = _displayOriginX +
-          (parent.target?.imageModel.image!.width ?? 1280) -
+          (displayRect?.width ?? 1280) -
           r.right.roundToDouble();
       tryMoveCanvasX = _x + dx > cx && maxCanvasCanMove > 0;
       if (tryMoveCanvasX) {
@@ -2889,7 +2899,7 @@ class CursorModel with ChangeNotifier {
     var tryMoveCanvasY = false;
     if (dy > 0) {
       final mayCanvasCanMove = _displayOriginY +
-          (parent.target?.imageModel.image!.height ?? 720) -
+          (displayRect?.height ?? 720) -
           r.bottom.roundToDouble();
       tryMoveCanvasY = _y + dy > cy && mayCanvasCanMove > 0;
       if (tryMoveCanvasY) {

@@ -315,6 +315,12 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
             {
                 scale = d.scale();
             }
+            #[cfg(target_os = "linux")]
+            {
+                if !is_x11() {
+                    scale = d.scale();
+                }
+            }
             let original_resolution = get_original_resolution(
                 &display_name,
                 ((d.width() as f64) / scale).round() as usize,

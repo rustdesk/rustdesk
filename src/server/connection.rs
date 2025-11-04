@@ -7,10 +7,10 @@ use crate::clipboard::{update_clipboard, ClipboardSide};
 use crate::clipboard_file::*;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
-#[cfg(target_os = "linux")]
-use crate::platform::linux_desktop_manager;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 use crate::platform::WallPaperRemover;
+#[cfg(target_os = "linux")]
+use crate::platform::{is_x11, linux_desktop_manager};
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
 use crate::{
@@ -1558,6 +1558,7 @@ impl Connection {
                     {
                         self.retina.set_displays(&displays);
                     }
+
                     pi.displays = displays;
                     pi.current_display = self.display_idx as _;
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
