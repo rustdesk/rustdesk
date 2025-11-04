@@ -91,20 +91,23 @@ jobs:
           perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
           perl -0777 -pe "s#(?s)(pub const RENDEZVOUS_SERVERS:\s*[^=]+=\s*)[^;]*;#\${1}${RDV_ARRAY};#g" -i "$CFG" || true
 
-      # Сборка exe
+      # Сборка exe (все переменные ставим внутри PowerShell — без YAML env)
       - name: Build (release)
-        shell: bash
-        env:
-          VCPKG_ROOT: '${{ github.workspace }}\vcpkg'
-          VCPKG_DEFAULT_TRIPLET: 'x64-windows-static'
-          LIBCLANG_PATH: 'C:\Program Files\LLVM\bin'
-          BINDGEN_EXTRA_CLANG_ARGS: '-I${{ github.workspace }}/vcpkg/installed/x64-windows-static/include'
-          PKG_CONFIG_PATH: '${{ github.workspace }}\vcpkg\installed\x64-windows-static\lib\pkgconfig'
+        shell: pwsh
         run: |
-          mkdir -p target/debug
-          curl -L -o target/debug/sciter.dll https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
+          # Vars that were causing YAML parsing issues — set them here:
+          $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
+          $env:VCPKG_DEFAULT_TRIPLET = "x64-windows-static"
+          $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+          $env:BINDGEN_EXTRA_CLANG_ARGS = "-I$env:GITHUB_WORKSPACE/vcpkg/installed/x64-windows-static/include"
+          $env:PKG_CONFIG_PATH = "$env:GITHUB_WORKSPACE\vcpkg\installed\x64-windows-static\lib\pkgconfig"
+
+          # Sciter DLL рядом с бинарём — положим и потом включим в MSI
+          New-Item -ItemType Directory -Force -Path target\debug | Out-Null
+          Invoke-WebRequest https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll -OutFile target\debug\sciter.dll
+
           cargo build --release
-          cp target/debug/sciter.dll target/release/
+          Copy-Item target\debug\sciter.dll target\release\
 
       - name: Upload raw binaries (optional)
         uses: actions/upload-artifact@v4
