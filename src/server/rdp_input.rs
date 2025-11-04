@@ -71,6 +71,7 @@ pub mod client {
         stream: PwStreamInfo,
         resolution: (usize, usize),
         scale: Option<f64>,
+        position: (f64, f64),
     }
 
     impl RdpInputMouse {
@@ -98,12 +99,14 @@ pub mod client {
             } else {
                 None
             };
+            let pos = stream.get_position();
             Ok(Self {
                 conn,
                 session,
                 stream,
                 resolution,
                 scale,
+                position: (pos.0 as f64, pos.1 as f64),
             })
         }
     }
@@ -128,6 +131,8 @@ pub mod client {
             } else {
                 y as f64
             };
+            let x = x - self.position.0;
+            let y = y - self.position.1;
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion_absolute(
                 &portal,
