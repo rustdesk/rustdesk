@@ -91,18 +91,16 @@ jobs:
           perl -0777 -pe "s#(?s)pub const RS_PUB_KEY:.*?;#pub const RS_PUB_KEY: &'static str = \"$SAFE_KEY\";#g" -i "$CFG" || true
           perl -0777 -pe "s#(?s)(pub const RENDEZVOUS_SERVERS:\s*[^=]+=\s*)[^;]*;#\${1}${RDV_ARRAY};#g" -i "$CFG" || true
 
-      # Сборка exe (все переменные ставим внутри PowerShell — без YAML env)
+      # Сборка exe
       - name: Build (release)
         shell: pwsh
         run: |
-          # Vars that were causing YAML parsing issues — set them here:
           $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
           $env:VCPKG_DEFAULT_TRIPLET = "x64-windows-static"
           $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
           $env:BINDGEN_EXTRA_CLANG_ARGS = "-I$env:GITHUB_WORKSPACE/vcpkg/installed/x64-windows-static/include"
           $env:PKG_CONFIG_PATH = "$env:GITHUB_WORKSPACE\vcpkg\installed\x64-windows-static\lib\pkgconfig"
 
-          # Sciter DLL рядом с бинарём — положим и потом включим в MSI
           New-Item -ItemType Directory -Force -Path target\debug | Out-Null
           Invoke-WebRequest https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll -OutFile target\debug\sciter.dll
 
@@ -117,42 +115,30 @@ jobs:
             target/release/rustdesk.exe
             target/release/sciter.dll
 
-      # WiX: один MSI
+      # WiX: один MSI — БЕЗ here-string, записываем XML построчно
       - name: Generate minimal WiX Product.wxs
         shell: pwsh
         run: |
-          $wxs = @"
-<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension"
-     xmlns:ui="http://schemas.microsoft.com/wix/UIExtension">
-  <Product
-    Id="*"
-    Name="RustDesk Custom"
-    Manufacturer="Your Company"
-    Version="1.0.0"
-    Language="1033"
-    UpgradeCode="8B6B6B3A-9E56-4E2E-9A8E-6B2C6E5C1111">
-    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
-    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
-
-    <Feature Id="MainFeature" Title="RustDesk Custom" Level="1">
-      <ComponentGroupRef Id="AppFiles" />
-    </Feature>
-
-    <UIRef Id="WixUI_InstallDir" />
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
-
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLDIR" Name="RustDesk Custom" />
-      </Directory>
-    </Directory>
-  </Product>
-</Wix>
-"@
-          Set-Content -Encoding UTF8 -NoNewline -Path Product.wxs -Value $wxs
+          $lines = @()
+          $lines += '<?xml version="1.0" encoding="UTF-8"?>'
+          $lines += '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi" xmlns:util="http://schemas.microsoft.com/wix/UtilExtension" xmlns:ui="http://schemas.microsoft.com/wix/UIExtension">'
+          $lines += '  <Product Id="*" Name="RustDesk Custom" Manufacturer="Your Company" Version="1.0.0" Language="1033" UpgradeCode="8B6B6B3A-9E56-4E2E-9A8E-6B2C6E5C1111">'
+          $lines += '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />'
+          $lines += '    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />'
+          $lines += '    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />'
+          $lines += '    <Feature Id="MainFeature" Title="RustDesk Custom" Level="1">'
+          $lines += '      <ComponentGroupRef Id="AppFiles" />'
+          $lines += '    </Feature>'
+          $lines += '    <UIRef Id="WixUI_InstallDir" />'
+          $lines += '    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />'
+          $lines += '    <Directory Id="TARGETDIR" Name="SourceDir">'
+          $lines += '      <Directory Id="ProgramFiles64Folder">'
+          $lines += '        <Directory Id="INSTALLDIR" Name="RustDesk Custom" />'
+          $lines += '      </Directory>'
+          $lines += '    </Directory>'
+          $lines += '  </Product>'
+          $lines += '</Wix>'
+          Set-Content -Encoding UTF8 -Path Product.wxs -Value $lines
 
       - name: Harvest files with heat.exe
         shell: pwsh
