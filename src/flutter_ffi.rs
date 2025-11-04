@@ -1437,20 +1437,7 @@ pub fn main_handle_relay_id(id: String) -> String {
 }
 
 pub fn main_is_option_fixed(key: String) -> SyncReturn<bool> {
-    SyncReturn(
-        config::OVERWRITE_DISPLAY_SETTINGS
-            .read()
-            .unwrap()
-            .contains_key(&key)
-            || config::OVERWRITE_LOCAL_SETTINGS
-                .read()
-                .unwrap()
-                .contains_key(&key)
-            || config::OVERWRITE_SETTINGS
-                .read()
-                .unwrap()
-                .contains_key(&key),
-    )
+    SyncReturn(is_option_fixed(&key))
 }
 
 pub fn main_get_main_display() -> SyncReturn<String> {
