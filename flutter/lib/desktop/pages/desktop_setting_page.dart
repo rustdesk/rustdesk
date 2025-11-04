@@ -1741,6 +1741,11 @@ class _DisplayState extends State<_Display> {
           label: 'ScrollAuto',
           onChanged: isOptFixed ? null : onScrollStyleChanged),
       _Radio(context,
+          value: kRemoteScrollStyleBar,
+          groupValue: groupValue,
+          label: 'Scrollbar',
+          onChanged: isOptFixed ? null : onScrollStyleChanged),
+      _Radio(context,
           value: kRemoteScrollStyleEdge,
           groupValue: groupValue,
           label: 'ScrollEdge',
@@ -1782,11 +1787,6 @@ class _DisplayState extends State<_Display> {
               ),
             ],
           )),
-      _Radio(context,
-          value: kRemoteScrollStyleBar,
-          groupValue: groupValue,
-          label: 'Scrollbar',
-          onChanged: isOptFixed ? null : onScrollStyleChanged),
     ]);
   }
 
