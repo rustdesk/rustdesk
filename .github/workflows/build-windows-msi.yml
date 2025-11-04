@@ -35,6 +35,21 @@ jobs:
         run: |
           choco install -y llvm git wixtoolset
 
+      - name: Locate WiX folder
+        id: wix
+        shell: pwsh
+        run: |
+          $cand = Get-ChildItem 'C:\Program Files (x86)\WiX Toolset *\bin' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+          if ($cand) {
+            $wixbin = $cand.FullName
+          } else {
+            $cmd = Get-Command heat.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $wixbin = (Split-Path $cmd.Source) }
+          }
+          if (-not $wixbin) { throw "WiX bin folder not found" }
+          "WIXBIN=$wixbin" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Using WiX bin: $wixbin"
+
       # vcpkg: манифест + классик (кодеки)
       - name: Install vcpkg (manifest deps) for static
         shell: pwsh
@@ -115,7 +130,7 @@ jobs:
             target/release/rustdesk.exe
             target/release/sciter.dll
 
-      # WiX: один MSI — БЕЗ here-string, записываем XML построчно
+      # WiX: один MSI — пишем XML построчно
       - name: Generate minimal WiX Product.wxs
         shell: pwsh
         run: |
@@ -144,18 +159,18 @@ jobs:
         shell: pwsh
         run: |
           $ReleaseDir = Join-Path $env:GITHUB_WORKSPACE "target\release"
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\heat.exe" dir $ReleaseDir -gg -sfrag -srd -sreg -dr INSTALLDIR -cg AppFiles -var var.SourceDir -out harvest.wxs
+          & "$env:WIXBIN\heat.exe" dir $ReleaseDir -gg -sfrag -srd -sreg -dr INSTALLDIR -cg AppFiles -var var.SourceDir -out harvest.wxs
 
       - name: Compile WiX (candle)
         shell: pwsh
         run: |
           $ReleaseDir = Join-Path $env:GITHUB_WORKSPACE "target\release"
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe" -arch x64 -dSourceDir="$ReleaseDir" Product.wxs harvest.wxs -ext WixUIExtension -ext WixUtilExtension
+          & "$env:WIXBIN\candle.exe" -arch x64 -dSourceDir="$ReleaseDir" Product.wxs harvest.wxs -ext WixUIExtension -ext WixUtilExtension
 
       - name: Link WiX (light) -> MSI single file
         shell: pwsh
         run: |
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\light.exe" -cultures:en-us Product.wixobj harvest.wixobj -ext WixUIExtension -ext WixUtilExtension -out RustDesk-Custom-x64.msi
+          & "$env:WIXBIN\light.exe" -cultures:en-us Product.wixobj harvest.wixobj -ext WixUIExtension -ext WixUtilExtension -out RustDesk-Custom-x64.msi
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
