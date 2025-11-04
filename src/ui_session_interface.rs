@@ -238,7 +238,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().scroll_style.clone()
     }
 
-    pub fn get_edge_scroll_edge_thickness(&self) -> Option<i32> {
+    pub fn get_edge_scroll_edge_thickness(&self) -> i32 {
         self.lc.read().unwrap().edge_scroll_edge_thickness
     }
 

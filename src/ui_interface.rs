@@ -1113,6 +1113,12 @@ pub fn get_user_default_option(key: String) -> String {
     UserDefaultConfig::load().get(&key)
 }
 
+#[cfg(feature = "flutter")]
+pub fn get_option_range(key: String) -> hbb_common::config::NumRange {
+    use hbb_common::config::UserDefaultConfig;
+    UserDefaultConfig::default().get_num_range(&key)
+}
+
 pub fn get_fingerprint() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if Config::get_key_confirmed() {

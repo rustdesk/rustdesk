@@ -1680,11 +1680,11 @@ class _DisplayState extends State<_Display> {
     final isOptFixed = isOptionFixed(kOptionScrollStyle);
 
     final groupValue = bind.mainGetUserDefaultOption(key: kOptionScrollStyle);
-    final edgeScrollEdgeThickness = int.tryParse(bind.mainGetUserDefaultOption(key: kOptionEdgeScrollEdgeThickness))
-      ?? kDefaultEdgeScrollEdgeThickness;
+    final edgeScrollEdgeThicknessRange = bind.mainGetOptionRange(key: kOptionEdgeScrollEdgeThickness);
+    final edgeScrollEdgeThickness = double.parse(bind.mainGetUserDefaultOption(key: kOptionEdgeScrollEdgeThickness));
     final edgeScrollEdgeThicknessTextController = TextEditingController();
 
-    edgeScrollEdgeThicknessTextController.text = edgeScrollEdgeThickness.toString();
+    edgeScrollEdgeThicknessTextController.text = edgeScrollEdgeThickness.toInt().toString();
 
     updateSavedScrollStyle(String value) async {
       await bind.mainSetUserDefaultOption(
@@ -1712,15 +1712,12 @@ class _DisplayState extends State<_Display> {
     onEdgeScrollEdgeThicknessTextSubmitted(String value) async {
       int? intValue = int.tryParse(edgeScrollEdgeThicknessTextController.text);
 
-      if (intValue == null) {
-        intValue = kDefaultEdgeScrollEdgeThickness;
+      if (intValue != null) {
+        await onEdgeScrollEdgeThicknessChanged(intValue.toDouble());
       } else {
-        intValue = intValue.clamp(
-          kMinimumEdgeScrollEdgeThickness,
-          kMaximumEdgeScrollEdgeThickness);
+        // can't parse what the user typed, just revert it to what's saved
+        setState(() {});
       }
-
-      await onEdgeScrollEdgeThicknessChanged(intValue.toDouble());
     }
 
     final edgeScrollEdgeThicknessFocusNode = FocusNode();
@@ -1771,11 +1768,10 @@ class _DisplayState extends State<_Display> {
                           thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10.0), // Smaller thumb
                         ),
                         child: Slider(
-                          value: (edgeScrollEdgeThickness ?? kDefaultEdgeScrollEdgeThickness)
-                            .clamp(kMinimumEdgeScrollEdgeThickness, kMaximumEdgeScrollEdgeThickness).toDouble(),
-                          min: kMinimumEdgeScrollEdgeThickness.toDouble(),
-                          max: kMaximumEdgeScrollEdgeThickness.toDouble(),
-                          divisions: (kMaximumEdgeScrollEdgeThickness - kMinimumEdgeScrollEdgeThickness).round(),
+                          value: edgeScrollEdgeThickness,
+                          min: edgeScrollEdgeThicknessRange.minimumValue,
+                          max: edgeScrollEdgeThicknessRange.maximumValue,
+                          divisions: (edgeScrollEdgeThicknessRange.maximumValue - edgeScrollEdgeThicknessRange.minimumValue).round(),
                           onChangeStart: (x) { automaticallySwitchToEdgeScroll(); },
                           onChanged: onEdgeScrollEdgeThicknessChanged)))),
                   SizedBox(width: 65, child:

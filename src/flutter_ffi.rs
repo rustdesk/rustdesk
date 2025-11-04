@@ -14,7 +14,7 @@ use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::allow_err;
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
+    config::{self, LocalConfig, PeerConfig, PeerInfoSerde, UserDefaultConfig},
     fs, lazy_static, log,
     rendezvous_proto::ConnType,
     ResultType,
@@ -28,6 +28,23 @@ use std::{
     },
     time::{Duration, SystemTime},
 };
+
+// rust-ffigen can't grok the NumRange type imported from hbb_common
+pub struct NumRange {
+    pub defaultValue: f64,
+    pub minimumValue: f64,
+    pub maximumValue: f64,
+}
+
+impl From<config::NumRange> for NumRange {
+    fn from(range: config::NumRange) -> Self {
+        NumRange {
+            defaultValue: range.default,
+            minimumValue: range.minimum,
+            maximumValue: range.maximum
+        }
+    }
+}
 
 pub type SessionID = uuid::Uuid;
 
@@ -395,7 +412,7 @@ pub fn session_set_scroll_style(session_id: SessionID, value: String) {
 
 pub fn session_get_edge_scroll_edge_thickness(session_id: SessionID) -> Option<i32> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.get_edge_scroll_edge_thickness()
+        Some(session.get_edge_scroll_edge_thickness())
     } else {
         None
     }
@@ -1435,6 +1452,10 @@ pub fn main_set_user_default_option(key: String, value: String) {
 
 pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_user_default_option(key))
+}
+
+pub fn main_get_option_range(key: String) -> SyncReturn<NumRange> {
+    SyncReturn(NumRange::from(get_option_range(key)))
 }
 
 pub fn main_handle_relay_id(id: String) -> String {

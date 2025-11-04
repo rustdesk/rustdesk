@@ -1990,7 +1990,7 @@ impl LoginConfigHandler {
     /// * `value` - The edge thickness to be saved.
     pub fn save_edge_scroll_edge_thickness(&mut self, value: i32) {
         let mut config = self.load_config();
-        config.edge_scroll_edge_thickness = Some(value);
+        config.edge_scroll_edge_thickness = value;
         self.save_config(config);
     }
 

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
+import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -1069,18 +1070,24 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       final scrollStyle =
           await bind.sessionGetScrollStyle(sessionId: ffi.sessionId) ?? '';
       final edgeScrollEdgeThickness =
-          await bind.sessionGetEdgeScrollEdgeThickness(sessionId: ffi.sessionId) ?? kDefaultEdgeScrollEdgeThickness;
+          await bind.sessionGetEdgeScrollEdgeThickness(sessionId: ffi.sessionId);
+      final edgeScrollEdgeThicknessRange =
+          await bind.mainGetOptionRange(key: kOptionEdgeScrollEdgeThickness);
       return {
         'visible': visible,
         'scrollStyle': scrollStyle,
-        'edgeScrollEdgeThickness': edgeScrollEdgeThickness
+        'edgeScrollEdgeThickness': edgeScrollEdgeThickness,
+        'edgeScrollEdgeThicknessRange': edgeScrollEdgeThicknessRange,
       };
     }(), hasData: (data) {
       final visible = data['visible'] as bool;
       if (!visible) return Offstage();
       final groupValue = data['scrollStyle'] as String;
       final edgeScrollEdgeThickness = data['edgeScrollEdgeThickness'] as int;
+      final edgeScrollEdgeThicknessRange = data['edgeScrollEdgeThicknessRange'] as NumRange;
       updateScrollStyle(String value) async {
+        print("updateScrollStyle HAPPING");
+        print(StackTrace.current.toString());
         await bind.sessionSetScrollStyle(
             sessionId: ffi.sessionId, value: value);
         widget.ffi.canvasModel.updateScrollStyle();
@@ -1142,8 +1149,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                   overlayColor: colorScheme.primary.withOpacity(0.1),
                   showValueIndicator: ShowValueIndicator.never,
                   thumbShape: _RectValueThumbShape(
-                    min: kMinimumEdgeScrollEdgeThickness.toDouble(),
-                    max: kMaximumEdgeScrollEdgeThickness.toDouble(),
+                    min: edgeScrollEdgeThicknessRange.minimumValue,
+                    max: edgeScrollEdgeThicknessRange.maximumValue,
                     width: 52,
                     height: 24,
                     radius: 4,
@@ -1153,9 +1160,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                 child: Slider(
                   label: translate('Scroll region thickness'),
                   value: edgeScrollEdgeThickness.toDouble(),
-                  min: kMinimumEdgeScrollEdgeThickness.toDouble(),
-                  max: kMaximumEdgeScrollEdgeThickness.toDouble(),
-                  divisions: (kMaximumEdgeScrollEdgeThickness - kMinimumEdgeScrollEdgeThickness).round(),
+                  min: edgeScrollEdgeThicknessRange.minimumValue,
+                  max: edgeScrollEdgeThicknessRange.maximumValue,
+                  divisions: (edgeScrollEdgeThicknessRange.maximumValue - edgeScrollEdgeThicknessRange.minimumValue).round(),
                   semanticFormatterCallback: (double newValue) {
                     return "${newValue.round()}px";
                   },
