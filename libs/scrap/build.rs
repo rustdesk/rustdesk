@@ -228,9 +228,7 @@ fn ffmpeg() {
 
 fn main() {
     // in this crate, these are also valid configurations
-    println!("cargo:rustc-check-cfg=cfg(dxgi)");
-    println!("cargo:rustc-check-cfg=cfg(quartz)");
-    println!("cargo:rustc-check-cfg=cfg(x11)");
+    println!("cargo:rustc-check-cfg=cfg(dxgi,quartz,x11)");
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
