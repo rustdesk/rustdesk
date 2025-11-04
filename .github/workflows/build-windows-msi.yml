@@ -95,11 +95,11 @@ jobs:
       - name: Build (release)
         shell: bash
         env:
-          VCPKG_ROOT: "${{ github.workspace }}\vcpkg"
-          VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
-          LIBCLANG_PATH: "C:\\Program Files\\LLVM\\bin"
-          BINDGEN_EXTRA_CLANG_ARGS: "-I${{ github.workspace }}/vcpkg/installed/x64-windows-static/include"
-          PKG_CONFIG_PATH: "${{ github.workspace }}\vcpkg\installed\x64-windows-static\lib\pkgconfig"
+          VCPKG_ROOT: '${{ github.workspace }}\vcpkg'
+          VCPKG_DEFAULT_TRIPLET: 'x64-windows-static'
+          LIBCLANG_PATH: 'C:\Program Files\LLVM\bin'
+          BINDGEN_EXTRA_CLANG_ARGS: '-I${{ github.workspace }}/vcpkg/installed/x64-windows-static/include'
+          PKG_CONFIG_PATH: '${{ github.workspace }}\vcpkg\installed\x64-windows-static\lib\pkgconfig'
         run: |
           mkdir -p target/debug
           curl -L -o target/debug/sciter.dll https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
