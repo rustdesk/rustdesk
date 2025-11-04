@@ -57,7 +57,6 @@ String findRustlsPlatformVerifierMavenDir() {
     return mavenDir.path
 }
 
-
 repositories {
     maven {
         url = findRustlsPlatformVerifierMavenDir()
@@ -134,4 +133,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("1.9.10") } }
     implementation 'com.caverock:androidsvg-aar:1.4'
     implementation "rustls:rustls-platform-verifier:0.1.1"
+
+    // + añadido para SAF (DocumentFile)
+    implementation "androidx.documentfile:documentfile:1.0.1"
 }
