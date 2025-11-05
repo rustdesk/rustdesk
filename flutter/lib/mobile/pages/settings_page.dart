@@ -724,18 +724,16 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 title: const Text('ID/Relay Server'),
                 content: const Text(
                   'Elige una opción:\n\n'
-                  '• Abrir configuración normal\n'
-                  '• Autorellenar con mis valores y abrir'
                 ),
                 actions: [
-                  dialogButton('Abrir normal', onPressed: () {
+                  dialogButton('ABRIR CONF ACTUAL', onPressed: () {
                     close();
                     showServerSettings(gFFI.dialogManager, (callback) async {
                       _isUsingPublicServer = await bind.mainIsUsingPublicServer();
                       setState(callback);
                     });
                   }, isOutline: true),
-                  dialogButton('Autorellenar y abrir', onPressed: () async {
+                  dialogButton('CARGAR SERVIDOR IDECOM', onPressed: () async {
                     close();
                     await _applyPresetAndOpenServerDialog(context);
                   }),
