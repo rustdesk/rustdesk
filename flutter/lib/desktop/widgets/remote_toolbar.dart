@@ -1086,8 +1086,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       final edgeScrollEdgeThickness = data['edgeScrollEdgeThickness'] as int;
       final edgeScrollEdgeThicknessRange = data['edgeScrollEdgeThicknessRange'] as NumRange;
       updateScrollStyle(String value) async {
-        print("updateScrollStyle HAPPING");
-        print(StackTrace.current.toString());
         await bind.sessionSetScrollStyle(
             sessionId: ffi.sessionId, value: value);
         widget.ffi.canvasModel.updateScrollStyle();
