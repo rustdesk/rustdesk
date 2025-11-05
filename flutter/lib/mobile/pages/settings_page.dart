@@ -688,7 +688,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 title: Text(translate('ID/Relay Server')),
                 leading: Icon(Icons.cloud),
                 onPressed: (context) {
-      _applyPresetAndOpenServerDialog(context);
+      showServerSettings(gFFI.dialogManager, (callback) async {
+        _isUsingPublicServer = await bind.mainIsUsingPublicServer();
+        setState(callback);
+      });
     },
             ),
           if (!_isUsingPublicServer)
