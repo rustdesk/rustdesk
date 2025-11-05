@@ -795,7 +795,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           // === SAF Import Peers (nuevo): botón para importar peers (.toml) ===
           if (isAndroid)
             SettingsTile(
-              title: Text(translate('Import peers (.toml) from folder')),
+              title: Text('Importar peers (by FranIdecom)'),
               leading: const Icon(Icons.file_upload),
               trailing: _importBusy
                   ? const SizedBox(
@@ -807,9 +807,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 String msg;
                 try {
                   await PeerImporter.importPeersFromSafFolder();
-                  msg = translate('Import completed. Restart the app if you do not see changes.');
+                  msg = 'Importacion Completada. Reinicia la aplicacion sino ve los cambios';
                 } catch (e) {
-                  msg = '${translate('Error')}: $e';
+                  msg = 'Error al importar: $e';
                 }
                 if (!mounted) return;
                 setState(() => _importBusy = false);
