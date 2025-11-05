@@ -25,7 +25,7 @@ RustDesk verwelkomt bijdragen van iedereen. Zie [`docs/CONTRIBUTING.md`](CONTRIB
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Download het op F-Droid"
-    height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
+    height="80">](https://f-droid.org/en/packages/com.wadey.desktop)
 
 ## Afhankelijkheden
 

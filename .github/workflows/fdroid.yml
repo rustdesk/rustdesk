@@ -10,7 +10,7 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'
 
 jobs:
-  # https://gitlab.com/fdroid/fdroiddata/-/blob/master/metadata/com.carriez.flutter_hbb.yml
+  # https://gitlab.com/fdroid/fdroiddata/-/blob/master/metadata/com.wadey.desktop.yml
   # Finds latest release and transforms F-Droid version code from version as follows:
   # X.Y.Z-A => X * 1e6 + Y * 1e4 + Z * 1e2 + A
   update-fdroid-version-file:

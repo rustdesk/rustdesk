@@ -28,7 +28,7 @@ RustDeskは皆さんの貢献を歓迎します。
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="F-Droidで入手する"
-    height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
+    height="80">](https://f-droid.org/en/packages/com.wadey.desktop)
 
 ## 依存関係
 

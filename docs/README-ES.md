@@ -29,7 +29,7 @@ RustDesk agradece la contribución de todo el mundo. Lee [`docs/CONTRIBUTING.md`
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
-    height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
+    height="80">](https://f-droid.org/en/packages/com.wadey.desktop)
 [<img src="https://flathub.org/api/badge?svg&locale=en"
     alt="Get it on Flathub"
     height="80">](https://flathub.org/apps/com.rustdesk.RustDesk)
