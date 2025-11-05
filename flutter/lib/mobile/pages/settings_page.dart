@@ -23,6 +23,21 @@ import 'scan_page.dart';
 
 // === SAF Import Peers (nuevo) ===
 import '../../services/peer_importer.dart';
+
+// =====================
+// Presets para ID server y KEY (edítalos a tu gusto)
+// =====================
+const String kPresetIdServer = 'PON_AQUI_TU_ID_SERVER:21116'; // <-- cámbialo
+// Si tu clave es una sola línea, usa esta forma:
+const String kPresetKey = 'PON_AQUI_TU_CLAVE_PUBLICA_EN_UNA_LINEA';
+// Si tu clave está en formato PEM multilínea, comenta la línea anterior y usa esto:
+// const String kPresetKey = '''
+// -----BEGIN PUBLIC KEY-----
+// TU_CLAVE_AQUI
+// -----END PUBLIC KEY-----
+// ''';
+
+
 // === FIN SAF Import Peers ===
 
 class SettingsPage extends StatefulWidget implements PageShape {
@@ -70,6 +85,30 @@ KeepScreenOn optionToKeepScreenOn(String value) {
 }
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
+
+  // Aplica los valores predefinidos de ID y KEY y abre el diálogo oficial
+  Future<void> _applyPresetAndOpenServerDialog(BuildContext context) async {
+    try {
+      // Setear SOLO ID y KEY (no tocamos relay)
+      await bind.mainSetOption(key: 'id-server', value: kPresetIdServer);
+      await bind.mainSetOption(key: 'key',       value: kPresetKey);
+      await bind.mainSetLocalOption(key: 'id-server', value: kPresetIdServer);
+      await bind.mainSetLocalOption(key: 'key',       value: kPresetKey);
+
+      // Abrir el diálogo estándar de RustDesk para que lo veas ya relleno
+      showServerSettings(gFFI.dialogManager, (callback) async {
+        _isUsingPublicServer = await bind.mainIsUsingPublicServer();
+        setState(callback);
+      });
+    } catch (e) {
+      gFFI.dialogManager.show((setState, close, _) => CustomAlertDialog(
+        title: const Text('Error'),
+        content: Text('No se pudo aplicar el preset: $e'),
+        actions: [ dialogButton('Cerrar', onPressed: () => close()) ],
+      ));
+    }
+  }
+
   final _hasIgnoreBattery =
       false; //androidVersion >= 26; // remove because not work on every device
   var _ignoreBatteryOpt = false;
@@ -685,36 +724,32 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         SettingsSection(title: Text(translate("Settings")), tiles: [
           if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(
-                title: Text(translate('ID/Relay Server')),
-                leading: Icon(Icons.cloud),
-                onPressed: (context) {
-                  showServerSettings(gFFI.dialogManager, (callback) async {
-                    _isUsingPublicServer = await bind.mainIsUsingPublicServer();
-                    setState(callback);
-                  });
-                }),
-          if (!_hideNetwork && !_hideProxy)
-            SettingsTile(
-                title: Text(translate('Socks5/Http(s) Proxy')),
-                leading: Icon(Icons.network_ping),
-                onPressed: (context) {
-                  changeSocks5Proxy();
-                }),
-          if (!disabledSettings && !_hideNetwork && !_hideWebSocket)
-            SettingsTile.switchTile(
-              title: Text(translate('Use WebSocket')),
-              initialValue: _allowWebSocket,
-              onToggle: isOptionFixed(kOptionAllowWebSocket)
-                  ? null
-                  : (v) async {
-                      await mainSetBoolOption(kOptionAllowWebSocket, v);
-                      final newValue =
-                          await mainGetBoolOption(kOptionAllowWebSocket);
-                      setState(() {
-                        _allowWebSocket = newValue;
-                      });
-                    },
-            ),
+            title: Text(translate('ID/Relay Server')),
+            leading: const Icon(Icons.cloud),
+            onPressed: (context) {
+              gFFI.dialogManager.show((setState, close, _) => CustomAlertDialog(
+                title: const Text('ID/Relay Server'),
+                content: const Text(
+                  'Elige una opción:\n\n'
+                  '• Abrir configuración normal\n'
+                  '• Autorellenar con mis valores y abrir'
+                ),
+                actions: [
+                  dialogButton('Abrir normal', onPressed: () {
+                    close();
+                    showServerSettings(gFFI.dialogManager, (callback) async {
+                      _isUsingPublicServer = await bind.mainIsUsingPublicServer();
+                      setState(callback);
+                    });
+                  }, isOutline: true),
+                  dialogButton('Autorellenar y abrir', onPressed: () async {
+                    close();
+                    await _applyPresetAndOpenServerDialog(context);
+                  }),
+                ],
+              ), clickMaskDismiss: true, backDismiss: true);
+            },
+          ),
           if (!_isUsingPublicServer)
             SettingsTile.switchTile(
               title: Text(translate('Allow insecure TLS fallback')),
