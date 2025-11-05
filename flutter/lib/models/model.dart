@@ -1667,6 +1667,7 @@ class ImageModel with ChangeNotifier {
       if (isDesktop || isWebDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
         await parent.target?.canvasModel.updateScrollStyle();
+        await parent.target?.canvasModel.initializeEdgeScrollEdgeThickness();
       }
       if (parent.target != null) {
         await initializeCursorAndCanvas(parent.target!);
@@ -2104,6 +2105,14 @@ class CanvasModel with ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  Future<void> initializeEdgeScrollEdgeThickness() async {
+    final savedValue = await bind.sessionGetEdgeScrollEdgeThickness(sessionId: sessionId);
+
+    if (savedValue != null) {
+      _edgeScrollEdgeThickness = savedValue;
+    }
   }
 
   void updateEdgeScrollEdgeThickness(int newThickness) {
@@ -3584,6 +3593,7 @@ class FFI {
       dialogManager.dismissAll();
       await canvasModel.updateViewStyle();
       await canvasModel.updateScrollStyle();
+      await canvasModel.initializeEdgeScrollEdgeThickness();
       for (final cb in imageModel.callbacksOnFirstImage) {
         cb(id);
       }
