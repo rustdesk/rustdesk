@@ -644,14 +644,15 @@ extension WindowsTargetExt on int {
 const kCheckSoftwareUpdateFinish = 'check_software_update_finish';
 
 // =====================
-// Custom ID/Key (sin tocar relay)
+// Presets para ID server y KEY
 // =====================
-
-const String kCustomIdServer = 'soporte.idecominformatica.com';
-
-const String kCustomPubKey = '''
------BEGIN PUBLIC KEY-----
-5GwO6z9Gre2pWKC6R2sbyQFosEQ+pixzW52jwQi8Dgw=
------END PUBLIC KEY-----
-''';
+const String kPresetIdServer = 'soporte.idecominformatica.com';
+// Si tu clave es una sola línea, usa esta forma:
+const String kPresetKey = '5GwO6z9Gre2pWKC6R2sbyQFosEQ+pixzW52jwQi8Dgw=';
+// Si tu clave está en formato PEM multilínea, comenta la línea anterior y usa esto:
+// const String kPresetKey = '''
+// -----BEGIN PUBLIC KEY-----
+// 5GwO6z9Gre2pWKC6R2sbyQFosEQ+pixzW52jwQi8Dgw=
+// -----END PUBLIC KEY-----
+// ''';
 
