@@ -1747,42 +1747,44 @@ class _DisplayState extends State<_Display> {
           groupValue: groupValue,
           label: 'ScrollEdge',
           onChanged: isOptFixed ? null : onScrollStyleChanged),
-      Container(
-          width: double.infinity,
-          margin: EdgeInsets.only(left: 30.0),
-          child: Column(
-            children: <Widget>[
-              Text(translate('Scroll region thickness'),
-                textAlign: TextAlign.left,
-                style: TextStyle(fontSize: 12)),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Semantics(
-                      label: translate('ScrollEdgeThicknessSlider'),
-                      value: edgeScrollEdgeThickness.toString(),
-                      child: SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          showValueIndicator: ShowValueIndicator.always,
-                          overlayShape: RoundSliderOverlayShape(overlayRadius: 15.0), // Smaller overlay
-                          thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10.0), // Smaller thumb
-                        ),
-                        child: Slider(
-                          value: edgeScrollEdgeThickness,
-                          min: edgeScrollEdgeThicknessRange.minimumValue,
-                          max: edgeScrollEdgeThicknessRange.maximumValue,
-                          divisions: (edgeScrollEdgeThicknessRange.maximumValue - edgeScrollEdgeThicknessRange.minimumValue).round(),
-                          onChangeStart: (x) { automaticallySwitchToEdgeScroll(); },
-                          onChanged: onEdgeScrollEdgeThicknessChanged)))),
-                  SizedBox(width: 65, child:
-                  TextField(
-                    controller: edgeScrollEdgeThicknessTextController,
-                    onSubmitted: onEdgeScrollEdgeThicknessTextSubmitted,
-                    focusNode: edgeScrollEdgeThicknessFocusNode)),
-                ],
-              ),
-            ],
-          )),
+      Offstage(
+        offstage: groupValue != kRemoteScrollStyleEdge,
+        child: Container(
+            width: double.infinity,
+            margin: EdgeInsets.only(left: 30.0),
+            child: Column(
+              children: <Widget>[
+                Text(translate('Scroll region thickness'),
+                  textAlign: TextAlign.left,
+                  style: TextStyle(fontSize: 12)),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Semantics(
+                        label: translate('ScrollEdgeThicknessSlider'),
+                        value: edgeScrollEdgeThickness.toString(),
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            showValueIndicator: ShowValueIndicator.always,
+                            overlayShape: RoundSliderOverlayShape(overlayRadius: 15.0), // Smaller overlay
+                            thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10.0), // Smaller thumb
+                          ),
+                          child: Slider(
+                            value: edgeScrollEdgeThickness,
+                            min: edgeScrollEdgeThicknessRange.minimumValue,
+                            max: edgeScrollEdgeThicknessRange.maximumValue,
+                            divisions: (edgeScrollEdgeThicknessRange.maximumValue - edgeScrollEdgeThicknessRange.minimumValue).round(),
+                            onChangeStart: (x) { automaticallySwitchToEdgeScroll(); },
+                            onChanged: onEdgeScrollEdgeThicknessChanged)))),
+                    SizedBox(width: 65, child:
+                    TextField(
+                      controller: edgeScrollEdgeThicknessTextController,
+                      onSubmitted: onEdgeScrollEdgeThicknessTextSubmitted,
+                      focusNode: edgeScrollEdgeThicknessFocusNode)),
+                  ],
+                ),
+              ],
+            ))),
     ]);
   }
 

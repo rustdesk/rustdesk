@@ -1072,7 +1072,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       final edgeScrollEdgeThickness =
           await bind.sessionGetEdgeScrollEdgeThickness(sessionId: ffi.sessionId);
       final edgeScrollEdgeThicknessRange =
-          await bind.mainGetOptionRange(key: kOptionEdgeScrollEdgeThickness);
+          bind.mainGetOptionRange(key: kOptionEdgeScrollEdgeThickness);
       return {
         'visible': visible,
         'scrollStyle': scrollStyle,
@@ -1118,6 +1118,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               onChanged: widget.ffi.canvasModel.imageOverflow.value
                   ? (value) => onChangeScrollStyle(value)
                   : null,
+              closeOnActivate: groupValue != kRemoteScrollStyleEdge,
               ffi: widget.ffi,
             ),
             RdoMenuButton<String>(
@@ -1127,6 +1128,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               onChanged: widget.ffi.canvasModel.imageOverflow.value
                   ? (value) => onChangeScrollStyle(value)
                   : null,
+              closeOnActivate: groupValue != kRemoteScrollStyleEdge,
               ffi: widget.ffi,
             ),
             RdoMenuButton<String>(
@@ -1139,37 +1141,39 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                   : null,
               ffi: widget.ffi,
             ),
-            Semantics(
-              label: translate('ScrollEdgeThicknessSlider'),
-              value: edgeScrollEdgeThickness.toString(),
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: colorScheme.primary,
-                  thumbColor: colorScheme.primary,
-                  overlayColor: colorScheme.primary.withOpacity(0.1),
-                  showValueIndicator: ShowValueIndicator.never,
-                  thumbShape: _RectValueThumbShape(
+            Offstage(
+              offstage: groupValue != kRemoteScrollStyleEdge,
+              child: Semantics(
+                label: translate('ScrollEdgeThicknessSlider'),
+                value: edgeScrollEdgeThickness.toString(),
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: colorScheme.primary,
+                    thumbColor: colorScheme.primary,
+                    overlayColor: colorScheme.primary.withOpacity(0.1),
+                    showValueIndicator: ShowValueIndicator.never,
+                    thumbShape: _RectValueThumbShape(
+                      min: edgeScrollEdgeThicknessRange.minimumValue,
+                      max: edgeScrollEdgeThicknessRange.maximumValue,
+                      width: 52,
+                      height: 24,
+                      radius: 4,
+                      unit: 'px',
+                    ),
+                  ),
+                  child: Slider(
+                    label: translate('Scroll region thickness'),
+                    value: edgeScrollEdgeThickness.toDouble(),
                     min: edgeScrollEdgeThicknessRange.minimumValue,
                     max: edgeScrollEdgeThicknessRange.maximumValue,
-                    width: 52,
-                    height: 24,
-                    radius: 4,
-                    unit: 'px',
+                    divisions: (edgeScrollEdgeThicknessRange.maximumValue - edgeScrollEdgeThicknessRange.minimumValue).round(),
+                    semanticFormatterCallback: (double newValue) {
+                      return "${newValue.round()}px";
+                    },
+                    onChanged: onChangeEdgeScrollEdgeThickness,
                   ),
                 ),
-                child: Slider(
-                  label: translate('Scroll region thickness'),
-                  value: edgeScrollEdgeThickness.toDouble(),
-                  min: edgeScrollEdgeThicknessRange.minimumValue,
-                  max: edgeScrollEdgeThicknessRange.maximumValue,
-                  divisions: (edgeScrollEdgeThicknessRange.maximumValue - edgeScrollEdgeThicknessRange.minimumValue).round(),
-                  semanticFormatterCallback: (double newValue) {
-                    return "${newValue.round()}px";
-                  },
-                  onChanged: onChangeEdgeScrollEdgeThickness,
-                ),
-              ),
-            ),
+              )),
             Divider(),
           ]));
     });
