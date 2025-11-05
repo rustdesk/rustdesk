@@ -25,18 +25,11 @@ import 'scan_page.dart';
 import '../../services/peer_importer.dart';
 
 // =====================
-// Presets para ID server y KEY (edítalos a tu gusto)
+// Presets para ID server y KEY
 // =====================
-const String kPresetIdServer = 'PON_AQUI_TU_ID_SERVER:21116'; // <-- cámbialo
+const String kPresetIdServer = 'soporte.idecominformatica.com'; 
 // Si tu clave es una sola línea, usa esta forma:
-const String kPresetKey = 'PON_AQUI_TU_CLAVE_PUBLICA_EN_UNA_LINEA';
-// Si tu clave está en formato PEM multilínea, comenta la línea anterior y usa esto:
-// const String kPresetKey = '''
-// -----BEGIN PUBLIC KEY-----
-// TU_CLAVE_AQUI
-// -----END PUBLIC KEY-----
-// ''';
-
+const String kPresetKey = '5GwO6z9Gre2pWKC6R2sbyQFosEQ+pixzW52jwQi8Dgw=';
 
 // === FIN SAF Import Peers ===
 
