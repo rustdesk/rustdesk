@@ -644,13 +644,14 @@ extension WindowsTargetExt on int {
 const kCheckSoftwareUpdateFinish = 'check_software_update_finish';
 
 // =====================
-// Custom ID/Relay/Key
+// Custom ID/Key (sin tocar relay)
 // =====================
-const String kCustomIdServer = 'tu-dominio-o-ip:21116';   // TODO
-const String kCustomRelay    = 'tu-dominio-o-ip:21117';   // TODO
-const String kCustomPubKey   = '''
+
+const String kCustomIdServer = 'soporte.idecominformatica.com';
+
+const String kCustomPubKey = '''
 -----BEGIN PUBLIC KEY-----
-TU_CLAVE_PUBLICA_AQUI
+5GwO6z9Gre2pWKC6R2sbyQFosEQ+pixzW52jwQi8Dgw=
 -----END PUBLIC KEY-----
-'''; // TODO
+''';
 
