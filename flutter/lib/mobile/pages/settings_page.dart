@@ -23,14 +23,6 @@ import 'scan_page.dart';
 
 // === SAF Import Peers (nuevo) ===
 import '../../services/peer_importer.dart';
-
-// =====================
-// Presets para ID server y KEY
-// =====================
-const String kPresetIdServer = 'soporte.idecominformatica.com'; 
-// Si tu clave es una sola línea, usa esta forma:
-const String kPresetKey = '5GwO6z9Gre2pWKC6R2sbyQFosEQ+pixzW52jwQi8Dgw=';
-
 // === FIN SAF Import Peers ===
 
 class SettingsPage extends StatefulWidget implements PageShape {
@@ -78,30 +70,6 @@ KeepScreenOn optionToKeepScreenOn(String value) {
 }
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
-
-  // Aplica los valores predefinidos de ID y KEY y abre el diálogo oficial
-  Future<void> _applyPresetAndOpenServerDialog(BuildContext context) async {
-    try {
-      // Setear SOLO ID y KEY (no tocamos relay)
-      await bind.mainSetOption(key: 'id-server', value: kPresetIdServer);
-      await bind.mainSetOption(key: 'key',       value: kPresetKey);
-      await bind.mainSetLocalOption(key: 'id-server', value: kPresetIdServer);
-      await bind.mainSetLocalOption(key: 'key',       value: kPresetKey);
-
-      // Abrir el diálogo estándar de RustDesk para que lo veas ya relleno
-      showServerSettings(gFFI.dialogManager, (callback) async {
-        _isUsingPublicServer = await bind.mainIsUsingPublicServer();
-        setState(callback);
-      });
-    } catch (e) {
-      gFFI.dialogManager.show((setState, close, _) => CustomAlertDialog(
-        title: const Text('Error'),
-        content: Text('No se pudo aplicar el preset: $e'),
-        actions: [ dialogButton('Cerrar', onPressed: () => close()) ],
-      ));
-    }
-  }
-
   final _hasIgnoreBattery =
       false; //androidVersion >= 26; // remove because not work on every device
   var _ignoreBatteryOpt = false;
@@ -717,30 +685,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         SettingsSection(title: Text(translate("Settings")), tiles: [
           if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(
-            title: Text(translate('ID/Relay Server')),
-            leading: const Icon(Icons.cloud),
-            onPressed: (context) {
-              gFFI.dialogManager.show((setState, close, _) => CustomAlertDialog(
-                title: const Text('ID/Relay Server'),
-                content: const Text(
-                  'Elige una opción:\n\n'
-                ),
-                actions: [
-                  dialogButton('ABRIR CONF ACTUAL', onPressed: () {
-                    close();
-                    showServerSettings(gFFI.dialogManager, (callback) async {
-                      _isUsingPublicServer = await bind.mainIsUsingPublicServer();
-                      setState(callback);
-                    });
-                  }, isOutline: true),
-                  dialogButton('CARGAR SERVIDOR IDECOM', onPressed: () async {
-                    close();
-                    await _applyPresetAndOpenServerDialog(context);
-                  }),
-                ],
-              ), clickMaskDismiss: true, backDismiss: true);
-            },
-          ),
+                title: Text(translate('ID/Relay Server')),
+                leading: Icon(Icons.cloud),
+                onPressed: (context) {
+      _applyPresetAndOpenServerDialog(context);
+    },
+            ),
           if (!_isUsingPublicServer)
             SettingsTile.switchTile(
               title: Text(translate('Allow insecure TLS fallback')),
@@ -821,7 +771,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           // === SAF Import Peers (nuevo): botón para importar peers (.toml) ===
           if (isAndroid)
             SettingsTile(
-              title: Text('Importar peers (by FranIdecom)'),
+              title: Text(translate('Import peers (.toml) from folder')),
               leading: const Icon(Icons.file_upload),
               trailing: _importBusy
                   ? const SizedBox(
@@ -833,9 +783,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 String msg;
                 try {
                   await PeerImporter.importPeersFromSafFolder();
-                  msg = 'Importacion Completada. Reinicia la aplicacion sino ve los cambios';
+                  msg = translate('Import completed. Restart the app if you do not see changes.');
                 } catch (e) {
-                  msg = 'Error al importar: $e';
+                  msg = '${translate('Error')}: $e';
                 }
                 if (!mounted) return;
                 setState(() => _importBusy = false);
