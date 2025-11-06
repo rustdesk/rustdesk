@@ -204,6 +204,19 @@ pub fn use_texture_render() -> bool {
 }
 
 #[inline]
+pub fn is_option_fixed(key: &str) -> bool {
+    config::OVERWRITE_DISPLAY_SETTINGS
+        .read()
+        .unwrap()
+        .contains_key(key)
+        || config::OVERWRITE_LOCAL_SETTINGS
+            .read()
+            .unwrap()
+            .contains_key(key)
+        || config::OVERWRITE_SETTINGS.read().unwrap().contains_key(key)
+}
+
+#[inline]
 pub fn get_local_option(key: String) -> String {
     crate::get_local_option(&key)
 }
