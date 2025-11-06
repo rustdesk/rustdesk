@@ -5,6 +5,8 @@ use crate::clipboard::try_empty_clipboard_files;
 use crate::clipboard::{update_clipboard, ClipboardSide};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use crate::clipboard_file::*;
+#[cfg(feature = "unix-file-copy-paste")]
+use crate::unix_file_clip;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
 #[cfg(target_os = "linux")]
