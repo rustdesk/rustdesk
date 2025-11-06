@@ -6,24 +6,28 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
+import '../../generated_bridge.dart';
+
 customImageQualityWidget(
     {required double initQuality,
     required double initFps,
     required Function(double)? setQuality,
     required Function(double)? setFps,
     required bool showFps,
-    required bool showMoreQuality}) {
-  if (initQuality < kMinQuality ||
-      initQuality > (showMoreQuality ? kMaxMoreQuality : kMaxQuality)) {
-    initQuality = kDefaultQuality;
+    required bool showMoreQuality,
+    required NumRange customQualityRange,
+    required NumRange customFpsRange}) {
+  if (initQuality < customQualityRange.minimumValue ||
+      initQuality > (showMoreQuality ? kMaxMoreQuality : customQualityRange.maximumValue)) {
+    initQuality = customQualityRange.defaultValue;
   }
-  if (initFps < kMinFps || initFps > kMaxFps) {
-    initFps = kDefaultFps;
+  if (initFps < customFpsRange.minimumValue || initFps > customFpsRange.maximumValue) {
+    initFps = customFpsRange.defaultValue;
   }
   final qualityValue = initQuality.obs;
   final fpsValue = initFps.obs;
 
-  final RxBool moreQualityChecked = RxBool(qualityValue.value > kMaxQuality);
+  final RxBool moreQualityChecked = RxBool(qualityValue.value > customQualityRange.maximumValue);
   final debouncerQuality = Debouncer<double>(
     Duration(milliseconds: 1000),
     onChanged: setQuality,
@@ -52,11 +56,11 @@ customImageQualityWidget(
                 flex: 3,
                 child: Slider(
                   value: qualityValue.value,
-                  min: kMinQuality,
-                  max: moreQualityChecked.value ? kMaxMoreQuality : kMaxQuality,
+                  min: customQualityRange.minimumValue,
+                  max: moreQualityChecked.value ? kMaxMoreQuality : customQualityRange.maximumValue,
                   divisions: moreQualityChecked.value
-                      ? ((kMaxMoreQuality - kMinQuality) / 10).round()
-                      : ((kMaxQuality - kMinQuality) / 5).round(),
+                      ? ((kMaxMoreQuality - customQualityRange.minimumValue) / 10).round()
+                      : ((customQualityRange.maximumValue - customQualityRange.minimumValue) / 5).round(),
                   onChanged: setQuality == null
                       ? null
                       : (double value) async {
@@ -118,9 +122,9 @@ customImageQualityWidget(
                   flex: 3,
                   child: Slider(
                     value: fpsValue.value,
-                    min: kMinFps,
-                    max: kMaxFps,
-                    divisions: ((kMaxFps - kMinFps) / 5).round(),
+                    min: customFpsRange.minimumValue,
+                    max: customFpsRange.maximumValue,
+                    divisions: ((customFpsRange.maximumValue - customFpsRange.minimumValue) / 5).round(),
                     onChanged: setFps == null
                         ? null
                         : (double value) async {
@@ -147,17 +151,17 @@ customImageQualityWidget(
   );
 }
 
-customImageQualitySetting() {
+customImageQualitySetting(NumRange customQualityRange, NumRange customFpsRange) {
   final qualityKey = 'custom_image_quality';
   final fpsKey = 'custom-fps';
 
   final initQuality =
       (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ??
-          kDefaultQuality);
+          customQualityRange.defaultValue);
   final isQuanlityFixed = isOptionFixed(qualityKey);
   final initFps =
       (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ??
-          kDefaultFps);
+          customFpsRange.defaultValue);
   final isFpsFixed = isOptionFixed(fpsKey);
 
   return customImageQualityWidget(
@@ -175,7 +179,9 @@ customImageQualitySetting() {
               bind.mainSetUserDefaultOption(key: fpsKey, value: v.toString());
             },
       showFps: true,
-      showMoreQuality: true);
+      showMoreQuality: true,
+      customQualityRange: customQualityRange,
+      customFpsRange: customFpsRange);
 }
 
 List<Widget> ServerConfigImportExportWidgets(

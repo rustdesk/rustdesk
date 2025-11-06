@@ -381,6 +381,9 @@ Future<List<TRadioMenu<String>>> toolbarImageQuality(
     await bind.sessionSetImageQuality(sessionId: ffi.sessionId, value: value);
   }
 
+  final customFpsRange = bind.mainGetOptionRange(key: kOptionCustomFps);
+  final customQualityRange = bind.mainGetOptionRange(key: kOptionCustomImageQuality);
+
   return [
     TRadioMenu<String>(
         child: Text(translate('Good image quality')),
@@ -403,7 +406,7 @@ Future<List<TRadioMenu<String>>> toolbarImageQuality(
       groupValue: groupValue,
       onChanged: (value) {
         onChanged(value);
-        customImageQualityDialog(ffi.sessionId, id, ffi);
+        customImageQualityDialog(ffi.sessionId, id, ffi, customFpsRange, customQualityRange);
       },
     ),
   ];

@@ -246,8 +246,8 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().image_quality.clone()
     }
 
-    pub fn get_custom_image_quality(&self) -> Vec<i32> {
-        self.lc.read().unwrap().custom_image_quality.clone()
+    pub fn get_custom_image_quality(&self) -> i32 {
+        self.lc.read().unwrap().custom_image_quality
     }
 
     pub fn get_peer_version(&self) -> i64 {

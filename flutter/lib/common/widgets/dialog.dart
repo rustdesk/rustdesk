@@ -13,6 +13,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../generated_bridge.dart';
 import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
@@ -1590,9 +1591,9 @@ void showConfirmSwitchSidesDialog(
   });
 }
 
-customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
-  double initQuality = kDefaultQuality;
-  double initFps = kDefaultFps;
+customImageQualityDialog(SessionID sessionId, String id, FFI ffi, NumRange customQualityRange, NumRange customFpsRange) async {
+  double initQuality = customQualityRange.defaultValue;
+  double initFps = customFpsRange.defaultValue;
   bool qualitySet = false;
   bool fpsSet = false;
 
@@ -1637,21 +1638,21 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
 
   // quality
   final quality = await bind.sessionGetCustomImageQuality(sessionId: sessionId);
-  initQuality = quality != null && quality.isNotEmpty
-      ? quality[0].toDouble()
-      : kDefaultQuality;
-  if (initQuality < kMinQuality ||
-      initQuality > (!hideMoreQuality ? kMaxMoreQuality : kMaxQuality)) {
-    initQuality = kDefaultQuality;
+  initQuality = quality != null
+      ? quality.toDouble()
+      : customQualityRange.defaultValue;
+  if (initQuality < customQualityRange.minimumValue ||
+      initQuality > (!hideMoreQuality ? kMaxMoreQuality : customQualityRange.maximumValue)) {
+    initQuality = customQualityRange.defaultValue;
   }
   // fps
   final fpsOption =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'custom-fps');
   initFps = fpsOption == null
-      ? kDefaultFps
-      : double.tryParse(fpsOption) ?? kDefaultFps;
-  if (initFps < kMinFps || initFps > kMaxFps) {
-    initFps = kDefaultFps;
+      ? customFpsRange.defaultValue
+      : double.tryParse(fpsOption) ?? customFpsRange.defaultValue;
+  if (initFps < customFpsRange.minimumValue || initFps > customFpsRange.maximumValue) {
+    initFps = customFpsRange.defaultValue;
   }
 
   final content = customImageQualityWidget(
@@ -1660,7 +1661,9 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
       setQuality: (v) => setCustomValues(quality: v),
       setFps: (v) => setCustomValues(fps: v),
       showFps: !hideFps,
-      showMoreQuality: !hideMoreQuality);
+      showMoreQuality: !hideMoreQuality,
+      customFpsRange: customFpsRange,
+      customQualityRange: customQualityRange);
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 

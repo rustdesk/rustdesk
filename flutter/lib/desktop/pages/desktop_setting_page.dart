@@ -23,6 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
+import '../../generated_bridge.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
 
@@ -1797,6 +1798,8 @@ class _DisplayState extends State<_Display> {
 
     final isOptFixed = isOptionFixed(kOptionImageQuality);
     final groupValue = bind.mainGetUserDefaultOption(key: kOptionImageQuality);
+    final customQualityRange = bind.mainGetOptionRange(key: kOptionCustomImageQuality);
+    final customFpsRange = bind.mainGetOptionRange(key: kOptionCustomFps);
     return _Card(title: 'Default Image Quality', children: [
       _Radio(context,
           value: kRemoteImageQualityBest,
@@ -1820,7 +1823,7 @@ class _DisplayState extends State<_Display> {
           onChanged: isOptFixed ? null : onChanged),
       Offstage(
         offstage: groupValue != kRemoteImageQualityCustom,
-        child: customImageQualitySetting(),
+        child: customImageQualitySetting(customQualityRange, customFpsRange),
       )
     ]);
   }

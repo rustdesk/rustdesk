@@ -1030,6 +1030,8 @@ class __DisplayPageState extends State<_DisplayPage> {
       if (h265) _RadioEntry('H265', 'h265')
     ];
     RxBool showCustomImageQuality = false.obs;
+    final customQualityRange = bind.mainGetOptionRange(key: kOptionCustomImageQuality);
+    final customFpsRange = bind.mainGetOptionRange(key: kOptionCustomFps);
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -1078,7 +1080,7 @@ class __DisplayPageState extends State<_DisplayPage> {
                       showCustomImageQuality.value =
                           value == kRemoteImageQualityCustom;
                     },
-              tail: customImageQualitySetting(),
+              tail: customImageQualitySetting(customQualityRange, customFpsRange),
               showTail: showCustomImageQuality,
               notCloseValue: kRemoteImageQualityCustom,
             ),

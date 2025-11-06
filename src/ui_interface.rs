@@ -1116,7 +1116,7 @@ pub fn get_user_default_option(key: String) -> String {
 #[cfg(feature = "flutter")]
 pub fn get_option_range(key: String) -> hbb_common::config::NumRange {
     use hbb_common::config::UserDefaultConfig;
-    UserDefaultConfig::default().get_num_range(&key)
+    UserDefaultConfig::get_num_range(&key)
 }
 
 pub fn get_fingerprint() -> String {

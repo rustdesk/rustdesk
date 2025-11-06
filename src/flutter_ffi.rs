@@ -14,7 +14,7 @@ use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::allow_err;
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, PeerInfoSerde, UserDefaultConfig},
+    config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
     fs, lazy_static, log,
     rendezvous_proto::ConnType,
     ResultType,
@@ -31,17 +31,17 @@ use std::{
 
 // rust-ffigen can't grok the NumRange type imported from hbb_common
 pub struct NumRange {
-    pub defaultValue: f64,
-    pub minimumValue: f64,
-    pub maximumValue: f64,
+    pub default_value: f64,
+    pub minimum_value: f64,
+    pub maximum_value: f64,
 }
 
 impl From<config::NumRange> for NumRange {
     fn from(range: config::NumRange) -> Self {
         NumRange {
-            defaultValue: range.default,
-            minimumValue: range.minimum,
-            maximumValue: range.maximum
+            default_value: range.default,
+            minimum_value: range.minimum,
+            maximum_value: range.maximum
         }
     }
 }
@@ -511,7 +511,7 @@ pub fn session_set_use_all_my_displays_for_the_remote_session(
     }
 }
 
-pub fn session_get_custom_image_quality(session_id: SessionID) -> Option<Vec<i32>> {
+pub fn session_get_custom_image_quality(session_id: SessionID) -> Option<i32> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_custom_image_quality())
     } else {

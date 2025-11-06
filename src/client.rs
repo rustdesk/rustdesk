@@ -129,6 +129,8 @@ pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#
 #[cfg(not(target_os = "linux"))]
 pub const AUDIO_BUFFER_MS: usize = 3000;
 
+pub const MAX_PUBLIC_SERVER_QUALITY: i32 = 100;
+
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) struct ClientClipboardContext;
@@ -2221,15 +2223,10 @@ impl LoginConfigHandler {
         } else if q == "custom" {
             let config = self.load_config();
             let allow_more = !crate::using_public_server() || self.direct == Some(true);
-            let quality = if config.custom_image_quality.is_empty() {
-                50
-            } else {
-                let mut quality = config.custom_image_quality[0];
-                if !allow_more && quality > 100 {
-                    quality = 50;
-                }
-                quality
-            };
+            let mut quality = config.custom_image_quality;
+            if !allow_more && quality > MAX_PUBLIC_SERVER_QUALITY {
+                quality = MAX_PUBLIC_SERVER_QUALITY / 2;
+            }
             msg.custom_image_quality = quality << 8;
             #[cfg(feature = "flutter")]
             if let Some(custom_fps) = self.options.get("custom-fps") {
@@ -2388,7 +2385,7 @@ impl LoginConfigHandler {
         msg_out.set_misc(misc);
         let mut config = self.load_config();
         config.image_quality = "custom".to_owned();
-        config.custom_image_quality = vec![image_quality as _];
+        config.custom_image_quality = image_quality;
         self.save_config(config);
         msg_out
     }
