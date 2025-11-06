@@ -22,7 +22,10 @@ use hbb_common::{
     ResultType,
 };
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    time::Duration,
+};
 use std::{
     collections::HashMap,
     sync::{
