@@ -287,7 +287,7 @@ void showServerSettingsWithValue(
         dialogButton('Cancel', onPressed: () {
           close();
         }, isOutline: true),
-        dialogButton('Autorrellenar', onPressed: () {
+        dialogButton('Cargar Servidor Idecom', onPressed: () {
           setState(() {
             idCtrl.text = kPresetIdServer;
             keyCtrl.text = kPresetKey;
