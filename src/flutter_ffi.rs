@@ -273,7 +273,10 @@ pub fn session_take_screenshot(session_id: SessionID, display: usize) {
     }
 }
 
-pub fn session_handle_screenshot(#[allow(unused_variables)] session_id: SessionID, action: String) -> String {
+pub fn session_handle_screenshot(
+    #[allow(unused_variables)] session_id: SessionID,
+    action: String,
+) -> String {
     crate::client::screenshot::handle_screenshot(action)
 }
 
@@ -390,6 +393,20 @@ pub fn session_get_scroll_style(session_id: SessionID) -> Option<String> {
 pub fn session_set_scroll_style(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.save_scroll_style(value);
+    }
+}
+
+pub fn session_get_edge_scroll_edge_thickness(session_id: SessionID) -> Option<i32> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        Some(session.get_edge_scroll_edge_thickness())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_edge_scroll_edge_thickness(session_id: SessionID, value: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_edge_scroll_edge_thickness(value);
     }
 }
 

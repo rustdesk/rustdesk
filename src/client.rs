@@ -1976,10 +1976,21 @@ impl LoginConfigHandler {
     ///
     /// # Arguments
     ///
-    /// * `value` - The view style to be saved.
+    /// * `value` - The scroll style to be saved.
     pub fn save_scroll_style(&mut self, value: String) {
         let mut config = self.load_config();
         config.scroll_style = value;
+        self.save_config(config);
+    }
+
+    /// Save edge scroll edge thickness to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The edge thickness to be saved.
+    pub fn save_edge_scroll_edge_thickness(&mut self, value: i32) {
+        let mut config = self.load_config();
+        config.edge_scroll_edge_thickness = value;
         self.save_config(config);
     }
 

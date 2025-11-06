@@ -1667,6 +1667,7 @@ class ImageModel with ChangeNotifier {
       if (isDesktop || isWebDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
         await parent.target?.canvasModel.updateScrollStyle();
+        await parent.target?.canvasModel.initializeEdgeScrollEdgeThickness();
       }
       if (parent.target != null) {
         await initializeCursorAndCanvas(parent.target!);
@@ -1914,6 +1915,8 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
+  // edge scroll mode: trigger scrolling when the cursor is close to the edge of the view
+  int _edgeScrollEdgeThickness = 100;
   // tracks whether edge scroll should be active, prevents spurious
   // scrolling when the cursor enters the view from outside
   EdgeScrollState _edgeScrollState = EdgeScrollState.inactive;
@@ -2090,11 +2093,11 @@ class CanvasModel with ChangeNotifier {
     });
   }
 
-  updateScrollStyle() async {
+  Future<void> updateScrollStyle() async {
     final style = await bind.sessionGetScrollStyle(sessionId: sessionId);
 
     _scrollStyle = style != null
-        ? ScrollStyle.fromString(style!)
+        ? ScrollStyle.fromString(style)
         : ScrollStyle.scrollauto;
 
     if (_scrollStyle != ScrollStyle.scrollauto) {
@@ -2104,7 +2107,20 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  update(double x, double y, double scale) {
+  Future<void> initializeEdgeScrollEdgeThickness() async {
+    final savedValue = await bind.sessionGetEdgeScrollEdgeThickness(sessionId: sessionId);
+
+    if (savedValue != null) {
+      _edgeScrollEdgeThickness = savedValue;
+    }
+  }
+
+  void updateEdgeScrollEdgeThickness(int newThickness) {
+    _edgeScrollEdgeThickness = newThickness;
+    notifyListeners();
+  }
+
+  void update(double x, double y, double scale) {
     _x = x;
     _y = y;
     _scale = scale;
@@ -2224,9 +2240,6 @@ class CanvasModel with ChangeNotifier {
       return;
     }
 
-    // Trigger scrolling when the cursor is close to an edge
-    const double edgeThickness = 100;
-
     if (_edgeScrollState == EdgeScrollState.armed) {
       // Edge scroll is armed to become active once the cursor
       // is observed within the rectangle interior to the
@@ -2235,7 +2248,7 @@ class CanvasModel with ChangeNotifier {
       // doesn't happen yet.
       final clientArea = Rect.fromLTWH(0, 0, size.width, size.height);
 
-      final innerZone = clientArea.deflate(edgeThickness);
+      final innerZone = clientArea.deflate(_edgeScrollEdgeThickness.toDouble());
 
       if (innerZone.contains(Offset(x, y))) {
         _edgeScrollState = EdgeScrollState.active;
@@ -2248,16 +2261,16 @@ class CanvasModel with ChangeNotifier {
     var dxOffset = 0.0;
     var dyOffset = 0.0;
 
-    if (x < edgeThickness) {
-      dxOffset = x - edgeThickness;
-    } else if (x >= size.width - edgeThickness) {
-      dxOffset = x - (size.width - edgeThickness);
+    if (x < _edgeScrollEdgeThickness) {
+      dxOffset = x - _edgeScrollEdgeThickness;
+    } else if (x >= size.width - _edgeScrollEdgeThickness) {
+      dxOffset = x - (size.width - _edgeScrollEdgeThickness);
     }
 
-    if (y < edgeThickness) {
-      dyOffset = y - edgeThickness;
-    } else if (y >= size.height - edgeThickness) {
-      dyOffset = y - (size.height - edgeThickness);
+    if (y < _edgeScrollEdgeThickness) {
+      dyOffset = y - _edgeScrollEdgeThickness;
+    } else if (y >= size.height - _edgeScrollEdgeThickness) {
+      dyOffset = y - (size.height - _edgeScrollEdgeThickness);
     }
 
     var encroachment = Vector2(dxOffset, dyOffset);
@@ -3580,6 +3593,7 @@ class FFI {
       dialogManager.dismissAll();
       await canvasModel.updateViewStyle();
       await canvasModel.updateScrollStyle();
+      await canvasModel.initializeEdgeScrollEdgeThickness();
       for (final cb in imageModel.callbacksOnFirstImage) {
         cb(id);
       }
