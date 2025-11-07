@@ -1,0 +1,15 @@
+name: Build Custom RustDesk (Windows exe + msi)
+
+on:
+  workflow_dispatch:      # запуск руками из Actions
+  push:
+    tags:
+      - "v*"             # опционально: автосборка по тегам v1.3.8 и т.п.
+
+jobs:
+  build:
+    # используем тот же workflow, что и у официального RustDesk
+    uses: ./.github/workflows/flutter-build.yml
+    with:
+      upload-artifact: true      # чтобы exe/msi улетели в Artifacts
+      upload-tag: custom         # суффикс в именах артефактов
