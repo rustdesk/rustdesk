@@ -1,4 +1,4 @@
-name: Build Windows (exe + msi)
+name: Build Windows (exe + msi, custom hbb_common)
 
 on:
   workflow_dispatch:
@@ -15,6 +15,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      # 👀 Проверяем, что сабмодуль hbb_common — твой и с нужными строками
+      - name: Debug hbb_common config
+        shell: pwsh
+        run: |
+          cd hbb_common
+          Write-Host "=== Git remotes for hbb_common ==="
+          git remote -v
+          Write-Host "=== Last commit in hbb_common ==="
+          git log -1 --oneline
+          Write-Host "=== Checking config.rs ==="
+          Get-ChildItem -Path . -Recurse -Filter config.rs | ForEach-Object {
+            Write-Host "`n--- $($_.FullName) ---"
+            Select-String -Path $_.FullName -Pattern "RENDEZVOUS_SERVERS","RS_PUB_KEY" | ForEach-Object { $_.Line }
+          }
+          cd ..
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
