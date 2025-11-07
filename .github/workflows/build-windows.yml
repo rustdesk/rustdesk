@@ -1,0 +1,57 @@
+name: Build Windows (exe + msi)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies (vcpkg + LLVM + WiX)
+        shell: pwsh
+        run: |
+          choco install -y llvm wix vcpkg python3
+          echo "VCPKG_ROOT=$env:ProgramData\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install vcpkg libraries
+        shell: pwsh
+        run: |
+          vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+
+      - name: Build RustDesk (exe)
+        shell: pwsh
+        run: |
+          cargo build --release --locked
+          mkdir dist
+          Copy-Item target\release\rustdesk.exe dist\
+
+      - name: Prepare MSI files
+        shell: pwsh
+        run: |
+          cd res/msi
+          python preprocess.py
+          msbuild RustDeskMsi.sln /p:Configuration=Release
+
+      - name: Collect MSI
+        shell: pwsh
+        run: |
+          Copy-Item res\msi\bin\Release\*.msi dist\
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-windows
+          path: dist/*
