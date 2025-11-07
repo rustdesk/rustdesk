@@ -1188,7 +1188,7 @@ mod desktop {
             }
             self.display = self
                 .display
-                .replace(&hbb_common::whoami::fallible::hostname().unwrap_or_else(|_| "".to_string()), "")
+                .replace(&hbb_common::whoami::fallible::hostname().unwrap_or_default(), "")
                 .replace("localhost", "");
         }
 
