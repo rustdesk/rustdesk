@@ -11,6 +11,7 @@ import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
@@ -1631,7 +1632,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                 switchWidget(
                     Icons.web_asset_outlined,
                     'Use WebSocket',
-                    '${translate('websocket_tip')}\n\n${translate('oss-not-support-tip')}',
+                    '${translate('websocket_tip')}\n\n${translate('server-oss-not-support-tip')}',
                     kOptionAllowWebSocket),
               if (!isWeb)
                 futureBuilder(
@@ -1656,7 +1657,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                               title: 'Disable UDP',
                               showTooltip: true,
                               tooltipMessage:
-                                  '${translate('disable-udp-tip')}\n\n${translate('oss-not-support-tip')}',
+                                  '${translate('disable-udp-tip')}\n\n${translate('server-oss-not-support-tip')}',
                               trailing: Switch(
                                 value: bind.mainGetOptionSync(
                                         key: kOptionDisableUdp) ==
@@ -1738,6 +1739,13 @@ class _DisplayState extends State<_Display> {
     }
 
     final groupValue = bind.mainGetUserDefaultOption(key: kOptionScrollStyle);
+
+    onEdgeScrollEdgeThicknessChanged(double value) async {
+      await bind.mainSetUserDefaultOption(
+          key: kOptionEdgeScrollEdgeThickness, value: value.round().toString());
+      setState(() {});
+    }
+
     return _Card(title: 'Default Scroll Style', children: [
       _Radio(context,
           value: kRemoteScrollStyleAuto,
@@ -1745,15 +1753,25 @@ class _DisplayState extends State<_Display> {
           label: 'ScrollAuto',
           onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
-          value: kRemoteScrollStyleEdge,
-          groupValue: groupValue,
-          label: 'ScrollEdge',
-          onChanged: isOptFixed ? null : onChanged),
-      _Radio(context,
           value: kRemoteScrollStyleBar,
           groupValue: groupValue,
           label: 'Scrollbar',
           onChanged: isOptFixed ? null : onChanged),
+      _Radio(context,
+          value: kRemoteScrollStyleEdge,
+          groupValue: groupValue,
+          label: 'ScrollEdge',
+          onChanged: isOptFixed ? null : onChanged),
+      Offstage(
+          offstage: groupValue != kRemoteScrollStyleEdge,
+          child: EdgeThicknessControl(
+            value: double.tryParse(bind.mainGetUserDefaultOption(
+                    key: kOptionEdgeScrollEdgeThickness)) ??
+                100.0,
+            onChanged: isOptionFixed(kOptionEdgeScrollEdgeThickness)
+                ? null
+                : onEdgeScrollEdgeThicknessChanged,
+          )),
     ]);
   }
 

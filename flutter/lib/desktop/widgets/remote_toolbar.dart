@@ -511,7 +511,7 @@ class _MonitorMenu extends StatelessWidget {
         menuStyle: MenuStyle(
             padding:
                 MaterialStatePropertyAll(EdgeInsets.symmetric(horizontal: 6))),
-        menuChildrenGetter: () => [buildMonitorSubmenuWidget(context)]);
+        menuChildrenGetter: (_) => [buildMonitorSubmenuWidget(context)]);
   }
 
   Widget buildMultiMonitorMenu(BuildContext context) {
@@ -722,7 +722,7 @@ class _ControlMenu extends StatelessWidget {
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         ffi: ffi,
-        menuChildrenGetter: () => toolbarControls(context, id, ffi).map((e) {
+        menuChildrenGetter: (_) => toolbarControls(context, id, ffi).map((e) {
               if (e.divider) {
                 return Divider();
               } else {
@@ -933,12 +933,13 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     _screenAdjustor.updateScreen();
-    menuChildrenGetter() {
+    menuChildrenGetter(_IconSubmenuButtonState state) {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
         viewStyle(customPercent: _customPercent),
-        scrollStyle(),
+        scrollStyle(state, colorScheme),
         imageQuality(),
         codec(),
         if (ffi.connType == ConnType.defaultConn)
@@ -1013,14 +1014,14 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           return Column(children: [
             ...v.map((e) {
               final isCustom = e.value == kRemoteViewStyleCustom;
-              final child = isCustom
-                  ? Text(translate('Scale custom'))
-                  : e.child;
+              final child =
+                  isCustom ? Text(translate('Scale custom')) : e.child;
               // Whether the current selection is already custom
               final bool isGroupCustomSelected =
                   e.groupValue == kRemoteViewStyleCustom;
               // Keep menu open when switching INTO custom so the slider is visible immediately
-              final bool keepOpenForThisItem = isCustom && !isGroupCustomSelected;
+              final bool keepOpenForThisItem =
+                  isCustom && !isGroupCustomSelected;
               return RdoMenuButton<String>(
                   value: e.value,
                   groupValue: e.groupValue,
@@ -1039,7 +1040,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             }).toList(),
             // Only show a divider when custom is NOT selected
             if (!isCustomSelected) Divider(),
-            _customControlsIfCustomSelected(onChanged: (v) => customPercent.value = v),
+            _customControlsIfCustomSelected(
+                onChanged: (v) => customPercent.value = v),
           ]);
         });
   }
@@ -1054,12 +1056,14 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         duration: Duration(milliseconds: 220),
         switchInCurve: Curves.easeOut,
         switchOutCurve: Curves.easeIn,
-        child: isCustom ? _CustomScaleMenuControls(ffi: ffi, onChanged: onChanged) : SizedBox.shrink(),
+        child: isCustom
+            ? _CustomScaleMenuControls(ffi: ffi, onChanged: onChanged)
+            : SizedBox.shrink(),
       );
     });
   }
 
-  scrollStyle() {
+  scrollStyle(_IconSubmenuButtonState state, ColorScheme colorScheme) {
     return futureBuilder(future: () async {
       final viewStyle =
           await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
@@ -1067,16 +1071,34 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           viewStyle == kRemoteViewStyleCustom;
       final scrollStyle =
           await bind.sessionGetScrollStyle(sessionId: ffi.sessionId) ?? '';
-      return {'visible': visible, 'scrollStyle': scrollStyle};
+      final edgeScrollEdgeThickness = await bind
+          .sessionGetEdgeScrollEdgeThickness(sessionId: ffi.sessionId);
+      return {
+        'visible': visible,
+        'scrollStyle': scrollStyle,
+        'edgeScrollEdgeThickness': edgeScrollEdgeThickness,
+      };
     }(), hasData: (data) {
       final visible = data['visible'] as bool;
       if (!visible) return Offstage();
       final groupValue = data['scrollStyle'] as String;
-      onChange(String? value) async {
+      final edgeScrollEdgeThickness = data['edgeScrollEdgeThickness'] as int;
+
+      onChangeScrollStyle(String? value) async {
         if (value == null) return;
         await bind.sessionSetScrollStyle(
             sessionId: ffi.sessionId, value: value);
         widget.ffi.canvasModel.updateScrollStyle();
+        state.setState(() {});
+      }
+
+      onChangeEdgeScrollEdgeThickness(double? value) async {
+        if (value == null) return;
+        final newThickness = value.round();
+        await bind.sessionSetEdgeScrollEdgeThickness(
+            sessionId: ffi.sessionId, value: newThickness);
+        widget.ffi.canvasModel.updateEdgeScrollEdgeThickness(newThickness);
+        state.setState(() {});
       }
 
       return Obx(() => Column(children: [
@@ -1085,17 +1107,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               value: kRemoteScrollStyleAuto,
               groupValue: groupValue,
               onChanged: widget.ffi.canvasModel.imageOverflow.value
-                  ? (value) => onChange(value)
+                  ? (value) => onChangeScrollStyle(value)
                   : null,
-              ffi: widget.ffi,
-            ),
-            RdoMenuButton<String>(
-              child: Text(translate('ScrollEdge')),
-              value: kRemoteScrollStyleEdge,
-              groupValue: groupValue,
-              onChanged: widget.ffi.canvasModel.imageOverflow.value
-                  ? (value) => onChange(value)
-                  : null,
+              closeOnActivate: groupValue != kRemoteScrollStyleEdge,
               ffi: widget.ffi,
             ),
             RdoMenuButton<String>(
@@ -1103,10 +1117,28 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               value: kRemoteScrollStyleBar,
               groupValue: groupValue,
               onChanged: widget.ffi.canvasModel.imageOverflow.value
-                  ? (value) => onChange(value)
+                  ? (value) => onChangeScrollStyle(value)
+                  : null,
+              closeOnActivate: groupValue != kRemoteScrollStyleEdge,
+              ffi: widget.ffi,
+            ),
+            RdoMenuButton<String>(
+              child: Text(translate('ScrollEdge')),
+              value: kRemoteScrollStyleEdge,
+              groupValue: groupValue,
+              closeOnActivate: false,
+              onChanged: widget.ffi.canvasModel.imageOverflow.value
+                  ? (value) => onChangeScrollStyle(value)
                   : null,
               ffi: widget.ffi,
             ),
+            Offstage(
+                offstage: groupValue != kRemoteScrollStyleEdge,
+                child: EdgeThicknessControl(
+                  value: edgeScrollEdgeThickness.toDouble(),
+                  onChanged: onChangeEdgeScrollEdgeThickness,
+                  colorScheme: colorScheme,
+                )),
             Divider(),
           ]));
     });
@@ -1193,13 +1225,16 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 class _CustomScaleMenuControls extends StatefulWidget {
   final FFI ffi;
   final ValueChanged<int>? onChanged;
-  const _CustomScaleMenuControls({Key? key, required this.ffi, this.onChanged}) : super(key: key);
+  const _CustomScaleMenuControls({Key? key, required this.ffi, this.onChanged})
+      : super(key: key);
 
   @override
-  State<_CustomScaleMenuControls> createState() => _CustomScaleMenuControlsState();
+  State<_CustomScaleMenuControls> createState() =>
+      _CustomScaleMenuControlsState();
 }
 
-class _CustomScaleMenuControlsState extends CustomScaleControls<_CustomScaleMenuControls> {
+class _CustomScaleMenuControlsState
+    extends CustomScaleControls<_CustomScaleMenuControls> {
   @override
   FFI get ffi => widget.ffi;
 
@@ -1235,7 +1270,9 @@ class _CustomScaleMenuControlsState extends CustomScaleControls<_CustomScaleMenu
           max: 1.0,
           // Use a wide range of divisions (calculated as (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)) to provide ~1% precision increments.
           // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons, which is undesirable for big ranges.
-          divisions: (CustomScaleControls.maxPercent - CustomScaleControls.minPercent).round(),
+          divisions:
+              (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)
+                  .round(),
           onChanged: onSliderChanged,
         ),
       ),
@@ -1281,6 +1318,7 @@ class _RectValueThumbShape extends SliderComponentShape {
   final double width;
   final double height;
   final double radius;
+  final String unit;
   // Optional mapper to compute display value from normalized position [0,1]
   // If null, falls back to linear interpolation between min and max.
   final int Function(double normalized)? displayValueForNormalized;
@@ -1292,6 +1330,7 @@ class _RectValueThumbShape extends SliderComponentShape {
     required this.height,
     required this.radius,
     this.displayValueForNormalized,
+    this.unit = '%',
   });
 
   @override
@@ -1332,12 +1371,12 @@ class _RectValueThumbShape extends SliderComponentShape {
     final Paint paint = Paint()..color = fillColor;
     canvas.drawRRect(rrect, paint);
 
-    // Compute displayed percent from normalized slider value.
-    final int percent = displayValueForNormalized != null
+    // Compute displayed value from normalized slider value.
+    final int displayValue = displayValueForNormalized != null
         ? displayValueForNormalized!(value)
         : (min + value * (max - min)).round();
     final TextSpan span = TextSpan(
-      text: '$percent%',
+      text: '$displayValue$unit',
       style: const TextStyle(
         color: Colors.white,
         fontSize: 12,
@@ -1350,7 +1389,8 @@ class _RectValueThumbShape extends SliderComponentShape {
       textDirection: textDirection,
     );
     tp.layout(maxWidth: width - 4);
-    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+    tp.paint(
+        canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
   }
 }
 
@@ -1696,7 +1736,7 @@ class _KeyboardMenu extends StatelessWidget {
         ffi: ffi,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
-        menuChildrenGetter: () => [
+        menuChildrenGetter: (_) => [
               keyboardMode(),
               localKeyboardType(),
               inputSource(),
@@ -1961,7 +2001,7 @@ class _ChatMenuState extends State<_ChatMenu> {
           ffi: widget.ffi,
           color: _ToolbarTheme.blueColor,
           hoverColor: _ToolbarTheme.hoverBlueColor,
-          menuChildrenGetter: () => [textChat(), voiceCall()]);
+          menuChildrenGetter: (_) => [textChat(), voiceCall()]);
     }
   }
 
@@ -2017,7 +2057,7 @@ class _VoiceCallMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    menuChildrenGetter() {
+    menuChildrenGetter(_IconSubmenuButtonState state) {
       final audioInput = AudioInput(
         builder: (devices, currentDevice, setDevice) {
           return Column(
@@ -2217,7 +2257,7 @@ class _IconSubmenuButton extends StatefulWidget {
   final Widget? icon;
   final Color color;
   final Color hoverColor;
-  final List<Widget> Function() menuChildrenGetter;
+  final List<Widget> Function(_IconSubmenuButtonState state) menuChildrenGetter;
   final MenuStyle? menuStyle;
   final FFI? ffi;
   final double? width;
@@ -2241,6 +2281,11 @@ class _IconSubmenuButton extends StatefulWidget {
 
 class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
   bool hover = false;
+
+  @override // discard @protected
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2274,7 +2319,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
                         ),
                         child: icon))),
             menuChildren: widget
-                .menuChildrenGetter()
+                .menuChildrenGetter(this)
                 .map((e) => _buildPointerTrackWidget(e, widget.ffi))
                 .toList()));
     return MenuBar(children: [
@@ -2636,4 +2681,57 @@ Widget _buildPointerTrackWidget(Widget child, FFI? ffi) {
       child: child,
     ),
   );
+}
+
+class EdgeThicknessControl extends StatelessWidget {
+  final double value;
+  final ValueChanged<double>? onChanged;
+  final ColorScheme? colorScheme;
+
+  const EdgeThicknessControl({
+    Key? key,
+    required this.value,
+    this.onChanged,
+    this.colorScheme,
+  }) : super(key: key);
+
+  static const double kMin = 20;
+  static const double kMax = 150;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = this.colorScheme ?? Theme.of(context).colorScheme;
+
+    final slider = SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: colorScheme.primary,
+        thumbColor: colorScheme.primary,
+        overlayColor: colorScheme.primary.withOpacity(0.1),
+        showValueIndicator: ShowValueIndicator.never,
+        thumbShape: _RectValueThumbShape(
+          min: EdgeThicknessControl.kMin,
+          max: EdgeThicknessControl.kMax,
+          width: 52,
+          height: 24,
+          radius: 4,
+          unit: 'px',
+        ),
+      ),
+      child: Semantics(
+        value: value.toInt().toString(),
+        child: Slider(
+          value: value,
+          min: EdgeThicknessControl.kMin,
+          max: EdgeThicknessControl.kMax,
+          divisions:
+              (EdgeThicknessControl.kMax - EdgeThicknessControl.kMin).round(),
+          semanticFormatterCallback: (double newValue) =>
+              "${newValue.round()}px",
+          onChanged: onChanged,
+        ),
+      ),
+    );
+
+    return slider;
+  }
 }
