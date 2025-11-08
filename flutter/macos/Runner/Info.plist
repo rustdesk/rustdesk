@@ -26,10 +26,10 @@
 			<key>CFBundleURLIconFile</key>
 			<string></string>
 			<key>CFBundleURLName</key>
-			<string>com.carriez.rustdesk</string>
+			<string>com.rdpconnect.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>rustdesk</string>
+				<string>rdpconnect</string>
 			</array>
 		</dict>
 	</array>

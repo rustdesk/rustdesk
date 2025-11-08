@@ -1,4 +1,4 @@
-use librustdesk::*;
+use librdp_connect::*;
 
 #[cfg(not(target_os = "macos"))]
 fn main() {}

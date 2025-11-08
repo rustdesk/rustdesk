@@ -1,11 +1,11 @@
 [Desktop Entry]
-Name=RustDesk
+Name=Rdp_Connect
 NoDisplay=true
-MimeType=x-scheme-handler/rustdesk;
-TryExec=rustdesk
-Exec=rustdesk %u
-Icon=rustdesk
+MimeType=x-scheme-handler/rdpconnect;
+TryExec=rdp_connect
+Exec=rdp_connect %u
+Icon=rdp_connect
 Terminal=false
 Type=Application
 StartupNotify=false
-StartupWMClass=rustdesk
+StartupWMClass=rdp_connect

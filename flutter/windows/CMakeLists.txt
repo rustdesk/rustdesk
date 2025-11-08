@@ -1,10 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(rustdesk LANGUAGES CXX)
+project(rdp_connect LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "rustdesk")
+set(BINARY_NAME "rdp_connect")
 
 # Explicitly opt into modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -102,10 +102,10 @@ endif()
 
 # flutter_rust_bridge
 set(RUSTDESK_LIB_BUILD_TYPE $<IF:$<CONFIG:Debug>,debug,release>)
-message(STATUS "rustdesk lib build type: ${RUSTDESK_LIB_BUILD_TYPE}")
-set(RUSTDESK_LIB "../../target/${RUSTDESK_LIB_BUILD_TYPE}/librustdesk.dll")
+message(STATUS "rdp_connect lib build type: ${RUSTDESK_LIB_BUILD_TYPE}")
+set(RUSTDESK_LIB "../../target/${RUSTDESK_LIB_BUILD_TYPE}/librdp_connect.dll")
 install(FILES "${RUSTDESK_LIB}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-COMPONENT Runtime RENAME librustdesk.dll)
+COMPONENT Runtime RENAME librdp_connect.dll)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.

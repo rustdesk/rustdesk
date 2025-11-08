@@ -1,15 +1,15 @@
 [package]
-name = "rustdesk"
+name = "rdp_connect"
 version = "1.4.3"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["Rdp_Connect"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "RDP Connect Remote Desktop"
+default-run = "rdp_connect"
 rust-version = "1.75"
 
 [lib]
-name = "librustdesk"
+name = "librdp_connect"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
@@ -202,10 +202,10 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
-FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+LegalCopyright = "Copyright © 2025 Rdp_Connect. All rights reserved."
+ProductName = "Rdp_Connect"
+FileDescription = "RDP Connect Remote Desktop"
+OriginalFilename = "rdp_connect.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -221,8 +221,8 @@ hound = "3.5"
 docopt = "1.1"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "Rdp_Connect"
+identifier = "com.rdpconnect.app"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

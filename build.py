@@ -408,10 +408,10 @@ def build_flutter_dmg(version, features):
             f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --release')
     # copy dylib
     system2(
-        "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
+        "cp target/release/librdp_connect.dylib target/release/rdp_connect.dylib")
     os.chdir('flutter')
     system2('flutter build macos --release')
-    system2('cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/')
+    system2('cp -rf ../target/release/service ./build/macos/Build/Products/Release/Rdp_Connect.app/Contents/MacOS/')
     '''
     system2(
         "create-dmg --volname \"RustDesk Installer\" --window-pos 200 120 --window-size 800 400 --icon-size 100 --app-drop-link 600 185 --icon RustDesk.app 200 190 --hide-extension RustDesk.app rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")
@@ -426,7 +426,7 @@ def build_flutter_arch_manjaro(version, features):
     ffi_bindgen_function_refactor()
     os.chdir('flutter')
     system2('flutter build linux --release')
-    system2(f'strip {flutter_build_dir}/lib/librustdesk.so')
+    system2(f'strip {flutter_build_dir}/lib/librdp_connect.so')
     os.chdir('../res')
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
@@ -434,7 +434,7 @@ def build_flutter_arch_manjaro(version, features):
 def build_flutter_windows(version, features, skip_portable_pack):
     if not skip_cargo:
         system2(f'cargo build --features {features} --lib --release')
-        if not os.path.exists("target/release/librustdesk.dll"):
+        if not os.path.exists("target/release/librdp_connect.dll"):
             print("cargo build failed, please check rust source code.")
             exit(-1)
     os.chdir('flutter')
@@ -447,19 +447,19 @@ def build_flutter_windows(version, features, skip_portable_pack):
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
-        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
+        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rdp_connect.exe')
     os.chdir('../..')
-    if os.path.exists('./rustdesk_portable.exe'):
-        os.replace('./target/release/rustdesk-portable-packer.exe',
-                   './rustdesk_portable.exe')
+    if os.path.exists('./rdp_connect_portable.exe'):
+        os.replace('./target/release/rdp_connect-portable-packer.exe',
+                   './rdp_connect_portable.exe')
     else:
-        os.rename('./target/release/rustdesk-portable-packer.exe',
-                  './rustdesk_portable.exe')
+        os.rename('./target/release/rdp_connect-portable-packer.exe',
+                  './rdp_connect_portable.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
-    os.rename('./rustdesk_portable.exe', f'./rustdesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/rdp_connect_portable.exe')
+    os.rename('./rdp_connect_portable.exe', f'./rdp_connect-{version}-install.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/rdp_connect-{version}-install.exe')
 
 
 def main():
