@@ -6,22 +6,21 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
 
     Here are the current version numbers needed to successfully build a working RustDesk:
 
-    | Item           | Type            | Version      |
-    |----------------|-----------------|--------------|
-    | Rust           | Toolchain       | 2015 Edition |
-    | Flutter        | SDK             | 3.24.5       |
-    | Visual Studio* | IDE             | 2022 or 2019 |
-    | vcpkg          | Package Manager | Git HEAD     |
-    | LLVM/Clang     | Compiler        | (latest)     |
-    | ffigen         | Flutter Package | 5.0.1        |
-    | Python         | Language        | 3.x          |
-
-    > * (Windows only)
+    | Item          | Type            | Version      | Required On |
+    |---------------|-----------------|--------------|-------------|
+    | Rust          | Toolchain       | 2015 Edition |             |
+    | Flutter       | SDK             | 3.24.5       |             |
+    | Visual Studio | IDE             | 2022 or 2019 | Windows     |
+    | vcpkg         | Package Manager | Git HEAD     |             |
+    | LLVM/Clang    | Compiler        | (latest)     |             |
+    | ffigen        | Flutter Package | 5.0.1        |             |
+    | Python        | Language        | 3.x          |             |
 
 1. Prerequisites
 
-    - Disk space: If you are starting from scratch, this process may require up to 50GB free disk space
- BLONK SLATE: 76,724,314,112 bytes free
+    > NB: Package names in parentheses below (such as "(`ninja-build`)") are hints to the actual package name within Apt for **Ubuntu** and related Linux distributions.
+
+    - Disk space: If you are starting from scratch, this process may require up to 20GB free disk space (50GB on Windows)
     - [Windows] The RustDesk build requires that symlink support be enabled. To do this, you must enable Developer Mode in system settings.
         - `start ms-settings:developers`
     - [Windows] Flutter requires Visual Studio 2019 or 2022 to be installed
@@ -33,13 +32,35 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
                 - If there is a newer version available, use that instead.
             - `C++ CMake tools for Windows`
             - `Windows 10 SDK'
+    - [Linux] Build tools: Ensure that your environment has the following build tools installed:
+        - `pkg-config`
+        - `autoconf`
+        - `make`
+        - `cmake`
+        - `ninja` (`ninja-build`)
+        - `gcc`
+        - `g++`
+        - `nasm`
+        - `libtool` (`libtool-bin`)
+        They are often already installed, but if not, install with your distribution's package manager (e.g. `apt install pkg-config autoconf make cmake ...`).
+    - [Linux / OS X] UI toolkit: Flutter on Linux and OS X requires Gtk 3.
+        - This can typically be installed through your distribution's package manager, e.g. `apt install libgtk-3-dev` or `brew install gtk+3`.
+    - [Linux] Dependencies: Ensure that the following libraries are installed:
+        - `gstreamer` (`gstreamer1.0-gtk3`, `libgstreamer1.0-dev`, `libgstreamer-plugins-base1.0-dev`)
+        - `pam` (`libpam0g-dev`)
+        - `openssl` (`libssl-dev`)
+        - `libxdo` (`libxdo-dev`)
+        - `libxcb-randr` (`libxcb-randr0-dev`)
+        These can usually be installed with your distribution's package manager (e.g. `apt install gstreamer1.0-gtk3 gstreamer1.0-video libgstreamer1.0-dev libssl-dev ...`)
     - Rust: <https://rust-lang.org/tools/install/>
         - Be sure to select the correct architecture
+        - [Linux / OS X] Run `rustup` as yourself, not as `root`
         - [Windows] Will install Visual C++ build tools if needed
+        - Restart your shell to bring in updates to `PATH`
     - Git:
-        - [Linux/OS X] Install with your distribution's package manager (e.g. `apt install git` or `brew install git`)
         - [Windows] Git for Windows: <https//git-scm.com/downloads/win>
-        - Some operating systems may already include Git
+        - [Linux/OS X] Install with your distribution's package manager (e.g. `apt install git` or `brew install git`)
+            - Some installations may already include Git
     - Python: <https://www.python.org/downloads/>
         - Some operating systems may already include Python
         - A version of Python 3 is required
@@ -47,9 +68,12 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
     - LLVM/Clang: <https://releases.llvm.org/download.html>
         - Your operating system may include a package manager that can install `clang` easily (e.g. `apt install clang`)
         - [Windows] LLVM can be installed with this PowerShell command: `winget install --id=LLVM.LLVM -e`
+    - [Linux] nasm: <https://www.nasm.us/>
+        - Your operating system may include a package manager that can install `nasm` easily (e.g. `apt install nasm`)
     - VCPKG: <https://learn.microsoft.com/en-us/vcpkg/get_started/get-started>
     - VCPKG Packages:
         - [Windows] Start a new command prompt window using `Developer Command Prompt for VS 2022` to ensure that the latest environment variables are loaded.
+        - [Linux, OS X] Ensure that you have an environment variable `VCPKG_ROOT` set up pointing at the path to the VCPKG root, and that this path is also on your `PATH`.
         - In the RustDesk repository root: `vcpkg install`
         - This installs packages according to a configuration laid out in `vcpkg.json`.
         - This configuration places installed packages into a subdirectory `vcpkg_installed` off of the RustDesk root. Each "triplet" gets its own path. These paths need to be added to the environment variables used to locate headers and library files.
@@ -65,22 +89,26 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
                 set LIB=%LIB%;%_VCPKG_LIB%
                 set RUSTFLAGS=-L%_VCPKG_STATIC_LIB% -L%_VCPKG_DYNAMIC_LIB%
                 ```
-            - Linux:
-                ```
-                set VCPKG_INSTALLED_ROOT=`pwd`/vcpkg_installed
-                export "INCLUDE=$INCLUDE:$VCPKG_INSTALLED_ROOT/x64-linux/include
-                set VCPKG_LIB=$VCPKG_INSTALLED_ROOT/x64-linux/lib
-                export "LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$VCPKG_LIB"
-                export "RUSTFLAGS=-L$VCPKG_LIB"
-                ```
-            - OS X:
-                ```
-                set VCPKG_INSTALLED_ROOT=`pwd`/vcpkg_installed
-                export "INCLUDE=$INCLUDE:$VCPKG_INSTALLED_ROOT/x64-osx/include
-                set VCPKG_LIB=$VCPKG_INSTALLED_ROOT/x64-osx/lib
-                export "DYLD_FALLBACK_LIBRARY_PATH=$DYLD_FALLBACK_LIBRARY_PATH:$VCPKG_LIB"
-                export "RUSTFLAGS=-L$VCPKG_LIB"
-                ```
+            - Linux / OS X:
+                - Source in `sh`, `bash`, `zsh`:
+                    ```
+                    TRIPLET=x64-linux  OR  TRIPLET=x64-osx
+                    export "VCPKG_INSTALLED_ROOT=`pwd`/vcpkg_installed"
+                    export "INCLUDE=$INCLUDE:$VCPKG_INSTALLED_ROOT/$TRIPLET/include"
+                    VCPKG_LIB=$VCPKG_INSTALLED_ROOT/$TRIPLET/lib
+                    export "LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$VCPKG_LIB"
+                    export "RUSTFLAGS=-L$VCPKG_LIB"
+                    ```
+                - Source in `csh`, `tcsh`:
+                    ```
+                    set TRIPLET=x64-linux  OR  TRIPLET=x64-osx
+                    setenv VCPKG_INSTALLED_ROOT "`pwd`/vcpkg_installed"
+                    setenv INCLUDE "$INCLUDE:$VCPKG_INSTALLED_ROOT/$TRIPLET/include"
+                    set VCPKG_LIB=$VCPKG_INSTALLED_ROOT/$TRIPLET/lib
+                    setenv LD_LIBRARY_PATH "$LD_LIBRARY_PATH:$VCPKG_LIB"
+                    setenv RUSTFLAGS "-L$VCPKG_LIB"
+                    ```
+                - Not sure which shell you're using? `echo $0` shows it in most cases (though not `csh`)
         - Recommendation: Create a script in the RustDesk repository root with these statements to set up environment variables for VCPKG
     - Visual Studio Code:
         - Note that Visual Studio 2022 and Visual Studio Code are completely different, unrelated products.
@@ -95,6 +123,10 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
             - You will be prompted automatically to download and install the Flutter SDK
             - Note: The installation retrieves the Flutter SDK files using a Git clone. You must select a directory within which `git clone` will be run. A subdirectory called `flutter` will be created.
             - Recommended: If prompted to add the Flutter SDK to PATH, select `Add SDK to PATH`
+                - [Linux] You will need to manually update your `PATH` variable to include the Flutter SDK. The SDK was downloaded as a `git clone` into a subdirectory called `flutter` of the directory you chose earlier, and the binaries for the installation are in a subdirectory of that called `bin`. For instance, if you cloned `flutter` to `/home/username/flutter`, then the directory you need to add to `PATH` is `/home/username/flutter/bin`. If you cloned to `/code/flutter`, then the directory is `/code/flutter/bin`.
+                    - Add a command to your profile initialization script to update `PATH`
+                    - `sh` style shells (including `bash`): `PATH="$PATH:/path/to/flutter/bin"`
+                    - `csh` style shells (including `tcsh`): `setenv PATH "$PATH:/path/to/flutter/bin"`
         - Without Visual Studio Code: Follow instructions at <https://docs.flutter.dev/install/manual>
         - Optional: Disable Web as a build target if you don't intend to use it and don't have Google Chrome installed
             - `flutter config --no-enable-web`
@@ -136,10 +168,10 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
     cargo install flutter_rust_bridge_codegen --version 1.80.1
     ```
 
-    Then, run the utility out of the Cargo bin folder. This is typically `.cargo/bin` off of your home directory (on Windows as well). The correct command, executed in the root of the repository, is:
+    Then, run the utility out of the Cargo bin folder. The correct command, executed in the root of the `rustdesk` repository, is:
 
-    - Windows: `%HOMEDRIVE%%HOMEPATH%\.cargo\bin\flutter_rust_bridge_codegen --rust-input src\flutter_ffi.rs --dart-output flutter\lib\generated_bridge.dart`
-    - Others: `~/.cargo/bin/flutter_rust_bridge_codegen --rust-input src/flutter_ffi.rs --dart-output flutter/lib/generated_bridge.dart`
+    - Windows: `flutter_rust_bridge_codegen --rust-input src\flutter_ffi.rs --dart-output flutter\lib\generated_bridge.dart`
+    - Linux / OS X: `flutter_rust_bridge_codegen --rust-input src/flutter_ffi.rs --dart-output flutter/lib/generated_bridge.dart`
 
 1. Underlying Rust Code
 
