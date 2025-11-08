@@ -13,6 +13,7 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
     | Visual Studio | IDE             | 2022 or 2019 | Windows     |
     | vcpkg         | Package Manager | Git HEAD     |             |
     | LLVM/Clang    | Compiler        | (latest)     |             |
+    | GCC           | Compiler        | <= 14        | Linux, OS X |
     | ffigen        | Flutter Package | 5.0.1        |             |
     | Python        | Language        | 3.x          |             |
 
@@ -39,10 +40,14 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
         - `cmake`
         - `ninja` (`ninja-build`)
         - `gcc`
-        - `g++`
+        - `g++` (version 13 or 14)
         - `nasm`
         - `libtool` (`libtool-bin`)
-        They are often already installed, but if not, install with your distribution's package manager (e.g. `apt install pkg-config autoconf make cmake ...`).
+        They are often already installed, but if not, install with your distribution's package manager (e.g. `apt install pkg-config autoconf make cmake g++-13 ...`).
+
+        > NB: On alternatives-based systems, if Clang is installed before GCC, then `/usr/bin/c++` might run Clang instead of GCC. If this happens, you will likely encounter build errors. One way to fix this might be to remove the Clang and GCC packages and then reinstall them starting with GCC `g++`.
+
+        > NB: On the newest systems, as of this writing, `g++` install version 15. This is not compatible with all of the Rust crates needed by RustDesk and will cause build errors. When an earlier version is installed, however, the `/usr/bin/c++` link might not be configured to run it. You may need to explicitly configure your system's alternatives mechanism, with a command such as `update-alternatives --install /usr/bin/c++ c++ ``which g++-13`` 13`, or manually create a symbolic link from `/usr/bin/c++` to the correct path for a compatible `g++` version.
     - [Linux / OS X] UI toolkit: Flutter on Linux and OS X requires Gtk 3.
         - This can typically be installed through your distribution's package manager, e.g. `apt install libgtk-3-dev` or `brew install gtk+3`.
     - [Linux] Dependencies: Ensure that the following libraries are installed:
@@ -64,12 +69,11 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
     - Python: <https://www.python.org/downloads/>
         - Some operating systems may already include Python
         - A version of Python 3 is required
+        - [Linux Ubuntu-based] If `python3` works but `python` doesn't, run: `apt install python-is-python3`.
         - [Windows] Recommended: Enable the "Add commands directory to your PATH" option during installation
     - LLVM/Clang: <https://releases.llvm.org/download.html>
         - Your operating system may include a package manager that can install `clang` easily (e.g. `apt install clang`)
         - [Windows] LLVM can be installed with this PowerShell command: `winget install --id=LLVM.LLVM -e`
-    - [Linux] nasm: <https://www.nasm.us/>
-        - Your operating system may include a package manager that can install `nasm` easily (e.g. `apt install nasm`)
     - VCPKG: <https://learn.microsoft.com/en-us/vcpkg/get_started/get-started>
     - VCPKG Packages:
         - [Windows] Start a new command prompt window using `Developer Command Prompt for VS 2022` to ensure that the latest environment variables are loaded.
@@ -110,6 +114,11 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
                     ```
                 - Not sure which shell you're using? `echo $0` shows it in most cases (though not `csh`)
         - Recommendation: Create a script in the RustDesk repository root with these statements to set up environment variables for VCPKG
+    - [Linux] VCPKG Special case: `opus`
+        - The Rust crate `magnum-opus` builds against and links to `libopus` through the VCPKG package `opus`. But, its build script hardcodes VCPKG classic mode (global package cache) and doesn't respect the VCPKG manifest configuration that RustDesk uses. As a result, while `vcpkg` installs `opus` into a subdirectory `vcpkg_installed` of the RustDesk repository, the build looks for the `opus` files underneath `$VCPKG_ROOT`.
+        - To resolve this, change directory out of the RustDesk repository, so that no `vcpkg.json` manifest file is visible, and run:
+            - `vcpkg install opus`
+        - This places the `opus` files in the central VCPKG cache, which is what the `magnum-opus` crate needs to build.
     - Visual Studio Code:
         - Note that Visual Studio 2022 and Visual Studio Code are completely different, unrelated products.
         - Visual Studio Code is Optional but recommended for development and debugging of RustDesk
@@ -144,6 +153,12 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
 
     - `git submodule update --init --recursive`
 
+    Git remembers the exact commit of each submodule with something called a "gitlink". If the link is pointing at an old commit (which could very well be the case), then you may get out-of-date code for `hbb_common` that will not compile. To prevent this, run the following command:
+
+    - `git submodule update --remote`
+
+    You should use this command after cloning, and also any time that `hbb_common` receives important or breaking changes.
+
 1. Flutter Version
 
     As of this writing, Continuous Integration builds use Flutter SDK version **3.24.5**. You can use the following commands to enable FVM (Flutter Version Management) and ensure that the correct Flutter version is used:
@@ -172,6 +187,8 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
 
     - Windows: `flutter_rust_bridge_codegen --rust-input src\flutter_ffi.rs --dart-output flutter\lib\generated_bridge.dart`
     - Linux / OS X: `flutter_rust_bridge_codegen --rust-input src/flutter_ffi.rs --dart-output flutter/lib/generated_bridge.dart`
+
+    **You may need to rerun this command after pulling updates to the underlying Rust code in the RustDesk repository or in `hbb_common`.**
 
 1. Underlying Rust Code
 
@@ -214,7 +231,7 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
 
     > **Flutter Version Compatibility**
     >
-    > The latest Flutter version has some breaking changes compared with the version the code is written against. The followign changes may be needed to resolve build issues, if your Flutter SDK version is too new:
+    > The latest Flutter version has some breaking changes compared with the version the code is written against. The following local changes may be needed to resolve build issues, if your Flutter SDK version is too new:
     > 
     > 1. Update the version of the `extended_text` dependency in `flutter/pubspec.yaml` to `15.0.0`.
     > 1. Open `lib/common.dart` and make the following edits:
