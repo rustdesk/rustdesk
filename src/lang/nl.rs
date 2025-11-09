@@ -721,11 +721,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "Virtuele joystick weergeven"),
         ("Edit note", "Opmerking bewerken"),
         ("Alias", "Alias"),
-        ("ScrollEdge", ""),
-        ("Allow insecure TLS fallback", ""),
-        ("allow-insecure-tls-fallback-tip", ""),
-        ("Disable UDP", ""),
-        ("disable-udp-tip", ""),
-        ("server-oss-not-support-tip", ""),
+        ("ScrollEdge", "Schuifbalk"),
+        ("Allow insecure TLS fallback", "Onbeveiligde TLS-terugval toestaan"),
+        ("allow-insecure-tls-fallback-tip", "Standaard controleert RustDesk het certificaat van de server bij het gebruik van protocollen die TLS gebruiken. Wanneer deze optie is ingeschakeld, laat RustDesk verbindingen toe, zelfs als de verificatiestap mislukt."),
+        ("Disable UDP", "UDP uitschakelen"),
+        ("disable-udp-tip", "Controleert of alleen TCP moet worden gebruikt. Als deze optie is ingeschakeld, gebruikt RustDesk niet langer UDP 21116, maar TCP 21116."),
+        ("server-oss-not-support-tip", "Opmerking: Deze functie is niet beschikbaar in de open-sourceversie van de RustDesk-server."),
     ].iter().cloned().collect();
 }
