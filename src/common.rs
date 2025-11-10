@@ -115,50 +115,6 @@ pub fn global_init() -> bool {
             crate::server::wayland::init();
         }
     }
-    // Install panic hook to log backtrace on all platforms
-    std::env::set_var("RUST_BACKTRACE", "1");
-    std::panic::set_hook(Box::new(|info| {
-        let thread = std::thread::current().name().unwrap_or("unnamed");
-        let location = info
-            .location()
-            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
-            .unwrap_or_else(|| "unknown".into());
-        let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
-            *s
-        } else if let Some(s) = info.payload().downcast_ref::<String>() {
-            s.as_str()
-        } else {
-            "Box<Any>"
-        };
-        let bt = std::backtrace::Backtrace::force_capture();
-        let out = format!("thread '{}' panicked at '{}', {}\nBacktrace:\n{bt:?}", thread, msg, location);
-        eprintln!("{}", out);
-        log::error!("{}", out);
-    }));
-    // Native crash handlers
-    #[cfg(unix)]
-    unsafe {
-        extern "C" fn crash_signal_handler(sig: libc::c_int) {
-            let bt = std::backtrace::Backtrace::force_capture();
-            eprintln!("native crash signal {}\nBacktrace:\n{bt:?}", sig);
-            log::error!("native crash signal {}\nBacktrace:\n{bt:?}", sig);
-        }
-        for &s in &[libc::SIGSEGV, libc::SIGABRT, libc::SIGILL, libc::SIGFPE, libc::SIGBUS] {
-            libc::signal(s, crash_signal_handler as usize);
-        }
-    }
-    #[cfg(windows)]
-    unsafe {
-        use winapi::um::{errhandlingapi::SetUnhandledExceptionFilter, minwinbase::EXCEPTION_POINTERS};
-        extern "system" fn unhandled_exception_filter(_: *mut EXCEPTION_POINTERS) -> i32 {
-            let bt = std::backtrace::Backtrace::force_capture();
-            eprintln!("native unhandled exception\nBacktrace:\n{bt:?}");
-            log::error!("native unhandled exception\nBacktrace:\n{bt:?}");
-            // EXCEPTION_EXECUTE_HANDLER = 1
-            1
-        }
-        SetUnhandledExceptionFilter(Some(unhandled_exception_filter));
-    }
     true
 }
 

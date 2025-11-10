@@ -70,6 +70,10 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
         crate::common::test_nat_type();
     }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = crate::common::global_init();
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         // core_main's init_log does not work for flutter since it is only applied to its load_library in main.c
