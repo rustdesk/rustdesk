@@ -2,6 +2,21 @@ if (is_osx) view.windowBlurbehind = #light;
 stdout.println("current platform:", OS);
 stdout.println("is_xfce: ", is_xfce);
 
+// See default height in common.tis `msgbox()`.
+const msgbox_default_height = 180;
+const incoming_only_width = 180;
+
+const outgoing_only = handler.is_outgoing_only();
+const incoming_only = handler.is_incoming_only();
+const disable_installation = handler.is_disable_installation();
+const disable_account = handler.is_disable_account();
+const disable_settings = handler.is_disable_settings();
+const is_custom_client = handler.is_custom_client();
+const disable_ab = handler.is_disable_ab();
+const hide_server_settings = handler.get_builtin_option("hide-server-settings") == "Y";
+const hide_proxy_settings = handler.get_builtin_option("hide-proxy-settings") == "Y";
+const hide_websocket_settings = handler.get_builtin_option("hide-websocket-settings") == "Y";
+
 // html min-width, min-height not working on mac, below works for all
 if (incoming_only) {
   view.windowMinSize = (scaleIt(incoming_only_width), scaleIt((handler.is_installed() || disable_installation) ? 300 : 390));
@@ -38,6 +53,14 @@ var my_id = handler.get_id();
 function get_id() {
   my_id = handler.get_id();
   return my_id;
+}
+
+function get_msgbox_width(width=500) {
+    if (incoming_only) {
+        var maxw = scaleIt(incoming_only_width);
+        if (width > maxw) width = maxw;
+    }
+    return width;
 }
 
 class ConnectStatus: Reactor.Component {
@@ -310,7 +333,7 @@ class Enhancements: Reactor.Component {
                 if (!is_opt_fixed_auto_incoming) handler.set_option("allow-auto-record-incoming", res.auto_record_incoming ? 'Y' : default_option_no);
                 if (!is_opt_fixed_auto_outgoing) handler.set_local_option("allow-auto-record-outgoing", res.auto_record_outgoing ? 'Y' : default_option_no);
                 if (!is_opt_fixed_video_dir) handler.set_local_option("video-save-directory", $(#folderPath).text);
-            });
+            }, msgbox_default_height, get_msgbox_width());
         }
         this.toggleMenuState();
     }
@@ -364,7 +387,7 @@ function open_custom_server_dialog() {
                 configOptions["key"] = key;
                 handler.set_options(configOptions);
                 if (typeof show_progress === 'function') show_progress(-1);
-            }, 260);
+            }, 260, get_msgbox_width());
 }
 
 function open_whitelist_dialog() {
@@ -397,7 +420,7 @@ function open_whitelist_dialog() {
                 if (!value) value = default_option_whitelist;
                 handler.set_option("whitelist", value.replace("\n", ","));
                 if (typeof show_progress === 'function') show_progress(-1);
-            }, 300);
+            }, 300, get_msgbox_width());
 }
 
 function open_proxy_dialog() {
@@ -431,7 +454,7 @@ function open_proxy_dialog() {
                 }
                 handler.set_socks(proxy, username, password);
                 if (typeof show_progress === 'function') show_progress(-1);
-            }, 240);
+            }, 240, get_msgbox_width());
 }
 
 function updateTheme() {
@@ -558,7 +581,7 @@ class MyIdMenu: Reactor.Component {
             if (el && el.attributes) {
                 handler.open_url(el.attributes['url']);
             };
-        }, 400);
+        }, 400, get_msgbox_width());
     }
 
     event click $(menu#config-options>li) (_, me) {
@@ -580,9 +603,11 @@ class MyIdMenu: Reactor.Component {
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? default_option_no : "Y");
         } else if (me.id == "change-id") {
+            var id_label_width = incoming_only ? "50px" : "100px";
+            var input_width = incoming_only ? (incoming_only_width - 20) + "px" : "250px";
             msgbox("custom-id", translate("Change ID"), "<div .form .set-password> \
             <div>" + translate('id_change_tip') + " </div> \
-            <div><span style='width: 100px; display:inline-block'>ID: </span><input|text .outline-focus style='width: 250px' name='id' /></div> \
+            <div><span style='width: " + id_label_width + "; display:inline-block'>ID: </span><input|text .outline-focus style='width: " + input_width + "' name='id' /></div> \
             </div> \
             ", "", function(res=null, show_progress) {
                 if (!res) return;
@@ -601,7 +626,7 @@ class MyIdMenu: Reactor.Component {
                 }
                 check_status();
                 return " ";
-            });
+            }, msgbox_default_height, get_msgbox_width());
         } else if (me.id == "allow-darktheme") {
             updateTheme();
         } else if (me.id == "about") {
@@ -644,7 +669,7 @@ function editDirectAccessPort() {
             p = p + '';
         }
         if (p != p0) handler.set_option('direct-access-port', p);
-      });
+      }, msgbox_default_height, get_msgbox_width());
 }
 
 class App: Reactor.Component
@@ -1091,7 +1116,7 @@ class PasswordArea: Reactor.Component {
             }
             handler.set_permanent_password(p0);
             me.update();
-        });
+        }, msgbox_default_height, get_msgbox_width());
     }
 
     event click $(menu#edit-password-context>li) (_, me) {
@@ -1136,7 +1161,7 @@ class PasswordArea: Reactor.Component {
                     return translate('wrong-2fa-code');
                 }
                 me.update();
-            }, 400);
+            }, 400, get_msgbox_width());
         }
     }
 }
@@ -1436,7 +1461,7 @@ function login() {
             show_progress(false, err);
         });
         return " ";
-      });
+      }, msgbox_default_height, get_msgbox_width());
 }
 
 function on_2fa_check(last_msg) {
@@ -1490,7 +1515,9 @@ function on_2fa_check(last_msg) {
                 }
             );
             return " ";
-        }
+        },
+        msgbox_default_height,
+        get_msgbox_width()
     );
 }
 
