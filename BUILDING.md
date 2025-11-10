@@ -41,13 +41,16 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
         - `ninja` (`ninja-build`)
         - `gcc`
         - `g++` (version 13 or 14)
+        - `libstdc++` (`libstdc++-dev`)
         - `nasm`
         - `libtool` (`libtool-bin`)
         They are often already installed, but if not, install with your distribution's package manager (e.g. `apt install pkg-config autoconf make cmake g++-13 ...`).
 
-        > NB: On alternatives-based systems, if Clang is installed before GCC, then `/usr/bin/c++` might run Clang instead of GCC. If this happens, you will likely encounter build errors. One way to fix this might be to remove the Clang and GCC packages and then reinstall them starting with GCC `g++`.
+        > NB: On alternatives-based systems, if Clang is installed before GCC, then `/usr/bin/c++` might run Clang instead of GCC. If this happens, you will likely encounter build errors. One way to fix this might be to remove the Clang and GCC packages and then reinstall them starting with GCC `g++` (`g++-13`).
 
         > NB: On the newest systems, as of this writing, `g++` install version 15. This is not compatible with all of the Rust crates needed by RustDesk and will cause build errors. When an earlier version is installed, however, the `/usr/bin/c++` link might not be configured to run it. You may need to explicitly configure your system's alternatives mechanism, with a command such as `update-alternatives --install /usr/bin/c++ c++ ``which g++-13`` 13`, or manually create a symbolic link from `/usr/bin/c++` to the correct path for a compatible `g++` version.
+
+        > NB: The previous point notwithstanding, the latest version of the development package for `libstdc++` (e.g. `apt install libstdc++-15-dev`) may still need to be installed in order for the Rust build output to link properly.
     - [Linux / OS X] UI toolkit: Flutter on Linux and OS X requires Gtk 3.
         - This can typically be installed through your distribution's package manager, e.g. `apt install libgtk-3-dev` or `brew install gtk+3`.
     - [Linux] Dependencies: Ensure that the following libraries are installed:
@@ -134,7 +137,7 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
             - Recommended: If prompted to add the Flutter SDK to PATH, select `Add SDK to PATH`
                 - [Linux] You will need to manually update your `PATH` variable to include the Flutter SDK. The SDK was downloaded as a `git clone` into a subdirectory called `flutter` of the directory you chose earlier, and the binaries for the installation are in a subdirectory of that called `bin`. For instance, if you cloned `flutter` to `/home/username/flutter`, then the directory you need to add to `PATH` is `/home/username/flutter/bin`. If you cloned to `/code/flutter`, then the directory is `/code/flutter/bin`.
                     - Add a command to your profile initialization script to update `PATH`
-                    - `sh` style shells (including `bash`): `PATH="$PATH:/path/to/flutter/bin"`
+                    - `sh` style shells (including `bash`): `export PATH="$PATH:/path/to/flutter/bin"`
                     - `csh` style shells (including `tcsh`): `setenv PATH "$PATH:/path/to/flutter/bin"`
         - Without Visual Studio Code: Follow instructions at <https://docs.flutter.dev/install/manual>
         - Optional: Disable Web as a build target if you don't intend to use it and don't have Google Chrome installed
