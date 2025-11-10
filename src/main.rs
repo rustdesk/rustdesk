@@ -23,6 +23,9 @@ fn main() {
     feature = "flutter"
 )))]
 fn main() {
+    if !common::global_init() {
+        return;
+    }
     #[cfg(all(windows, not(feature = "inline")))]
     unsafe {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
