@@ -704,8 +704,7 @@ async fn sync_and_watch_config_dir() {
                                 match crate::ipc::connect(1000, "_service").await {
                                     Ok(mut _conn) => {
                                         conn = _conn;
-                                        log::info!("reconnected to ipc_service");
-                                        break;
+                                        log::info!("reconnected to ipc_service, looping to retry");
                                     }
                                     _ => {}
                                 }
