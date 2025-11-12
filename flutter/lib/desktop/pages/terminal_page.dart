@@ -8,7 +8,7 @@ import 'package:xterm/xterm.dart';
 import 'terminal_connection_manager.dart';
 
 class TerminalPage extends StatefulWidget {
-  const TerminalPage({
+  TerminalPage({
     Key? key,
     required this.id,
     required this.password,
@@ -25,9 +25,16 @@ class TerminalPage extends StatefulWidget {
   final bool? isSharedPassword;
   final String? connToken;
   final int terminalId;
+  final SimpleWrapper<State<TerminalPage>?> _lastState = SimpleWrapper(null);
+
+  FFI get ffi => (_lastState.value! as _TerminalPageState)._ffi;
 
   @override
-  State<TerminalPage> createState() => _TerminalPageState();
+  State<TerminalPage> createState() {
+    final state = _TerminalPageState();
+    _lastState.value = state;
+    return state;
+  }
 }
 
 class _TerminalPageState extends State<TerminalPage>
@@ -59,12 +66,13 @@ class _TerminalPageState extends State<TerminalPage>
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.tabController.onSelected?.call(widget.id);
-      
+
       // Check if this is a new connection or additional terminal
       // Note: When a connection exists, the ref count will be > 1 after this terminal is added
-      final isExistingConnection = TerminalConnectionManager.hasConnection(widget.id) && 
-          TerminalConnectionManager.getTerminalCount(widget.id) > 1;
-      
+      final isExistingConnection =
+          TerminalConnectionManager.hasConnection(widget.id) &&
+              TerminalConnectionManager.getTerminalCount(widget.id) > 1;
+
       if (!isExistingConnection) {
         // First terminal - show loading dialog, wait for onReady
         _ffi.dialogManager

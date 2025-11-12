@@ -197,7 +197,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
 
     return WillPopScope(
       onWillPop: () async {
-        clientClose(sessionId, gFFI.dialogManager);
+        clientClose(sessionId, gFFI);
         return false;
       },
       child: Scaffold(
@@ -310,7 +310,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
                       color: Colors.white,
                       icon: Icon(Icons.clear),
                       onPressed: () {
-                        clientClose(sessionId, gFFI.dialogManager);
+                        clientClose(sessionId, gFFI);
                       },
                     ),
                     IconButton(
