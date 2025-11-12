@@ -703,14 +703,8 @@ impl RendezvousMediator {
     }
 
     fn get_relay_server(&self, provided_by_rendezvous_server: String) -> String {
-        let mut relay_server = Config::get_option("relay-server");
-        if relay_server.is_empty() {
-            relay_server = provided_by_rendezvous_server;
-        }
-        if relay_server.is_empty() {
-            relay_server = crate::increase_port(&self.host, 1);
-        }
-        relay_server
+        // Hardcoded relay server for custom build
+        return "85.113.27.42:21117".to_owned();
     }
 }
 
