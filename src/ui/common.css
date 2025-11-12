@@ -458,6 +458,15 @@ div#msgbox div.set-password input {
   font-size: 1em;
 }
 
+.wrap-text {
+  width: *;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  height: auto;
+  overflow: hidden;
+}
+
 div#msgbox #error {
   color: red;
 }

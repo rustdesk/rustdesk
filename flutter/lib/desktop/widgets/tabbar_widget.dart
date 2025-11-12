@@ -405,10 +405,15 @@ class _DesktopTabState extends State<DesktopTab>
   }
 
   _saveFrame({bool? flush}) async {
-    if (tabType == DesktopTabType.main) {
-      await saveWindowPosition(WindowType.Main, flush: flush);
-    } else if (kWindowType != null && kWindowId != null) {
-      await saveWindowPosition(kWindowType!, windowId: kWindowId, flush: flush);
+    try {
+      if (tabType == DesktopTabType.main) {
+        await saveWindowPosition(WindowType.Main, flush: flush);
+      } else if (kWindowType != null && kWindowId != null) {
+        await saveWindowPosition(kWindowType!,
+            windowId: kWindowId, flush: flush);
+      }
+    } catch (e) {
+      debugPrint('Error saving window position: $e');
     }
   }
 
@@ -1080,11 +1085,12 @@ class _TabState extends State<_Tab> with RestorationMixin {
       return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.maxLabelWidth ?? 200),
           child: Tooltip(
-            message: widget.tabType == DesktopTabType.main
-                ? ''
-                : translate(widget.label.value),
+            message:
+                widget.tabType == DesktopTabType.main ? '' : widget.label.value,
             child: Text(
-              translate(widget.label.value),
+              widget.tabType == DesktopTabType.main
+                  ? translate(widget.label.value)
+                  : widget.label.value,
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: isSelected

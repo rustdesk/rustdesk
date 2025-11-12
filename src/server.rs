@@ -705,7 +705,6 @@ async fn sync_and_watch_config_dir() {
                                     Ok(mut _conn) => {
                                         conn = _conn;
                                         log::info!("reconnected to ipc_service");
-                                        break;
                                     }
                                     _ => {}
                                 }

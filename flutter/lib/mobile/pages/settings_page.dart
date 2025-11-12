@@ -94,7 +94,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _hideWebSocket = false;
   var _enableTrustedDevices = false;
   var _enableUdpPunch = false;
+  var _allowInsecureTlsFallback = false;
+  var _disableUdp = false;
   var _enableIpv6Punch = false;
+  var _isUsingPublicServer = false;
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -109,6 +112,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _enableHardwareCodec = option2bool(kOptionEnableHwcodec,
         bind.mainGetOptionSync(key: kOptionEnableHwcodec));
     _allowWebSocket = mainGetBoolOptionSync(kOptionAllowWebSocket);
+    _allowInsecureTlsFallback =
+        mainGetBoolOptionSync(kOptionAllowInsecureTLSFallback);
+    _disableUdp = bind.mainGetOptionSync(key: kOptionDisableUdp) == 'Y';
     _autoRecordIncomingSession = option2bool(kOptionAllowAutoRecordIncoming,
         bind.mainGetOptionSync(key: kOptionAllowAutoRecordIncoming));
     _autoRecordOutgoingSession = option2bool(kOptionAllowAutoRecordOutgoing,
@@ -200,6 +206,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         update = true;
         _buildDate = buildDate;
       }
+
+      final isUsingPublicServer = await bind.mainIsUsingPublicServer();
+      if (_isUsingPublicServer != isUsingPublicServer) {
+        update = true;
+        _isUsingPublicServer = isUsingPublicServer;
+      }
+
       if (update) {
         setState(() {});
       }
@@ -667,9 +680,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 title: Text(translate('ID/Relay Server')),
                 leading: Icon(Icons.cloud),
                 onPressed: (context) {
-                  showServerSettings(gFFI.dialogManager);
+                  showServerSettings(gFFI.dialogManager, (callback) async {
+                    _isUsingPublicServer = await bind.mainIsUsingPublicServer();
+                    setState(callback);
+                  });
                 }),
-          if (!isIOS && !_hideNetwork && !_hideProxy)
+          if (!_hideNetwork && !_hideProxy)
             SettingsTile(
                 title: Text(translate('Socks5/Http(s) Proxy')),
                 leading: Icon(Icons.network_ping),
@@ -688,6 +704,38 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                           await mainGetBoolOption(kOptionAllowWebSocket);
                       setState(() {
                         _allowWebSocket = newValue;
+                      });
+                    },
+            ),
+          if (!_isUsingPublicServer)
+            SettingsTile.switchTile(
+              title: Text(translate('Allow insecure TLS fallback')),
+              initialValue: _allowInsecureTlsFallback,
+              onToggle: isOptionFixed(kOptionAllowInsecureTLSFallback)
+                  ? null
+                  : (v) async {
+                      await mainSetBoolOption(
+                          kOptionAllowInsecureTLSFallback, v);
+                      final newValue = mainGetBoolOptionSync(
+                          kOptionAllowInsecureTLSFallback);
+                      setState(() {
+                        _allowInsecureTlsFallback = newValue;
+                      });
+                    },
+            ),
+          if (isAndroid && !outgoingOnly && !_isUsingPublicServer)
+            SettingsTile.switchTile(
+              title: Text(translate('Disable UDP')),
+              initialValue: _disableUdp,
+              onToggle: isOptionFixed(kOptionDisableUdp)
+                  ? null
+                  : (v) async {
+                      await bind.mainSetOption(
+                          key: kOptionDisableUdp, value: v ? 'Y' : 'N');
+                      final newValue =
+                          bind.mainGetOptionSync(key: kOptionDisableUdp) == 'Y';
+                      setState(() {
+                        _disableUdp = newValue;
                       });
                     },
             ),

@@ -13,8 +13,18 @@ class RdPlatformChannel {
 
   static RdPlatformChannel get instance => _windowUtil;
 
-  final MethodChannel _osxMethodChannel =
-      MethodChannel("org.rustdesk.rustdesk/macos");
+  final MethodChannel _hostMethodChannel =
+      MethodChannel("org.rustdesk.rustdesk/host");
+
+  /// Bump the position of the mouse cursor, if applicable
+  Future<bool> bumpMouse({required int dx, required int dy}) async {
+    // No debug output; this call is too chatty.
+
+    bool? result = await _hostMethodChannel
+      .invokeMethod("bumpMouse", {"dx": dx, "dy": dy});
+
+    return result ?? false;
+  }
 
   /// Change the theme of the system window
   Future<void> changeSystemWindowTheme(SystemWindowTheme theme) {
@@ -23,13 +33,13 @@ class RdPlatformChannel {
       print(
           "[Window ${kWindowId ?? 'Main'}] change system window theme to ${theme.name}");
     }
-    return _osxMethodChannel
+    return _hostMethodChannel
         .invokeMethod("setWindowTheme", {"themeName": theme.name});
   }
 
   /// Terminate .app manually.
   Future<void> terminate() {
     assert(isMacOS);
-    return _osxMethodChannel.invokeMethod("terminate");
+    return _hostMethodChannel.invokeMethod("terminate");
   }
 }

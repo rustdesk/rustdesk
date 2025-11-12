@@ -527,7 +527,7 @@ class _ImagePaintState extends State<ImagePaint> {
 
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
-    if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
+    if (c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto) {
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);

@@ -284,6 +284,34 @@ impl UI {
         crate::using_public_server()
     }
 
+    fn is_incoming_only(&self) -> bool {
+        hbb_common::config::is_incoming_only()
+    }
+
+    pub fn is_outgoing_only(&self) -> bool {
+        hbb_common::config::is_outgoing_only()
+    }
+
+    pub fn is_custom_client(&self) -> bool {
+        crate::common::is_custom_client()
+    }
+
+    pub fn is_disable_settings(&self) -> bool {
+        hbb_common::config::is_disable_settings()
+    }
+
+    pub fn is_disable_account(&self) -> bool {
+        hbb_common::config::is_disable_account()
+    }
+
+    pub fn is_disable_installation(&self) -> bool {
+        hbb_common::config::is_disable_installation()
+    }
+
+    pub fn is_disable_ab(&self) -> bool {
+        hbb_common::config::is_disable_ab()
+    }
+
     fn get_options(&self) -> Value {
         let hashmap: HashMap<String, String> =
             serde_json::from_str(&get_options()).unwrap_or_default();
@@ -663,6 +691,14 @@ impl UI {
     pub fn check_hwcodec(&self) {
         check_hwcodec()
     }
+
+    fn is_option_fixed(&self, key: String) -> bool {
+        crate::ui_interface::is_option_fixed(&key)
+    }
+
+    fn get_builtin_option(&self, key: String) -> String {
+        crate::ui_interface::get_builtin_option(&key)
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -671,6 +707,13 @@ impl sciter::EventHandler for UI {
         fn get_api_server();
         fn is_xfce();
         fn using_public_server();
+        fn is_custom_client();
+        fn is_outgoing_only();
+        fn is_incoming_only();
+        fn is_disable_settings();
+        fn is_disable_account();
+        fn is_disable_installation();
+        fn is_disable_ab();
         fn get_id();
         fn temporary_password();
         fn update_temporary_password();
@@ -756,6 +799,8 @@ impl sciter::EventHandler for UI {
         fn verify2fa(String);
         fn check_hwcodec();
         fn verify_login(String, String);
+        fn is_option_fixed(String);
+        fn get_builtin_option(String);
     }
 }
 

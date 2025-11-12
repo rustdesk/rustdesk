@@ -349,6 +349,9 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
             if !desktop.home.is_empty() {
                 envs.push(("HOME", desktop.home.clone()));
             }
+            if !desktop.dbus.is_empty() {
+                envs.push(("DBUS_SESSION_BUS_ADDRESS", desktop.dbus.clone()));
+            }
             envs.push((
                 "TERM",
                 get_cur_term(&desktop.uid).unwrap_or_else(|| suggest_best_term()),
@@ -1111,6 +1114,7 @@ mod desktop {
         pub display: String,
         pub xauth: String,
         pub home: String,
+        pub dbus: String,
         pub is_rustdesk_subprocess: bool,
         pub wl_display: String,
     }
@@ -1145,6 +1149,7 @@ mod desktop {
                     self.display = get_env("DISPLAY", &self.uid, proc);
                     self.xauth = get_env("XAUTHORITY", &self.uid, proc);
                     self.wl_display = get_env("WAYLAND_DISPLAY", &self.uid, proc);
+                    self.dbus = get_env("DBUS_SESSION_BUS_ADDRESS", &self.uid, proc);
                     if !self.display.is_empty() && !self.xauth.is_empty() {
                         return;
                     }
