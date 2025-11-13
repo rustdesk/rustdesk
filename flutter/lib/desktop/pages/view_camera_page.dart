@@ -360,7 +360,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     super.build(context);
     return WillPopScope(
         onWillPop: () async {
-          clientClose(sessionId, _ffi.dialogManager);
+          clientClose(sessionId, _ffi);
           return false;
         },
         child: MultiProvider(providers: [

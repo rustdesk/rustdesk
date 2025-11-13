@@ -561,6 +561,12 @@ class _GeneralState extends State<_General> {
       children.add(_OptionCheckBox(
           context, 'Allow linux headless', kOptionAllowLinuxHeadless));
     }
+    children.add(_OptionCheckBox(
+      context,
+      'note-at-conn-end-tip',
+      kOptionAllowAskForNoteAtEndOfConnection,
+      isServer: false,
+    ));
     return _Card(title: 'Other', children: children);
   }
 
@@ -1757,21 +1763,23 @@ class _DisplayState extends State<_Display> {
           groupValue: groupValue,
           label: 'Scrollbar',
           onChanged: isOptFixed ? null : onChanged),
-      _Radio(context,
-          value: kRemoteScrollStyleEdge,
-          groupValue: groupValue,
-          label: 'ScrollEdge',
-          onChanged: isOptFixed ? null : onChanged),
-      Offstage(
-          offstage: groupValue != kRemoteScrollStyleEdge,
-          child: EdgeThicknessControl(
-            value: double.tryParse(bind.mainGetUserDefaultOption(
-                    key: kOptionEdgeScrollEdgeThickness)) ??
-                100.0,
-            onChanged: isOptionFixed(kOptionEdgeScrollEdgeThickness)
-                ? null
-                : onEdgeScrollEdgeThicknessChanged,
-          )),
+      if (!isWeb) ...[
+        _Radio(context,
+            value: kRemoteScrollStyleEdge,
+            groupValue: groupValue,
+            label: 'ScrollEdge',
+            onChanged: isOptFixed ? null : onChanged),
+        Offstage(
+            offstage: groupValue != kRemoteScrollStyleEdge,
+            child: EdgeThicknessControl(
+              value: double.tryParse(bind.mainGetUserDefaultOption(
+                      key: kOptionEdgeScrollEdgeThickness)) ??
+                  100.0,
+              onChanged: isOptionFixed(kOptionEdgeScrollEdgeThickness)
+                  ? null
+                  : onEdgeScrollEdgeThicknessChanged,
+            )),
+      ],
     ]);
   }
 

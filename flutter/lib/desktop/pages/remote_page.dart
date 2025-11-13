@@ -73,7 +73,10 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage>
-    with AutomaticKeepAliveClientMixin, MultiWindowListener, TickerProviderStateMixin {
+    with
+        AutomaticKeepAliveClientMixin,
+        MultiWindowListener,
+        TickerProviderStateMixin {
   Timer? _timer;
   String keyboardMode = "legacy";
   bool _isWindowBlur = false;
@@ -398,7 +401,7 @@ class _RemotePageState extends State<RemotePage>
     super.build(context);
     return WillPopScope(
         onWillPop: () async {
-          clientClose(sessionId, _ffi.dialogManager);
+          clientClose(sessionId, _ffi);
           return false;
         },
         child: MultiProvider(providers: [

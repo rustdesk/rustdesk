@@ -254,6 +254,10 @@ pub fn session_get_enable_trusted_devices(session_id: SessionID) -> SyncReturn<b
     SyncReturn(v)
 }
 
+pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<bool> {
+    SyncReturn(sessions::would_remove_peer_by_session_id(&session_id))
+}
+
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
         // `release_remote_keys` is not required for mobile platforms in common cases.
@@ -1774,6 +1778,36 @@ pub fn session_get_audit_server_sync(session_id: SessionID, typ: String) -> Sync
 pub fn session_send_note(session_id: SessionID, note: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send_note(note)
+    }
+}
+
+pub fn session_get_last_audit_note(session_id: SessionID) -> SyncReturn<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.last_audit_note.lock().unwrap().clone())
+    } else {
+        SyncReturn("".to_owned())
+    }
+}
+
+pub fn session_set_audit_guid(session_id: SessionID, guid: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        *session.audit_guid.lock().unwrap() = guid;
+    }
+}
+
+pub fn session_get_audit_guid(session_id: SessionID) -> SyncReturn<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.audit_guid.lock().unwrap().clone())
+    } else {
+        SyncReturn("".to_owned())
+    }
+}
+
+pub fn session_get_conn_session_id(session_id: SessionID) -> SyncReturn<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.lc.read().unwrap().session_id.to_string())
+    } else {
+        SyncReturn("".to_owned())
     }
 }
 

@@ -366,7 +366,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
     return WillPopScope(
       onWillPop: () async {
-        clientClose(sessionId, gFFI.dialogManager);
+        clientClose(sessionId, gFFI);
         return false;
       },
       child: Scaffold(
@@ -484,7 +484,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       color: Colors.white,
                       icon: Icon(Icons.clear),
                       onPressed: () {
-                        clientClose(sessionId, gFFI.dialogManager);
+                        clientClose(sessionId, gFFI);
                       },
                     ),
                     IconButton(
