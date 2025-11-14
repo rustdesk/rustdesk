@@ -2103,6 +2103,26 @@ pub mod sessions {
         s
     }
 
+    /// Check if removing a session by session_id would result in removing the entire peer.
+    ///
+    /// Returns:
+    /// - `true`: The session exists and removing it would leave the peer with no other sessions,
+    ///           so the entire peer would be removed (equivalent to `remove_session_by_session_id` returning `Some`)
+    /// - `false`: The session doesn't exist, or it exists but the peer has other sessions,
+    ///            so the peer would not be removed (equivalent to `remove_session_by_session_id` returning `None`)
+    #[inline]
+    pub fn would_remove_peer_by_session_id(id: &SessionID) -> bool {
+        for (_peer_key, s) in SESSIONS.read().unwrap().iter() {
+            let read_lock = s.ui_handler.session_handlers.read().unwrap();
+            if read_lock.contains_key(id) {
+                // Found the session, check if it's the only one for this peer
+                return read_lock.len() == 1;
+            }
+        }
+        // Session not found
+        false
+    }
+
     fn check_remove_unused_displays(
         current: Option<usize>,
         session_id: &SessionID,

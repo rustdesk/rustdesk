@@ -70,6 +70,10 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
         crate::common::test_nat_type();
     }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = crate::common::global_init();
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         // core_main's init_log does not work for flutter since it is only applied to its load_library in main.c
@@ -250,6 +254,10 @@ pub fn session_get_enable_trusted_devices(session_id: SessionID) -> SyncReturn<b
     SyncReturn(v)
 }
 
+pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<bool> {
+    SyncReturn(sessions::would_remove_peer_by_session_id(&session_id))
+}
+
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
         // `release_remote_keys` is not required for mobile platforms in common cases.
@@ -273,7 +281,10 @@ pub fn session_take_screenshot(session_id: SessionID, display: usize) {
     }
 }
 
-pub fn session_handle_screenshot(#[allow(unused_variables)] session_id: SessionID, action: String) -> String {
+pub fn session_handle_screenshot(
+    #[allow(unused_variables)] session_id: SessionID,
+    action: String,
+) -> String {
     crate::client::screenshot::handle_screenshot(action)
 }
 
@@ -390,6 +401,20 @@ pub fn session_get_scroll_style(session_id: SessionID) -> Option<String> {
 pub fn session_set_scroll_style(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.save_scroll_style(value);
+    }
+}
+
+pub fn session_get_edge_scroll_edge_thickness(session_id: SessionID) -> Option<i32> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        Some(session.get_edge_scroll_edge_thickness())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_edge_scroll_edge_thickness(session_id: SessionID, value: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_edge_scroll_edge_thickness(value);
     }
 }
 
@@ -1437,20 +1462,7 @@ pub fn main_handle_relay_id(id: String) -> String {
 }
 
 pub fn main_is_option_fixed(key: String) -> SyncReturn<bool> {
-    SyncReturn(
-        config::OVERWRITE_DISPLAY_SETTINGS
-            .read()
-            .unwrap()
-            .contains_key(&key)
-            || config::OVERWRITE_LOCAL_SETTINGS
-                .read()
-                .unwrap()
-                .contains_key(&key)
-            || config::OVERWRITE_SETTINGS
-                .read()
-                .unwrap()
-                .contains_key(&key),
-    )
+    SyncReturn(is_option_fixed(&key))
 }
 
 pub fn main_get_main_display() -> SyncReturn<String> {
@@ -1766,6 +1778,36 @@ pub fn session_get_audit_server_sync(session_id: SessionID, typ: String) -> Sync
 pub fn session_send_note(session_id: SessionID, note: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send_note(note)
+    }
+}
+
+pub fn session_get_last_audit_note(session_id: SessionID) -> SyncReturn<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.last_audit_note.lock().unwrap().clone())
+    } else {
+        SyncReturn("".to_owned())
+    }
+}
+
+pub fn session_set_audit_guid(session_id: SessionID, guid: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        *session.audit_guid.lock().unwrap() = guid;
+    }
+}
+
+pub fn session_get_audit_guid(session_id: SessionID) -> SyncReturn<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.audit_guid.lock().unwrap().clone())
+    } else {
+        SyncReturn("".to_owned())
+    }
+}
+
+pub fn session_get_conn_session_id(session_id: SessionID) -> SyncReturn<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.lc.read().unwrap().session_id.to_string())
+    } else {
+        SyncReturn("".to_owned())
     }
 }
 

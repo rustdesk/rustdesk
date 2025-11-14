@@ -39,7 +39,14 @@ def view_shared_abs(url, token, name=None):
     while True:
         filtered_params["current"] = current
         response = requests.get(f"{url}/api/ab/shared/profiles", headers=headers, params=filtered_params)
+        if response.status_code != 200:
+            print(f"Error: HTTP {response.status_code} - {response.text}")
+            exit(1)
+        
         response_json = response.json()
+        if "error" in response_json:
+            print(f"Error: {response_json['error']}")
+            exit(1)
 
         data = response_json.get("data", [])
         abs.extend(data)
@@ -84,7 +91,14 @@ def view_ab_peers(url, token, ab_guid, peer_id=None, alias=None):
     while True:
         filtered_params["current"] = current
         response = requests.get(f"{url}/api/ab/peers", headers=headers, params=filtered_params)
+        if response.status_code != 200:
+            print(f"Error: HTTP {response.status_code} - {response.text}")
+            exit(1)
+        
         response_json = response.json()
+        if "error" in response_json:
+            print(f"Error: {response_json['error']}")
+            exit(1)
 
         data = response_json.get("data", [])
         peers.extend(data)
@@ -103,11 +117,6 @@ def view_ab_tags(url, token, ab_guid):
     response = requests.get(f"{url}/api/ab/tags/{ab_guid}", headers=headers)
     response_json = check_response(response)
     
-    # Handle error responses
-    if isinstance(response_json, tuple) and response_json[0] == "Failed":
-        print(f"Error: {response_json[1]} - {response_json[2]}")
-        return []
-    
     # Format color values as hex
     if response_json:
         for tag in response_json:
@@ -122,14 +131,18 @@ def view_ab_tags(url, token, ab_guid):
 
 def check_response(response):
     """Check API response and return result"""
-    if response.status_code == 200:
-        try:
-            response_json = response.json()
-            return response_json
-        except ValueError:
-            return response.text or "Success"
-    else:
-        return "Failed", response.status_code, response.text
+    if response.status_code != 200:
+        print(f"Error: HTTP {response.status_code} - {response.text}")
+        exit(1)
+    
+    try:
+        response_json = response.json()
+        if "error" in response_json:
+            print(f"Error: {response_json['error']}")
+            exit(1)
+        return response_json
+    except ValueError:
+        return response.text or "Success"
 
 
 def add_peer(url, token, ab_guid, peer_id, alias=None, note=None, tags=None, password=None):
@@ -395,7 +408,14 @@ def view_ab_rules(url, token, ab_guid):
     while True:
         params["current"] = current
         response = requests.get(f"{url}/api/ab/rules", headers=headers, params=params)
+        if response.status_code != 200:
+            print(f"Error: HTTP {response.status_code} - {response.text}")
+            exit(1)
+        
         response_json = response.json()
+        if "error" in response_json:
+            print(f"Error: {response_json['error']}")
+            exit(1)
 
         data = response_json.get("data", [])
         rules.extend(data)

@@ -30,6 +30,7 @@ import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desc_ui.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/http_service.dart' as http;
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_svg/flutter_svg.dart';
@@ -933,11 +934,21 @@ class FfiModel with ChangeNotifier {
   /// Show a message box with [type], [title] and [text].
   showMsgBox(SessionID sessionId, String type, String title, String text,
       String link, bool hasRetry, OverlayDialogManager dialogManager,
-      {bool? hasCancel}) {
-    msgBox(sessionId, type, title, text, link, dialogManager,
-        hasCancel: hasCancel,
-        reconnect: hasRetry ? reconnect : null,
-        reconnectTimeout: hasRetry ? _reconnects : null);
+      {bool? hasCancel}) async {
+    final showNoteEdit = parent.target != null &&
+        allowAskForNoteAtEndOfConnection(parent.target, false) &&
+        (title == "Connection Error" || type == "restarting") &&
+        !hasRetry;
+    if (showNoteEdit) {
+      await showConnEndAuditDialogCloseCanceled(
+          ffi: parent.target!, type: type, title: title, text: text);
+      closeConnection();
+    } else {
+      msgBox(sessionId, type, title, text, link, dialogManager,
+          hasCancel: hasCancel,
+          reconnect: hasRetry ? reconnect : null,
+          reconnectTimeout: hasRetry ? _reconnects : null);
+    }
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
@@ -958,8 +969,30 @@ class FfiModel with ChangeNotifier {
         onCancel: closeConnection);
   }
 
-  void showRelayHintDialog(SessionID sessionId, String type, String title,
-      String text, OverlayDialogManager dialogManager, String peerId) {
+  Future<void> showRelayHintDialog(
+      SessionID sessionId,
+      String type,
+      String title,
+      String text,
+      OverlayDialogManager dialogManager,
+      String peerId) async {
+    var hint = "\n\n${translate('relay_hint_tip')}";
+    if (text.contains("10054") || text.contains("104")) {
+      hint = "";
+    }
+    final text2 = "${translate(text)}$hint";
+
+    if (parent.target != null &&
+        allowAskForNoteAtEndOfConnection(parent.target, false) &&
+        pi.isSet.isTrue) {
+      if (await showConnEndAuditDialogCloseCanceled(
+          ffi: parent.target!, type: type, title: title, text: text2)) {
+        return;
+      }
+      closeConnection();
+      return;
+    }
+
     dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
       onClose() {
         closeConnection();
@@ -968,13 +1001,10 @@ class FfiModel with ChangeNotifier {
 
       final style =
           ElevatedButton.styleFrom(backgroundColor: Colors.green[700]);
-      var hint = "\n\n${translate('relay_hint_tip')}";
-      if (text.contains("10054") || text.contains("104")) {
-        hint = "";
-      }
+
       return CustomAlertDialog(
         title: null,
-        content: msgboxContent(type, title, "${translate(text)}$hint"),
+        content: msgboxContent(type, title, text2),
         actions: [
           dialogButton('Close', onPressed: onClose, isOutline: true),
           if (type == 'relay-hint')
@@ -1064,9 +1094,90 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  void _queryAuditGuid(String peerId) async {
+    try {
+      if (!mainGetLocalBoolOptionSync(
+          kOptionAllowAskForNoteAtEndOfConnection)) {
+        return;
+      }
+      if (bind.sessionGetAuditGuid(sessionId: sessionId).isNotEmpty) {
+        debugPrint('Get cached audit GUID');
+        return;
+      }
+      final url = bind.sessionGetAuditServerSync(
+          sessionId: sessionId, typ: "conn/active");
+      if (url.isEmpty) {
+        return;
+      }
+      final initialConnSessionId =
+          bind.sessionGetConnSessionId(sessionId: sessionId);
+      final connType = switch (parent.target?.connType) {
+        ConnType.defaultConn => 0,
+        ConnType.fileTransfer => 1,
+        ConnType.portForward => 2,
+        ConnType.rdp => 2,
+        ConnType.viewCamera => 3,
+        ConnType.terminal => 4,
+        _ => 0,
+      };
+
+      const retryIntervals = [1, 1, 2, 2, 3, 3];
+
+      for (int attempt = 1; attempt <= retryIntervals.length; attempt++) {
+        final currentConnSessionId =
+            bind.sessionGetConnSessionId(sessionId: sessionId);
+        if (currentConnSessionId != initialConnSessionId) {
+          debugPrint('connSessionId changed, stopping audit GUID query');
+          return;
+        }
+
+        final fullUrl =
+            '$url?id=$peerId&session_id=$currentConnSessionId&conn_type=$connType';
+
+        debugPrint(
+            'Querying audit GUID, attempt $attempt/${retryIntervals.length}');
+        try {
+          var headers = getHttpHeaders();
+          headers['Content-Type'] = "application/json";
+
+          final response = await http.get(
+            Uri.parse(fullUrl),
+            headers: headers,
+          );
+
+          if (response.statusCode == 200) {
+            final guid = jsonDecode(response.body) as String?;
+            if (guid != null && guid.isNotEmpty) {
+              bind.sessionSetAuditGuid(sessionId: sessionId, guid: guid);
+              debugPrint('Successfully retrieved audit GUID');
+              return;
+            }
+          } else {
+            debugPrint(
+                'Failed to query audit GUID. Status: ${response.statusCode}, Body: ${response.body}');
+            return;
+          }
+        } catch (e) {
+          debugPrint('Error querying audit GUID (attempt $attempt): $e');
+        }
+
+        if (attempt < retryIntervals.length) {
+          await Future.delayed(Duration(seconds: retryIntervals[attempt - 1]));
+        }
+      }
+
+      debugPrint(
+          'Failed to retrieve audit GUID after ${retryIntervals.length} attempts');
+    } catch (e) {
+      debugPrint('Error in _queryAuditGuid: $e');
+    }
+  }
+
   /// Handle the peer info event based on [evt].
   handlePeerInfo(Map<String, dynamic> evt, String peerId, bool isCache) async {
     parent.target?.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
+
+    _queryAuditGuid(peerId);
 
     // This call is to ensuer the keyboard mode is updated depending on the peer version.
     parent.target?.inputModel.updateKeyboardMode();
@@ -1667,6 +1778,7 @@ class ImageModel with ChangeNotifier {
       if (isDesktop || isWebDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
         await parent.target?.canvasModel.updateScrollStyle();
+        await parent.target?.canvasModel.initializeEdgeScrollEdgeThickness();
       }
       if (parent.target != null) {
         await initializeCursorAndCanvas(parent.target!);
@@ -1914,6 +2026,8 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
+  // edge scroll mode: trigger scrolling when the cursor is close to the edge of the view
+  int _edgeScrollEdgeThickness = 100;
   // tracks whether edge scroll should be active, prevents spurious
   // scrolling when the cursor enters the view from outside
   EdgeScrollState _edgeScrollState = EdgeScrollState.inactive;
@@ -2090,12 +2204,11 @@ class CanvasModel with ChangeNotifier {
     });
   }
 
-  updateScrollStyle() async {
+  Future<void> updateScrollStyle() async {
     final style = await bind.sessionGetScrollStyle(sessionId: sessionId);
 
-    _scrollStyle = style != null
-        ? ScrollStyle.fromString(style!)
-        : ScrollStyle.scrollauto;
+    _scrollStyle =
+        style != null ? ScrollStyle.fromString(style) : ScrollStyle.scrollauto;
 
     if (_scrollStyle != ScrollStyle.scrollauto) {
       _resetScroll();
@@ -2104,7 +2217,21 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  update(double x, double y, double scale) {
+  Future<void> initializeEdgeScrollEdgeThickness() async {
+    final savedValue =
+        await bind.sessionGetEdgeScrollEdgeThickness(sessionId: sessionId);
+
+    if (savedValue != null) {
+      _edgeScrollEdgeThickness = savedValue;
+    }
+  }
+
+  void updateEdgeScrollEdgeThickness(int newThickness) {
+    _edgeScrollEdgeThickness = newThickness;
+    notifyListeners();
+  }
+
+  void update(double x, double y, double scale) {
     _x = x;
     _y = y;
     _scale = scale;
@@ -2207,12 +2334,12 @@ class CanvasModel with ChangeNotifier {
 
   (Vector2, Vector2) getScrollInfo() {
     final scrollPixel = Vector2(
-      _horizontal.hasClients ? _horizontal.position.pixels : 0,
-      _vertical.hasClients ? _vertical.position.pixels : 0);
+        _horizontal.hasClients ? _horizontal.position.pixels : 0,
+        _vertical.hasClients ? _vertical.position.pixels : 0);
 
     final max = Vector2(
-      _horizontal.hasClients ? _horizontal.position.maxScrollExtent : 0,
-      _vertical.hasClients ? _vertical.position.maxScrollExtent : 0);
+        _horizontal.hasClients ? _horizontal.position.maxScrollExtent : 0,
+        _vertical.hasClients ? _vertical.position.maxScrollExtent : 0);
 
     return (scrollPixel, max);
   }
@@ -2224,9 +2351,6 @@ class CanvasModel with ChangeNotifier {
       return;
     }
 
-    // Trigger scrolling when the cursor is close to an edge
-    const double edgeThickness = 100;
-
     if (_edgeScrollState == EdgeScrollState.armed) {
       // Edge scroll is armed to become active once the cursor
       // is observed within the rectangle interior to the
@@ -2235,7 +2359,7 @@ class CanvasModel with ChangeNotifier {
       // doesn't happen yet.
       final clientArea = Rect.fromLTWH(0, 0, size.width, size.height);
 
-      final innerZone = clientArea.deflate(edgeThickness);
+      final innerZone = clientArea.deflate(_edgeScrollEdgeThickness.toDouble());
 
       if (innerZone.contains(Offset(x, y))) {
         _edgeScrollState = EdgeScrollState.active;
@@ -2248,16 +2372,16 @@ class CanvasModel with ChangeNotifier {
     var dxOffset = 0.0;
     var dyOffset = 0.0;
 
-    if (x < edgeThickness) {
-      dxOffset = x - edgeThickness;
-    } else if (x >= size.width - edgeThickness) {
-      dxOffset = x - (size.width - edgeThickness);
+    if (x < _edgeScrollEdgeThickness) {
+      dxOffset = x - _edgeScrollEdgeThickness;
+    } else if (x >= size.width - _edgeScrollEdgeThickness) {
+      dxOffset = x - (size.width - _edgeScrollEdgeThickness);
     }
 
-    if (y < edgeThickness) {
-      dyOffset = y - edgeThickness;
-    } else if (y >= size.height - edgeThickness) {
-      dyOffset = y - (size.height - edgeThickness);
+    if (y < _edgeScrollEdgeThickness) {
+      dyOffset = y - _edgeScrollEdgeThickness;
+    } else if (y >= size.height - _edgeScrollEdgeThickness) {
+      dyOffset = y - (size.height - _edgeScrollEdgeThickness);
     }
 
     var encroachment = Vector2(dxOffset, dyOffset);
@@ -3297,7 +3421,6 @@ class FFI {
   var version = '';
   var connType = ConnType.defaultConn;
   var closed = false;
-  var auditNote = '';
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
@@ -3388,7 +3511,6 @@ class FFI {
     List<int>? displays,
   }) {
     closed = false;
-    auditNote = '';
     if (isMobile) mobileReset();
     assert(
         (!(isPortForward && isViewCamera)) &&
@@ -3580,6 +3702,7 @@ class FFI {
       dialogManager.dismissAll();
       await canvasModel.updateViewStyle();
       await canvasModel.updateScrollStyle();
+      await canvasModel.initializeEdgeScrollEdgeThickness();
       for (final cb in imageModel.callbacksOnFirstImage) {
         cb(id);
       }

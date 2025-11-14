@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -37,6 +38,8 @@ class _TerminalPageState extends State<TerminalPage>
   final String _robotoMonoFontFamily = isWeb
       ? (GoogleFonts.robotoMono().fontFamily ?? 'monospace')
       : 'monospace';
+
+  SessionID get sessionId => _ffi.sessionId;
 
   @override
   void initState() {
@@ -82,6 +85,16 @@ class _TerminalPageState extends State<TerminalPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    return WillPopScope(
+      onWillPop: () async {
+        clientClose(sessionId, _ffi);
+        return false; // Prevent default back behavior
+      },
+      child: buildBody(),
+    );
+  }
+
+  Widget buildBody() {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: TerminalView(

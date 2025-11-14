@@ -98,6 +98,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _disableUdp = false;
   var _enableIpv6Punch = false;
   var _isUsingPublicServer = false;
+  var _allowAskForNoteAtEndOfConnection = false;
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -136,6 +137,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _enableTrustedDevices = mainGetBoolOptionSync(kOptionEnableTrustedDevices);
     _enableUdpPunch = mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
     _enableIpv6Punch = mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
+    _allowAskForNoteAtEndOfConnection =
+        mainGetLocalBoolOptionSync(kOptionAllowAskForNoteAtEndOfConnection);
   }
 
   @override
@@ -781,6 +784,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 : Icons.light_mode),
             onPressed: (context) {
               showThemeSettings(gFFI.dialogManager);
+            },
+          ),
+          SettingsTile.switchTile(
+            title: Text(translate('note-at-conn-end-tip')),
+            initialValue: _allowAskForNoteAtEndOfConnection,
+            onToggle: (v) async {
+              await mainSetLocalBoolOption(
+                  kOptionAllowAskForNoteAtEndOfConnection, v);
+              final newValue = mainGetLocalBoolOptionSync(
+                  kOptionAllowAskForNoteAtEndOfConnection);
+              setState(() {
+                _allowAskForNoteAtEndOfConnection = newValue;
+              });
             },
           )
         ]),
