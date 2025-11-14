@@ -116,8 +116,20 @@ jobs:
         
     - name: 📦 安装vcpkg依赖
       run: |
-        vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-        echo "VCPKG_ROOT=${{ github.workspace }}\\vcpkg" >> $env:GITHUB_ENV
+        Write-Host "📦 检查vcpkg配置..."
+        if (Test-Path "vcpkg.json") {
+          Write-Host "✅ 发现 vcpkg.json，使用manifest模式"
+          Get-Content "vcpkg.json" | Write-Host
+          
+          # 设置vcpkg环境
+          echo "VCPKG_ROOT=${{ github.workspace }}\\vcpkg" >> $env:GITHUB_ENV
+          
+          # 使用manifest模式安装依赖
+          Write-Host "🚀 安装vcpkg依赖..."
+          vcpkg install --triplet x64-windows-static
+        } else {
+          Write-Host "❌ 未发现 vcpkg.json，跳过依赖安装"
+        }
         
     - name: 🔧 生成CQNT定制配置
       run: |
