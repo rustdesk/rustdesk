@@ -1,0 +1,271 @@
+name: 🔐 CQNT定制RustDesk安全编译
+
+on:
+  # 手动触发编译
+  workflow_dispatch:
+    inputs:
+      build_windows:
+        description: '编译Windows版本'
+        required: true
+        default: true
+        type: boolean
+      build_linux:
+        description: '编译Linux版本'
+        required: true
+        default: true
+        type: boolean
+      build_macos:
+        description: '编译macOS版本'
+        required: false
+        default: false
+        type: boolean
+
+  # 代码推送时自动编译
+  push:
+    branches: [ main, master ]
+    paths:
+      - '.github/workflows/**'
+      - 'src/**'
+      - 'Cargo.toml'
+
+# 所有敏感配置从GitHub Secrets读取，不在代码中暴露
+  
+jobs:
+  validate-secrets:
+    name: 🔍 验证Secrets配置
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 验证必需的Secrets
+      run: |
+        echo "🔍 检查必需的Secrets配置..."
+        
+        # 检查必需的Secrets
+        if [ -z "${{ secrets.CQNT_SERVER_HOST }}" ]; then
+          echo "❌ 错误: CQNT_SERVER_HOST 未配置"
+          exit 1
+        fi
+        
+        if [ -z "${{ secrets.CQNT_HBBS_PORT }}" ]; then
+          echo "❌ 错误: CQNT_HBBS_PORT 未配置"
+          exit 1
+        fi
+        
+        if [ -z "${{ secrets.CQNT_APP_NAME }}" ]; then
+          echo "❌ 错误: CQNT_APP_NAME 未配置"
+          exit 1
+        fi
+        
+        echo "✅ 所有必需的Secrets配置检查通过"
+        
+        # 显示配置信息（脱敏）
+        echo "📋 当前配置："
+        echo "  服务器: ${{ secrets.CQNT_SERVER_HOST }}:${{ secrets.CQNT_HBBS_PORT }}"
+        echo "  应用名称: ${{ secrets.CQNT_APP_NAME }}"
+        
+        # 检查密钥长度（不显示内容）
+        key_length=$(echo -n "${{ secrets.CQNT_SERVER_KEY }}" | wc -c)
+        echo "  服务器密钥: [已配置，长度: ${key_length} 字符]"
+
+  build-windows:
+    name: 🪟 编译Windows客户端
+    runs-on: windows-latest
+    needs: validate-secrets
+    if: github.event.inputs.build_windows != 'false'
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: 🦀 安装Rust工具链
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        
+    - name: 📦 安装vcpkg依赖
+      run: |
+        vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+        echo "VCPKG_ROOT=${{ github.workspace }}\\vcpkg" >> $env:GITHUB_ENV
+        
+    - name: 🔧 配置编译环境
+      run: |
+        # 从Secrets构建环境变量
+        $env:RENDEZVOUS_SERVER = "${{ secrets.CQNT_SERVER_HOST }}:${{ secrets.CQNT_HBBS_PORT }}"
+        $env:API_SERVER = "http://${{ secrets.CQNT_SERVER_HOST }}:${{ secrets.CQNT_API_PORT }}"
+        $env:RS_PUB_KEY = "${{ secrets.CQNT_SERVER_KEY }}"
+        $env:RUSTDESK_APP_NAME = "${{ secrets.CQNT_APP_NAME }}"
+        
+        # 保存到GITHUB_ENV以供后续步骤使用
+        echo "RENDEZVOUS_SERVER=$env:RENDEZVOUS_SERVER" >> $env:GITHUB_ENV
+        echo "API_SERVER=$env:API_SERVER" >> $env:GITHUB_ENV
+        echo "RS_PUB_KEY=$env:RS_PUB_KEY" >> $env:GITHUB_ENV
+        echo "RUSTDESK_APP_NAME=$env:RUSTDESK_APP_NAME" >> $env:GITHUB_ENV
+        
+        # 显示配置信息（脱敏）
+        Write-Host "🔧 编译配置："
+        Write-Host "  ID服务器: $env:RENDEZVOUS_SERVER"
+        Write-Host "  API服务器: $env:API_SERVER"
+        Write-Host "  应用名称: $env:RUSTDESK_APP_NAME"
+        Write-Host "  密钥: [已配置]"
+        
+    - name: 🚀 编译RustDesk客户端
+      run: |
+        Write-Host "🚀 开始编译Windows客户端..."
+        cargo build --release --features flutter
+        
+    - name: 📝 生成版本信息
+      id: version
+      run: |
+        $version = "1.4.3-CQNT-$(Get-Date -Format 'yyyyMMdd')"
+        $filename = "CQNT_RustDesk_${version}_windows_x64.exe"
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "filename=$filename" >> $env:GITHUB_OUTPUT
+        
+    - name: 📦 准备发布文件
+      run: |
+        mkdir release
+        copy rustdesk-master\target\release\rustdesk.exe "release\${{ steps.version.outputs.filename }}"
+        
+        # 创建配置信息文件
+        @"
+        CQNT定制RustDesk客户端
+        ========================
+        
+        版本: ${{ steps.version.outputs.version }}
+        编译时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        
+        内置配置:
+        - ID服务器: $env:RENDEZVOUS_SERVER
+        - API服务器: $env:API_SERVER
+        - 应用名称: $env:RUSTDESK_APP_NAME
+        
+        使用说明:
+        1. 直接运行exe文件
+        2. 自动连接到CQNT服务器
+        3. 无需任何额外配置
+        
+        技术支持: CQNT技术团队
+        "@ | Out-File -FilePath "release\使用说明.txt" -Encoding UTF8
+        
+    - name: 🎯 上传编译产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: CQNT-RustDesk-Windows
+        path: release/
+        
+  build-linux:
+    name: 🐧 编译Linux客户端  
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: 📦 安装系统依赖
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential cmake git pkg-config \
+          libasound2-dev libpulse-dev libgtk-3-dev \
+          libxcb-randr0-dev libxdo-dev libxfixes-dev \
+          libxcb-shape0-dev libxcb-xfixes0-dev \
+          libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+          libpam0g-dev clang libclang-dev ninja-build \
+          nasm yasm
+          
+    - name: 🦀 安装Rust工具链
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        
+    - name: 📦 安装vcpkg依赖
+      run: |
+        git clone https://github.com/Microsoft/vcpkg.git
+        cd vcpkg
+        ./bootstrap-vcpkg.sh
+        ./vcpkg install libvpx libyuv opus aom
+        echo "VCPKG_ROOT=${{ github.workspace }}/vcpkg" >> $GITHUB_ENV
+        
+    - name: 🚀 编译RustDesk客户端
+      run: |
+        cd rustdesk-master
+        cargo build --release --features flutter
+        
+    - name: 📝 生成版本信息
+      id: version
+      run: |
+        version="1.4.3-CQNT-$(date +%Y%m%d)"
+        filename="CQNT_RustDesk_${version}_linux_x64"
+        echo "version=$version" >> $GITHUB_OUTPUT
+        echo "filename=$filename" >> $GITHUB_OUTPUT
+        
+    - name: 📦 准备发布文件
+      run: |
+        mkdir release
+        cp rustdesk-master/target/release/rustdesk "release/${{ steps.version.outputs.filename }}"
+        chmod +x "release/${{ steps.version.outputs.filename }}"
+        
+        # 创建配置信息文件
+        cat > release/使用说明.txt << EOF
+        CQNT定制RustDesk客户端 (Linux版)
+        ================================
+        
+        版本: ${{ steps.version.outputs.version }}
+        编译时间: $(date '+%Y-%m-%d %H:%M:%S')
+        
+        内置配置:
+        - ID服务器: $RENDEZVOUS_SERVER
+        - API服务器: $API_SERVER  
+        - 应用名称: $RUSTDESK_APP_NAME
+        
+        安装说明:
+        1. chmod +x ${{ steps.version.outputs.filename }}
+        2. ./${{ steps.version.outputs.filename }}
+        3. 自动连接到CQNT服务器
+        
+        系统要求: Linux x64, GTK3
+        技术支持: CQNT技术团队
+        EOF
+        
+    - name: 🎯 上传编译产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: CQNT-RustDesk-Linux
+        path: release/
+        
+  # 可选：macOS编译
+  build-macos:
+    name: 🍎 编译macOS客户端
+    runs-on: macos-latest
+    if: false  # 默认禁用，需要时改为true
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 🦀 安装Rust工具链
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: 📦 安装依赖
+      run: |
+        brew install cmake pkg-config
+        
+    - name: 🚀 编译RustDesk客户端
+      run: |
+        cd rustdesk-master
+        cargo build --release --features flutter
+        
+    - name: 📦 准备发布文件
+      run: |
+        mkdir release
+        cp rustdesk-master/target/release/rustdesk "release/CQNT_RustDesk_macos_$(date +%Y%m%d)"
+        
+    - name: 🎯 上传编译产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: CQNT-RustDesk-macOS
+        path: release/
