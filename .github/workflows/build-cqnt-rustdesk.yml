@@ -41,13 +41,18 @@ jobs:
         echo "🔍 检查必需的Secrets配置..."
         
         # 检查必需的Secrets
-        if [ -z "${{ secrets.CQNT_SERVER_HOST }}" ]; then
-          echo "❌ 错误: CQNT_SERVER_HOST 未配置"
+        if [ -z "${{ secrets.RUSTDESK_SERVER_HOST }}" ]; then
+          echo "❌ 错误: RUSTDESK_SERVER_HOST 未配置"
           exit 1
         fi
         
-        if [ -z "${{ secrets.CQNT_HBBS_PORT }}" ]; then
-          echo "❌ 错误: CQNT_HBBS_PORT 未配置"
+        if [ -z "${{ secrets.RUSTDESK_HBBS_PORT }}" ]; then
+          echo "❌ 错误: RUSTDESK_HBBS_PORT 未配置"
+          exit 1
+        fi
+        
+        if [ -z "${{ secrets.CQNT_BACKEND_HOST }}" ]; then
+          echo "❌ 错误: CQNT_BACKEND_HOST 未配置"
           exit 1
         fi
         
@@ -60,11 +65,12 @@ jobs:
         
         # 显示配置信息（脱敏）
         echo "📋 当前配置："
-        echo "  服务器: ${{ secrets.CQNT_SERVER_HOST }}:${{ secrets.CQNT_HBBS_PORT }}"
+        echo "  RustDesk服务端: ${{ secrets.RUSTDESK_SERVER_HOST }}:${{ secrets.RUSTDESK_HBBS_PORT }}"
+        echo "  CQNT管理后端: ${{ secrets.CQNT_BACKEND_HOST }}:${{ secrets.CQNT_BACKEND_PORT }}"
         echo "  应用名称: ${{ secrets.CQNT_APP_NAME }}"
         
         # 检查密钥长度（不显示内容）
-        key_length=$(echo -n "${{ secrets.CQNT_SERVER_KEY }}" | wc -c)
+        key_length=$(echo -n "${{ secrets.RUSTDESK_SERVER_KEY }}" | wc -c)
         echo "  服务器密钥: [已配置，长度: ${key_length} 字符]"
 
   build-windows:
@@ -92,9 +98,9 @@ jobs:
     - name: 🔧 配置编译环境
       run: |
         # 从Secrets构建环境变量
-        $env:RENDEZVOUS_SERVER = "${{ secrets.CQNT_SERVER_HOST }}:${{ secrets.CQNT_HBBS_PORT }}"
-        $env:API_SERVER = "http://${{ secrets.CQNT_SERVER_HOST }}:${{ secrets.CQNT_API_PORT }}"
-        $env:RS_PUB_KEY = "${{ secrets.CQNT_SERVER_KEY }}"
+        $env:RENDEZVOUS_SERVER = "${{ secrets.RUSTDESK_SERVER_HOST }}:${{ secrets.RUSTDESK_HBBS_PORT }}"
+        $env:API_SERVER = "http://${{ secrets.CQNT_BACKEND_HOST }}:${{ secrets.CQNT_BACKEND_PORT }}"
+        $env:RS_PUB_KEY = "${{ secrets.RUSTDESK_SERVER_KEY }}"
         $env:RUSTDESK_APP_NAME = "${{ secrets.CQNT_APP_NAME }}"
         
         # 保存到GITHUB_ENV以供后续步骤使用
