@@ -40,7 +40,7 @@ jobs:
       run: |
         echo "🔍 检查必需的Secrets配置..."
         
-        # 检查必需的Secrets
+        # 检查必需的Secrets (简化后的6个必需配置)
         if [ -z "${{ secrets.RUSTDESK_SERVER_HOST }}" ]; then
           echo "❌ 错误: RUSTDESK_SERVER_HOST 未配置"
           exit 1
@@ -48,6 +48,11 @@ jobs:
         
         if [ -z "${{ secrets.RUSTDESK_HBBS_PORT }}" ]; then
           echo "❌ 错误: RUSTDESK_HBBS_PORT 未配置"
+          exit 1
+        fi
+        
+        if [ -z "${{ secrets.RUSTDESK_SERVER_KEY }}" ]; then
+          echo "❌ 错误: RUSTDESK_SERVER_KEY 未配置"
           exit 1
         fi
         
@@ -84,6 +89,25 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
+        fetch-depth: 0
+        
+    - name: 🔄 更新子模块
+      run: |
+        Write-Host "🔄 初始化并更新Git子模块..."
+        git submodule update --init --recursive --force
+        Write-Host "📋 检查关键子模块："
+        if (Test-Path "libs\hbb_common") {
+          Write-Host "  ✅ hbb_common 子模块存在"
+        } else {
+          Write-Host "  ❌ hbb_common 子模块缺失，尝试手动克隆..."
+          git clone https://github.com/rustdesk/hbb_common.git libs\hbb_common
+        }
+        if (Test-Path "libs\scrap") {
+          Write-Host "  ✅ scrap 子模块存在"  
+        } else {
+          Write-Host "  ❌ scrap 子模块缺失，尝试手动克隆..."
+          git clone https://github.com/rustdesk/rust_scrap.git libs\scrap
+        }
         
     - name: 🦀 安装Rust工具链
       uses: dtolnay/rust-toolchain@stable
@@ -95,31 +119,49 @@ jobs:
         vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
         echo "VCPKG_ROOT=${{ github.workspace }}\\vcpkg" >> $env:GITHUB_ENV
         
-    - name: 🔧 配置编译环境
+    - name: 🔧 生成CQNT定制配置
       run: |
-        # 从Secrets构建环境变量
-        $env:RENDEZVOUS_SERVER = "${{ secrets.RUSTDESK_SERVER_HOST }}:${{ secrets.RUSTDESK_HBBS_PORT }}"
-        $env:API_SERVER = "http://${{ secrets.CQNT_BACKEND_HOST }}:${{ secrets.CQNT_BACKEND_PORT }}"
-        $env:RS_PUB_KEY = "${{ secrets.RUSTDESK_SERVER_KEY }}"
-        $env:RUSTDESK_APP_NAME = "${{ secrets.CQNT_APP_NAME }}"
+        Write-Host "🔧 生成CQNT定制配置文件..."
         
-        # 保存到GITHUB_ENV以供后续步骤使用
-        echo "RENDEZVOUS_SERVER=$env:RENDEZVOUS_SERVER" >> $env:GITHUB_ENV
-        echo "API_SERVER=$env:API_SERVER" >> $env:GITHUB_ENV
-        echo "RS_PUB_KEY=$env:RS_PUB_KEY" >> $env:GITHUB_ENV
-        echo "RUSTDESK_APP_NAME=$env:RUSTDESK_APP_NAME" >> $env:GITHUB_ENV
+        # 构建RustDesk配置JSON
+        $config = @{
+            "app-name" = "${{ secrets.CQNT_APP_NAME }}"
+            "default-settings" = @{
+                "custom-rendezvous-server" = "${{ secrets.RUSTDESK_SERVER_HOST }}:${{ secrets.RUSTDESK_HBBS_PORT }}"
+                "api-server" = "http://${{ secrets.CQNT_BACKEND_HOST }}:${{ secrets.CQNT_BACKEND_PORT }}"
+                "key" = "${{ secrets.RUSTDESK_SERVER_KEY }}"
+            }
+            "override-settings" = @{
+                "custom-rendezvous-server" = "${{ secrets.RUSTDESK_SERVER_HOST }}:${{ secrets.RUSTDESK_HBBS_PORT }}"
+            }
+        }
         
-        # 显示配置信息（脱敏）
-        Write-Host "🔧 编译配置："
-        Write-Host "  ID服务器: $env:RENDEZVOUS_SERVER"
-        Write-Host "  API服务器: $env:API_SERVER"
-        Write-Host "  应用名称: $env:RUSTDESK_APP_NAME"
-        Write-Host "  密钥: [已配置]"
+        # 转换为JSON并保存
+        $jsonConfig = $config | ConvertTo-Json -Depth 3 -Compress
+        $jsonBytes = [System.Text.Encoding]::UTF8.GetBytes($jsonConfig)
+        $base64Config = [Convert]::ToBase64String($jsonBytes)
+        
+        # 创建custom.txt文件 (注意：这是简化版，生产环境需要签名)
+        Write-Output $base64Config | Out-File -FilePath "custom.txt" -Encoding ASCII
+        
+        Write-Host "📋 生成的配置："
+        Write-Host "  ID服务器: ${{ secrets.RUSTDESK_SERVER_HOST }}:${{ secrets.RUSTDESK_HBBS_PORT }}"
+        Write-Host "  API服务器: http://${{ secrets.CQNT_BACKEND_HOST }}:${{ secrets.CQNT_BACKEND_PORT }}"
+        Write-Host "  应用名称: ${{ secrets.CQNT_APP_NAME }}"
+        Write-Host "  配置文件: custom.txt (已生成)"
         
     - name: 🚀 编译RustDesk客户端
       run: |
         Write-Host "🚀 开始编译Windows客户端..."
-        cargo build --release --features flutter
+        Write-Host "📂 当前目录: $(Get-Location)"
+        Write-Host "📂 检查Cargo.toml: $(Test-Path 'Cargo.toml')"
+        if (Test-Path 'Cargo.toml') {
+          Write-Host "✅ 在根目录编译"
+          cargo build --release --features flutter
+        } else {
+          Write-Host "❌ Cargo.toml未找到，检查是否需要进入子目录"
+          exit 1
+        }
         
     - name: 📝 生成版本信息
       id: version
@@ -132,7 +174,16 @@ jobs:
     - name: 📦 准备发布文件
       run: |
         mkdir release
-        copy rustdesk-master\target\release\rustdesk.exe "release\${{ steps.version.outputs.filename }}"
+        # 检查编译产物路径
+        Write-Host "📂 检查编译产物："
+        if (Test-Path "target\release\rustdesk.exe") {
+          Write-Host "✅ 找到编译产物: target\release\rustdesk.exe"
+          copy "target\release\rustdesk.exe" "release\${{ steps.version.outputs.filename }}"
+        } else {
+          Write-Host "❌ 编译产物未找到"
+          Get-ChildItem -Path "target" -Recurse -Name "*.exe" | ForEach-Object { Write-Host "  发现: $_" }
+          exit 1
+        }
         
         # 创建配置信息文件
         @"
