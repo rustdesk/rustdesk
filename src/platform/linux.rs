@@ -1,12 +1,11 @@
 use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
-use hbb_common::config::keys::OPTION_ALLOW_LINUX_HEADLESS;
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail,
-    config::Config,
+    config::{keys::OPTION_ALLOW_LINUX_HEADLESS, Config},
     libc::{c_char, c_int, c_long, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},

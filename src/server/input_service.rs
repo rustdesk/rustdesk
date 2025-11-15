@@ -1834,6 +1834,17 @@ pub fn wayland_use_rdp_input() -> bool {
     !crate::platform::is_x11() && !crate::is_server()
 }
 
+// Simple mouse move for linux wayland uinput.
+// This function create a new thread on each call,
+// it should only be used in special cases.
+#[inline]
+#[cfg(target_os = "linux")]
+pub fn simple_mouse_move_to(x: i32, y: i32) {
+    std::thread::spawn(move || {
+        ENIGO.lock().unwrap().mouse_move_to(x, y);
+    });
+}
+
 lazy_static::lazy_static! {
     static ref MODIFIER_MAP: HashMap<i32, Key> = [
         (ControlKey::Alt, Key::Alt),

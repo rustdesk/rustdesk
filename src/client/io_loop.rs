@@ -1755,6 +1755,13 @@ impl<T: InvokeUiSession> Remote<T> {
                             thread.video_sender.send(MediaData::Reset).ok();
                         }
 
+                        let mut scale = 1.0;
+                        if let Some(pi) = &self.handler.lc.read().unwrap().peer_info {
+                            if let Some(d) = pi.displays.get(s.display as usize) {
+                                scale = d.scale;
+                            }
+                        }
+
                         if s.width > 0 && s.height > 0 {
                             self.handler.set_display(
                                 s.x,
@@ -1762,6 +1769,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 s.width,
                                 s.height,
                                 s.cursor_embedded,
+                                scale,
                             );
                         }
                     }
