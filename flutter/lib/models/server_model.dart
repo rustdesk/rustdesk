@@ -32,7 +32,10 @@ class ServerModel with ChangeNotifier {
   bool _fileOk = false;
   bool _clipboardOk = false;
   bool _showElevation = false;
-  bool hideCm = false;
+  //修复隐藏CM功能：
+  bool _hideCm = false;
+  //修复隐藏托盘功能：
+  bool _hideTray = false;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
@@ -67,6 +70,30 @@ class ServerModel with ChangeNotifier {
 
   int get connectStatus => _connectStatus;
 
+    //修复隐藏CM功能：
+  bool get hideCm => _hideCm;
+  set hideCm(bool value) {
+    if (_hideCm != value) {
+      _hideCm = value;
+      if (desktopType == DesktopType.cm) {
+        if (value) {
+          hideCmWindow();
+        } else {
+          showCmWindow();
+        }
+      }
+      notifyListeners();
+    }
+  }
+  //修复隐藏托盘图标功能：
+  bool get hideTray => _hideTray;
+  set hideTray(bool value) {
+    if (_hideTray != value) {
+      _hideTray = value;
+      notifyListeners();
+    }
+  }
+
   String get verificationMethod {
     final index = [
       kUseTemporaryPassword,
@@ -83,12 +110,13 @@ class ServerModel with ChangeNotifier {
 
   setVerificationMethod(String method) async {
     await bind.mainSetOption(key: kOptionVerificationMethod, value: method);
-    /*
-    if (method != kUsePermanentPassword) {
+    /*if (method != kUsePermanentPassword) {
       await bind.mainSetOption(
           key: 'allow-hide-cm', value: bool2option('allow-hide-cm', false));
-    }
-    */
+      await bind.mainSetOption(
+          key: 'hide-tray', value: bool2option('hide-tray', false));
+    }*/
+    
   }
 
   String get temporaryPasswordLength {
@@ -109,6 +137,8 @@ class ServerModel with ChangeNotifier {
     if (mode != 'password') {
       await bind.mainSetOption(
           key: 'allow-hide-cm', value: bool2option('allow-hide-cm', false));
+      await bind.mainSetOption(
+          key: 'hide-tray', value: bool2option('hide-tray', false));
     }
     */
   }
@@ -133,7 +163,7 @@ class ServerModel with ChangeNotifier {
     _emptyIdShow = translate("Generating ...");
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
-    /*
+    
     // initital _hideCm at startup
     final verificationMethod =
         bind.mainGetOptionSync(key: kOptionVerificationMethod);
@@ -144,7 +174,15 @@ class ServerModel with ChangeNotifier {
         verificationMethod == kUsePermanentPassword)) {
       _hideCm = false;
     }
-    */
+    //修复隐藏托盘图标功能：
+    // initialize _hideTray at startup
+    _hideTray = option2bool(
+        'hide-tray', bind.mainGetOptionSync(key: 'hide-tray'));
+    if (!(approveMode == 'password' &&
+        verificationMethod == kUsePermanentPassword)) {
+      _hideTray = false;
+    }
+    
 
     timerCallback() async {
       final connectionStatus =
@@ -169,7 +207,7 @@ class ServerModel with ChangeNotifier {
             }
           } else {
             _zeroClientLengthCounter = 0;
-            if (!hideCm) showCmWindow();
+            if (!_hideCm) showCmWindow();
           }
         }
       }
@@ -236,14 +274,21 @@ class ServerModel with ChangeNotifier {
     final approveMode = await bind.mainGetOption(key: kOptionApproveMode);
     final numericOneTimePassword =
         await mainGetBoolOption(kOptionAllowNumericOneTimePassword);
-    /*
+    
     var hideCm = option2bool(
         'allow-hide-cm', await bind.mainGetOption(key: 'allow-hide-cm'));
     if (!(approveMode == 'password' &&
         verificationMethod == kUsePermanentPassword)) {
       hideCm = false;
     }
-    */
+        //修复隐藏托盘图标功能：
+    var hideTray = option2bool(
+        'hide-tray', await bind.mainGetOption(key: 'hide-tray'));
+    if (!(approveMode == 'password' &&
+        verificationMethod == kUsePermanentPassword)) {
+      hideTray = false;
+    }
+    
     if (_approveMode != approveMode) {
       _approveMode = approveMode;
       update = true;
@@ -278,7 +323,7 @@ class ServerModel with ChangeNotifier {
       _allowNumericOneTimePassword = numericOneTimePassword;
       update = true;
     }
-    /*
+    
     if (_hideCm != hideCm) {
       _hideCm = hideCm;
       if (desktopType == DesktopType.cm) {
@@ -290,7 +335,11 @@ class ServerModel with ChangeNotifier {
       }
       update = true;
     }
-    */
+    //修复隐藏托盘图标功能：
+    if (_hideTray != hideTray) {
+      _hideTray = hideTray;
+      update = true;
+    }
     if (update) {
       notifyListeners();
     }
