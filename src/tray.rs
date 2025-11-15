@@ -7,8 +7,6 @@ use hbb_common::{allow_err, log};
 use std::sync::{Arc, Mutex};
 #[cfg(windows)]
 use std::time::Duration;
-#[cfg(windows)]
-use hbb_common::futures::StreamExt;
 
 pub fn start_tray() {
     if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
@@ -123,7 +121,8 @@ fn make_tray() -> hbb_common::ResultType<()> {
 
     #[cfg(windows)]
     std::thread::spawn(move || {
-        start_query_session_count(ipc_sender.clone());
+        let ipc_sender_for_count = ipc_sender.clone();
+        start_query_session_count(ipc_sender_for_count);
     });
     #[cfg(windows)]
     let mut last_click = std::time::Instant::now();
