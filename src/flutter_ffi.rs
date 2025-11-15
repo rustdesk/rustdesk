@@ -1002,13 +1002,13 @@ pub fn main_set_option(key: String, value: String) {
         if is_allow_tls_fallback {
             hbb_common::tls::reset_tls_cache();
         }
-        set_option(key, value.clone());
+        set_option(key.clone(), value.clone());
         #[cfg(target_os = "android")]
         crate::rendezvous_mediator::RendezvousMediator::restart();
         #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
         crate::common::test_rendezvous_server();
     } else {
-        set_option(key, value.clone());
+        set_option(key.clone(), value.clone());
         // 检测到 hide-tray 选项变化时，通过 IPC 通知 tray 进程动态隐藏/显示图标
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if key.eq(config::keys::OPTION_HIDE_TRAY) {
