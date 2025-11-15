@@ -3864,6 +3864,7 @@ void earlyAssert() {
 }
 
 void checkUpdate() {
+  return;
   if (!isWeb) {
     if (!bind.isCustomClient()) {
       platformFFI.registerEventHandler(
