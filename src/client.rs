@@ -3924,6 +3924,8 @@ async fn hc_connection_(
     Ok(())
 }
 
+// RustC doesn't recognize call sites for some methods
+#[allow(dead_code)]
 pub mod peer_online {
     use hbb_common::{
         anyhow::bail,
