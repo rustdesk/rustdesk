@@ -118,12 +118,13 @@ fn make_tray() -> hbb_common::ResultType<()> {
             start_ipc_listener(ipc_sender_for_tray);
         });
     }
-
     #[cfg(windows)]
-    std::thread::spawn(move || {
+    {
         let ipc_sender_for_count = ipc_sender.clone();
-        start_query_session_count(ipc_sender_for_count);
-    });
+        std::thread::spawn(move || {
+            start_query_session_count(ipc_sender_for_count);
+        });
+    }
     #[cfg(windows)]
     let mut last_click = std::time::Instant::now();
     #[cfg(target_os = "macos")]
