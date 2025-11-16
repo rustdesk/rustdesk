@@ -1208,8 +1208,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             'allow-only-conn-window-open',
             reverse: false, enabled: enabled),
       if (bind.mainIsInstalled()) unlockPin(),
-      hide_cm(enabled).marginOnly(left: _kContentHSubMargin),
-      hide_tray(enabled).marginOnly(left: _kContentHSubMargin)
+      hide_cm(enabled).marginOnly(left: _kContentHMargin),
+      hide_tray(enabled).marginOnly(left: _kContentHMargin)
     ]);
   }
 
