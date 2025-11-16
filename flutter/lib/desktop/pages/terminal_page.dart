@@ -101,9 +101,9 @@ class _TerminalPageState extends State<TerminalPage>
     super.dispose();
   }
 
-  // It ensures that the number of visible rows is an integer by computing the
+  // This method ensures that the number of visible rows is an integer by computing the
   // extra space left after dividing the available height by the height of a single
-  // terminal row (`_cellHeight`) and distributes it evenly as top and bottom padding.
+  // terminal row (`_cellHeight`) and distributing it evenly as top and bottom padding.
   EdgeInsets _calculatePadding(double heightPx) {
     if (_cellHeight == null) {
       return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
