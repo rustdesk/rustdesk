@@ -71,7 +71,7 @@ class TerminalModel with ChangeNotifier {
         debugPrint(
             '[TerminalModel] Terminal resized to ${w}x$h (pixel: ${pw}x$ph)');
 
-        //This piece of code must be placed before the conditional check in order to initialize properly.
+        // This piece of code must be placed before the conditional check in order to initialize properly.
         onResizeExternal?.call(w, h, pw, ph);
 
         if (_terminalOpened) {
