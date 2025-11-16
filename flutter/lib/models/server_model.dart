@@ -170,18 +170,18 @@ class ServerModel with ChangeNotifier {
     final approveMode = bind.mainGetOptionSync(key: kOptionApproveMode);
     _hideCm = option2bool(
         'allow-hide-cm', bind.mainGetOptionSync(key: 'allow-hide-cm'));
-    if (!(approveMode == 'password' &&
+    /*if (!(approveMode == 'password' &&
         verificationMethod == kUsePermanentPassword)) {
       _hideCm = false;
-    }
+    }*/
     //修复隐藏托盘图标功能：
     // initialize _hideTray at startup
     _hideTray = option2bool(
         'hide-tray', bind.mainGetOptionSync(key: 'hide-tray'));
-    if (!(approveMode == 'password' &&
+    /*if (!(approveMode == 'password' &&
         verificationMethod == kUsePermanentPassword)) {
       _hideTray = false;
-    }
+    }*/
     
 
     timerCallback() async {
@@ -277,17 +277,17 @@ class ServerModel with ChangeNotifier {
     
     var hideCm = option2bool(
         'allow-hide-cm', await bind.mainGetOption(key: 'allow-hide-cm'));
-    if (!(approveMode == 'password' &&
+    /*if (!(approveMode == 'password' &&
         verificationMethod == kUsePermanentPassword)) {
       hideCm = false;
-    }
+    }*/
         //修复隐藏托盘图标功能：
     var hideTray = option2bool(
         'hide-tray', await bind.mainGetOption(key: 'hide-tray'));
-    if (!(approveMode == 'password' &&
+    /*if (!(approveMode == 'password' &&
         verificationMethod == kUsePermanentPassword)) {
       hideTray = false;
-    }
+    }*/
     
     if (_approveMode != approveMode) {
       _approveMode = approveMode;
