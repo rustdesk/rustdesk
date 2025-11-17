@@ -869,11 +869,7 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
 
 fn update_extracted(target_dir: &str) -> ResultType<()> {
     let app_name = crate::get_app_name();
-    let exe_path = format!(
-        "{}/{app_name}.app/Contents/MacOS/{app_name}",
-        target_dir,
-        app_name = app_name
-    );
+    let exe_path = format!("{}/{}.app/Contents/MacOS/{}", target_dir, app_name, app_name);
     let _child = unsafe {
         Command::new(&exe_path)
             .arg("--update")
