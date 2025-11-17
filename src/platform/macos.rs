@@ -793,9 +793,11 @@ pgrep -x '{app_name}' | grep -v {pid} | xargs kill -9 && rm -rf '/Applications/{
 }
 
 pub fn update_from_dmg(dmg_path: &str) -> ResultType<()> {
-    log::info!("Starting update from DMG: {}", dmg_path);
+    println!("Starting update from DMG: {}", dmg_path);
     extract_dmg(dmg_path, UPDATE_TEMP_DIR)?;
+    println!("DMG extracted");
     update_extracted(UPDATE_TEMP_DIR)?;
+    println!("Update process started");
     Ok(())
 }
 
