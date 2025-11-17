@@ -300,14 +300,31 @@ pub fn core_main() -> Option<Vec<String>> {
         {
             use crate::platform;
             if args[0] == "--update" {
-                let _text = match platform::update_me() {
-                    Ok(_) => {
-                        log::info!("{}", translate("Update successfully!".to_string()));
+                if args.len() > 1 && args[1].ends_with(".dmg") {
+                    // Version check is unnecessary unless downgrading to an older version
+                    // that lacks "update dmg" support. This is a special case since we cannot
+                    // detect the version before extracting the DMG, so we skip the check.
+                    let dmg_path = &args[1];
+                    log::info!("Updating from DMG: {}", dmg_path);
+                    match platform::update_from_dmg(dmg_path) {
+                        Ok(_) => {
+                            log::info!("Update process from DMG started successfully.");
+                            // The new process will handle the rest. We can exit.
+                        }
+                        Err(err) => {
+                            log::error!("Failed to start update from DMG: {}", err);
+                        }
                     }
-                    Err(err) => {
-                        log::error!("Update failed with error: {err}");
-                    }
-                };
+                } else {
+                    let _text = match platform::update_me() {
+                        Ok(_) => {
+                            log::info!("{}", translate("Update successfully!".to_string()));
+                        }
+                        Err(err) => {
+                            log::error!("Update failed with error: {err}");
+                        }
+                    };
+                }
                 return None;
             }
         }
