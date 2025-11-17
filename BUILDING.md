@@ -11,7 +11,10 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
     | Rust          | Toolchain       | 2015 Edition |             |
     | Flutter       | SDK             | 3.24.5       |             |
     | Visual Studio | IDE             | 2022 or 2019 | Windows     |
+    | Xcode         | IDE             | at least 15  | OS X        |
     | vcpkg         | Package Manager | Git HEAD     |             |
+    | CocoaPods     | Package Manager |              | OS X        |
+    | Homebrew      | Package Manager |              | OS X (rec.) |
     | LLVM/Clang    | Compiler        | (latest)     |             |
     | GCC           | Compiler        | <= 14        | Linux, OS X |
     | ffigen        | Flutter Package | 5.0.1        |             |
@@ -33,24 +36,51 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
                 - If there is a newer version available, use that instead.
             - `C++ CMake tools for Windows`
             - `Windows 10 SDK'
-    - [Linux] Build tools: Ensure that your environment has the following build tools installed:
+    - [OS X] Build tools: Ensure that Xcode and command-line build tools are installed.
+        - Xcode can be installed from the Apple Store.
+        - Command-line tools are installed automatically the first time you try to use them. Open Terminal and run `git`, for instance.
+        - [Optional] Install iOS Simulator runtimes with: `xcodebuild -downloadPlatform iOS`
+    - [OS X] CocoaPods Package Manager
+        - Installs as a Ruby Gem
+        - You should install a newer Ruby version first: `brew install ruby`
+            - Pay attentiol to `PATH` configuration, as by default the older system installation will still be found first
+        - Then the Gem should be able to install: `gem install cocoapods`
+        - More information: <https://guides.cocoapods.org/using/getting-started.html#installation>
+    - [Linux / OS X] Build tools: Ensure that your environment has the following build tools installed:
         - `pkg-config`
         - `autoconf`
         - `make`
         - `cmake`
-        - `ninja` (`ninja-build`)
-        - `gcc`
-        - `g++` (version 13 or 14)
-        - `libstdc++` (`libstdc++-dev`)
-        - `nasm`
+        - `ninja` (`ninja-build` for Ubuntu)
+        - GCC
+            - Linux:
+                - `gcc`
+                - `g++` (version 13 or 14)
+                - `libstdc++` (`libstdc++-dev`)
+            - OS X:
+                - `brew install gcc@13`
+        - NASM
+            - Linux: `nasm`
+            - OS X:
+                Brew installs NASM version 3.01. This version's output has changes that make it incompatible with the build of AOM (below). In order to build AOM, NASM version 2.16.03 should be used. To install this on OS X, commands like these can be used:
+
+                ```
+                curl https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip -o nasm.zip
+                unzip nasm.zip
+                rm nasm.zip
+                mv nasm-2.16.03 nasm
+                export PATH=~/nasm:$PATH
+                ```
+
+                Add the last line to `~/.zprofile` to make the change persist.
         - `libtool` (`libtool-bin`)
         They are often already installed, but if not, install with your distribution's package manager (e.g. `apt install pkg-config autoconf make cmake g++-13 ...`).
 
-        > NB: On alternatives-based systems, if Clang is installed before GCC, then `/usr/bin/c++` might run Clang instead of GCC. If this happens, you will likely encounter build errors. One way to fix this might be to remove the Clang and GCC packages and then reinstall them starting with GCC `g++` (`g++-13`).
+        > [Linux] NB: On alternatives-based systems, if Clang is installed before GCC, then `/usr/bin/c++` might run Clang instead of GCC. If this happens, you will likely encounter build errors. One way to fix this might be to remove the Clang and GCC packages and then reinstall them starting with GCC `g++` (`g++-13`).
 
-        > NB: On the newest systems, as of this writing, `g++` install version 15. This is not compatible with all of the Rust crates needed by RustDesk and will cause build errors. When an earlier version is installed, however, the `/usr/bin/c++` link might not be configured to run it. You may need to explicitly configure your system's alternatives mechanism, with a command such as `update-alternatives --install /usr/bin/c++ c++ ``which g++-13`` 13`, or manually create a symbolic link from `/usr/bin/c++` to the correct path for a compatible `g++` version.
+        > [Linux] NB: On the newest systems, as of this writing, `g++` install version 15. This is not compatible with all of the Rust crates needed by RustDesk and will cause build errors. When an earlier version is installed, however, the `/usr/bin/c++` link might not be configured to run it. You may need to explicitly configure your system's alternatives mechanism, with a command such as `update-alternatives --install /usr/bin/c++ c++ ``which g++-13`` 13`, or manually create a symbolic link from `/usr/bin/c++` to the correct path for a compatible `g++` version.
 
-        > NB: The previous point notwithstanding, the latest version of the development package for `libstdc++` (e.g. `apt install libstdc++-15-dev`) may still need to be installed in order for the Rust build output to link properly.
+        > [Linux] NB: The previous point notwithstanding, the latest version of the development package for `libstdc++` (e.g. `apt install libstdc++-15-dev`) may still need to be installed in order for the Rust build output to link properly.
     - [Linux / OS X] UI toolkit: Flutter on Linux and OS X requires Gtk 3.
         - This can typically be installed through your distribution's package manager, e.g. `apt install libgtk-3-dev` or `brew install gtk+3`.
     - [Linux] Dependencies: Ensure that the following libraries are installed:
@@ -67,8 +97,9 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
         - Restart your shell to bring in updates to `PATH`
     - Git:
         - [Windows] Git for Windows: <https//git-scm.com/downloads/win>
-        - [Linux/OS X] Install with your distribution's package manager (e.g. `apt install git` or `brew install git`)
+        - [Linux] Install with your distribution's package manager (e.g. `apt install git` or `brew install git`)
             - Some installations may already include Git
+        - [OS X] The first time you run `git`, you will be prompted to install the Xcode Command Line Tools.
     - Python: <https://www.python.org/downloads/>
         - Some operating systems may already include Python
         - A version of Python 3 is required
@@ -77,6 +108,7 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
     - LLVM/Clang: <https://releases.llvm.org/download.html>
         - Your operating system may include a package manager that can install `clang` easily (e.g. `apt install clang`)
         - [Windows] LLVM can be installed with this PowerShell command: `winget install --id=LLVM.LLVM -e`
+        - [OS X] LLVM/Clang are installed as part of Xcode.
     - VCPKG: <https://learn.microsoft.com/en-us/vcpkg/get_started/get-started>
     - VCPKG Packages:
         - [Windows] Start a new command prompt window using `Developer Command Prompt for VS 2022` to ensure that the latest environment variables are loaded.
@@ -117,7 +149,7 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
                     ```
                 - Not sure which shell you're using? `echo $0` shows it in most cases (though not `csh`)
         - Recommendation: Create a script in the RustDesk repository root with these statements to set up environment variables for VCPKG
-    - [Linux] VCPKG Special case: `opus`
+    - [Linux / OS X] VCPKG Special case: `opus`
         - The Rust crate `magnum-opus` builds against and links to `libopus` through the VCPKG package `opus`. But, its build script hardcodes VCPKG classic mode (global package cache) and doesn't respect the VCPKG manifest configuration that RustDesk uses. As a result, while `vcpkg` installs `opus` into a subdirectory `vcpkg_installed` of the RustDesk repository, the build looks for the `opus` files underneath `$VCPKG_ROOT`.
         - To resolve this, change directory out of the RustDesk repository, so that no `vcpkg.json` manifest file is visible, and run:
             - `vcpkg install opus`
@@ -137,13 +169,16 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
             - Recommended: If prompted to add the Flutter SDK to PATH, select `Add SDK to PATH`
                 - [Linux] You will need to manually update your `PATH` variable to include the Flutter SDK. The SDK was downloaded as a `git clone` into a subdirectory called `flutter` of the directory you chose earlier, and the binaries for the installation are in a subdirectory of that called `bin`. For instance, if you cloned `flutter` to `/home/username/flutter`, then the directory you need to add to `PATH` is `/home/username/flutter/bin`. If you cloned to `/code/flutter`, then the directory is `/code/flutter/bin`.
                     - Add a command to your profile initialization script to update `PATH`
-                    - `sh` style shells (including `bash`): `export PATH="$PATH:/path/to/flutter/bin"`
+                    - `sh` style shells (including `bash` and `zsh`): `export PATH="$PATH:/path/to/flutter/bin"`
                     - `csh` style shells (including `tcsh`): `setenv PATH "$PATH:/path/to/flutter/bin"`
         - Without Visual Studio Code: Follow instructions at <https://docs.flutter.dev/install/manual>
         - Optional: Disable Web as a build target if you don't intend to use it and don't have Google Chrome installed
             - `flutter config --no-enable-web`
         - Optional: Disable Android as a build target if you don't intend to use it and don't have the Android SDK installed
             - `flutter config --no-enable-android`
+        - [OS X] Optional: Disable iOS as a build target if you don't intend to use it
+            - `flutter config --no-enable-ios`
+            - But `flutter doctor` will still complain if you don't have any installed Simulator runtimes in Xcode
         - Sanity check: `flutter doctor`
 
 1. Git Submodules
@@ -189,7 +224,8 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
     Then, run the utility out of the Cargo bin folder. The correct command, executed in the root of the `rustdesk` repository, is:
 
     - Windows: `flutter_rust_bridge_codegen --rust-input src\flutter_ffi.rs --dart-output flutter\lib\generated_bridge.dart`
-    - Linux / OS X: `flutter_rust_bridge_codegen --rust-input src/flutter_ffi.rs --dart-output flutter/lib/generated_bridge.dart`
+    - Linux: `flutter_rust_bridge_codegen --rust-input src/flutter_ffi.rs --dart-output flutter/lib/generated_bridge.dart`
+    - OS X: `flutter_rust_bridge_codegen --rust-input src/flutter_ffi.rs --dart-output flutter/lib/generated_bridge.dart --c-output flutter/macos/Runner/bridge_generated.h`
 
     **You may need to rerun this command after pulling updates to the underlying Rust code in the RustDesk repository or in `hbb_common`.**
 
