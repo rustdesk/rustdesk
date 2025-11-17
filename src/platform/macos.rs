@@ -716,6 +716,14 @@ pub fn quit_gui() {
     };
 }
 
+#[inline]
+pub fn try_remove_temp_update_dir(dir: Option<&str>) {
+    let target_path = Path::new(dir.unwrap_or(UPDATE_TEMP_DIR));
+    if target_path.exists() {
+        std::fs::remove_dir_all(target_path).ok();
+    }
+}
+
 pub fn update_me() -> ResultType<()> {
     let is_installed_daemon = is_installed_daemon(false);
     let option_stop_service = "stop-service";
@@ -869,9 +877,12 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
 
 fn update_extracted(target_dir: &str) -> ResultType<()> {
     let app_name = crate::get_app_name();
-    let exe_path = format!("{}/{}.app/Contents/MacOS/{}", target_dir, app_name, app_name);
+    let exe_path = format!(
+        "{}/{}.app/Contents/MacOS/{}",
+        target_dir, app_name, app_name
+    );
     let _child = unsafe {
-        Command::new(&exe_path)
+        if let Err(e) = Command::new(&exe_path)
             .arg("--update")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -880,7 +891,11 @@ fn update_extracted(target_dir: &str) -> ResultType<()> {
                 hbb_common::libc::setsid();
                 Ok(())
             })
-            .spawn()?
+            .spawn()
+        {
+            try_remove_temp_update_dir(Some(target_dir));
+            bail!(e);
+        }
     };
     Ok(())
 }

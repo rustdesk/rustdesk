@@ -115,6 +115,10 @@ pub fn global_init() -> bool {
             crate::server::wayland::init();
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        crate::platform::macos::try_remove_temp_update_dir(None);
+    }
     true
 }
 
