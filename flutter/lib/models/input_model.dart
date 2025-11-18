@@ -1085,6 +1085,10 @@ class InputModel {
   }
 
   Future<void> tapDown(MouseButtons button) async {
+    if (!_pointerMovedAfterEnter) {
+      refreshMousePos();
+      await Future.delayed(Duration(milliseconds: 10));
+    }
     await sendMouse('down', button);
   }
 
