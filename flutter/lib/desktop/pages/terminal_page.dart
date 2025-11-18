@@ -63,7 +63,13 @@ class _TerminalPageState extends State<TerminalPage>
 
     _terminalModel.onResizeExternal = (w, h, pw, ph) {
       _cellHeight = ph * 1.0;
-      setState(() {});
+
+      // Schedule the setState for the next frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {});
+        }
+      });
     };
 
     // Register this terminal model with FFI for event routing
