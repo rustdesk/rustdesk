@@ -21,8 +21,9 @@ use gstreamer::prelude::*;
 use gstreamer_app::AppSink;
 
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 
-use hbb_common::{bail, config, platform::linux::CMD_SH, tokio, ResultType};
+use hbb_common::{bail, config, platform::linux::CMD_SH, serde_json, tokio, ResultType};
 
 use super::capturable::PixelProvider;
 use super::capturable::{Capturable, Recorder};
@@ -33,15 +34,9 @@ use super::screencast_portal::OrgFreedesktopPortalScreenCast as screencast_porta
 
 lazy_static! {
     pub static ref RDP_SESSION_INFO: Mutex<Option<RdpSessionInfo>> = Mutex::new(None);
-    // Maybe it's better to save this cache in config file?
-    // Because "--server" process may be restarted frequently, then the cache will be lost.
-    // But the users have to know where to find and delete the config file when they want to clear the cache,
-    // or we have to add a UI for that.
-    // For simplicity, we just keep it in memory for now.
-    static ref PIPEWIRE_DISPLAY_OFFSET_CACHE: Mutex<Option<PipewireDisplayOffsetCache>> =
-        Mutex::new(None);
 }
 
+#[derive(Serialize, Deserialize)]
 // For KDE Plasma only, because GNOME provides position info.
 struct PipewireDisplayOffsetCache {
     // We need to compare the displays, because:
@@ -313,24 +308,28 @@ impl PipeWireRecorder {
         );
         pipeline.set_state(gst::State::Playing)?;
 
-        // Wait for the state change to actually complete before proceeding.
-        // The 2000ms timeout for pipeline state change was chosen based on empirical testing.
-        let state_change = pipeline.get_state(gst::ClockTime::from_mseconds(2000));
-        match state_change {
-            (Ok(_), gst::State::Playing, _) => {
-                debug!(
-                    "[gstreamer] Pipeline {} state confirmed as PLAYING.",
-                    capturable.fd.as_raw_fd()
-                );
-            }
-            (result, state, pending) => {
-                warn!(
+        // If `is_server_running()` is false, it means using remote_desktop_portal,
+        // which does not use multiple streams, so no need to wait for state change.
+        if is_server_running() {
+            // Wait for the state change to actually complete before proceeding.
+            // The 2000ms timeout for pipeline state change was chosen based on empirical testing.
+            let state_change = pipeline.get_state(gst::ClockTime::from_mseconds(2000));
+            match state_change {
+                (Ok(_), gst::State::Playing, _) => {
+                    debug!(
+                        "[gstreamer] Pipeline {} state confirmed as PLAYING.",
+                        capturable.fd.as_raw_fd()
+                    );
+                }
+                (result, state, pending) => {
+                    warn!(
                     "[gstreamer] Pipeline {} state change incomplete: result={:?}, state={:?}, pending={:?}",
                     capturable.fd.as_raw_fd(), result, state, pending
                 );
+                }
             }
+            std::thread::sleep(std::time::Duration::from_millis(150));
         }
-        std::thread::sleep(std::time::Duration::from_millis(150));
 
         Ok(Self {
             pipeline,
@@ -589,6 +588,7 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
 static mut INIT: bool = false;
 const RESTORE_TOKEN: &str = "restore_token";
 const RESTORE_TOKEN_CONF_KEY: &str = "wayland-restore-token";
+const PIPEWIRE_DISPLAY_OFFSET_CONF_KEY: &str = "wayland-pipewire-display-offset";
 
 pub fn get_available_cursor_modes() -> Result<u32, dbus::Error> {
     let conn = SyncConnection::new_session()?;
@@ -1108,8 +1108,17 @@ fn try_fill_positions(
     shared_displays: &mut Vec<crate::Display>,
     streams: &mut Vec<PwStreamInfo>,
 ) -> ResultType<()> {
-    if try_fill_positions_from_cache(displays, shared_displays, streams) {
-        return Ok(());
+    let pipewire_display_offset = config::LocalConfig::get_option(PIPEWIRE_DISPLAY_OFFSET_CONF_KEY);
+    if !pipewire_display_offset.is_empty() {
+        if try_fill_positions_from_cache(
+            pipewire_display_offset,
+            displays,
+            shared_displays,
+            streams,
+        ) {
+            return Ok(());
+        }
+        config::LocalConfig::set_option(PIPEWIRE_DISPLAY_OFFSET_CONF_KEY.to_owned(), "".to_owned());
     }
 
     let mut multi_matched_indices = Vec::new();
@@ -1155,29 +1164,26 @@ fn try_fill_positions(
 }
 
 fn try_fill_positions_from_cache(
+    cache_str: String,
     displays: &Arc<Displays>,
     shared_displays: &mut Vec<crate::Display>,
     streams: &mut Vec<PwStreamInfo>,
 ) -> bool {
-    let mut lock = PIPEWIRE_DISPLAY_OFFSET_CACHE.lock().unwrap();
-    let Some(cache) = lock.as_ref() else {
+    let Ok(cache) = serde_json::from_str::<PipewireDisplayOffsetCache>(&cache_str) else {
         return false;
     };
 
     if cache.offsets.len() != shared_displays.len() {
-        let _ = lock.take();
         return false;
     }
 
     let display_key = PipewireDisplayOffsetCache::displays_to_key(displays);
     if cache.display_key != display_key {
-        let _ = lock.take();
         return false;
     }
 
     let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
     if cache.restore_token != restore_token {
-        let _ = lock.take();
         return false;
     }
 
@@ -1216,7 +1222,9 @@ fn save_positions_to_cache(displays: &Arc<Displays>, shared_displays: &Vec<crate
         offsets,
     };
 
-    *PIPEWIRE_DISPLAY_OFFSET_CACHE.lock().unwrap() = Some(cache);
+    if let Ok(s) = serde_json::to_string(&cache) {
+        config::LocalConfig::set_option(PIPEWIRE_DISPLAY_OFFSET_CONF_KEY.to_owned(), s);
+    }
 }
 
 fn compare_left_up_corner(w: usize, d1: &[u8], d2: &[u8]) -> bool {
