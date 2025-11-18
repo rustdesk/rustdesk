@@ -233,7 +233,7 @@ fn main() {
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
 
-    // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
+    // note: all link symbol names in x86 (32-bit) are prefixed with "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,
     // please install x64 toolchain by "rustup toolchain install stable-x86_64-pc-windows-msvc",
     // then set x64 to default by "rustup default stable-x86_64-pc-windows-msvc"
