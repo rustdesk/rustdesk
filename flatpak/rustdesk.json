@@ -56,7 +56,6 @@
   "finish-args": [
     "--share=ipc",
     "--socket=x11",
-    "--socket=wayland",
     "--share=network",
     "--filesystem=home",
     "--device=dri",
