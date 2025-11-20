@@ -9,6 +9,8 @@ use std::{
 
 use uuid::Uuid;
 
+#[cfg(feature = "webrtc")]
+use hbb_common::webrtc::{self, is_webrtc_endpoint, WebRTCStream};
 use hbb_common::{
     allow_err,
     anyhow::{self, bail},
@@ -455,6 +457,14 @@ impl RendezvousMediator {
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
             socket_addr: socket_addr.into(),
+            uuid: uuid.clone(),
+            #[cfg(feature = "webrtc")]
+            relay_server: if is_webrtc_endpoint(&relay_server) {
+                let webrtc_stream = WebRTCStream::new(&relay_server, false, 30000).await?;
+                webrtc_stream.get_local_endpoint().await?.to_owned()
+            } else {
+                relay_server.clone()
+            },
             version: crate::VERSION.to_owned(),
             socket_addr_v6,
             ..Default::default()
