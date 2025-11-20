@@ -38,8 +38,6 @@ static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
 static mut LATEST_SEED: i32 = 0;
 
-// Using a fixed temporary directory for updates is preferable to
-// using one that includes the custom client name.
 const UPDATE_TEMP_DIR: &str = "/tmp/.rustdeskupdate";
 
 extern "C" {
@@ -716,14 +714,6 @@ pub fn quit_gui() {
     };
 }
 
-#[inline]
-pub fn try_remove_temp_update_dir(dir: Option<&str>) {
-    let target_path = Path::new(dir.unwrap_or(UPDATE_TEMP_DIR));
-    if target_path.exists() {
-        std::fs::remove_dir_all(target_path).ok();
-    }
-}
-
 pub fn update_me() -> ResultType<()> {
     let is_installed_daemon = is_installed_daemon(false);
     let option_stop_service = "stop-service";
@@ -743,7 +733,6 @@ pub fn update_me() -> ResultType<()> {
         bail!("Unknown app directory of current exe file: {:?}", cmd);
     };
 
-    let app_name = crate::get_app_name();
     if is_installed_daemon && !is_service_stopped {
         let agent = format!("{}_server.plist", crate::get_full_name());
         let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
@@ -760,13 +749,12 @@ pub fn update_me() -> ResultType<()> {
         let update_body = format!(
             r#"
 do shell script "
-pgrep -x '{app_name}' | grep -v {pid} | xargs kill -9 && rm -rf '/Applications/{app_name}.app' && ditto '{app_dir}' '/Applications/{app_name}.app' && chown -R {user}:staff '/Applications/{app_name}.app' && xattr -r -d com.apple.quarantine '/Applications/{app_name}.app'
-" with prompt "{app_name} wants to update itself" with administrator privileges
+pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDesk.app && ditto '{}' /Applications/RustDesk.app && chown -R {}:staff /Applications/RustDesk.app && xattr -r -d com.apple.quarantine /Applications/RustDesk.app
+" with prompt "RustDesk wants to update itself" with administrator privileges
     "#,
-            app_name = app_name,
-            pid = std::process::id(),
-            app_dir = app_dir,
-            user = get_active_username()
+            std::process::id(),
+            app_dir,
+            get_active_username()
         );
         match Command::new("osascript")
             .arg("-e")
@@ -784,20 +772,11 @@ pgrep -x '{app_name}' | grep -v {pid} | xargs kill -9 && rm -rf '/Applications/{
     }
     std::process::Command::new("open")
         .arg("-n")
-        .arg(&format!("/Applications/{}.app", app_name))
+        .arg(&format!("/Applications/{}.app", crate::get_app_name()))
         .spawn()
         .ok();
     // leave open a little time
     std::thread::sleep(std::time::Duration::from_millis(300));
-    Ok(())
-}
-
-pub fn update_from_dmg(dmg_path: &str) -> ResultType<()> {
-    println!("Starting update from DMG: {}", dmg_path);
-    extract_dmg(dmg_path, UPDATE_TEMP_DIR)?;
-    println!("DMG extracted");
-    update_extracted(UPDATE_TEMP_DIR)?;
-    println!("Update process started");
     Ok(())
 }
 
@@ -832,13 +811,9 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
     }
     std::fs::create_dir_all(target_path)?;
 
-    let status = Command::new("hdiutil")
+    Command::new("hdiutil")
         .args(&["attach", "-nobrowse", "-mountpoint", mount_point, dmg_path])
         .status()?;
-
-    if !status.success() {
-        bail!("Failed to attach DMG image at {}: {:?}", dmg_path, status);
-    }
 
     struct DmgGuard(&'static str);
     impl Drop for DmgGuard {
@@ -850,7 +825,7 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
     }
     let _guard = DmgGuard(mount_point);
 
-    let app_name = format!("{}.app", crate::get_app_name());
+    let app_name = "RustDesk.app";
     let src_path = format!("{}/{}", mount_point, app_name);
     let dest_path = format!("{}/{}", target_dir, app_name);
 
@@ -859,12 +834,7 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
         .status()?;
 
     if !copy_status.success() {
-        bail!(
-            "Failed to copy application from {} to {}: {:?}",
-            src_path,
-            dest_path,
-            copy_status
-        );
+        bail!("Failed to copy application {:?}", copy_status);
     }
 
     if !Path::new(&dest_path).exists() {
@@ -878,13 +848,9 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
 }
 
 fn update_extracted(target_dir: &str) -> ResultType<()> {
-    let app_name = crate::get_app_name();
-    let exe_path = format!(
-        "{}/{}.app/Contents/MacOS/{}",
-        target_dir, app_name, app_name
-    );
+    let exe_path = format!("{}/RustDesk.app/Contents/MacOS/RustDesk", target_dir);
     let _child = unsafe {
-        if let Err(e) = Command::new(&exe_path)
+        Command::new(&exe_path)
             .arg("--update")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -893,11 +859,7 @@ fn update_extracted(target_dir: &str) -> ResultType<()> {
                 hbb_common::libc::setsid();
                 Ok(())
             })
-            .spawn()
-        {
-            try_remove_temp_update_dir(Some(target_dir));
-            bail!(e);
-        }
+            .spawn()?
     };
     Ok(())
 }
