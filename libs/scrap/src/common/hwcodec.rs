@@ -364,7 +364,7 @@ impl HwRamDecoder {
             }
         }
     }
-    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage>> {
+    pub fn decode<'a>(&'a mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage<'a>>> {
         match self.decoder.decode(data) {
             Ok(v) => Ok(v.iter().map(|f| HwRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),

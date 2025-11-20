@@ -231,7 +231,7 @@ impl EncoderApi for VpxEncoder {
 }
 
 impl VpxEncoder {
-    pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
+    pub fn encode<'a>(&'a mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames<'a>> {
         let bpp = if self.i444 { 24 } else { 12 };
         if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
@@ -268,7 +268,7 @@ impl VpxEncoder {
     }
 
     /// Notify the encoder to return any pending packets
-    pub fn flush(&mut self) -> Result<EncodeFrames> {
+    pub fn flush<'a>(&'a mut self) -> Result<EncodeFrames<'a>> {
         call_vpx!(vpx_codec_encode(
             &mut self.ctx,
             ptr::null(),
@@ -473,7 +473,7 @@ impl VpxDecoder {
     /// The `data` slice is sent to the decoder
     ///
     /// It matches a call to `vpx_codec_decode`.
-    pub fn decode(&mut self, data: &[u8]) -> Result<DecodeFrames> {
+    pub fn decode<'a>(&'a mut self, data: &[u8]) -> Result<DecodeFrames<'a>> {
         call_vpx!(vpx_codec_decode(
             &mut self.ctx,
             data.as_ptr(),
@@ -489,7 +489,7 @@ impl VpxDecoder {
     }
 
     /// Notify the decoder to return any pending frame
-    pub fn flush(&mut self) -> Result<DecodeFrames> {
+    pub fn flush<'a>(&'a mut self) -> Result<DecodeFrames<'a>> {
         call_vpx!(vpx_codec_decode(
             &mut self.ctx,
             ptr::null(),

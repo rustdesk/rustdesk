@@ -39,7 +39,7 @@ env:
   # 2. Update the `VCPKG_COMMIT_ID` in `ci.yml` and `playground.yml`.
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836" # 2025.01.13, got "/opt/artifacts/vcpkg/vcpkg: No such file or directory" with latest version
-  VERSION: "1.4.3"
+  VERSION: "1.4.4"
   NDK_VERSION: "r27c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
@@ -1001,6 +1001,8 @@ jobs:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+          # Increase Gradle JVM memory for CI builds
+          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           case ${{ matrix.job.target }} in
@@ -1208,6 +1210,8 @@ jobs:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+          # Increase Gradle JVM memory for CI builds
+          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           mv ./flutter/android/app/src/main/jniLibs/arm64-v8a/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
@@ -1443,7 +1447,8 @@ jobs:
                rpm \
                unzip \
                wget \
-               xz-utils
+               xz-utils \
+               libssl-dev
             # we have libopus compiled by us.
             apt-get remove -y libopus-dev || true
             # output devs
@@ -1723,12 +1728,13 @@ jobs:
                unzip \
                wget \
                xz-utils \
-               zip
+               zip \
+               libssl-dev
             # arm-linux needs CMake and vcokg built from source as there
             # are no prebuilts available from Kitware and Microsoft
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
               # install gcc/g++ 8 for vcpkg and OpenSSL headers for CMake
-              apt-get install -y gcc-8 g++-8 libssl-dev
+              apt-get install -y gcc-8 g++-8
               # bootstrap CMake amd add it to PATH
               git clone --depth 1 https://github.com/kitware/cmake -b "v${{ env.SCITER_ARMV7_CMAKE_VERSION }}" /tmp/cmake
               pushd /tmp/cmake

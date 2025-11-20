@@ -23,6 +23,7 @@
     </queries>
 
     <application
+        android:name=".MainApplication"
         android:icon="@mipmap/ic_launcher"
         android:label="RustDesk"
         android:requestLegacyExternalStorage="true"

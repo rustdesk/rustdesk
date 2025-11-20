@@ -58,6 +58,7 @@ const String kWindowActionRebuild = "rebuild";
 const String kWindowEventHide = "hide";
 const String kWindowEventShow = "show";
 const String kWindowConnect = "connect";
+const String kWindowBumpMouse = "bump_mouse";
 
 const String kWindowEventNewRemoteDesktop = "new_remote_desktop";
 const String kWindowEventNewFileTransfer = "new_file_transfer";
@@ -78,6 +79,7 @@ const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
 const String kOptionViewStyle = "view_style";
 const String kOptionScrollStyle = "scroll_style";
+const String kOptionEdgeScrollEdgeThickness = "edge-scroll-edge-thickness";
 const String kOptionImageQuality = "image_quality";
 const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionTextureRender = "use-texture-render";
@@ -158,11 +160,15 @@ const String kOptionEnableTrustedDevices = "enable-trusted-devices";
 const String kOptionShowVirtualMouse = "show-virtual-mouse";
 const String kOptionVirtualMouseScale = "virtual-mouse-scale";
 const String kOptionShowVirtualJoystick = "show-virtual-joystick";
+const String kOptionAllowAskForNoteAtEndOfConnection = "allow-ask-for-note";
 
 // network options
 const String kOptionAllowWebSocket = "allow-websocket";
+const String kOptionAllowInsecureTLSFallback = "allow-insecure-tls-fallback";
+const String kOptionDisableUdp = "disable-udp";
+const String kOptionEnableFlutterHttpOnRust = "enable-flutter-http-on-rust";
 
-// buildin opitons
+// builtin options
 const String kOptionHideServerSetting = "hide-server-settings";
 const String kOptionHideProxySetting = "hide-proxy-settings";
 const String kOptionHideWebSocketSetting = "hide-websocket-settings";
@@ -319,12 +325,14 @@ const kRemoteViewStyleAdaptive = 'adaptive';
 /// [kRemoteViewStyleCustom] Show remote image at a user-defined scale percent.
 const kRemoteViewStyleCustom = 'custom';
 
-
 /// [kRemoteScrollStyleAuto] Scroll image auto by position.
 const kRemoteScrollStyleAuto = 'scrollauto';
 
 /// [kRemoteScrollStyleBar] Scroll image with scroll bar.
 const kRemoteScrollStyleBar = 'scrollbar';
+
+/// [kRemoteScrollStyleEdge] Scroll image auto at edges.
+const kRemoteScrollStyleEdge = 'scrolledge';
 
 /// [kScrollModeDefault] Mouse or touchpad, the default scroll mode.
 const kScrollModeDefault = 'default';
@@ -353,12 +361,14 @@ const Set<PointerDeviceKind> kTouchBasedDeviceKinds = {
 };
 
 // Scale custom related constants
-const String kCustomScalePercentKey = 'custom_scale_percent'; // Flutter option key for storing custom scale percent (integer 5-1000)
+const String kCustomScalePercentKey =
+    'custom_scale_percent'; // Flutter option key for storing custom scale percent (integer 5-1000)
 const int kScaleCustomMinPercent = 5;
 const int kScaleCustomPivotPercent = 100; // 100% should be at 1/3 of track
 const int kScaleCustomMaxPercent = 1000;
 const double kScaleCustomPivotPos = 1.0 / 3.0; // first 1/3 → up to 100%
-const double kScaleCustomDetentEpsilon = 0.006; // snap range around pivot (~0.6%)
+const double kScaleCustomDetentEpsilon =
+    0.006; // snap range around pivot (~0.6%)
 const Duration kDebounceCustomScaleDuration = Duration(milliseconds: 300);
 
 // ================================ mobile ================================

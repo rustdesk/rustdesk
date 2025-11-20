@@ -11,6 +11,7 @@ import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
@@ -560,6 +561,12 @@ class _GeneralState extends State<_General> {
       children.add(_OptionCheckBox(
           context, 'Allow linux headless', kOptionAllowLinuxHeadless));
     }
+    children.add(_OptionCheckBox(
+      context,
+      'note-at-conn-end-tip',
+      kOptionAllowAskForNoteAtEndOfConnection,
+      isServer: false,
+    ));
     return _Card(title: 'Other', children: children);
   }
 
@@ -1177,7 +1184,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     ],
                   ),
                   enabled: tmpEnabled && !locked),
-            numericOneTimePassword,
+            if (usePassword) numericOneTimePassword,
             if (usePassword) radios[1],
             if (usePassword)
               _SubButton('Set permanent password', setPasswordDialog,
@@ -1585,6 +1592,27 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       );
     }
 
+    Widget switchWidget(IconData icon, String title, String tooltipMessage,
+            String optionKey) =>
+        listTile(
+          icon: icon,
+          title: title,
+          showTooltip: true,
+          tooltipMessage: tooltipMessage,
+          trailing: Switch(
+            value: mainGetBoolOptionSync(optionKey),
+            onChanged: locked || isOptionFixed(optionKey)
+                ? null
+                : (value) {
+                    mainSetBoolOption(optionKey, value);
+                    setState(() {});
+                  },
+          ),
+        );
+
+    final outgoingOnly = bind.isOutgoingOnly();
+
+    final divider = const Divider(height: 1, indent: 16, endIndent: 16);
     return _Card(
       title: 'Network',
       children: [
@@ -1596,33 +1624,65 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                 listTile(
                   icon: Icons.dns_outlined,
                   title: 'ID/Relay Server',
-                  onTap: () => showServerSettings(gFFI.dialogManager),
+                  onTap: () => showServerSettings(gFFI.dialogManager, setState),
                 ),
-              if (!hideServer && (!hideProxy || !hideWebSocket))
-                Divider(height: 1, indent: 16, endIndent: 16),
+              if (!hideProxy && !hideServer) divider,
               if (!hideProxy)
                 listTile(
                   icon: Icons.network_ping_outlined,
                   title: 'Socks5/Http(s) Proxy',
                   onTap: changeSocks5Proxy,
                 ),
-              if (!hideProxy && !hideWebSocket)
-                Divider(height: 1, indent: 16, endIndent: 16),
+              if (!hideWebSocket && (!hideServer || !hideProxy)) divider,
               if (!hideWebSocket)
-                listTile(
-                  icon: Icons.web_asset_outlined,
-                  title: 'Use WebSocket',
-                  showTooltip: true,
-                  tooltipMessage: 'websocket_tip',
-                  trailing: Switch(
-                    value: mainGetBoolOptionSync(kOptionAllowWebSocket),
-                    onChanged: locked
-                        ? null
-                        : (value) {
-                            mainSetBoolOption(kOptionAllowWebSocket, value);
-                            setState(() {});
-                          },
-                  ),
+                switchWidget(
+                    Icons.web_asset_outlined,
+                    'Use WebSocket',
+                    '${translate('websocket_tip')}\n\n${translate('server-oss-not-support-tip')}',
+                    kOptionAllowWebSocket),
+              if (!isWeb)
+                futureBuilder(
+                  future: bind.mainIsUsingPublicServer(),
+                  hasData: (isUsingPublicServer) {
+                    if (isUsingPublicServer) {
+                      return Offstage();
+                    } else {
+                      return Column(
+                        children: [
+                          if (!hideServer || !hideProxy || !hideWebSocket)
+                            divider,
+                          switchWidget(
+                              Icons.no_encryption_outlined,
+                              'Allow insecure TLS fallback',
+                              'allow-insecure-tls-fallback-tip',
+                              kOptionAllowInsecureTLSFallback),
+                          if (!outgoingOnly) divider,
+                          if (!outgoingOnly)
+                            listTile(
+                              icon: Icons.lan_outlined,
+                              title: 'Disable UDP',
+                              showTooltip: true,
+                              tooltipMessage:
+                                  '${translate('disable-udp-tip')}\n\n${translate('server-oss-not-support-tip')}',
+                              trailing: Switch(
+                                value: bind.mainGetOptionSync(
+                                        key: kOptionDisableUdp) ==
+                                    'Y',
+                                onChanged:
+                                    locked || isOptionFixed(kOptionDisableUdp)
+                                        ? null
+                                        : (value) async {
+                                            await bind.mainSetOption(
+                                                key: kOptionDisableUdp,
+                                                value: value ? 'Y' : 'N');
+                                            setState(() {});
+                                          },
+                              ),
+                            ),
+                        ],
+                      );
+                    }
+                  },
                 ),
             ],
           ),
@@ -1685,6 +1745,13 @@ class _DisplayState extends State<_Display> {
     }
 
     final groupValue = bind.mainGetUserDefaultOption(key: kOptionScrollStyle);
+
+    onEdgeScrollEdgeThicknessChanged(double value) async {
+      await bind.mainSetUserDefaultOption(
+          key: kOptionEdgeScrollEdgeThickness, value: value.round().toString());
+      setState(() {});
+    }
+
     return _Card(title: 'Default Scroll Style', children: [
       _Radio(context,
           value: kRemoteScrollStyleAuto,
@@ -1696,6 +1763,23 @@ class _DisplayState extends State<_Display> {
           groupValue: groupValue,
           label: 'Scrollbar',
           onChanged: isOptFixed ? null : onChanged),
+      if (!isWeb) ...[
+        _Radio(context,
+            value: kRemoteScrollStyleEdge,
+            groupValue: groupValue,
+            label: 'ScrollEdge',
+            onChanged: isOptFixed ? null : onChanged),
+        Offstage(
+            offstage: groupValue != kRemoteScrollStyleEdge,
+            child: EdgeThicknessControl(
+              value: double.tryParse(bind.mainGetUserDefaultOption(
+                      key: kOptionEdgeScrollEdgeThickness)) ??
+                  100.0,
+              onChanged: isOptionFixed(kOptionEdgeScrollEdgeThickness)
+                  ? null
+                  : onEdgeScrollEdgeThicknessChanged,
+            )),
+      ],
     ]);
   }
 
@@ -1737,9 +1821,9 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget trackpadSpeed(BuildContext context) {
-    final initSpeed = (int.tryParse(
-            bind.mainGetUserDefaultOption(key: kKeyTrackpadSpeed)) ??
-        kDefaultTrackpadSpeed);
+    final initSpeed =
+        (int.tryParse(bind.mainGetUserDefaultOption(key: kKeyTrackpadSpeed)) ??
+            kDefaultTrackpadSpeed);
     final curSpeed = SimpleWrapper(initSpeed);
     void onDebouncer(int v) {
       bind.mainSetUserDefaultOption(

@@ -18,6 +18,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/plugin/ui_manager.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -760,9 +761,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           'scaleFactor': screen.scaleFactor,
         };
 
+    bool isChattyMethod(String methodName) {
+      switch (methodName) {
+        case kWindowBumpMouse: return true;
+      }
+
+      return false;
+    }
+
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
-      debugPrint(
+      if (!isChattyMethod(call.method)) {
+        debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+      }
       if (call.method == kWindowMainWindowOnTop) {
         windowOnTop(null);
       } else if (call.method == kWindowGetWindowInfo) {
@@ -793,6 +804,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           forceRelay: call.arguments['forceRelay'],
           connToken: call.arguments['connToken'],
         );
+      } else if (call.method == kWindowBumpMouse) {
+        return RdPlatformChannel.instance.bumpMouse(
+          dx: call.arguments['dx'],
+          dy: call.arguments['dy']);
       } else if (call.method == kWindowEventMoveTabToNewWindow) {
         final args = call.arguments.split(',');
         int? windowId;

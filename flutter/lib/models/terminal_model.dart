@@ -27,6 +27,8 @@ class TerminalModel with ChangeNotifier {
 
   bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
 
+  void Function(int w, int h, int pw, int ph)? onResizeExternal;
+
   Future<void> _handleInput(String data) async {
     // If we press the `Enter` button on Android,
     // `data` can be '\r' or '\n' when using different keyboards.
@@ -68,6 +70,10 @@ class TerminalModel with ChangeNotifier {
       if (w > 0 && h > 0 && pw > 0 && ph > 0) {
         debugPrint(
             '[TerminalModel] Terminal resized to ${w}x$h (pixel: ${pw}x$ph)');
+
+        // This piece of code must be placed before the conditional check in order to initialize properly.
+        onResizeExternal?.call(w, h, pw, ph);
+
         if (_terminalOpened) {
           // Notify remote terminal of resize
           try {

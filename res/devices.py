@@ -34,12 +34,20 @@ def view(
 
     devices = []
 
-    current = 1
+    current = 0
 
     while True:
+        current += 1
         params["current"] = current
         response = requests.get(f"{url}/api/devices", headers=headers, params=params)
+        if response.status_code != 200:
+            print(f"Error: HTTP {response.status_code} - {response.text}")
+            exit(1)
+        
         response_json = response.json()
+        if "error" in response_json:
+            print(f"Error: {response_json['error']}")
+            exit(1)
 
         data = response_json.get("data", [])
 
@@ -54,22 +62,25 @@ def view(
                 devices.append(device)
 
         total = response_json.get("total", 0)
-        current += pageSize
-        if len(data) < pageSize or current > total:
+        if len(data) < pageSize or current * pageSize >= total:
             break
 
     return devices
 
 
 def check(response):
-    if response.status_code == 200:
-        try:
-            response_json = response.json()
-            return response_json
-        except ValueError:
-            return response.text or "Success"
-    else:
-        return "Failed", response.status_code, response.text
+    if response.status_code != 200:
+        print(f"Error: HTTP {response.status_code} - {response.text}")
+        exit(1)
+    
+    try:
+        response_json = response.json()
+        if "error" in response_json:
+            print(f"Error: {response_json['error']}")
+            exit(1)
+        return response_json
+    except ValueError:
+        return response.text or "Success"
 
 
 def disable(url, token, guid, id):

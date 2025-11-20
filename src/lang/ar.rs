@@ -721,5 +721,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "إظهار عصا التحكم الافتراضية"),
         ("Edit note", ""),
         ("Alias", ""),
+        ("ScrollEdge", ""),
+        ("Allow insecure TLS fallback", ""),
+        ("allow-insecure-tls-fallback-tip", ""),
+        ("Disable UDP", ""),
+        ("disable-udp-tip", ""),
+        ("server-oss-not-support-tip", ""),
+        ("input note here", ""),
+        ("note-at-conn-end-tip", ""),
     ].iter().cloned().collect();
 }

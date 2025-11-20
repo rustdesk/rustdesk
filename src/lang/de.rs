@@ -666,7 +666,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Incoming Print Job", "Eingehender Druckauftrag"),
         ("use-the-default-printer-tip", "Standarddrucker verwenden"),
         ("use-the-selected-printer-tip", "Ausgewählten Drucker verwenden"),
-        ("auto-print-tip", "Automatischer Druck mit dem ausgewählten Drucker."),
+        ("auto-print-tip", "Automatisch mit dem ausgewählten Drucker drucken"),
         ("print-incoming-job-confirm-tip", "Sie haben einen Druckauftrag aus der Ferne erhalten. Möchten Sie ihn bei sich selbst ausführen?"),
         ("remote-printing-disallowed-tile-tip", "Entferntes Drucken nicht erlaubt"),
         ("remote-printing-disallowed-text-tip", "Die Berechtigungseinstellungen der kontrollierten Seite verweigern den entfernten Druck."),
@@ -721,5 +721,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "Virtuellen Joystick anzeigen"),
         ("Edit note", "Hinweis bearbeiten"),
         ("Alias", "Alias"),
+        ("ScrollEdge", "Scrollen am Rand"),
+        ("Allow insecure TLS fallback", "Unsicheres TLS-Fallback zulassen"),
+        ("allow-insecure-tls-fallback-tip", "Standardmäßig überprüft RustDesk das Serverzertifikat für Protokolle, die TLS verwenden. Wenn diese Option aktiviert ist, überspringt RustDesk den Überprüfungsschritt und fährt im Falle eines Überprüfungsfehlers fort."),
+        ("Disable UDP", "UDP deaktivieren"),
+        ("disable-udp-tip", "Legt fest, ob nur TCP verwendet werden soll. Wenn diese Option aktiviert ist, verwendet RustDesk nicht mehr UDP 21116, sondern stattdessen TCP 21116."),
+        ("server-oss-not-support-tip", "HINWEIS: RustDesk Server OSS enthält diese Funktion nicht."),
+        ("input note here", "Hier eine Notiz eingeben"),
+        ("note-at-conn-end-tip", "Am Ende der Verbindung um eine Notiz bitten."),
     ].iter().cloned().collect();
 }

@@ -258,5 +258,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("websocket_tip", "When using WebSocket, only relay connections are supported."),
         ("terminal-admin-login-tip", "Please input the administrator username and password of the controlled side."),
         ("elevation_username_tip", "Input username or domain\\username"),
+        ("allow-insecure-tls-fallback-tip", "By default, RustDesk verifies the server certificate for protocols using TLS.\nWith this option enabled, RustDesk will fall back to skipping the verification step and proceed in case of verification failure."),
+        ("disable-udp-tip", "Controls whether to use TCP only.\nWhen this option enabled, RustDesk will not use UDP 21116 any more, TCP 21116 will be used instead."),
+        ("server-oss-not-support-tip", "NOTE: RustDesk server OSS doesn't include this feature."),
+        ("note-at-conn-end-tip", "Ask for note at end of connection"),
     ].iter().cloned().collect();
 }

@@ -184,7 +184,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Direct and unencrypted connection", "اتصال مستقیم و بدون رمزگذاری"),
         ("Relayed and unencrypted connection", "و رمزگذاری نشده Relay اتصال از طریق"),
         ("Enter Remote ID", "شناسه از راه دور را وارد کنید"),
-        ("Enter your password", "زمر عبور خود را وارد کنید"),
+        ("Enter your password", "رمز عبور خود را وارد کنید"),
         ("Logging in...", "...در حال ورود"),
         ("Enable RDP session sharing", "را فعال کنید RDP اشتراک گذاری جلسه"),
         ("Auto Login", "ورود خودکار"),
@@ -721,5 +721,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "نمایش جوی‌استیک مجازی"),
         ("Edit note", ""),
         ("Alias", ""),
+        ("ScrollEdge", ""),
+        ("Allow insecure TLS fallback", ""),
+        ("allow-insecure-tls-fallback-tip", ""),
+        ("Disable UDP", ""),
+        ("disable-udp-tip", ""),
+        ("server-oss-not-support-tip", ""),
+        ("input note here", ""),
+        ("note-at-conn-end-tip", ""),
     ].iter().cloned().collect();
 }

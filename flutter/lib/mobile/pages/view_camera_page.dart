@@ -197,7 +197,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
 
     return WillPopScope(
       onWillPop: () async {
-        clientClose(sessionId, gFFI.dialogManager);
+        clientClose(sessionId, gFFI);
         return false;
       },
       child: Scaffold(
@@ -310,7 +310,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
                       color: Colors.white,
                       icon: Icon(Icons.clear),
                       onPressed: () {
-                        clientClose(sessionId, gFFI.dialogManager);
+                        clientClose(sessionId, gFFI);
                       },
                     ),
                     IconButton(
@@ -590,6 +590,14 @@ void showOptions(
   if (pi.displays.length > 1 && pi.currentDisplay != kAllDisplayValue) {
     final cur = pi.currentDisplay;
     final children = <Widget>[];
+    final isDarkTheme = MyTheme.currentThemeMode() == ThemeMode.dark;
+    final numColorSelected = Colors.white;
+    final numColorUnselected = isDarkTheme ? Colors.grey : Colors.black87;
+    // We can't use `Theme.of(context).primaryColor` here, the color is:
+    // - light theme: 0xff2196f3 (Colors.blue)
+    // - dark theme: 0xff212121 (the canvas color?)
+    final numBgSelected =
+        Theme.of(context).colorScheme.primary.withOpacity(0.6);
     for (var i = 0; i < pi.displays.length; ++i) {
       children.add(InkWell(
           onTap: () {
@@ -603,13 +611,12 @@ void showOptions(
               decoration: BoxDecoration(
                   border: Border.all(color: Theme.of(context).hintColor),
                   borderRadius: BorderRadius.circular(2),
-                  color: i == cur
-                      ? Theme.of(context).primaryColor.withOpacity(0.6)
-                      : null),
+                  color: i == cur ? numBgSelected : null),
               child: Center(
                   child: Text((i + 1).toString(),
                       style: TextStyle(
-                          color: i == cur ? Colors.white : Colors.black87,
+                          color:
+                              i == cur ? numColorSelected : numColorUnselected,
                           fontWeight: FontWeight.bold))))));
     }
     displays.add(Padding(
