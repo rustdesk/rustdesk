@@ -721,7 +721,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "Virtuális vezérlő megjelenítése"),
         ("Edit note", "Megjegyzés szerkesztése"),
         ("Alias", "Álnév"),
-        ("ScrollEdge", "Görgetés a széleken"),
+        ("ScrollEdge", "Görgetés az ablak szélein"),
         ("Allow insecure TLS fallback", "Nem biztonságos TLS-tartalék engedélyezése"),
         ("allow-insecure-tls-fallback-tip", "Alapértelmezés szerint a RustDesk ellenőrzi a kiszolgáló tanúsítványát a TLS-protokollok esetében. Ha ez a beállítás engedélyezve van, a RustDesk kihagyja az ellenőrzési lépést, és az ellenőrzés sikertelensége esetén folytatja a műveletet."),
         ("Disable UDP", "UDP letiltása"),
