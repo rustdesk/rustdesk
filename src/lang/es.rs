@@ -722,7 +722,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Edit note", "Editar nota"),
         ("Alias", ""),
         ("ScrollEdge", "Desplazamiento de pantalla"),
-        ("Allow insecure TLS fallback", "Permitir conexión TLS insegura de respalo"),
+        ("Allow insecure TLS fallback", "Permitir conexión TLS insegura de respaldo"),
         ("allow-insecure-tls-fallback-tip", ""),
         ("Disable UDP", "Inhabilitar UDP"),
         ("disable-udp-tip", ""),
