@@ -42,8 +42,9 @@ def list_groups(url, token, name=None, page_size=50):
     params = {"pageSize": page_size}
     if name:
         params["name"] = name
-    data, current = [], 1
+    data, current = [], 0
     while True:
+        current += 1
         params["current"] = current
         r = requests.get(f"{url}/api/user-groups", headers=headers, params=params)
         if r.status_code != 200:
@@ -56,8 +57,7 @@ def list_groups(url, token, name=None, page_size=50):
         rows = res.get("data", [])
         data.extend(rows)
         total = res.get("total", 0)
-        current += page_size
-        if len(rows) < page_size or current > total:
+        if len(rows) < page_size or current * page_size >= total:
             break
     return data
 
@@ -142,8 +142,9 @@ def view_users(url, token, group_name=None, name=None, page_size=50):
     
     params["pageSize"] = page_size
     
-    data, current = [], 1
+    data, current = [], 0
     while True:
+        current += 1
         params["current"] = current
         r = requests.get(f"{url}/api/users", headers=headers, params=params)
         if r.status_code != 200:
@@ -152,8 +153,7 @@ def view_users(url, token, group_name=None, name=None, page_size=50):
         rows = res.get("data", [])
         data.extend(rows)
         total = res.get("total", 0)
-        current += page_size
-        if len(rows) < page_size or current > total:
+        if len(rows) < page_size or current * page_size >= total:
             break
     return data
 
