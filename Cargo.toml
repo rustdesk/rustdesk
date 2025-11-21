@@ -1,10 +1,10 @@
 [package]
-name = "rustdesk"
+name = "LiSA Fernwartung"
 version = "1.4.4"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
+description = "LiSA Fernwartung"
 default-run = "rustdesk"
 rust-version = "1.75"
 
