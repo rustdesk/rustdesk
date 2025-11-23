@@ -3,6 +3,7 @@
 .vscode
 .idea
 .DS_Store
+.env
 libsciter-gtk.so
 src/ui/inline.rs
 extractor
