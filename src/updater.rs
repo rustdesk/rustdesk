@@ -119,7 +119,7 @@ fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
 
 fn check_update(manually: bool) -> ResultType<()> {
     #[cfg(target_os = "windows")]
-    let is_msi = crate::platform::is_msi_installed()?;
+    let update_msi = crate::platform::is_msi_installed()? && !crate::is_custom_client();
     if !(manually || config::Config::get_bool_option(config::keys::OPTION_ALLOW_AUTO_UPDATE)) {
         return Ok(());
     }
@@ -140,7 +140,7 @@ fn check_update(manually: bool) -> ResultType<()> {
                 "{}/rustdesk-{}-x86_64.{}",
                 download_url,
                 version,
-                if is_msi { "msi" } else { "exe" }
+                if update_msi { "msi" } else { "exe" }
             )
         } else {
             format!("{}/rustdesk-{}-x86-sciter.exe", download_url, version)
@@ -190,21 +190,21 @@ fn check_update(manually: bool) -> ResultType<()> {
         // before the download, but not empty after the download.
         if has_no_active_conns() {
             #[cfg(target_os = "windows")]
-            update_new_version(is_msi, &version, &file_path);
+            update_new_version(update_msi, &version, &file_path);
         }
     }
     Ok(())
 }
 
 #[cfg(target_os = "windows")]
-fn update_new_version(is_msi: bool, version: &str, file_path: &PathBuf) {
+fn update_new_version(update_msi: bool, version: &str, file_path: &PathBuf) {
     log::debug!(
-        "New version is downloaded, update begin, is msi: {is_msi}, version: {version}, file: {:?}",
+        "New version is downloaded, update begin, update msi: {update_msi}, version: {version}, file: {:?}",
         file_path.to_str()
     );
     if let Some(p) = file_path.to_str() {
         if let Some(session_id) = crate::platform::get_current_process_session_id() {
-            if is_msi {
+            if update_msi {
                 match crate::platform::update_me_msi(p, true) {
                     Ok(_) => {
                         log::debug!("New version \"{}\" updated.", version);
@@ -215,21 +215,51 @@ fn update_new_version(is_msi: bool, version: &str, file_path: &PathBuf) {
                             version,
                             e
                         );
+                        std::fs::remove_file(&file_path).ok();
                     }
                 }
             } else {
-                match crate::platform::launch_privileged_process(
+                let custom_client_staging_dir = if crate::is_custom_client() {
+                    let custom_client_staging_dir =
+                        crate::platform::get_custom_client_staging_dir();
+                    if let Err(e) = crate::platform::handle_custom_client_staging_dir_before_update(
+                        &custom_client_staging_dir,
+                    ) {
+                        log::error!(
+                            "Failed to handle custom client staging dir before update: {}",
+                            e
+                        );
+                        return;
+                    }
+                    Some(custom_client_staging_dir)
+                } else {
+                    None
+                };
+                let update_launched = match crate::platform::launch_privileged_process(
                     session_id,
                     &format!("{} --update", p),
                 ) {
                     Ok(h) => {
                         if h.is_null() {
                             log::error!("Failed to update to the new version: {}", version);
+                            false
+                        } else {
+                            log::debug!("New version \"{}\" is launched.", version);
+                            true
                         }
                     }
                     Err(e) => {
                         log::error!("Failed to run the new version: {}", e);
+                        false
                     }
+                };
+                if !update_launched {
+                    if let Some(dir) = custom_client_staging_dir {
+                        hbb_common::allow_err!(crate::platform::remove_custom_client_staging_dir(
+                            &dir
+                        ));
+                    }
+                    std::fs::remove_file(&file_path).ok();
                 }
             }
         } else {
@@ -237,6 +267,7 @@ fn update_new_version(is_msi: bool, version: &str, file_path: &PathBuf) {
                 "Failed to get the current process session id, Error {}",
                 std::io::Error::last_os_error()
             );
+            std::fs::remove_file(&file_path).ok();
         }
     } else {
         // unreachable!()
