@@ -273,6 +273,19 @@ class MainActivity : FlutterActivity() {
                 "on_voice_call_closed" -> {
                     onVoiceCallClosed()
                 }
+                "setDexMetaCapture" -> {
+                    val enable = call.argument<Boolean>("enable") ?: false
+                    SamsungDexUtils.setMetaKeyCapture(this, enable)
+                    result.success(null)
+                }
+                "togglePointerCapture" -> {
+                    val enable = call.argument<Boolean>("enable") ?: false
+                    togglePointerCapture(enable)
+                    result.success(null)
+                }
+                "isDexEnabled" -> {
+                    result.success(SamsungDexUtils.isDexEnabled(this))
+                }
                 else -> {
                     result.error("-1", "No such method", null)
                 }
@@ -396,6 +409,29 @@ class MainActivity : FlutterActivity() {
                 "text" to "Failed to stop voice call."))
         } else {
             Log.d(logTag, "onVoiceCallClosed success")
+        }
+    }
+
+    /**
+     * Toggle pointer capture for immersive mouse control.
+     * When enabled, the app receives raw relative mouse movements.
+     */
+    private fun togglePointerCapture(enable: Boolean) {
+        val view = window.decorView
+        if (enable) {
+            view.requestPointerCapture()
+            Log.d(logTag, "Pointer capture enabled")
+        } else {
+            view.releasePointerCapture()
+            Log.d(logTag, "Pointer capture released")
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) {
+            // Automatically release pointer capture when window loses focus
+            window.decorView.releasePointerCapture()
         }
     }
 
