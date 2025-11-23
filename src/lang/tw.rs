@@ -721,7 +721,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show virtual joystick", "顯示虛擬搖桿"),
         ("Edit note", "編輯備註"),
         ("Alias", "別名"),
-        ("ScrollEdge", "邊緣滑動"),
+        ("ScrollEdge", "邊緣滾動"),
         ("Allow insecure TLS fallback", "允許降級到不安全的 TLS 連接"),
         ("allow-insecure-tls-fallback-tip", "預設情況下，對於使用 TLS 的協定，RustDesk 會驗證伺服器的憑證。\n啟用此選項後，在驗證失敗時，RustDesk 將轉為跳過驗證步驟並繼續連接。"),
         ("Disable UDP", "停用 UDP"),
