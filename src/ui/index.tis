@@ -824,7 +824,9 @@ class UpdateMe: Reactor.Component {
         return <div .install-me>
             <div>{translate('Status')}</div>
             <div>There is a newer version of {handler.get_app_name()} ({handler.get_new_version()}) available.</div>
-            <div #install-me.link>{translate('Click to ' + update_or_download)}</div>
+            {is_custom_client
+                ? <div style="font-size: 1em; font-weight: normal; text-align: left; padding-top: 1em;">{translate('Enable \"Auto update\" or contact your administrator for the latest version.')}</div>
+                : <div #install-me.link>{translate('Click to ' + update_or_download)}</div>}
             <div #download-percent style="display:hidden; padding-top: 1em;" />
         </div>;
     }
