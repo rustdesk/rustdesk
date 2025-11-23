@@ -3,6 +3,7 @@ This guide details how to implement **Samsung DeX Meta Key Capture** and **Point
 ### Notes
 * Adapted from repo https://github.com/termux/termux-x11.
 * **ALWAYS** consult the original repo for its implementation.
+* You **MUST** always save your progress to serena Memory. Intermediate steps also!
 
 ### 1. Samsung DeX Key Remapping (Meta Key Capture)
 
