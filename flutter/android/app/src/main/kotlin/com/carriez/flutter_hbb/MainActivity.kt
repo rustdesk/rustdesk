@@ -290,7 +290,7 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "isDexEnabled" -> {
-                    result.success(isDexEnabled(this))
+                    result.success(SamsungDexUtils.isDexEnabled(this))
                 }
                 else -> {
                     result.error("-1", "No such method", null)
