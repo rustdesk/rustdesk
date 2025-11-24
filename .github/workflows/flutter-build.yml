@@ -9,6 +9,7 @@ on:
       upload-tag:
         type: string
         default: "nightly"
+  workflow_dispatch:
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
