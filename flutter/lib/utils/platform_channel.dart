@@ -16,6 +16,9 @@ class RdPlatformChannel {
   final MethodChannel _hostMethodChannel =
       MethodChannel("org.rustdesk.rustdesk/host");
 
+  // Main Flutter method channel for Android communication
+  final MethodChannel _mainChannel = MethodChannel("mChannel");
+
   /// Bump the position of the mouse cursor, if applicable
   Future<bool> bumpMouse({required int dx, required int dy}) async {
     // No debug output; this call is too chatty.
@@ -41,5 +44,46 @@ class RdPlatformChannel {
   Future<void> terminate() {
     assert(isMacOS);
     return _hostMethodChannel.invokeMethod("terminate");
+  }
+
+  /// Enable or disable Samsung DeX Meta (Windows/Command) key capture.
+  /// When enabled, Meta key events will be sent to the app instead of
+  /// being intercepted by the system.
+  /// 
+  /// Only works on Samsung devices with DeX mode.
+  Future<void> setDexMetaCapture(bool enable) async {
+    if (!isAndroid) return;
+    try {
+      await _mainChannel.invokeMethod('setDexMetaCapture', enable);
+    } on PlatformException catch (e) {
+      debugPrint("Failed to set DeX meta capture: '${e.message}'.");
+    }
+  }
+
+  /// Toggle pointer capture for immersive mouse control.
+  /// When enabled, the app receives raw relative mouse movements
+  /// instead of absolute coordinates.
+  /// 
+  /// Useful for games and applications that need precise mouse control.
+  Future<void> togglePointerCapture(bool enable) async {
+    if (!isAndroid) return;
+    try {
+      await _mainChannel.invokeMethod('togglePointerCapture', enable);
+    } on PlatformException catch (e) {
+      debugPrint("Failed to toggle pointer capture: '${e.message}'.");
+    }
+  }
+  
+  /// Check if Samsung DeX mode is currently enabled.
+  /// Returns true if DeX is active, false otherwise.
+  Future<bool> isDexEnabled() async {
+    if (!isAndroid) return false;
+    try {
+      final result = await _mainChannel.invokeMethod('isDexEnabled');
+      return result as bool? ?? false;
+    } catch (e) {
+      debugPrint("Failed to check DeX status: '$e'.");
+      return false;
+    }
   }
 }

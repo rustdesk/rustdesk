@@ -274,17 +274,23 @@ class MainActivity : FlutterActivity() {
                     onVoiceCallClosed()
                 }
                 "setDexMetaCapture" -> {
-                    val enable = call.argument<Boolean>("enable") ?: false
-                    SamsungDexUtils.setMetaKeyCapture(this, enable)
-                    result.success(null)
+                    if (call.arguments is Boolean) {
+                        setDexMetaCapture(call.arguments as Boolean)
+                        result.success(null)
+                    } else {
+                        result.success(false)
+                    }
                 }
                 "togglePointerCapture" -> {
-                    val enable = call.argument<Boolean>("enable") ?: false
-                    togglePointerCapture(enable)
-                    result.success(null)
+                    if (call.arguments is Boolean) {
+                        togglePointerCapture(call.arguments as Boolean)
+                        result.success(null)
+                    } else {
+                        result.success(false)
+                    }
                 }
                 "isDexEnabled" -> {
-                    result.success(SamsungDexUtils.isDexEnabled(this))
+                    result.success(isDexEnabled(this))
                 }
                 else -> {
                     result.error("-1", "No such method", null)
@@ -410,6 +416,14 @@ class MainActivity : FlutterActivity() {
         } else {
             Log.d(logTag, "onVoiceCallClosed success")
         }
+    }
+
+    /**
+     * Enable or disable Samsung DeX Meta key capture.
+     * Delegates to SamsungDexUtils in common.kt.
+     */
+    private fun setDexMetaCapture(enable: Boolean) {
+        SamsungDexUtils.setMetaKeyCapture(this, enable)
     }
 
     /**

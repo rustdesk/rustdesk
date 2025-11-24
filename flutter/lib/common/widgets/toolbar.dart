@@ -4,13 +4,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/common/dex_utils.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
 
 bool isEditOsPassword = false;
@@ -740,7 +740,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   
   // DeX optimization (Android only)
   if (isDefaultConn && isAndroid) {
-    final dexEnabled = await DexUtils.isDexEnabled();
+    final dexEnabled = await RdPlatformChannel.instance.isDexEnabled();
     if (dexEnabled) {
       final option = kOptionEnableDexOptimization;
       final value =
@@ -751,11 +751,11 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
             if (value == null) return;
             await bind.sessionToggleOption(sessionId: sessionId, value: option);
             if (value) {
-              await DexUtils.setDexMetaCapture(true);
-              await DexUtils.togglePointerCapture(true);
+              await RdPlatformChannel.instance.setDexMetaCapture(true);
+              await RdPlatformChannel.instance.togglePointerCapture(true);
             } else {
-              await DexUtils.setDexMetaCapture(false);
-              await DexUtils.togglePointerCapture(false);
+              await RdPlatformChannel.instance.setDexMetaCapture(false);
+              await RdPlatformChannel.instance.togglePointerCapture(false);
             }
           },
           child: Text(translate('DeX Optimization'))));
