@@ -152,6 +152,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "This file is identical with the peer's one."),
         ("show_monitors_tip", "Show monitors in toolbar"),
         ("View Mode", "View mode"),
+        ("DeX Optimization", "DeX optimization"),
         ("login_linux_tip", "You need to login to remote Linux account to enable a X desktop session"),
         ("verify_rustdesk_password_tip", "Verify RustDesk password"),
         ("remember_account_tip", "Remember this account"),
