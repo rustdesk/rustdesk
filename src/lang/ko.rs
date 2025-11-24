@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "이 파일은 상대방의 파일과 일치합니다."),
         ("show_monitors_tip", "도구 모음에 모니터 표시"),
         ("View Mode", "보기 모드"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "X 데스크탑을 활성화하려면 제어되는 터미널의 Linux 계정에 로그인하세요"),
         ("verify_rustdesk_password_tip", "RustDesk 비밀번호 확인"),
         ("remember_account_tip", "이 계정 기억하기"),

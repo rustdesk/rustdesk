@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Fitxategi hau parekidearen berdina da."),
         ("show_monitors_tip", "Erakutsi monitoreak tresna-barran"),
         ("View Mode", "Ikuspen modua"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Urruneko Linux kontu batera hasi behar duzu saioa X mahaigain saio bat gaitzeko"),
         ("verify_rustdesk_password_tip", "Berretsi RustDesk pasahitza"),
         ("remember_account_tip", "Gogoratu kontu hau"),

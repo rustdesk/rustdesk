@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Bu dosya, cihazın dosyası ile aynıdır."),
         ("show_monitors_tip", "Monitörleri araç çubuğunda göster"),
         ("View Mode", "Görünüm Modu"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "X masaüstü oturumu başlatmak için uzaktaki Linux hesabına giriş yapmanız gerekiyor"),
         ("verify_rustdesk_password_tip", "RustDesk parolasını doğrulayın"),
         ("remember_account_tip", "Bu hesabı hatırla"),

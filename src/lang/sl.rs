@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Datoteka je enaka partnerjevi"),
         ("show_monitors_tip", "Prikaži monitorje v orodni vrstici"),
         ("View Mode", "Način prikazovanja"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Prijaviti se morate v oddaljeni Linux račun in omogočiti namizno sejo X."),
         ("verify_rustdesk_password_tip", "Preveri geslo za RustDesk"),
         ("remember_account_tip", "Zapomni si ta račun"),

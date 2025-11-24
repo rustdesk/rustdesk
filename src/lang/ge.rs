@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "ფაილი იდენტურია დისტანციურ კვანძზე არსებული ფაილის"),
         ("show_monitors_tip", "მონიტორების ჩვენება ხელსაწყოთა პანელზე"),
         ("View Mode", "ნახვის რეჟიმი"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "X სამუშაო მაგიდის სესიის ჩასართავად, საჭიროა დისტანციურ Linux ანგარიშში შესვლა."),
         ("verify_rustdesk_password_tip", "დაადასტურეთ RustDesk-ის პაროლი"),
         ("remember_account_tip", "დაიმახსოვრეთ ეს ანგარიში"),

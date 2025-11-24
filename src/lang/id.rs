@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Data ini identik dengan milik rekan"),
         ("show_monitors_tip", "Tampilkan monitor di toolbar"),
         ("View Mode", "Mode Tampilan"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Anda harus masuk ke akun remote linux untuk mengaktifkan sesi X desktop"),
         ("verify_rustdesk_password_tip", "Verifikasi Kata Sandi RustDesk"),
         ("remember_account_tip", "Ingat akun ini"),

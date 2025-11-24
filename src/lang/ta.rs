@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "ஒரே_மாதிரியான_கோப்பு_குறிப்பு"),
         ("show_monitors_tip", "மானிட்டர்களை_காட்டு_குறிப்பு"),
         ("View Mode", "காட்சி முறை"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "லினக்ஸ்_உள்நுழைவு_குறிப்பு"),
         ("verify_rustdesk_password_tip", "rustdesk_கடவுச்சொல்_சரிபார்ப்பு_குறிப்பு"),
         ("remember_account_tip", "கணக்கை_நினைவில்_கொள்_குறிப்பு"),

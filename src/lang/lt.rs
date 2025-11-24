@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Failas yra identiškas nuotoliniame kompiuteryje esančiam failui."),
         ("show_monitors_tip", "Rodyti monitorius įrankių juostoje"),
         ("View Mode", "Peržiūros režimas"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Norėdami įjungti X darbalaukio seansą, turite būti prisijungę prie nuotolinės Linux paskyros."),
         ("verify_rustdesk_password_tip", "Įveskite kliento RustDesk slaptažodį"),
         ("remember_account_tip", "Prisiminti šią paskyrą"),

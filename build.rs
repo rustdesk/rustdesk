@@ -84,7 +84,7 @@ fn main() {
     build_manifest();
     #[cfg(windows)]
     build_windows();
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS")so..unwrap();
     if target_os == "macos" {
         #[cfg(target_os = "macos")]
         build_mac();

@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Custu archìviu est pretzisu a su chi b'at in su dispositivu remotu."),
         ("show_monitors_tip", "Mustra sos ischermos in s'istanga de sos trastes"),
         ("View Mode", "Modalidade de visualizatzione"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Intra a su contu de Linux remotu"),
         ("verify_rustdesk_password_tip", "Cunfirma sa crae de RustDesk"),
         ("remember_account_tip", "Ammenta custu contu"),

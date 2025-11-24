@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Ez a fájl megegyezik a távoli állomás fájljával."),
         ("show_monitors_tip", "Képernyők megjelenítése az eszköztáron"),
         ("View Mode", "Nézet mód"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Az X-asztal munkamenet megnyitásához be kell jelentkeznie egy távoli Linux-fiókba."),
         ("verify_rustdesk_password_tip", "RustDesk jelszó megerősítése"),
         ("remember_account_tip", "Emlékezzen erre a fiókra"),

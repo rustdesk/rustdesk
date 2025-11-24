@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Denne fil er identisk med modpartens."),
         ("show_monitors_tip", "Vis skærme i værktøjsbjælken"),
         ("View Mode", "Visningstilstand"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Du skal logge på en fjernstyret Linux konto for at aktivere en X skrivebordssession"),
         ("verify_rustdesk_password_tip", "Bekræft RustDesk adgangskode"),
         ("remember_account_tip", "Husk denne konto"),

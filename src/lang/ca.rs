@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Aquest fitxer és idèntic al del client."),
         ("show_monitors_tip", "Mostra les pantalles a la barra d'eines"),
         ("View Mode", "Mode espectador"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "És necessari que inicieu prèviament sessió amb un entorn d'escriptori x11 habilitat"),
         ("verify_rustdesk_password_tip", "Verifica la contrasenya del RustDesk"),
         ("remember_account_tip", "Recorda aquest compte"),

@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Tento súbor je identický so súborom partnera."),
         ("show_monitors_tip", "Zobraziť monitory na paneli nástrojov"),
         ("View Mode", "Režim zobrazenia"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Ak chcete povoliť reláciu Desktop X, musíte sa prihlásiť do vzdialeného konta Linuxu."),
         ("verify_rustdesk_password_tip", "Overenie hesla RustDesk"),
         ("remember_account_tip", "Zapamätať si tento účet"),

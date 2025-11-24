@@ -465,6 +465,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Ten plik jest identyczny z plikiem na drugim komputerze."),
         ("show_monitors_tip", "Pokaż monitory w zasobniku"),
         ("View Mode", "Tylko podgląd (wyłącza możliwość interakcji)"),
+        ("DeX Optimization", ""),
         ("login_linux_tip", "Musisz zalogować się na zdalne konto, by zezwolić na sesję pulpitu X"),
         ("verify_rustdesk_password_tip", "Weryfikuj hasło RustDesk"),
         ("remember_account_tip", "Zapamiętaj to konto"),
