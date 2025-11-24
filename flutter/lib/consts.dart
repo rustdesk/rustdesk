@@ -187,6 +187,8 @@ const String kOptionDisableFloatingWindow = "disable-floating-window";
 
 const String kOptionKeepScreenOn = "keep-screen-on";
 
+const String kOptionEnableDexOptimization = "enable-dex-optimization";
+
 const String kOptionShowMobileAction = "showMobileActions";
 
 const String kUrlActionClose = "close";

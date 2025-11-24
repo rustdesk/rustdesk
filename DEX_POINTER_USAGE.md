@@ -41,25 +41,25 @@ togglePointerCapture(false) // Disable
 
 #### Import
 ```dart
-import 'package:flutter_hbb/common/android_utils.dart';
+import 'package:flutter_hbb/common/dex_utils.dart';
 ```
 
 #### Usage
 ```dart
 // Enable Samsung DeX Meta key capture
-await AndroidUtils.setDexMetaCapture(true);
+await DexUtils.setDexMetaCapture(true);
 
 // Disable Samsung DeX Meta key capture
-await AndroidUtils.setDexMetaCapture(false);
+await DexUtils.setDexMetaCapture(false);
 
 // Enable pointer capture
-await AndroidUtils.togglePointerCapture(true);
+await DexUtils.togglePointerCapture(true);
 
 // Disable pointer capture
-await AndroidUtils.togglePointerCapture(false);
+await DexUtils.togglePointerCapture(false);
 
 // Check if DeX is enabled
-bool dexEnabled = await AndroidUtils.isDexEnabled();
+bool dexEnabled = await DexUtils.isDexEnabled();
 if (dexEnabled) {
   print('Samsung DeX is active');
 }
@@ -71,7 +71,7 @@ To add these features to a Flutter UI, you could create toggle buttons:
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/android_utils.dart';
+import 'package:flutter_hbb/common/dex_utils.dart';
 
 class DexControlPanel extends StatefulWidget {
   @override
@@ -90,7 +90,7 @@ class _DexControlPanelState extends State<DexControlPanel> {
   }
 
   Future<void> _checkDexStatus() async {
-    final dexEnabled = await AndroidUtils.isDexEnabled();
+    final dexEnabled = await DexUtils.isDexEnabled();
     setState(() {
       _isDexEnabled = dexEnabled;
     });
@@ -106,7 +106,7 @@ class _DexControlPanelState extends State<DexControlPanel> {
             subtitle: Text('Capture Windows/Command key'),
             value: _metaCaptureEnabled,
             onChanged: (value) async {
-              await AndroidUtils.setDexMetaCapture(value);
+              await DexUtils.setDexMetaCapture(value);
               setState(() {
                 _metaCaptureEnabled = value;
               });
@@ -117,7 +117,7 @@ class _DexControlPanelState extends State<DexControlPanel> {
           subtitle: Text('Immersive mouse control'),
           value: _pointerCaptureEnabled,
           onChanged: (value) async {
-            await AndroidUtils.togglePointerCapture(value);
+            await DexUtils.togglePointerCapture(value);
             setState(() {
               _pointerCaptureEnabled = value;
             });

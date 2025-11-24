@@ -244,6 +244,7 @@ List<(String, String)> otherDefaultSettings() {
         kKeyUseAllMyDisplaysForTheRemoteSession
       ),
     ('Keep terminal sessions on disconnect', kOptionTerminalPersistent),
+    if (isAndroid) ('DeX Optimization', kOptionEnableDexOptimization),
   ];
 
   return v;

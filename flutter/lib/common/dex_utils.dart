@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
 
-/// Android-specific utilities for Samsung DeX and pointer capture features.
+/// Utilities for Samsung DeX and pointer capture features on Android.
 /// 
 /// Based on termux-x11 implementation:
 /// https://github.com/termux/termux-x11
-class AndroidUtils {
+class DexUtils {
   static const platform = MethodChannel('mChannel');
 
   /// Enable or disable Samsung DeX Meta (Windows/Command) key capture.

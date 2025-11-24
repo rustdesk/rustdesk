@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/dex_utils.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -735,6 +736,30 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
           ffiModel.setViewOnly(id, value);
         },
         child: Text(translate('View Mode'))));
+  }
+  
+  // DeX optimization (Android only)
+  if (isDefaultConn && isAndroid) {
+    final dexEnabled = await DexUtils.isDexEnabled();
+    if (dexEnabled) {
+      final option = kOptionEnableDexOptimization;
+      final value =
+          bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+      v.add(TToggleMenu(
+          value: value,
+          onChanged: (value) async {
+            if (value == null) return;
+            await bind.sessionToggleOption(sessionId: sessionId, value: option);
+            if (value) {
+              await DexUtils.setDexMetaCapture(true);
+              await DexUtils.togglePointerCapture(true);
+            } else {
+              await DexUtils.setDexMetaCapture(false);
+              await DexUtils.togglePointerCapture(false);
+            }
+          },
+          child: Text(translate('DeX Optimization'))));
+    }
   }
   return v;
 }

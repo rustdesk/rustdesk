@@ -19,8 +19,8 @@ This implementation adds Samsung DeX Meta key capture and Pointer Capture (mouse
    - New function: `togglePointerCapture(enable: Boolean)`
    - Override: `onWindowFocusChanged()` for auto-release
 
-3. **android_utils.dart** (NEW)
-   - Location: `flutter/lib/common/android_utils.dart`
+3. **dex_utils.dart** (NEW)
+   - Location: `flutter/lib/common/dex_utils.dart`
    - 52 lines of Dart code
    - Flutter wrapper for Android features
    - Functions: `setDexMetaCapture()`, `togglePointerCapture()`, `isDexEnabled()`
@@ -37,7 +37,7 @@ From FEAT_DOCS.md Summary Checklist:
 
 1. ✅ **Copy `SamsungDexUtils` logic** - Adapted from Java to Kotlin
 2. ✅ **Setup MethodChannel** - Three handlers added to MainActivity.kt
-3. ✅ **Create Dart Wrapper** - AndroidUtils.dart created with full API
+3. ✅ **Create Dart Wrapper** - DexUtils.dart created with full API
 4. ⚠️ **Update Input Logic** - **Documented but NOT Implemented**
 
 ## ⚠️ Optional: Input Logic Integration (Section 4)
