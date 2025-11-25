@@ -90,8 +90,10 @@ function adaptDisplay() {
     }
     if (isRemoteLinux()) {
         cursor_scale = display_scale * display_remote_scale;
-        if (cursor_scale <= 0.0001) cursor_scale = 1.;
+    } else {
+        cursor_scale = display_scale;
     }
+    if (cursor_scale <= 0.0001) cursor_scale = 1.;
     refreshCursor();
     handler.style.set {
         width: w / scaleFactor + "px",
