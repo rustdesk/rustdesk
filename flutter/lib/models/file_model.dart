@@ -113,6 +113,31 @@ class FileModel {
     fileFetcher.tryCompleteEmptyDirsTask(evt['value'], evt['is_local']);
   }
 
+  // This method fixes a deadlock that occurred when the previous code directly
+  // called jobController.jobError(evt) in the job_error event handler.
+  //
+  // The problem with directly calling jobController.jobError():
+  //   1. fetchDirectoryRecursiveToRemove(jobID) registers readRecursiveTasks[jobID]
+  //      and waits for completion
+  //   2. If the remote has no permission (or some other errors), it returns a FileTransferError
+  //   3. The error triggers job_error event, which called jobController.jobError()
+  //   4. jobController.jobError() calls getJob(jobID) to find the job in jobTable
+  //   5. But addDeleteDirJob() is called AFTER fetchDirectoryRecursiveToRemove(),
+  //      so the job doesn't exist yet in jobTable
+  //   6. Result: jobController.jobError() does nothing useful, and
+  //      readRecursiveTasks[jobID] never completes, causing a 2s timeout
+  //
+  // Solution: Before calling jobController.jobError(), we first check if there's
+  // a pending readRecursiveTasks with this ID and complete it with the error.
+  void handleJobError(Map<String, dynamic> evt) {
+    final id = int.tryParse(evt['id']?.toString() ?? '');
+    if (id != null) {
+      final err = evt['err']?.toString() ?? '';
+      fileFetcher.tryCompleteRecursiveTaskWithError(id, err);
+    }
+    jobController.jobError(evt);
+  }
+
   Future<void> postOverrideFileConfirm(Map<String, dynamic> evt) async {
     evtLoop.pushEvent(
         _FileDialogEvent(WeakReference(this), FileDialogType.overwrite, evt));
@@ -591,8 +616,19 @@ class FileController {
       } else if (item.isDirectory) {
         title = translate("Not an empty directory");
         dialogManager?.showLoading(translate("Waiting"));
-        final fd = await fileFetcher.fetchDirectoryRecursiveToRemove(
-            jobID, item.path, items.isLocal, true);
+        late final FileDirectory fd;
+        try {
+          fd = await fileFetcher.fetchDirectoryRecursiveToRemove(
+              jobID, item.path, items.isLocal, true);
+        } catch (e) {
+          dialogManager?.dismissAll();
+          final dm = dialogManager;
+          if (dm != null) {
+            msgBox(sessionId, 'custom-error-nook-nocancel-hasclose',
+                translate("Error"), "$e", '', dm);
+          }
+          return;
+        }
         if (fd.path.isEmpty) {
           fd.path = item.path;
         }
@@ -606,7 +642,7 @@ class FileController {
               item.name,
               false);
           if (confirm == true) {
-            sendRemoveEmptyDir(
+            await sendRemoveEmptyDir(
               item.path,
               0,
               deleteJobId,
@@ -647,7 +683,7 @@ class FileController {
             // handle remove res;
             if (item.isDirectory &&
                 res['file_num'] == (entries.length - 1).toString()) {
-              sendRemoveEmptyDir(item.path, i, deleteJobId);
+              await sendRemoveEmptyDir(item.path, i, deleteJobId);
             }
           } else {
             jobController.updateJobStatus(deleteJobId,
@@ -660,7 +696,7 @@ class FileController {
                 final res = await jobController.jobResultListener.start();
                 if (item.isDirectory &&
                     res['file_num'] == (entries.length - 1).toString()) {
-                  sendRemoveEmptyDir(item.path, i, deleteJobId);
+                  await sendRemoveEmptyDir(item.path, i, deleteJobId);
                 }
               }
             } else {
@@ -755,9 +791,9 @@ class FileController {
         fileNum: fileNum);
   }
 
-  void sendRemoveEmptyDir(String path, int fileNum, int actId) {
+  Future<void> sendRemoveEmptyDir(String path, int fileNum, int actId) async {
     history.removeWhere((element) => element.contains(path));
-    bind.sessionRemoveAllEmptyDirs(
+    await bind.sessionRemoveAllEmptyDirs(
         sessionId: sessionId, actId: actId, path: path, isRemote: !isLocal);
   }
 
@@ -1272,6 +1308,15 @@ class FileFetcher {
       }
     } catch (e) {
       debugPrint("tryCompleteJob err: $e");
+    }
+  }
+
+  // Complete a pending recursive read task with an error.
+  // See FileModel.handleJobError() for why this is necessary.
+  void tryCompleteRecursiveTaskWithError(int id, String error) {
+    final completer = readRecursiveTasks.remove(id);
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(error);
     }
   }
 

@@ -37,6 +37,21 @@ use hbb_common::{
 
 use crate::{common::is_server, privacy_mode, rendezvous_mediator::RendezvousMediator};
 
+/// Represents a file that has been validated for read access.
+/// Used in Windows server mode to confirm read permissions before transfer.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ValidatedFile {
+    /// Relative file name, relative to the base path being validated
+    /// (empty for single-file validation, populated for directory listings)
+    pub name: String,
+    /// File size in bytes
+    pub size: u64,
+    /// Last modified time as seconds since Unix epoch
+    pub modified_time: u64,
+    /// Optional hash (None if hashing is disabled)
+    pub hash: Option<String>,
+}
+
 // IPC actions here.
 pub const IPC_ACTION_CLOSE: &str = "close";
 pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
@@ -111,6 +126,19 @@ pub enum FS {
         id: i32,
         path: String,
         new_name: String,
+    },
+    ValidateReadAccess {
+        path: String,
+        id: i32,
+        file_num: i32,
+        include_hidden: bool,
+        conn_id: i32,
+    },
+    ReadAllFiles {
+        path: String,
+        id: i32,
+        include_hidden: bool,
+        conn_id: i32,
     },
 }
 
@@ -268,6 +296,20 @@ pub enum Data {
     #[cfg(windows)]
     ControlledSessionCount(usize),
     CmErr(String),
+    ReadAccessValidated {
+        id: i32,
+        file_num: i32,
+        include_hidden: bool,
+        conn_id: i32,
+        result: Result<(String, Vec<ValidatedFile>), String>,
+    },
+    AllFilesResult {
+        id: i32,
+        conn_id: i32,
+        path: String,
+        /// Serialized protobuf bytes of FileDirectory, or error string
+        result: Result<Vec<u8>, String>,
+    },
     CheckHwcodec,
     #[cfg(feature = "flutter")]
     VideoConnCount(Option<usize>),

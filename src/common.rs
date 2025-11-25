@@ -182,6 +182,18 @@ pub fn is_server() -> bool {
 }
 
 #[inline]
+pub fn need_validate_file_read_access() -> bool {
+    #[cfg(windows)]
+    {
+        is_server()
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+#[inline]
 pub fn is_main() -> bool {
     *IS_MAIN
 }
