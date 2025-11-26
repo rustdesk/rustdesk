@@ -1054,7 +1054,9 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     pub async fn sync_jobs_status_to_local(&mut self) -> bool {
-        log::info!("sync transfer job status");
+        if !self.is_connected {
+            return false;
+        }
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
         for job in self.read_jobs.iter() {
