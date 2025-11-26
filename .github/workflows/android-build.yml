@@ -3,7 +3,6 @@ name: Android Build
 on:
   workflow_dispatch:
   push:
-    branches: [ master, main ]
     paths:
       - 'src/**'
       - 'flutter/**'
