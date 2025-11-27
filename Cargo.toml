@@ -21,6 +21,7 @@ name = "service"
 path = "src/service.rs"
 
 [features]
+webrtc = ["hbb_common/webrtc"]
 inline = []
 cli = []
 use_samplerate = ["samplerate"]
