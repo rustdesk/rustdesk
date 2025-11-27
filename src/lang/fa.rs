@@ -727,5 +727,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Disable UDP", ""),
         ("disable-udp-tip", ""),
         ("server-oss-not-support-tip", ""),
+        ("input note here", ""),
+        ("note-at-conn-end-tip", ""),
     ].iter().cloned().collect();
 }

@@ -1122,23 +1122,25 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               closeOnActivate: groupValue != kRemoteScrollStyleEdge,
               ffi: widget.ffi,
             ),
-            RdoMenuButton<String>(
-              child: Text(translate('ScrollEdge')),
-              value: kRemoteScrollStyleEdge,
-              groupValue: groupValue,
-              closeOnActivate: false,
-              onChanged: widget.ffi.canvasModel.imageOverflow.value
-                  ? (value) => onChangeScrollStyle(value)
-                  : null,
-              ffi: widget.ffi,
-            ),
-            Offstage(
-                offstage: groupValue != kRemoteScrollStyleEdge,
-                child: EdgeThicknessControl(
-                  value: edgeScrollEdgeThickness.toDouble(),
-                  onChanged: onChangeEdgeScrollEdgeThickness,
-                  colorScheme: colorScheme,
-                )),
+            if (!isWeb) ...[
+              RdoMenuButton<String>(
+                child: Text(translate('ScrollEdge')),
+                value: kRemoteScrollStyleEdge,
+                groupValue: groupValue,
+                closeOnActivate: false,
+                onChanged: widget.ffi.canvasModel.imageOverflow.value
+                    ? (value) => onChangeScrollStyle(value)
+                    : null,
+                ffi: widget.ffi,
+              ),
+              Offstage(
+                  offstage: groupValue != kRemoteScrollStyleEdge,
+                  child: EdgeThicknessControl(
+                    value: edgeScrollEdgeThickness.toDouble(),
+                    onChanged: onChangeEdgeScrollEdgeThickness,
+                    colorScheme: colorScheme,
+                  )),
+            ],
             Divider(),
           ]));
     });
@@ -2163,7 +2165,12 @@ class _CloseMenu extends StatelessWidget {
     return _IconMenuButton(
       assetName: 'assets/close.svg',
       tooltip: 'Close',
-      onPressed: () => closeConnection(id: id),
+      onPressed: () async {
+        if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) {
+          return;
+        }
+        closeConnection(id: id);
+      },
       color: _ToolbarTheme.redColor,
       hoverColor: _ToolbarTheme.hoverRedColor,
     );

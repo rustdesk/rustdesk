@@ -8,7 +8,7 @@ import 'package:xterm/xterm.dart';
 import 'terminal_connection_manager.dart';
 
 class TerminalPage extends StatefulWidget {
-  const TerminalPage({
+  TerminalPage({
     Key? key,
     required this.id,
     required this.password,
@@ -25,15 +25,23 @@ class TerminalPage extends StatefulWidget {
   final bool? isSharedPassword;
   final String? connToken;
   final int terminalId;
+  final SimpleWrapper<State<TerminalPage>?> _lastState = SimpleWrapper(null);
+
+  FFI get ffi => (_lastState.value! as _TerminalPageState)._ffi;
 
   @override
-  State<TerminalPage> createState() => _TerminalPageState();
+  State<TerminalPage> createState() {
+    final state = _TerminalPageState();
+    _lastState.value = state;
+    return state;
+  }
 }
 
 class _TerminalPageState extends State<TerminalPage>
     with AutomaticKeepAliveClientMixin {
   late FFI _ffi;
   late TerminalModel _terminalModel;
+  double? _cellHeight;
 
   @override
   void initState() {
@@ -53,18 +61,30 @@ class _TerminalPageState extends State<TerminalPage>
     debugPrint(
         '[TerminalPage] Terminal model created for terminal ${widget.terminalId}');
 
+    _terminalModel.onResizeExternal = (w, h, pw, ph) {
+      _cellHeight = ph * 1.0;
+
+      // Schedule the setState for the next frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+    };
+
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
 
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.tabController.onSelected?.call(widget.id);
-      
+
       // Check if this is a new connection or additional terminal
       // Note: When a connection exists, the ref count will be > 1 after this terminal is added
-      final isExistingConnection = TerminalConnectionManager.hasConnection(widget.id) && 
-          TerminalConnectionManager.getTerminalCount(widget.id) > 1;
-      
+      final isExistingConnection =
+          TerminalConnectionManager.hasConnection(widget.id) &&
+              TerminalConnectionManager.getTerminalCount(widget.id) > 1;
+
       if (!isExistingConnection) {
         // First terminal - show loading dialog, wait for onReady
         _ffi.dialogManager
@@ -87,30 +107,48 @@ class _TerminalPageState extends State<TerminalPage>
     super.dispose();
   }
 
+  // This method ensures that the number of visible rows is an integer by computing the
+  // extra space left after dividing the available height by the height of a single
+  // terminal row (`_cellHeight`) and distributing it evenly as top and bottom padding.
+  EdgeInsets _calculatePadding(double heightPx) {
+    if (_cellHeight == null) {
+      return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+    }
+    final rows = (heightPx / _cellHeight!).floor();
+    final extraSpace = heightPx - rows * _cellHeight!;
+    final topBottom = extraSpace / 2.0;
+    return EdgeInsets.symmetric(horizontal: 5.0, vertical: topBottom);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: TerminalView(
-        _terminalModel.terminal,
-        controller: _terminalModel.terminalController,
-        autofocus: true,
-        backgroundOpacity: 0.7,
-        padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0),
-        onSecondaryTapDown: (details, offset) async {
-          final selection = _terminalModel.terminalController.selection;
-          if (selection != null) {
-            final text = _terminalModel.terminal.buffer.getText(selection);
-            _terminalModel.terminalController.clearSelection();
-            await Clipboard.setData(ClipboardData(text: text));
-          } else {
-            final data = await Clipboard.getData('text/plain');
-            final text = data?.text;
-            if (text != null) {
-              _terminalModel.terminal.paste(text);
-            }
-          }
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final heightPx = constraints.maxHeight;
+          return TerminalView(
+            _terminalModel.terminal,
+            controller: _terminalModel.terminalController,
+            autofocus: true,
+            backgroundOpacity: 0.7,
+            padding: _calculatePadding(heightPx),
+            onSecondaryTapDown: (details, offset) async {
+              final selection = _terminalModel.terminalController.selection;
+              if (selection != null) {
+                final text = _terminalModel.terminal.buffer.getText(selection);
+                _terminalModel.terminalController.clearSelection();
+                await Clipboard.setData(ClipboardData(text: text));
+              } else {
+                final data = await Clipboard.getData('text/plain');
+                final text = data?.text;
+                if (text != null) {
+                  _terminalModel.terminal.paste(text);
+                }
+              }
+            },
+          );
         },
       ),
     );

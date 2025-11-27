@@ -67,6 +67,8 @@ pub struct Session<T: InvokeUiSession> {
     // Indicate whether the session is reconnected.
     // Used to auto start file transfer after reconnection.
     pub reconnect_count: Arc<AtomicUsize>,
+    pub last_audit_note: Arc<Mutex<String>>,
+    pub audit_guid: Arc<Mutex<String>>,
 }
 
 #[derive(Clone)]
@@ -355,7 +357,10 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn save_edge_scroll_edge_thickness(&self, value: i32) {
-        self.lc.write().unwrap().save_edge_scroll_edge_thickness(value);
+        self.lc
+            .write()
+            .unwrap()
+            .save_edge_scroll_edge_thickness(value);
     }
 
     pub fn save_flutter_option(&self, k: String, v: String) {
@@ -562,9 +567,6 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_audit_server(&self, typ: String) -> String {
-        if LocalConfig::get_option("access_token").is_empty() {
-            return "".to_owned();
-        }
         crate::get_audit_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
@@ -576,6 +578,7 @@ impl<T: InvokeUiSession> Session<T> {
         let url = self.get_audit_server("conn".to_string());
         let id = self.get_id();
         let session_id = self.lc.read().unwrap().session_id;
+        *self.last_audit_note.lock().unwrap() = note.clone();
         std::thread::spawn(move || {
             send_note(url, id, session_id, note);
         });
@@ -1281,6 +1284,8 @@ impl<T: InvokeUiSession> Session<T> {
         drop(connection_round_state_lock);
 
         let cloned = self.clone();
+        *cloned.audit_guid.lock().unwrap() = String::new();
+        *cloned.last_audit_note.lock().unwrap() = String::new();
         // override only if true
         if true == force_relay {
             self.lc.write().unwrap().force_relay = true;
@@ -1653,7 +1658,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool);
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool, scale: f64);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
     fn set_displays(&self, displays: &Vec<DisplayInfo>);
@@ -1799,6 +1804,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 current.width,
                 current.height,
                 current.cursor_embedded,
+                current.scale,
             );
         }
         self.update_privacy_mode();
@@ -2003,7 +2009,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     }
     let mut remote = Remote::new(handler, receiver, sender);
     remote.io_loop(&key, &token, round).await;
-    remote.sync_jobs_status_to_local().await;
+    let _ = remote.sync_jobs_status_to_local().await;
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
