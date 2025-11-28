@@ -770,7 +770,6 @@ jobs:
       - build-for-windows-flutter
       - build-for-windows-sciter
     runs-on: ubuntu-latest
-    if: ${{ inputs.upload-artifact }}
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@master
