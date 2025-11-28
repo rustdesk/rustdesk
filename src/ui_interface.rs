@@ -1401,10 +1401,12 @@ async fn check_id(
                                 return "Not available";
                             }
                             Ok(register_pk_response::Result::TOO_FREQUENT) => {
-                                return "Too frequent";
+                                ok = true;
+                                //return "Too frequent";
                             }
                             Ok(register_pk_response::Result::NOT_SUPPORT) => {
-                                return "server_not_support";
+                                ok = true;
+                                //return "server_not_support";
                             }
                             Ok(register_pk_response::Result::SERVER_ERROR) => {
                                 return "Server error";
