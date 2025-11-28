@@ -95,31 +95,172 @@ class _TerminalPageState extends State<TerminalPage>
   }
 
   Widget buildBody() {
+    const double heightFloatingKeyboard = 100;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: TerminalView(
-        _terminalModel.terminal,
-        controller: _terminalModel.terminalController,
-        autofocus: true,
-        textStyle: _getTerminalStyle(),
-        backgroundOpacity: 0.7,
-        padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0),
-        onSecondaryTapDown: (details, offset) async {
-          final selection = _terminalModel.terminalController.selection;
-          if (selection != null) {
-            final text = _terminalModel.terminal.buffer.getText(selection);
-            _terminalModel.terminalController.clearSelection();
-            await Clipboard.setData(ClipboardData(text: text));
-          } else {
-            final data = await Clipboard.getData('text/plain');
-            final text = data?.text;
-            if (text != null) {
-              _terminalModel.terminal.paste(text);
-            }
-          }
-        },
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: TerminalView(
+              _terminalModel.terminal,
+              controller: _terminalModel.terminalController,
+              autofocus: true,
+              textStyle: _getTerminalStyle(),
+              backgroundOpacity: 0.7,
+              padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 2.0, bottom: 2.0 + heightFloatingKeyboard),
+              onSecondaryTapDown: (details, offset) async {
+                final selection = _terminalModel.terminalController.selection;
+                if (selection != null) {
+                  final text = _terminalModel.terminal.buffer.getText(selection);
+                  _terminalModel.terminalController.clearSelection();
+                  await Clipboard.setData(ClipboardData(text: text));
+                } else {
+                  final data = await Clipboard.getData('text/plain');
+                  final text = data?.text;
+                  if (text != null) {
+                    _terminalModel.terminal.paste(text);
+                  }
+                }
+              },
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: heightFloatingKeyboard,
+            child: _buildFloatingKeyboard(),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildFloatingKeyboard() {
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 200),
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        padding: EdgeInsets.zero,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildKeyButton('Esc'),
+                const SizedBox(width: 2),
+                _buildKeyButton('/'),
+                const SizedBox(width: 2),
+                _buildKeyButton(':'),
+                const SizedBox(width: 2),
+                _buildKeyButton('?'),
+                const SizedBox(width: 2),
+                _buildKeyButton('Home'),
+                const SizedBox(width: 2),
+                _buildKeyButton('↑'),
+                const SizedBox(width: 2),
+                _buildKeyButton('End'),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildKeyButton('Tab'),
+                const SizedBox(width: 2),
+                _buildKeyButton('Ctrl+C'),
+                const SizedBox(width: 2),
+                _buildKeyButton('-'),
+                const SizedBox(width: 2),
+                _buildKeyButton('!'),
+                const SizedBox(width: 2),
+                _buildKeyButton('←'),
+                const SizedBox(width: 2),
+                _buildKeyButton('↓'),
+                const SizedBox(width: 2),
+                _buildKeyButton('→'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKeyButton(String label) {
+    return ElevatedButton(
+      onPressed: () {
+        _sendKeyToTerminal(label);
+      },
+      child: Text(label),
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size(48, 32),
+        padding: EdgeInsets.zero,
+        textStyle: const TextStyle(fontSize: 12),
+        backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+        foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+
+  void _sendKeyToTerminal(String key) {
+    String? send;
+
+    switch (key) {
+      case 'Esc':
+        send = '\x1B';
+        break;
+      case 'Tab':
+        send = '\t';
+        break;
+      case 'Ctrl+C':
+        send = '\x03';
+        break;
+
+      case '↑':
+        send = '\x1B[A';
+        break;
+      case '↓':
+        send = '\x1B[B';
+        break;
+      case '→':
+        send = '\x1B[C';
+        break;
+      case '←':
+        send = '\x1B[D';
+        break;
+
+      case 'Home':
+        send = '\x1B[H';
+        break;
+      case 'End':
+        send = '\x1B[F';
+        break;
+
+      case '/':
+        send = '/';
+        break;
+      case ':':
+        send = ':';
+        break;
+      case '?':
+        send = '?';
+        break;
+      case '-':
+        send = '-';
+        break;
+      case '!':
+        send = '!';
+        break;
+    }
+
+    if (send != null) {
+      _terminalModel.sendVirtualKey(send);
+    }
   }
 
   // https://github.com/TerminalStudio/xterm.dart/issues/42#issuecomment-877495472
