@@ -1,14 +1,16 @@
 name: Build the flutter version of the RustDesk
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
       upload-artifact:
+        description: 'Upload artifacts'
         type: boolean
         default: true
       upload-tag:
+        description: 'Tag name'
         type: string
-        default: "nightly"
+        default: "manual-build"
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -283,6 +285,7 @@ jobs:
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
+    if: False
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     # Temporarily disable this action due to additional test is needed.
@@ -433,7 +436,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   build-rustdesk-ios:
-    if: ${{ inputs.upload-artifact }}
+    if: False
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -553,6 +556,7 @@ jobs:
 
 
   build-for-macOS:
+    if: False
     name: ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -760,6 +764,7 @@ jobs:
             rustdesk*-${{ matrix.job.arch }}.dmg
 
   publish_unsigned:
+    if: False
     needs:
       - build-for-macOS
       - build-for-windows-flutter
@@ -803,6 +808,7 @@ jobs:
           files: rustdesk-${{ env.VERSION }}-unsigned.tar.gz
 
   build-rustdesk-android:
+    if: False
     needs: [generate-bridge]
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
