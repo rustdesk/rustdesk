@@ -16,6 +16,7 @@ import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_hbb/models/server_config_model.dart' as multi;
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desktop_settings.dart';
@@ -23,6 +24,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
@@ -1506,6 +1508,27 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   bool locked = !isWeb && bind.mainIsInstalled();
 
   final scrollController = ScrollController();
+  String? _selectedConfigId;
+  final _nameCtrl = TextEditingController();
+  final _idServerCtrl = TextEditingController();
+  final _relayCtrl = TextEditingController();
+  final _apiCtrl = TextEditingController();
+  final _keyCtrl = TextEditingController();
+  final RxString _idError = ''.obs;
+  final RxString _relayError = ''.obs;
+  final RxString _apiError = ''.obs;
+  bool _isApplying = false;
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    _nameCtrl.dispose();
+    _idServerCtrl.dispose();
+    _relayCtrl.dispose();
+    _apiCtrl.dispose();
+    _keyCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1611,84 +1634,379 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         );
 
     final outgoingOnly = bind.isOutgoingOnly();
-
     final divider = const Divider(height: 1, indent: 16, endIndent: 16);
-    return _Card(
-      title: 'Network',
+    return ChangeNotifierProvider.value(
+      value: gFFI.serverModel,
+      child: Consumer<ServerModel>(builder: (context, model, child) {
+        final List<Widget> connectionOptions = [];
+        if (!hideProxy) {
+          connectionOptions.add(listTile(
+            icon: Icons.network_ping_outlined,
+            title: 'Socks5/Http(s) Proxy',
+            onTap: changeSocks5Proxy,
+          ));
+        }
+        if (!hideWebSocket) {
+          if (connectionOptions.isNotEmpty) {
+            connectionOptions.add(divider);
+          }
+          connectionOptions.add(switchWidget(
+              Icons.web_asset_outlined,
+              'Use WebSocket',
+              '${translate('websocket_tip')}\n\n${translate('server-oss-not-support-tip')}',
+              kOptionAllowWebSocket));
+        }
+        if (!isWeb) {
+          connectionOptions.add(futureBuilder(
+            future: bind.mainIsUsingPublicServer(),
+            hasData: (isUsingPublicServer) {
+              if (isUsingPublicServer) {
+                return Offstage();
+              } else {
+                return Column(
+                  children: [
+                    if (connectionOptions.isNotEmpty) divider,
+                    switchWidget(
+                        Icons.no_encryption_outlined,
+                        'Allow insecure TLS fallback',
+                        'allow-insecure-tls-fallback-tip',
+                        kOptionAllowInsecureTLSFallback),
+                    if (!outgoingOnly) divider,
+                    if (!outgoingOnly)
+                      listTile(
+                        icon: Icons.lan_outlined,
+                        title: 'Disable UDP',
+                        showTooltip: true,
+                        tooltipMessage:
+                            '${translate('disable-udp-tip')}\n\n${translate('server-oss-not-support-tip')}',
+                        trailing: Switch(
+                          value:
+                              bind.mainGetOptionSync(key: kOptionDisableUdp) ==
+                                  'Y',
+                          onChanged: locked || isOptionFixed(kOptionDisableUdp)
+                              ? null
+                              : (value) async {
+                                  await bind.mainSetOption(
+                                      key: kOptionDisableUdp,
+                                      value: value ? 'Y' : 'N');
+                                  setState(() {});
+                                },
+                        ),
+                      ),
+                  ],
+                );
+              }
+            },
+          ));
+        }
+
+        return _Card(
+          title: 'Network',
+          children: [
+            if (!hideServer)
+              _buildServerConfigManager(
+                  context: context, model: model, enabled: !locked),
+            if (!hideServer && connectionOptions.isNotEmpty)
+              SizedBox(height: 12),
+            if (connectionOptions.isNotEmpty)
+              Container(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: connectionOptions,
+                ),
+              ),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildServerConfigManager(
+      {required BuildContext context,
+      required ServerModel model,
+      required bool enabled}) {
+    final configs = model.serverConfigs;
+    if (_selectedConfigId != null) {
+      final match = model.findServerConfigById(_selectedConfigId!);
+      if (match != null) {
+        _syncControllers(match);
+      }
+    } else if (configs.isNotEmpty) {
+      _syncControllers(configs.first);
+    }
+    final hasSelection = _selectedConfigId != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!hideServer)
-                listTile(
-                  icon: Icons.dns_outlined,
-                  title: 'ID/Relay Server',
-                  onTap: () => showServerSettings(gFFI.dialogManager, setState),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              translate('ID/Relay Server'),
+              style: TextStyle(fontSize: _kContentFontSize),
+            ),
+            Row(
+              children: [
+                IconButton(
+                  tooltip: translate('Add'),
+                  icon: Icon(Icons.add),
+                  onPressed: enabled ? () => _addConfig(model) : null,
                 ),
-              if (!hideProxy && !hideServer) divider,
-              if (!hideProxy)
-                listTile(
-                  icon: Icons.network_ping_outlined,
-                  title: 'Socks5/Http(s) Proxy',
-                  onTap: changeSocks5Proxy,
+                IconButton(
+                  tooltip: translate('Delete'),
+                  icon: Icon(Icons.delete_outline),
+                  onPressed: enabled && hasSelection
+                      ? () => _deleteConfig(model)
+                      : null,
                 ),
-              if (!hideWebSocket && (!hideServer || !hideProxy)) divider,
-              if (!hideWebSocket)
-                switchWidget(
-                    Icons.web_asset_outlined,
-                    'Use WebSocket',
-                    '${translate('websocket_tip')}\n\n${translate('server-oss-not-support-tip')}',
-                    kOptionAllowWebSocket),
-              if (!isWeb)
-                futureBuilder(
-                  future: bind.mainIsUsingPublicServer(),
-                  hasData: (isUsingPublicServer) {
-                    if (isUsingPublicServer) {
-                      return Offstage();
-                    } else {
-                      return Column(
-                        children: [
-                          if (!hideServer || !hideProxy || !hideWebSocket)
-                            divider,
-                          switchWidget(
-                              Icons.no_encryption_outlined,
-                              'Allow insecure TLS fallback',
-                              'allow-insecure-tls-fallback-tip',
-                              kOptionAllowInsecureTLSFallback),
-                          if (!outgoingOnly) divider,
-                          if (!outgoingOnly)
-                            listTile(
-                              icon: Icons.lan_outlined,
-                              title: 'Disable UDP',
-                              showTooltip: true,
-                              tooltipMessage:
-                                  '${translate('disable-udp-tip')}\n\n${translate('server-oss-not-support-tip')}',
-                              trailing: Switch(
-                                value: bind.mainGetOptionSync(
-                                        key: kOptionDisableUdp) ==
-                                    'Y',
-                                onChanged:
-                                    locked || isOptionFixed(kOptionDisableUdp)
-                                        ? null
-                                        : (value) async {
-                                            await bind.mainSetOption(
-                                                key: kOptionDisableUdp,
-                                                value: value ? 'Y' : 'N');
-                                            setState(() {});
-                                          },
-                              ),
-                            ),
-                        ],
-                      );
-                    }
-                  },
+              ],
+            ),
+          ],
+        ),
+        SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 2,
+              child: Container(
+                height: 220,
+                decoration: BoxDecoration(
+                  border: Border.all(color: MyTheme.border),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-            ],
-          ),
+                child: configs.isEmpty
+                    ? Center(child: Text('请新增配置'))
+                    : ListView.separated(
+                        itemCount: configs.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1, indent: 12, endIndent: 12),
+                        itemBuilder: (_, index) {
+                          final cfg = configs[index];
+                          final selected = cfg.id == _selectedConfigId;
+                          return ListTile(
+                            selected: selected,
+                            title: Text(
+                                cfg.name.isEmpty
+                                    ? 'Config ${index + 1}'
+                                    : cfg.name,
+                                overflow: TextOverflow.ellipsis),
+                            subtitle: cfg.idServer.isEmpty
+                                ? null
+                                : Text(cfg.idServer,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 12)),
+                            onTap: enabled
+                                ? () {
+                                    _syncControllers(cfg);
+                                    setState(() {});
+                                  }
+                                : null,
+                          );
+                        },
+                      ),
+              ),
+            ),
+            SizedBox(width: 16),
+            Expanded(
+              flex: 3,
+              child: hasSelection
+                  ? _buildConfigForm(model: model, enabled: enabled)
+                  : Center(child: Text('请新增配置')),
+            ),
+          ],
         ),
       ],
     );
+  }
+
+  Widget _buildConfigForm(
+      {required ServerModel model, required bool enabled}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTextField(
+            label: '配置名称', controller: _nameCtrl, enabled: enabled),
+        SizedBox(height: 8),
+        _buildTextField(
+            label: 'ID Server',
+            controller: _idServerCtrl,
+            enabled: enabled,
+            error: _idError),
+        SizedBox(height: 8),
+        _buildTextField(
+            label: 'Relay Server',
+            controller: _relayCtrl,
+            enabled: enabled,
+            error: _relayError),
+        SizedBox(height: 8),
+        _buildTextField(
+            label: 'API Server',
+            controller: _apiCtrl,
+            enabled: enabled,
+            error: _apiError),
+        SizedBox(height: 8),
+        _buildTextField(
+            label: 'Key', controller: _keyCtrl, enabled: enabled),
+        SizedBox(height: 12),
+        Row(
+          children: [
+            ElevatedButton(
+              onPressed: enabled ? () => _saveConfig(model) : null,
+              child: Text(translate('Save')),
+            ),
+            SizedBox(width: 8),
+            ElevatedButton(
+              onPressed:
+                  enabled && !_isApplying ? () => _applyConfig(model) : null,
+              child: _isApplying
+                  ? SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text('应用/设为当前'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTextField(
+      {required String label,
+      required TextEditingController controller,
+      bool enabled = true,
+      RxString? error}) {
+    if (error == null) {
+      return TextField(
+        controller: controller,
+        enabled: enabled,
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      );
+    }
+    return Obx(() => TextField(
+          controller: controller,
+          enabled: enabled,
+          decoration: InputDecoration(
+            labelText: label,
+            errorText: error.value.isEmpty ? null : error.value,
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ));
+  }
+
+  void _syncControllers(multi.ServerConfig config) {
+    _selectedConfigId = config.id;
+    _nameCtrl.text = config.name;
+    _idServerCtrl.text = config.idServer;
+    _relayCtrl.text = config.relayServer;
+    _apiCtrl.text = config.apiServer;
+    _keyCtrl.text = config.key;
+    _clearErrors();
+  }
+
+  void _clearControllers() {
+    _nameCtrl.clear();
+    _idServerCtrl.clear();
+    _relayCtrl.clear();
+    _apiCtrl.clear();
+    _keyCtrl.clear();
+    _clearErrors();
+  }
+
+  void _clearErrors() {
+    _idError.value = '';
+    _relayError.value = '';
+    _apiError.value = '';
+  }
+
+  Future<void> _addConfig(ServerModel model) async {
+    final base = await _readCurrentServerOptions();
+    final cfg = multi.ServerConfig(
+      id: const Uuid().v4(),
+      name: 'Config ${model.serverConfigs.length + 1}',
+      idServer: base.idServer,
+      relayServer: base.relayServer,
+      apiServer: base.apiServer,
+      key: base.key,
+    );
+    await model.upsertServerConfig(cfg);
+    setState(() {
+      _syncControllers(cfg);
+    });
+  }
+
+  Future<void> _deleteConfig(ServerModel model) async {
+    if (_selectedConfigId == null) return;
+    await model.removeServerConfig(_selectedConfigId!);
+    setState(() {
+      if (model.serverConfigs.isNotEmpty) {
+        _syncControllers(model.serverConfigs.first);
+      } else {
+        _selectedConfigId = null;
+        _clearControllers();
+      }
+    });
+  }
+
+  Future<void> _saveConfig(ServerModel model) async {
+    if (_selectedConfigId == null) return;
+    final cfg = _currentFormConfig(_selectedConfigId!);
+    await model.upsertServerConfig(cfg);
+    showToast('保存成功');
+  }
+
+  Future<void> _applyConfig(ServerModel model) async {
+    if (_selectedConfigId == null) return;
+    _clearErrors();
+    setState(() {
+      _isApplying = true;
+    });
+    final success = await setServerConfig(
+      [_idServerCtrl, _relayCtrl, _apiCtrl, _keyCtrl],
+      [_idError, _relayError, _apiError],
+      ServerConfig(
+        idServer: _idServerCtrl.text,
+        relayServer: _relayCtrl.text,
+        apiServer: _apiCtrl.text,
+        key: _keyCtrl.text,
+      ),
+    );
+    setState(() {
+      _isApplying = false;
+    });
+    if (success) {
+      final cfg = _currentFormConfig(_selectedConfigId!);
+      await model.upsertServerConfig(cfg);
+      showToast('已应用当前配置');
+    }
+  }
+
+  multi.ServerConfig _currentFormConfig(String id) {
+    return multi.ServerConfig(
+      id: id,
+      name: _nameCtrl.text.trim().isEmpty ? 'Config' : _nameCtrl.text.trim(),
+      idServer: _idServerCtrl.text.trim(),
+      relayServer: _relayCtrl.text.trim(),
+      apiServer: _apiCtrl.text.trim(),
+      key: _keyCtrl.text.trim(),
+    );
+  }
+
+  Future<ServerConfig> _readCurrentServerOptions() async {
+    try {
+      final options = jsonDecode(await bind.mainGetOptions());
+      if (options is Map<String, dynamic>) {
+        return ServerConfig.fromOptions(options);
+      }
+    } catch (_) {}
+    return ServerConfig();
   }
 }
 

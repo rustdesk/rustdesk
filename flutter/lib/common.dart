@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +39,7 @@ import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
 import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
+import 'models/server_config_model.dart' as multi;
 import 'models/platform_model.dart';
 
 import 'package:flutter_hbb/native/win32.dart'
@@ -2511,6 +2513,8 @@ connect(BuildContext context, String id,
     String? connToken,
     bool? isSharedPassword}) async {
   if (id == '') return;
+  final rawId = id.replaceAll(' ', '');
+  await _applyServerConfigForPeer(rawId);
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
       if (Get.isRegistered<IDTextEditingController>()) {
@@ -2662,6 +2666,31 @@ connect(BuildContext context, String id,
   if (!currentFocus.hasPrimaryFocus) {
     currentFocus.unfocus();
   }
+}
+
+Future<void> _applyServerConfigForPeer(String peerId) async {
+  final peer = _findPeerById(peerId);
+  final configId = peer?.serverConfigId;
+  if (configId == null || configId.isEmpty) return;
+  final cfg = gFFI.serverModel.findServerConfigById(configId);
+  if (cfg == null) return;
+  await _overrideServerOptions(cfg);
+}
+
+Peer? _findPeerById(String id) {
+  return gFFI.abModel.find(id) ??
+      gFFI.recentPeersModel.peers.firstWhereOrNull((e) => e.id == id) ??
+      gFFI.favoritePeersModel.peers.firstWhereOrNull((e) => e.id == id) ??
+      gFFI.lanPeersModel.peers.firstWhereOrNull((e) => e.id == id) ??
+      gFFI.groupModel.peers.firstWhereOrNull((e) => e.id == id);
+}
+
+Future<void> _overrideServerOptions(multi.ServerConfig cfg) async {
+  await bind.mainSetOption(
+      key: 'custom-rendezvous-server', value: cfg.idServer);
+  await bind.mainSetOption(key: 'relay-server', value: cfg.relayServer);
+  await bind.mainSetOption(key: 'api-server', value: cfg.apiServer);
+  await bind.mainSetOption(key: 'key', value: cfg.key);
 }
 
 Map<String, String> getHttpHeaders() {

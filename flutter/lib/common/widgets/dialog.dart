@@ -9,6 +9,7 @@ import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/server_config_model.dart' as multi;
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -2113,6 +2114,101 @@ void renameDialog(
                 validator: validator,
               ).workaroundFreezeLinuxMint(),
             ),
+          ),
+          // NOT use Offstage to wrap LinearProgressIndicator
+          Obx(() =>
+              isInProgress.value ? const LinearProgressIndicator() : Offstage())
+        ],
+      ),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: cancel,
+    );
+  });
+}
+
+void editPeerInfoDialog(
+    {required String oldName,
+    String? initialServerConfigId,
+    required List<multi.ServerConfig> configs,
+    FormFieldValidator<String>? validator,
+    required Future<void> Function(String alias, String? serverConfigId)
+        onSubmit,
+    Function? onCancel}) async {
+  RxBool isInProgress = false.obs;
+  var controller = TextEditingController(text: oldName);
+  final formKey = GlobalKey<FormState>();
+  String? selectedId = initialServerConfigId ?? '';
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      final alias = controller.text.trim();
+      if (validator != null && formKey.currentState?.validate() == false) {
+        return;
+      }
+      isInProgress.value = true;
+      await onSubmit(alias, selectedId?.isEmpty ?? true ? null : selectedId);
+      isInProgress.value = false;
+      close();
+    }
+
+    cancel() {
+      onCancel?.call();
+      close();
+    }
+
+    final dropdownItems = <DropdownMenuItem<String>>[
+      DropdownMenuItem(value: '', child: Text('不指定')),
+      ...configs.map((c) => DropdownMenuItem(
+          value: c.id,
+          child: Text(c.name.isEmpty ? '未命名配置' : c.name,
+              overflow: TextOverflow.ellipsis))),
+    ];
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.edit_rounded, color: MyTheme.accent),
+          Text('编辑设备信息').paddingOnly(left: 10),
+        ],
+      ),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Form(
+            key: formKey,
+            child: TextFormField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(labelText: translate('Name')),
+              validator: validator,
+            ).workaroundFreezeLinuxMint(),
+          ),
+          SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: selectedId,
+            decoration: InputDecoration(
+              labelText: '服务器标签',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: dropdownItems,
+            onChanged: (v) {
+              selectedId = v;
+              setState(() {});
+            },
           ),
           // NOT use Offstage to wrap LinearProgressIndicator
           Obx(() =>

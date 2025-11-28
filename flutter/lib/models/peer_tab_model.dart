@@ -66,6 +66,8 @@ class PeerTabModel with ChangeNotifier {
   bool get isShiftDown => _isShiftDown;
   String _lastId = '';
   String get lastId => _lastId;
+  String? _serverConfigFilterId;
+  String? get serverConfigFilterId => _serverConfigFilterId;
 
   PeerTabModel(this.parent) {
     // visible
@@ -120,6 +122,13 @@ class PeerTabModel with ChangeNotifier {
   setCurrentTab(int index) {
     if (_currentTab != index) {
       _currentTab = index;
+      notifyListeners();
+    }
+  }
+
+  void setServerConfigFilterId(String? id) {
+    if (_serverConfigFilterId != id) {
+      _serverConfigFilterId = id;
       notifyListeners();
     }
   }

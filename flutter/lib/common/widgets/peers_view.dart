@@ -360,9 +360,18 @@ class _PeersViewState extends State<_PeersView>
 
   Future<List<Peer>>? matchPeers(
       String searchText, String sortedBy, List<Peer> peers) async {
-    if (widget.peerFilter != null) {
-      peers = peers.where((peer) => widget.peerFilter!(peer)).toList();
-    }
+    final selectedServerConfigId = gFFI.peerTabModel.serverConfigFilterId;
+    peers = peers.where((peer) {
+      if (selectedServerConfigId != null &&
+          selectedServerConfigId.isNotEmpty &&
+          (peer.serverConfigId ?? '') != selectedServerConfigId) {
+        return false;
+      }
+      if (widget.peerFilter != null && !widget.peerFilter!(peer)) {
+        return false;
+      }
+      return true;
+    }).toList();
 
     // fallback to id sorting
     if (!PeerSortType.values.contains(sortedBy)) {

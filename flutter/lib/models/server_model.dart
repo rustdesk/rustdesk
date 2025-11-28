@@ -16,6 +16,7 @@ import '../common/formatter/id_formatter.dart';
 import '../desktop/pages/server_page.dart' as desktop;
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
+import 'server_config_model.dart' as multi;
 import 'model.dart';
 
 const kLoginDialogTag = "LOGIN";
@@ -23,6 +24,7 @@ const kLoginDialogTag = "LOGIN";
 const kUseTemporaryPassword = "use-temporary-password";
 const kUsePermanentPassword = "use-permanent-password";
 const kUseBothPasswords = "use-both-passwords";
+const kOptionServerConfigs = 'multi-server-configs';
 
 class ServerModel with ChangeNotifier {
   bool _isStart = false; // Android MainService status
@@ -129,9 +131,15 @@ class ServerModel with ChangeNotifier {
 
   WeakReference<FFI> parent;
 
+  /// 多服务器配置集合，纯客户端管理。
+  final List<multi.ServerConfig> _serverConfigs = [];
+  List<multi.ServerConfig> get serverConfigs => List.unmodifiable(_serverConfigs);
+
   ServerModel(this.parent) {
     _emptyIdShow = translate("Generating ...");
     _serverId = IDTextEditingController(text: _emptyIdShow);
+    // 异步拉取本地持久化的服务器配置列表。
+    loadServerConfigs();
 
     /*
     // initital _hideCm at startup
@@ -805,7 +813,66 @@ class ServerModel with ChangeNotifier {
       }
     }
   }
+
+  multi.ServerConfig? findServerConfigById(String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final config in _serverConfigs) {
+      if (config.id == id) return config;
+    }
+    return null;
+  }
+
+  Future<void> loadServerConfigs() async {
+    try {
+      final raw = bind.mainGetLocalOption(key: kOptionServerConfigs);
+      if (raw.isEmpty) {
+        _serverConfigs.clear();
+        notifyListeners();
+        return;
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      _serverConfigs
+        ..clear()
+        ..addAll(decoded.whereType<Map<String, dynamic>>().map(
+              (m) => multi.ServerConfig.fromJson(m),
+            ));
+      notifyListeners();
+    } catch (e) {
+      debugPrint('loadServerConfigs failed: $e');
+    }
+  }
+
+  Future<void> upsertServerConfig(multi.ServerConfig config) async {
+    final index =
+        _serverConfigs.indexWhere((element) => element.id == config.id);
+    if (index >= 0) {
+      _serverConfigs[index] = config;
+    } else {
+      _serverConfigs.add(config);
+    }
+    await _persistServerConfigs();
+    notifyListeners();
+  }
+
+  Future<void> removeServerConfig(String id) async {
+    _serverConfigs.removeWhere((element) => element.id == id);
+    await _persistServerConfigs();
+    notifyListeners();
+  }
+
+  Future<void> _persistServerConfigs() async {
+    try {
+      final serialized =
+          jsonEncode(_serverConfigs.map((e) => e.toJson()).toList());
+      await bind.mainSetLocalOption(
+          key: kOptionServerConfigs, value: serialized);
+    } catch (e) {
+      debugPrint('persist server configs failed: $e');
+    }
+  }
 }
+
 
 enum ClientType {
   remote,

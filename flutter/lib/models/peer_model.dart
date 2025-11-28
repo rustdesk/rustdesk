@@ -22,6 +22,7 @@ class Peer {
   String device_group_name;
   String note;
   bool? sameServer;
+  String? serverConfigId; // 关联的服务器配置标签
 
   String getId() {
     if (alias != '') {
@@ -45,7 +46,9 @@ class Peer {
         loginName = json['loginName'] ?? '',
         device_group_name = json['device_group_name'] ?? '',
         note = json['note'] is String ? json['note'] : '',
-        sameServer = json['same_server'];
+        sameServer = json['same_server'],
+        serverConfigId =
+            json['server_config_id'] ?? json['serverConfigId'] ?? null;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -64,6 +67,7 @@ class Peer {
       'device_group_name': device_group_name,
       'note': note,
       'same_server': sameServer,
+      'server_config_id': serverConfigId,
     };
   }
 
@@ -109,6 +113,7 @@ class Peer {
     required this.device_group_name,
     required this.note,
     this.sameServer,
+    this.serverConfigId,
   });
 
   Peer.loading()
@@ -127,6 +132,7 @@ class Peer {
           loginName: '',
           device_group_name: '',
           note: '',
+          serverConfigId: null,
         );
   bool equal(Peer other) {
     return id == other.id &&
@@ -142,7 +148,8 @@ class Peer {
         rdpUsername == other.rdpUsername &&
         device_group_name == other.device_group_name &&
         loginName == other.loginName &&
-        note == other.note;
+        note == other.note &&
+        serverConfigId == other.serverConfigId;
   }
 
   Peer.copy(Peer other)
@@ -161,7 +168,8 @@ class Peer {
             loginName: other.loginName,
             device_group_name: other.device_group_name,
             note: other.note,
-            sameServer: other.sameServer);
+            sameServer: other.sameServer,
+            serverConfigId: other.serverConfigId);
 }
 
 enum UpdateEvent { online, load }

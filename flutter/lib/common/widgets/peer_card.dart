@@ -5,8 +5,10 @@ import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/models/server_config_model.dart' as multi;
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
+import 'package:collection/collection.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
@@ -512,6 +514,13 @@ abstract class BasePeerCard extends StatelessWidget {
       {required this.peer, required this.tab, this.menuPadding, Key? key})
       : super(key: key);
 
+  Peer? _findPeerById(String id) {
+    return gFFI.abModel.find(id) ??
+        gFFI.recentPeersModel.peers.firstWhereOrNull((e) => e.id == id) ??
+        gFFI.favoritePeersModel.peers.firstWhereOrNull((e) => e.id == id) ??
+        gFFI.lanPeersModel.peers.firstWhereOrNull((e) => e.id == id);
+  }
+
   @override
   Widget build(BuildContext context) {
     return _PeerCard(
@@ -761,9 +770,18 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () async {
         String oldName = await _getAlias(id);
-        renameDialog(
+        final peer = _findPeerById(id);
+        final configs = gFFI.serverModel.serverConfigs;
+        final initialConfigId = peer?.serverConfigId;
+        editPeerInfoDialog(
             oldName: oldName,
-            onSubmit: (String newName) async {
+            initialServerConfigId: initialConfigId,
+            configs: configs,
+            onSubmit: (String newName, String? serverConfigId) async {
+              final normalizedId =
+                  (serverConfigId == null || serverConfigId.isEmpty)
+                      ? null
+                      : serverConfigId;
               if (newName != oldName) {
                 if (tab == PeerTabIndex.ab) {
                   await gFFI.abModel.changeAlias(id: id, alias: newName);
@@ -773,6 +791,17 @@ abstract class BasePeerCard extends StatelessWidget {
                   showToast(translate('Successful'));
                   _update();
                 }
+              }
+              if ((peer?.serverConfigId ?? '') != (normalizedId ?? '')) {
+                peer?.serverConfigId = normalizedId;
+                if (tab == PeerTabIndex.ab) {
+                  await gFFI.abModel
+                      .changeServerConfigForPeers([id], normalizedId);
+                }
+                await bind.mainSetPeerOption(
+                    id: id,
+                    key: 'server_config_id',
+                    value: normalizedId ?? '');
               }
             });
       },
