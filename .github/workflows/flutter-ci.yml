@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - master
+      - MultipleTags
     paths-ignore:
       - ".github/**"
       - "docs/**"
