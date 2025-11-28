@@ -1,0 +1,12 @@
+name: Manual Client Build
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  build-client:
+    uses: ./.github/workflows/flutter-build.yml
+    with:
+      upload-artifact: true
+      upload-tag: "manual-build"
+    secrets: inherit
