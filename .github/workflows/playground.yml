@@ -89,7 +89,6 @@ jobs:
         uses: actions/checkout@v3
         with:
           ref: ${{ matrix.job.ref }}
-          submodules: recursive
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
