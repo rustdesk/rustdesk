@@ -1,0 +1,123 @@
+name: Android Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'src/**'
+      - 'flutter/**'
+      - '.github/workflows/android-build.yml'
+
+env:
+  FLUTTER_VERSION: "3.24.5"
+  RUST_VERSION: "1.75"
+  NDK_VERSION: "r27c"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-android:
+    needs: generate-bridge
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target: [aarch64-linux-android]
+        include:
+          - target: aarch64-linux-android
+            android_abi: arm64-v8a
+            flutter_arch: android-arm64
+    
+    steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake curl git g++ pkg-config libclang-dev nasm ninja-build llvm-dev libgtk-3-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          if ! ./flutter/build_android_deps.sh "${{ matrix.android_abi }}"; then
+            echo "Build failed, printing logs..."
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r logfile; do
+              echo "=== $logfile ==="
+              cat "$logfile"
+              echo "=================="
+            done
+            exit 1
+          fi
+        shell: bash
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.target }}
+          components: "rustfmt"
+
+      - name: Build Rust library
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          cargo install cargo-ndk --locked
+          ./flutter/ndk_arm64.sh
+          mkdir -p ./flutter/android/app/src/main/jniLibs/${{ matrix.android_abi }}
+          cp ./target/${{ matrix.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/${{ matrix.android_abi }}/librustdesk.so
+
+      - name: Build Flutter APK
+        working-directory: ./flutter
+        run: |
+          # Copy libc++_shared.so
+          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.target }}/libc++_shared.so ./android/app/src/main/jniLibs/${{ matrix.android_abi }}/
+          
+          # Build APK
+          flutter build apk --release --target-platform ${{ matrix.flutter_arch }} --split-per-abi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-${{ matrix.android_abi }}.apk
+          path: flutter/build/app/outputs/flutter-apk/app-${{ matrix.android_abi }}-release.apk
