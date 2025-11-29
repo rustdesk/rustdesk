@@ -222,4 +222,3 @@ object SamsungDexUtils {
         }
     }
 }
-}
