@@ -281,14 +281,9 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
-                "togglePointerCapture" -> {
-                    if (call.arguments is Boolean) {
-                        togglePointerCapture(call.arguments as Boolean)
-                        result.success(null)
-                    } else {
-                        result.success(false)
-                    }
-                }
+                // NOTE: togglePointerCapture was removed - pointer capture changes mouse events
+                // from absolute to relative coordinates which Flutter's input system doesn't handle.
+                // Meta key capture alone provides the primary DeX optimization value.
                 "isDexEnabled" -> {
                     result.success(SamsungDexUtils.isDexEnabled(this))
                 }
@@ -426,28 +421,10 @@ class MainActivity : FlutterActivity() {
         SamsungDexUtils.setMetaKeyCapture(this, enable)
     }
 
-    /**
-     * Toggle pointer capture for immersive mouse control.
-     * When enabled, the app receives raw relative mouse movements.
-     */
-    private fun togglePointerCapture(enable: Boolean) {
-        val view = window.decorView
-        if (enable) {
-            view.requestPointerCapture()
-            Log.d(logTag, "Pointer capture enabled")
-        } else {
-            view.releasePointerCapture()
-            Log.d(logTag, "Pointer capture released")
-        }
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus) {
-            // Automatically release pointer capture when window loses focus
-            window.decorView.releasePointerCapture()
-        }
-    }
+    // NOTE: togglePointerCapture was removed - pointer capture changes mouse events
+    // from absolute to relative coordinates which Flutter's input system doesn't handle.
+    // See termux-x11's TouchInputHandler.java for how they handle captured pointer events
+    // with AXIS_RELATIVE_X/Y - this would require significant changes to Flutter input handling.
 
     override fun onStop() {
         super.onStop()

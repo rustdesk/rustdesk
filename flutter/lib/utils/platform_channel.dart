@@ -60,19 +60,11 @@ class RdPlatformChannel {
     }
   }
 
-  /// Toggle pointer capture for immersive mouse control.
-  /// When enabled, the app receives raw relative mouse movements
-  /// instead of absolute coordinates.
-  /// 
-  /// Useful for games and applications that need precise mouse control.
-  Future<void> togglePointerCapture(bool enable) async {
-    if (!isAndroid) return;
-    try {
-      await _mainChannel.invokeMethod('togglePointerCapture', enable);
-    } on PlatformException catch (e) {
-      debugPrint("Failed to toggle pointer capture: '${e.message}'.");
-    }
-  }
+  // NOTE: Pointer capture (togglePointerCapture) was removed because it breaks
+  // normal mouse input. When pointer capture is enabled, Android delivers
+  // relative movement deltas instead of absolute coordinates, which Flutter's
+  // input system doesn't handle correctly. The DeX Meta key capture alone
+  // provides the primary value for remote desktop use cases.
   
   /// Check if Samsung DeX mode is currently enabled.
   /// Returns true if DeX is active, false otherwise.
