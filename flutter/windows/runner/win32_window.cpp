@@ -7,6 +7,7 @@
 
 #include <cstdlib> // for getenv and _putenv
 #include <cstring> // for strcmp
+#include <string> // for std::wstring
 
 namespace {
 
@@ -14,6 +15,40 @@ constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
+
+// Try to load icon from data\flutter_assets\assets\icon.ico if it exists.
+// Returns nullptr if the file doesn't exist or can't be loaded.
+HICON LoadCustomIcon() {
+  static HICON custom_icon_ = nullptr;
+  if (custom_icon_ != nullptr) {
+    return custom_icon_;
+  }
+  wchar_t exe_path[MAX_PATH];
+  if (!GetModuleFileNameW(nullptr, exe_path, MAX_PATH)) {
+    return nullptr;
+  }
+  
+  std::wstring icon_path = exe_path;
+  size_t last_slash = icon_path.find_last_of(L"\\/");
+  if (last_slash == std::wstring::npos) {
+    return nullptr;
+  }
+  
+  icon_path = icon_path.substr(0, last_slash + 1);
+  icon_path += L"data\\flutter_assets\\assets\\icon.ico";
+  
+  // Check if file exists and load it
+  DWORD file_attr = GetFileAttributesW(icon_path.c_str());
+  if (file_attr == INVALID_FILE_ATTRIBUTES || 
+      (file_attr & FILE_ATTRIBUTE_DIRECTORY)) {
+    return nullptr;
+  }
+  
+  custom_icon_ = (HICON)LoadImageW(
+      nullptr, icon_path.c_str(), IMAGE_ICON, 0, 0,
+      LR_LOADFROMFILE | LR_DEFAULTSIZE);
+  return custom_icon_;
+}
 
 using EnableNonClientDpiScaling = BOOL __stdcall(HWND hwnd);
 
@@ -81,8 +116,16 @@ const wchar_t* WindowClassRegistrar::GetWindowClass() {
     window_class.cbClsExtra = 0;
     window_class.cbWndExtra = 0;
     window_class.hInstance = GetModuleHandle(nullptr);
-    window_class.hIcon =
-        LoadIcon(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    
+    // Try to load icon from data\flutter_assets\assets\icon.ico if it exists
+    HICON custom_icon = LoadCustomIcon();
+    if (custom_icon != nullptr) {
+      window_class.hIcon = custom_icon;
+    } else {
+      window_class.hIcon =
+          LoadIcon(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    }
+    
     window_class.hbrBackground = 0;
     window_class.lpszMenuName = nullptr;
     window_class.lpfnWndProc = Win32Window::WndProc;
@@ -128,6 +171,13 @@ bool Win32Window::CreateAndShow(const std::wstring& title,
 
   if (!window) {
     return false;
+  }
+
+  // Try to set window icon from data\flutter_assets\assets\icon.ico if it exists
+  HICON custom_icon = LoadCustomIcon();
+  if (custom_icon != nullptr) {
+    SendMessage(window, WM_SETICON, ICON_SMALL, (LPARAM)custom_icon);
+    SendMessage(window, WM_SETICON, ICON_BIG, (LPARAM)custom_icon);
   }
 
   if (!showOnTaskBar) {
