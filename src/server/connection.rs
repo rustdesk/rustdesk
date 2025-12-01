@@ -3,7 +3,7 @@ use super::{input_service::*, *};
 use crate::clipboard::try_empty_clipboard_files;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::{update_clipboard, ClipboardSide};
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
 use crate::clipboard_file::*;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
@@ -243,7 +243,7 @@ pub struct Connection {
     // by peer
     disable_audio: bool,
     // by peer
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     enable_file_transfer: bool,
     // by peer
     audio_sender: Option<MediaSender>,
@@ -414,7 +414,7 @@ impl Connection {
             multi_ui_session: false,
             ip: "".to_owned(),
             disable_audio: false,
-            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+            #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
             enable_file_transfer: false,
             disable_clipboard: false,
             disable_keyboard: false,

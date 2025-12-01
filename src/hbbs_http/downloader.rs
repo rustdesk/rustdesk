@@ -1,3 +1,5 @@
+// RustC doesn't recognize call sites for some functions
+#![allow(dead_code)]
 use super::create_http_client_async_with_url;
 use hbb_common::{
     bail,
