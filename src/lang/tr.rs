@@ -684,7 +684,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("{}-to-update-tip", "{} şimdi kapanacak ve yeni sürüm kurulacak."),
         ("download-new-version-failed-tip", "İndirme başarısız oldu. Tekrar deneyebilir veya 'İndir' düğmesine tıklayarak sürüm sayfasından manuel olarak indirip güncelleyebilirsiniz."),
         ("Auto update", "Otomatik güncelleme"),
-        ("update-failed-check-msi-tip", "Kurulum yöntemi denetimi başarısız oldu. Sürüm sayfasından indirmek ve manuel olarak yükseltmek için lütfen "İndir" düğmesine tıklayın."),
+        ("update-failed-check-msi-tip", "Kurulum yöntemi denetimi başarısız oldu. Sürüm sayfasından indirmek ve manuel olarak yükseltmek için lütfen \"İndir\" düğmesine tıklayın."),
         ("websocket_tip", "WebSocket kullanıldığında yalnızca röle bağlantıları desteklenir."),
         ("Use WebSocket", "WebSocket'ı kullan"),
         ("Trackpad speed", "İzleme paneli hızı"),
