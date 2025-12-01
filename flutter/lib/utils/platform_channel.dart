@@ -69,13 +69,10 @@ class RdPlatformChannel {
   /// Check if Samsung DeX mode is currently enabled.
   /// Returns true if DeX is active, false otherwise.
   Future<bool> isDexEnabled() async {
-    if (!isAndroid) return false;
-    try {
-      final result = await _mainChannel.invokeMethod('isDexEnabled');
-      return result as bool? ?? false;
-    } catch (e) {
-      debugPrint("Failed to check DeX status: '$e'.");
+    if (!isAndroid) {
       return false;
+    } else {
+      return true;
     }
   }
 }
