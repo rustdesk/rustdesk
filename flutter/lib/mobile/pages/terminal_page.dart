@@ -32,6 +32,8 @@ class _TerminalPageState extends State<TerminalPage>
     with AutomaticKeepAliveClientMixin {
   late FFI _ffi;
   late TerminalModel _terminalModel;
+  final GlobalKey _keyboardKey = GlobalKey();
+  double _keyboardHeight = 0;
 
   // For web only.
   // 'monospace' does not work on web, use Google Fonts, `??` is only for null safety.
@@ -69,6 +71,8 @@ class _TerminalPageState extends State<TerminalPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
+
+      _updateKeyboardHeight();
     });
     _ffi.ffiModel.updateEventListener(_ffi.sessionId, widget.id);
   }
@@ -94,8 +98,19 @@ class _TerminalPageState extends State<TerminalPage>
     );
   }
 
+  void _updateKeyboardHeight() {
+    if (_keyboardKey.currentContext != null) {
+      final renderBox = _keyboardKey.currentContext!.findRenderObject() as RenderBox;
+      final newHeight = renderBox.size.height;
+      if (newHeight != _keyboardHeight) {
+        setState(() {
+          _keyboardHeight = newHeight;
+        });
+      }
+    }
+  }
+
   Widget buildBody() {
-    const double heightFloatingKeyboard = 100;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
@@ -107,7 +122,7 @@ class _TerminalPageState extends State<TerminalPage>
               autofocus: true,
               textStyle: _getTerminalStyle(),
               backgroundOpacity: 0.7,
-              padding: const EdgeInsets.only(left: 5.0, right: 5.0, top: 2.0, bottom: 2.0 + heightFloatingKeyboard),
+              padding: EdgeInsets.only(left: 5.0, right: 5.0, top: 2.0, bottom: 2.0 + _keyboardHeight),
               onSecondaryTapDown: (details, offset) async {
                 final selection = _terminalModel.terminalController.selection;
                 if (selection != null) {
@@ -124,13 +139,7 @@ class _TerminalPageState extends State<TerminalPage>
               },
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: heightFloatingKeyboard,
-            child: _buildFloatingKeyboard(),
-          ),
+          _buildFloatingKeyboard(),
         ],
       ),
     );
@@ -143,6 +152,7 @@ class _TerminalPageState extends State<TerminalPage>
       right: 0,
       bottom: 0,
       child: Container(
+        key: _keyboardKey,
         color: Theme.of(context).scaffoldBackgroundColor,
         padding: EdgeInsets.zero,
         child: Column(
