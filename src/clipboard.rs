@@ -427,17 +427,8 @@ impl ClipboardContext {
                 // Don't use `hbb_common::platform::linux::is_kde()` here.
                 // It's not correct in the server process.
                 #[cfg(target_os = "linux")]
-                let is_kde_x11 = {
-                    use hbb_common::platform::linux::CMD_SH;
-                    let is_kde = std::process::Command::new(CMD_SH.as_str())
-                        .arg("-c")
-                        .arg("ps -e | grep -E kded[0-9]+ | grep -v grep")
-                        .stdout(std::process::Stdio::piped())
-                        .output()
-                        .map(|o| !o.stdout.is_empty())
-                        .unwrap_or(false);
-                    is_kde && crate::platform::linux::is_x11()
-                };
+                let is_kde_x11 = hbb_common::platform::linux::is_kde_session()
+                    && crate::platform::linux::is_x11();
                 #[cfg(target_os = "macos")]
                 let is_kde_x11 = false;
                 let clear_holder_text = if is_kde_x11 {
