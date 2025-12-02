@@ -34,6 +34,7 @@ class _TerminalPageState extends State<TerminalPage>
   late TerminalModel _terminalModel;
   final GlobalKey _keyboardKey = GlobalKey();
   double _keyboardHeight = 0;
+  double? _cellHeight;
 
   // For web only.
   // 'monospace' does not work on web, use Google Fonts, `??` is only for null safety.
@@ -64,6 +65,10 @@ class _TerminalPageState extends State<TerminalPage>
     debugPrint(
         '[TerminalPage] Terminal model created for terminal ${widget.terminalId}');
 
+    _terminalModel.onResizeExternal = (w, h, pw, ph) {
+      _cellHeight = ph * 1.0;
+    };
+
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
 
@@ -86,6 +91,24 @@ class _TerminalPageState extends State<TerminalPage>
     TerminalConnectionManager.releaseConnection(widget.id);
   }
 
+  void _updateKeyboardHeight() {
+    if (_keyboardKey.currentContext != null) {
+      final renderBox = _keyboardKey.currentContext!.findRenderObject() as RenderBox;
+      _keyboardHeight = renderBox.size.height;
+    }
+  }
+
+  EdgeInsets _calculatePadding(double heightPx) {
+    if (_cellHeight == null) {
+      return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+    }
+    final realHeight = heightPx - _keyboardHeight;
+    final rows = (realHeight / _cellHeight!).floor();
+    final extraSpace = realHeight - rows * _cellHeight!;
+    final topBottom = extraSpace / 2.0;
+    return EdgeInsets.only(left: 5.0, right: 5.0, top: topBottom, bottom: topBottom + _keyboardHeight);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -98,45 +121,41 @@ class _TerminalPageState extends State<TerminalPage>
     );
   }
 
-  void _updateKeyboardHeight() {
-    if (_keyboardKey.currentContext != null) {
-      final renderBox = _keyboardKey.currentContext!.findRenderObject() as RenderBox;
-      final newHeight = renderBox.size.height;
-      if (newHeight != _keyboardHeight) {
-        setState(() {
-          _keyboardHeight = newHeight;
-        });
-      }
-    }
-  }
-
   Widget buildBody() {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           Positioned.fill(
-            child: TerminalView(
-              _terminalModel.terminal,
-              controller: _terminalModel.terminalController,
-              autofocus: true,
-              textStyle: _getTerminalStyle(),
-              backgroundOpacity: 0.7,
-              padding: EdgeInsets.only(left: 5.0, right: 5.0, top: 2.0, bottom: 2.0 + _keyboardHeight),
-              onSecondaryTapDown: (details, offset) async {
-                final selection = _terminalModel.terminalController.selection;
-                if (selection != null) {
-                  final text = _terminalModel.terminal.buffer.getText(selection);
-                  _terminalModel.terminalController.clearSelection();
-                  await Clipboard.setData(ClipboardData(text: text));
-                } else {
-                  final data = await Clipboard.getData('text/plain');
-                  final text = data?.text;
-                  if (text != null) {
-                    _terminalModel.terminal.paste(text);
-                  }
-                }
-              },
+            child: SafeArea(
+              top: true,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final heightPx = constraints.maxHeight;
+                  return TerminalView(
+                    _terminalModel.terminal,
+                    controller: _terminalModel.terminalController,
+                    autofocus: true,
+                    textStyle: _getTerminalStyle(),
+                    backgroundOpacity: 0.7,
+                    padding: _calculatePadding(heightPx),
+                    onSecondaryTapDown: (details, offset) async {
+                      final selection = _terminalModel.terminalController.selection;
+                      if (selection != null) {
+                        final text = _terminalModel.terminal.buffer.getText(selection);
+                        _terminalModel.terminalController.clearSelection();
+                        await Clipboard.setData(ClipboardData(text: text));
+                      } else {
+                        final data = await Clipboard.getData('text/plain');
+                        final text = data?.text;
+                        if (text != null) {
+                          _terminalModel.terminal.paste(text);
+                        }
+                      }
+                    },
+                  );
+                },
+              ),
             ),
           ),
           _buildFloatingKeyboard(),
