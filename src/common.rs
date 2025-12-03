@@ -115,6 +115,31 @@ pub fn global_init() -> bool {
             crate::server::wayland::init();
         }
     }
+    
+    // Захардкоженные настройки сервера (неизменяемые пользователем)
+    {
+        use hbb_common::config::{OVERWRITE_SETTINGS, RENDEZVOUS_SERVERS, RS_PUB_KEY};
+        let mut settings = OVERWRITE_SETTINGS.write().unwrap();
+        
+        // ID/Rendezvous сервер
+        if let Some(server) = RENDEZVOUS_SERVERS.first() {
+            settings.insert("custom-rendezvous-server".to_string(), server.to_string());
+        }
+        
+        // Relay сервер
+        if let Some(server) = RENDEZVOUS_SERVERS.first() {
+            settings.insert("relay-server".to_string(), server.to_string());
+        }
+        
+        // Публичный ключ сервера
+        settings.insert("key".to_string(), RS_PUB_KEY.to_string());
+        
+        // API Server (для авторизации и адресной книги)
+        if let Some(server) = RENDEZVOUS_SERVERS.first() {
+            settings.insert("api-server".to_string(), format!("http://{}:21114", server));
+        }
+    }
+    
     true
 }
 
@@ -841,7 +866,11 @@ pub fn get_sysinfo() -> serde_json::Value {
     {
         os = format!("{os} - {}", system.os_version().unwrap_or_default());
     }
-    let hostname = hostname(); // sys.hostname() return localhost on android in my test
+    let hostname = hostname();
+    
+    // Получаем IP адрес
+    let ip = get_local_ip();
+    
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let out;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -851,6 +880,7 @@ pub fn get_sysinfo() -> serde_json::Value {
         "memory": format!("{memory}GB"),
         "os": os,
         "hostname": hostname,
+        "ip": ip,
     });
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -860,6 +890,22 @@ pub fn get_sysinfo() -> serde_json::Value {
         }
     }
     out
+}
+
+#[inline]
+fn get_local_ip() -> String {
+    use std::net::UdpSocket;
+    match UdpSocket::bind("0.0.0.0:0") {
+        Ok(socket) => {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(addr) = socket.local_addr() {
+                    return addr.ip().to_string();
+                }
+            }
+        }
+        Err(_) => {}
+    }
+    "Unknown".to_string()
 }
 
 #[inline]

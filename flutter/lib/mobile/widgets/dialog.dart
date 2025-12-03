@@ -180,8 +180,19 @@ void showServerSettingsWithValue(
     apiServerMsg,
   ];
 
+  // Проверяем, заблокированы ли настройки сервера
+  final isIdServerFixed = isOptionFixed('custom-rendezvous-server');
+  final isRelayServerFixed = isOptionFixed('relay-server');
+  final isApiServerFixed = isOptionFixed('api-server');
+  final isKeyFixed = isOptionFixed('key');
+  final allFixed = isIdServerFixed && isRelayServerFixed && isApiServerFixed && isKeyFixed;
+
   dialogManager.show((setState, close, context) {
     Future<bool> submit() async {
+      if (allFixed) {
+        close();
+        return true;
+      }
       setState(() {
         isInProgress = true;
       });
@@ -201,25 +212,29 @@ void showServerSettingsWithValue(
 
     Widget buildField(
         String label, TextEditingController controller, String errorMsg,
-        {String? Function(String?)? validator, bool autofocus = false}) {
+        {String? Function(String?)? validator, bool autofocus = false, bool readOnly = false}) {
       if (isDesktop || isWeb) {
         return Row(
           children: [
             SizedBox(
               width: 120,
-              child: Text(label),
+              child: Text(label, style: readOnly ? TextStyle(color: Colors.grey) : null),
             ),
             SizedBox(width: 8),
             Expanded(
               child: TextFormField(
                 controller: controller,
+                readOnly: readOnly,
+                enabled: !readOnly,
                 decoration: InputDecoration(
                   errorText: errorMsg.isEmpty ? null : errorMsg,
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  filled: readOnly,
+                  fillColor: readOnly ? Colors.grey.withOpacity(0.1) : null,
                 ),
                 validator: validator,
-                autofocus: autofocus,
+                autofocus: autofocus && !readOnly,
               ).workaroundFreezeLinuxMint(),
             ),
           ],
@@ -228,9 +243,13 @@ void showServerSettingsWithValue(
 
       return TextFormField(
         controller: controller,
+        readOnly: readOnly,
+        enabled: !readOnly,
         decoration: InputDecoration(
           labelText: label,
           errorText: errorMsg.isEmpty ? null : errorMsg,
+          filled: readOnly,
+          fillColor: readOnly ? Colors.grey.withOpacity(0.1) : null,
         ),
         validator: validator,
       ).workaroundFreezeLinuxMint();
@@ -240,7 +259,7 @@ void showServerSettingsWithValue(
       title: Row(
         children: [
           Expanded(child: Text(translate('ID/Relay Server'))),
-          ...ServerConfigImportExportWidgets(controllers, errMsgs),
+          if (!allFixed) ...ServerConfigImportExportWidgets(controllers, errMsgs),
         ],
       ),
       content: ConstrainedBox(
@@ -250,17 +269,18 @@ void showServerSettingsWithValue(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   buildField(translate('ID Server'), idCtrl, idServerMsg.value,
-                      autofocus: true),
+                      autofocus: true, readOnly: isIdServerFixed),
                   SizedBox(height: 8),
                   if (!isIOS && !isWeb) ...[
                     buildField(translate('Relay Server'), relayCtrl,
-                        relayServerMsg.value),
+                        relayServerMsg.value, readOnly: isRelayServerFixed),
                     SizedBox(height: 8),
                   ],
                   buildField(
                     translate('API Server'),
                     apiCtrl,
                     apiServerMsg.value,
+                    readOnly: isApiServerFixed,
                     validator: (v) {
                       if (v != null && v.isNotEmpty) {
                         if (!(v.startsWith('http://') ||
@@ -272,7 +292,7 @@ void showServerSettingsWithValue(
                     },
                   ),
                   SizedBox(height: 8),
-                  buildField('Key', keyCtrl, ''),
+                  buildField('Key', keyCtrl, '', readOnly: isKeyFixed),
                   if (isInProgress)
                     Padding(
                       padding: EdgeInsets.only(top: 8),
@@ -282,23 +302,29 @@ void showServerSettingsWithValue(
               )),
         ),
       ),
-      actions: [
-        dialogButton('Cancel', onPressed: () {
-          close();
-        }, isOutline: true),
-        dialogButton(
-          'OK',
-          onPressed: () async {
-            if (await submit()) {
-              close();
-              showToast(translate('Successful'));
-              upSetState?.call(() {});
-            } else {
-              showToast(translate('Failed'));
-            }
-          },
-        ),
-      ],
+      actions: allFixed
+          ? [
+              dialogButton('Close', onPressed: () {
+                close();
+              }),
+            ]
+          : [
+              dialogButton('Cancel', onPressed: () {
+                close();
+              }, isOutline: true),
+              dialogButton(
+                'OK',
+                onPressed: () async {
+                  if (await submit()) {
+                    close();
+                    showToast(translate('Successful'));
+                    upSetState?.call(() {});
+                  } else {
+                    showToast(translate('Failed'));
+                  }
+                },
+              ),
+            ],
     );
   });
 }

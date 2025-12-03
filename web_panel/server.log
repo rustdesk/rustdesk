@@ -1,0 +1,37 @@
+
+╔═══════════════════════════════════════════════════════════════════╗
+║          RustDesk Web Management Panel v2.0                       ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Web Panel:  https://0.0.0.0:21114                                ║
+║  API:        https://0.0.0.0:21114/api/                           ║
+║  Login:      admin / admin123                                     ║
+║  SSL:        ✅ ENABLED                            ║
+╚═══════════════════════════════════════════════════════════════════╝
+    
+ * Serving Flask app 'server'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on https://127.0.0.1:21114
+ * Running on https://192.168.0.76:21114
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 104-764-541
+127.0.0.1 - - [28/Nov/2025 09:37:27] "GET / HTTP/1.1" 302 -
+127.0.0.1 - - [28/Nov/2025 09:37:28] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [28/Nov/2025 09:37:28] "GET /favicon.ico HTTP/1.1" 404 -
+ * Detected change in 'D:\\rustdesk_src\\rustdesk\\web_panel\\server.py', reloading
+
+╔═══════════════════════════════════════════════════════════════════╗
+║          RustDesk Web Management Panel v2.0                       ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Web Panel:  https://0.0.0.0:21114                                ║
+║  API:        https://0.0.0.0:21114/api/                           ║
+║  Login:      admin / admin123                                     ║
+║  SSL:        ✅ ENABLED                            ║
+╚═══════════════════════════════════════════════════════════════════╝
+    
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 104-764-541

@@ -1,0 +1,10 @@
+Flask==2.3.3
+Flask-CORS==4.0.0
+PyJWT==2.8.1
+python-ldap==3.4.3
+
+
+
+
+
+

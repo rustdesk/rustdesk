@@ -46,6 +46,7 @@ class MainActivity : FlutterActivity() {
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
+    private var updateService: UpdateService? = null
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
@@ -61,6 +62,7 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
         )
+        updateService = UpdateService(this)
         initFlutterChannel(flutterMethodChannel!!)
         thread {
             try {
@@ -272,6 +274,65 @@ class MainActivity : FlutterActivity() {
                 }
                 "on_voice_call_closed" -> {
                     onVoiceCallClosed()
+                }
+                "check_for_updates" -> {
+                    updateService?.checkForUpdates(
+                        currentVersion = call.arguments as? String ?: "0.0.0",
+                        onUpdateAvailable = { updateInfo ->
+                            flutterMethodChannel?.invokeMethod(
+                                "on_update_available",
+                                mapOf(
+                                    "version" to updateInfo.version,
+                                    "download_url" to updateInfo.downloadUrl,
+                                    "release_notes" to updateInfo.releaseNotes,
+                                    "file_name" to updateInfo.fileName
+                                )
+                            )
+                        },
+                        onError = { error ->
+                            flutterMethodChannel?.invokeMethod(
+                                "on_update_error",
+                                mapOf("error" to error)
+                            )
+                        }
+                    )
+                    result.success(true)
+                }
+                "download_and_install_update" -> {
+                    if (call.arguments is Map<*, *>) {
+                        val args = call.arguments as Map<*, *>
+                        val updateInfo = UpdateService.UpdateInfo(
+                            version = args["version"] as? String ?: "",
+                            downloadUrl = args["download_url"] as? String ?: "",
+                            releaseNotes = args["release_notes"] as? String ?: "",
+                            fileName = args["file_name"] as? String ?: ""
+                        )
+                        updateService?.downloadAndInstall(
+                            updateInfo = updateInfo,
+                            onProgress = { progress ->
+                                flutterMethodChannel?.invokeMethod(
+                                    "on_update_progress",
+                                    mapOf("progress" to progress)
+                                )
+                            },
+                            onSuccess = {
+                                flutterMethodChannel?.invokeMethod("on_update_installed", null)
+                            },
+                            onError = { error ->
+                                flutterMethodChannel?.invokeMethod(
+                                    "on_update_error",
+                                    mapOf("error" to error)
+                                )
+                            }
+                        )
+                        result.success(true)
+                    } else {
+                        result.success(false)
+                    }
+                }
+                "cancel_update_download" -> {
+                    updateService?.cancelDownload()
+                    result.success(true)
                 }
                 else -> {
                     result.error("-1", "No such method", null)

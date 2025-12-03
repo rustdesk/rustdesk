@@ -97,6 +97,8 @@ const REG_NAME_INSTALL_STARTMENUSHORTCUTS: &str = "STARTMENUSHORTCUTS";
 pub const REG_NAME_INSTALL_PRINTER: &str = "PRINTER";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    // SAFETY: Windows API calls are safe when used correctly.
+    // GetForegroundWindow and GetWindowRect are standard Win32 APIs.
     unsafe {
         let hwnd = GetForegroundWindow();
         let mut rect: RECT = mem::zeroed();
@@ -115,6 +117,8 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
+    // SAFETY: GetCursorPos is a standard Win32 API that writes to the provided POINT struct.
+    // The struct is immediately initialized by the API call.
     unsafe {
         #[allow(invalid_value)]
         let mut out = mem::MaybeUninit::uninit().assume_init();
@@ -128,6 +132,8 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
 pub fn reset_input_cache() {}
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
+    // SAFETY: CURSORINFO struct is initialized by get_cursor_info API call.
+    // cbSize must be set before the call.
     unsafe {
         #[allow(invalid_value)]
         let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
