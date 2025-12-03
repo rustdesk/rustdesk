@@ -184,13 +184,9 @@ prebuild)
 	fi
 
 	# Map NDK version to revision
-
-	NDK_VERSION="$(wget \
-		-qO- \
-		-H "Accept: application/vnd.github+json" \
-		-H "X-GitHub-Api-Version: 2022-11-28" \
-		'https://api.github.com/repos/android/ndk/releases' |
-		jq -r ".[] | select(.tag_name == \"${NDK_VERSION}\") | .body | match(\"ndkVersion \\\"(.*)\\\"\").captures[0].string")"
+	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json \
+	  | jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" \
+	  | sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
 
 	if [ -z "${NDK_VERSION}" ]; then
 		echo "ERROR: Can not map Android NDK codename to revision!" >&2
@@ -414,13 +410,9 @@ build)
 		.github/workflows/flutter-build.yml)"
 
 	# Map NDK version to revision
-
-	NDK_VERSION="$(wget \
-		-qO- \
-		-H "Accept: application/vnd.github+json" \
-		-H "X-GitHub-Api-Version: 2022-11-28" \
-		'https://api.github.com/repos/android/ndk/releases' |
-		jq -r ".[] | select(.tag_name == \"${NDK_VERSION}\") | .body | match(\"ndkVersion \\\"(.*)\\\"\").captures[0].string")"
+	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json \
+	  | jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" \
+	  | sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
 
 	if [ -z "${NDK_VERSION}" ]; then
 		echo "ERROR: Can not map Android NDK codename to revision!" >&2
