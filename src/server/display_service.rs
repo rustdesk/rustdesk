@@ -304,6 +304,12 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
 pub(super) fn check_update_displays(all: &Vec<Display>) {
+    // For compatibility: if only one display, scale remains 1.0 and we use the physical size for `uinput`.
+    // If there are multiple displays, we use the logical size for `uinput` by setting scale to d.scale().
+    #[cfg(target_os = "linux")]
+    let use_logical_scale = !is_x11()
+        && crate::is_server()
+        && scrap::wayland::display::get_displays().displays.len() > 1;
     let displays = all
         .iter()
         .map(|d| {
@@ -314,6 +320,12 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
             #[cfg(target_os = "macos")]
             {
                 scale = d.scale();
+            }
+            #[cfg(target_os = "linux")]
+            {
+                if use_logical_scale {
+                    scale = d.scale();
+                }
             }
             let original_resolution = get_original_resolution(
                 &display_name,
