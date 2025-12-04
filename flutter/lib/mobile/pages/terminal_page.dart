@@ -7,6 +7,8 @@ import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:xterm/xterm.dart';
 import '../../desktop/pages/terminal_connection_manager.dart';
+import '../../consts.dart';
+import 'dart:async';
 
 class TerminalPage extends StatefulWidget {
   const TerminalPage({
@@ -34,7 +36,10 @@ class _TerminalPageState extends State<TerminalPage>
   late TerminalModel _terminalModel;
   final GlobalKey _keyboardKey = GlobalKey();
   double _keyboardHeight = 0;
+  double _sysKeyboardHeight = 0;
   double? _cellHeight;
+  Timer? _keyboardDebounce;
+  late bool _showTerminalControlButton;
 
   // For web only.
   // 'monospace' does not work on web, use Google Fonts, `??` is only for null safety.
@@ -69,6 +74,8 @@ class _TerminalPageState extends State<TerminalPage>
       _cellHeight = ph * 1.0;
     };
 
+    _showTerminalControlButton = mainGetLocalBoolOptionSync(kOptionAllowShowTerminalControlButton);
+
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
 
@@ -77,7 +84,9 @@ class _TerminalPageState extends State<TerminalPage>
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
 
-      _updateKeyboardHeight();
+      if (_showTerminalControlButton) {
+        _updateKeyboardHeight();
+      }
     });
     _ffi.ffiModel.updateEventListener(_ffi.sessionId, widget.id);
   }
@@ -102,11 +111,11 @@ class _TerminalPageState extends State<TerminalPage>
     if (_cellHeight == null) {
       return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
     }
-    final realHeight = heightPx - _keyboardHeight;
+    final realHeight = heightPx - _keyboardHeight - _sysKeyboardHeight;
     final rows = (realHeight / _cellHeight!).floor();
     final extraSpace = realHeight - rows * _cellHeight!;
     final topBottom = extraSpace / 2.0;
-    return EdgeInsets.only(left: 5.0, right: 5.0, top: topBottom, bottom: topBottom + _keyboardHeight);
+    return EdgeInsets.only(left: 5.0, right: 5.0, top: topBottom, bottom: topBottom + _keyboardHeight + _sysKeyboardHeight);
   }
 
   @override
@@ -123,6 +132,7 @@ class _TerminalPageState extends State<TerminalPage>
 
   Widget buildBody() {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
@@ -158,18 +168,27 @@ class _TerminalPageState extends State<TerminalPage>
               ),
             ),
           ),
-          _buildFloatingKeyboard(),
+          if (_showTerminalControlButton) _buildFloatingKeyboard(),
         ],
       ),
     );
   }
 
   Widget _buildFloatingKeyboard() {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 200),
+      duration: Duration.zero,
+      onEnd: () {
+        _keyboardDebounce?.cancel();
+        _keyboardDebounce = Timer(const Duration(milliseconds: 100), () { // Fix flickering when the system keyboard shows and hides
+          setState(() {
+            _sysKeyboardHeight = bottomInset;
+          });
+        });
+      },
       left: 0,
       right: 0,
-      bottom: 0,
+      bottom: bottomInset,
       child: Container(
         key: _keyboardKey,
         color: Theme.of(context).scaffoldBackgroundColor,

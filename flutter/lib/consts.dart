@@ -161,6 +161,7 @@ const String kOptionShowVirtualMouse = "show-virtual-mouse";
 const String kOptionVirtualMouseScale = "virtual-mouse-scale";
 const String kOptionShowVirtualJoystick = "show-virtual-joystick";
 const String kOptionAllowAskForNoteAtEndOfConnection = "allow-ask-for-note";
+const String kOptionAllowShowTerminalControlButton = "allow-show-terminal-control-button";
 
 // network options
 const String kOptionAllowWebSocket = "allow-websocket";
