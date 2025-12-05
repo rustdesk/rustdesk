@@ -12,10 +12,7 @@ use hbb_common::fs::serialize_transfer_job;
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 use hbb_common::{
     allow_err, bail,
-    config::{
-        keys::OPTION_ENABLE_FILE_TRANSFER_HASH_VALIDATION, keys::OPTION_FILE_TRANSFER_MAX_FILES,
-        Config,
-    },
+    config::{keys::OPTION_FILE_TRANSFER_MAX_FILES, Config},
     fs::{self, get_string, is_write_need_confirmation, new_send_confirm, DigestCheckResult},
     log,
     message_proto::*,
@@ -126,6 +123,8 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     file_transfer_enabled: bool,
     #[cfg(target_os = "windows")]
     file_transfer_enabled_peer: bool,
+    /// Read jobs for CM-side file reading (server to client transfers)
+    read_jobs: Vec<fs::TransferJob>,
 }
 
 lazy_static::lazy_static! {
@@ -393,9 +392,16 @@ pub fn switch_back(id: i32) {
 impl<T: InvokeUiCM> IpcTaskRunner<T> {
     async fn run(&mut self) {
         use hbb_common::config::LocalConfig;
+        use hbb_common::tokio::time::{self, Duration, Instant};
+
+        const MILLI1: Duration = Duration::from_millis(1);
+        const SEC30: Duration = Duration::from_secs(30);
 
         // for tmp use, without real conn id
         let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
+        // File timer for processing read_jobs
+        let mut file_timer =
+            crate::rustdesk_interval(time::interval_at(Instant::now() + SEC30, SEC30));
 
         #[cfg(target_os = "windows")]
         let is_authorized = self.cm.is_authorized(self.conn_id);
@@ -488,10 +494,14 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
                                         if let Ok(bytes) = self.stream.next_raw().await {
                                             fs = ipc::FS::WriteBlock{id, file_num, data:bytes.into(), compressed};
-                                            handle_fs(fs, &mut write_jobs, &self.tx, Some(&tx_log)).await;
+                                            handle_fs(fs, &mut write_jobs, &mut self.read_jobs, &self.tx, Some(&tx_log), self.conn_id).await;
                                         }
                                     } else {
-                                        handle_fs(fs, &mut write_jobs, &self.tx, Some(&tx_log)).await;
+                                        handle_fs(fs, &mut write_jobs, &mut self.read_jobs, &self.tx, Some(&tx_log), self.conn_id).await;
+                                    }
+                                    // Activate file timer if there are read jobs
+                                    if !self.read_jobs.is_empty() {
+                                        file_timer = crate::rustdesk_interval(time::interval(MILLI1));
                                     }
                                     let log = fs::serialize_transfer_jobs(&write_jobs);
                                     self.cm.ui_handler.file_transfer_log("transfer", &log);
@@ -645,6 +655,18 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                 Some(job_log) = rx_log.recv() => {
                     self.cm.ui_handler.file_transfer_log("transfer", &job_log);
                 }
+                _ = file_timer.tick() => {
+                    if !self.read_jobs.is_empty() {
+                        let conn_id = self.conn_id;
+                        if let Err(e) = handle_read_jobs_tick(&mut self.read_jobs, &self.tx, conn_id).await {
+                            log::error!("Error processing read jobs: {}", e);
+                        }
+                        let log = fs::serialize_transfer_jobs(&self.read_jobs);
+                        self.cm.ui_handler.file_transfer_log("transfer", &log);
+                    } else {
+                        file_timer = crate::rustdesk_interval(time::interval_at(Instant::now() + SEC30, SEC30));
+                    }
+                }
             }
         }
     }
@@ -664,6 +686,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             file_transfer_enabled: false,
             #[cfg(target_os = "windows")]
             file_transfer_enabled_peer: false,
+            read_jobs: Vec::new(),
         };
 
         while task_runner.running {
@@ -765,7 +788,17 @@ pub async fn start_listen<T: InvokeUiCM>(
                 cm.new_message(current_id, text);
             }
             Some(Data::FS(fs)) => {
-                handle_fs(fs, &mut write_jobs, &tx, None).await;
+                // Android doesn't need CM-side file reading (no need_validate_file_read_access)
+                let mut read_jobs_unused: Vec<fs::TransferJob> = Vec::new();
+                handle_fs(
+                    fs,
+                    &mut write_jobs,
+                    &mut read_jobs_unused,
+                    &tx,
+                    None,
+                    current_id,
+                )
+                .await;
             }
             Some(Data::Close) => {
                 break;
@@ -792,8 +825,10 @@ pub async fn start_listen<T: InvokeUiCM>(
 async fn handle_fs(
     fs: ipc::FS,
     write_jobs: &mut Vec<fs::TransferJob>,
+    read_jobs: &mut Vec<fs::TransferJob>,
     tx: &UnboundedSender<Data>,
     tx_log: Option<&UnboundedSender<String>>,
+    conn_id: i32,
 ) {
     match fs {
         ipc::FS::ReadEmptyDirs {
@@ -839,9 +874,10 @@ async fn handle_fs(
                 return;
             }
 
-            // Check write access to the parent directory
+            // Check that the path contains a filename; OS will handle permission and
+            // existence checks when we actually create or write the files.
             let path_obj = Path::new(&path);
-            let Some(filename) = path_obj.file_name() else {
+            let Some(_filename) = path_obj.file_name() else {
                 log::warn!("Write access denied for {}: No filename provided", path);
                 send_raw(
                     fs::new_error(
@@ -854,14 +890,9 @@ async fn handle_fs(
                 return;
             };
 
-            let canonical_base = match validate_parent_and_canonicalize(&path_obj) {
-                Ok(parent) => parent.join(filename),
-                Err(e) => {
-                    log::warn!("Write access denied for {}: {}", path, e);
-                    send_raw(fs::new_error(id, e, file_num), tx);
-                    return;
-                }
-            };
+            // Base path for the write operation. Any invalid paths or permission
+            // errors will be reported by the OS when the transfer job runs.
+            let base_path = PathBuf::from(&path);
 
             // Convert files to FileEntry and validate write paths
             let file_entries: Vec<FileEntry> = files
@@ -874,7 +905,7 @@ async fn handle_fs(
                 .collect();
 
             // Validate that all intermediate directories for each file are accessible
-            if let Err(e) = validate_write_paths(&canonical_base, &file_entries) {
+            if let Err(e) = validate_write_paths(&base_path, &file_entries) {
                 log::warn!("Write path validation failed for {}: {}", path, e);
                 send_raw(fs::new_error(id, e, file_num), tx);
                 return;
@@ -1006,14 +1037,55 @@ async fn handle_fs(
         ipc::FS::Rename { id, path, new_name } => {
             rename_file(path, new_name, id, tx).await;
         }
-        ipc::FS::ValidateReadAccess {
+        ipc::FS::ReadFile {
             path,
             id,
             file_num,
             include_hidden,
             conn_id,
+            overwrite_detection,
         } => {
-            validate_read_access(path, file_num, include_hidden, id, conn_id, tx).await;
+            start_read_job(
+                path,
+                file_num,
+                include_hidden,
+                id,
+                conn_id,
+                overwrite_detection,
+                read_jobs,
+                tx,
+            )
+            .await;
+        }
+        ipc::FS::CancelRead { id, conn_id: _ } => {
+            if let Some(job) = fs::remove_job(id, read_jobs) {
+                tx_log.map(|tx: &UnboundedSender<String>| {
+                    tx.send(serialize_transfer_job(&job, false, true, ""))
+                });
+            }
+        }
+        ipc::FS::SendConfirmForRead {
+            id,
+            file_num: _,
+            skip,
+            offset_blk,
+            conn_id: _,
+        } => {
+            if let Some(job) = fs::get_job(id, read_jobs) {
+                let req = FileTransferSendConfirmRequest {
+                    id,
+                    file_num: job.file_num(),
+                    union: if skip {
+                        Some(file_transfer_send_confirm_request::Union::Skip(true))
+                    } else {
+                        Some(file_transfer_send_confirm_request::Union::OffsetBlk(
+                            offset_blk,
+                        ))
+                    },
+                    ..Default::default()
+                };
+                job.confirm(&req).await;
+            }
         }
         ipc::FS::ReadAllFiles {
             path,
@@ -1025,123 +1097,6 @@ async fn handle_fs(
         }
         _ => {}
     }
-}
-
-fn compute_hash(path: &Path) -> ResultType<Option<String>> {
-    if !Config::get_bool_option(OPTION_ENABLE_FILE_TRANSFER_HASH_VALIDATION) {
-        // Verify read access; close immediately.
-        let _ = std::fs::File::open(path)?;
-        return Ok(None);
-    }
-    let mut file = std::fs::File::open(path)?;
-    fs::compute_file_hash_sync(&mut file, Some(fs::MAX_HASH_BYTES))
-}
-
-// Although the following function is typically only needed on Windows,
-// we include it for other platforms (except iOS) as well to maintain consistency,
-// and it does not add significant overhead.
-//
-/// Validates that all parent directories of the given path are accessible (readable).
-/// This prevents bypassing directory-level access restrictions by directly accessing
-/// child files/directories using their full paths.
-///
-/// On Windows, denying access to a directory only prevents listing its contents,
-/// but child items can still be accessed if their full paths are known.
-/// This function ensures that if any parent directory is inaccessible,
-/// the entire path is considered inaccessible.
-///
-/// NOTE: Android uses a different permission model (scoped storage / SAF) where
-/// parent directories like `/storage` or `/storage/emulated` may not be
-/// listable even though a child such as `/storage/emulated/0` is fully
-/// accessible to the app. Enforcing directory-list permissions on all
-/// ancestors would therefore break legitimate access on Android.
-/// For this reason we only apply the strict ancestor checks on desktop
-/// platforms and treat Android as a special case.
-#[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
-fn check_parent_directories_access(path: &Path) -> ResultType<()> {
-    // ancestors() yields the path itself first, skip(1) to start from parent
-    for ancestor in path.ancestors().skip(1) {
-        // Skip empty ancestor path components
-        if ancestor.as_os_str().is_empty() {
-            continue;
-        }
-
-        // Check directory list permission for all ancestors including root.
-        // While canonicalize() validates path reachability (Traverse permission),
-        // we also enforce List permission to prevent accessing files when parent
-        // directories are intentionally hidden. This implements defense-in-depth:
-        // even if root directory list access is rarely restricted, checking it
-        // ensures consistent security policy across all path levels.
-        if ancestor.is_dir() {
-            if let Err(e) = std::fs::read_dir(ancestor) {
-                log::error!(
-                    "access denied to parent directory '{}': {}",
-                    ancestor.display(),
-                    e
-                );
-                bail!("access denied: insufficient permissions to access path");
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Android: do not enforce ancestor listability checks.
-///
-/// On Android, storage access typically goes through scoped storage/S-A-F.
-/// It is common that parent directories are not listable while a specific
-/// subtree (e.g. `/storage/emulated/0`) remains readable. Requiring all
-/// ancestors to be listable would cause legitimate paths to be rejected and
-/// break file transfer browsing.
-#[cfg(target_os = "android")]
-fn check_parent_directories_access(_path: &Path) -> ResultType<()> {
-    Ok(())
-}
-
-/// Validates and canonicalizes a path, checking parent directory access.
-/// It validates the path itself exists (via canonicalize) and
-/// that all parent directories are accessible.
-/// This is the main helper function to ensure a path is accessible before operations.
-#[inline]
-#[cfg(not(any(target_os = "ios")))]
-fn validate_and_canonicalize(path: &Path) -> ResultType<PathBuf> {
-    let canonical = path.canonicalize()?;
-    check_parent_directories_access(&canonical)?;
-    Ok(canonical)
-}
-
-/// Validates parent directory access and canonicalizes the parent path.
-/// Used for operations like create_dir where the target itself doesn't exist yet.
-#[inline]
-#[cfg(not(any(target_os = "ios")))]
-fn validate_parent_and_canonicalize(path: &Path) -> ResultType<PathBuf> {
-    let parent = match path.parent() {
-        Some(p) => p,
-        None => {
-            bail!("invalid path: no parent directory");
-        }
-    };
-    let canonical = parent.canonicalize()?;
-    check_parent_directories_access(&canonical)?;
-    Ok(canonical)
-}
-
-/// Validates parent directory access without canonicalizing the target path.
-/// This is used for operations like remove_file and remove_dir where we need to
-/// preserve symlink semantics (remove the link itself, not its target).
-#[inline]
-#[cfg(not(any(target_os = "ios")))]
-fn validate_parent_access(path: &Path) -> ResultType<()> {
-    let parent = match path.parent() {
-        Some(p) => p,
-        None => {
-            bail!("invalid path: no parent directory");
-        }
-    };
-    // Canonicalize and validate the parent directory to ensure it's accessible
-    let canonical_parent = parent.canonicalize()?;
-    check_parent_directories_access(&canonical_parent)?;
-    Ok(())
 }
 
 /// Validates that a file name does not contain path traversal sequences.
@@ -1213,6 +1168,8 @@ fn validate_transfer_file_names(files: &[(String, u64)]) -> ResultType<()> {
 /// its accessibility. This allows write operations into directories that don't exist yet.
 #[cfg(not(any(target_os = "ios")))]
 fn validate_write_paths(canonical_base: &PathBuf, files: &[FileEntry]) -> ResultType<()> {
+    use std::fs::read_dir;
+
     for file in files {
         if file.name.is_empty() {
             continue;
@@ -1227,144 +1184,228 @@ fn validate_write_paths(canonical_base: &PathBuf, files: &[FileEntry]) -> Result
         // Stop at the first existing directory and validate it.
         let full_path = canonical_base.join(&file.name);
         let mut current = Some(full_path.as_path());
+        let mut found_existing = None;
 
         while let Some(path) = current {
             if path.exists() {
-                // Found the first existing ancestor. Validate it with
-                // validate_and_canonicalize (which checks the entire parent
-                // chain). Return a generic error to avoid leaking paths.
-                if let Err(e) = validate_and_canonicalize(path) {
-                    log::debug!("validate_and_canonicalize failed: {:?}", e);
-                    bail!("access denied");
-                }
+                found_existing = Some(path.to_path_buf());
                 break;
             }
-
             current = path.parent();
+        }
+
+        // Validate that the first existing directory is accessible
+        if let Some(existing_path) = found_existing {
+            if existing_path.is_dir() {
+                // Try to read the directory to check access permissions
+                if let Err(e) = read_dir(&existing_path) {
+                    bail!(
+                        "access denied for path '{}': {}",
+                        existing_path.display(),
+                        e
+                    );
+                }
+            }
+            // If it's a file, we'll let the actual write operation handle the error
         }
     }
 
     Ok(())
 }
 
+/// Start a read job in CM for file transfer from server to client.
+/// This mirrors the logic of `TransferJob::new_read` used in connection.rs,
+/// creates the job, adds it to `read_jobs`, and sends the initial file list
+/// response to connection.rs via IPC.
 #[cfg(not(any(target_os = "ios")))]
-async fn validate_read_access(
+async fn start_read_job(
     path: String,
     file_num: i32,
     include_hidden: bool,
     id: i32,
     conn_id: i32,
+    overwrite_detection: bool,
+    read_jobs: &mut Vec<fs::TransferJob>,
     tx: &UnboundedSender<Data>,
 ) {
-    let result = spawn_blocking(move || {
-        let path_obj = Path::new(&path);
-
-        match validate_and_canonicalize(&path_obj) {
-            Ok(canonical_path) => {
-                let canonical_str = canonical_path.to_string_lossy().to_string();
-
-                if canonical_path.is_file() {
-                    match std::fs::metadata(&canonical_path) {
-                        Ok(meta) => {
-                            let size = meta.len();
-                            let modified_time = meta
-                                .modified()
-                                .ok()
-                                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                                .map(|d| d.as_secs())
-                                .unwrap_or(0);
-
-                            let hash = compute_hash(&canonical_path)?;
-
-                            let file_entry = ipc::ValidatedFile {
-                                name: String::new(),
-                                size,
-                                modified_time,
-                                hash,
-                            };
-                            Ok((path, vec![file_entry]))
-                        }
-                        Err(e) => {
-                            log::error!("stat file failed: {}", e);
-                            bail!("stat file failed")
-                        }
-                    }
-                } else if canonical_path.is_dir() {
-                    match fs::get_recursive_files(&canonical_str, include_hidden) {
-                        Ok(files) => {
-                            // Check file count limit to prevent excessive I/O
-                            if let Err(msg) = check_file_count_limit(files.len()) {
-                                bail!(msg);
-                            }
-
-                            let mut validated_files = Vec::with_capacity(files.len());
-                            for f in files {
-                                let full_path = canonical_path.join(&f.name);
-
-                                // Validate parent directory access for files in subdirectories
-                                if Path::new(&f.name).components().count() > 1 {
-                                    if let Some(parent) = full_path.parent() {
-                                        if let Err(e) = validate_and_canonicalize(parent) {
-                                            log::error!(
-                                                "access denied to parent of '{}': {}",
-                                                f.name,
-                                                e
-                                            );
-                                            bail!("access denied");
-                                        }
-                                    }
-                                }
-
-                                // Check file accessibility before computing hash
-                                if let Err(e) = std::fs::metadata(&full_path) {
-                                    log::error!("access denied to '{}': {}", f.name, e);
-                                    bail!("access denied");
-                                }
-                                let hash = compute_hash(&full_path)?;
-                                validated_files.push(ipc::ValidatedFile {
-                                    name: f.name,
-                                    size: f.size,
-                                    modified_time: f.modified_time,
-                                    hash,
-                                });
-                            }
-                            Ok((path, validated_files))
-                        }
-                        Err(e) => {
-                            log::error!(
-                                "list directory failed, dir: {}, error: {}",
-                                canonical_str,
-                                e
-                            );
-                            bail!("list directory failed")
-                        }
-                    }
-                } else {
-                    log::error!("path is neither file nor directory: {}", canonical_str);
-                    bail!("invalid path")
-                }
-            }
-            Err(e) => {
-                log::error!("canonicalize failed: {}", e);
-                bail!("Failed to validate access");
-            }
-        }
+    let path_clone = path.clone();
+    let result = spawn_blocking(move || -> ResultType<fs::TransferJob> {
+        let data_source = fs::DataSource::FilePath(PathBuf::from(&path));
+        fs::TransferJob::new_read(
+            id,
+            fs::JobType::Generic,
+            "".to_string(),
+            data_source,
+            file_num,
+            include_hidden,
+            false,
+            overwrite_detection,
+        )
     })
     .await;
 
-    let result = match result {
-        Ok(Ok((path, files))) => Ok((path, files)),
-        Ok(Err(e)) => Err(format!("validation failed: {}", e)),
-        Err(e) => Err(format!("validation task failed: {}", e)),
-    };
+    match result {
+        Ok(Ok(mut job)) => {
+            // Optional: enforce file count limit for CM-side jobs to avoid
+            // excessive I/O. This is applied on the job's file list produced
+            // by `new_read`, similar to how AllFiles uses the same helper.
+            if let Err(msg) = check_file_count_limit(job.files().len()) {
+                let _ = tx.send(Data::ReadFileResponse {
+                    id,
+                    file_num,
+                    include_hidden,
+                    conn_id,
+                    result: Err(msg),
+                });
+                return;
+            }
 
-    let _ = tx.send(Data::ReadAccessValidated {
-        id,
-        file_num,
-        include_hidden,
-        conn_id,
-        result,
-    });
+            // Build FileDirectory from the job's file list and serialize
+            let files = job.files().to_owned();
+            let mut dir = FileDirectory::new();
+            dir.id = id;
+            dir.path = path_clone.clone();
+            dir.entries = files.clone().into();
+            let dir_bytes = dir.write_to_bytes().unwrap_or_default();
+
+            let _ = tx.send(Data::ReadFileResponse {
+                id,
+                file_num,
+                include_hidden,
+                conn_id,
+                result: Ok(dir_bytes),
+            });
+
+            // Attach connection id so CM can route read blocks back correctly
+            job.conn_id = conn_id;
+            read_jobs.push(job);
+        }
+        Ok(Err(e)) => {
+            let _ = tx.send(Data::ReadFileResponse {
+                id,
+                file_num,
+                include_hidden,
+                conn_id,
+                result: Err(format!("validation failed: {}", e)),
+            });
+        }
+        Err(e) => {
+            let _ = tx.send(Data::ReadFileResponse {
+                id,
+                file_num,
+                include_hidden,
+                conn_id,
+                result: Err(format!("validation task failed: {}", e)),
+            });
+        }
+    }
+}
+
+/// Process read jobs periodically, reading file blocks and sending them via IPC
+#[cfg(not(any(target_os = "ios")))]
+async fn handle_read_jobs_tick(
+    jobs: &mut Vec<fs::TransferJob>,
+    tx: &UnboundedSender<Data>,
+    conn_id: i32,
+) -> ResultType<()> {
+    let mut finished = Vec::new();
+
+    for job in jobs.iter_mut() {
+        if job.is_last_job {
+            continue;
+        }
+
+        // Initialize data stream if needed (opens file, sends digest for overwrite detection)
+        if let Err(err) = init_read_job_for_cm(job, tx, conn_id).await {
+            let _ = tx.send(Data::FileReadError {
+                id: job.id,
+                file_num: job.file_num(),
+                err: format!("{}", err),
+                conn_id,
+            });
+            continue;
+        }
+
+        // Read a block from the file
+        match job.read().await {
+            Err(err) => {
+                let _ = tx.send(Data::FileReadError {
+                    id: job.id,
+                    file_num: job.file_num(),
+                    err: format!("{}", err),
+                    conn_id,
+                });
+            }
+            Ok(Some(block)) => {
+                let _ = tx.send(Data::FileBlockFromCM {
+                    id: block.id,
+                    file_num: block.file_num,
+                    data: block.data,
+                    compressed: block.compressed,
+                    conn_id,
+                });
+            }
+            Ok(None) => {
+                if job.job_completed() {
+                    finished.push(job.id);
+                    match job.job_error() {
+                        Some(err) => {
+                            let _ = tx.send(Data::FileReadError {
+                                id: job.id,
+                                file_num: job.file_num(),
+                                err,
+                                conn_id,
+                            });
+                        }
+                        None => {
+                            let _ = tx.send(Data::FileReadDone {
+                                id: job.id,
+                                file_num: job.file_num(),
+                                conn_id,
+                            });
+                        }
+                    }
+                }
+                // else: waiting for confirmation from peer
+            }
+        }
+        // Process one job at a time to avoid blocking
+        break;
+    }
+
+    for id in finished {
+        let _ = fs::remove_job(id, jobs);
+    }
+
+    Ok(())
+}
+
+/// Initialize a read job's data stream and handle digest sending for overwrite detection.
+/// This is similar to TransferJob::init_data_stream but sends digest via IPC.
+#[cfg(not(any(target_os = "ios")))]
+async fn init_read_job_for_cm(
+    job: &mut fs::TransferJob,
+    tx: &UnboundedSender<Data>,
+    conn_id: i32,
+) -> ResultType<()> {
+    // Initialize data stream and get digest info if overwrite detection is needed
+    match job.init_data_stream_for_cm().await? {
+        Some((last_modified, file_size)) => {
+            // Send digest via IPC for overwrite detection
+            let _ = tx.send(Data::FileDigestFromCM {
+                id: job.id,
+                file_num: job.file_num(),
+                last_modified,
+                file_size,
+                is_resume: job.is_resume,
+                conn_id,
+            });
+        }
+        None => {
+            // Job done or already initialized, nothing to do
+        }
+    }
+    Ok(())
 }
 
 #[cfg(not(any(target_os = "ios")))]
@@ -1376,23 +1417,7 @@ async fn read_all_files(
     tx: &UnboundedSender<Data>,
 ) {
     let path_clone = path.clone();
-    let result = spawn_blocking(move || {
-        let path_obj = Path::new(&path);
-
-        // Canonicalize the path so that both ACL checks and recursive listing
-        // operate on the same, fully-resolved filesystem path.
-        match validate_and_canonicalize(&path_obj) {
-            Ok(canonical_path) => {
-                let canonical_str = canonical_path.to_string_lossy().to_string();
-                fs::get_recursive_files(&canonical_str, include_hidden)
-            }
-            Err(e) => {
-                log::error!("canonicalize failed: {}", e);
-                bail!("Failed to read files");
-            }
-        }
-    })
-    .await;
+    let result = spawn_blocking(move || fs::get_recursive_files(&path, include_hidden)).await;
 
     let result = match result {
         Ok(Ok(files)) => {
@@ -1430,8 +1455,7 @@ async fn read_empty_dirs(dir: &str, include_hidden: bool, tx: &UnboundedSender<D
 
     let result = spawn_blocking(
         move || -> ResultType<(String, String, Vec<FileDirectory>)> {
-            let path_obj = Path::new(&path);
-            let canonical = validate_and_canonicalize(&path_obj)?;
+            let canonical = Path::new(&path).canonicalize()?;
             let canonical_str = canonical.to_string_lossy().to_string();
             let fds = fs::get_empty_dirs_recursive(&canonical_str, include_hidden)?;
             Ok((path, canonical_str, fds))
@@ -1505,7 +1529,7 @@ async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
         let canonical = if is_windows_root {
             path
         } else {
-            validate_and_canonicalize(&path)?
+            Path::new(&path).canonicalize()?
         };
         fs::read_dir(&canonical, include_hidden)
     })
@@ -1554,13 +1578,7 @@ async fn handle_result<F: std::fmt::Display, S: std::fmt::Display>(
 #[cfg(not(any(target_os = "ios")))]
 async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<Data>) {
     handle_result(
-        spawn_blocking(move || {
-            let path_obj = Path::new(&path);
-            // Validate parent access without canonicalizing to preserve symlink semantics
-            validate_parent_access(&path_obj)?;
-            fs::remove_file(&path)
-        })
-        .await,
+        spawn_blocking(move || fs::remove_file(&path)).await,
         id,
         file_num,
         tx,
@@ -1571,14 +1589,7 @@ async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<
 #[cfg(not(any(target_os = "ios")))]
 async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
-        spawn_blocking(move || {
-            let path_obj = Path::new(&path);
-            // For create_dir, check parent of the new directory.
-            // The canonicalized path is not needed; call for validation side effect only.
-            let _ = validate_parent_and_canonicalize(&path_obj)?;
-            fs::create_dir(&path)
-        })
-        .await,
+        spawn_blocking(move || fs::create_dir(&path)).await,
         id,
         0,
         tx,
@@ -1592,11 +1603,6 @@ async fn rename_file(path: String, new_name: String, id: i32, tx: &UnboundedSend
         spawn_blocking(move || {
             // Validate that new_name doesn't contain path traversal
             validate_file_name_no_traversal(&new_name)?;
-
-            // validate_and_canonicalize ensures the source path is accessible
-            // validate_file_name_no_traversal already ensures new_name has no path traversal
-            let _ = validate_and_canonicalize(&Path::new(&path))?;
-
             fs::rename_file(&path, &new_name)
         })
         .await,
@@ -1612,13 +1618,10 @@ async fn remove_dir(path: String, id: i32, recursive: bool, tx: &UnboundedSender
     let path = fs::get_path(&path);
     handle_result(
         spawn_blocking(move || {
-            let path_obj = Path::new(&path);
-            // Validate parent access without canonicalizing to preserve symlink semantics
-            validate_parent_access(&path_obj)?;
             if recursive {
-                fs::remove_all_empty_dir(&path_obj)
+                fs::remove_all_empty_dir(&path)
             } else {
-                std::fs::remove_dir(&path_obj).map_err(|err| err.into())
+                std::fs::remove_dir(&path).map_err(|err| err.into())
             }
         })
         .await,
@@ -1746,55 +1749,6 @@ mod tests {
             modified_time: 0,
             ..Default::default()
         }
-    }
-
-    /// Test validate_and_canonicalize fails when parent directory ACL denies access.
-    #[test]
-    #[cfg(windows)]
-    fn validate_and_canonicalize_acl_denied() {
-        use std::process::Command;
-
-        if Command::new("icacls").arg("/?").output().is_err() {
-            return;
-        }
-
-        let username = match get_username() {
-            Some(u) => u,
-            None => return,
-        };
-
-        let base_dir = std::env::temp_dir().join("rustdesk_acl_test");
-        let denied_dir = base_dir.join("denied_dir");
-        let file_path = denied_dir.join("file.txt");
-
-        let _ = fs::remove_dir_all(&base_dir);
-        fs::create_dir_all(&denied_dir).unwrap();
-        fs::write(&file_path, b"test").unwrap();
-
-        if !setup_acl_deny(&denied_dir, &username) {
-            let _ = fs::remove_dir_all(&base_dir);
-            return;
-        }
-
-        // Check opening the file directly still works (it should).
-        let direct_open = fs::File::open(&file_path);
-        assert!(
-            direct_open.is_ok(),
-            "expected direct file open to succeed despite parent ACL"
-        );
-
-        // Now any attempt to access a child under `denied_dir` via directory
-        // listing should fail, and validate_and_canonicalize should surface
-        // an error for the file path.
-        let res = super::validate_and_canonicalize(&file_path);
-        assert!(
-            res.is_err(),
-            "expected ACL validation failure for {:?}",
-            file_path
-        );
-
-        cleanup_acl_deny(&denied_dir, &username);
-        let _ = fs::remove_dir_all(&base_dir);
     }
 
     #[test]
@@ -1949,11 +1903,9 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
-    /// Test validate_parent_access with symlinks.
-    /// Verifies that validate_parent_access checks the parent of the symlink itself
-    /// (not following the link), which is critical for delete operations to remove
-    /// the link rather than the target. Also tests broken symlinks and contrasts
-    /// with validate_and_canonicalize which does follow symlinks.
+    /// Symlink helper test.
+    /// Ensures that basic file and directory symlinks used by other tests can
+    /// be created successfully on this platform.
     #[test]
     #[cfg(not(any(target_os = "ios")))]
     fn validate_parent_access_symlink() {
@@ -1990,23 +1942,6 @@ mod tests {
                 return;
             }
         }
-
-        // Test 1: Contrast with validate_and_canonicalize which follows symlinks
-        let canonical = super::validate_and_canonicalize(&link_path).unwrap();
-        assert!(
-            canonical.to_string_lossy().contains("target_dir"),
-            "canonicalize should follow symlink to target"
-        );
-
-        // Test 2: Broken symlink - delete target to break the link
-        //         validate_parent_access should check link_dir (symlink's parent),
-        //         not target_dir (target's parent)
-        fs::remove_file(&target_file).unwrap();
-        let result = super::validate_parent_access(&link_path);
-        assert!(
-            result.is_ok(),
-            "validate_parent_access should succeed even for broken symlink"
-        );
 
         let _ = fs::remove_dir_all(&base_dir);
     }

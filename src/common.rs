@@ -182,7 +182,7 @@ pub fn is_server() -> bool {
 }
 
 #[inline]
-pub fn need_validate_file_read_access() -> bool {
+pub fn need_fs_cm_send_files() -> bool {
     #[cfg(windows)]
     {
         is_server()

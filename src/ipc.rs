@@ -37,21 +37,6 @@ use hbb_common::{
 
 use crate::{common::is_server, privacy_mode, rendezvous_mediator::RendezvousMediator};
 
-/// Represents a file that has been validated for read access.
-/// Used in Windows server mode to confirm read permissions before transfer.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ValidatedFile {
-    /// Relative file name, relative to the base path being validated
-    /// (empty for single-file validation, populated for directory listings)
-    pub name: String,
-    /// File size in bytes
-    pub size: u64,
-    /// Last modified time as seconds since Unix epoch
-    pub modified_time: u64,
-    /// Optional hash (None if hashing is disabled)
-    pub hash: Option<String>,
-}
-
 // IPC actions here.
 pub const IPC_ACTION_CLOSE: &str = "close";
 pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
@@ -127,11 +112,23 @@ pub enum FS {
         path: String,
         new_name: String,
     },
-    ValidateReadAccess {
+    ReadFile {
         path: String,
         id: i32,
         file_num: i32,
         include_hidden: bool,
+        conn_id: i32,
+        overwrite_detection: bool,
+    },
+    CancelRead {
+        id: i32,
+        conn_id: i32,
+    },
+    SendConfirmForRead {
+        id: i32,
+        file_num: i32,
+        skip: bool,
+        offset_blk: u32,
         conn_id: i32,
     },
     ReadAllFiles {
@@ -296,12 +293,40 @@ pub enum Data {
     #[cfg(windows)]
     ControlledSessionCount(usize),
     CmErr(String),
-    ReadAccessValidated {
+    ReadFileResponse {
         id: i32,
         file_num: i32,
         include_hidden: bool,
         conn_id: i32,
-        result: Result<(String, Vec<ValidatedFile>), String>,
+        /// Serialized protobuf bytes of FileDirectory, or error string
+        result: Result<Vec<u8>, String>,
+    },
+    FileBlockFromCM {
+        id: i32,
+        file_num: i32,
+        data: bytes::Bytes,
+        compressed: bool,
+        conn_id: i32,
+    },
+    FileReadDone {
+        id: i32,
+        file_num: i32,
+        conn_id: i32,
+    },
+    FileReadError {
+        id: i32,
+        file_num: i32,
+        err: String,
+        conn_id: i32,
+    },
+    /// Digest request from CM to connection for overwrite detection
+    FileDigestFromCM {
+        id: i32,
+        file_num: i32,
+        last_modified: u64,
+        file_size: u64,
+        is_resume: bool,
+        conn_id: i32,
     },
     AllFilesResult {
         id: i32,

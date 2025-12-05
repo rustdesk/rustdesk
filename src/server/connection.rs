@@ -721,9 +721,29 @@ impl Connection {
                             let msg = new_voice_call_request(false);
                             conn.send(msg).await;
                         }
-                        ipc::Data::ReadAccessValidated { id, file_num, include_hidden, conn_id, result } => {
+                        ipc::Data::ReadFileResponse { id, file_num, include_hidden, conn_id, result } => {
                             if conn_id == conn.inner.id() {
-                                conn.handle_read_access_validated(id, file_num, include_hidden, result).await;
+                                conn.handle_read_file_response(id, file_num, include_hidden, result).await;
+                            }
+                        }
+                        ipc::Data::FileBlockFromCM { id, file_num, data, compressed, conn_id } => {
+                            if conn_id == conn.inner.id() {
+                                conn.handle_file_block_from_cm(id, file_num, data, compressed).await;
+                            }
+                        }
+                        ipc::Data::FileReadDone { id, file_num, conn_id } => {
+                            if conn_id == conn.inner.id() {
+                                conn.handle_file_read_done(id, file_num).await;
+                            }
+                        }
+                        ipc::Data::FileReadError { id, file_num, err, conn_id } => {
+                            if conn_id == conn.inner.id() {
+                                conn.handle_file_read_error(id, file_num, err).await;
+                            }
+                        }
+                        ipc::Data::FileDigestFromCM { id, file_num, last_modified, file_size, is_resume, conn_id } => {
+                            if conn_id == conn.inner.id() {
+                                conn.handle_file_digest_from_cm(id, file_num, last_modified, file_size, is_resume).await;
                             }
                         }
                         ipc::Data::AllFilesResult { id, conn_id, path, result } => {
@@ -2680,7 +2700,7 @@ impl Connection {
                                 self.read_dir(&rd.path, rd.include_hidden);
                             }
                             Some(file_action::Union::AllFiles(f)) => {
-                                if crate::common::need_validate_file_read_access() {
+                                if crate::common::need_fs_cm_send_files() {
                                     self.send_fs(ipc::FS::ReadAllFiles {
                                         path: f.path,
                                         id: f.id,
@@ -2713,14 +2733,18 @@ impl Connection {
                                 let r#type = JobType::from_proto(s.file_type);
                                 match r#type {
                                     JobType::Generic => {
-                                        if crate::common::need_validate_file_read_access() {
+                                        if crate::common::need_fs_cm_send_files() {
+                                            let od = can_enable_overwrite_detection(
+                                                get_version_number(&self.lr.version),
+                                            );
                                             self.pending_read_validations.insert(id);
-                                            self.send_fs(ipc::FS::ValidateReadAccess {
+                                            self.send_fs(ipc::FS::ReadFile {
                                                 path,
                                                 id,
                                                 file_num: s.file_num,
                                                 include_hidden: s.include_hidden,
                                                 conn_id: self.inner.id(),
+                                                overwrite_detection: od,
                                             });
                                         } else {
                                             let od = can_enable_overwrite_detection(
@@ -2743,7 +2767,15 @@ impl Connection {
                                                     self.send(fs::new_error(id, err, 0)).await;
                                                 }
                                                 Ok(job) => {
-                                                    self.process_new_read_job(job, path).await;
+                                                    // Enforce the same file count limit as CM-side
+                                                    // read jobs to avoid excessive I/O.
+                                                    if let Err(msg) = crate::ui_cm_interface::check_file_count_limit(
+                                                        job.files().len(),
+                                                    ) {
+                                                        self.send(fs::new_error(id, msg, -1)).await;
+                                                    } else {
+                                                        self.process_new_read_job(job, path).await;
+                                                    }
                                                 }
                                             }
                                         }
@@ -2846,7 +2878,13 @@ impl Connection {
                             }
                             Some(file_action::Union::Cancel(c)) => {
                                 self.send_fs(ipc::FS::CancelWrite { id: c.id });
-                                self.pending_read_validations.remove(&c.id);
+                                // Also cancel any CM-side read job
+                                if self.pending_read_validations.remove(&c.id) {
+                                    self.send_fs(ipc::FS::CancelRead {
+                                        id: c.id,
+                                        conn_id: self.inner.id(),
+                                    });
+                                }
                                 if let Some(job) = fs::remove_job(c.id, &mut self.read_jobs) {
                                     self.send_to_cm(ipc::Data::FileTransferLog((
                                         "transfer".to_string(),
@@ -2857,6 +2895,15 @@ impl Connection {
                             Some(file_action::Union::SendConfirm(r)) => {
                                 if let Some(job) = fs::get_job(r.id, &mut self.read_jobs) {
                                     job.confirm(&r).await;
+                                } else if self.pending_read_validations.contains(&r.id) {
+                                    // Forward to CM for CM-read jobs
+                                    self.send_fs(ipc::FS::SendConfirmForRead {
+                                        id: r.id,
+                                        file_num: r.file_num,
+                                        skip: r.skip(),
+                                        offset_blk: r.offset_blk(),
+                                        conn_id: self.inner.id(),
+                                    });
                                 } else {
                                     if let Ok(sc) = r.write_to_bytes() {
                                         self.send_fs(ipc::FS::SendConfirm(sc));
@@ -4055,17 +4102,20 @@ impl Connection {
         raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
     }
 
-    async fn handle_read_access_validated(
+    async fn handle_read_file_response(
         &mut self,
         id: i32,
-        file_num: i32,
-        include_hidden: bool,
-        result: Result<(String, Vec<ipc::ValidatedFile>), String>,
+        _file_num: i32,
+        _include_hidden: bool,
+        result: Result<Vec<u8>, String>,
     ) {
-        // Check if this validation response is still expected (not stale/cancelled)
-        if !self.pending_read_validations.remove(&id) {
+        use hbb_common::protobuf::Message as _;
+
+        // Check if this response is still expected (not stale/cancelled)
+        // Note: Do NOT remove from pending_read_validations - keep tracking until transfer completes
+        if !self.pending_read_validations.contains(&id) {
             log::warn!(
-                "Received ReadAccessValidated for unknown or stale job id={}, ignoring",
+                "Received ReadFileResponse for unknown or stale job id={}, ignoring",
                 id
             );
             return;
@@ -4073,41 +4123,110 @@ impl Connection {
 
         match result {
             Err(error) => {
+                self.pending_read_validations.remove(&id);
                 self.send(fs::new_error(id, error, 0)).await;
             }
-            Ok((path_str, validated_files)) => {
-                let od = can_enable_overwrite_detection(get_version_number(&self.lr.version));
-                let path_buf = PathBuf::from(&path_str);
+            Ok(dir_bytes) => {
+                // Deserialize FileDirectory from protobuf bytes
+                let dir = match FileDirectory::parse_from_bytes(&dir_bytes) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        log::error!("Failed to parse FileDirectory: {}", e);
+                        self.pending_read_validations.remove(&id);
+                        self.send(fs::new_error(id, "internal error".to_string(), 0))
+                            .await;
+                        return;
+                    }
+                };
 
-                let file_hashes: Vec<Option<String>> =
-                    validated_files.iter().map(|vf| vf.hash.clone()).collect();
+                let path_str = dir.path.clone();
+                let file_entries: Vec<FileEntry> = dir.entries.into();
 
-                let file_entries: Vec<FileEntry> = validated_files
-                    .iter()
-                    .map(|vf| FileEntry {
-                        name: vf.name.clone(),
-                        entry_type: FileType::File.into(),
-                        size: vf.size,
-                        modified_time: vf.modified_time,
-                        ..Default::default()
-                    })
-                    .collect();
+                // Send file directory to client
+                self.send(fs::new_dir(id, path_str.clone(), file_entries.clone()))
+                    .await;
 
-                let job = fs::TransferJob::new_read_with_validated_files(
-                    id,
-                    fs::JobType::Generic,
-                    "".to_string(),
-                    fs::DataSource::FilePath(path_buf),
-                    file_entries,
-                    file_hashes,
-                    file_num,
-                    include_hidden,
-                    false,
-                    od,
+                // Post audit for file transfer
+                self.post_file_audit(
+                    FileAuditType::RemoteSend,
+                    &path_str,
+                    Self::get_files_for_audit(fs::JobType::Generic, file_entries),
+                    json!({}),
                 );
-                self.process_new_read_job(job, path_str).await;
+
+                // CM will handle the actual file reading and send blocks via IPC
+                self.file_transferred = true;
             }
         }
+    }
+
+    async fn handle_file_block_from_cm(
+        &mut self,
+        id: i32,
+        file_num: i32,
+        data: bytes::Bytes,
+        compressed: bool,
+    ) {
+        // Forward file block to client
+        let mut block = FileTransferBlock::new();
+        block.id = id;
+        block.file_num = file_num;
+        block.data = data.to_vec().into();
+        block.compressed = compressed;
+
+        let mut msg = Message::new();
+        let mut fr = FileResponse::new();
+        fr.set_block(block);
+        msg.set_file_response(fr);
+        self.send(msg).await;
+    }
+
+    async fn handle_file_read_done(&mut self, id: i32, file_num: i32) {
+        // Remove from pending tracking
+        self.pending_read_validations.remove(&id);
+
+        // Forward done message to client
+        let mut done = FileTransferDone::new();
+        done.id = id;
+        done.file_num = file_num;
+
+        let mut msg = Message::new();
+        let mut fr = FileResponse::new();
+        fr.set_done(done);
+        msg.set_file_response(fr);
+        self.send(msg).await;
+    }
+
+    async fn handle_file_read_error(&mut self, id: i32, file_num: i32, err: String) {
+        // Remove from pending tracking
+        self.pending_read_validations.remove(&id);
+
+        // Forward error to client
+        self.send(fs::new_error(id, err, file_num)).await;
+    }
+
+    async fn handle_file_digest_from_cm(
+        &mut self,
+        id: i32,
+        file_num: i32,
+        last_modified: u64,
+        file_size: u64,
+        is_resume: bool,
+    ) {
+        // Forward digest to client for overwrite detection
+        let mut digest = FileTransferDigest::new();
+        digest.id = id;
+        digest.file_num = file_num;
+        digest.last_modified = last_modified;
+        digest.file_size = file_size;
+        digest.is_upload = false; // Server sending to client
+        digest.is_resume = is_resume;
+
+        let mut msg = Message::new();
+        let mut fr = FileResponse::new();
+        fr.set_digest(digest);
+        msg.set_file_response(fr);
+        self.send(msg).await;
     }
 
     async fn process_new_read_job(&mut self, mut job: fs::TransferJob, path: String) {
