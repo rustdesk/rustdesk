@@ -701,7 +701,7 @@ pub fn get_env_var(k: &str) -> String {
     }
 }
 
-pub fn is_flatpak() -> bool {
+fn is_flatpak() -> bool {
     std::path::PathBuf::from("/.flatpak-info").exists()
 }
 

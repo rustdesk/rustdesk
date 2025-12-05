@@ -803,10 +803,6 @@ fn is_root() -> bool {
         return crate::platform::is_elevated(None).unwrap_or_default()
             || crate::platform::is_root();
     }
-    #[cfg(linux)]
-    {
-        return crate::platform::is_flatpak() || crate::platform::is_root();
-    }
     #[allow(unreachable_code)]
     crate::platform::is_root()
 }
