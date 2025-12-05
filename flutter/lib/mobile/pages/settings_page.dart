@@ -71,6 +71,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _ignoreBatteryOpt = false;
   var _enableStartOnBoot = false;
   var _checkUpdateOnStartup = false;
+  var _showTerminalControlButton = false;
   var _floatingWindowDisabled = false;
   var _keepScreenOn = KeepScreenOn.duringControlled; // relay on floating window
   var _enableAbr = false;
@@ -139,6 +140,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _enableIpv6Punch = mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
     _allowAskForNoteAtEndOfConnection =
         mainGetLocalBoolOptionSync(kOptionAllowAskForNoteAtEndOfConnection);
+    _showTerminalControlButton =
+        mainGetLocalBoolOptionSync(kOptionAllowShowTerminalControlButton);
   }
 
   @override
@@ -601,6 +604,23 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         ),
       );
     }
+
+    enhancementsTiles.add(
+      SettingsTile.switchTile(
+        initialValue: _showTerminalControlButton,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(translate('Show terminal control button')),
+        ]),
+        onToggle: (bool v) async {
+          await mainSetLocalBoolOption(kOptionAllowShowTerminalControlButton, v);
+          final newValue =
+            mainGetLocalBoolOptionSync(kOptionAllowShowTerminalControlButton);
+          setState(() {
+            _showTerminalControlButton = newValue;
+          });
+        },
+      ),
+    );
 
     onFloatingWindowChanged(bool toValue) async {
       if (toValue) {
