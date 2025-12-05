@@ -119,7 +119,10 @@ class FfiModel with ChangeNotifier {
   bool _touchMode = false;
   late VirtualMouseMode virtualMouseMode;
   Timer? _timer;
-  var _reconnects = 1;
+  static const _minBackoff = 1;
+  static const _maxBackoff = 60;
+  var _reconnects = _minBackoff;
+  final _random = Random();
   bool _viewOnly = false;
   bool _showMyCursor = false;
   WeakReference<FFI> parent;
@@ -956,12 +959,19 @@ class FfiModel with ChangeNotifier {
     }
     _timer?.cancel();
     if (hasRetry) {
-      _timer = Timer(Duration(seconds: _reconnects), () {
+      // Calculate next delay with jitter and cap
+      final baseDelay = min(_reconnects * 2, _maxBackoff);
+      final jitter = _random.nextDouble() * 0.3; // +/- 30% jitter
+      final delaySeconds = max(_minBackoff, (baseDelay * (1 + jitter)).toInt());
+
+      _timer = Timer(Duration(seconds: delaySeconds), () {
         reconnect(dialogManager, sessionId, false);
       });
-      _reconnects *= 2;
+
+      // Update base delay for next retry (capped)
+      _reconnects = min(_reconnects * 2, _maxBackoff ~/ 2);
     } else {
-      _reconnects = 1;
+      _reconnects = _minBackoff;
     }
   }
 
@@ -1081,7 +1091,8 @@ class FfiModel with ChangeNotifier {
       if (displays.length == 1) {
         bind.sessionSetSize(
           sessionId: sessionId,
-          display: pi.currentDisplay == kAllDisplayValue ? 0 : pi.currentDisplay,
+          display:
+              pi.currentDisplay == kAllDisplayValue ? 0 : pi.currentDisplay,
           width: displays[0].width,
           height: displays[0].height,
         );
@@ -1264,7 +1275,7 @@ class FfiModel with ChangeNotifier {
         updateCurDisplay(sessionId);
       }
       if (displays.isNotEmpty) {
-        _reconnects = 1;
+        _reconnects = _minBackoff;
         waitForFirstImage.value = true;
         isRefreshing = false;
       }
