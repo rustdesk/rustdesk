@@ -774,6 +774,11 @@ impl TerminalServiceProxy {
         #[allow(unused_mut)]
         let mut cmd = CommandBuilder::new(&shell);
 
+        // Set TERM environment variable to ensure proper handling of control sequences
+        // This fixes issues with Delete/Backspace keys not working correctly
+        // See: https://github.com/rustdesk/rustdesk/issues/13621
+        cmd.env("TERM", "xterm-256color");
+
         #[cfg(target_os = "windows")]
         if let Some(token) = &self.user_token {
             cmd.set_user_token(*token as _);
