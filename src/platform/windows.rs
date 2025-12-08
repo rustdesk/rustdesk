@@ -1861,13 +1861,17 @@ unsafe fn set_default_dll_directories() -> bool {
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
     let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    // https://github.com/rustdesk/rustdesk/issues/13735
+    // Replace ':' with '_' for filename since ':' is not allowed in Windows filenames
+    // https://github.com/rustdesk/hbb_common/blob/8b0e25867375ba9e6bff548acf44fe6d6ffa7c0e/src/config.rs#L1384
+    let filename = id.replace(':', "_");
     let shortcut = write_cmds(
         format!(
             "
 Set oWS = WScript.CreateObject(\"WScript.Shell\")
 strDesktop = oWS.SpecialFolders(\"Desktop\")
 Set objFSO = CreateObject(\"Scripting.FileSystemObject\")
-sLinkFile = objFSO.BuildPath(strDesktop, \"{id}.lnk\")
+sLinkFile = objFSO.BuildPath(strDesktop, \"{filename}.lnk\")
 Set oLink = oWS.CreateShortcut(sLinkFile)
     oLink.TargetPath = \"{exe}\"
     oLink.Arguments = \"--connect {id}\"
