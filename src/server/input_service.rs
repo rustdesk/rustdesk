@@ -441,6 +441,68 @@ enum KeysDown {
     EnigoKey(u64),
 }
 
+/// State for scroll debouncing to filter micro-reversals from trackpad
+/// See: https://github.com/rustdesk/rustdesk/issues/13403
+#[derive(Default)]
+struct ScrollState {
+    last_direction_x: i32, // -1, 0, or 1
+    last_direction_y: i32,
+    last_scroll_time: Option<Instant>,
+}
+
+impl ScrollState {
+    const DEBOUNCE_MS: u64 = 40;
+
+    /// Check if a scroll event should be filtered (debounced)
+    /// Returns true if the event should be dropped
+    fn should_filter(&mut self, x: i32, y: i32) -> bool {
+        let now = Instant::now();
+        let dir_x = x.signum();
+        let dir_y = y.signum();
+
+        let should_drop = if let Some(last_time) = self.last_scroll_time {
+            let elapsed = now.duration_since(last_time).as_millis() as u64;
+
+            // Only filter single-unit opposite-direction scrolls within debounce window
+            if elapsed < Self::DEBOUNCE_MS {
+                let is_micro_reversal_x = dir_x != 0
+                    && self.last_direction_x != 0
+                    && dir_x == -self.last_direction_x
+                    && x.abs() == 1;
+                let is_micro_reversal_y = dir_y != 0
+                    && self.last_direction_y != 0
+                    && dir_y == -self.last_direction_y
+                    && y.abs() == 1;
+
+                is_micro_reversal_x || is_micro_reversal_y
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        // Update state if not dropping
+        if !should_drop {
+            if dir_x != 0 {
+                self.last_direction_x = dir_x;
+            }
+            if dir_y != 0 {
+                self.last_direction_y = dir_y;
+            }
+            self.last_scroll_time = Some(now);
+        }
+
+        should_drop
+    }
+
+    fn reset(&mut self) {
+        self.last_direction_x = 0;
+        self.last_direction_y = 0;
+        self.last_scroll_time = None;
+    }
+}
+
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = {
         Arc::new(Mutex::new(Enigo::new()))
@@ -448,6 +510,7 @@ lazy_static::lazy_static! {
     static ref KEYS_DOWN: Arc<Mutex<HashMap<KeysDown, Instant>>> = Default::default();
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
     static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Option<Instant>, (i32, i32))>> = Arc::new(Mutex::new((None, (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
+    static ref SCROLL_STATE: Arc<Mutex<ScrollState>> = Default::default();
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
@@ -1105,6 +1168,14 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
 
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             let is_track_pad = evt_type == MOUSE_TYPE_TRACKPAD;
+
+            // Debounce trackpad scroll to filter micro-reversals
+            // See: https://github.com/rustdesk/rustdesk/issues/13403
+            if evt_type == MOUSE_TYPE_TRACKPAD {
+                if SCROLL_STATE.lock().unwrap().should_filter(x, y) {
+                    return;
+                }
+            }
 
             #[cfg(target_os = "macos")]
             {
