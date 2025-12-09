@@ -539,7 +539,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Timeout in minutes", ""),
         ("auto_disconnect_option_tip", ""),
         ("Connection failed due to inactivity", ""),
-        ("Check for software update on startupmật"),
+        ("Check for software update on startupmật", ""),
         ("idd_not_support_under_win10_2004_tip", ""),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
