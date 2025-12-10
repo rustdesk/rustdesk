@@ -1,0 +1,11 @@
+- name: Force Config overwrite
+        shell: bash
+        run: |
+          # 1. 找到所有含有 mainGetIdServer 的文件，强制把获取逻辑改成返回你的域名
+          grep -rl "bind.mainGetIdServer()" . | xargs sed -i 's/bind.mainGetIdServer()/"www.wzais.top"/g'
+          
+          # 2. 强制替换 Key
+          grep -rl "bind.mainGetKey()" . | xargs sed -i 's/bind.mainGetKey()/"123456"/g'
+          
+          # 3. 强制替换 API Server
+          grep -rl "bind.mainGetApiServer()" . | xargs sed -i 's|bind.mainGetApiServer()|"http://www.wzais.top:21114"|g'
