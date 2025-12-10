@@ -567,6 +567,9 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_audit_server(&self, typ: String) -> String {
+        if LocalConfig::get_option("access_token").is_empty() {
+            return "".to_owned();
+        }
         crate::get_audit_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
