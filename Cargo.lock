@@ -286,7 +286,7 @@ checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 [[package]]
 name = "arboard"
 version = "3.4.0"
-source = "git+https://github.com/rustdesk-org/arboard#4e16bad260ea05dd7dcdb68cc7549dad3920b940"
+source = "git+https://github.com/rustdesk-org/arboard#85be1218668ff218a7b170c9d424fde73e069914"
 dependencies = [
  "clipboard-win",
  "core-graphics 0.23.2",
