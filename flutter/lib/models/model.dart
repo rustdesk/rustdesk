@@ -363,7 +363,7 @@ class FfiModel with ChangeNotifier {
           parent.target?.fileModel.refreshAll();
         }
       } else if (name == 'job_error') {
-        parent.target?.fileModel.jobController.jobError(evt);
+        parent.target?.fileModel.handleJobError(evt);
       } else if (name == 'override_file_confirm') {
         parent.target?.fileModel.postOverrideFileConfirm(evt);
       } else if (name == 'load_last_job') {
