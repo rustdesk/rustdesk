@@ -722,7 +722,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Edit note", "ویرایش یادداشت"),
         ("Alias", "نام مستعار"),
         ("ScrollEdge", ""),
-        ("Allow insecure TLS fallback", "برگشتی TLS در کانکشن غیر امر"),
+        ("Allow insecure TLS fallback", "استفاده از TLS غیر امن در ارتباط"),
         ("allow-insecure-tls-fallback-tip", "به‌طور پیش‌فرض، RustDesk گواهی سرور را برای پروتکل‌ها با استفاده از TLS تأیید می‌کند.\nبا فعال بودن این گزینه، RustDesk دوباره مرحله تأیید را رد می‌کند و در صورت عدم موفقیت تأیید ادامه می‌دهد."),
         ("Disable UDP", "UDP غیر فعال کردن"),
         ("disable-udp-tip", "کنترل می کند که آیا فقط از TCP استفاده شود یا خیر.\nوقتی این گزینه فعال باشد، RustDesk دیگر از UDP 21116 استفاده نمی کند، به جای آن از TCP 21116 استفاده می شود."),
