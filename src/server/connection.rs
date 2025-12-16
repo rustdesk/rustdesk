@@ -33,6 +33,7 @@ use hbb_common::{
     get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
     password_security::{self as password, ApproveMode},
+    rendezvous_proto::control_permissions::Feature,
     sha2::{Digest, Sha256},
     sleep, timeout,
     tokio::{
@@ -71,6 +72,7 @@ lazy_static::lazy_static! {
     static ref SESSIONS: Arc::<Mutex<HashMap<SessionKey, Session>>> = Default::default();
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
     pub static ref AUTHED_CONNS: Arc::<Mutex<Vec<AuthedConn>>> = Default::default();
+    pub static ref CONTROL_PERMISSIONS_ARRAY: Arc::<Mutex<Vec<(i32, ControlPermissions)>>> = Default::default();
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
 }
@@ -226,6 +228,7 @@ pub struct Connection {
     restart: bool,
     recording: bool,
     block_input: bool,
+    control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
     lock_after_session_end: bool,
@@ -349,8 +352,11 @@ impl Connection {
         stream: super::Stream,
         id: i32,
         server: super::ServerPtrWeak,
+        control_permissions: Option<ControlPermissions>,
     ) {
         let _raii_id = raii::ConnectionID::new(id);
+        let _raii_control_permissions_id =
+            raii::ControlPermissionsID::new(id, &control_permissions);
         let hash = Hash {
             salt: Config::get_salt(),
             challenge: Config::get_auto_password(6),
@@ -401,14 +407,15 @@ impl Connection {
             port_forward_address: "".to_owned(),
             tx_to_cm,
             authorized: false,
-            keyboard: Connection::permission("enable-keyboard"),
-            clipboard: Connection::permission("enable-clipboard"),
-            audio: Connection::permission("enable-audio"),
+            keyboard: Self::permission(keys::OPTION_ENABLE_KEYBOARD, &control_permissions),
+            clipboard: Self::permission(keys::OPTION_ENABLE_CLIPBOARD, &control_permissions),
+            audio: Self::permission(keys::OPTION_ENABLE_AUDIO, &control_permissions),
             // to-do: make sure is the option correct here
-            file: Connection::permission(keys::OPTION_ENABLE_FILE_TRANSFER),
-            restart: Connection::permission("enable-remote-restart"),
-            recording: Connection::permission("enable-record-session"),
-            block_input: Connection::permission("enable-block-input"),
+            file: Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &control_permissions),
+            restart: Self::permission(keys::OPTION_ENABLE_REMOTE_RESTART, &control_permissions),
+            recording: Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &control_permissions),
+            block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
+            control_permissions,
             last_test_delay: None,
             network_delay: 0,
             lock_after_session_end: false,
@@ -885,7 +892,7 @@ impl Connection {
                     match data {
                         #[cfg(all(target_os = "windows", feature = "flutter"))]
                         ipc::Data::PrinterData(data) => {
-                            if config::Config::get_bool_option(config::keys::OPTION_ENABLE_REMOTE_PRINTER) {
+                            if Self::permission(keys::OPTION_ENABLE_REMOTE_PRINTER, &conn.control_permissions) {
                                 conn.send_printer_request(data).await;
                             } else {
                                 conn.send_remote_printing_disallowed().await;
@@ -1942,7 +1949,8 @@ impl Connection {
         false
     }
 
-    pub fn permission(enable_prefix_option: &str) -> bool {
+    #[inline]
+    fn is_permission_enabled_locally(enable_prefix_option: &str) -> bool {
         #[cfg(feature = "flutter")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
@@ -1957,6 +1965,42 @@ impl Connection {
             enable_prefix_option,
             &Config::get_option(enable_prefix_option),
         )
+    }
+
+    fn permission(
+        enable_prefix_option: &str,
+        control_permissions: &Option<ControlPermissions>,
+    ) -> bool {
+        let mut is_enabled = Self::is_permission_enabled_locally(enable_prefix_option);
+        if !is_enabled {
+            return false;
+        }
+        if let Some(control_permissions) = control_permissions {
+            let feature = match enable_prefix_option {
+                keys::OPTION_ENABLE_KEYBOARD => Some(Feature::keyboard),
+                keys::OPTION_ENABLE_REMOTE_PRINTER => Some(Feature::remote_printer),
+                keys::OPTION_ENABLE_CLIPBOARD => Some(Feature::clipboard),
+                keys::OPTION_ENABLE_FILE_TRANSFER => Some(Feature::file),
+                keys::OPTION_ENABLE_AUDIO => Some(Feature::audio),
+                keys::OPTION_ENABLE_CAMERA => Some(Feature::camera),
+                keys::OPTION_ENABLE_TERMINAL => Some(Feature::terminal),
+                keys::OPTION_ENABLE_TUNNEL => Some(Feature::tunnel),
+                keys::OPTION_ENABLE_REMOTE_RESTART => Some(Feature::restart),
+                keys::OPTION_ENABLE_RECORD_SESSION => Some(Feature::recording),
+                keys::OPTION_ENABLE_BLOCK_INPUT => Some(Feature::block_input),
+                _ => None,
+            };
+            if let Some(feature) = feature {
+                if crate::is_feature_disabled_by_control_permissions(
+                    control_permissions.disabled_features,
+                    feature,
+                ) {
+                    is_enabled = false;
+                }
+            }
+        }
+
+        is_enabled
     }
 
     fn update_codec_on_login(&self) {
@@ -2054,7 +2098,10 @@ impl Connection {
             }
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
-                    if !Connection::permission(keys::OPTION_ENABLE_FILE_TRANSFER) {
+                    if !Self::permission(
+                        keys::OPTION_ENABLE_FILE_TRANSFER,
+                        &self.control_permissions,
+                    ) {
                         self.send_login_error("No permission of file transfer")
                             .await;
                         sleep(1.).await;
@@ -2063,7 +2110,7 @@ impl Connection {
                     self.file_transfer = Some((ft.dir, ft.show_hidden));
                 }
                 Some(login_request::Union::ViewCamera(_vc)) => {
-                    if !Connection::permission(keys::OPTION_ENABLE_CAMERA) {
+                    if !Self::permission(keys::OPTION_ENABLE_CAMERA, &self.control_permissions) {
                         self.send_login_error("No permission of viewing camera")
                             .await;
                         sleep(1.).await;
@@ -2072,7 +2119,7 @@ impl Connection {
                     self.view_camera = true;
                 }
                 Some(login_request::Union::Terminal(terminal)) => {
-                    if !Connection::permission(keys::OPTION_ENABLE_TERMINAL) {
+                    if !Self::permission(keys::OPTION_ENABLE_TERMINAL, &self.control_permissions) {
                         self.send_login_error("No permission of terminal").await;
                         sleep(1.).await;
                         return false;
@@ -2120,7 +2167,7 @@ impl Connection {
                     }
                 }
                 Some(login_request::Union::PortForward(mut pf)) => {
-                    if !Connection::permission("enable-tunnel") {
+                    if !Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions) {
                         self.send_login_error("No permission of IP tunneling").await;
                         sleep(1.).await;
                         return false;
@@ -5175,6 +5222,7 @@ pub struct AuthedConn {
 mod raii {
     // ALIVE_CONNS: all connections, including unauthorized connections
     // AUTHED_CONNS: all authorized connections
+    // CONTROL_PERMISSIONS_ARRAY: all non-None control permissions
 
     use super::*;
     pub struct ConnectionID(i32);
@@ -5362,6 +5410,34 @@ mod raii {
             {
                 use crate::whiteboard;
                 whiteboard::unregister_whiteboard(whiteboard::get_key_cursor(self.0));
+            }
+        }
+    }
+
+    pub struct ControlPermissionsID {
+        id: i32,
+        control_permissions: Option<ControlPermissions>,
+    }
+
+    impl Drop for ControlPermissionsID {
+        fn drop(&mut self) {
+            if self.control_permissions.is_some() {
+                let mut lock = CONTROL_PERMISSIONS_ARRAY.lock().unwrap();
+                lock.retain(|(conn_id, _)| *conn_id != self.id);
+            }
+        }
+    }
+    impl ControlPermissionsID {
+        pub fn new(id: i32, control_permissions: &Option<ControlPermissions>) -> Self {
+            if let Some(s) = control_permissions {
+                CONTROL_PERMISSIONS_ARRAY
+                    .lock()
+                    .unwrap()
+                    .push((id, s.clone()));
+            }
+            Self {
+                id,
+                control_permissions: control_permissions.clone(),
             }
         }
     }

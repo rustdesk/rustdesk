@@ -23,7 +23,11 @@ pub use clipboard::ClipboardFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
-    config::{self, keys::OPTION_ALLOW_WEBSOCKET, Config, Config2},
+    config::{
+        self,
+        keys::{self, OPTION_ALLOW_WEBSOCKET},
+        Config, Config2,
+    },
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
     log, password_security as password, timeout,
@@ -384,6 +388,7 @@ pub enum Data {
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Whiteboard((String, crate::whiteboard::CustomEvent)),
+    ControlPermissionsDisableRemoteModify(Option<bool>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -862,6 +867,25 @@ async fn handle(data: Data, stream: &mut Connection) {
                 // Port forward session count is only a get value.
             }
         },
+        Data::ControlPermissionsDisableRemoteModify(_) => {
+            let disable_remote_modify = {
+                use hbb_common::rendezvous_proto::control_permissions::Feature;
+                let control_permissions = crate::server::CONTROL_PERMISSIONS_ARRAY.lock().unwrap();
+                control_permissions.iter().any(|(_, control_permissions)| {
+                    crate::is_feature_disabled_by_control_permissions(
+                        control_permissions.disabled_features,
+                        Feature::remote_modify,
+                    )
+                })
+            };
+            allow_err!(
+                stream
+                    .send(&Data::ControlPermissionsDisableRemoteModify(Some(
+                        disable_remote_modify
+                    )))
+                    .await
+            );
+        }
         _ => {}
     }
 }
