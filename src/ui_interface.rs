@@ -69,6 +69,7 @@ lazy_static::lazy_static! {
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
     static ref ASYNC_HTTP_STATUS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
+    static ref IS_REMOTE_MODIFY_ENABLED_BY_CONTROL_PERMISSIONS : Arc<Mutex<Option<bool>>> = Arc::new(Mutex::new(None));
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -77,6 +78,11 @@ lazy_static::lazy_static! {
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
     static ref CHILDREN : Children = Default::default();
+}
+
+#[cfg(target_os = "windows")]
+lazy_static::lazy_static! {
+    pub static ref IS_FILE_TRANSFER_ENABLED: Arc<Mutex<Option<bool>>> = Arc::new(Mutex::new(None));
 }
 
 const INIT_ASYNC_JOB_STATUS: &str = " ";
@@ -1166,10 +1172,6 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     let mut video_conn_count = 0;
     #[cfg(not(feature = "flutter"))]
     let mut id = "".to_owned();
-    #[cfg(target_os = "windows")]
-    let mut access_mode = "".to_owned();
-    #[cfg(target_os = "windows")]
-    let mut enable_file_transfer = "".to_owned();
     let is_cm = crate::common::is_cm();
 
     loop {
@@ -1194,28 +1196,6 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
                                 *OPTIONS.lock().unwrap() = v;
                                 *OPTION_SYNCED.lock().unwrap() = true;
-
-                                #[cfg(target_os = "windows")]
-                                {
-                                    let (ft, am) = {
-                                        let lock = OPTIONS.lock().unwrap();
-                                        (
-                                            lock.get(OPTION_ENABLE_FILE_TRANSFER).map(|x| x.to_string()).unwrap_or_default(),
-                                            lock.get(OPTION_ACCESS_MODE).map(|x| x.to_string()).unwrap_or_default(),
-                                        )
-                                    };
-                                    if ft != enable_file_transfer || am != access_mode {
-                                        let access_mode_enabled = match am.as_str() {
-                                            "full" => Some(true),
-                                            "view" => Some(false),
-                                            _ => None,
-                                        };
-                                        let enabled = access_mode_enabled.unwrap_or(config::option2bool(OPTION_ENABLE_FILE_TRANSFER, &ft));
-                                        clipboard::ContextSend::enable(enabled);
-                                        enable_file_transfer = ft;
-                                        access_mode = am;
-                                    }
-                                }
                             }
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {
@@ -1251,6 +1231,19 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                     video_conn_count,
                                 };
                             }
+                            Ok(Some(ipc::Data::ControlPermissionsRemoteModify(v))) => {
+                                *IS_REMOTE_MODIFY_ENABLED_BY_CONTROL_PERMISSIONS.lock().unwrap() = v;
+                            }
+                            #[cfg(target_os = "windows")]
+                            Ok(Some(ipc::Data::FileTransferEnabledState(v))) => {
+                                if let Some(enabled) = v {
+                                    let mut lock = IS_FILE_TRANSFER_ENABLED.lock().unwrap();
+                                    if *lock != v {
+                                        clipboard::ContextSend::enable(enabled);
+                                        *lock = v;
+                                    }
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -1264,6 +1257,9 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                         c.send(&ipc::Data::Config(("temporary-password".to_owned(), None))).await.ok();
                         #[cfg(feature = "flutter")]
                         c.send(&ipc::Data::VideoConnCount(None)).await.ok();
+                        c.send(&ipc::Data::ControlPermissionsRemoteModify(None)).await.ok();
+                        #[cfg(target_os = "windows")]
+                        c.send(&ipc::Data::FileTransferEnabledState(None)).await.ok();
                     }
                 }
             }
@@ -1555,4 +1551,10 @@ pub fn clear_trusted_devices() {
 #[cfg(feature = "flutter")]
 pub fn max_encrypt_len() -> usize {
     hbb_common::config::ENCRYPT_MAX_LEN
+}
+
+pub fn is_remote_modify_enabled_by_control_permissions() -> Option<bool> {
+    *IS_REMOTE_MODIFY_ENABLED_BY_CONTROL_PERMISSIONS
+        .lock()
+        .unwrap()
 }

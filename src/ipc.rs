@@ -23,7 +23,11 @@ pub use clipboard::ClipboardFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
-    config::{self, keys::OPTION_ALLOW_WEBSOCKET, Config, Config2},
+    config::{
+        self,
+        keys::{self, OPTION_ALLOW_WEBSOCKET},
+        Config, Config2,
+    },
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
     log, password_security as password, timeout,
@@ -384,6 +388,9 @@ pub enum Data {
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Whiteboard((String, crate::whiteboard::CustomEvent)),
+    ControlPermissionsRemoteModify(Option<bool>),
+    #[cfg(target_os = "windows")]
+    FileTransferEnabledState(Option<bool>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -862,6 +869,31 @@ async fn handle(data: Data, stream: &mut Connection) {
                 // Port forward session count is only a get value.
             }
         },
+        Data::ControlPermissionsRemoteModify(_) => {
+            use hbb_common::rendezvous_proto::control_permissions::Permission;
+            let state =
+                crate::server::get_control_permission_state(Permission::remote_modify, true);
+            allow_err!(
+                stream
+                    .send(&Data::ControlPermissionsRemoteModify(state))
+                    .await
+            );
+        }
+        #[cfg(target_os = "windows")]
+        Data::FileTransferEnabledState(_) => {
+            use hbb_common::rendezvous_proto::control_permissions::Permission;
+            let state = crate::server::get_control_permission_state(Permission::file, false);
+            let enabled = state.unwrap_or_else(|| {
+                crate::server::Connection::is_permission_enabled_locally(
+                    config::keys::OPTION_ENABLE_FILE_TRANSFER,
+                )
+            });
+            allow_err!(
+                stream
+                    .send(&Data::FileTransferEnabledState(Some(enabled)))
+                    .await
+            );
+        }
         _ => {}
     }
 }
