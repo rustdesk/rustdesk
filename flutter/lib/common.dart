@@ -3016,10 +3016,19 @@ Future<void> start_service(bool is_start) async {
 }
 
 Future<bool> canBeBlocked() async {
-  var access_mode = await bind.mainGetOption(key: kOptionAccessMode);
+  // First check local settings
+  var accessMode = await bind.mainGetOption(key: kOptionAccessMode);
+  var customAccessMode = accessMode != 'full' && accessMode != 'view';
   var option = option2bool(kOptionAllowRemoteConfigModification,
       await bind.mainGetOption(key: kOptionAllowRemoteConfigModification));
-  return access_mode == 'view' || (access_mode.isEmpty && !option);
+  if (accessMode == 'view' || (customAccessMode && !option)) {
+    return true;
+  }
+  // Local settings allow, check controlling strategy
+  final disabledByStrategy = await bind.mainGetCommon(
+          key: "is-remote-modify-disabled-by-controlling-strategy") ==
+      "true";
+  return disabledByStrategy;
 }
 
 // to-do: web not implemented

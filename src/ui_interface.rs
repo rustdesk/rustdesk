@@ -15,6 +15,7 @@ use hbb_common::{
     sleep,
     tokio::{sync::mpsc, time},
 };
+use serde::Deserialize;
 use serde_derive::Serialize;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::process::Child;
@@ -69,6 +70,8 @@ lazy_static::lazy_static! {
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
     static ref ASYNC_HTTP_STATUS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
+    // default: false (not disabled)
+    static ref CONTROLLING_STRATEGY_DISABLE_REMOTE_MODIFY : Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1236,6 +1239,9 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                     video_conn_count,
                                 };
                             }
+                            Ok(Some(ipc::Data::ControllingStrategyDisableRemoteModify(Some(v)))) => {
+                                *CONTROLLING_STRATEGY_DISABLE_REMOTE_MODIFY.lock().unwrap() = v;
+                            }
                             _ => {}
                         }
                     }
@@ -1249,6 +1255,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                         c.send(&ipc::Data::Config(("temporary-password".to_owned(), None))).await.ok();
                         #[cfg(feature = "flutter")]
                         c.send(&ipc::Data::VideoConnCount(None)).await.ok();
+                        c.send(&ipc::Data::ControllingStrategyDisableRemoteModify(None)).await.ok();
                     }
                 }
             }
@@ -1540,4 +1547,8 @@ pub fn clear_trusted_devices() {
 #[cfg(feature = "flutter")]
 pub fn max_encrypt_len() -> usize {
     hbb_common::config::ENCRYPT_MAX_LEN
+}
+
+pub fn is_remote_modify_disabled_by_controlling_strategy() -> bool {
+    *CONTROLLING_STRATEGY_DISABLE_REMOTE_MODIFY.lock().unwrap()
 }

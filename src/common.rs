@@ -2265,6 +2265,19 @@ pub fn str2color(s: &str, alpha: u8) -> u32 {
     (alpha as u32) << 24 | rgb
 }
 
+pub fn is_feature_disabled_by_controlling_strategy(
+    disabled_features: u64,
+    feature: hbb_common::rendezvous_proto::controlling_strategy::Feature,
+) -> bool {
+    use hbb_common::protobuf::Enum;
+    let bit = feature.value();
+    if bit >= 0 && bit < 64 {
+        (disabled_features & (1 << bit)) != 0
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

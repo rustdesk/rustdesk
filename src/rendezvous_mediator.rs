@@ -427,6 +427,7 @@ impl RendezvousMediator {
             rr.secure,
             false,
             Default::default(),
+            rr.controlling_strategy.clone().into_option(),
         )
         .await
     }
@@ -440,6 +441,7 @@ impl RendezvousMediator {
         secure: bool,
         initiate: bool,
         socket_addr_v6: bytes::Bytes,
+        controlling_strategy: Option<ControllingStrategy>,
     ) -> ResultType<()> {
         let peer_addr = AddrMangle::decode(&socket_addr);
         log::info!(
@@ -473,6 +475,7 @@ impl RendezvousMediator {
             peer_addr,
             secure,
             is_ipv4(&self.addr),
+            controlling_strategy,
         )
         .await;
         Ok(())
@@ -491,7 +494,13 @@ impl RendezvousMediator {
         let relay = use_ws() || Config::is_proxy();
         let mut socket_addr_v6 = Default::default();
         if peer_addr_v6.port() > 0 && !relay {
-            socket_addr_v6 = start_ipv6(peer_addr_v6, addr, server.clone()).await;
+            socket_addr_v6 = start_ipv6(
+                peer_addr_v6,
+                addr,
+                server.clone(),
+                fla.controlling_strategy.clone().into_option(),
+            )
+            .await;
         }
         if is_ipv4(&self.addr) && !relay && !config::is_disable_tcp_listen() {
             if let Err(err) = self
@@ -517,6 +526,7 @@ impl RendezvousMediator {
             true,
             true,
             socket_addr_v6,
+            fla.controlling_strategy.into_option(),
         )
         .await
     }
@@ -547,7 +557,14 @@ impl RendezvousMediator {
         });
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, true).await;
+        crate::accept_connection(
+            server.clone(),
+            socket,
+            peer_addr,
+            true,
+            fla.controlling_strategy.into_option(),
+        )
+        .await;
         Ok(())
     }
 
@@ -562,8 +579,16 @@ impl RendezvousMediator {
         let peer_addr_v6 = hbb_common::AddrMangle::decode(&ph.socket_addr_v6);
         let relay = use_ws() || Config::is_proxy() || ph.force_relay;
         let mut socket_addr_v6 = Default::default();
+        // Extract permission controlling_strategy from PunchHole message
+        let controlling_strategy = ph.controlling_strategy.into_option();
         if peer_addr_v6.port() > 0 && !relay {
-            socket_addr_v6 = start_ipv6(peer_addr_v6, peer_addr, server.clone()).await;
+            socket_addr_v6 = start_ipv6(
+                peer_addr_v6,
+                peer_addr,
+                server.clone(),
+                controlling_strategy.clone(),
+            )
+            .await;
         }
         let relay_server = self.get_relay_server(ph.relay_server);
         // for ensure, websocket go relay directly
@@ -582,6 +607,7 @@ impl RendezvousMediator {
                     true,
                     true,
                     socket_addr_v6.clone(),
+                    controlling_strategy,
                 )
                 .await;
         }
@@ -598,7 +624,8 @@ impl RendezvousMediator {
         };
         if ph.udp_port > 0 {
             peer_addr.set_port(ph.udp_port as u16);
-            self.punch_udp_hole(peer_addr, server, msg_punch).await?;
+            self.punch_udp_hole(peer_addr, server, msg_punch, controlling_strategy)
+                .await?;
             return Ok(());
         }
         log::debug!("Punch tcp hole to {:?}", peer_addr);
@@ -614,7 +641,14 @@ impl RendezvousMediator {
         msg_out.set_punch_hole_sent(msg_punch);
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, true).await;
+        crate::accept_connection(
+            server.clone(),
+            socket,
+            peer_addr,
+            true,
+            controlling_strategy,
+        )
+        .await;
         Ok(())
     }
 
@@ -623,6 +657,7 @@ impl RendezvousMediator {
         peer_addr: SocketAddr,
         server: ServerPtr,
         msg_punch: PunchHoleSent,
+        controlling_strategy: Option<ControllingStrategy>,
     ) -> ResultType<()> {
         let mut msg_out = Message::new();
         msg_out.set_punch_hole_sent(msg_punch);
@@ -637,7 +672,14 @@ impl RendezvousMediator {
                 socket.send_to(&data, addr).await.ok();
             }
         });
-        udp_nat_listen(socket_cloned.clone(), peer_addr, peer_addr, server).await?;
+        udp_nat_listen(
+            socket_cloned.clone(),
+            peer_addr,
+            peer_addr,
+            server,
+            controlling_strategy,
+        )
+        .await?;
         Ok(())
     }
 
@@ -778,6 +820,7 @@ async fn direct_server(server: ServerPtr) {
                             hbb_common::Stream::from(stream, local_addr),
                             addr,
                             false,
+                            None, // Direct connections don't have controlling_strategy
                         )
                         .await
                     );
@@ -809,12 +852,22 @@ async fn start_ipv6(
     peer_addr_v6: SocketAddr,
     peer_addr_v4: SocketAddr,
     server: ServerPtr,
+    controlling_strategy: Option<ControllingStrategy>,
 ) -> bytes::Bytes {
     crate::test_ipv6().await;
     if let Some((socket, local_addr_v6)) = crate::get_ipv6_socket().await {
         let server = server.clone();
         tokio::spawn(async move {
-            allow_err!(udp_nat_listen(socket.clone(), peer_addr_v6, peer_addr_v4, server).await);
+            allow_err!(
+                udp_nat_listen(
+                    socket.clone(),
+                    peer_addr_v6,
+                    peer_addr_v4,
+                    server,
+                    controlling_strategy
+                )
+                .await
+            );
         });
         return local_addr_v6;
     }
@@ -826,6 +879,7 @@ async fn udp_nat_listen(
     peer_addr: SocketAddr,
     peer_addr_v4: SocketAddr,
     server: ServerPtr,
+    controlling_strategy: Option<ControllingStrategy>,
 ) -> ResultType<()> {
     let tm = Instant::now();
     let socket_cloned = socket.clone();
@@ -838,7 +892,14 @@ async fn udp_nat_listen(
             res,
         )
         .await?;
-        crate::server::create_tcp_connection(server, stream.1, peer_addr_v4, true).await?;
+        crate::server::create_tcp_connection(
+            server,
+            stream.1,
+            peer_addr_v4,
+            true,
+            controlling_strategy,
+        )
+        .await?;
         Ok(())
     };
     func.await.map_err(|e: anyhow::Error| {
