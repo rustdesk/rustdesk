@@ -5126,9 +5126,13 @@ impl Retina {
 
     #[inline]
     fn on_mouse_event(&mut self, e: &mut MouseEvent, current: usize) {
-        let evt_type = e.mask & 0x7;
-        if evt_type == crate::input::MOUSE_TYPE_WHEEL {
-            // x and y are always 0, +1 or -1
+        let evt_type = e.mask & crate::input::MOUSE_TYPE_MASK;
+        // Delta-based events do not contain absolute coordinates.
+        // Avoid applying Retina coordinate scaling to them.
+        if evt_type == crate::input::MOUSE_TYPE_WHEEL
+            || evt_type == crate::input::MOUSE_TYPE_TRACKPAD
+            || evt_type == crate::input::MOUSE_TYPE_MOVE_RELATIVE
+        {
             return;
         }
         let Some(d) = self.displays.get(current) else {
@@ -5338,6 +5342,9 @@ mod raii {
                     .unwrap()
                     .on_connection_close(self.0);
             }
+            // Clear per-connection state to avoid stale behavior if conn ids are reused.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            clear_relative_mouse_active(self.0);
             AUTHED_CONNS.lock().unwrap().retain(|c| c.conn_id != self.0);
             let remote_count = AUTHED_CONNS
                 .lock()

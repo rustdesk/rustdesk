@@ -730,5 +730,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input note here", "voeg hier een opmerking toe"),
         ("note-at-conn-end-tip", "Vraag om een opmerking aan het einde van de verbinding"),
         ("Show terminal extra keys", "Toon extra toetsen voor terminal"),
+        ("Relative Mouse Mode", ""),
+        ("rel-mouse-not-supported-peer-tip", ""),
+        ("rel-mouse-not-ready-tip", ""),
+        ("rel-mouse-lock-failed-tip", ""),
+        ("rel-mouse-entered-tip", ""),
+        ("rel-mouse-permission-lost-tip", ""),
     ].iter().cloned().collect();
 }
