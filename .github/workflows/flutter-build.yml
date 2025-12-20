@@ -444,7 +444,7 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-apple-ios,
-              os: macos-13,
+              os: macos-latest,
               vcpkg-triplet: arm64-ios,
             }
     steps:
