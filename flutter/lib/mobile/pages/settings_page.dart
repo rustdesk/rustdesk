@@ -790,6 +790,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             title: Text(translate('note-at-conn-end-tip')),
             initialValue: _allowAskForNoteAtEndOfConnection,
             onToggle: (v) async {
+              if (v && !gFFI.userModel.isLogin) {
+                final res = await loginDialog();
+                if (res != true) return;
+              }
               await mainSetLocalBoolOption(
                   kOptionAllowAskForNoteAtEndOfConnection, v);
               final newValue = mainGetLocalBoolOptionSync(
