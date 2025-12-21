@@ -1101,6 +1101,9 @@ class FfiModel with ChangeNotifier {
 
   void _queryAuditGuid(String peerId) async {
     try {
+      if (bind.isDisableAccount()) {
+        return;
+      }
       if (bind
           .sessionGetAuditServerSync(sessionId: sessionId, typ: "conn/active")
           .isEmpty) {
