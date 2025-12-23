@@ -1081,7 +1081,8 @@ class FfiModel with ChangeNotifier {
       if (displays.length == 1) {
         bind.sessionSetSize(
           sessionId: sessionId,
-          display: pi.currentDisplay == kAllDisplayValue ? 0 : pi.currentDisplay,
+          display:
+              pi.currentDisplay == kAllDisplayValue ? 0 : pi.currentDisplay,
           width: displays[0].width,
           height: displays[0].height,
         );
@@ -1100,6 +1101,14 @@ class FfiModel with ChangeNotifier {
 
   void _queryAuditGuid(String peerId) async {
     try {
+      if (bind.isDisableAccount()) {
+        return;
+      }
+      if (bind
+          .sessionGetAuditServerSync(sessionId: sessionId, typ: "conn/active")
+          .isEmpty) {
+        return;
+      }
       if (!mainGetLocalBoolOptionSync(
           kOptionAllowAskForNoteAtEndOfConnection)) {
         return;

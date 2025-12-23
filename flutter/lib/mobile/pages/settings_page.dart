@@ -786,19 +786,24 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               showThemeSettings(gFFI.dialogManager);
             },
           ),
-          SettingsTile.switchTile(
-            title: Text(translate('note-at-conn-end-tip')),
-            initialValue: _allowAskForNoteAtEndOfConnection,
-            onToggle: (v) async {
-              await mainSetLocalBoolOption(
-                  kOptionAllowAskForNoteAtEndOfConnection, v);
-              final newValue = mainGetLocalBoolOptionSync(
-                  kOptionAllowAskForNoteAtEndOfConnection);
-              setState(() {
-                _allowAskForNoteAtEndOfConnection = newValue;
-              });
-            },
-          )
+          if (!bind.isDisableAccount())
+            SettingsTile.switchTile(
+              title: Text(translate('note-at-conn-end-tip')),
+              initialValue: _allowAskForNoteAtEndOfConnection,
+              onToggle: (v) async {
+                if (v && !gFFI.userModel.isLogin) {
+                  final res = await loginDialog();
+                  if (res != true) return;
+                }
+                await mainSetLocalBoolOption(
+                    kOptionAllowAskForNoteAtEndOfConnection, v);
+                final newValue = mainGetLocalBoolOptionSync(
+                    kOptionAllowAskForNoteAtEndOfConnection);
+                setState(() {
+                  _allowAskForNoteAtEndOfConnection = newValue;
+                });
+              },
+            )
         ]),
         if (isAndroid)
           SettingsSection(title: Text(translate('Hardware Codec')), tiles: [

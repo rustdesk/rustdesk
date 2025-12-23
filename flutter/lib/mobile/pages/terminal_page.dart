@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
@@ -29,9 +31,12 @@ class TerminalPage extends StatefulWidget {
 }
 
 class _TerminalPageState extends State<TerminalPage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   late FFI _ffi;
   late TerminalModel _terminalModel;
+  double? _cellHeight;
+  double _sysKeyboardHeight = 0;
+  Timer? _keyboardDebounce;
 
   // For web only.
   // 'monospace' does not work on web, use Google Fonts, `??` is only for null safety.
@@ -44,6 +49,7 @@ class _TerminalPageState extends State<TerminalPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     debugPrint(
         '[TerminalPage] Initializing terminal ${widget.terminalId} for peer ${widget.id}');
@@ -62,6 +68,10 @@ class _TerminalPageState extends State<TerminalPage>
     debugPrint(
         '[TerminalPage] Terminal model created for terminal ${widget.terminalId}');
 
+    _terminalModel.onResizeExternal = (w, h, pw, ph) {
+      _cellHeight = ph * 1.0;
+    };
+
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
 
@@ -78,8 +88,34 @@ class _TerminalPageState extends State<TerminalPage>
     // Unregister terminal model from FFI
     _ffi.unregisterTerminalModel(widget.terminalId);
     _terminalModel.dispose();
+    _keyboardDebounce?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
     TerminalConnectionManager.releaseConnection(widget.id);
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+
+    _keyboardDebounce?.cancel();
+    _keyboardDebounce = Timer(const Duration(milliseconds: 20), () {
+      final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+      setState(() {
+        _sysKeyboardHeight = bottomInset;
+      });
+    });
+  }
+
+  EdgeInsets _calculatePadding(double heightPx) {
+    if (_cellHeight == null) {
+      return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+    }
+    final realHeight = heightPx - _sysKeyboardHeight;
+    final rows = (realHeight / _cellHeight!).floor();
+    final extraSpace = realHeight - rows * _cellHeight!;
+    final topBottom = max(0.0, extraSpace / 2.0);
+    return EdgeInsets.only(left: 5.0, right: 5.0, top: topBottom, bottom: topBottom + _sysKeyboardHeight);
   }
 
   @override
@@ -96,28 +132,37 @@ class _TerminalPageState extends State<TerminalPage>
 
   Widget buildBody() {
     return Scaffold(
+      resizeToAvoidBottomInset: false, // Disable automatic layout adjustment; manually control UI updates to prevent flickering when the keyboard shows/hides
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: TerminalView(
-        _terminalModel.terminal,
-        controller: _terminalModel.terminalController,
-        autofocus: true,
-        textStyle: _getTerminalStyle(),
-        backgroundOpacity: 0.7,
-        padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0),
-        onSecondaryTapDown: (details, offset) async {
-          final selection = _terminalModel.terminalController.selection;
-          if (selection != null) {
-            final text = _terminalModel.terminal.buffer.getText(selection);
-            _terminalModel.terminalController.clearSelection();
-            await Clipboard.setData(ClipboardData(text: text));
-          } else {
-            final data = await Clipboard.getData('text/plain');
-            final text = data?.text;
-            if (text != null) {
-              _terminalModel.terminal.paste(text);
-            }
-          }
-        },
+      body: SafeArea(
+        top: true,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final heightPx = constraints.maxHeight;
+            return TerminalView(
+              _terminalModel.terminal,
+              controller: _terminalModel.terminalController,
+              autofocus: true,
+              textStyle: _getTerminalStyle(),
+              backgroundOpacity: 0.7,
+              padding: _calculatePadding(heightPx),
+              onSecondaryTapDown: (details, offset) async {
+                final selection = _terminalModel.terminalController.selection;
+                if (selection != null) {
+                  final text = _terminalModel.terminal.buffer.getText(selection);
+                  _terminalModel.terminalController.clearSelection();
+                  await Clipboard.setData(ClipboardData(text: text));
+                } else {
+                  final data = await Clipboard.getData('text/plain');
+                  final text = data?.text;
+                  if (text != null) {
+                    _terminalModel.terminal.paste(text);
+                  }
+                }
+              },
+            );
+          },
+        ),
       ),
     );
   }
