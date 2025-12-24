@@ -474,7 +474,7 @@ impl ScrollState {
                     && dir_y == -self.last_direction_y
                     && y.abs() == 1;
 
-                is_micro_reversal_x || is_micro_reversal_y
+                is_micro_reversal_x && is_micro_reversal_y
             } else {
                 false
             }
@@ -501,6 +501,11 @@ impl ScrollState {
         self.last_direction_y = 0;
         self.last_scroll_time = None;
     }
+}
+
+/// Reset scroll state on disconnect to prevent stale state affecting next session
+pub fn reset_scroll_state() {
+    SCROLL_STATE.lock().unwrap().reset();
 }
 
 lazy_static::lazy_static! {
