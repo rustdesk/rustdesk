@@ -98,6 +98,39 @@ fn get_default_shell() -> String {
     }
 }
 
+/// Determines the appropriate TERM environment variable for the PTY shell.
+///
+/// This function ensures that the spawned shell has a correct TERM value,
+/// which is essential for proper handling of special keys like Delete, Home, End, etc.
+///
+/// The function prioritizes in the following order:
+/// 1. Inherited TERM from current environment (if valid)
+/// 2. `screen-256color` when running inside tmux or screen sessions
+/// 3. `xterm-256color` as the default fallback
+///
+/// Invalid TERM values like empty string, "unknown", or "dumb" are ignored.
+///
+/// This fixes issue #13621 where Delete key was not working in terminal sessions.
+fn determine_shell_term() -> String {
+    const INVALID_TERM_VALUES: [&str; 3] = ["", "unknown", "dumb"];
+
+    // First, try to inherit TERM from the current environment
+    if let Ok(term) = std::env::var("TERM") {
+        let term = term.trim();
+        if !INVALID_TERM_VALUES.contains(&term) {
+            return term.to_string();
+        }
+    }
+
+    // Check if running inside tmux or screen
+    if std::env::var("TMUX").is_ok() || std::env::var("STY").is_ok() {
+        return "screen-256color".to_string();
+    }
+
+    // Default to xterm-256color which is widely supported
+    "xterm-256color".to_string()
+}
+
 pub fn is_service_specified_user(service_id: &str) -> Option<bool> {
     get_service(service_id).map(|s| s.lock().unwrap().is_specified_user)
 }
@@ -773,6 +806,12 @@ impl TerminalServiceProxy {
 
         #[allow(unused_mut)]
         let mut cmd = CommandBuilder::new(&shell);
+
+        // Set TERM environment variable to ensure proper handling of special keys
+        // (Delete, Home, End, etc.) - fixes issue #13621
+        let term = determine_shell_term();
+        log::debug!("Setting TERM={}", term);
+        cmd.env("TERM", term);
 
         #[cfg(target_os = "windows")]
         if let Some(token) = &self.user_token {
