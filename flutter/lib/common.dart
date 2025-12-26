@@ -1932,44 +1932,41 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
     return null;
   }
 
-  double? frameLeft;
-  double? frameTop;
-  double? frameRight;
-  double? frameBottom;
-
   if (isDesktop || isWebDesktop) {
-    for (final screen in await window_size.getScreenList()) {
-      frameLeft = frameLeft == null
-          ? screen.visibleFrame.left
-          : min(screen.visibleFrame.left, frameLeft);
-      frameTop = frameTop == null
-          ? screen.visibleFrame.top
-          : min(screen.visibleFrame.top, frameTop);
-      frameRight = frameRight == null
-          ? screen.visibleFrame.right
-          : max(screen.visibleFrame.right, frameRight);
-      frameBottom = frameBottom == null
-          ? screen.visibleFrame.bottom
-          : max(screen.visibleFrame.bottom, frameBottom);
+    final screens = await window_size.getScreenList();
+    if (screens.isNotEmpty) {
+      final windowRect = Rect.fromLTWH(left, top, width, height);
+      bool isVisible = false;
+      for (final screen in screens) {
+        final intersection = windowRect.intersect(screen.visibleFrame);
+        if (intersection.width >= 10.0 && intersection.height >= 10.0) {
+          isVisible = true;
+          break;
+        }
+      }
+      if (!isVisible) {
+        return null;
+      }
+      return Offset(left, top);
     }
   }
-  if (frameLeft == null) {
-    frameLeft = 0.0;
-    frameTop = 0.0;
-    frameRight = ((isDesktop || isWebDesktop)
-            ? kDesktopMaxDisplaySize
-            : kMobileMaxDisplaySize)
-        .toDouble();
-    frameBottom = ((isDesktop || isWebDesktop)
-            ? kDesktopMaxDisplaySize
-            : kMobileMaxDisplaySize)
-        .toDouble();
-  }
+
+  double frameLeft = 0.0;
+  double frameTop = 0.0;
+  double frameRight = ((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplaySize
+          : kMobileMaxDisplaySize)
+      .toDouble();
+  double frameBottom = ((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplaySize
+          : kMobileMaxDisplaySize)
+      .toDouble();
+
   final minWidth = 10.0;
-  if ((left + minWidth) > frameRight! ||
-      (top + minWidth) > frameBottom! ||
+  if ((left + minWidth) > frameRight ||
+      (top + minWidth) > frameBottom ||
       (left + width - minWidth) < frameLeft ||
-      top < frameTop!) {
+      top < frameTop) {
     return null;
   } else {
     return Offset(left, top);
