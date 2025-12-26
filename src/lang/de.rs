@@ -729,5 +729,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server-oss-not-support-tip", "HINWEIS: RustDesk Server OSS enthält diese Funktion nicht."),
         ("input note here", "Hier eine Notiz eingeben"),
         ("note-at-conn-end-tip", "Am Ende der Verbindung um eine Notiz bitten."),
+        ("Show terminal extra keys", ""),
     ].iter().cloned().collect();
 }

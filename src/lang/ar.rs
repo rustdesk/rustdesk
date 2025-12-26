@@ -729,5 +729,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server-oss-not-support-tip", "هذه الميزة غير مدعومة من قبل خادمك"),
         ("input note here", "أدخل الملاحظة هنا"),
         ("note-at-conn-end-tip", "سيتم عرض هذه الملاحظة عند نهاية الاتصال"),
+        ("Show terminal extra keys", ""),
     ].iter().cloned().collect();
 }
