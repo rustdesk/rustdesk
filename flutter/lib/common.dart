@@ -3016,10 +3016,10 @@ Future<void> start_service(bool is_start) async {
 }
 
 Future<bool> canBeBlocked() async {
-  var access_mode = await bind.mainGetOption(key: kOptionAccessMode);
-  var option = option2bool(kOptionAllowRemoteConfigModification,
-      await bind.mainGetOption(key: kOptionAllowRemoteConfigModification));
-  return access_mode == 'view' || (access_mode.isEmpty && !option);
+  final allow =
+      await bind.mainGetCommon(key: kOptionAllowRemoteConfigModification) ==
+          "true";
+  return !allow;
 }
 
 // to-do: web not implemented

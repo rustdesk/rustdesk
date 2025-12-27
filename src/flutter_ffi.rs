@@ -2600,6 +2600,8 @@ pub fn main_get_common(key: String) -> String {
         return false.to_string();
     } else if key == "transfer-job-id" {
         return hbb_common::fs::get_next_job_id().to_string();
+    } else if key == config::keys::OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION {
+        return allow_remote_config_modification().to_string();
     } else {
         if key.starts_with("download-data-") {
             let id = key.replace("download-data-", "");
