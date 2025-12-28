@@ -729,5 +729,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server-oss-not-support-tip", "توجه: سرور RustDesk OSS این ویژگی را ندارد."),
         ("input note here", "یادداشت را اینجا وارد کنید"),
         ("note-at-conn-end-tip", "در پایان اتصال، یادداشت بخواهید"),
+        ("Show terminal extra keys", ""),
     ].iter().cloned().collect();
 }

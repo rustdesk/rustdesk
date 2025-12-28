@@ -729,5 +729,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server-oss-not-support-tip", "注意：RustDesk 开源服务器 (OSS server) 不包含此功能。"),
         ("input note here", "输入备注"),
         ("note-at-conn-end-tip", "在连接结束时请求备注"),
+        ("Show terminal extra keys", "显示终端扩展键"),
     ].iter().cloned().collect();
 }
