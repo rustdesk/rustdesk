@@ -192,6 +192,29 @@ impl VideoFrameController {
     }
 }
 
+struct FirstFrameWatchdog {
+    waited: Duration,
+    timeout: Duration,
+}
+
+impl FirstFrameWatchdog {
+    fn new(timeout: Duration) -> Self {
+        Self {
+            waited: Duration::ZERO,
+            timeout,
+        }
+    }
+
+    fn on_no_frame(&mut self, tick: Duration) -> bool {
+        self.waited = self.waited.saturating_add(tick);
+        self.waited >= self.timeout
+    }
+
+    fn reset(&mut self) {
+        self.waited = Duration::ZERO;
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VideoSource {
     Monitor,
@@ -648,11 +671,15 @@ fn run(vs: VideoService) -> ResultType<()> {
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
     let mut first_frame = true;
+    let first_frame_timeout = Duration::from_secs(3);
+    let mut first_frame_watchdog = FirstFrameWatchdog::new(first_frame_timeout);
+    let mut sent_first_frame = false;
     let capture_width = c.width;
     let capture_height = c.height;
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
 
     while sp.ok() {
+        let mut produced_frame = false;
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
         check_qos(
@@ -719,8 +746,11 @@ fn run(vs: VideoService) -> ResultType<()> {
         let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
         let res = match c.frame(spf) {
             Ok(frame) => {
-                repeat_encode_counter = 0;
-                if frame.valid() {
+                if !frame.valid() {
+                    Err(std::io::Error::new(WouldBlock, "empty frame"))
+                } else {
+                    repeat_encode_counter = 0;
+
                     let screenshot = SCREENSHOTS.lock().unwrap().remove(&display_idx);
                     if let Some(mut screenshot) = screenshot {
                         let restore_vram = screenshot.restore_vram;
@@ -777,18 +807,23 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_width,
                         capture_height,
                     )?;
+                    if !send_conn_ids.is_empty() {
+                        produced_frame = true;
+                    }
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
-                }
-                #[cfg(windows)]
-                {
-                    #[cfg(feature = "vram")]
-                    if try_gdi == 1 && !c.is_gdi() {
-                        VRamEncoder::set_fallback_gdi(sp.name(), false);
+
+                    #[cfg(windows)]
+                    {
+                        #[cfg(feature = "vram")]
+                        if try_gdi == 1 && !c.is_gdi() {
+                            VRamEncoder::set_fallback_gdi(sp.name(), false);
+                        }
+                        try_gdi = 0;
                     }
-                    try_gdi = 0;
+
+                    Ok(())
                 }
-                Ok(())
             }
             Err(err) => Err(err),
         };
@@ -836,6 +871,9 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_width,
                             capture_height,
                         )?;
+                        if !send_conn_ids.is_empty() {
+                            produced_frame = true;
+                        }
                         frame_controller.set_send(now, send_conn_ids);
                         send_counter += 1;
                     }
@@ -861,6 +899,18 @@ fn run(vs: VideoService) -> ResultType<()> {
                 {
                     would_block_count = 0;
                 }
+            }
+        }
+
+        if !sent_first_frame {
+            if produced_frame {
+                sent_first_frame = true;
+                first_frame_watchdog.reset();
+            } else if first_frame_watchdog.on_no_frame(spf) {
+                log::warn!(
+                    "No first video frame for {first_frame_timeout:?}, restarting video service"
+                );
+                bail!("SWITCH");
             }
         }
 
@@ -1415,5 +1465,27 @@ fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, da
         .send((hbb_common::tokio::time::Instant::now(), Arc::new(msg_out)))
     {
         log::error!("Failed to send screenshot, {}", e);
+    }
+}
+
+#[cfg(test)]
+mod first_frame_watchdog_tests {
+    use super::FirstFrameWatchdog;
+    use std::time::Duration;
+
+    #[test]
+    fn triggers_after_timeout() {
+        let mut w = FirstFrameWatchdog::new(Duration::from_secs(3));
+        assert!(!w.on_no_frame(Duration::from_secs(1)));
+        assert!(!w.on_no_frame(Duration::from_secs(1)));
+        assert!(w.on_no_frame(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn resets_after_frame() {
+        let mut w = FirstFrameWatchdog::new(Duration::from_secs(3));
+        assert!(!w.on_no_frame(Duration::from_secs(2)));
+        w.reset();
+        assert!(!w.on_no_frame(Duration::from_secs(2)));
     }
 }
