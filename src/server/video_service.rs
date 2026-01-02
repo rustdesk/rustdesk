@@ -193,25 +193,24 @@ impl VideoFrameController {
 }
 
 struct FirstFrameWatchdog {
-    waited: Duration,
+    start: Instant,
     timeout: Duration,
 }
 
 impl FirstFrameWatchdog {
     fn new(timeout: Duration) -> Self {
         Self {
-            waited: Duration::ZERO,
+            start: Instant::now(),
             timeout,
         }
     }
 
-    fn on_no_frame(&mut self, tick: Duration) -> bool {
-        self.waited = self.waited.saturating_add(tick);
-        self.waited >= self.timeout
+    fn has_timed_out(&self) -> bool {
+        self.has_timed_out_at(Instant::now())
     }
 
-    fn reset(&mut self) {
-        self.waited = Duration::ZERO;
+    fn has_timed_out_at(&self, now: Instant) -> bool {
+        now.saturating_duration_since(self.start) >= self.timeout
     }
 }
 
@@ -672,7 +671,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut encode_fail_counter = 0;
     let mut first_frame = true;
     let first_frame_timeout = Duration::from_secs(3);
-    let mut first_frame_watchdog = FirstFrameWatchdog::new(first_frame_timeout);
+    let first_frame_watchdog = FirstFrameWatchdog::new(first_frame_timeout);
     let mut sent_first_frame = false;
     let capture_width = c.width;
     let capture_height = c.height;
@@ -905,8 +904,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         if !sent_first_frame {
             if produced_frame {
                 sent_first_frame = true;
-                first_frame_watchdog.reset();
-            } else if first_frame_watchdog.on_no_frame(spf) {
+            } else if first_frame_watchdog.has_timed_out() {
                 log::warn!(
                     "No first video frame for {first_frame_timeout:?}, restarting video service"
                 );
@@ -1471,21 +1469,17 @@ fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, da
 #[cfg(test)]
 mod first_frame_watchdog_tests {
     use super::FirstFrameWatchdog;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn triggers_after_timeout() {
-        let mut w = FirstFrameWatchdog::new(Duration::from_secs(3));
-        assert!(!w.on_no_frame(Duration::from_secs(1)));
-        assert!(!w.on_no_frame(Duration::from_secs(1)));
-        assert!(w.on_no_frame(Duration::from_secs(1)));
-    }
-
-    #[test]
-    fn resets_after_frame() {
-        let mut w = FirstFrameWatchdog::new(Duration::from_secs(3));
-        assert!(!w.on_no_frame(Duration::from_secs(2)));
-        w.reset();
-        assert!(!w.on_no_frame(Duration::from_secs(2)));
+        let t0 = Instant::now();
+        let w = FirstFrameWatchdog {
+            start: t0,
+            timeout: Duration::from_secs(3),
+        };
+        assert!(!w.has_timed_out_at(t0 + Duration::from_secs(1)));
+        assert!(!w.has_timed_out_at(t0 + Duration::from_secs(2)));
+        assert!(w.has_timed_out_at(t0 + Duration::from_secs(3)));
     }
 }
