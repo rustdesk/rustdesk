@@ -283,11 +283,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         _ = status_timer.tick() => {
                             if self.watchdog.check(self.is_connected, self.first_frame, self.handler.is_default(), Instant::now()) {
                                 log::warn!("No first video frame received, sending refresh");
-                                let mut misc = Misc::new();
-                                misc.set_refresh_video(true);
-                                let mut msg = Message::new();
-                                msg.set_misc(misc);
-                                allow_err!(peer.send(&msg).await);
+                                let display = self.handler.lc.read().unwrap().peer_info.as_ref().map(|p| p.current_display).unwrap_or(0);
+                                self.handler.refresh_video(display as _);
                             }
 
                             let elapsed = fps_instant.elapsed().as_millis();

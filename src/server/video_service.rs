@@ -655,7 +655,6 @@ fn run(vs: VideoService) -> ResultType<()> {
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
 
     while sp.ok() {
-        let mut produced_frame = false;
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
         check_qos(
@@ -783,9 +782,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_width,
                         capture_height,
                     )?;
-                    if !send_conn_ids.is_empty() {
-                        produced_frame = true;
-                    }
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
 
@@ -847,9 +843,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_width,
                             capture_height,
                         )?;
-                        if !send_conn_ids.is_empty() {
-                            produced_frame = true;
-                        }
                         frame_controller.set_send(now, send_conn_ids);
                         send_counter += 1;
                     }
