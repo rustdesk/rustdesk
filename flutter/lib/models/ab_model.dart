@@ -1015,16 +1015,8 @@ class LegacyAb extends BaseAb {
       var authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
       final body = jsonEncode({"data": jsonEncode(_serialize())});
-      http.Response resp;
-      // support compression
-      if (licensedDevices > 0 && body.length > 1024) {
-        authHeaders['Content-Encoding'] = "gzip";
-        resp = await http.post(Uri.parse(api),
-            headers: authHeaders, body: GZipCodec().encode(utf8.encode(body)));
-      } else {
-        resp =
-            await http.post(Uri.parse(api), headers: authHeaders, body: body);
-      }
+      http.Response resp =
+          await http.post(Uri.parse(api), headers: authHeaders, body: body);
       if (resp.statusCode == 200 &&
           (resp.body.isEmpty || resp.body.toLowerCase() == 'null')) {
         ret = true;
