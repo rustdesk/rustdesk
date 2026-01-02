@@ -282,8 +282,18 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         _ = status_timer.tick() => {
                             if self.watchdog.check(self.is_connected, self.first_frame, self.handler.is_default(), Instant::now()) {
-                                log::warn!("No first video frame received, sending refresh");
-                                let display = self.handler.lc.read().unwrap().peer_info.as_ref().map(|p| p.current_display).unwrap_or(0);
+                                let (id, display) = {
+                                    let lch = self.handler.lc.read().unwrap();
+                                    let display = lch
+                                        .peer_info
+                                        .as_ref()
+                                        .map(|p| p.current_display)
+                                        .unwrap_or(0);
+                                    (lch.id.clone(), display)
+                                };
+                                log::warn!(
+                                    "No first video frame received, id={id}, display={display}, sending refresh"
+                                );
                                 self.handler.refresh_video(display as _);
                             }
 
@@ -1292,8 +1302,14 @@ impl<T: InvokeUiSession> Remote<T> {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
                 Some(message::Union::VideoFrame(vf)) => {
+                    let display = vf.display as usize;
                     if !self.first_frame {
                         self.first_frame = true;
+                        log::info!(
+                            "First video frame received, id={}, display={}",
+                            self.handler.get_id(),
+                            display
+                        );
                         self.handler.close_success();
                         self.handler.adapt_size();
                         self.send_toggle_virtual_display_msg(peer).await;
@@ -1301,7 +1317,6 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     self.video_format = CodecFormat::from(&vf);
 
-                    let display = vf.display as usize;
                     if !self.video_threads.contains_key(&display) {
                         self.new_video_thread(display);
                     }

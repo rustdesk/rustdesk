@@ -650,6 +650,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
     let mut first_frame = true;
+    let mut logged_invalid_frame = false;
     let capture_width = c.width;
     let capture_height = c.height;
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
@@ -722,6 +723,24 @@ fn run(vs: VideoService) -> ResultType<()> {
         let res = match c.frame(spf) {
             Ok(frame) => {
                 if !frame.valid() {
+                    if !logged_invalid_frame {
+                        logged_invalid_frame = true;
+                        match &frame {
+                            scrap::Frame::PixelBuffer(f) => {
+                                log::debug!(
+                                    "capturer returned invalid frame (pixelbuffer), len={}, w={}, h={}, treating as WouldBlock",
+                                    f.data().len(),
+                                    f.width(),
+                                    f.height()
+                                );
+                            }
+                            scrap::Frame::Texture((texture, _)) => {
+                                log::debug!(
+                                    "capturer returned invalid frame (texture={texture:?}), treating as WouldBlock"
+                                );
+                            }
+                        }
+                    }
                     Err(std::io::Error::new(WouldBlock, "empty frame"))
                 } else {
                     repeat_encode_counter = 0;
