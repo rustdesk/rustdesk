@@ -192,27 +192,7 @@ impl VideoFrameController {
     }
 }
 
-struct FirstFrameWatchdog {
-    start: Instant,
-    timeout: Duration,
-}
 
-impl FirstFrameWatchdog {
-    fn new(timeout: Duration) -> Self {
-        Self {
-            start: Instant::now(),
-            timeout,
-        }
-    }
-
-    fn has_timed_out(&self) -> bool {
-        self.has_timed_out_at(Instant::now())
-    }
-
-    fn has_timed_out_at(&self, now: Instant) -> bool {
-        now.saturating_duration_since(self.start) >= self.timeout
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VideoSource {
@@ -670,9 +650,6 @@ fn run(vs: VideoService) -> ResultType<()> {
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
     let mut first_frame = true;
-    let first_frame_timeout = Duration::from_secs(3);
-    let first_frame_watchdog = FirstFrameWatchdog::new(first_frame_timeout);
-    let mut sent_first_frame = false;
     let capture_width = c.width;
     let capture_height = c.height;
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
@@ -898,17 +875,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                 {
                     would_block_count = 0;
                 }
-            }
-        }
-
-        if !sent_first_frame {
-            if produced_frame {
-                sent_first_frame = true;
-            } else if first_frame_watchdog.has_timed_out() {
-                log::warn!(
-                    "No first video frame for {first_frame_timeout:?}, restarting video service"
-                );
-                bail!("SWITCH");
             }
         }
 
@@ -1466,20 +1432,4 @@ fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, da
     }
 }
 
-#[cfg(test)]
-mod first_frame_watchdog_tests {
-    use super::FirstFrameWatchdog;
-    use std::time::{Duration, Instant};
 
-    #[test]
-    fn triggers_after_timeout() {
-        let t0 = Instant::now();
-        let w = FirstFrameWatchdog {
-            start: t0,
-            timeout: Duration::from_secs(3),
-        };
-        assert!(!w.has_timed_out_at(t0 + Duration::from_secs(1)));
-        assert!(!w.has_timed_out_at(t0 + Duration::from_secs(2)));
-        assert!(w.has_timed_out_at(t0 + Duration::from_secs(3)));
-    }
-}
