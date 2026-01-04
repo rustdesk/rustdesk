@@ -1,21 +1,20 @@
 use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
-use hbb_common::config::keys::OPTION_ALLOW_LINUX_HEADLESS;
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail,
-    config::Config,
+    config::{keys::OPTION_ALLOW_LINUX_HEADLESS, Config},
     libc::{c_char, c_int, c_long, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
     regex::{Captures, Regex},
+    users::{get_user_by_name, os::unix::UserExt},
 };
 use std::{
     cell::RefCell,
     ffi::{OsStr, OsString},
-    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     process::{Child, Command},
     string::String,
@@ -26,7 +25,6 @@ use std::{
     time::{Duration, Instant},
 };
 use terminfo::{capability as cap, Database};
-use users::{get_user_by_name, os::unix::UserExt};
 use wallpaper;
 
 type Xdo = *const c_void;
@@ -1714,26 +1712,57 @@ pub fn run_cmds_privileged(cmds: &str) -> bool {
     crate::platform::gtk_sudo::run(vec![cmds]).is_ok()
 }
 
+/// Spawn the current executable after a delay.
+///
+/// # Security
+/// The executable path is safely quoted using `shell_quote()` to prevent
+/// command injection vulnerabilities. The `secs` parameter is a u32, so it
+/// cannot contain malicious input.
+///
+/// # Arguments
+/// * `secs` - Number of seconds to wait before spawning
 pub fn run_me_with(secs: u32) {
-    let exe = std::env::current_exe()
-        .unwrap_or("".into())
-        .to_string_lossy()
-        .to_string();
-    // We use `CMD_SH` instead of `sh` to suppress some audit messages on some systems.
-    std::process::Command::new(CMD_SH.as_str())
+    let exe = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(e) => {
+            log::error!("Failed to get current exe: {}", e);
+            return;
+        }
+    };
+
+    // SECURITY: Use shell_quote to safely escape the executable path,
+    // preventing command injection even if the path contains special characters.
+    let exe_quoted = shell_quote(&exe.to_string_lossy());
+
+    // Spawn a background process that sleeps and then executes.
+    // The child process is automatically orphaned when parent exits,
+    // and will be adopted by init (PID 1).
+    Command::new(CMD_SH.as_str())
         .arg("-c")
-        .arg(&format!("sleep {secs}; {exe}"))
+        .arg(&format!("sleep {secs}; exec {exe_quoted}"))
         .spawn()
         .ok();
 }
 
 fn switch_service(stop: bool) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
+    // SECURITY: Use trusted home directory lookup via getpwuid instead of $HOME env var
+    // to prevent confused-deputy attacks where an attacker manipulates environment variables.
+    let home = get_home_dir_trusted()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
     Config::set_option("stop-service".into(), if stop { "Y" } else { "" }.into());
-    if home != "/root" && !Config::get().is_empty() {
-        let p = format!(".config/{}", crate::get_app_name().to_lowercase());
+    if !home.is_empty() && home != "/root" && !Config::get().is_empty() {
+        let app_name_lower = crate::get_app_name().to_lowercase();
         let app_name0 = crate::get_app_name();
-        format!("cp -f {home}/{p}/{app_name0}.toml /root/{p}/; cp -f {home}/{p}/{app_name0}2.toml /root/{p}/;")
+        let config_subdir = format!(".config/{}", app_name_lower);
+
+        // SECURITY: Quote all paths to prevent shell injection from paths containing
+        // spaces, semicolons, or other special characters.
+        let src1 = shell_quote(&format!("{}/{}/{}.toml", home, config_subdir, app_name0));
+        let src2 = shell_quote(&format!("{}/{}/{}2.toml", home, config_subdir, app_name0));
+        let dst = shell_quote(&format!("/root/{}/", config_subdir));
+
+        format!("cp -f {} {}; cp -f {} {};", src1, dst, src2, dst)
     } else {
         "".to_owned()
     }
@@ -1787,7 +1816,15 @@ fn check_if_stop_service() {
 }
 
 pub fn check_autostart_config() -> ResultType<()> {
-    let home = std::env::var("HOME").unwrap_or_default();
+    // SECURITY: Use trusted home directory lookup via getpwuid instead of $HOME env var
+    // to prevent confused-deputy attacks where an attacker manipulates environment variables.
+    let home = match get_home_dir_trusted() {
+        Some(p) => p.to_string_lossy().to_string(),
+        None => {
+            log::warn!("Failed to get trusted home directory for autostart config check");
+            return Ok(());
+        }
+    };
     let app_name = crate::get_app_name().to_lowercase();
     let path = format!("{home}/.config/autostart");
     let file = format!("{path}/{app_name}.desktop");

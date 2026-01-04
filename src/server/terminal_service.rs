@@ -774,6 +774,21 @@ impl TerminalServiceProxy {
         #[allow(unused_mut)]
         let mut cmd = CommandBuilder::new(&shell);
 
+        // Set `TERM` environment variable for macOS to ensure proper terminal behavior
+        // This fixes issues with control sequences (e.g., Delete/Backspace keys)
+        // macOS terminfo uses hex naming: '78' = 'x' for xterm entries
+        // Note: For Linux, `TERM` is set in src/platform/linux.rs try_start_server_()
+        #[cfg(target_os = "macos")]
+        {
+            let term = if std::path::Path::new("/usr/share/terminfo/78/xterm-256color").exists() {
+                "xterm-256color"
+            } else {
+                "xterm"
+            };
+            cmd.env("TERM", term);
+            log::debug!("Set TERM={} for macOS PTY", term);
+        }
+
         #[cfg(target_os = "windows")]
         if let Some(token) = &self.user_token {
             cmd.set_user_token(*token as _);
