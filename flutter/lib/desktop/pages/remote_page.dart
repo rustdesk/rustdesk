@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 
 import '../../consts.dart';
@@ -85,6 +84,7 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
+  final _uniqueKey = UniqueKey();
 
   var _blockableOverlayState = BlockableOverlayState();
 
@@ -138,9 +138,7 @@ class _RemotePageState extends State<RemotePage>
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     if (!isWeb) bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
@@ -206,26 +204,20 @@ class _RemotePageState extends State<RemotePage>
     if (isWindows) {
       _isWindowBlur = false;
     }
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
   }
 
   // When the window is unminimized, onWindowMaximize or onWindowRestore can be called when the old state was maximized or not.
   @override
   void onWindowMaximize() {
     super.onWindowMaximize();
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
   }
 
   @override
   void onWindowMinimize() {
     super.onWindowMinimize();
-    if (!isLinux) {
-      WakelockPlus.disable();
-    }
+    WakelockManager.disable(_uniqueKey);
   }
 
   @override
@@ -268,9 +260,7 @@ class _RemotePageState extends State<RemotePage>
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: SystemUiOverlay.values);
     }
-    if (!isLinux) {
-      await WakelockPlus.disable();
-    }
+    WakelockManager.disable(_uniqueKey);
     await Get.delete<FFI>(tag: widget.id);
     removeSharedStates(widget.id);
   }
