@@ -24,6 +24,7 @@ import 'package:provider/provider.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -2674,6 +2675,31 @@ Map<String, String> getHttpHeaders() {
 class SimpleWrapper<T> {
   T value;
   SimpleWrapper(this.value);
+}
+
+/// Wakelock manager with reference counting for desktop.
+/// Ensures wakelock is only disabled when all sessions are closed/minimized.
+///
+/// Note: Each isolate has its own WakelockPlus instance with independent assertion.
+/// As long as one isolate has wakelock enabled, the screen stays awake.
+/// This manager handles multiple tabs within the same isolate.
+class WakelockManager {
+  static final Set<UniqueKey> _enabledKeys = {};
+
+  static void enable(UniqueKey key) {
+    if (isLinux) return;
+    _enabledKeys.add(key);
+    WakelockPlus.enable();
+  }
+
+  static void disable(UniqueKey key) {
+    if (isLinux) return;
+    if (_enabledKeys.remove(key)) {
+      if (_enabledKeys.isEmpty) {
+        WakelockPlus.disable();
+      }
+    }
+  }
 }
 
 /// call this to reload current window.
