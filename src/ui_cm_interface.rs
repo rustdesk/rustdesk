@@ -772,10 +772,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     #[cfg(target_os = "windows")]
-    ContextSend::enable(option2bool(
-        OPTION_ENABLE_FILE_TRANSFER,
-        &Config::get_option(OPTION_ENABLE_FILE_TRANSFER),
-    ));
+    ContextSend::enable(crate::Connection::permission(OPTION_ENABLE_FILE_TRANSFER));
     match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {
             while let Some(result) = incoming.next().await {

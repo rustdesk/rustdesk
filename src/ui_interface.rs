@@ -1167,6 +1167,8 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     #[cfg(not(feature = "flutter"))]
     let mut id = "".to_owned();
     #[cfg(target_os = "windows")]
+    let mut access_mode = "".to_owned();
+    #[cfg(target_os = "windows")]
     let mut enable_file_transfer = "".to_owned();
     let is_cm = crate::common::is_cm();
 
@@ -1195,10 +1197,23 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
 
                                 #[cfg(target_os = "windows")]
                                 {
-                                    let b = OPTIONS.lock().unwrap().get(OPTION_ENABLE_FILE_TRANSFER).map(|x| x.to_string()).unwrap_or_default();
-                                    if b != enable_file_transfer {
-                                        clipboard::ContextSend::enable(config::option2bool(OPTION_ENABLE_FILE_TRANSFER, &b));
-                                        enable_file_transfer = b;
+                                    let (ft, am) = {
+                                        let lock = OPTIONS.lock().unwrap();
+                                        (
+                                            lock.get(OPTION_ENABLE_FILE_TRANSFER).map(|x| x.to_string()).unwrap_or_default(),
+                                            lock.get(OPTION_ACCESS_MODE).map(|x| x.to_string()).unwrap_or_default(),
+                                        )
+                                    };
+                                    if ft != enable_file_transfer || am != access_mode {
+                                        let access_mode_enabled = match am.as_str() {
+                                            "full" => Some(true),
+                                            "view" => Some(false),
+                                            _ => None,
+                                        };
+                                        let enabled = access_mode_enabled.unwrap_or(config::option2bool(OPTION_ENABLE_FILE_TRANSFER, &ft));
+                                        clipboard::ContextSend::enable(enabled);
+                                        enable_file_transfer = ft;
+                                        access_mode = am;
                                     }
                                 }
                             }
