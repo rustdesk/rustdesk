@@ -3231,12 +3231,15 @@ impl Connection {
         if !token.is_null() {
             match crate::platform::ensure_primary_token(token) {
                 Ok(t) => {
-                    self.terminal_user_token = Some(TerminalUserToken::CurrentLogonUser(t as _));
+                    self.terminal_user_token = Some(TerminalUserToken::CurrentLogonUser(
+                        crate::terminal_service::UserToken::new(t as usize),
+                    ));
                 }
                 Err(e) => {
                     log::error!("Failed to ensure primary token: {}", e);
-                    self.terminal_user_token =
-                        Some(TerminalUserToken::CurrentLogonUser(token as _));
+                    self.terminal_user_token = Some(TerminalUserToken::CurrentLogonUser(
+                        crate::terminal_service::UserToken::new(token as usize),
+                    ));
                 }
             }
             None
@@ -5049,9 +5052,9 @@ impl Drop for Connection {
 
         #[cfg(target_os = "windows")]
         if let Some(TerminalUserToken::CurrentLogonUser(token)) = self.terminal_user_token.take() {
-            if token != 0 {
+            if token.as_raw() != 0 {
                 unsafe {
-                    hbb_common::allow_err!(CloseHandle(HANDLE(token as _)));
+                    hbb_common::allow_err!(CloseHandle(HANDLE(token.as_raw() as _)));
                 };
             }
         }
