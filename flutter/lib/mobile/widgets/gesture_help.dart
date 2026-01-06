@@ -65,6 +65,14 @@ class _GestureHelpState extends State<GestureHelp> {
     _selectedIndex = _touchMode ? 1 : 0;
   }
 
+  /// Helper to exit relative mouse mode when certain conditions are met.
+  /// This reduces code duplication across multiple UI callbacks.
+  void _exitRelativeMouseModeIf(bool condition) {
+    if (condition) {
+      widget.inputModel?.setRelativeMouseMode(false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -108,9 +116,7 @@ class _GestureHelpState extends State<GestureHelp> {
                               _touchMode = index == 0 ? false : true;
                               widget.onTouchModeChange(_touchMode);
                               // Exit relative mouse mode when switching to touch mode
-                              if (_touchMode && widget.inputModel != null) {
-                                widget.inputModel!.setRelativeMouseMode(false);
-                              }
+                              _exitRelativeMouseModeIf(_touchMode);
                             }
                           });
                         },
@@ -126,10 +132,8 @@ class _GestureHelpState extends State<GestureHelp> {
                                 if (value == null) return;
                                 await _virtualMouseMode.toggleVirtualMouse();
                                 // Exit relative mouse mode when virtual mouse is hidden
-                                if (!_virtualMouseMode.showVirtualMouse &&
-                                    widget.inputModel != null) {
-                                  widget.inputModel!.setRelativeMouseMode(false);
-                                }
+                                _exitRelativeMouseModeIf(
+                                    !_virtualMouseMode.showVirtualMouse);
                                 setState(() {});
                               },
                             ),
@@ -137,10 +141,8 @@ class _GestureHelpState extends State<GestureHelp> {
                               onTap: () async {
                                 await _virtualMouseMode.toggleVirtualMouse();
                                 // Exit relative mouse mode when virtual mouse is hidden
-                                if (!_virtualMouseMode.showVirtualMouse &&
-                                    widget.inputModel != null) {
-                                  widget.inputModel!.setRelativeMouseMode(false);
-                                }
+                                _exitRelativeMouseModeIf(
+                                    !_virtualMouseMode.showVirtualMouse);
                                 setState(() {});
                               },
                               child: Text(translate('Show virtual mouse')),
@@ -215,11 +217,9 @@ class _GestureHelpState extends State<GestureHelp> {
                                       await _virtualMouseMode
                                           .toggleVirtualJoystick();
                                       // Exit relative mouse mode when joystick is hidden
-                                      if (!_virtualMouseMode.showVirtualJoystick &&
-                                          widget.inputModel != null) {
-                                        widget.inputModel!
-                                            .setRelativeMouseMode(false);
-                                      }
+                                      _exitRelativeMouseModeIf(
+                                          !_virtualMouseMode
+                                              .showVirtualJoystick);
                                       setState(() {});
                                     },
                                   ),
@@ -228,11 +228,9 @@ class _GestureHelpState extends State<GestureHelp> {
                                       await _virtualMouseMode
                                           .toggleVirtualJoystick();
                                       // Exit relative mouse mode when joystick is hidden
-                                      if (!_virtualMouseMode.showVirtualJoystick &&
-                                          widget.inputModel != null) {
-                                        widget.inputModel!
-                                            .setRelativeMouseMode(false);
-                                      }
+                                      _exitRelativeMouseModeIf(
+                                          !_virtualMouseMode
+                                              .showVirtualJoystick);
                                       setState(() {});
                                     },
                                     child: Text(
@@ -255,8 +253,8 @@ class _GestureHelpState extends State<GestureHelp> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Checkbox(
-                                        value: widget
-                                            .inputModel!.relativeMouseMode.value,
+                                        value: widget.inputModel!
+                                            .relativeMouseMode.value,
                                         onChanged: (value) {
                                           if (value == null) return;
                                           widget.inputModel!

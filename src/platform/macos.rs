@@ -74,8 +74,6 @@ extern "C" {
     fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
     fn MacSetMode(display: u32, width: u32, height: u32, tryHiDPI: bool) -> BOOL;
     fn CGWarpMouseCursorPosition(newCursorPosition: CGPoint) -> CGError;
-    fn CGDisplayHideCursor(display: u32) -> CGError;
-    fn CGDisplayShowCursor(display: u32) -> CGError;
     fn CGAssociateMouseAndMouseCursorPosition(connected: BooleanT) -> CGError;
 }
 

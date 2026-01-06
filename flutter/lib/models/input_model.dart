@@ -14,6 +14,7 @@ import 'package:get/get.dart';
 
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../models/state_model.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
@@ -369,6 +370,8 @@ class InputModel {
   late final RelativeMouseModel _relativeMouse;
   // Callback to cancel external throttle timer when relative mouse mode is disabled.
   VoidCallback? onRelativeMouseModeDisabled;
+  // Disposer for the relativeMouseMode observer (to prevent memory leaks).
+  Worker? _relativeMouseModeDisposer;
 
   bool _queryOtherWindowCoords = false;
   Rect? _windowRect;
@@ -405,6 +408,14 @@ class InputModel {
       setPointerInsideImage: (inside) => _pointerInsideImage = inside,
     );
     _relativeMouse.onDisabled = () => onRelativeMouseModeDisabled?.call();
+
+    // Sync relative mouse mode state to global state for UI components (e.g., tab bar hint).
+    _relativeMouseModeDisposer = ever(relativeMouseMode, (bool value) {
+      final peerId = id;
+      if (peerId.isNotEmpty) {
+        stateGlobal.relativeMouseModeState[peerId] = value;
+      }
+    });
   }
 
   // This function must be called after the peer info is received.
@@ -928,9 +939,12 @@ class InputModel {
   /// Uses the 'move_relative' type which bypasses absolute position tracking.
   ///
   /// Accumulates fractional deltas to avoid losing slow/fine movements.
+  /// Only sends events when relative mouse mode is enabled and supported.
   Future<void> sendMobileRelativeMouseMove(double dx, double dy) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
+    // Only send relative mouse events when relative mode is enabled and supported.
+    if (!isRelativeMouseModeSupported || !relativeMouseMode.value) return;
     _mobileDeltaRemainderX += dx;
     _mobileDeltaRemainderY += dy;
     final x = _mobileDeltaRemainderX.truncate();
@@ -971,6 +985,13 @@ class InputModel {
   void disposeRelativeMouseMode() {
     _relativeMouse.dispose();
     onRelativeMouseModeDisabled = null;
+    // Cancel the relative mouse mode observer and clean up global state.
+    _relativeMouseModeDisposer?.dispose();
+    _relativeMouseModeDisposer = null;
+    final peerId = id;
+    if (peerId.isNotEmpty) {
+      stateGlobal.relativeMouseModeState.remove(peerId);
+    }
   }
 
   void onWindowBlur() {

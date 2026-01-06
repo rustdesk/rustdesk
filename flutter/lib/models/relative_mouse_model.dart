@@ -214,6 +214,41 @@ class RelativeMouseModel {
     _pointerRegionTopLeftGlobal = e.position - e.localPosition;
   }
 
+  /// Shared helper for handling Ctrl+Alt+Shift+M toggle shortcut.
+  /// Returns true if the event was handled and should not be forwarded.
+  ///
+  /// [isMKey] - whether the event is for the M key
+  /// [isKeyUp] - whether the event is a key up event
+  /// [isKeyDown] - whether the event is a key down event
+  /// [ctrlPressed], [altPressed], [shiftPressed] - modifier states
+  bool _handleToggleShortcut({
+    required bool isMKey,
+    required bool isKeyUp,
+    required bool isKeyDown,
+    required bool ctrlPressed,
+    required bool altPressed,
+    required bool shiftPressed,
+  }) {
+    if (!isMKey) return false;
+    if (!isDesktop || !keyboardPerm() || isViewCamera()) return false;
+
+    // Block M key up if M key down was blocked (to avoid orphan key up event on remote).
+    // This must be checked before clearing the flag below.
+    if (isKeyUp && _toggleShortcutMKeyDown) {
+      _toggleShortcutMKeyDown = false;
+      return true;
+    }
+
+    // Toggle on Ctrl+Alt+Shift+M key down
+    if (isKeyDown && ctrlPressed && altPressed && shiftPressed) {
+      _toggleShortcutMKeyDown = true;
+      toggleRelativeMouseMode();
+      return true;
+    }
+
+    return false;
+  }
+
   bool handleKeyEvent(
     KeyEvent e, {
     required bool ctrlPressed,
@@ -221,55 +256,28 @@ class RelativeMouseModel {
     required bool altPressed,
     required bool commandPressed,
   }) {
-    // Toggle shortcut: Ctrl+Alt+Shift+M (all platforms) toggles relative mouse mode.
-    // This combination is chosen to avoid conflicts with common application shortcuts.
-    if (e.logicalKey == LogicalKeyboardKey.keyM) {
-      if (isDesktop && keyboardPerm() && !isViewCamera()) {
-        // Block M key up if M key down was blocked (to avoid orphan key up event on remote).
-        // This must be checked before clearing the flag below.
-        if (e is KeyUpEvent && _toggleShortcutMKeyDown) {
-          _toggleShortcutMKeyDown = false;
-          return true;
-        }
-
-        if (e is KeyDownEvent && ctrlPressed && altPressed && shiftPressed) {
-          _toggleShortcutMKeyDown = true;
-          toggleRelativeMouseMode();
-          return true;
-        }
-      }
-    }
-
-    return false;
+    return _handleToggleShortcut(
+      isMKey: e.logicalKey == LogicalKeyboardKey.keyM,
+      isKeyUp: e is KeyUpEvent,
+      isKeyDown: e is KeyDownEvent,
+      ctrlPressed: ctrlPressed,
+      altPressed: altPressed,
+      shiftPressed: shiftPressed,
+    );
   }
 
   /// Handle raw key events for relative mouse mode.
   /// Returns true if the event was handled and should not be forwarded.
   bool handleRawKeyEvent(RawKeyEvent e) {
-    // Toggle shortcut: Ctrl+Alt+Shift+M (all platforms) toggles relative mouse mode.
-    if (e.logicalKey == LogicalKeyboardKey.keyM) {
-      if (isDesktop && keyboardPerm() && !isViewCamera()) {
-        // Block M key up if M key down was blocked (to avoid orphan key up event on remote).
-        // This must be checked before clearing the flag below.
-        if (e is RawKeyUpEvent && _toggleShortcutMKeyDown) {
-          _toggleShortcutMKeyDown = false;
-          return true;
-        }
-
-        if (e is RawKeyDownEvent) {
-          final modifiers = e.data;
-          final ctrlPressed = modifiers.isControlPressed;
-          final altPressed = modifiers.isAltPressed;
-          final shiftPressed = modifiers.isShiftPressed;
-          if (ctrlPressed && altPressed && shiftPressed) {
-            _toggleShortcutMKeyDown = true;
-            toggleRelativeMouseMode();
-            return true;
-          }
-        }
-      }
-    }
-    return false;
+    final modifiers = e.data;
+    return _handleToggleShortcut(
+      isMKey: e.logicalKey == LogicalKeyboardKey.keyM,
+      isKeyUp: e is RawKeyUpEvent,
+      isKeyDown: e is RawKeyDownEvent,
+      ctrlPressed: modifiers.isControlPressed,
+      altPressed: modifiers.isAltPressed,
+      shiftPressed: modifiers.isShiftPressed,
+    );
   }
 
   void onEnterOrLeaveImage(bool enter) {
