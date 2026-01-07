@@ -1,3 +1,4 @@
+# BACKUP METADATA: {'timestamp': '20260106_214105_566568', 'operation': 'str_replace', 'file': '/users/kimera/projects/test/rustdesk/build.py', 'checksum': 'b6e7e91559815fe3355bee39d49c209c72dbed503f16b16fbe2fcae91ae08496'}
 #!/usr/bin/env python3
 
 import os
@@ -703,18 +704,13 @@ def main():
                     'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
                 system2(
                     'cp res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
-                
-                # SECURITY FIX: Replace os.system() with safe functions
-                safe_mkdir('tmpdeb/etc/rustdesk/')
-                safe_copy('res/startwm.sh', 'tmpdeb/etc/rustdesk/startwm.sh')
-                safe_mkdir('tmpdeb/etc/X11/rustdesk/')
-                safe_copy('res/xorg.conf', 'tmpdeb/etc/X11/rustdesk/xorg.conf')
-                
-                # Copy DEBIAN directory recursively
-                safe_copy('DEBIAN', 'tmpdeb/DEBIAN', recursive=True)
-                
-                safe_mkdir('tmpdeb/etc/pam.d/')
-                safe_copy('pam.d/rustdesk.debian', 'tmpdeb/etc/pam.d/rustdesk')
+                os.system('mkdir -p tmpdeb/etc/rustdesk/')
+                os.system('cp -a res/startwm.sh tmpdeb/etc/rustdesk/')
+                os.system('mkdir -p tmpdeb/etc/X11/rustdesk/')
+                os.system('cp res/xorg.conf tmpdeb/etc/X11/rustdesk/')
+                os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
+                os.system('mkdir -p tmpdeb/etc/pam.d/')
+                os.system('cp pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
                 system2('strip tmpdeb/usr/bin/rustdesk')
                 system2('mkdir -p tmpdeb/usr/share/rustdesk')
                 system2('mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/share/rustdesk/')
