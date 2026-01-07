@@ -406,6 +406,10 @@ pub fn core_main() -> Option<Vec<String>> {
                 println!("Settings are disabled!");
                 return None;
             }
+            if config::Config::is_disable_change_permanent_password() {
+                println!("Changing permanent password is disabled!");
+                return None;
+            }
             if args.len() == 2 {
                 if crate::platform::is_installed() && is_root() {
                     if let Err(err) = crate::ipc::set_permanent_password(args[1].to_owned()) {
@@ -419,6 +423,10 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--set-unlock-pin" {
+            if config::Config::is_disable_unlock_pin() {
+                println!("Unlock PIN is disabled!");
+                return None;
+            }
             #[cfg(feature = "flutter")]
             if args.len() == 2 {
                 if crate::platform::is_installed() && is_root() {
@@ -438,6 +446,10 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--set-id" {
             if config::is_disable_settings() {
                 println!("Settings are disabled!");
+                return None;
+            }
+            if config::Config::is_disable_change_id() {
+                println!("Changing ID is disabled!");
                 return None;
             }
             if args.len() == 2 {
