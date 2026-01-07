@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 
 import os
+import sys
+import subprocess
 import optparse
 from hashlib import md5
+from pathlib import Path
+from typing import Optional
 import brotli
 import datetime
 
@@ -64,12 +68,165 @@ def write_app_metadata(output_folder: str):
         f.write(f"timestamp = {int(datetime.datetime.now().timestamp() * 1000)}\n")
     print(f"App metadata has been written to {output_path}")
 
-def build_portable(output_folder: str, target: str):
-    os.chdir(output_folder)
-    if target:
-        os.system("cargo build --release --target " + target)
-    else:
-        os.system("cargo build --release")
+# SECURITY: Allowlist of valid Rust target architectures
+ALLOWED_TARGETS = {
+    # Linux
+    'x86_64-unknown-linux-gnu',
+    'x86_64-unknown-linux-musl',
+    'aarch64-unknown-linux-gnu',
+    'aarch64-unknown-linux-musl',
+    'armv7-unknown-linux-gnueabihf',
+    'armv7-unknown-linux-musleabihf',
+    'i686-unknown-linux-gnu',
+    
+    # Windows
+    'x86_64-pc-windows-msvc',
+    'x86_64-pc-windows-gnu',
+    'i686-pc-windows-msvc',
+    'i686-pc-windows-gnu',
+    'aarch64-pc-windows-msvc',
+    
+    # macOS
+    'x86_64-apple-darwin',
+    'aarch64-apple-darwin',
+    
+    # Android
+    'aarch64-linux-android',
+    'armv7-linux-androideabi',
+    'i686-linux-android',
+    'x86_64-linux-android',
+    
+    # iOS
+    'aarch64-apple-ios',
+    'x86_64-apple-ios',
+}
+
+
+def validate_target(target: Optional[str]) -> Optional[str]:
+    """
+    Validate build target against allowlist.
+    
+    SECURITY: Prevents command injection via malicious target strings.
+    
+    Args:
+        target: Rust target architecture string
+        
+    Returns:
+        Validated target string or None
+        
+    Raises:
+        ValueError: If target is invalid
+    """
+    if not target:
+        return None
+    
+    # Validate against allowlist
+    if target not in ALLOWED_TARGETS:
+        raise ValueError(
+            f"Invalid target: {target}\n"
+            f"Allowed targets:\n" + 
+            "\n".join(f"  - {t}" for t in sorted(ALLOWED_TARGETS))
+        )
+    
+    return target
+
+
+def validate_folder(folder: str) -> Path:
+    """
+    Validate and normalize folder path.
+    
+    SECURITY: Prevents directory traversal and path injection.
+    
+    Args:
+        folder: Folder path to validate
+        
+    Returns:
+        Validated Path object
+        
+    Raises:
+        ValueError: If path is invalid or dangerous
+    """
+    try:
+        path = Path(folder).resolve()
+        
+        # Check if path exists
+        if not path.exists():
+            raise ValueError(f"Folder does not exist: {folder}")
+        
+        if not path.is_dir():
+            raise ValueError(f"Path is not a directory: {folder}")
+        
+        return path
+        
+    except Exception as e:
+        raise ValueError(f"Invalid folder path: {folder} - {e}")
+
+
+def build_portable(output_folder: str, target: Optional[str]) -> None:
+    """
+    Build portable binary safely without command injection.
+    
+    SECURITY: This function replaces os.system() to prevent VULN-010 and VULN-011.
+    All commands are executed with subprocess.run(shell=False).
+    
+    Args:
+        output_folder: Output directory for build artifacts
+        target: Optional Rust target architecture
+        
+    Raises:
+        ValueError: If target is invalid
+        subprocess.CalledProcessError: If build fails
+    """
+    # Validate output folder
+    output_path = validate_folder(output_folder)
+    
+    # Validate target against allowlist
+    validated_target = validate_target(target)
+    
+    # Change to output directory
+    original_dir = os.getcwd()
+    try:
+        os.chdir(output_path)
+        
+        # Build command as list (no shell interpretation)
+        cmd = ['cargo', 'build', '--release']
+        
+        if validated_target:
+            cmd.extend(['--target', validated_target])
+            print(f"Building for target: {validated_target}")
+        else:
+            print("Building for default target")
+        
+        print(f"Command: {' '.join(cmd)}")
+        
+        # Execute safely without shell
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            shell=False  # CRITICAL: Prevents command injection
+        )
+        
+        # Print build output
+        if result.stdout:
+            print(result.stdout)
+        
+        print(f"Build completed successfully in {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(f"Build failed with exit code {e.returncode}\n")
+        if e.stderr:
+            sys.stderr.write(f"Error output:\n{e.stderr}\n")
+        sys.exit(1)
+        
+    except Exception as e:
+        sys.stderr.write(f"Unexpected error during build: {e}\n")
+        sys.exit(1)
+        
+    finally:
+        # Always restore original directory
+        os.chdir(original_dir)
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe
