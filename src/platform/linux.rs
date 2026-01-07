@@ -35,13 +35,20 @@ static mut UNMODIFIED: bool = true;
 const INVALID_TERM_VALUES: [&str; 3] = ["", "unknown", "dumb"];
 const SHELL_PROCESSES: [&str; 4] = ["bash", "zsh", "fish", "sh"];
 
+// Terminal type constants
+const TERM_XTERM_256COLOR: &str = "xterm-256color";
+const TERM_SCREEN_256COLOR: &str = "screen-256color";
+const TERM_XTERM: &str = "xterm";
+
 lazy_static::lazy_static! {
     pub static ref IS_X11: bool = hbb_common::platform::linux::is_x11_or_headless();
+    // Cache for TERM value - once TERM_XTERM_256COLOR is found, reuse it directly
+    static ref CACHED_TERM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     static ref DATABASE_XTERM_256COLOR: Option<Database> = {
-        match Database::from_name("xterm-256color") {
+        match Database::from_name(TERM_XTERM_256COLOR) {
             Ok(database) => Some(database),
             Err(err) => {
-                log::error!("Failed to initialize xterm-256color database: {}", err);
+                log::error!("Failed to initialize {} database: {}", TERM_XTERM_256COLOR, err);
                 None
             }
         }
@@ -310,12 +317,12 @@ fn start_uinput_service() {
 /// modern features required by many applications.
 fn suggest_best_term() -> String {
     if is_running_in_tmux() || is_running_in_screen() {
-        return "screen-256color".to_string();
+        return TERM_SCREEN_256COLOR.to_string();
     }
-    if term_supports_256_colors("xterm-256color") {
-        return "xterm-256color".to_string();
+    if term_supports_256_colors(TERM_XTERM_256COLOR) {
+        return TERM_XTERM_256COLOR.to_string();
     }
-    "xterm".to_string()
+    TERM_XTERM.to_string()
 }
 
 fn is_running_in_tmux() -> bool {
@@ -332,7 +339,7 @@ fn supports_256_colors(db: &Database) -> bool {
 
 fn term_supports_256_colors(term: &str) -> bool {
     match term {
-        "xterm-256color" => DATABASE_XTERM_256COLOR
+        TERM_XTERM_256COLOR => DATABASE_XTERM_256COLOR
             .as_ref()
             .map_or(false, |db| supports_256_colors(db)),
         _ => Database::from_name(term).map_or(false, |db| supports_256_colors(&db)),
@@ -340,25 +347,140 @@ fn term_supports_256_colors(term: &str) -> bool {
 }
 
 fn get_cur_term(uid: &str) -> Option<String> {
+    // Check cache first - if TERM_XTERM_256COLOR was found before, reuse it
+    if let Ok(cache) = CACHED_TERM.lock() {
+        if let Some(ref cached) = *cache {
+            if cached == TERM_XTERM_256COLOR {
+                return Some(cached.clone());
+            }
+        }
+    }
+
     if uid.is_empty() {
         return None;
     }
 
+    // Check current process environment
     if let Ok(term) = std::env::var("TERM") {
-        if !INVALID_TERM_VALUES.contains(&term.as_str()) {
+        if term == TERM_XTERM_256COLOR {
+            if let Ok(mut cache) = CACHED_TERM.lock() {
+                *cache = Some(term.clone());
+            }
             return Some(term);
         }
     }
 
-    for proc in SHELL_PROCESSES {
-        // Construct a regex pattern to match either the process name followed by '$' or 'bin/' followed by the process name.
-        let term = get_env("TERM", uid, &format!("{}$|bin/{}", proc, proc));
-        if !INVALID_TERM_VALUES.contains(&term.as_str()) {
-            return Some(term);
+    // Collect all TERM values from shell processes, looking for TERM_XTERM_256COLOR
+    let terms = get_all_term_values(uid);
+
+    // Prefer TERM_XTERM_256COLOR
+    if terms.iter().any(|t| t == TERM_XTERM_256COLOR) {
+        if let Ok(mut cache) = CACHED_TERM.lock() {
+            *cache = Some(TERM_XTERM_256COLOR.to_string());
+        }
+        return Some(TERM_XTERM_256COLOR.to_string());
+    }
+
+    // Return first valid TERM if no TERM_XTERM_256COLOR found
+    let fallback = terms.into_iter().next();
+    if let Some(ref term) = fallback {
+        log::debug!(
+            "TERM_XTERM_256COLOR not found, using fallback TERM: {}",
+            term
+        );
+    }
+    fallback
+}
+
+/// Get all TERM values from shell processes (bash, zsh, fish, sh).
+/// Returns a Vec of unique, valid TERM values.
+fn get_all_term_values(uid: &str) -> Vec<String> {
+    let Ok(uid_num) = uid.parse::<u32>() else {
+        return Vec::new();
+    };
+
+    // Build regex pattern to match shell processes using only argv[0] (the executable path)
+    // Pattern: match process name at start or after '/', followed by space or end
+    // e.g., "bash", "/bin/bash", "/usr/bin/zsh"
+    let shell_pattern = SHELL_PROCESSES
+        .iter()
+        .map(|p| format!(r"(^|/){p}(\s|$)"))
+        .collect::<Vec<_>>()
+        .join("|");
+    let Ok(re) = Regex::new(&shell_pattern) else {
+        return Vec::new();
+    };
+
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+
+    let mut terms = Vec::new();
+
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(pid_str) = file_name.to_str() else {
+            continue;
+        };
+        if !pid_str.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+
+        let proc_path = entry.path();
+
+        // Check if process belongs to the specified uid
+        if let Ok(meta) = std::fs::metadata(&proc_path) {
+            use std::os::unix::fs::MetadataExt;
+            if meta.uid() != uid_num {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        // Check cmdline matches process pattern
+        // /proc/<pid>/cmdline is a sequence of null-terminated strings; the first
+        // one (argv[0]) is the executable path. Match the regex only against that
+        // to avoid false positives from arguments (e.g., "python /path/to/bash-script.py").
+        let cmdline_path = proc_path.join("cmdline");
+        let Ok(cmdline) = std::fs::read(&cmdline_path) else {
+            continue;
+        };
+        let exe_end = cmdline.iter().position(|&b| b == 0).unwrap_or(cmdline.len());
+        let exe_str = String::from_utf8_lossy(&cmdline[..exe_end]);
+        if !re.is_match(&exe_str) {
+            continue;
+        }
+
+        // Read environ and extract TERM
+        let environ_path = proc_path.join("environ");
+        let Ok(environ) = std::fs::read(&environ_path) else {
+            continue;
+        };
+
+        for part in environ.split(|&b| b == 0) {
+            if part.is_empty() {
+                continue;
+            }
+            if let Some(eq) = part.iter().position(|&b| b == b'=') {
+                let key_bytes = &part[..eq];
+                if key_bytes == b"TERM" {
+                    let val_bytes = &part[eq + 1..];
+                    let term = String::from_utf8_lossy(val_bytes).into_owned();
+                    if !INVALID_TERM_VALUES.contains(&term.as_str()) && !terms.contains(&term) {
+                        // Early return if we found the preferred term
+                        if term == TERM_XTERM_256COLOR {
+                            return vec![term];
+                        }
+                        terms.push(term);
+                    }
+                    break;
+                }
+            }
         }
     }
 
-    None
+    terms
 }
 
 #[inline]
