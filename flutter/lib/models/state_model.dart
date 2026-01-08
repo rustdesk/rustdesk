@@ -31,6 +31,7 @@ class StateGlobal {
 
   // Track relative mouse mode state for each peer connection.
   // Key: peerId, Value: true if relative mouse mode is active.
+  // Note: This is session-only runtime state, NOT persisted to config.
   final RxMap<String, bool> relativeMouseModeState = <String, bool>{}.obs;
 
   // Use for desktop -> remote toolbar -> resolution

@@ -265,7 +265,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-not-supported-peer-tip", "Relative Mouse Mode is not supported by the connected peer."),
         ("rel-mouse-not-ready-tip", "Relative Mouse Mode is not ready yet. Please try again."),
         ("rel-mouse-lock-failed-tip", "Failed to lock cursor. Relative Mouse Mode has been disabled."),
-        ("rel-mouse-entered-tip", "Press Ctrl+Alt+Shift+M to exit."),
+        ("rel-mouse-exit-{}-tip", "Press {} to exit."),
         ("rel-mouse-permission-lost-tip", "Keyboard permission was revoked. Relative Mouse Mode has been disabled."),
     ].iter().cloned().collect();
 }

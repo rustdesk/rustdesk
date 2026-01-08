@@ -35,10 +35,29 @@ const OS_LOWER_ANDROID: &str = "android";
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
-// Track M key down state for relative mouse mode toggle shortcut (Ctrl+Alt+Shift+M).
-// This prevents the toggle from retriggering on OS key-repeat.
+// Track key down state for relative mouse mode exit shortcut.
+// macOS: Cmd+G (track G key)
+// Windows/Linux: Ctrl+Alt (track whichever modifier was pressed last)
+// This prevents the exit from retriggering on OS key-repeat.
 #[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-static TOGGLE_SHORTCUT_M_KEY_DOWN: AtomicBool = AtomicBool::new(false);
+static EXIT_SHORTCUT_KEY_DOWN: AtomicBool = AtomicBool::new(false);
+
+// Track whether relative mouse mode is currently active.
+// This is set by Flutter via set_relative_mouse_mode_state() and checked
+// by the rdev grab loop to determine if exit shortcuts should be processed.
+#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+static RELATIVE_MOUSE_MODE_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Set the relative mouse mode state from Flutter.
+/// This is called when entering or exiting relative mouse mode.
+#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+pub fn set_relative_mouse_mode_state(active: bool) {
+    RELATIVE_MOUSE_MODE_ACTIVE.store(active, Ordering::SeqCst);
+    // Reset exit shortcut state when mode changes to avoid stale state
+    if !active {
+        EXIT_SHORTCUT_KEY_DOWN.store(false, Ordering::SeqCst);
+    }
+}
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -271,32 +290,55 @@ fn get_keyboard_mode() -> String {
     "legacy".to_string()
 }
 
-/// Check if Ctrl+Alt+Shift+M chord is active.
-/// This is used to toggle relative mouse mode (all platforms).
+/// Check if exit shortcut for relative mouse mode is active.
+/// Exit shortcuts (only exits, not toggles):
+/// - macOS: Cmd+G
+/// - Windows/Linux: Ctrl+Alt (triggered when both are pressed)
 /// Note: This shortcut is only available in Flutter client. Sciter client does not support relative mouse mode.
 #[cfg(feature = "flutter")]
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn is_toggle_relative_mouse_shortcut(key: Key) -> bool {
-    if key != Key::KeyM {
-        return false;
-    }
+fn is_exit_relative_mouse_shortcut(key: Key) -> bool {
     let modifiers = MODIFIERS_STATE.lock().unwrap();
-    let ctrl = *modifiers.get(&Key::ControlLeft).unwrap_or(&false)
-        || *modifiers.get(&Key::ControlRight).unwrap_or(&false);
-    let alt = *modifiers.get(&Key::Alt).unwrap_or(&false)
-        || *modifiers.get(&Key::AltGr).unwrap_or(&false);
-    let shift = *modifiers.get(&Key::ShiftLeft).unwrap_or(&false)
-        || *modifiers.get(&Key::ShiftRight).unwrap_or(&false);
-    ctrl && alt && shift
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: Cmd+G to exit
+        if key != Key::KeyG {
+            return false;
+        }
+        let meta = *modifiers.get(&Key::MetaLeft).unwrap_or(&false)
+            || *modifiers.get(&Key::MetaRight).unwrap_or(&false);
+        return meta;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Windows/Linux: Ctrl+Alt to exit
+        // Triggered when Ctrl is pressed while Alt is down, or Alt is pressed while Ctrl is down
+        let is_ctrl_key = key == Key::ControlLeft || key == Key::ControlRight;
+        let is_alt_key = key == Key::Alt || key == Key::AltGr;
+
+        if !is_ctrl_key && !is_alt_key {
+            return false;
+        }
+
+        let ctrl = *modifiers.get(&Key::ControlLeft).unwrap_or(&false)
+            || *modifiers.get(&Key::ControlRight).unwrap_or(&false);
+        let alt = *modifiers.get(&Key::Alt).unwrap_or(&false)
+            || *modifiers.get(&Key::AltGr).unwrap_or(&false);
+
+        // When Ctrl is pressed and Alt is already down, or vice versa
+        (is_ctrl_key && alt) || (is_alt_key && ctrl)
+    }
 }
 
-/// Notify Flutter to toggle relative mouse mode.
+/// Notify Flutter to exit relative mouse mode.
 /// Note: This is Flutter-only. Sciter client does not support relative mouse mode.
 #[cfg(feature = "flutter")]
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn notify_toggle_relative_mouse_mode() {
+fn notify_exit_relative_mouse_mode() {
     let session_id = flutter::get_cur_session_id();
-    flutter::push_session_event(&session_id, "toggle_relative_mouse_mode", vec![]);
+    flutter::push_session_event(&session_id, "exit_relative_mouse_mode", vec![]);
 }
 
 
@@ -305,7 +347,13 @@ fn notify_toggle_relative_mouse_mode() {
 #[cfg(feature = "flutter")]
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 #[inline]
-fn can_toggle_relative_mouse_mode_from_grab_loop() -> bool {
+fn can_exit_relative_mouse_mode_from_grab_loop() -> bool {
+    // Only process exit shortcuts when relative mouse mode is actually active.
+    // This prevents blocking Ctrl+Alt (or Cmd+G) when not in relative mouse mode.
+    if !RELATIVE_MOUSE_MODE_ACTIVE.load(Ordering::SeqCst) {
+        return false;
+    }
+
     let Some(session) = flutter::get_cur_session() else {
         return false;
     };
@@ -336,23 +384,34 @@ fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
         return false;
     }
 
-    // Block M key up if M key down was blocked (to avoid orphan key up event on remote).
+    // Determine which key to track for key-up blocking based on platform
+    #[cfg(target_os = "macos")]
+    let is_tracked_key = key == Key::KeyG;
+    #[cfg(not(target_os = "macos"))]
+    let is_tracked_key = key == Key::ControlLeft
+        || key == Key::ControlRight
+        || key == Key::Alt
+        || key == Key::AltGr;
+
+    // Block key up if key down was blocked (to avoid orphan key up event on remote).
     // This must be checked before clearing the flag below.
-    if key == Key::KeyM && !is_press && TOGGLE_SHORTCUT_M_KEY_DOWN.swap(false, Ordering::SeqCst) {
+    if is_tracked_key && !is_press && EXIT_SHORTCUT_KEY_DOWN.swap(false, Ordering::SeqCst) {
         return true;
     }
 
-    // Ctrl+Alt+Shift+M toggles relative mouse mode.
+    // Exit relative mouse mode shortcuts:
+    // - macOS: Cmd+G
+    // - Windows/Linux: Ctrl+Alt
     // Guard it to supported/eligible sessions to avoid blocking the chord unexpectedly.
-    if is_toggle_relative_mouse_shortcut(key) {
-        if !can_toggle_relative_mouse_mode_from_grab_loop() {
+    if is_exit_relative_mouse_shortcut(key) {
+        if !can_exit_relative_mouse_mode_from_grab_loop() {
             return false;
         }
         if is_press {
-            // Only trigger toggle on transition from "not pressed" to "pressed".
+            // Only trigger exit on transition from "not pressed" to "pressed".
             // This prevents retriggering on OS key-repeat.
-            if !TOGGLE_SHORTCUT_M_KEY_DOWN.swap(true, Ordering::SeqCst) {
-                notify_toggle_relative_mouse_mode();
+            if !EXIT_SHORTCUT_KEY_DOWN.swap(true, Ordering::SeqCst) {
+                notify_exit_relative_mouse_mode();
             }
         }
         return true;

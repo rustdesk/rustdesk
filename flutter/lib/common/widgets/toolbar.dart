@@ -878,7 +878,7 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
             ffi.inputModel.relativeMouseMode.value = previousValue;
           }
         },
-        child: Text(translate('Relative Mouse Mode'))));
+        child: Text(translate('Relative mouse mode'))));
   }
 
   // reverse mouse wheel

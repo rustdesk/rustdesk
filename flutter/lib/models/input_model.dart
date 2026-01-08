@@ -982,6 +982,47 @@ class InputModel {
     return _relativeMouse.setRelativeMouseMode(enabled);
   }
 
+  /// Exit relative mouse mode and release all modifier keys to the remote.
+  /// This is called when the user presses the exit shortcut (Ctrl+Alt on Win/Linux, Cmd+G on macOS).
+  /// We need to send key-up events for all modifiers because the shortcut itself may have
+  /// blocked some key events, leaving the remote in a state where modifiers are stuck.
+  void exitRelativeMouseModeWithKeyRelease() {
+    if (!_relativeMouse.enabled.value) return;
+
+    // First, send release events for all modifier keys to the remote.
+    // This ensures the remote doesn't have stuck modifier keys after exiting.
+    // Use press: false, down: false to send key-up events without modifiers attached.
+    final modifiersToRelease = [
+      'Control_L',
+      'Control_R',
+      'Alt_L',
+      'Alt_R',
+      'Shift_L',
+      'Shift_R',
+      'Meta_L', // Command/Super left
+      'Meta_R', // Command/Super right
+    ];
+
+    for (final key in modifiersToRelease) {
+      bind.sessionInputKey(
+        sessionId: sessionId,
+        name: key,
+        down: false,
+        press: false,
+        alt: false,
+        ctrl: false,
+        shift: false,
+        command: false,
+      );
+    }
+
+    // Reset local modifier state
+    resetModifiers();
+
+    // Now exit relative mouse mode
+    _relativeMouse.setRelativeMouseMode(false);
+  }
+
   void disposeRelativeMouseMode() {
     _relativeMouse.dispose();
     onRelativeMouseModeDisabled = null;

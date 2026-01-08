@@ -472,9 +472,9 @@ class FfiModel with ChangeNotifier {
         _handlePrinterRequest(evt, sessionId, peerId);
       } else if (name == 'screenshot') {
         _handleScreenshot(evt, sessionId, peerId);
-      } else if (name == 'toggle_relative_mouse_mode') {
-        // Handle Ctrl+Alt+Shift+M shortcut from rdev grab loop
-        parent.target?.inputModel.toggleRelativeMouseMode();
+      } else if (name == 'exit_relative_mouse_mode') {
+        // Handle exit shortcut from rdev grab loop (Ctrl+Alt on Win/Linux, Cmd+G on macOS)
+        parent.target?.inputModel.exitRelativeMouseModeWithKeyRelease();
       } else {
         debugPrint('Event is not handled in the fixed branch: $name');
       }

@@ -210,7 +210,9 @@ class MainFlutterWindow: NSWindow {
                     }
                 case "requestRecordAudio":
                     AVCaptureDevice.requestAccess(for: .audio, completionHandler: { granted in
-                        result(granted)
+                        DispatchQueue.main.async {
+                            result(granted)
+                        }
                     })
                     break
                 case "bumpMouse":

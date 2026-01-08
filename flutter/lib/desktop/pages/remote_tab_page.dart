@@ -584,7 +584,8 @@ class _RelativeMouseModeHint extends StatelessWidget {
 
       // Use global state to check relative mouse mode (synced from InputModel).
       // This avoids timing issues with FFI registration.
-      final isRelativeMouseMode = stateGlobal.relativeMouseModeState[peerId] ?? false;
+      final isRelativeMouseMode =
+          stateGlobal.relativeMouseModeState[peerId] ?? false;
 
       if (!isRelativeMouseMode) {
         return const SizedBox.shrink();
@@ -608,7 +609,8 @@ class _RelativeMouseModeHint extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              translate('rel-mouse-entered-tip'),
+              translate(
+                  'rel-mouse-exit-{${isMacOS ? "Cmd+G" : "Ctrl+Alt"}}-tip'),
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.orange[700],

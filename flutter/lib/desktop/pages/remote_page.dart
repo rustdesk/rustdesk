@@ -219,6 +219,7 @@ class _RemotePageState extends State<RemotePage>
 
     // Restore relative mouse mode constraints when window regains focus.
     if (_ffi.inputModel.relativeMouseMode.value) {
+      _rawKeyFocusNode.requestFocus();
       _ffi.inputModel.onWindowFocus();
     }
   }
@@ -653,6 +654,7 @@ class _ViewStyleUpdater extends StatefulWidget {
 
 class _ViewStyleUpdaterState extends State<_ViewStyleUpdater> {
   Size? _lastSize;
+  bool _callbackScheduled = false;
 
   @override
   Widget build(BuildContext context) {
@@ -668,15 +670,19 @@ class _ViewStyleUpdaterState extends State<_ViewStyleUpdater> {
         if (_lastSize != newSize) {
           _lastSize = newSize;
           // Schedule the update for after the current frame to avoid setState during build.
-          // Always schedule a callback when size changes; the callback reads current _lastSize
-          // to handle any size changes that occur before the callback runs.
-          SchedulerBinding.instance.addPostFrameCallback((_) {
-            final currentSize = _lastSize;
-            if (mounted && currentSize != null) {
-              widget.canvasModel.updateViewStyle();
-              widget.inputModel.updateImageWidgetSize(currentSize);
-            }
-          });
+          // Use _callbackScheduled flag to prevent accumulating multiple callbacks
+          // when size changes rapidly before any callback executes.
+          if (!_callbackScheduled) {
+            _callbackScheduled = true;
+            SchedulerBinding.instance.addPostFrameCallback((_) {
+              _callbackScheduled = false;
+              final currentSize = _lastSize;
+              if (mounted && currentSize != null) {
+                widget.canvasModel.updateViewStyle();
+                widget.inputModel.updateImageWidgetSize(currentSize);
+              }
+            });
+          }
         }
         return widget.child;
       },

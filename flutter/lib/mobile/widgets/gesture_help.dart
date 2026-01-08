@@ -247,7 +247,7 @@ class _GestureHelpState extends State<GestureHelp> {
                         Obx(() => Transform.translate(
                               offset: const Offset(-10.0, -24.0),
                               child: Padding(
-                                  // Indent further for "Relative Mouse Mode"
+                                  // Indent further for 'Relative mouse mode'
                                   padding: const EdgeInsets.only(left: 48.0),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -267,7 +267,7 @@ class _GestureHelpState extends State<GestureHelp> {
                                               .toggleRelativeMouseMode();
                                         },
                                         child: Text(
-                                            translate("Relative Mouse Mode")),
+                                            translate('Relative mouse mode')),
                                       ),
                                     ],
                                   )),

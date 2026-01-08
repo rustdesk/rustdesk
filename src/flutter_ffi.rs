@@ -1849,6 +1849,8 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
             // The server does not track mode deactivation; it simply stops receiving
             // relative move events when the client exits relative mouse mode.
             if !active {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                crate::keyboard::set_relative_mouse_mode_state(false);
                 return;
             }
 
@@ -1895,6 +1897,8 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
             }
 
             // All validation passed - marker will be forwarded as a no-op relative move.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            crate::keyboard::set_relative_mouse_mode_state(true);
         }
 
         let alt = m.get("alt").is_some();
