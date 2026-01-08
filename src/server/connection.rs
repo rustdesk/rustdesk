@@ -1094,6 +1094,7 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         clear_remapped_keycode();
+        reset_scroll_state();
         log::debug!("Input thread exited");
     }
 
