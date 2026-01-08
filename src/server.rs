@@ -154,18 +154,30 @@ pub fn new() -> ServerPtr {
     Arc::new(RwLock::new(server))
 }
 
-async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> ResultType<()> {
+async fn accept_connection_(
+    server: ServerPtr,
+    socket: Stream,
+    secure: bool,
+    control_permissions: Option<ControlPermissions>,
+) -> ResultType<()> {
     let local_addr = socket.local_addr();
     drop(socket);
     // even we drop socket, below still may fail if not use reuse_addr,
     // there is TIME_WAIT before socket really released, so sometimes we
-    // see “Only one usage of each socket address is normally permitted” on windows sometimes,
+    // see "Only one usage of each socket address is normally permitted" on windows sometimes,
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
         stream.set_nodelay(true).ok();
         let stream_addr = stream.local_addr()?;
-        create_tcp_connection(server, Stream::from(stream, stream_addr), addr, secure).await?;
+        create_tcp_connection(
+            server,
+            Stream::from(stream, stream_addr),
+            addr,
+            secure,
+            control_permissions,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -175,6 +187,7 @@ pub async fn create_tcp_connection(
     stream: Stream,
     addr: SocketAddr,
     secure: bool,
+    control_permissions: Option<ControlPermissions>,
 ) -> ResultType<()> {
     let mut stream = stream;
     let id = server.write().unwrap().get_new_id();
@@ -242,7 +255,14 @@ pub async fn create_tcp_connection(
         }
         log::info!("wake up macos");
     }
-    Connection::start(addr, stream, id, Arc::downgrade(&server)).await;
+    Connection::start(
+        addr,
+        stream,
+        id,
+        Arc::downgrade(&server),
+        control_permissions,
+    )
+    .await;
     Ok(())
 }
 
@@ -251,8 +271,9 @@ pub async fn accept_connection(
     socket: Stream,
     peer_addr: SocketAddr,
     secure: bool,
+    control_permissions: Option<ControlPermissions>,
 ) {
-    if let Err(err) = accept_connection_(server, socket, secure).await {
+    if let Err(err) = accept_connection_(server, socket, secure, control_permissions).await {
         log::warn!("Failed to accept connection from {}: {}", peer_addr, err);
     }
 }
@@ -264,9 +285,18 @@ pub async fn create_relay_connection(
     peer_addr: SocketAddr,
     secure: bool,
     ipv4: bool,
+    control_permissions: Option<ControlPermissions>,
 ) {
-    if let Err(err) =
-        create_relay_connection_(server, relay_server, uuid.clone(), peer_addr, secure, ipv4).await
+    if let Err(err) = create_relay_connection_(
+        server,
+        relay_server,
+        uuid.clone(),
+        peer_addr,
+        secure,
+        ipv4,
+        control_permissions,
+    )
+    .await
     {
         log::error!(
             "Failed to create relay connection for {} with uuid {}: {}",
@@ -284,6 +314,7 @@ async fn create_relay_connection_(
     peer_addr: SocketAddr,
     secure: bool,
     ipv4: bool,
+    control_permissions: Option<ControlPermissions>,
 ) -> ResultType<()> {
     let mut stream = socket_client::connect_tcp(
         socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
@@ -298,7 +329,7 @@ async fn create_relay_connection_(
         ..Default::default()
     });
     stream.send(&msg_out).await?;
-    create_tcp_connection(server, stream, peer_addr, secure).await?;
+    create_tcp_connection(server, stream, peer_addr, secure, control_permissions).await?;
     Ok(())
 }
 
