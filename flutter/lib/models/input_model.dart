@@ -14,6 +14,7 @@ import 'package:get/get.dart';
 
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../common/mouse_speed_analyzer.dart';
 import '../common.dart';
 import '../consts.dart';
 
@@ -357,6 +358,7 @@ class InputModel {
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
+  MouseSpeedAnalyzer _mouseSpeedAnalyzer = MouseSpeedAnalyzer();
 
   bool _queryOtherWindowCoords = false;
   Rect? _windowRect;
@@ -1211,13 +1213,11 @@ class InputModel {
     }
 
     if (!cursorModel.gotMouseControl) {
-      bool selfGetControl =
-          (x - lastMousePos.dx).abs() > kMouseControlDistance ||
-              (y - lastMousePos.dy).abs() > kMouseControlDistance;
-      if (selfGetControl) {
+      _mouseSpeedAnalyzer.addEvent(x, y);
+
+      if (_mouseSpeedAnalyzer.hasExceededThreshold) {
         cursorModel.gotMouseControl = true;
       } else {
-        lastMousePos = ui.Offset(x, y);
         return true;
       }
     }
