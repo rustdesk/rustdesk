@@ -561,12 +561,21 @@ class _GeneralState extends State<_General> {
       children.add(_OptionCheckBox(
           context, 'Allow linux headless', kOptionAllowLinuxHeadless));
     }
-    children.add(_OptionCheckBox(
-      context,
-      'note-at-conn-end-tip',
-      kOptionAllowAskForNoteAtEndOfConnection,
-      isServer: false,
-    ));
+    if (!bind.isDisableAccount()) {
+      children.add(_OptionCheckBox(
+        context,
+        'note-at-conn-end-tip',
+        kOptionAllowAskForNoteAtEndOfConnection,
+        isServer: false,
+        optSetter: (key, value) async {
+          if (value && !gFFI.userModel.isLogin) {
+            final res = await loginDialog();
+            if (res != true) return;
+          }
+          await mainSetLocalBoolOption(key, value);
+        },
+      ));
+    }
     return _Card(title: 'Other', children: children);
   }
 
@@ -816,7 +825,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 permissions(context),
                 password(context),
                 _Card(title: '2FA', children: [tfa()]),
-                _Card(title: 'ID', children: [changeId()]),
+                if (!isChangeIdDisabled())
+                  _Card(title: 'ID', children: [changeId()]),
                 more(context),
               ]),
             ),
@@ -1082,6 +1092,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                                         .indexOf(kUsePermanentPassword)] &&
                                 (await bind.mainGetPermanentPassword())
                                     .isEmpty) {
+                              if (isChangePermanentPasswordDisabled()) {
+                                await callback();
+                                return;
+                              }
                               setPasswordDialog(notEmptyCallback: callback);
                             } else {
                               await callback();
@@ -1186,7 +1200,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                   enabled: tmpEnabled && !locked),
             if (usePassword) numericOneTimePassword,
             if (usePassword) radios[1],
-            if (usePassword)
+            if (usePassword && !isChangePermanentPasswordDisabled())
               _SubButton('Set permanent password', setPasswordDialog,
                   permEnabled && !locked),
             // if (usePassword)
@@ -1209,7 +1223,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         _OptionCheckBox(context, 'allow-only-conn-window-open-tip',
             'allow-only-conn-window-open',
             reverse: false, enabled: enabled),
-      if (bind.mainIsInstalled()) unlockPin()
+      if (bind.mainIsInstalled() && !isUnlockPinDisabled()) unlockPin()
     ]);
   }
 
@@ -2645,7 +2659,7 @@ Widget _lock(
                           ]).marginSymmetric(vertical: 2)),
                   onPressed: () async {
                     final unlockPin = bind.mainGetUnlockPin();
-                    if (unlockPin.isEmpty) {
+                    if (unlockPin.isEmpty || isUnlockPinDisabled()) {
                       bool checked = await callMainCheckSuperUserPermission();
                       if (checked) {
                         onUnlock();

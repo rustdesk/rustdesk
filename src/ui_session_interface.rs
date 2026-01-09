@@ -1,6 +1,9 @@
 use crate::{
     common::{get_supported_keyboard_modes, is_keyboard_mode_supported},
-    input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL},
+    input::{
+        MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_MASK,
+        MOUSE_TYPE_TRACKPAD, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL,
+    },
     ui_interface::use_texture_render,
 };
 use async_trait::async_trait;
@@ -567,6 +570,9 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_audit_server(&self, typ: String) -> String {
+        if LocalConfig::get_option("access_token").is_empty() {
+            return "".to_owned();
+        }
         crate::get_audit_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
@@ -1219,7 +1225,9 @@ impl<T: InvokeUiSession> Session<T> {
             }
         }
 
-        let (x, y) = if mask == MOUSE_TYPE_WHEEL || mask == MOUSE_TYPE_TRACKPAD {
+        // Compute event type once using MOUSE_TYPE_MASK for reuse
+        let event_type = mask & MOUSE_TYPE_MASK;
+        let (x, y) = if event_type == MOUSE_TYPE_WHEEL || event_type == MOUSE_TYPE_TRACKPAD {
             self.get_scroll_xy((x, y))
         } else {
             (x, y)
@@ -1228,8 +1236,6 @@ impl<T: InvokeUiSession> Session<T> {
         // #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (alt, ctrl, shift, command) =
             keyboard::client::get_modifiers_state(alt, ctrl, shift, command);
-
-        use crate::input::*;
         let is_left = (mask & (MOUSE_BUTTON_LEFT << 3)) > 0;
         let is_right = (mask & (MOUSE_BUTTON_RIGHT << 3)) > 0;
         if is_left ^ is_right {
@@ -1249,9 +1255,8 @@ impl<T: InvokeUiSession> Session<T> {
         // to-do: how about ctrl + left from win to macos
         if cfg!(target_os = "macos") {
             let buttons = mask >> 3;
-            let evt_type = mask & 0x7;
             if buttons == MOUSE_BUTTON_LEFT
-                && evt_type == MOUSE_TYPE_DOWN
+                && event_type == MOUSE_TYPE_DOWN
                 && ctrl
                 && self.peer_platform() != "Mac OS"
             {
@@ -1658,7 +1663,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool);
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool, scale: f64);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
     fn set_displays(&self, displays: &Vec<DisplayInfo>);
@@ -1804,6 +1809,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 current.width,
                 current.height,
                 current.cursor_embedded,
+                current.scale,
             );
         }
         self.update_privacy_mode();
@@ -2008,7 +2014,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     }
     let mut remote = Remote::new(handler, receiver, sender);
     remote.io_loop(&key, &token, round).await;
-    remote.sync_jobs_status_to_local().await;
+    let _ = remote.sync_jobs_status_to_local().await;
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

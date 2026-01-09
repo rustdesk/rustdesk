@@ -32,13 +32,24 @@ use std::{
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::Mutex,
 };
+
+// macOS boolean_t is defined as `int` in <mach/boolean.h>
+type BooleanT = hbb_common::libc::c_int;
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
 static mut LATEST_SEED: i32 = 0;
 
+// Using a fixed temporary directory for updates is preferable to
+// using one that includes the custom client name.
 const UPDATE_TEMP_DIR: &str = "/tmp/.rustdeskupdate";
+
+/// Global mutex to serialize CoreGraphics cursor operations.
+/// This prevents race conditions between cursor visibility (hide depth tracking)
+/// and cursor positioning/clipping operations.
+static CG_CURSOR_MUTEX: Mutex<()> = Mutex::new(());
 
 extern "C" {
     fn CGSCurrentCursorSeed() -> i32;
@@ -62,6 +73,8 @@ extern "C" {
     fn majorVersion() -> u32;
     fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
     fn MacSetMode(display: u32, width: u32, height: u32, tryHiDPI: bool) -> BOOL;
+    fn CGWarpMouseCursorPosition(newCursorPosition: CGPoint) -> CGError;
+    fn CGAssociateMouseAndMouseCursorPosition(connected: BooleanT) -> CGError;
 }
 
 pub fn major_version() -> u32 {
@@ -383,6 +396,99 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
     pt.y -= frame.origin.y;
     Some((pt.x as _, pt.y as _))
     */
+}
+
+/// Warp the mouse cursor to the specified screen position.
+///
+/// # Thread Safety
+/// This function affects global cursor state and acquires `CG_CURSOR_MUTEX`.
+/// Callers must ensure no nested calls occur while the mutex is held.
+///
+/// # Arguments
+/// * `x` - X coordinate in screen points (macOS uses points, not pixels)
+/// * `y` - Y coordinate in screen points
+pub fn set_cursor_pos(x: i32, y: i32) -> bool {
+    // Acquire lock with deadlock detection in debug builds.
+    // In debug builds, try_lock detects re-entrant calls early; on failure we return immediately.
+    // In release builds, we use blocking lock() which will wait if contended.
+    #[cfg(debug_assertions)]
+    let _guard = match CG_CURSOR_MUTEX.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::WouldBlock) => {
+            log::error!("[BUG] set_cursor_pos: CG_CURSOR_MUTEX is already held - potential deadlock!");
+            debug_assert!(false, "Re-entrant call to set_cursor_pos detected");
+            return false;
+        }
+        Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+    };
+    #[cfg(not(debug_assertions))]
+    let _guard = CG_CURSOR_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let result = CGWarpMouseCursorPosition(CGPoint {
+            x: x as f64,
+            y: y as f64,
+        });
+        if result != CGError::Success {
+            log::error!(
+                "CGWarpMouseCursorPosition({}, {}) returned error: {:?}",
+                x,
+                y,
+                result
+            );
+        }
+        result == CGError::Success
+    }
+}
+
+/// Toggle pointer lock (dissociate/associate mouse from cursor position).
+///
+/// On macOS, cursor clipping is not supported directly like Windows ClipCursor.
+/// Instead, we use CGAssociateMouseAndMouseCursorPosition to dissociate mouse
+/// movement from cursor position, achieving a "pointer lock" effect.
+///
+/// # Thread Safety
+/// This function affects global cursor state and acquires `CG_CURSOR_MUTEX`.
+/// Callers must ensure only one owner toggles pointer lock at a time;
+/// nested Some/None transitions from different call sites may cause unexpected behavior.
+///
+/// # Arguments
+/// * `rect` - When `Some(_)`, dissociates mouse from cursor (enables pointer lock).
+///            When `None`, re-associates mouse with cursor (disables pointer lock).
+///            The rect coordinate values are ignored on macOS; only `Some`/`None` matters.
+///            The parameter signature matches Windows for API consistency.
+pub fn clip_cursor(rect: Option<(i32, i32, i32, i32)>) -> bool {
+    // Acquire lock with deadlock detection in debug builds.
+    // In debug builds, try_lock detects re-entrant calls early; on failure we return immediately.
+    // In release builds, we use blocking lock() which will wait if contended.
+    #[cfg(debug_assertions)]
+    let _guard = match CG_CURSOR_MUTEX.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::WouldBlock) => {
+            log::error!("[BUG] clip_cursor: CG_CURSOR_MUTEX is already held - potential deadlock!");
+            debug_assert!(false, "Re-entrant call to clip_cursor detected");
+            return false;
+        }
+        Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+    };
+    #[cfg(not(debug_assertions))]
+    let _guard = CG_CURSOR_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    // CGAssociateMouseAndMouseCursorPosition takes a boolean_t:
+    //   1 (true)  = associate mouse with cursor position (normal mode)
+    //   0 (false) = dissociate mouse from cursor position (pointer lock mode)
+    // When rect is Some, we want pointer lock (dissociate), so associate = false (0).
+    // When rect is None, we want normal mode (associate), so associate = true (1).
+    let associate: BooleanT = if rect.is_some() { 0 } else { 1 };
+    unsafe {
+        let result = CGAssociateMouseAndMouseCursorPosition(associate);
+        if result != CGError::Success {
+            log::warn!(
+                "CGAssociateMouseAndMouseCursorPosition({}) returned error: {:?}",
+                associate,
+                result
+            );
+        }
+        result == CGError::Success
+    }
 }
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
@@ -714,6 +820,14 @@ pub fn quit_gui() {
     };
 }
 
+#[inline]
+pub fn try_remove_temp_update_dir(dir: Option<&str>) {
+    let target_path = Path::new(dir.unwrap_or(UPDATE_TEMP_DIR));
+    if target_path.exists() {
+        std::fs::remove_dir_all(target_path).ok();
+    }
+}
+
 pub fn update_me() -> ResultType<()> {
     let is_installed_daemon = is_installed_daemon(false);
     let option_stop_service = "stop-service";
@@ -733,6 +847,7 @@ pub fn update_me() -> ResultType<()> {
         bail!("Unknown app directory of current exe file: {:?}", cmd);
     };
 
+    let app_name = crate::get_app_name();
     if is_installed_daemon && !is_service_stopped {
         let agent = format!("{}_server.plist", crate::get_full_name());
         let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
@@ -749,12 +864,13 @@ pub fn update_me() -> ResultType<()> {
         let update_body = format!(
             r#"
 do shell script "
-pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDesk.app && ditto '{}' /Applications/RustDesk.app && chown -R {}:staff /Applications/RustDesk.app && xattr -r -d com.apple.quarantine /Applications/RustDesk.app
-" with prompt "RustDesk wants to update itself" with administrator privileges
+pgrep -x '{app_name}' | grep -v {pid} | xargs kill -9 && rm -rf '/Applications/{app_name}.app' && ditto '{app_dir}' '/Applications/{app_name}.app' && chown -R {user}:staff '/Applications/{app_name}.app' && xattr -r -d com.apple.quarantine '/Applications/{app_name}.app'
+" with prompt "{app_name} wants to update itself" with administrator privileges
     "#,
-            std::process::id(),
-            app_dir,
-            get_active_username()
+            app_name = app_name,
+            pid = std::process::id(),
+            app_dir = app_dir,
+            user = get_active_username()
         );
         match Command::new("osascript")
             .arg("-e")
@@ -772,11 +888,20 @@ pgrep -x 'RustDesk' | grep -v {} | xargs kill -9 && rm -rf /Applications/RustDes
     }
     std::process::Command::new("open")
         .arg("-n")
-        .arg(&format!("/Applications/{}.app", crate::get_app_name()))
+        .arg(&format!("/Applications/{}.app", app_name))
         .spawn()
         .ok();
     // leave open a little time
     std::thread::sleep(std::time::Duration::from_millis(300));
+    Ok(())
+}
+
+pub fn update_from_dmg(dmg_path: &str) -> ResultType<()> {
+    println!("Starting update from DMG: {}", dmg_path);
+    extract_dmg(dmg_path, UPDATE_TEMP_DIR)?;
+    println!("DMG extracted");
+    update_extracted(UPDATE_TEMP_DIR)?;
+    println!("Update process started");
     Ok(())
 }
 
@@ -811,9 +936,13 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
     }
     std::fs::create_dir_all(target_path)?;
 
-    Command::new("hdiutil")
+    let status = Command::new("hdiutil")
         .args(&["attach", "-nobrowse", "-mountpoint", mount_point, dmg_path])
         .status()?;
+
+    if !status.success() {
+        bail!("Failed to attach DMG image at {}: {:?}", dmg_path, status);
+    }
 
     struct DmgGuard(&'static str);
     impl Drop for DmgGuard {
@@ -825,7 +954,7 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
     }
     let _guard = DmgGuard(mount_point);
 
-    let app_name = "RustDesk.app";
+    let app_name = format!("{}.app", crate::get_app_name());
     let src_path = format!("{}/{}", mount_point, app_name);
     let dest_path = format!("{}/{}", target_dir, app_name);
 
@@ -834,7 +963,12 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
         .status()?;
 
     if !copy_status.success() {
-        bail!("Failed to copy application {:?}", copy_status);
+        bail!(
+            "Failed to copy application from {} to {}: {:?}",
+            src_path,
+            dest_path,
+            copy_status
+        );
     }
 
     if !Path::new(&dest_path).exists() {
@@ -848,9 +982,13 @@ fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
 }
 
 fn update_extracted(target_dir: &str) -> ResultType<()> {
-    let exe_path = format!("{}/RustDesk.app/Contents/MacOS/RustDesk", target_dir);
+    let app_name = crate::get_app_name();
+    let exe_path = format!(
+        "{}/{}.app/Contents/MacOS/{}",
+        target_dir, app_name, app_name
+    );
     let _child = unsafe {
-        Command::new(&exe_path)
+        if let Err(e) = Command::new(&exe_path)
             .arg("--update")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -859,7 +997,11 @@ fn update_extracted(target_dir: &str) -> ResultType<()> {
                 hbb_common::libc::setsid();
                 Ok(())
             })
-            .spawn()?
+            .spawn()
+        {
+            try_remove_temp_update_dir(Some(target_dir));
+            bail!(e);
+        }
     };
     Ok(())
 }

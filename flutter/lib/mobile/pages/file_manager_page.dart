@@ -355,15 +355,21 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return Offstage();
       }
 
-      switch (jobTable.last.state) {
+      // Find the first job that is in progress (the one actually transferring data)
+      // Rust backend processes jobs sequentially, so the first inProgress job is the active one
+      final activeJob = jobTable
+              .firstWhereOrNull((job) => job.state == JobState.inProgress) ??
+          jobTable.last;
+
+      switch (activeJob.state) {
         case JobState.inProgress:
           return BottomSheetBody(
             leading: CircularProgressIndicator(),
             title: translate("Waiting"),
             text:
-                "${translate("Speed")}:  ${readableFileSize(jobTable.last.speed)}/s",
+                "${translate("Speed")}:  ${readableFileSize(activeJob.speed)}/s",
             onCanceled: () {
-              model.jobController.cancelJob(jobTable.last.id);
+              model.jobController.cancelJob(activeJob.id);
               jobTable.clear();
             },
           );
@@ -371,7 +377,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           return BottomSheetBody(
             leading: Icon(Icons.check),
             title: "${translate("Successful")}!",
-            text: jobTable.last.display(),
+            text: activeJob.display(),
             onCanceled: () => jobTable.clear(),
           );
         case JobState.error:

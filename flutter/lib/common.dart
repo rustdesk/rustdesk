@@ -24,6 +24,7 @@ import 'package:provider/provider.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -1010,13 +1011,15 @@ makeMobileActionsOverlayEntry(VoidCallback? onHide, {FFI? ffi}) {
   });
 }
 
-void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
+void showToast(String text,
+    {Duration timeout = const Duration(seconds: 3),
+    Alignment alignment = const Alignment(0.0, 0.8)}) {
   final overlayState = globalKey.currentState?.overlay;
   if (overlayState == null) return;
   final entry = OverlayEntry(builder: (context) {
     return IgnorePointer(
         child: Align(
-            alignment: const Alignment(0.0, 0.8),
+            alignment: alignment,
             child: Container(
               decoration: BoxDecoration(
                 color: MyTheme.color(context).toastBg,
@@ -1932,44 +1935,41 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
     return null;
   }
 
-  double? frameLeft;
-  double? frameTop;
-  double? frameRight;
-  double? frameBottom;
-
   if (isDesktop || isWebDesktop) {
-    for (final screen in await window_size.getScreenList()) {
-      frameLeft = frameLeft == null
-          ? screen.visibleFrame.left
-          : min(screen.visibleFrame.left, frameLeft);
-      frameTop = frameTop == null
-          ? screen.visibleFrame.top
-          : min(screen.visibleFrame.top, frameTop);
-      frameRight = frameRight == null
-          ? screen.visibleFrame.right
-          : max(screen.visibleFrame.right, frameRight);
-      frameBottom = frameBottom == null
-          ? screen.visibleFrame.bottom
-          : max(screen.visibleFrame.bottom, frameBottom);
+    final screens = await window_size.getScreenList();
+    if (screens.isNotEmpty) {
+      final windowRect = Rect.fromLTWH(left, top, width, height);
+      bool isVisible = false;
+      for (final screen in screens) {
+        final intersection = windowRect.intersect(screen.visibleFrame);
+        if (intersection.width >= 10.0 && intersection.height >= 10.0) {
+          isVisible = true;
+          break;
+        }
+      }
+      if (!isVisible) {
+        return null;
+      }
+      return Offset(left, top);
     }
   }
-  if (frameLeft == null) {
-    frameLeft = 0.0;
-    frameTop = 0.0;
-    frameRight = ((isDesktop || isWebDesktop)
-            ? kDesktopMaxDisplaySize
-            : kMobileMaxDisplaySize)
-        .toDouble();
-    frameBottom = ((isDesktop || isWebDesktop)
-            ? kDesktopMaxDisplaySize
-            : kMobileMaxDisplaySize)
-        .toDouble();
-  }
+
+  double frameLeft = 0.0;
+  double frameTop = 0.0;
+  double frameRight = ((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplaySize
+          : kMobileMaxDisplaySize)
+      .toDouble();
+  double frameBottom = ((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplaySize
+          : kMobileMaxDisplaySize)
+      .toDouble();
+
   final minWidth = 10.0;
-  if ((left + minWidth) > frameRight! ||
-      (top + minWidth) > frameBottom! ||
+  if ((left + minWidth) > frameRight ||
+      (top + minWidth) > frameBottom ||
       (left + width - minWidth) < frameLeft ||
-      top < frameTop!) {
+      top < frameTop) {
     return null;
   } else {
     return Offset(left, top);
@@ -2676,6 +2676,31 @@ class SimpleWrapper<T> {
   SimpleWrapper(this.value);
 }
 
+/// Wakelock manager with reference counting for desktop.
+/// Ensures wakelock is only disabled when all sessions are closed/minimized.
+///
+/// Note: Each isolate has its own WakelockPlus instance with independent assertion.
+/// As long as one isolate has wakelock enabled, the screen stays awake.
+/// This manager handles multiple tabs within the same isolate.
+class WakelockManager {
+  static final Set<UniqueKey> _enabledKeys = {};
+
+  static void enable(UniqueKey key) {
+    if (isLinux) return;
+    _enabledKeys.add(key);
+    WakelockPlus.enable();
+  }
+
+  static void disable(UniqueKey key) {
+    if (isLinux) return;
+    if (_enabledKeys.remove(key)) {
+      if (_enabledKeys.isEmpty) {
+        WakelockPlus.disable();
+      }
+    }
+  }
+}
+
 /// call this to reload current window.
 ///
 /// [Note]
@@ -3016,10 +3041,21 @@ Future<void> start_service(bool is_start) async {
 }
 
 Future<bool> canBeBlocked() async {
-  var access_mode = await bind.mainGetOption(key: kOptionAccessMode);
+  // First check control permission
+  final controlPermission = await bind.mainGetCommon(
+      key: "is-remote-modify-enabled-by-control-permissions");
+  if (controlPermission == "true") {
+    return false;
+  } else if (controlPermission == "false") {
+    return true;
+  }
+
+  // Check local settings
+  var accessMode = await bind.mainGetOption(key: kOptionAccessMode);
+  var isCustomAccessMode = accessMode != 'full' && accessMode != 'view';
   var option = option2bool(kOptionAllowRemoteConfigModification,
       await bind.mainGetOption(key: kOptionAllowRemoteConfigModification));
-  return access_mode == 'view' || (access_mode.isEmpty && !option);
+  return accessMode == 'view' || (isCustomAccessMode && !option);
 }
 
 // to-do: web not implemented
@@ -3782,6 +3818,16 @@ setResizable(bool resizable) {
 
 isOptionFixed(String key) => bind.mainIsOptionFixed(key: key);
 
+bool isChangePermanentPasswordDisabled() =>
+    bind.mainGetBuildinOption(key: kOptionDisableChangePermanentPassword) ==
+    'Y';
+
+bool isChangeIdDisabled() =>
+    bind.mainGetBuildinOption(key: kOptionDisableChangeId) == 'Y';
+
+bool isUnlockPinDisabled() =>
+    bind.mainGetBuildinOption(key: kOptionDisableUnlockPin) == 'Y';
+
 bool? _isCustomClient;
 bool get isCustomClient {
   _isCustomClient ??= bind.isCustomClient();
@@ -4024,4 +4070,24 @@ String decode_http_response(http.Response resp) {
 
 bool peerTabShowNote(PeerTabIndex peerTabIndex) {
   return peerTabIndex == PeerTabIndex.ab || peerTabIndex == PeerTabIndex.group;
+}
+
+// TODO: We should support individual bits combinations in the future.
+// But for now, just keep it simple, because the old code only supports single button.
+// No users have requested multi-button support yet.
+String mouseButtonsToPeer(int buttons) {
+  switch (buttons) {
+    case kPrimaryMouseButton:
+      return 'left';
+    case kSecondaryMouseButton:
+      return 'right';
+    case kMiddleMouseButton:
+      return 'wheel';
+    case kBackMouseButton:
+      return 'back';
+    case kForwardMouseButton:
+      return 'forward';
+    default:
+      return '';
+  }
 }

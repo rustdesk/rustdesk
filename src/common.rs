@@ -71,6 +71,19 @@ pub mod input {
     pub const MOUSE_TYPE_UP: i32 = 2;
     pub const MOUSE_TYPE_WHEEL: i32 = 3;
     pub const MOUSE_TYPE_TRACKPAD: i32 = 4;
+    /// Relative mouse movement type for gaming/3D applications.
+    /// This type sends delta (dx, dy) values instead of absolute coordinates.
+    /// NOTE: This is only supported by the Flutter client. The Sciter client (deprecated)
+    /// does not support relative mouse mode due to:
+    /// 1. Fixed send_mouse() function signature that doesn't allow type differentiation
+    /// 2. Lack of pointer lock API in Sciter/TIS
+    /// 3. No OS cursor control (hide/show/clip) FFI bindings in Sciter UI
+    pub const MOUSE_TYPE_MOVE_RELATIVE: i32 = 5;
+
+    /// Mask to extract the mouse event type from the mask field.
+    /// The lower 3 bits contain the event type (MOUSE_TYPE_*), giving a valid range of 0-7.
+    /// Currently defined types use values 0-5; values 6 and 7 are reserved for future use.
+    pub const MOUSE_TYPE_MASK: i32 = 0x7;
 
     pub const MOUSE_BUTTON_LEFT: i32 = 0x01;
     pub const MOUSE_BUTTON_RIGHT: i32 = 0x02;
@@ -175,10 +188,36 @@ pub fn is_support_file_transfer_resume_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number("1.4.2")
 }
 
+/// Minimum server version required for relative mouse mode support.
+/// This constant must mirror Flutter's `kMinVersionForRelativeMouseMode` in `consts.dart`.
+const MIN_VERSION_RELATIVE_MOUSE_MODE: &str = "1.4.5";
+
+#[inline]
+pub fn is_support_relative_mouse_mode(ver: &str) -> bool {
+    is_support_relative_mouse_mode_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+pub fn is_support_relative_mouse_mode_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number(MIN_VERSION_RELATIVE_MOUSE_MODE)
+}
+
 // is server process, with "--server" args
 #[inline]
 pub fn is_server() -> bool {
     *IS_SERVER
+}
+
+#[inline]
+pub fn need_fs_cm_send_files() -> bool {
+    #[cfg(windows)]
+    {
+        is_server()
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
 }
 
 #[inline]
@@ -1051,7 +1090,7 @@ fn get_api_server_(api: String, custom: String) -> String {
 
 #[inline]
 pub fn is_public(url: &str) -> bool {
-    url.contains("rustdesk.com")
+    url.contains("rustdesk.com/") || url.ends_with("rustdesk.com")
 }
 
 pub fn get_udp_punch_enabled() -> bool {
@@ -2265,6 +2304,28 @@ pub fn str2color(s: &str, alpha: u8) -> u32 {
     (alpha as u32) << 24 | rgb
 }
 
+/// Check control permission state from a u64 bitmap.
+/// Each permission uses 2 bits: 0 = not set, 1 = disable, 2 = enable, 3 = invalid (treated as not set)
+/// Returns: Some(true) = enabled, Some(false) = disabled, None = not set or invalid
+pub fn get_control_permission(
+    permissions: u64,
+    permission: hbb_common::rendezvous_proto::control_permissions::Permission,
+) -> Option<bool> {
+    use hbb_common::protobuf::Enum;
+    let index = permission.value();
+    if index >= 0 && index < 32 {
+        let shift = index * 2;
+        let value = (permissions >> shift) & 0b11;
+        match value {
+            1 => Some(false), // disable
+            2 => Some(true),  // enable
+            _ => None,        // 0 = not set, 3 = invalid
+        }
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2404,5 +2465,60 @@ mod tests {
             Duration::from_secs_f64(dur.as_secs_f64() * 0.499 * 1e-9),
             Duration::from_nanos(0)
         );
+    }
+
+    #[test]
+    fn test_is_public() {
+        // Test URLs containing "rustdesk.com/"
+        assert!(is_public("https://rustdesk.com/"));
+        assert!(is_public("https://www.rustdesk.com/"));
+        assert!(is_public("https://api.rustdesk.com/v1"));
+        assert!(is_public("https://rustdesk.com/path"));
+
+        // Test URLs ending with "rustdesk.com"
+        assert!(is_public("rustdesk.com"));
+        assert!(is_public("https://rustdesk.com"));
+        assert!(is_public("http://www.rustdesk.com"));
+        assert!(is_public("https://api.rustdesk.com"));
+
+        // Test non-public URLs
+        assert!(!is_public("https://example.com"));
+        assert!(!is_public("https://custom-server.com"));
+        assert!(!is_public("http://192.168.1.1"));
+        assert!(!is_public("localhost"));
+        assert!(!is_public("https://rustdesk.computer.com"));
+        assert!(!is_public("rustdesk.comhello.com"));
+    }
+
+    #[test]
+    fn test_mouse_event_constants_and_mask_layout() {
+        use super::input::*;
+
+        // Verify MOUSE_TYPE constants are unique and within the mask range.
+        let types = [
+            MOUSE_TYPE_MOVE,
+            MOUSE_TYPE_DOWN,
+            MOUSE_TYPE_UP,
+            MOUSE_TYPE_WHEEL,
+            MOUSE_TYPE_TRACKPAD,
+            MOUSE_TYPE_MOVE_RELATIVE,
+        ];
+
+        let mut seen = std::collections::HashSet::new();
+        for t in types.iter() {
+            assert!(seen.insert(*t), "Duplicate mouse type: {}", t);
+            assert_eq!(
+                *t & MOUSE_TYPE_MASK,
+                *t,
+                "Mouse type {} exceeds mask {}",
+                t,
+                MOUSE_TYPE_MASK
+            );
+        }
+
+        // The mask layout is: lower 3 bits for type, upper bits for buttons (shifted by 3).
+        let combined_mask = MOUSE_TYPE_DOWN | ((MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT) << 3);
+        assert_eq!(combined_mask & MOUSE_TYPE_MASK, MOUSE_TYPE_DOWN);
+        assert_eq!(combined_mask >> 3, MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT);
     }
 }

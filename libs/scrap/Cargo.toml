@@ -10,7 +10,7 @@ authors = ["Ram <quadrupleslap@gmail.com>"]
 edition = "2018"
 
 [features]
-wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing"]
+wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "zbus"]
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
@@ -57,6 +57,7 @@ tracing = { version = "0.1", optional = true }
 gstreamer = { version = "0.16", optional = true }
 gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
 gstreamer-video = { version = "0.16", optional = true }
+zbus = { version = "3.15", optional = true }
 
 [dependencies.hwcodec]
 git = "https://github.com/rustdesk-org/hwcodec"

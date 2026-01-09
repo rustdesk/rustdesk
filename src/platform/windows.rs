@@ -116,12 +116,51 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
-        #[allow(invalid_value)]
-        let mut out = mem::MaybeUninit::uninit().assume_init();
-        if GetCursorPos(&mut out) == FALSE {
+        let mut out = mem::MaybeUninit::<POINT>::uninit();
+        if GetCursorPos(out.as_mut_ptr()) == FALSE {
             return None;
         }
-        return Some((out.x, out.y));
+        let out = out.assume_init();
+        Some((out.x, out.y))
+    }
+}
+
+pub fn set_cursor_pos(x: i32, y: i32) -> bool {
+    unsafe {
+        if SetCursorPos(x, y) == FALSE {
+            let err = GetLastError();
+            log::warn!("SetCursorPos failed: x={}, y={}, error_code={}", x, y, err);
+            return false;
+        }
+        true
+    }
+}
+
+/// Clip cursor to a rectangle. Pass None to unclip.
+pub fn clip_cursor(rect: Option<(i32, i32, i32, i32)>) -> bool {
+    unsafe {
+        let result = match rect {
+            Some((left, top, right, bottom)) => {
+                let r = RECT {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                };
+                ClipCursor(&r)
+            }
+            None => ClipCursor(std::ptr::null()),
+        };
+        if result == FALSE {
+            let err = GetLastError();
+            log::warn!(
+                "ClipCursor failed: rect={:?}, error_code={}",
+                rect,
+                err
+            );
+            return false;
+        }
+        true
     }
 }
 
@@ -1861,13 +1900,17 @@ unsafe fn set_default_dll_directories() -> bool {
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
     let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    // https://github.com/rustdesk/rustdesk/issues/13735
+    // Replace ':' with '_' for filename since ':' is not allowed in Windows filenames
+    // https://github.com/rustdesk/hbb_common/blob/8b0e25867375ba9e6bff548acf44fe6d6ffa7c0e/src/config.rs#L1384
+    let filename = id.replace(':', "_");
     let shortcut = write_cmds(
         format!(
             "
 Set oWS = WScript.CreateObject(\"WScript.Shell\")
 strDesktop = oWS.SpecialFolders(\"Desktop\")
 Set objFSO = CreateObject(\"Scripting.FileSystemObject\")
-sLinkFile = objFSO.BuildPath(strDesktop, \"{id}.lnk\")
+sLinkFile = objFSO.BuildPath(strDesktop, \"{filename}.lnk\")
 Set oLink = oWS.CreateShortcut(sLinkFile)
     oLink.TargetPath = \"{exe}\"
     oLink.Arguments = \"--connect {id}\"
@@ -1882,6 +1925,7 @@ oLink.Save
     .to_owned();
     std::process::Command::new("cscript")
         .arg(&shortcut)
+        .creation_flags(CREATE_NO_WINDOW)
         .output()?;
     allow_err!(std::fs::remove_file(shortcut));
     Ok(())
