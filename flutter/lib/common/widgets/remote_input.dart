@@ -372,7 +372,10 @@ class _RawTouchGestureDetectorRegionState
         await ffi.cursorModel
             .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
       }
-      await inputModel.sendMouse('down', MouseButtons.left);
+      // In relative mouse mode, skip mouse down - only send movement via sendMobileRelativeMouseMove
+      if (!inputModel.relativeMouseMode.value) {
+        await inputModel.sendMouse('down', MouseButtons.left);
+      }
       await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
     } else {
       final offset = ffi.cursorModel.offset;
@@ -397,7 +400,12 @@ class _RawTouchGestureDetectorRegionState
     if (handleTouch && !_touchModePanStarted) {
       return;
     }
-    await ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
+    // In relative mouse mode, send delta directly without position tracking.
+    if (inputModel.relativeMouseMode.value) {
+      await inputModel.sendMobileRelativeMouseMove(d.delta.dx, d.delta.dy);
+    } else {
+      await ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
+    }
   }
 
   onOneFingerPanEnd(DragEndDetails d) async {
@@ -409,7 +417,10 @@ class _RawTouchGestureDetectorRegionState
       ffi.cursorModel.clearRemoteWindowCoords();
     }
     if (handleTouch) {
-      await inputModel.sendMouse('up', MouseButtons.left);
+      // In relative mouse mode, skip mouse up - matches the skipped mouse down in onOneFingerPanStart
+      if (!inputModel.relativeMouseMode.value) {
+        await inputModel.sendMouse('up', MouseButtons.left);
+      }
     }
   }
 

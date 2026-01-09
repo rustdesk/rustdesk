@@ -97,6 +97,7 @@ extern "C" {
         y: *mut c_int,
         screen_num: *mut c_int,
     ) -> c_int;
+    fn xdo_move_mouse(xdo: Xdo, x: c_int, y: c_int, screen: c_int) -> c_int;
     fn xdo_new(display: *const c_char) -> Xdo;
     fn xdo_get_active_window(xdo: Xdo, window: *mut *mut c_void) -> c_int;
     fn xdo_get_window_location(
@@ -172,6 +173,56 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
         }
     });
     res
+}
+
+pub fn set_cursor_pos(x: i32, y: i32) -> bool {
+    let mut res = false;
+    XDO.with(|xdo| {
+        match xdo.try_borrow_mut() {
+            Ok(xdo) => {
+                if xdo.is_null() {
+                    log::debug!("set_cursor_pos: xdo is null");
+                    return;
+                }
+                unsafe {
+                    let ret = xdo_move_mouse(*xdo, x, y, 0);
+                    if ret != 0 {
+                        log::debug!(
+                            "set_cursor_pos: xdo_move_mouse failed with code {} for coordinates ({}, {})",
+                            ret, x, y
+                        );
+                    }
+                    res = ret == 0;
+                }
+            }
+            Err(_) => {
+                log::debug!("set_cursor_pos: failed to borrow xdo");
+            }
+        }
+    });
+    res
+}
+
+/// Clip cursor - Linux implementation is a no-op.
+///
+/// On X11, there's no direct equivalent to Windows ClipCursor. XGrabPointer
+/// can confine the pointer but requires a window handle and has side effects.
+///
+/// On Wayland, pointer constraints require the zwp_pointer_constraints_v1
+/// protocol which is compositor-dependent.
+///
+/// For relative mouse mode on Linux, the Flutter side uses pointer warping
+/// (set_cursor_pos) to re-center the cursor after each movement, which achieves
+/// a similar effect without requiring cursor clipping.
+///
+/// Returns true (always succeeds as no-op).
+pub fn clip_cursor(_rect: Option<(i32, i32, i32, i32)>) -> bool {
+    // Log only once per process to avoid flooding logs when called frequently.
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    if !LOGGED.swap(true, Ordering::Relaxed) {
+        log::debug!("clip_cursor called (no-op on Linux, this message is logged only once)");
+    }
+    true
 }
 
 pub fn reset_input_cache() {}
