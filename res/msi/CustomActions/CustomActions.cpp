@@ -31,22 +31,168 @@ LExit:
     return WcaFinalize(er);
 }
 
-// CAUTION: We can't simply remove the install folder here, because silent repair/upgrade will fail.
-// `RemoveInstallFolder()` is a deferred custom action, it will be executed after the files are copied.
-// `msiexec /i package.msi /qn`
+// Helper function to safely delete a file or directory using handle-based deletion.
+// This avoids TOCTOU (Time-Of-Check-Time-Of-Use) race conditions.
+BOOL SafeDeleteItem(LPCWSTR fullPath)
+{
+    // Open the file/directory with DELETE access and FILE_FLAG_OPEN_REPARSE_POINT
+    // to prevent following symlinks.
+    // Use shared access to allow deletion even when other processes have the file open.
+    DWORD flags = FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT;
+    HANDLE hFile = CreateFileW(
+        fullPath,
+        DELETE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,  // Allow shared access
+        NULL,
+        OPEN_EXISTING,
+        flags,
+        NULL
+    );
+
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        WcaLog(LOGMSG_STANDARD, "SafeDeleteItem: Failed to open '%ls'. Error: %lu", fullPath, GetLastError());
+        return FALSE;
+    }
+
+    // Use SetFileInformationByHandle to mark for deletion.
+    // The file will be deleted when the handle is closed.
+    FILE_DISPOSITION_INFO dispInfo;
+    dispInfo.DeleteFile = TRUE;
+
+    BOOL result = SetFileInformationByHandle(
+        hFile,
+        FileDispositionInfo,
+        &dispInfo,
+        sizeof(dispInfo)
+    );
+
+    if (!result)
+    {
+        DWORD error = GetLastError();
+        WcaLog(LOGMSG_STANDARD, "SafeDeleteItem: Failed to mark '%ls' for deletion. Error: %lu", fullPath, error);
+    }
+
+    CloseHandle(hFile);
+    return result;
+}
+
+// Helper function to recursively delete a directory's contents with detailed logging.
+void RecursiveDelete(LPCWSTR path)
+{
+    // Ensure the path is not empty or null.
+    if (path == NULL || path[0] == L'\0')
+    {
+        return;
+    }
+
+    // Extra safety: never operate directly on a root path.
+    if (PathIsRootW(path))
+    {
+        WcaLog(LOGMSG_STANDARD, "RecursiveDelete: refusing to operate on root path '%ls'.", path);
+        return;
+    }
+
+    // MAX_PATH is enough here since the installer should not be using longer paths.
+    // No need to handle extended-length paths (\\?\) in this context.
+    WCHAR searchPath[MAX_PATH];
+    HRESULT hr = StringCchPrintfW(searchPath, MAX_PATH, L"%s\\*", path);
+    if (FAILED(hr)) {
+        WcaLog(LOGMSG_STANDARD, "RecursiveDelete: Path too long to enumerate: %ls", path);
+        return;
+    }
+
+    WIN32_FIND_DATAW findData;
+    HANDLE hFind = FindFirstFileW(searchPath, &findData);
+
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        // This can happen if the directory is empty or doesn't exist, which is not an error in our case.
+        WcaLog(LOGMSG_STANDARD, "RecursiveDelete: Failed to enumerate directory '%ls'. It may be missing or inaccessible. Error: %lu", path, GetLastError());
+        return;
+    }
+
+    do
+    {
+        // Skip '.' and '..' directories.
+        if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0)
+        {
+            continue;
+        }
+
+        // MAX_PATH is enough here since the installer should not be using longer paths.
+        // No need to handle extended-length paths (\\?\) in this context.
+        WCHAR fullPath[MAX_PATH];
+        hr = StringCchPrintfW(fullPath, MAX_PATH, L"%s\\%s", path, findData.cFileName);
+        if (FAILED(hr)) {
+            WcaLog(LOGMSG_STANDARD, "RecursiveDelete: Path too long for item '%ls' in '%ls', skipping.", findData.cFileName, path);
+            continue;
+        }
+
+        // Before acting, ensure the read-only attribute is not set.
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_READONLY)
+        {
+            if (FALSE == SetFileAttributesW(fullPath, findData.dwFileAttributes & ~FILE_ATTRIBUTE_READONLY))
+            {
+                WcaLog(LOGMSG_STANDARD, "RecursiveDelete: Failed to remove read-only attribute. Error: %lu", GetLastError());
+            }
+        }
+
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            // Check for reparse points (symlinks/junctions) to prevent directory traversal attacks.
+            // Do not follow reparse points, only remove the link itself.
+            if (findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+            {
+                WcaLog(LOGMSG_STANDARD, "RecursiveDelete: Not recursing into reparse point (symlink/junction), deleting link itself: %ls", fullPath);
+                SafeDeleteItem(fullPath);
+            }
+            else
+            {
+                // Recursively delete directory contents first
+                RecursiveDelete(fullPath);
+                // Then delete the directory itself
+                SafeDeleteItem(fullPath);
+            }
+        }
+        else
+        {
+            // Delete file using safe handle-based deletion
+            SafeDeleteItem(fullPath);
+        }
+    } while (FindNextFileW(hFind, &findData) != 0);
+
+    DWORD lastError = GetLastError();
+    if (lastError != ERROR_NO_MORE_FILES)
+    {
+        WcaLog(LOGMSG_STANDARD, "RecursiveDelete: FindNextFileW failed with error %lu", lastError);
+    }
+
+    FindClose(hFind);
+}
+
+// See `Package.wxs` for the sequence of this custom action.
 //
-// So we need to delete the files separately in install folder.
+// Upgrade/uninstall sequence:
+//   1. InstallInitialize
+//   2. RemoveExistingProducts
+//      ├─ TerminateProcesses
+//      ├─ TryStopDeleteService
+//      ├─ RemoveInstallFolder - <-- Here
+//      └─ RemoveFiles
+//   3. InstallValidate
+//   4. InstallFiles
+//   5. InstallExecute
+//   6. InstallFinalize
 UINT __stdcall RemoveInstallFolder(
     __in MSIHANDLE hInstall)
 {
     HRESULT hr = S_OK;
     DWORD er = ERROR_SUCCESS;
 
-    int nResult = 0;
     LPWSTR installFolder = NULL;
     LPWSTR pwz = NULL;
     LPWSTR pwzData = NULL;
-    WCHAR runtimeBroker[1024] = { 0, };
 
     hr = WcaInitialize(hInstall, "RemoveInstallFolder");
     ExitOnFailure(hr, "Failed to initialize");
@@ -58,23 +204,22 @@ UINT __stdcall RemoveInstallFolder(
     hr = WcaReadStringFromCaData(&pwz, &installFolder);
     ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
 
-    StringCchPrintfW(runtimeBroker, sizeof(runtimeBroker) / sizeof(runtimeBroker[0]), L"%ls\\RuntimeBroker_rustdesk.exe", installFolder);
-
-    SHFILEOPSTRUCTW fileOp;
-    ZeroMemory(&fileOp, sizeof(SHFILEOPSTRUCT));
-    fileOp.wFunc = FO_DELETE;
-    fileOp.pFrom = runtimeBroker;
-    fileOp.fFlags = FOF_NOCONFIRMATION | FOF_SILENT;
-
-    nResult = SHFileOperationW(&fileOp);
-    if (nResult == 0)
-    {
-        WcaLog(LOGMSG_STANDARD, "The external file \"%ls\" has been deleted.", runtimeBroker);
+    if (installFolder == NULL || installFolder[0] == L'\0') {
+        WcaLog(LOGMSG_STANDARD, "Install folder path is empty, skipping recursive delete.");
+        goto LExit;
     }
-    else
-    {
-        WcaLog(LOGMSG_STANDARD, "The external file \"%ls\" has not been deleted, error code: 0x%02X. Please refer to https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shfileoperationa for the error codes.", runtimeBroker, nResult);
+
+    if (PathIsRootW(installFolder)) {
+        WcaLog(LOGMSG_STANDARD, "Refusing to recursively delete root folder '%ls'.", installFolder);
+        goto LExit;
     }
+
+    WcaLog(LOGMSG_STANDARD, "Attempting to recursively delete contents of install folder: %ls", installFolder);
+
+    RecursiveDelete(installFolder);
+
+    // The standard MSI 'RemoveFolders' action will take care of removing the (now empty) directories.
+    // We don't need to call RemoveDirectoryW on installFolder itself, as it might still be in use by the installer.
 
 LExit:
     ReleaseStr(pwzData);
@@ -109,9 +254,12 @@ bool TerminateProcessIfNotContainsParam(pfnNtQueryInformationProcess NtQueryInfo
             {
                 if (pebUpp.CommandLine.Length > 0)
                 {
-                    WCHAR *commandLine = (WCHAR *)malloc(pebUpp.CommandLine.Length);
+                    // Allocate extra space for null terminator
+                    WCHAR *commandLine = (WCHAR *)malloc(pebUpp.CommandLine.Length + sizeof(WCHAR));
                     if (commandLine != NULL)
                     {
+                        // Initialize all bytes to zero for safety
+                        memset(commandLine, 0, pebUpp.CommandLine.Length + sizeof(WCHAR));
                         if (ReadProcessMemory(process, pebUpp.CommandLine.Buffer,
                                               commandLine, pebUpp.CommandLine.Length, &dwBytesRead))
                         {
