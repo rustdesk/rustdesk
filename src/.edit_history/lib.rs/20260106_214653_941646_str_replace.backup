@@ -1,12 +1,10 @@
+# BACKUP METADATA: {'timestamp': '20260106_214653_941646', 'operation': 'str_replace', 'file': '/users/kimera/projects/test/rustdesk/src/lib.rs', 'checksum': '4416d81afd3b6878402698e05a713cf20bb2cca82ea5860f3263f26a751f6016'}
 mod keyboard;
-/// Security utilities for input validation and command execution safety
-pub mod security;
 /// cbindgen:ignore
 pub mod platform;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use platform::{
-    clip_cursor, get_cursor, get_cursor_data, get_cursor_pos, get_focused_display,
-    set_cursor_pos, start_os_service,
+    get_cursor, get_cursor_data, get_cursor_pos, get_focused_display, start_os_service,
 };
 #[cfg(not(any(target_os = "ios")))]
 /// cbindgen:ignore
