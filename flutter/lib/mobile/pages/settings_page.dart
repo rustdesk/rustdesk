@@ -71,6 +71,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _ignoreBatteryOpt = false;
   var _enableStartOnBoot = false;
   var _checkUpdateOnStartup = false;
+  var _showTerminalExtraKeys = false;
   var _floatingWindowDisabled = false;
   var _keepScreenOn = KeepScreenOn.duringControlled; // relay on floating window
   var _enableAbr = false;
@@ -139,6 +140,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _enableIpv6Punch = mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
     _allowAskForNoteAtEndOfConnection =
         mainGetLocalBoolOptionSync(kOptionAllowAskForNoteAtEndOfConnection);
+    _showTerminalExtraKeys =
+        mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
   }
 
   @override
@@ -602,6 +605,23 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       );
     }
 
+    enhancementsTiles.add(
+      SettingsTile.switchTile(
+        initialValue: _showTerminalExtraKeys,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(translate('Show terminal extra keys')),
+        ]),
+        onToggle: (bool v) async {
+          await mainSetLocalBoolOption(kOptionEnableShowTerminalExtraKeys, v);
+          final newValue =
+            mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+          setState(() {
+            _showTerminalExtraKeys = newValue;
+          });
+        },
+      ),
+    );
+
     onFloatingWindowChanged(bool toValue) async {
       if (toValue) {
         if (!await AndroidPermissionManager.check(kSystemAlertWindow)) {
@@ -786,19 +806,24 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               showThemeSettings(gFFI.dialogManager);
             },
           ),
-          SettingsTile.switchTile(
-            title: Text(translate('note-at-conn-end-tip')),
-            initialValue: _allowAskForNoteAtEndOfConnection,
-            onToggle: (v) async {
-              await mainSetLocalBoolOption(
-                  kOptionAllowAskForNoteAtEndOfConnection, v);
-              final newValue = mainGetLocalBoolOptionSync(
-                  kOptionAllowAskForNoteAtEndOfConnection);
-              setState(() {
-                _allowAskForNoteAtEndOfConnection = newValue;
-              });
-            },
-          )
+          if (!bind.isDisableAccount())
+            SettingsTile.switchTile(
+              title: Text(translate('note-at-conn-end-tip')),
+              initialValue: _allowAskForNoteAtEndOfConnection,
+              onToggle: (v) async {
+                if (v && !gFFI.userModel.isLogin) {
+                  final res = await loginDialog();
+                  if (res != true) return;
+                }
+                await mainSetLocalBoolOption(
+                    kOptionAllowAskForNoteAtEndOfConnection, v);
+                final newValue = mainGetLocalBoolOptionSync(
+                    kOptionAllowAskForNoteAtEndOfConnection);
+                setState(() {
+                  _allowAskForNoteAtEndOfConnection = newValue;
+                });
+              },
+            )
         ]),
         if (isAndroid)
           SettingsSection(title: Text(translate('Hardware Codec')), tiles: [

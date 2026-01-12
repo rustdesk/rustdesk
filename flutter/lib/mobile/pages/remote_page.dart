@@ -569,7 +569,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   bool get showCursorPaint =>
-      !gFFI.ffiModel.isPeerAndroid && !gFFI.canvasModel.cursorEmbedded;
+      !gFFI.ffiModel.isPeerAndroid &&
+      !gFFI.canvasModel.cursorEmbedded &&
+      !gFFI.inputModel.relativeMouseMode.value;
 
   Widget getBodyForMobile() {
     final keyboardIsVisible = keyboardVisibilityController.isVisible;
@@ -808,6 +810,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 bind.mainSetLocalOption(key: kOptionTouchMode, value: v);
               },
               virtualMouseMode: gFFI.ffiModel.virtualMouseMode,
+              inputModel: gFFI.inputModel,
             )));
   }
 

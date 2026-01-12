@@ -14,6 +14,8 @@ import 'package:get/get.dart';
 
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../models/state_model.dart';
+import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
 
@@ -349,14 +351,27 @@ class InputModel {
   double _trackpadSpeedInner = kDefaultTrackpadSpeed / 100.0;
   var _trackpadScrollUnsent = Offset.zero;
 
+  // Mobile relative mouse delta accumulators (for slow/fine movements).
+  double _mobileDeltaRemainderX = 0.0;
+  double _mobileDeltaRemainderY = 0.0;
+
   var _lastScale = 1.0;
 
   bool _pointerMovedAfterEnter = false;
+  bool _pointerInsideImage = false;
 
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
+
+  // Relative mouse mode (for games/3D apps).
+  final relativeMouseMode = false.obs;
+  late final RelativeMouseModel _relativeMouse;
+  // Callback to cancel external throttle timer when relative mouse mode is disabled.
+  VoidCallback? onRelativeMouseModeDisabled;
+  // Disposer for the relativeMouseMode observer (to prevent memory leaks).
+  Worker? _relativeMouseModeDisposer;
 
   bool _queryOtherWindowCoords = false;
   Rect? _windowRect;
@@ -367,15 +382,40 @@ class InputModel {
   bool get keyboardPerm => parent.target!.ffiModel.keyboard;
   String get id => parent.target?.id ?? '';
   String? get peerPlatform => parent.target?.ffiModel.pi.platform;
+  String get peerVersion => parent.target?.ffiModel.pi.version ?? '';
   bool get isViewOnly => parent.target!.ffiModel.viewOnly;
   bool get showMyCursor => parent.target!.ffiModel.showMyCursor;
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
   bool get isViewCamera => parent.target!.connType == ConnType.viewCamera;
   int get trackpadSpeed => _trackpadSpeed;
-  bool get useEdgeScroll => parent.target!.canvasModel.scrollStyle == ScrollStyle.scrolledge;
+  bool get useEdgeScroll =>
+      parent.target!.canvasModel.scrollStyle == ScrollStyle.scrolledge;
+
+  /// Check if the connected server supports relative mouse mode.
+  bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
+    _relativeMouse = RelativeMouseModel(
+      sessionId: sessionId,
+      enabled: relativeMouseMode,
+      keyboardPerm: () => keyboardPerm,
+      isViewCamera: () => isViewCamera,
+      peerVersion: () => peerVersion,
+      peerPlatform: () => peerPlatform,
+      modify: (msg) => modify(msg),
+      getPointerInsideImage: () => _pointerInsideImage,
+      setPointerInsideImage: (inside) => _pointerInsideImage = inside,
+    );
+    _relativeMouse.onDisabled = () => onRelativeMouseModeDisabled?.call();
+
+    // Sync relative mouse mode state to global state for UI components (e.g., tab bar hint).
+    _relativeMouseModeDisposer = ever(relativeMouseMode, (bool value) {
+      final peerId = id;
+      if (peerId.isNotEmpty) {
+        stateGlobal.relativeMouseModeState[peerId] = value;
+      }
+    });
   }
 
   // This function must be called after the peer info is received.
@@ -506,6 +546,10 @@ class InputModel {
       }
     }
 
+    if (_relativeMouse.handleRawKeyEvent(e)) {
+      return KeyEventResult.handled;
+    }
+
     final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
       if (!e.repeat) {
@@ -566,6 +610,16 @@ class InputModel {
           e.physicalKey == PhysicalKeyboardKey.metaRight) {
         return KeyEventResult.handled;
       }
+    }
+
+    if (_relativeMouse.handleKeyEvent(
+      e,
+      ctrlPressed: ctrl,
+      shiftPressed: shift,
+      altPressed: alt,
+      commandPressed: command,
+    )) {
+      return KeyEventResult.handled;
     }
 
     if (e is KeyUpEvent) {
@@ -853,11 +907,13 @@ class InputModel {
     toReleaseKeys.release(handleKeyEvent);
     toReleaseRawKeys.release(handleRawKeyEvent);
     _pointerMovedAfterEnter = false;
+    _pointerInsideImage = enter;
 
     // Fix status
     if (!enter) {
       resetModifiers();
     }
+    _relativeMouse.onEnterOrLeaveImage(enter);
     _flingTimer?.cancel();
     if (!isInputSourceFlutter) {
       bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
@@ -878,15 +934,134 @@ class InputModel {
         msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
   }
 
+  /// Send relative mouse movement for mobile clients (virtual joystick).
+  /// This method is for touch-based controls that want to send delta values.
+  /// Uses the 'move_relative' type which bypasses absolute position tracking.
+  ///
+  /// Accumulates fractional deltas to avoid losing slow/fine movements.
+  /// Only sends events when relative mouse mode is enabled and supported.
+  Future<void> sendMobileRelativeMouseMove(double dx, double dy) async {
+    if (!keyboardPerm) return;
+    if (isViewCamera) return;
+    // Only send relative mouse events when relative mode is enabled and supported.
+    if (!isRelativeMouseModeSupported || !relativeMouseMode.value) return;
+    _mobileDeltaRemainderX += dx;
+    _mobileDeltaRemainderY += dy;
+    final x = _mobileDeltaRemainderX.truncate();
+    final y = _mobileDeltaRemainderY.truncate();
+    _mobileDeltaRemainderX -= x;
+    _mobileDeltaRemainderY -= y;
+    if (x == 0 && y == 0) return;
+    await bind.sessionSendMouse(
+        sessionId: sessionId,
+        msg: json.encode(modify({
+          'type': 'move_relative',
+          'x': '$x',
+          'y': '$y',
+        })));
+  }
+
+  /// Update the pointer lock center position based on current window frame.
+  Future<void> updatePointerLockCenter({Offset? localCenter}) {
+    return _relativeMouse.updatePointerLockCenter(localCenter: localCenter);
+  }
+
+  /// Get the current image widget size (for comparison to avoid unnecessary updates).
+  Size? get imageWidgetSize => _relativeMouse.imageWidgetSize;
+
+  /// Update the image widget size for center calculation.
+  void updateImageWidgetSize(Size size) {
+    _relativeMouse.updateImageWidgetSize(size);
+  }
+
+  void toggleRelativeMouseMode() {
+    _relativeMouse.toggleRelativeMouseMode();
+  }
+
+  bool setRelativeMouseMode(bool enabled) {
+    return _relativeMouse.setRelativeMouseMode(enabled);
+  }
+
+  /// Exit relative mouse mode and release all modifier keys to the remote.
+  /// This is called when the user presses the exit shortcut (Ctrl+Alt on Win/Linux, Cmd+G on macOS).
+  /// We need to send key-up events for all modifiers because the shortcut itself may have
+  /// blocked some key events, leaving the remote in a state where modifiers are stuck.
+  void exitRelativeMouseModeWithKeyRelease() {
+    if (!_relativeMouse.enabled.value) return;
+
+    // First, send release events for all modifier keys to the remote.
+    // This ensures the remote doesn't have stuck modifier keys after exiting.
+    // Use press: false, down: false to send key-up events without modifiers attached.
+    final modifiersToRelease = [
+      'Control_L',
+      'Control_R',
+      'Alt_L',
+      'Alt_R',
+      'Shift_L',
+      'Shift_R',
+      'Meta_L', // Command/Super left
+      'Meta_R', // Command/Super right
+    ];
+
+    for (final key in modifiersToRelease) {
+      bind.sessionInputKey(
+        sessionId: sessionId,
+        name: key,
+        down: false,
+        press: false,
+        alt: false,
+        ctrl: false,
+        shift: false,
+        command: false,
+      );
+    }
+
+    // Reset local modifier state
+    resetModifiers();
+
+    // Now exit relative mouse mode
+    _relativeMouse.setRelativeMouseMode(false);
+  }
+
+  void disposeRelativeMouseMode() {
+    _relativeMouse.dispose();
+    onRelativeMouseModeDisabled = null;
+    // Cancel the relative mouse mode observer and clean up global state.
+    _relativeMouseModeDisposer?.dispose();
+    _relativeMouseModeDisposer = null;
+    final peerId = id;
+    if (peerId.isNotEmpty) {
+      stateGlobal.relativeMouseModeState.remove(peerId);
+    }
+  }
+
+  void onWindowBlur() {
+    _relativeMouse.onWindowBlur();
+  }
+
+  void onWindowFocus() {
+    _relativeMouse.onWindowFocus();
+  }
+
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
     if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
+
+    // Only update pointer region when relative mouse mode is enabled.
+    // This avoids unnecessary tracking when not in relative mode.
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
+    }
+
     if (!isPhysicalMouse.value) {
       isPhysicalMouse.value = true;
     }
     if (isPhysicalMouse.value) {
-      handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position, edgeScroll: useEdgeScroll);
+      if (!_relativeMouse.handleRelativeMouseMove(e.localPosition)) {
+        handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position,
+            edgeScroll: useEdgeScroll);
+      }
     }
   }
 
@@ -1043,13 +1218,25 @@ class InputModel {
     _windowRect = null;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
+
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
+    }
+
     if (e.kind != ui.PointerDeviceKind.mouse) {
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
       }
     }
     if (isPhysicalMouse.value) {
-      handleMouse(_getMouseEvent(e, _kMouseEventDown), e.position);
+      // In relative mouse mode, send button events without position.
+      // Use _relativeMouse.enabled.value consistently with the guard above.
+      if (_relativeMouse.enabled.value) {
+        _relativeMouse
+            .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventDown));
+      } else {
+        handleMouse(_getMouseEvent(e, _kMouseEventDown), e.position);
+      }
     }
   }
 
@@ -1057,9 +1244,21 @@ class InputModel {
     if (isDesktop) _queryOtherWindowCoords = false;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
+
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
+    }
+
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
-      handleMouse(_getMouseEvent(e, _kMouseEventUp), e.position);
+      // In relative mouse mode, send button events without position.
+      // Use _relativeMouse.enabled.value consistently with the guard above.
+      if (_relativeMouse.enabled.value) {
+        _relativeMouse
+            .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventUp));
+      } else {
+        handleMouse(_getMouseEvent(e, _kMouseEventUp), e.position);
+      }
     }
   }
 
@@ -1067,6 +1266,11 @@ class InputModel {
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
+
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
+    }
+
     if (_queryOtherWindowCoords) {
       Future.delayed(Duration.zero, () async {
         _windowRect = await fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords);
@@ -1074,7 +1278,10 @@ class InputModel {
       _queryOtherWindowCoords = false;
     }
     if (isPhysicalMouse.value) {
-      handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position, edgeScroll: useEdgeScroll);
+      if (!_relativeMouse.handleRelativeMouseMove(e.localPosition)) {
+        handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position,
+            edgeScroll: useEdgeScroll);
+      }
     }
   }
 
@@ -1098,6 +1305,11 @@ class InputModel {
     return null;
   }
 
+  /// Handle scroll/wheel events.
+  /// Note: Scroll events intentionally use absolute positioning even in relative mouse mode.
+  /// This is because scroll events don't need relative positioning - they represent
+  /// scroll deltas that are independent of cursor position. Games and 3D applications
+  /// handle scroll events the same way regardless of mouse mode.
   void onPointerSignalImage(PointerSignalEvent e) {
     if (isViewOnly) return;
     if (isViewCamera) return;
@@ -1285,14 +1497,18 @@ class InputModel {
       evt['y'] = '${pos.y.toInt()}';
     }
 
-    Map<int, String> mapButtons = {
-      kPrimaryMouseButton: 'left',
-      kSecondaryMouseButton: 'right',
-      kMiddleMouseButton: 'wheel',
-      kBackMouseButton: 'back',
-      kForwardMouseButton: 'forward'
-    };
-    evt['buttons'] = mapButtons[evt['buttons']] ?? '';
+    final buttons = evt['buttons'];
+    if (buttons is int) {
+      evt['buttons'] = mouseButtonsToPeer(buttons);
+    } else {
+      // Log warning if buttons exists but is not an int (unexpected caller).
+      // Keep empty string fallback for missing buttons to preserve move/hover behavior.
+      if (buttons != null) {
+        debugPrint(
+            '[InputModel] processEventToPeer: unexpected buttons type: ${buttons.runtimeType}, value: $buttons');
+      }
+      evt['buttons'] = '';
+    }
     return evt;
   }
 
@@ -1303,8 +1519,8 @@ class InputModel {
     bool moveCanvas = true,
     bool edgeScroll = false,
   }) {
-    final evtToPeer =
-        processEventToPeer(evt, offset, onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
+    final evtToPeer = processEventToPeer(evt, offset,
+        onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
     if (evtToPeer != null) {
       bind.sessionSendMouse(
           sessionId: sessionId, msg: json.encode(modify(evtToPeer)));

@@ -275,7 +275,7 @@ class TransferJobSerdeData {
       : this(
           connId: d['connId'] ?? 0,
           id: int.tryParse(d['id'].toString()) ?? 0,
-          path: d['path'] ?? '',
+          path: d['dataSource'] ?? '',
           isRemote: d['isRemote'] ?? false,
           totalSize: d['totalSize'] ?? 0,
           finishedSize: d['finishedSize'] ?? 0,

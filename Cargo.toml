@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.4.4"
+version = "1.4.5"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -123,10 +123,19 @@ winapi = { version = "0.3", features = [
 ] }
 windows = { version = "0.61", features = [
     "Win32",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
     "Win32_System",
     "Win32_System_Diagnostics",
-    "Win32_System_Threading",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Environment",
+    "Win32_System_IO",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
 ] }
 winreg = "0.11"
 windows-service = "0.6"
@@ -176,7 +185,6 @@ evdev = { git="https://github.com/rustdesk-org/evdev" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
 pam = { git="https://github.com/rustdesk-org/pam" }
-users = { version = "0.11" }
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
 percent-encoding = {version = "2.3", optional = true}

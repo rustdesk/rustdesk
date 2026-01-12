@@ -626,7 +626,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("cancel-2fa-confirm-tip", "Отключить двухфакторную аутентификацию?"),
         ("cancel-bot-confirm-tip", "Отключить Telegram-бота?"),
         ("About RustDesk", "О RustDesk"),
-        ("Send clipboard keystrokes", "Отправлять нажатия клавиш из буфера обмена"),
+        ("Send clipboard keystrokes", "Отправлять нажатия клавиш в буфер обмена"),
         ("network_error_tip", "Проверьте подключение к сети, затем нажмите \"Повтор\"."),
         ("Unlock with PIN", "Разблокировать PIN-кодом"),
         ("Requires at least {} characters", "Требуется не менее {} символов"),
@@ -729,5 +729,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server-oss-not-support-tip", "ПРИМЕЧАНИЕ: в OSS-сервере RustDesk эта функция отсутствует."),
         ("input note here", "введите заметку"),
         ("note-at-conn-end-tip", "Запрашивать заметку в конце соединения"),
+        ("Show terminal extra keys", "Показывать дополнительные кнопки терминала"),
+        ("Relative mouse mode", "Режим относительного перемещения мыши"),
+        ("rel-mouse-not-supported-peer-tip", "Режим относительного перемещения мыши не поддерживается подключённым узлом."),
+        ("rel-mouse-not-ready-tip", "Режим относительного перемещения мыши ещё не готов. Попробуйте снова."),
+        ("rel-mouse-lock-failed-tip", "Невозможно заблокировать курсор. Режим относительного перемещения мыши отключён."),
+        ("rel-mouse-exit-{}-tip", "Нажмите {} для выхода."),
+        ("rel-mouse-permission-lost-tip", "Разрешение на использование клавиатуры отменено. Режим относительного перемещения мыши отключён."),
+        ("Changelog", "Журнал изменений"),
     ].iter().cloned().collect();
 }

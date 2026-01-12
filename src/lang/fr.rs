@@ -728,6 +728,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("disable-udp-tip", "Contrôle l’utilisation exclusive du mode TCP.\nLorsque cette option est activée, RustDesk n’utilise plus le port UDP 21116 et utilise le port TCP 21116 à la place."),
         ("server-oss-not-support-tip", "Note : Cette fonctionnalité n’est pas disponible sous la version open-source du serveur RustDesk."),
         ("input note here", "saisir la note ici"),
-        ("note-at-conn-end-tip", "Proposer d’écrire une note une fois la connexion terminée"),
+        ("note-at-conn-end-tip", "Proposer de rédiger une note une fois la connexion terminée"),
+        ("Show terminal extra keys", "Afficher les touches supplémentaires du terminal"),
+        ("Relative mouse mode", "Mode souris relative"),
+        ("rel-mouse-not-supported-peer-tip", "Le mode souris relative n’est pas pris en charge par l’appareil distant."),
+        ("rel-mouse-not-ready-tip", "Le mode souris relative n’est pas encore prêt ; veuillez réessayer."),
+        ("rel-mouse-lock-failed-tip", "Échec du verrouillage du curseur. Le mode souris relative a été désactivé."),
+        ("rel-mouse-exit-{}-tip", "Appuyez sur {} pour quitter."),
+        ("rel-mouse-permission-lost-tip", "L’autorisation de contrôle du clavier a été révoquée. Le mode souris relative a été désactivé."),
+        ("Changelog", "Journal des modifications"),
     ].iter().cloned().collect();
 }

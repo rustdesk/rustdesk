@@ -699,7 +699,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Terminal", ""),
         ("Enable terminal", ""),
         ("New tab", "Yeni sekme"),
-        ("Keep terminal sessions on disconnect", "Bağlantı kesildiğinde uçbirim oturumlarını açık tut"),
+        ("Keep terminal sessions on disconnect", "Bağlantı kesildiğinde terminal oturumlarını açık tut"),
         ("Terminal (Run as administrator)", "Terminal (Yönetici olarak çalıştır)"),
         ("terminal-admin-login-tip", "Lütfen kontrol edilen tarafın yönetici kullanıcı adı ve şifresini giriniz."),
         ("Failed to get user token.", "Kullanıcı belirteci alınamadı."),
@@ -729,5 +729,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server-oss-not-support-tip", "NOT: RustDesk sunucu OSS'si bu özelliği içermemektedir."),
         ("input note here", "Notu buraya girin"),
         ("note-at-conn-end-tip", "Bağlantı bittiğinde not sorulsun"),
+        ("Show terminal extra keys", "Terminal ek tuşlarını göster"),
+        ("Relative mouse mode", "Fareyi göreli modda kullan"),
+        ("rel-mouse-not-supported-peer-tip", "Karşı taraf göreli fare modunu desteklemiyor"),
+        ("rel-mouse-not-ready-tip", "Göreli fare modu henüz hazır değil"),
+        ("rel-mouse-lock-failed-tip", "Göreli fare kilitlenemedi"),
+        ("rel-mouse-exit-{}-tip", "Göreli fare modundan çıkmak için {}"),
+		("rel-mouse-permission-lost-tip", "Göreli fare izinleri geçerli değil"),
+        ("Changelog", "Değişiklik Günlüğü"),
     ].iter().cloned().collect();
 }
