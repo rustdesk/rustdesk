@@ -29,7 +29,7 @@
 		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigKey" Return="check" Property="ConfigKey" Value="stop-service" />
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
-		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
+		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="$(var.Product)" />
 		<CustomAction Id="InstallPrinter.SetParam" Return="check" Property="InstallPrinter" Value="[INSTALLFOLDER_INNER]" />
 		<InstallExecuteSequence>
 
@@ -91,8 +91,9 @@
 			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>
 			<Custom Action="TerminateBrokers" Before="RemoveInstallFolder"/>
 			<Custom Action="TerminateBrokers.SetParam" Before="TerminateBrokers"/>
-			<Custom Action="RemoveAmyuniIdd" Before="RemoveInstallFolder"/>
-			<Custom Action="RemoveAmyuniIdd.SetParam" Before="RemoveAmyuniIdd"/>
+			<!-- Only run during uninstall: (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE) -->
+			<Custom Action="RemoveAmyuniIdd" Before="RemoveRegistryValues" Condition="Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE"/>
+			<Custom Action="RemoveAmyuniIdd.SetParam" Before="RemoveAmyuniIdd" Condition="Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE"/>
 		</InstallExecuteSequence>
 
 		<!-- Shortcuts -->

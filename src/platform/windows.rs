@@ -95,6 +95,7 @@ pub const SET_FOREGROUND_WINDOW: &'static str = "SET_FOREGROUND_WINDOW";
 const REG_NAME_INSTALL_DESKTOPSHORTCUTS: &str = "DESKTOPSHORTCUTS";
 const REG_NAME_INSTALL_STARTMENUSHORTCUTS: &str = "STARTMENUSHORTCUTS";
 pub const REG_NAME_INSTALL_PRINTER: &str = "PRINTER";
+const REG_NAME_AMYUNI_IDD_INSTALLED: &str = "AmyuniIddInstalled";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
@@ -153,11 +154,7 @@ pub fn clip_cursor(rect: Option<(i32, i32, i32, i32)>) -> bool {
         };
         if result == FALSE {
             let err = GetLastError();
-            log::warn!(
-                "ClipCursor failed: rect={:?}, error_code={}",
-                rect,
-                err
-            );
+            log::warn!("ClipCursor failed: rect={:?}, error_code={}", rect, err);
             return false;
         }
         true
@@ -1387,8 +1384,22 @@ fn get_after_install(
     ", create_service=get_create_service(&exe))
 }
 
+#[inline]
+fn get_uninstall_amyuni_idd_on_install() -> bool {
+    let installed_version = get_reg("Version");
+    if !installed_version.is_empty() {
+        // This ensures behavior consistent with pre-1.4.6 versions.
+        // Those versions installed the IDD driver without setting the registry flag, potentially leaving an orphaned display adapter entry.
+        // (See set_amyuni_idd_installed(), which now manages this flag.)
+        hbb_common::get_version_number(&installed_version) < hbb_common::get_version_number("1.4.6")
+    } else {
+        false
+    }
+}
+
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall(false, false);
+    let uninstall_amyuni_idd = get_uninstall_amyuni_idd_on_install();
+    let uninstall_str = get_uninstall(false, false, uninstall_amyuni_idd);
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
     let mut exe = exe;
@@ -1616,12 +1627,13 @@ fn get_before_uninstall(kill_self: bool) -> String {
 ///   the current process as well. If `false`, it will exclude the current process from the kill
 ///   command.
 /// - `uninstall_printer`: If `true`, includes commands to uninstall the remote printer.
+/// - `uninstall_amyuni_idd`: If `true`, includes commands to uninstall the Amyuni IDD driver.
 ///
 /// # Details
 /// The `uninstall_printer` parameter determines whether the command to uninstall the remote printer
 /// is included in the generated uninstall script. If `uninstall_printer` is `false`, the printer
 /// related command is omitted from the script.
-fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
+fn get_uninstall(kill_self: bool, uninstall_printer: bool, uninstall_amyuni_idd: bool) -> String {
     let reg_uninstall_string = get_reg("UninstallString");
     if reg_uninstall_string.to_lowercase().contains("msiexec.exe") {
         return reg_uninstall_string;
@@ -1651,13 +1663,21 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
         before_uninstall=get_before_uninstall(kill_self),
-        uninstall_amyuni_idd=get_uninstall_amyuni_idd(),
+        uninstall_amyuni_idd=if uninstall_amyuni_idd {get_uninstall_amyuni_idd()} else {"".to_string()},
         app_name = crate::get_app_name(),
     )
 }
 
+fn should_uninstall_amyuni_idd() -> bool {
+    &get_reg(REG_NAME_AMYUNI_IDD_INSTALLED) == "1"
+}
+
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
-    run_cmds(get_uninstall(kill_self, true), true, "uninstall")
+    run_cmds(
+        get_uninstall(kill_self, true, should_uninstall_amyuni_idd()),
+        true,
+        "uninstall",
+    )
 }
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
@@ -1788,6 +1808,32 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
         }
     }
     "".to_owned()
+}
+
+/// Set the AmyuniIddInstalled registry flag to "1".
+/// This should be called after Amyuni IDD driver is successfully installed.
+pub fn set_amyuni_idd_installed() {
+    let (subkey, _, _, _) = get_install_info();
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    match hklm.open_subkey_with_flags(
+        subkey.replace("HKEY_LOCAL_MACHINE\\", ""),
+        KEY_READ | KEY_WRITE,
+    ) {
+        Ok(key) => {
+            if let Err(e) = key.set_value(REG_NAME_AMYUNI_IDD_INSTALLED, &"1") {
+                log::warn!("Failed to set {}: {:?}", REG_NAME_AMYUNI_IDD_INSTALLED, e);
+            } else {
+                log::info!("{} set to 1", REG_NAME_AMYUNI_IDD_INSTALLED);
+            }
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to open registry key for {}: {:?}",
+                REG_NAME_AMYUNI_IDD_INSTALLED,
+                e
+            );
+        }
+    }
 }
 
 pub fn get_license_from_exe_name() -> ResultType<CustomServer> {

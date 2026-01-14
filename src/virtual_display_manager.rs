@@ -500,6 +500,7 @@ pub mod amyuni_idd {
             if crate::platform::windows::is_x64() {
                 log::info!("Installing driver by deviceinstaller64.exe");
                 install_if_x86_on_x64(&work_dir, "install usbmmidd.inf usbmmidd")?;
+                crate::platform::windows::set_amyuni_idd_installed();
                 *is_async = true;
                 return Ok(());
             }
@@ -519,6 +520,7 @@ pub mod amyuni_idd {
         let mut reboot_required = false;
         let _ =
             unsafe { win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required)? };
+        crate::platform::windows::set_amyuni_idd_installed();
         *is_async = false;
         Ok(())
     }

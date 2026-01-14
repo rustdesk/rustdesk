@@ -12,6 +12,9 @@
 
 #pragma comment(lib, "Shlwapi.lib")
 
+// Registry flag name to track if Amyuni IDD driver was installed by RustDesk
+static const LPCWSTR REG_NAME_AMYUNI_IDD_INSTALLED = L"AmyuniIddInstalled";
+
 UINT __stdcall CustomActionHello(
     __in MSIHANDLE hInstall)
 {
@@ -639,11 +642,12 @@ UINT __stdcall RemoveAmyuniIdd(
     DWORD er = ERROR_SUCCESS;
 
     int nResult = 0;
-    LPWSTR installFolder = NULL;
     LPWSTR pwz = NULL;
     LPWSTR pwzData = NULL;
+    LPWSTR productName = NULL;
 
     WCHAR workDir[1024] = L"";
+    WCHAR regKeyPath[1024] = L"";
     DWORD fileAttributes = 0;
     HINSTANCE hi = 0;
 
@@ -652,30 +656,96 @@ UINT __stdcall RemoveAmyuniIdd(
     WCHAR exePath[1024] = L"";
 
     BOOL rebootRequired = FALSE;
+    HKEY hKey = NULL;
+    DWORD dwType = 0;
+    WCHAR szValue[64] = L"";
+    DWORD cbValue = sizeof(szValue);
+    BOOL shouldUninstall = FALSE;
+    LSTATUS regResult = 0;
+    LSTATUS queryResult = 0;
+    LSTATUS deleteResult = 0;
+    WCHAR szInstallLocation[1024] = L"";  // Read from registry
+    DWORD cbInstallLocation = sizeof(szInstallLocation);
 
     hr = WcaInitialize(hInstall, "RemoveAmyuniIdd");
     ExitOnFailure(hr, "Failed to initialize");
-
-    UninstallDriver(L"usbmmidd", rebootRequired);
-
-    // Only for x86 app on x64
-    GetNativeSystemInfo(&si);
-    if (si.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64) {
-        goto LExit;
-    }
 
     hr = WcaGetProperty(L"CustomActionData", &pwzData);
     ExitOnFailure(hr, "failed to get CustomActionData");
 
     pwz = pwzData;
-    hr = WcaReadStringFromCaData(&pwz, &installFolder);
-    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
 
-    hr = StringCchPrintfW(workDir, 1024, L"%lsusbmmidd_v2", installFolder);
+    // Parse product name from CustomActionData
+    hr = WcaReadStringFromCaData(&pwz, &productName);
+    ExitOnFailure(hr, "failed to read product name from custom action data: %ls", pwz);
+
+    WcaLog(LOGMSG_STANDARD, "RemoveAmyuniIdd: productName=%ls", productName);
+
+    // Check registry flag AmyuniIddInstalled
+    hr = StringCchPrintfW(regKeyPath, 1024, L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\%ls", productName);
+    ExitOnFailure(hr, "Failed to compose registry key path");
+
+    WcaLog(LOGMSG_STANDARD, "Trying to open registry key: %ls", regKeyPath);
+
+    regResult = RegOpenKeyExW(HKEY_LOCAL_MACHINE, regKeyPath, 0, KEY_READ | KEY_WRITE, &hKey);
+    if (regResult == ERROR_SUCCESS) {
+        WcaLog(LOGMSG_STANDARD, "Successfully opened registry key");
+
+        // Read InstallLocation from registry (more reliable than CustomActionData during uninstall)
+        if (RegQueryValueExW(hKey, L"InstallLocation", NULL, &dwType, (LPBYTE)szInstallLocation, &cbInstallLocation) == ERROR_SUCCESS) {
+            WcaLog(LOGMSG_STANDARD, "InstallLocation from registry: %ls", szInstallLocation);
+        } else {
+            WcaLog(LOGMSG_STANDARD, "InstallLocation not found in registry");
+            szInstallLocation[0] = L'\0';
+        }
+
+        // Check AmyuniIddInstalled flag
+        queryResult = RegQueryValueExW(hKey, REG_NAME_AMYUNI_IDD_INSTALLED, NULL, &dwType, (LPBYTE)szValue, &cbValue);
+        if (queryResult == ERROR_SUCCESS) {
+            WcaLog(LOGMSG_STANDARD, "Found AmyuniIddInstalled value: %ls (type=%d)", szValue, dwType);
+            if (dwType == REG_SZ && wcscmp(szValue, L"1") == 0) {
+                shouldUninstall = TRUE;
+                WcaLog(LOGMSG_STANDARD, "AmyuniIddInstalled flag is set to 1, will uninstall driver");
+            }
+            // Delete the AmyuniIddInstalled value since it's not managed by MSI
+            // and won't be cleaned up automatically
+            deleteResult = RegDeleteValueW(hKey, REG_NAME_AMYUNI_IDD_INSTALLED);
+            if (deleteResult == ERROR_SUCCESS) {
+                WcaLog(LOGMSG_STANDARD, "Deleted AmyuniIddInstalled registry value");
+            } else {
+                WcaLog(LOGMSG_STANDARD, "Failed to delete AmyuniIddInstalled registry value, error: %d", deleteResult);
+            }
+        } else {
+            WcaLog(LOGMSG_STANDARD, "AmyuniIddInstalled value not found, error: %d", queryResult);
+        }
+        RegCloseKey(hKey);
+    } else {
+        WcaLog(LOGMSG_STANDARD, "Failed to open registry key: %ls, error: %d", regKeyPath, regResult);
+    }
+
+    if (!shouldUninstall) {
+        WcaLog(LOGMSG_STANDARD, "AmyuniIddInstalled flag is not set, skip uninstalling Amyuni IDD driver");
+        goto LExit;
+    }
+
+    UninstallDriver(L"usbmmidd", rebootRequired);
+
+    // Only for x86 app on x64, and only if InstallLocation is available
+    if (szInstallLocation[0] == L'\0') {
+        WcaLog(LOGMSG_STANDARD, "Install location not available, skip deviceinstaller64.exe");
+        goto LExit;
+    }
+
+    GetNativeSystemInfo(&si);
+    if (si.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64) {
+        goto LExit;
+    }
+
+    hr = StringCchPrintfW(workDir, 1024, L"%ls\\usbmmidd_v2", szInstallLocation);
     ExitOnFailure(hr, "Failed to compose a resource identifier string");
     fileAttributes = GetFileAttributesW(workDir);
     if (fileAttributes == INVALID_FILE_ATTRIBUTES) {
-        WcaLog(LOGMSG_STANDARD, "Amyuni idd dir \"%ls\" is not found, %d", workDir, fileAttributes);
+        WcaLog(LOGMSG_STANDARD, "Amyuni idd dir \"%ls\" is not found, error: %d", workDir, GetLastError());
         goto LExit;
     }
 
@@ -683,6 +753,7 @@ UINT __stdcall RemoveAmyuniIdd(
     ExitOnFailure(hr, "Failed to compose a resource identifier string");
     fileAttributes = GetFileAttributesW(exePath);
     if (fileAttributes == INVALID_FILE_ATTRIBUTES) {
+        WcaLog(LOGMSG_STANDARD, "deviceinstaller64.exe not found, error: %d", GetLastError());
         goto LExit;
     }
 
