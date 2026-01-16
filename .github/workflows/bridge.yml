@@ -25,7 +25,7 @@ jobs:
             }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -61,7 +61,7 @@ jobs:
 
       - name: Cache Bridge
         id: cache-bridge
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: /tmp/flutter_rust_bridge
           key: vcpkg-${{ matrix.job.arch }}

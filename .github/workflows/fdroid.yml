@@ -31,7 +31,7 @@ jobs:
         shell: bash
 
       - name: Publish RustDesk version file
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           prerelease: true
           tag_name: "fdroid-version"
