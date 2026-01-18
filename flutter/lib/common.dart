@@ -3910,6 +3910,10 @@ void earlyAssert() {
 }
 
 void checkUpdate() {
+  // Android: update check is disabled to avoid UI interference (e.g. E2E/U2 runs).
+  if (isAndroid) {
+    return;
+  }
   if (!isWeb) {
     if (!bind.isCustomClient()) {
       platformFFI.registerEventHandler(

@@ -150,6 +150,7 @@ const String kOptionCurrentAbName = "current-ab-name";
 const String kOptionEnableConfirmClosingTabs = "enable-confirm-closing-tabs";
 const String kOptionAllowAlwaysSoftwareRender = "allow-always-software-render";
 const String kOptionEnableCheckUpdate = "enable-check-update";
+const String kOptionEnableAndroidE2eMode = "enable-android-e2e-mode";
 const String kOptionAllowAutoUpdate = "allow-auto-update";
 const String kOptionAllowLinuxHeadless = "allow-linux-headless";
 const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
@@ -163,7 +164,8 @@ const String kOptionShowVirtualMouse = "show-virtual-mouse";
 const String kOptionVirtualMouseScale = "virtual-mouse-scale";
 const String kOptionShowVirtualJoystick = "show-virtual-joystick";
 const String kOptionAllowAskForNoteAtEndOfConnection = "allow-ask-for-note";
-const String kOptionEnableShowTerminalExtraKeys = "enable-show-terminal-extra-keys";
+const String kOptionEnableShowTerminalExtraKeys =
+    "enable-show-terminal-extra-keys";
 
 // network options
 const String kOptionAllowWebSocket = "allow-websocket";

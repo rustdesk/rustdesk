@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
@@ -71,6 +71,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _ignoreBatteryOpt = false;
   var _enableStartOnBoot = false;
   var _checkUpdateOnStartup = false;
+  var _androidE2eMode = false;
   var _showTerminalExtraKeys = false;
   var _floatingWindowDisabled = false;
   var _keepScreenOn = KeepScreenOn.duringControlled; // relay on floating window
@@ -182,6 +183,15 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (checkUpdateOnStartup != _checkUpdateOnStartup) {
         update = true;
         _checkUpdateOnStartup = checkUpdateOnStartup;
+      }
+
+      if (isAndroid && kDebugMode) {
+        final androidE2eMode =
+            mainGetLocalBoolOptionSync(kOptionEnableAndroidE2eMode);
+        if (androidE2eMode != _androidE2eMode) {
+          update = true;
+          _androidE2eMode = androidE2eMode;
+        }
       }
 
       var floatingWindowDisabled =
@@ -590,16 +600,49 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         }));
 
     if (!bind.isCustomClient()) {
+      if (isAndroid) {
+        enhancementsTiles.add(
+          SettingsTile.switchTile(
+            initialValue: false,
+            title:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(translate('Check for software update on startup')),
+              Text('* ${translate('Disabled')}',
+                  style: Theme.of(context).textTheme.bodySmall),
+            ]),
+            onToggle: null,
+          ),
+        );
+      } else {
+        enhancementsTiles.add(
+          SettingsTile.switchTile(
+            initialValue: _checkUpdateOnStartup,
+            title:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(translate('Check for software update on startup')),
+            ]),
+            onToggle: (bool toValue) async {
+              await mainSetLocalBoolOption(kOptionEnableCheckUpdate, toValue);
+              setState(() => _checkUpdateOnStartup = toValue);
+            },
+          ),
+        );
+      }
+    }
+
+    if (isAndroid && kDebugMode) {
       enhancementsTiles.add(
         SettingsTile.switchTile(
-          initialValue: _checkUpdateOnStartup,
+          initialValue: _androidE2eMode,
           title:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(translate('Check for software update on startup')),
+            Text(translate('Android E2E Mode')),
+            Text('* ${translate('Force enable input log overlay')}',
+                style: Theme.of(context).textTheme.bodySmall),
           ]),
           onToggle: (bool toValue) async {
-            await mainSetLocalBoolOption(kOptionEnableCheckUpdate, toValue);
-            setState(() => _checkUpdateOnStartup = toValue);
+            await mainSetLocalBoolOption(kOptionEnableAndroidE2eMode, toValue);
+            setState(() => _androidE2eMode = toValue);
           },
         ),
       );
@@ -614,7 +657,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         onToggle: (bool v) async {
           await mainSetLocalBoolOption(kOptionEnableShowTerminalExtraKeys, v);
           final newValue =
-            mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+              mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
           setState(() {
             _showTerminalExtraKeys = newValue;
           });

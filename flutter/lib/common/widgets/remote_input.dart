@@ -10,6 +10,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/input_model.dart';
+import 'package:flutter_hbb/common/remote_input_event_log.dart';
 
 import './gestures.dart';
 
@@ -162,6 +163,13 @@ class _RawTouchGestureDetectorRegionState
           await inputModel.tapDown(MouseButtons.left);
         }
         await inputModel.tapUp(MouseButtons.left);
+        RemoteInputEventLog.add(
+          'left_click',
+          data: {
+            'x': d.localPosition.dx.round(),
+            'y': d.localPosition.dy.round(),
+          },
+        );
       }
     }
   }
@@ -441,6 +449,12 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
 
+    // Android: pinch-to-zoom is removed for the remote session (Milestone 1).
+    // Two-finger gestures should not scale/pan the canvas.
+    if (isAndroid && !isSpecialHoldDragActive) {
+      return;
+    }
+
     // If in special drag mode, perform a pan instead of a scale.
     if (isSpecialHoldDragActive) {
       // Calculate delta manually to avoid the jumpy behavior.
@@ -473,6 +487,10 @@ class _RawTouchGestureDetectorRegionState
 
   onTwoFingerScaleEnd(ScaleEndDetails d) async {
     if (isNotTouchBasedDevice()) {
+      return;
+    }
+    if (isAndroid && !isSpecialHoldDragActive) {
+      _scale = 1;
       return;
     }
     if ((isDesktop || isWebDesktop)) {
