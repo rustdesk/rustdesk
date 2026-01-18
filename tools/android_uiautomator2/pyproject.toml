@@ -1,0 +1,19 @@
+[project]
+name = "android-uiautomator2-tools"
+version = "0.1.0"
+description = "uiautomator2 automation helpers (managed by uv)"
+requires-python = ">=3.10"
+dependencies = [
+  "uiautomator2>=3.2.0",
+  "adbutils>=2.5.0",
+  "loguru>=0.7.2",
+  "rich>=13.7.1",
+]
+
+[project.scripts]
+u2-connect = "u2runner.connect:main"
+u2-smoketest = "u2runner.smoketest:main"
+u2-story10-disable-update = "u2runner.story10_disable_update:main"
+
+[tool.uv]
+package = false

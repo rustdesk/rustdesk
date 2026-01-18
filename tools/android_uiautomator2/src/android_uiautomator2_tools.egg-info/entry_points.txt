@@ -1,0 +1,2 @@
+[console_scripts]
+u2-connect = u2runner.connect:main

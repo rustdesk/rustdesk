@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: android-uiautomator2-tools
+Version: 0.1.0
+Summary: uiautomator2 automation helpers (managed by uv)
+Requires-Python: >=3.10
+Requires-Dist: uiautomator2>=3.2.0
+Requires-Dist: adbutils>=2.5.0
+Requires-Dist: loguru>=0.7.2
+Requires-Dist: rich>=13.7.1

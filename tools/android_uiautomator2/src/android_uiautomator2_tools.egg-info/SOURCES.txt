@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+src/android_uiautomator2_tools.egg-info/PKG-INFO
+src/android_uiautomator2_tools.egg-info/SOURCES.txt
+src/android_uiautomator2_tools.egg-info/dependency_links.txt
+src/android_uiautomator2_tools.egg-info/entry_points.txt
+src/android_uiautomator2_tools.egg-info/requires.txt
+src/android_uiautomator2_tools.egg-info/top_level.txt
+src/u2runner/__init__.py
+src/u2runner/connect.py

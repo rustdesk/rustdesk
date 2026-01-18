@@ -1,0 +1,4 @@
+uiautomator2>=3.2.0
+adbutils>=2.5.0
+loguru>=0.7.2
+rich>=13.7.1
