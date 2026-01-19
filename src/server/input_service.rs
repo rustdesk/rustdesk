@@ -457,10 +457,12 @@ lazy_static::lazy_static! {
     };
     #[cfg(windows)]
     static ref INTERCEPTION_MOUSE: Arc<Mutex<Option<i32>>> = Default::default();
+    #[cfg(windows)]
+    static ref INTERCEPTION_KEYBOARD: Arc<Mutex<Option<i32>>> = Default::default();
 }
 
 #[cfg(windows)]
-fn ensure_interception_ctx() -> Option<(Arc<Mutex<Option<crate::platform::interception::InterceptionContext>>>, i32)> {
+fn ensure_interception_ctx() -> Option<(Arc<Mutex<Option<crate::platform::interception::InterceptionContext>>>, i32, i32)> {
     // Check if enabled in config
     // not working
     // let enabled = hbb_common::config::Config::get_option("enable-interception-input") == "Y";
@@ -489,11 +491,25 @@ fn ensure_interception_ctx() -> Option<(Arc<Mutex<Option<crate::platform::interc
              }
         }
     }
-    
-    if let Some(mouse_dev) = *mouse_guard {
-        return Some((INTERCEPTION_CTX.clone(), mouse_dev));
+
+    // Check keyboard
+    let mut kbd_guard = INTERCEPTION_KEYBOARD.lock().unwrap();
+    if kbd_guard.is_none() {
+        if let Some(ctx) = ctx_guard.as_ref() {
+             if let Some(dev) = crate::platform::interception::find_first_device(ctx, crate::platform::interception::DeviceKind::Keyboard) {
+                 *kbd_guard = Some(dev);
+             }
+        }
     }
-    None
+    
+    match (*mouse_guard, *kbd_guard) {
+        (Some(mouse_dev), Some(kbd_dev)) => Some((INTERCEPTION_CTX.clone(), mouse_dev, kbd_dev)),
+        (Some(mouse_dev), None) => {
+             Some((INTERCEPTION_CTX.clone(), mouse_dev, 0))
+        },
+        (None, Some(kbd_dev)) => Some((INTERCEPTION_CTX.clone(), 0, kbd_dev)),
+        _ => None,
+    }
 }
 
 #[inline]
@@ -1102,7 +1118,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     crate::platform::windows::try_change_desktop();
 
     #[cfg(windows)]
-    if let Some((ctx_arc, mouse_dev)) = ensure_interception_ctx() {
+    if let Some((ctx_arc, mouse_dev, _)) = ensure_interception_ctx() {
         // Use interception
         if let Some(ctx) = ctx_arc.lock().unwrap().as_ref() {
              use crate::platform::interception::{mouse_move, mouse_down, mouse_up, MouseButton, mouse_move_relative, mouse_scroll};
@@ -1538,6 +1554,43 @@ fn release_capslock() {
 #[cfg(not(target_os = "macos"))]
 #[inline]
 fn simulate_(event_type: &EventType) {
+    #[cfg(windows)]
+    if let Some((ctx_arc, _, kbd_dev)) = ensure_interception_ctx() {
+        if kbd_dev > 0 {
+            if let Some(ctx) = ctx_arc.lock().unwrap().as_ref() {
+                 use crate::platform::interception::{key_stroke, KeyState};
+                 let convert = |key: &rdev::Key, down: bool| -> Option<(u16, KeyState)> {
+                    match key {
+                        rdev::Key::RawKey(raw) => match raw {
+                            rdev::RawKey::ScanCode(sc) => {
+                                let mut code = *sc as u16;
+                                let mut state = if down { KeyState::empty() } else { KeyState::UP };
+                                if code & 0xFF00 == 0xE000 {
+                                    code = code & 0xFF;
+                                    state.insert(KeyState::E0);
+                                }
+                                Some((code, state))
+                            }
+                            _ => None, 
+                        },
+                        _ => None,
+                    }
+                };
+                
+                let res = match event_type {
+                    EventType::KeyPress(key) => convert(key, true),
+                    EventType::KeyRelease(key) => convert(key, false),
+                    _ => None,
+                };
+
+                if let Some((code, state)) = res {
+                    key_stroke(ctx, kbd_dev, code, state);
+                    return;
+                }
+            }
+        }
+    }
+
     match rdev::simulate(&event_type) {
         Ok(()) => (),
         Err(_simulate_error) => {

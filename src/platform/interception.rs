@@ -1,6 +1,7 @@
 use hbb_common::{log, ResultType, anyhow::anyhow};
 use std::sync::{Arc, Mutex};
-use interception::{Stroke, MouseState, MouseFlags, Filter};
+pub use interception::{Stroke, MouseState, MouseFlags, Filter, KeyState, ScanCode};
+
 pub use interception::Interception;
 
 pub struct InterceptionContext(pub Interception);
@@ -148,4 +149,14 @@ pub fn mouse_scroll(ctx: &Interception, mouse_dev: i32, amount: i32) {
         information: 0,
     };
     ctx.send(mouse_dev, &[stroke]);
+}
+
+pub fn key_stroke(ctx: &Interception, kbd_dev: i32, code: u16, state: KeyState) {
+    let code: ScanCode = unsafe { std::mem::transmute(code) };
+    let stroke = Stroke::Keyboard {
+        code,
+        state,
+        information: 0,
+    };
+    ctx.send(kbd_dev, &[stroke]);
 }
