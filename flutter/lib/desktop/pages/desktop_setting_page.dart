@@ -559,12 +559,14 @@ class _GeneralState extends State<_General> {
     ];
 
     // Add client-side wakelock option for desktop platforms
-    children.add(_OptionCheckBox(
-      context,
-      'keep-awake-during-outgoing-sessions-label',
-      kOptionKeepAwakeDuringOutgoingSessions,
-      isServer: false,
-    ));
+    if (!bind.isIncomingOnly()) {
+      children.add(_OptionCheckBox(
+        context,
+        'keep-awake-during-outgoing-sessions-label',
+        kOptionKeepAwakeDuringOutgoingSessions,
+        isServer: false,
+      ));
+    }
 
     if (!isWeb && bind.mainShowOption(key: kOptionAllowLinuxHeadless)) {
       children.add(_OptionCheckBox(
@@ -1228,7 +1230,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       ...directIp(context),
       whitelist(),
       ...autoDisconnect(context),
-      _OptionCheckBox(context, 'keep-awake-during-incoming-sessions-label', kOptionKeepAwakeDuringIncomingSessions,
+      _OptionCheckBox(context, 'keep-awake-during-incoming-sessions-label',
+          kOptionKeepAwakeDuringIncomingSessions,
           reverse: false, enabled: enabled),
       if (bind.mainIsInstalled())
         _OptionCheckBox(context, 'allow-only-conn-window-open-tip',

@@ -268,6 +268,7 @@ class Enhancements: Reactor.Component {
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
                 {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
+                <li #keep-awake-during-incoming-sessions><span>{svg_checkmark}</span>{translate("keep-awake-during-incoming-sessions-label")}</li>
             </menu>
         </li>;
     }
@@ -283,6 +284,13 @@ class Enhancements: Reactor.Component {
                 }
             } else if (el.id && el.id.indexOf("allow-") == 0) {
                 var enabled = handler.get_option(el.id) == "Y";
+                el.attributes.toggleClass("selected", enabled);
+                var is_opt_fixed = handler.is_option_fixed(el.id);
+                if (is_opt_fixed) {
+                    el.state.disabled = true;
+                }
+            } else if (el.id == "keep-awake-during-incoming-sessions") {
+                var enabled = handler.get_option(el.id) != "N";
                 el.attributes.toggleClass("selected", enabled);
                 var is_opt_fixed = handler.is_option_fixed(el.id);
                 if (is_opt_fixed) {
@@ -304,6 +312,8 @@ class Enhancements: Reactor.Component {
             }
         } else if (v.indexOf("allow-") == 0) {
             handler.set_option(v, handler.get_option(v) == 'Y' ? default_option_no : 'Y');
+        } else if (v == 'keep-awake-during-incoming-sessions') {
+            handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : default_option_yes);
         } else if (v == 'screen-recording') {
             var show_root_dir = is_win && handler.is_installed();
             var user_dir = handler.video_save_directory(false);
