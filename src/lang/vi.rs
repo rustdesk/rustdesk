@@ -737,5 +737,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", "Thoát chế độ chuột tương đối: {}"),
         ("rel-mouse-permission-lost-tip", "Mất quyền điều khiển chuột tương đối."),
         ("Changelog", "Nhật ký thay đổi"),
+        ("keep-awake-during-outgoing-sessions-label", ""),
+        ("keep-awake-during-incoming-sessions-label", ""),
     ].iter().cloned().collect();
 }

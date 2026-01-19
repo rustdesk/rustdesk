@@ -2686,13 +2686,16 @@ class WakelockManager {
   static final Set<UniqueKey> _enabledKeys = {};
 
   static void enable(UniqueKey key) {
-    if (isLinux) return;
+    // Check if we should keep awake during outgoing sessions
+    final keepAwake = mainGetLocalBoolOptionSync('keep-awake-during-outgoing-sessions');
+    if (!keepAwake) {
+      return; // Don't enable wakelock if user disabled keep awake
+    }
     _enabledKeys.add(key);
     WakelockPlus.enable();
   }
 
   static void disable(UniqueKey key) {
-    if (isLinux) return;
     if (_enabledKeys.remove(key)) {
       if (_enabledKeys.isEmpty) {
         WakelockPlus.disable();

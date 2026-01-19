@@ -5008,6 +5008,7 @@ impl FileRemoveLogControl {
 }
 
 fn start_wakelock_thread() -> std::sync::mpsc::Sender<(usize, usize)> {
+    // Check if we should keep awake during incoming sessions
     use crate::platform::{get_wakelock, WakeLock};
     let (tx, rx) = std::sync::mpsc::channel::<(usize, usize)>();
     std::thread::spawn(move || {
@@ -5016,10 +5017,11 @@ fn start_wakelock_thread() -> std::sync::mpsc::Sender<(usize, usize)> {
         loop {
             match rx.recv() {
                 Ok((conn_count, remote_count)) => {
-                    if conn_count == 0 {
+                    let keep_awake = config::Config::get_bool_option("keep-awake-during-incoming-sessions");
+                    if conn_count == 0 && wakeLock.is_some() {
                         wakelock = None;
                         log::info!("drop wakelock");
-                    } else {
+                    } else if keep_awake {
                         let mut display = remote_count > 0;
                         if let Some(_w) = wakelock.as_mut() {
                             if display != last_display {
