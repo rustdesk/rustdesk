@@ -1126,7 +1126,26 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
              let evt_type = evt.mask & MOUSE_TYPE_MASK;
              match evt_type {
                 MOUSE_TYPE_MOVE => {
-                     mouse_move(ctx, mouse_dev, evt.x, evt.y);
+                    let buttons = evt.mask >> 3;
+                    let mut sent_relative = false;
+                    if buttons & MOUSE_BUTTON_RIGHT != 0 {
+                          let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+                          if lock.conn == conn && lock.x != INVALID_CURSOR_POS {
+                              let dx = evt.x - lock.x;
+                              let dy = evt.y - lock.y;
+                              mouse_move_relative(ctx, mouse_dev, dx * 3, dy * 3);
+                              sent_relative = true;
+                          }
+                    }
+                    if !sent_relative {
+                        mouse_move(ctx, mouse_dev, evt.x, evt.y);
+                    }
+                    *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
+                        conn,
+                        time: get_time(),
+                        x: evt.x,
+                        y: evt.y,
+                    };
                 }
                 MOUSE_TYPE_MOVE_RELATIVE => {
                     // Clamp logic same as enigo path
