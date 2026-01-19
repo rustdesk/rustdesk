@@ -2696,19 +2696,9 @@ class WakelockManager {
   }
 
   static void disable(UniqueKey key) {
-    // Mirror keep-awake behavior from enable; if wakelock was never enabled
-    // due to user settings, there is nothing to disable.
-    final keepAwake = mainGetLocalBoolOptionSync('keep-awake-during-outgoing-sessions');
-    if (!keepAwake) {
-      return;
-    }
     if (_enabledKeys.remove(key)) {
       if (_enabledKeys.isEmpty) {
-        // Avoid calling WakelockPlus.disable on Linux, where special handling
-        // is required.
-        if (defaultTargetPlatform != TargetPlatform.linux) {
-          WakelockPlus.disable();
-        }
+        WakelockPlus.disable();
       }
     }
   }
