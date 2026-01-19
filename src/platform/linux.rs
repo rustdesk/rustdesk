@@ -948,15 +948,6 @@ pub fn is_root() -> bool {
     crate::username() == "root"
 }
 
-fn is_opensuse() -> bool {
-    if let Ok(res) = run_cmds("cat /etc/os-release | grep opensuse") {
-        if !res.is_empty() {
-            return true;
-        }
-    }
-    false
-}
-
 pub fn run_as_user<I, K, V>(
     arg: Vec<&str>,
     user: Option<(String, String)>,
@@ -1298,6 +1289,15 @@ pub fn check_super_user_permission() -> ResultType<bool> {
 }
 
 /*
+fn is_opensuse() -> bool {
+    if let Ok(res) = run_cmds("cat /etc/os-release | grep opensuse") {
+        if !res.is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
 pub fn elevate(args: Vec<&str>) -> ResultType<bool> {
     let cmd = std::env::current_exe()?;
     match cmd.to_str() {
@@ -1623,7 +1623,7 @@ mod desktop {
             }
             self.display = self
                 .display
-                .replace(&hbb_common::whoami::hostname(), "")
+                .replace(&hbb_common::whoami::fallible::hostname().unwrap_or_default(), "")
                 .replace("localhost", "");
         }
 
@@ -1858,7 +1858,10 @@ mod desktop {
     }
 }
 
-pub struct WakeLock(Option<keepawake::AwakeHandle>);
+pub struct WakeLock(
+    #[allow(unused)]
+    Option<keepawake::AwakeHandle>
+);
 
 impl WakeLock {
     pub fn new(display: bool, idle: bool, sleep: bool) -> Self {
