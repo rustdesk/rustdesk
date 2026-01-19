@@ -494,6 +494,7 @@ class MyIdMenu: Reactor.Component {
                 {!disable_settings && <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable remote restart')}</li>}
                 {!disable_settings && <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP tunneling')}</li>}
                 {!disable_settings && is_win ? <li #enable-block-input><span>{svg_checkmark}</span>{translate('Enable blocking user input')}</li> : ""}
+                {!disable_settings && is_win ? <li #enable-interception-input><span>{svg_checkmark}</span>{translate('Enable Interception input')}</li> : ""}
                 {!disable_settings && <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN discovery')}</li>}
                 <AudioInputs />
                 <Enhancements />

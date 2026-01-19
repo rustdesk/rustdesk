@@ -4133,6 +4133,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "interception"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76b4dc218c6fdcf3c6e9807b892a1100396d936e56b391e533a71e3ad02b17b3"
+dependencies = [
+ "bitflags 1.3.2",
+ "interception-sys",
+ "num_enum 0.5.11",
+ "serde 1.0.228",
+]
+
+[[package]]
+name = "interception-sys"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abe875cf6439eb5d98f0fdbcc6128fdef4870c47e0f898735105ff77685dfcd1"
+
+[[package]]
 name = "interceptor"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7177,6 +7195,7 @@ dependencies = [
  "image 0.24.9",
  "impersonate_system",
  "include_dir",
+ "interception",
  "jni",
  "kcp-sys",
  "keepawake",

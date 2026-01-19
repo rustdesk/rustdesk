@@ -267,5 +267,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-lock-failed-tip", "Failed to lock cursor. Relative Mouse Mode has been disabled."),
         ("rel-mouse-exit-{}-tip", "Press {} to exit."),
         ("rel-mouse-permission-lost-tip", "Keyboard permission was revoked. Relative Mouse Mode has been disabled."),
+        ("Enable Interception input", "Enable Interception input"),
     ].iter().cloned().collect();
 }

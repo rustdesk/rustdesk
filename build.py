@@ -437,29 +437,61 @@ def build_flutter_windows(version, features, skip_portable_pack):
         if not os.path.exists("target/release/librustdesk.dll"):
             print("cargo build failed, please check rust source code.")
             exit(-1)
+
     os.chdir('flutter')
     system2('flutter build windows --release')
     os.chdir('..')
-    shutil.copy2('target/release/deps/dylib_virtual_display.dll',
-                 flutter_build_dir_2)
+
+    # copy required runtime dlls to flutter output
+    dylib_vd = 'target/release/deps/dylib_virtual_display.dll'
+    if os.path.exists(dylib_vd):
+        shutil.copy2(dylib_vd, flutter_build_dir_2)
+
+    if os.path.exists("interception.dll"):
+        shutil.copy2('interception.dll', flutter_build_dir_2)
+
     if skip_portable_pack:
         return
+
+    # portable pack
     os.chdir('libs/portable')
-    system2('pip3 install -r requirements.txt')
-    system2(
-        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
+
+    # use Windows launcher python (py) instead of pip3/python3
+    system2('python -m pip install -r requirements.txt')
+
+    # generate portable metadata/bin
+    cmd = (
+        f'python ./generate.py '
+        f'-f ../../{flutter_build_dir_2} '
+        f'-o . '
+        f'-e ../../{flutter_build_dir_2}/rustdesk.exe'
+    )
+    system2(cmd)
+
     os.chdir('../..')
-    if os.path.exists('./rustdesk_portable.exe'):
-        os.replace('./target/release/rustdesk-portable-packer.exe',
-                   './rustdesk_portable.exe')
+
+    # produce rustdesk_portable.exe in repo root
+    packer_exe = './target/release/rustdesk-portable-packer.exe'
+    portable_exe = './rustdesk_portable.exe'
+
+    if not os.path.exists(packer_exe):
+        print(f"portable packer not found: {os.path.abspath(packer_exe)}")
+        exit(-1)
+
+    # replace (overwrite) portable exe if exists
+    if os.path.exists(portable_exe):
+        os.replace(packer_exe, portable_exe)
     else:
-        os.rename('./target/release/rustdesk-portable-packer.exe',
-                  './rustdesk_portable.exe')
-    print(
-        f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
-    os.rename('./rustdesk_portable.exe', f'./rustdesk-{version}-install.exe')
-    print(
-        f'output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe')
+        os.rename(packer_exe, portable_exe)
+
+    print(f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
+
+    # ALSO create a copy named like installer, but keep portable_exe
+    install_exe = f'./rustdesk-{version}-install.exe'
+    shutil.copy2(portable_exe, install_exe)
+
+    print(f'output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe')
+
 
 
 def main():
@@ -475,7 +507,8 @@ def main():
     features = ','.join(get_features(args))
     flutter = args.flutter
     if not flutter:
-        system2('python3 res/inline-sciter.py')
+        system2('python res/inline-sciter.py')
+        #system2('python3 res/inline-sciter.py')
     print(args.skip_cargo)
     if args.skip_cargo:
         skip_cargo = True
@@ -509,9 +542,11 @@ def main():
         system2(
             f'cp -rf target/release/RustDesk.exe {res_dir}')
         os.chdir('libs/portable')
-        system2('pip3 install -r requirements.txt')
+        system2('python -m pip install -r requirements.txt')
         system2(
-            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/rustdesk-{version}-win7-install.exe')
+            f'python ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/rustdesk-{version}-win7-install.exe')
+        # system2(
+        #     f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/rustdesk-{version}-win7-install.exe')
         system2('mv ../../{res_dir}/rustdesk-{version}-win7-install.exe ../..')
     elif os.path.isfile('/usr/bin/pacman'):
         # pacman -S -needed base-devel

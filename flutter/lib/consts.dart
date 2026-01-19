@@ -114,6 +114,7 @@ const String kOptionTerminalPersistent = "terminal-persistent";
 const String kOptionEnableTunnel = "enable-tunnel";
 const String kOptionEnableRemoteRestart = "enable-remote-restart";
 const String kOptionEnableBlockInput = "enable-block-input";
+const String kOptionEnableInterceptionInput = "enable-interception-input";
 const String kOptionAllowRemoteConfigModification =
     "allow-remote-config-modification";
 const String kOptionVerificationMethod = "verification-method";

@@ -145,6 +145,7 @@ impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1"
 runas = "1.2"
+interception = "0.1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"

@@ -451,6 +451,49 @@ lazy_static::lazy_static! {
     // Track connections that are currently using relative mouse movement.
     // Used to disable whiteboard/cursor display for all events while in relative mode.
     static ref RELATIVE_MOUSE_CONNS: Arc<Mutex<std::collections::HashSet<i32>>> = Default::default();
+    #[cfg(windows)]
+    static ref INTERCEPTION_CTX: Arc<Mutex<Option<crate::platform::interception::InterceptionContext>>> = {
+         Arc::new(Mutex::new(None))
+    };
+    #[cfg(windows)]
+    static ref INTERCEPTION_MOUSE: Arc<Mutex<Option<i32>>> = Default::default();
+}
+
+#[cfg(windows)]
+fn ensure_interception_ctx() -> Option<(Arc<Mutex<Option<crate::platform::interception::InterceptionContext>>>, i32)> {
+    // Check if enabled in config
+    // not working
+    // let enabled = hbb_common::config::Config::get_option("enable-interception-input") == "Y";
+    let enabled = true;
+    if !enabled {
+         return None;
+    }
+    
+    let mut ctx_guard = INTERCEPTION_CTX.lock().unwrap();
+    if ctx_guard.is_none() {
+        if let Some(ctx) = crate::platform::interception::Interception::new() {
+            *ctx_guard = Some(crate::platform::interception::InterceptionContext(ctx));
+        } else {
+            // Failed to init (maybe not admin)
+            return None;
+        }
+    }
+    
+    // We have a context, check mouse
+    let mut mouse_guard = INTERCEPTION_MOUSE.lock().unwrap();
+    if mouse_guard.is_none() {
+        if let Some(ctx) = ctx_guard.as_ref() {
+            // Mimic user logic: find first mouse
+             if let Some(dev) = crate::platform::interception::find_first_device(ctx, crate::platform::interception::DeviceKind::Mouse) {
+                 *mouse_guard = Some(dev);
+             }
+        }
+    }
+    
+    if let Some(mouse_dev) = *mouse_guard {
+        return Some((INTERCEPTION_CTX.clone(), mouse_dev));
+    }
+    None
 }
 
 #[inline]
@@ -1057,6 +1100,59 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
 
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
+
+    #[cfg(windows)]
+    if let Some((ctx_arc, mouse_dev)) = ensure_interception_ctx() {
+        // Use interception
+        if let Some(ctx) = ctx_arc.lock().unwrap().as_ref() {
+             use crate::platform::interception::{mouse_move, mouse_down, mouse_up, MouseButton, mouse_move_relative};
+             
+             let evt_type = evt.mask & MOUSE_TYPE_MASK;
+             match evt_type {
+                MOUSE_TYPE_MOVE => {
+                     mouse_move(ctx, mouse_dev, evt.x, evt.y);
+                }
+                MOUSE_TYPE_MOVE_RELATIVE => {
+                    // Clamp logic same as enigo path
+                    const MAX_RELATIVE_MOUSE_DELTA: i32 = 10000;
+                    let dx = evt.x.clamp(-MAX_RELATIVE_MOUSE_DELTA, MAX_RELATIVE_MOUSE_DELTA);
+                    let dy = evt.y.clamp(-MAX_RELATIVE_MOUSE_DELTA, MAX_RELATIVE_MOUSE_DELTA);
+                    mouse_move_relative(ctx, mouse_dev, dx, dy);
+                }
+                MOUSE_TYPE_DOWN => {
+                     // Map buttons
+                     let buttons = evt.mask >> 3;
+                     let btn = match buttons {
+                         MOUSE_BUTTON_LEFT => Some(MouseButton::Left),
+                         MOUSE_BUTTON_RIGHT => Some(MouseButton::Right),
+                         MOUSE_BUTTON_WHEEL => Some(MouseButton::Middle),
+                         _ => None,
+                     };
+                     if let Some(b) = btn {
+                            mouse_down(ctx, mouse_dev, b);
+                     }
+                }
+                MOUSE_TYPE_UP => {
+                     let buttons = evt.mask >> 3;
+                     let btn = match buttons {
+                         MOUSE_BUTTON_LEFT => Some(MouseButton::Left),
+                         MOUSE_BUTTON_RIGHT => Some(MouseButton::Right),
+                         MOUSE_BUTTON_WHEEL => Some(MouseButton::Middle),
+                         _ => None,
+                     };
+                     if let Some(b) = btn {
+                            mouse_up(ctx, mouse_dev, b);
+                     }
+                }
+                MOUSE_TYPE_WHEEL => {
+                    // Wheel support not in user request, skipping for now or adding if helper exists.
+                }
+                _ => {}
+             }
+             return;
+        }
+    }
+
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & MOUSE_TYPE_MASK;
     let mut en = ENIGO.lock().unwrap();
