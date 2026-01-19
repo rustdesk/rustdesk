@@ -95,7 +95,7 @@ pub fn mouse_up(ctx: &Interception, mouse_dev: i32, btn: MouseButton) {
 use winapi::um::winuser::{GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN};
 
 pub fn mouse_move(ctx: &Interception, mouse_dev: i32, x: i32, y: i32) {
-    let mut flags = MouseFlags::MOVE_ABSOLUTE;
+    let mut flags = MouseFlags::MOVE_ABSOLUTE | MouseFlags::VIRTUAL_DESKTOP;
     // Align with Enigo's logic: scale pixels to 0..65535 range based on virtual screen bounds.
     let (left, top, width, height) = unsafe {
         (
