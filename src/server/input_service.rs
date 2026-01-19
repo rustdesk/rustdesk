@@ -1105,7 +1105,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     if let Some((ctx_arc, mouse_dev)) = ensure_interception_ctx() {
         // Use interception
         if let Some(ctx) = ctx_arc.lock().unwrap().as_ref() {
-             use crate::platform::interception::{mouse_move, mouse_down, mouse_up, MouseButton, mouse_move_relative};
+             use crate::platform::interception::{mouse_move, mouse_down, mouse_up, MouseButton, mouse_move_relative, mouse_scroll};
              
              let evt_type = evt.mask & MOUSE_TYPE_MASK;
              match evt_type {
@@ -1145,7 +1145,9 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
                      }
                 }
                 MOUSE_TYPE_WHEEL => {
-                    // Wheel support not in user request, skipping for now or adding if helper exists.
+                    if evt.y != 0 {
+                        mouse_scroll(ctx, mouse_dev, evt.y * WHEEL_DELTA as i32);
+                    }
                 }
                 _ => {}
              }

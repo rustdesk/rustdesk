@@ -137,3 +137,15 @@ pub fn mouse_move_relative(ctx: &Interception, mouse_dev: i32, dx: i32, dy: i32)
     };
     ctx.send(mouse_dev, &[stroke]);
 }
+
+pub fn mouse_scroll(ctx: &Interception, mouse_dev: i32, amount: i32) {
+    let stroke = Stroke::Mouse {
+        state: MouseState::WHEEL,
+        flags: MouseFlags::empty(),
+        rolling: amount as i16,
+        x: 0,
+        y: 0,
+        information: 0,
+    };
+    ctx.send(mouse_dev, &[stroke]);
+}
