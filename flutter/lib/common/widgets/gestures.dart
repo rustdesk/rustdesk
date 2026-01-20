@@ -25,6 +25,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragStartCallback? onOneFingerPanStart;
   GestureDragUpdateCallback? onOneFingerPanUpdate;
   GestureDragEndCallback? onOneFingerPanEnd;
+  GestureDragCancelCallback? onOneFingerPanCancel;
 
   // twoFingerScale : scale + pan event
   GestureScaleStartCallback? onTwoFingerScaleStart;
@@ -161,8 +162,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     }
   }
 
-  GestureDragCancelCallback? onOneFingerPanCancel;
-
   DragUpdateDetails _getDragUpdateDetails(ScaleUpdateDetails d) =>
       DragUpdateDetails(
           globalPosition: d.focalPoint,
@@ -175,12 +174,22 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   @override
   void rejectGesture(int pointer) {
     super.rejectGesture(pointer);
-    if (_currentState == GestureState.oneFingerPan) {
-      if (onOneFingerPanCancel != null) {
-        onOneFingerPanCancel!();
-      }
-      _currentState = GestureState.none;
+    switch (_currentState) {
+      case GestureState.oneFingerPan:
+        if (onOneFingerPanCancel != null) {
+          onOneFingerPanCancel!();
+        }
+        break;
+      case GestureState.twoFingerScale:
+        // Reset scale state if needed, currently self-contained
+        break;
+      case GestureState.threeFingerVerticalDrag:
+        // Reset drag state if needed, currently self-contained
+        break;
+      default:
+        break;
     }
+    _currentState = GestureState.none;
   }
 }
 
