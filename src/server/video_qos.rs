@@ -111,6 +111,7 @@ pub struct VideoQoS {
     adjust_ratio_instant: Instant,
     abr_config: bool,
     new_user_instant: Instant,
+    custom_bitrate_kbps: Option<u32>, // Fixed bitrate in kbps if set
 }
 
 impl Default for VideoQoS {
@@ -124,6 +125,7 @@ impl Default for VideoQoS {
             adjust_ratio_instant: Instant::now(),
             abr_config: true,
             new_user_instant: Instant::now(),
+            custom_bitrate_kbps: None,
         }
     }
 }
@@ -157,8 +159,27 @@ impl VideoQoS {
 
     // Get current bitrate ratio with bounds checking
     pub fn ratio(&mut self) -> f32 {
-        if self.ratio < BR_MIN_HIGH_RESOLUTION || self.ratio > BR_MAX {
-            self.ratio = BR_BALANCED;
+        // If custom bitrate is configured, calculate the required ratio
+        if let Some(custom_bitrate) = self.custom_bitrate_kbps {
+            // Calculate ratio needed to achieve target bitrate
+            // Formula: new_ratio = target_bitrate / base_bitrate
+            // Since current_bitrate = base_bitrate * current_ratio
+            // We have: base_bitrate = current_bitrate / current_ratio
+            // Therefore: new_ratio = target_bitrate * current_ratio / current_bitrate
+            if self.bitrate_store > 0 && self.ratio > 0.0 {
+                let calculated_ratio = (custom_bitrate as f32 * self.ratio) / self.bitrate_store as f32;
+                // Clamp to reasonable bounds to prevent extreme values
+                self.ratio = calculated_ratio.clamp(BR_MIN_HIGH_RESOLUTION, BR_MAX);
+            } else {
+                // If we don't have bitrate info yet, estimate based on typical base bitrate
+                // This is a fallback for initial connection before first frame
+                self.ratio = BR_BALANCED;
+            }
+        } else {
+            // Normal adaptive mode - ensure ratio is within bounds
+            if self.ratio < BR_MIN_HIGH_RESOLUTION || self.ratio > BR_MAX {
+                self.ratio = BR_BALANCED;
+            }
         }
         self.ratio
     }
@@ -176,6 +197,10 @@ impl VideoQoS {
 
     // Check if variable bitrate encoding is supported and enabled
     pub fn in_vbr_state(&self) -> bool {
+        // Disable VBR when custom bitrate is set
+        if self.custom_bitrate_kbps.is_some() {
+            return false;
+        }
         self.abr_config && self.displays.iter().all(|e| e.1.support_changing_quality)
     }
 }
@@ -187,6 +212,19 @@ impl VideoQoS {
         self.users.insert(id, UserData::default());
         self.abr_config = Config::get_option("enable-abr") != "N";
         self.new_user_instant = Instant::now();
+
+        // Read custom bitrate setting if configured
+        let custom_bitrate_str = Config::get_option("custom-bitrate-kbps");
+        self.custom_bitrate_kbps = if !custom_bitrate_str.is_empty() {
+            custom_bitrate_str.parse::<u32>().ok()
+        } else {
+            None
+        };
+
+        // If custom bitrate is set, disable adaptive bitrate
+        if self.custom_bitrate_kbps.is_some() {
+            log::info!("Custom bitrate mode enabled: {} kbps", self.custom_bitrate_kbps.unwrap());
+        }
     }
 
     // Clean up user session
@@ -372,7 +410,9 @@ impl VideoQoS {
                 });
                 self.adjust_ratio(dynamic_screen);
             }
-        } else {
+        } else if self.custom_bitrate_kbps.is_none() {
+            // Only set ratio from quality if not using custom bitrate
+            // Custom bitrate ratio is calculated dynamically in ratio() method
             self.ratio = self.latest_quality().ratio();
         }
     }

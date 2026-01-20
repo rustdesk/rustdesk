@@ -89,3 +89,22 @@ All configurations or options are under `libs/hbb_common/src/config.rs` file, 4 
 - Local
 - Display
 - Built-in
+
+### Bandwidth Control
+
+RustDesk includes an adaptive bandwidth control system for optimal streaming quality:
+
+- **Adaptive Bitrate (ABR)**: Automatically adjusts quality based on network conditions
+  - Implemented in `src/server/video_qos.rs`
+  - Can be disabled with config option: `enable-abr = N`
+
+- **Custom Fixed Bitrate**: Override ABR with a fixed target bitrate
+  - Config option: `custom-bitrate-kbps = <value>`
+  - Example: `custom-bitrate-kbps = 5000` for 5 Mbps
+  - See `docs/CUSTOM_BITRATE.md` for detailed documentation
+
+- **Key Files**:
+  - `src/server/video_qos.rs` - Main bandwidth control and QoS logic
+  - `src/server/video_service.rs` - Video encoding service integration
+  - `src/server/connection.rs` - Network delay measurement
+  - `libs/scrap/src/common/codec.rs` - Bitrate calculation and quality presets
