@@ -6,28 +6,25 @@ use hbb_common::{
     anyhow::anyhow,
     bail,
     config::{keys::OPTION_ALLOW_LINUX_HEADLESS, Config},
-    libc::{c_char, c_int, c_long, c_void},
+    libc::{c_char, c_int, c_long, c_uint, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
     regex::{Captures, Regex},
     users::{get_user_by_name, os::unix::UserExt},
 };
+use libxdo_sys::{self, xdo_t, Window};
 use std::{
     cell::RefCell,
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     process::{Child, Command},
     string::String,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
     time::{Duration, Instant},
 };
 use terminfo::{capability as cap, Database};
 use wallpaper;
-
-type Xdo = *const c_void;
 
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
@@ -86,33 +83,18 @@ lazy_static::lazy_static! {
 }
 
 thread_local! {
-    static XDO: RefCell<Xdo> = RefCell::new(unsafe { xdo_new(std::ptr::null()) });
+    // XDO context - created via libxdo-sys (which uses dynamic loading stub).
+    // If libxdo is not available, xdo will be null and xdo-based functions become no-ops.
+    static XDO: RefCell<*mut xdo_t> = RefCell::new({
+        let xdo = unsafe { libxdo_sys::xdo_new(std::ptr::null()) };
+        if xdo.is_null() {
+            log::warn!("Failed to create xdo context, xdo functions will be disabled");
+        } else {
+            log::info!("xdo context created successfully");
+        }
+        xdo
+    });
     static DISPLAY: RefCell<*mut c_void> = RefCell::new(unsafe { XOpenDisplay(std::ptr::null())});
-}
-
-extern "C" {
-    fn xdo_get_mouse_location(
-        xdo: Xdo,
-        x: *mut c_int,
-        y: *mut c_int,
-        screen_num: *mut c_int,
-    ) -> c_int;
-    fn xdo_move_mouse(xdo: Xdo, x: c_int, y: c_int, screen: c_int) -> c_int;
-    fn xdo_new(display: *const c_char) -> Xdo;
-    fn xdo_get_active_window(xdo: Xdo, window: *mut *mut c_void) -> c_int;
-    fn xdo_get_window_location(
-        xdo: Xdo,
-        window: *mut c_void,
-        x: *mut c_int,
-        y: *mut c_int,
-        screen_num: *mut c_int,
-    ) -> c_int;
-    fn xdo_get_window_size(
-        xdo: Xdo,
-        window: *mut c_void,
-        width: *mut c_int,
-        height: *mut c_int,
-    ) -> c_int;
 }
 
 #[link(name = "X11")]
@@ -160,14 +142,19 @@ fn sleep_millis(millis: u64) {
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     let mut res = None;
     XDO.with(|xdo| {
-        if let Ok(xdo) = xdo.try_borrow_mut() {
+        if let Ok(xdo) = xdo.try_borrow() {
             if xdo.is_null() {
                 return;
             }
             let mut x: c_int = 0;
             let mut y: c_int = 0;
             unsafe {
-                xdo_get_mouse_location(*xdo, &mut x as _, &mut y as _, std::ptr::null_mut());
+                libxdo_sys::xdo_get_mouse_location(
+                    *xdo as *const _,
+                    &mut x as _,
+                    &mut y as _,
+                    std::ptr::null_mut(),
+                );
             }
             res = Some((x, y));
         }
@@ -178,14 +165,14 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
 pub fn set_cursor_pos(x: i32, y: i32) -> bool {
     let mut res = false;
     XDO.with(|xdo| {
-        match xdo.try_borrow_mut() {
+        match xdo.try_borrow() {
             Ok(xdo) => {
                 if xdo.is_null() {
                     log::debug!("set_cursor_pos: xdo is null");
                     return;
                 }
                 unsafe {
-                    let ret = xdo_move_mouse(*xdo, x, y, 0);
+                    let ret = libxdo_sys::xdo_move_mouse(*xdo as *const _, x, y, 0);
                     if ret != 0 {
                         log::debug!(
                             "set_cursor_pos: xdo_move_mouse failed with code {} for coordinates ({}, {})",
@@ -230,22 +217,22 @@ pub fn reset_input_cache() {}
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     let mut res = None;
     XDO.with(|xdo| {
-        if let Ok(xdo) = xdo.try_borrow_mut() {
+        if let Ok(xdo) = xdo.try_borrow() {
             if xdo.is_null() {
                 return;
             }
             let mut x: c_int = 0;
             let mut y: c_int = 0;
-            let mut width: c_int = 0;
-            let mut height: c_int = 0;
-            let mut window: *mut c_void = std::ptr::null_mut();
+            let mut width: c_uint = 0;
+            let mut height: c_uint = 0;
+            let mut window: Window = 0;
 
             unsafe {
-                if xdo_get_active_window(*xdo, &mut window) != 0 {
+                if libxdo_sys::xdo_get_active_window(*xdo as *const _, &mut window) != 0 {
                     return;
                 }
-                if xdo_get_window_location(
-                    *xdo,
+                if libxdo_sys::xdo_get_window_location(
+                    *xdo as *const _,
                     window,
                     &mut x as _,
                     &mut y as _,
@@ -254,11 +241,17 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
                 {
                     return;
                 }
-                if xdo_get_window_size(*xdo, window, &mut width as _, &mut height as _) != 0 {
+                if libxdo_sys::xdo_get_window_size(
+                    *xdo as *const _,
+                    window,
+                    &mut width,
+                    &mut height,
+                ) != 0
+                {
                     return;
                 }
-                let center_x = x + width / 2;
-                let center_y = y + height / 2;
+                let center_x = x + (width / 2) as c_int;
+                let center_y = y + (height / 2) as c_int;
                 res = displays.iter().position(|d| {
                     center_x >= d.x
                         && center_x < d.x + d.width
@@ -497,7 +490,10 @@ fn get_all_term_values(uid: &str) -> Vec<String> {
         let Ok(cmdline) = std::fs::read(&cmdline_path) else {
             continue;
         };
-        let exe_end = cmdline.iter().position(|&b| b == 0).unwrap_or(cmdline.len());
+        let exe_end = cmdline
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(cmdline.len());
         let exe_str = String::from_utf8_lossy(&cmdline[..exe_end]);
         if !re.is_match(&exe_str) {
             continue;
