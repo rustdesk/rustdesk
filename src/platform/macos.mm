@@ -362,7 +362,10 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                 uint32_t capacity = CGDisplayGammaTableCapacity(d);
                 if (capacity > 0) {
                     std::vector<CGGammaValue> zeros(capacity, 0.0f);
-                    CGSetDisplayTransferByTable(d, capacity, zeros.data(), zeros.data(), zeros.data());
+                    CGError error = CGSetDisplayTransferByTable(d, capacity, zeros.data(), zeros.data(), zeros.data());
+                    if (error != kCGErrorSuccess) {
+                        NSLog(@"MacSetPrivacyMode: Failed to set gamma table to black for display %u (error %d)", (unsigned)d, error);
+                    }
                 }
             }
         }
