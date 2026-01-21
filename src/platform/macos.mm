@@ -357,11 +357,13 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                  }
             }
 
-            // Set to black
-            uint32_t capacity = CGDisplayGammaTableCapacity(d);
-            if (capacity > 0) {
-                std::vector<CGGammaValue> zeros(capacity, 0.0f);
-                CGSetDisplayTransferByTable(d, capacity, zeros.data(), zeros.data(), zeros.data());
+            // Set to black only if we have saved original gamma for this display
+            if (g_originalGammas.find(d) != g_originalGammas.end()) {
+                uint32_t capacity = CGDisplayGammaTableCapacity(d);
+                if (capacity > 0) {
+                    std::vector<CGGammaValue> zeros(capacity, 0.0f);
+                    CGSetDisplayTransferByTable(d, capacity, zeros.data(), zeros.data(), zeros.data());
+                }
             }
         }
         return true;
