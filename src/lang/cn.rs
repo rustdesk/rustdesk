@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "可以输入 ID、直连 IP，或域名和端口号（<域名>:<端口号>）。\n要访问另一台服务器上的设备，请附加服务器地址（<ID>@<服务器地址>?key=<密钥>）。比如，\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=。\n要访问公共服务器上的设备，请输入 \"<ID>@public\"，无需密钥。\n\n如果您想要在首次连接时，强制走中继连接，请在 ID 的后面添加 \"/r\"，例如，\"9123456234/r\"。"),
         ("privacy_mode_impl_mag_tip", "模式 1"),
         ("privacy_mode_impl_virtual_display_tip", "模式 2"),
+        ("privacy_mode_impl_macos_tip", "隐私模式"),
         ("Enter privacy mode", "进入隐私模式"),
         ("Exit privacy mode", "退出隐私模式"),
         ("idd_not_support_under_win10_2004_tip", "不支持 Indirect display driver 。需要 Windows 10 版本 2004 及更高的版本。"),

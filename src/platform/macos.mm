@@ -4,6 +4,10 @@
 #include <Security/Authorization.h>
 #include <Security/AuthorizationTags.h>
 
+#include <CoreGraphics/CoreGraphics.h>
+#include <vector>
+#include <map>
+
 extern "C" bool CanUseNewApiForScreenCaptureCheck() {
     #ifdef NO_InputMonitoringAuthStatus
     return false;
@@ -291,4 +295,97 @@ extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t h
     CGDisplayModeRelease(currentMode);
     CFRelease(allModes);
     return ret;
+}
+
+static CFMachPortRef g_eventTap = NULL;
+static CFRunLoopSourceRef g_runLoopSource = NULL;
+static std::map<CGDirectDisplayID, std::vector<CGGammaValue>> g_originalGammas;
+
+CGEventRef MyEventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon) {
+    (void)proxy;
+    (void)type;
+    (void)refcon;
+    if (CGEventGetIntegerValueField(event, kCGEventSourceStateID) == kCGEventSourceStateHIDSystemState) {
+        return NULL;
+    }
+    return event;
+}
+
+extern "C" bool MacSetPrivacyMode(bool on) {
+    if (on) {
+        // 1. Input Blocking
+        if (!g_eventTap) {
+            CGEventMask eventMask = (1 << kCGEventKeyDown) | (1 << kCGEventKeyUp) |
+                                    (1 << kCGEventLeftMouseDown) | (1 << kCGEventLeftMouseUp) |
+                                    (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
+                                    (1 << kCGEventMouseMoved) | (1 << kCGEventScrollWheel);
+            
+            g_eventTap = CGEventTapCreate(kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
+                                          eventMask, MyEventTapCallback, NULL);
+            if (g_eventTap) {
+                g_runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, g_eventTap, 0);
+                CFRunLoopAddSource(CFRunLoopGetMain(), g_runLoopSource, kCFRunLoopCommonModes);
+                CGEventTapEnable(g_eventTap, true);
+            }
+        }
+
+        // 2. Gamma Blackout
+        uint32_t count = 0;
+        CGGetOnlineDisplayList(0, NULL, &count);
+        std::vector<CGDirectDisplayID> displays(count);
+        CGGetOnlineDisplayList(count, displays.data(), &count);
+
+        for (uint32_t i = 0; i < count; i++) {
+            CGDirectDisplayID d = displays[i];
+            
+            // Save original if not saved
+            if (g_originalGammas.find(d) == g_originalGammas.end()) {
+                 uint32_t capacity = CGDisplayGammaTableCapacity(d);
+                 if (capacity > 0) {
+                     std::vector<CGGammaValue> red(capacity), green(capacity), blue(capacity);
+                     uint32_t sampleCount = 0;
+                     if (CGGetDisplayTransferByTable(d, capacity, red.data(), green.data(), blue.data(), &sampleCount) == kCGErrorSuccess) {
+                         std::vector<CGGammaValue> all;
+                         all.insert(all.end(), red.begin(), red.begin() + sampleCount);
+                         all.insert(all.end(), green.begin(), green.begin() + sampleCount);
+                         all.insert(all.end(), blue.begin(), blue.begin() + sampleCount);
+                         g_originalGammas[d] = all;
+                     }
+                 }
+            }
+
+            // Set to black
+            uint32_t capacity = CGDisplayGammaTableCapacity(d);
+            if (capacity > 0) {
+                std::vector<CGGammaValue> zeros(capacity, 0.0f);
+                CGSetDisplayTransferByTable(d, capacity, zeros.data(), zeros.data(), zeros.data());
+            }
+        }
+        return true;
+
+    } else {
+        // Restore
+        // 1. Input
+        if (g_eventTap) {
+            CGEventTapEnable(g_eventTap, false);
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), g_runLoopSource, kCFRunLoopCommonModes);
+            CFRelease(g_runLoopSource);
+            CFRelease(g_eventTap);
+            g_eventTap = NULL;
+            g_runLoopSource = NULL;
+        }
+
+        // 2. Gamma
+        for (auto const& [d, gamma] : g_originalGammas) {
+             uint32_t sampleCount = gamma.size() / 3;
+             if (sampleCount > 0) {
+                 const CGGammaValue* r = gamma.data();
+                 const CGGammaValue* g = r + sampleCount;
+                 const CGGammaValue* b = g + sampleCount;
+                 CGSetDisplayTransferByTable(d, sampleCount, r, g, b);
+             }
+        }
+        g_originalGammas.clear();
+        return true;
+    }
 }
