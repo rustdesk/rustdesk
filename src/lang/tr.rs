@@ -737,7 +737,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", "Göreli fare modundan çıkmak için {}"),
         ("rel-mouse-permission-lost-tip", "Göreli fare izinleri geçerli değil"),
         ("Changelog", "Değişiklik Günlüğü"),
-        ("keep-awake-during-outgoing-sessions-label", "Giden oturumlar sırasında ekranı açık tutun"),
-        ("keep-awake-during-incoming-sessions-label", "Gelen oturumlar sırasında ekranı açık tutun"),
+        ("keep-awake-during-outgoing-sessions-label", "Giden oturumlar süresince ekranı açık tutun"),
+        ("keep-awake-during-incoming-sessions-label", "Gelen oturumlar süresince ekranı açık tutun"),
     ].iter().cloned().collect();
 }
