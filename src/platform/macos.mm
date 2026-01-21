@@ -326,6 +326,9 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                 g_runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, g_eventTap, 0);
                 CFRunLoopAddSource(CFRunLoopGetMain(), g_runLoopSource, kCFRunLoopCommonModes);
                 CGEventTapEnable(g_eventTap, true);
+            } else {
+                NSLog(@"MacSetPrivacyMode: Failed to create CGEventTap; input blocking not enabled.");
+                return false;
             }
         }
 
