@@ -467,6 +467,7 @@ class ServerModel with ChangeNotifier {
     await parent.target?.invokeMethod("stop_service");
     await bind.mainStopService();
     notifyListeners();
+    // for androidUpdatekeepScreenOn only
     WakelockManager.disable(_wakelockKey);
   }
 
