@@ -379,10 +379,10 @@ extern "C" bool MacSetPrivacyMode(bool on) {
         for (auto const& [d, gamma] : g_originalGammas) {
              uint32_t sampleCount = gamma.size() / 3;
              if (sampleCount > 0) {
-                 const CGGammaValue* r = gamma.data();
-                 const CGGammaValue* g = r + sampleCount;
-                 const CGGammaValue* b = g + sampleCount;
-                 CGSetDisplayTransferByTable(d, sampleCount, r, g, b);
+                 const CGGammaValue* red = gamma.data();
+                 const CGGammaValue* green = red + sampleCount;
+                 const CGGammaValue* blue = green + sampleCount;
+                 CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
              }
         }
         g_originalGammas.clear();
