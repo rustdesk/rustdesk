@@ -61,6 +61,7 @@ class _GpuTexture {
   SessionID? _sessionId;
   final support = bind.mainHasGpuTextureRender();
   bool _destroying = false;
+  bool _cancelled = false;
   int _display = 0;
   int? _id;
   int? _output;
@@ -75,8 +76,17 @@ class _GpuTexture {
     if (support) {
       _sessionId = sessionId;
       _display = d;
+      _cancelled = false;
 
       gpuTextureRenderer.registerTexture().then((id) async {
+        // Check if destroyed during async operation
+        if (_cancelled) {
+          if (id != null) {
+            await gpuTextureRenderer.unregisterTexture(id);
+          }
+          return;
+        }
+
         _id = id;
         if (id != null) {
           _textureId = id;
@@ -97,15 +107,18 @@ class _GpuTexture {
 
   destroy(bool unregisterTexture, FFI ffi) async {
     // must stop texture render, render unregistered texture cause crash
-    if (!_destroying && support && _sessionId != null && _textureId != -1) {
+    if (!_destroying && support && _sessionId != null) {
       _destroying = true;
-      if (unregisterTexture) {
-        platformFFI.registerGpuTexture(_sessionId!, _display, 0);
-        // sleep for a while to avoid the texture is used after it's unregistered.
-        await Future.delayed(Duration(milliseconds: 100));
+      _cancelled = true; // Cancel any pending registration
+      if (_textureId != -1) {
+        if (unregisterTexture) {
+          platformFFI.registerGpuTexture(_sessionId!, _display, 0);
+          // sleep for a while to avoid the texture is used after it's unregistered.
+          await Future.delayed(Duration(milliseconds: 100));
+        }
+        await gpuTextureRenderer.unregisterTexture(_textureId);
+        _textureId = -1;
       }
-      await gpuTextureRenderer.unregisterTexture(_textureId);
-      _textureId = -1;
       _destroying = false;
       debugPrint(
           "destroy gpu texture: peerId: ${ffi.id} display:$_display, textureId:$_id, output:$_output");
