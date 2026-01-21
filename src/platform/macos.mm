@@ -301,10 +301,20 @@ static CFMachPortRef g_eventTap = NULL;
 static CFRunLoopSourceRef g_runLoopSource = NULL;
 static std::map<CGDirectDisplayID, std::vector<CGGammaValue>> g_originalGammas;
 
+// The event source user data value used by enigo library for injected events.
+// This allows us to distinguish remote input (which should be allowed) from local physical input.
+static const int64_t ENIGO_INPUT_EXTRA_VALUE = 100;
+
 CGEventRef MyEventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon) {
     (void)proxy;
     (void)type;
     (void)refcon;
+    // Allow events explicitly injected by enigo (remote input), identified via custom user data.
+    int64_t userData = CGEventGetIntegerValueField(event, kCGEventSourceUserData);
+    if (userData == ENIGO_INPUT_EXTRA_VALUE) {
+        return event;
+    }
+    // Block local physical HID input.
     if (CGEventGetIntegerValueField(event, kCGEventSourceStateID) == kCGEventSourceStateHIDSystemState) {
         return NULL;
     }
