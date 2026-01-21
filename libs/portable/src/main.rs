@@ -187,7 +187,10 @@ fn main() {
         i += 1;
     }
     let click_setup = args.is_empty() && arg_exe.to_lowercase().ends_with("install.exe");
+    #[cfg(windows)]
     let quick_support = args.is_empty() && win::is_quick_support_exe(&arg_exe);
+    #[cfg(not(windows))]
+    let quick_support = false;
 
     let mut ui = false;
     let reader = BinaryReader::default();

@@ -5,7 +5,6 @@ import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
@@ -72,6 +71,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       showLocal ? model.localController : model.remoteController;
   FileDirectory get currentDir => currentFileController.directory.value;
   DirectoryOptions get currentOptions => currentFileController.options.value;
+  final _uniqueKey = UniqueKey();
 
   @override
   void initState() {
@@ -86,7 +86,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     gFFI.ffiModel.updateEventListener(gFFI.sessionId, widget.id);
-    WakelockPlus.enable();
+    WakelockManager.enable(_uniqueKey);
   }
 
   @override
@@ -94,7 +94,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     model.close().whenComplete(() {
       gFFI.close();
       gFFI.dialogManager.dismissAll();
-      WakelockPlus.disable();
+      WakelockManager.disable(_uniqueKey);
     });
     model.jobController.clear();
     super.dispose();

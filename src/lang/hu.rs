@@ -737,5 +737,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", "A kilépéshez nyomja meg a(z) {} gombot."),
         ("rel-mouse-permission-lost-tip", "A billentyűzet-hozzáférés vissza lett vonva. A relatív egérmód le lett tilva."),
         ("Changelog", "Változáslista"),
+        ("keep-awake-during-outgoing-sessions-label", ""),
+        ("keep-awake-during-incoming-sessions-label", ""),
     ].iter().cloned().collect();
 }
