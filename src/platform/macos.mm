@@ -382,7 +382,11 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                  const CGGammaValue* red = gamma.data();
                  const CGGammaValue* green = red + sampleCount;
                  const CGGammaValue* blue = green + sampleCount;
-                 CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
+                 CGError error = CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
+                 if (error != kCGErrorSuccess) {
+                     NSLog(@"Failed to restore gamma table for display %u (error %d), attempting system reset", (unsigned)d, error);
+                     CGDisplayRestoreColorSyncSettings();
+                 }
              }
         }
         g_originalGammas.clear();
