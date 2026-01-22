@@ -7,6 +7,7 @@
 #include <CoreGraphics/CoreGraphics.h>
 #include <vector>
 #include <map>
+#include <set>
 
 extern "C" bool CanUseNewApiForScreenCaptureCheck() {
     #ifdef NO_InputMonitoringAuthStatus
@@ -394,7 +395,19 @@ extern "C" bool MacSetPrivacyMode(bool on) {
         }
 
         // 2. Gamma
+        // Get current online displays to validate before restoring
+        uint32_t onlineCount = 0;
+        CGGetOnlineDisplayList(0, NULL, &onlineCount);
+        std::vector<CGDirectDisplayID> onlineDisplays(onlineCount);
+        CGGetOnlineDisplayList(onlineCount, onlineDisplays.data(), &onlineCount);
+        std::set<CGDirectDisplayID> onlineSet(onlineDisplays.begin(), onlineDisplays.end());
+
         for (auto const& [d, gamma] : g_originalGammas) {
+             // Validate: only restore gamma for displays that are still online
+             if (onlineSet.find(d) == onlineSet.end()) {
+                 NSLog(@"Display %u no longer online, skipping gamma restore", (unsigned)d);
+                 continue;
+             }
              uint32_t sampleCount = gamma.size() / 3;
              if (sampleCount > 0) {
                  const CGGammaValue* red = gamma.data();
