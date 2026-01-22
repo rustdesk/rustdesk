@@ -8,6 +8,7 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <mutex>
 
 extern "C" bool CanUseNewApiForScreenCaptureCheck() {
     #ifdef NO_InputMonitoringAuthStatus
@@ -301,6 +302,7 @@ extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t h
 static CFMachPortRef g_eventTap = NULL;
 static CFRunLoopSourceRef g_runLoopSource = NULL;
 static std::map<CGDirectDisplayID, std::vector<CGGammaValue>> g_originalGammas;
+static std::mutex g_privacyModeMutex;
 
 // The event source user data value used by enigo library for injected events.
 // This allows us to distinguish remote input (which should be allowed) from local physical input.
@@ -323,6 +325,7 @@ CGEventRef MyEventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRe
 }
 
 extern "C" bool MacSetPrivacyMode(bool on) {
+    std::lock_guard<std::mutex> lock(g_privacyModeMutex);
     if (on) {
         // 1. Input Blocking
         if (!g_eventTap) {
