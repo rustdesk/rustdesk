@@ -1,5 +1,5 @@
 use super::{PrivacyMode, PrivacyModeState};
-use hbb_common::ResultType;
+use hbb_common::{anyhow::anyhow, ResultType};
 
 extern "C" {
     fn MacSetPrivacyMode(on: bool) -> bool;
@@ -38,17 +38,19 @@ impl PrivacyMode for PrivacyModeImpl {
 
     fn turn_on_privacy(&mut self, conn_id: i32) -> ResultType<bool> {
         self.conn_id = conn_id;
-        unsafe {
-            MacSetPrivacyMode(true);
+        let success = unsafe { MacSetPrivacyMode(true) };
+        if !success {
+            return Err(anyhow!("Failed to turn on privacy mode"));
         }
         Ok(true)
     }
 
     fn turn_off_privacy(&mut self, _conn_id: i32, _state: Option<PrivacyModeState>) -> ResultType<()> {
-        unsafe {
-            MacSetPrivacyMode(false);
-        }
+        let success = unsafe { MacSetPrivacyMode(false) };
         self.conn_id = 0;
+        if !success {
+            return Err(anyhow!("Failed to turn off privacy mode"));
+        }
         Ok(())
     }
 

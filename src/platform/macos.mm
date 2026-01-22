@@ -332,6 +332,9 @@ extern "C" bool MacSetPrivacyMode(bool on) {
             CGEventMask eventMask = (1 << kCGEventKeyDown) | (1 << kCGEventKeyUp) |
                                     (1 << kCGEventLeftMouseDown) | (1 << kCGEventLeftMouseUp) |
                                     (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
+                                    (1 << kCGEventOtherMouseDown) | (1 << kCGEventOtherMouseUp) |
+                                    (1 << kCGEventLeftMouseDragged) | (1 << kCGEventRightMouseDragged) |
+                                    (1 << kCGEventOtherMouseDragged) |
                                     (1 << kCGEventMouseMoved) | (1 << kCGEventScrollWheel);
             
             g_eventTap = CGEventTapCreate(kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
@@ -379,6 +382,7 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                     CGError error = CGSetDisplayTransferByTable(d, capacity, zeros.data(), zeros.data(), zeros.data());
                     if (error != kCGErrorSuccess) {
                         NSLog(@"MacSetPrivacyMode: Failed to set gamma table to black for display %u (error %d)", (unsigned)d, error);
+                        return false;
                     }
                 }
             }
@@ -420,6 +424,8 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                  if (error != kCGErrorSuccess) {
                      NSLog(@"Failed to restore gamma table for display %u (error %d), attempting system reset", (unsigned)d, error);
                      CGDisplayRestoreColorSyncSettings();
+                     g_originalGammas.clear();
+                     return false;
                  }
              }
         }
