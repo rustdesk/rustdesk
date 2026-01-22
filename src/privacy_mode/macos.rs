@@ -37,11 +37,11 @@ impl PrivacyMode for PrivacyModeImpl {
     }
 
     fn turn_on_privacy(&mut self, conn_id: i32) -> ResultType<bool> {
-        self.conn_id = conn_id;
         let success = unsafe { MacSetPrivacyMode(true) };
         if !success {
             return Err(anyhow!("Failed to turn on privacy mode"));
         }
+        self.conn_id = conn_id;
         Ok(true)
     }
 
