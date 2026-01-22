@@ -532,14 +532,17 @@ static bool SetupEventTapOnMainThread() {
             return;
         }
         
+        // Note: kCGEventTapDisabledByTimeout and kCGEventTapDisabledByUserInput are special
+        // notification types (0xFFFFFFFE and 0xFFFFFFFF) that are delivered via the callback's
+        // type parameter, not through the event mask. They should NOT be included in eventMask
+        // as bit-shifting by these values causes undefined behavior.
         CGEventMask eventMask = (1 << kCGEventKeyDown) | (1 << kCGEventKeyUp) |
                                 (1 << kCGEventLeftMouseDown) | (1 << kCGEventLeftMouseUp) |
                                 (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
                                 (1 << kCGEventOtherMouseDown) | (1 << kCGEventOtherMouseUp) |
                                 (1 << kCGEventLeftMouseDragged) | (1 << kCGEventRightMouseDragged) |
                                 (1 << kCGEventOtherMouseDragged) |
-                                (1 << kCGEventMouseMoved) | (1 << kCGEventScrollWheel) |
-                                (1 << kCGEventTapDisabledByTimeout) | (1 << kCGEventTapDisabledByUserInput);
+                                (1 << kCGEventMouseMoved) | (1 << kCGEventScrollWheel);
         
         g_eventTap = CGEventTapCreate(kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
                                       eventMask, MyEventTapCallback, NULL);
