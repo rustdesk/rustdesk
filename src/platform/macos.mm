@@ -520,6 +520,72 @@ CGEventRef MyEventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRe
     return event;
 }
 
+// Helper function to set up EventTap on the main thread
+// Returns true if EventTap was successfully created and enabled
+static bool SetupEventTapOnMainThread() {
+    __block bool success = false;
+    
+    void (^setupBlock)(void) = ^{
+        if (g_eventTap) {
+            // Already set up
+            success = true;
+            return;
+        }
+        
+        CGEventMask eventMask = (1 << kCGEventKeyDown) | (1 << kCGEventKeyUp) |
+                                (1 << kCGEventLeftMouseDown) | (1 << kCGEventLeftMouseUp) |
+                                (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
+                                (1 << kCGEventOtherMouseDown) | (1 << kCGEventOtherMouseUp) |
+                                (1 << kCGEventLeftMouseDragged) | (1 << kCGEventRightMouseDragged) |
+                                (1 << kCGEventOtherMouseDragged) |
+                                (1 << kCGEventMouseMoved) | (1 << kCGEventScrollWheel) |
+                                (1 << kCGEventTapDisabledByTimeout) | (1 << kCGEventTapDisabledByUserInput);
+        
+        g_eventTap = CGEventTapCreate(kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
+                                      eventMask, MyEventTapCallback, NULL);
+        if (g_eventTap) {
+            g_runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, g_eventTap, 0);
+            CFRunLoopAddSource(CFRunLoopGetMain(), g_runLoopSource, kCFRunLoopCommonModes);
+            CGEventTapEnable(g_eventTap, true);
+            success = true;
+        } else {
+            NSLog(@"MacSetPrivacyMode: Failed to create CGEventTap; input blocking not enabled.");
+            success = false;
+        }
+    };
+    
+    // Execute on main thread to ensure CFRunLoop operations are safe
+    // Use dispatch_sync if not on main thread, otherwise execute directly to avoid deadlock
+    if ([NSThread isMainThread]) {
+        setupBlock();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), setupBlock);
+    }
+    
+    return success;
+}
+
+// Helper function to tear down EventTap on the main thread
+static void TeardownEventTapOnMainThread() {
+    void (^teardownBlock)(void) = ^{
+        if (g_eventTap) {
+            CGEventTapEnable(g_eventTap, false);
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), g_runLoopSource, kCFRunLoopCommonModes);
+            CFRelease(g_runLoopSource);
+            CFRelease(g_eventTap);
+            g_eventTap = NULL;
+            g_runLoopSource = NULL;
+        }
+    };
+    
+    // Execute on main thread to ensure CFRunLoop operations are safe
+    if ([NSThread isMainThread]) {
+        teardownBlock();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), teardownBlock);
+    }
+}
+
 extern "C" bool MacSetPrivacyMode(bool on) {
     std::lock_guard<std::mutex> lock(g_privacyModeMutex);
     if (on) {
@@ -528,27 +594,9 @@ extern "C" bool MacSetPrivacyMode(bool on) {
             return true;
         }
         
-        // 1. Input Blocking
-        if (!g_eventTap) {
-            CGEventMask eventMask = (1 << kCGEventKeyDown) | (1 << kCGEventKeyUp) |
-                                    (1 << kCGEventLeftMouseDown) | (1 << kCGEventLeftMouseUp) |
-                                    (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
-                                    (1 << kCGEventOtherMouseDown) | (1 << kCGEventOtherMouseUp) |
-                                    (1 << kCGEventLeftMouseDragged) | (1 << kCGEventRightMouseDragged) |
-                                    (1 << kCGEventOtherMouseDragged) |
-                                    (1 << kCGEventMouseMoved) | (1 << kCGEventScrollWheel) |
-                                    (1 << kCGEventTapDisabledByTimeout) | (1 << kCGEventTapDisabledByUserInput);
-            
-            g_eventTap = CGEventTapCreate(kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
-                                          eventMask, MyEventTapCallback, NULL);
-            if (g_eventTap) {
-                g_runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, g_eventTap, 0);
-                CFRunLoopAddSource(CFRunLoopGetMain(), g_runLoopSource, kCFRunLoopCommonModes);
-                CGEventTapEnable(g_eventTap, true);
-            } else {
-                NSLog(@"MacSetPrivacyMode: Failed to create CGEventTap; input blocking not enabled.");
-                return false;
-            }
+        // 1. Input Blocking - set up EventTap on main thread
+        if (!SetupEventTapOnMainThread()) {
+            return false;
         }
 
         // 2. Register display reconfiguration callback to handle hot-plug events
@@ -614,15 +662,13 @@ extern "C" bool MacSetPrivacyMode(bool on) {
             NSLog(@"MacSetPrivacyMode: Failed to blackout all displays (%u/%u succeeded)", blackoutSuccessCount, blackoutAttemptCount);
             // Clean up: unregister callback and disable event tap since we're failing
             CGDisplayRemoveReconfigurationCallback(DisplayReconfigurationCallback, NULL);
-            if (g_eventTap) {
-                CGEventTapEnable(g_eventTap, false);
-                CFRunLoopRemoveSource(CFRunLoopGetMain(), g_runLoopSource, kCFRunLoopCommonModes);
-                CFRelease(g_runLoopSource);
-                CFRelease(g_eventTap);
-                g_eventTap = NULL;
-                g_runLoopSource = NULL;
-            }
+            TeardownEventTapOnMainThread();
             // Restore gamma for displays that were successfully blacked out
+            // We restore each display individually using saved gamma values rather than
+            // calling CGDisplayRestoreColorSyncSettings() which would reset ALL displays
+            // to system defaults, potentially leaving them in incorrect state if their
+            // saved gamma values differed from defaults.
+            bool cleanupRestoreFailed = false;
             for (auto const& [uuid, gamma] : g_originalGammas) {
                 CGDirectDisplayID d = FindDisplayIdByUUID(uuid);
                 if (d != kCGNullDirectDisplay) {
@@ -631,11 +677,20 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                         const CGGammaValue* red = gamma.data();
                         const CGGammaValue* green = red + sampleCount;
                         const CGGammaValue* blue = green + sampleCount;
-                        CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
+                        CGError error = CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
+                        if (error != kCGErrorSuccess) {
+                            std::string displayName = GetDisplayName(d);
+                            NSLog(@"Failed to restore gamma for display %u (Name: %s, ID: %u, UUID: %s, error: %d)", displayName.c_str(), (unsigned)d, uuid.c_str(), error);
+                            cleanupRestoreFailed = true;
+                        }
                     }
                 }
             }
-            CGDisplayRestoreColorSyncSettings();
+            // If any display failed to restore, use system reset as fallback
+            if (cleanupRestoreFailed) {
+                NSLog(@"Some displays failed to restore gamma during cleanup, using CGDisplayRestoreColorSyncSettings as fallback");
+                CGDisplayRestoreColorSyncSettings();
+            }
             g_originalGammas.clear();
             g_uuidToDisplayId.clear();
             return false;
@@ -653,15 +708,8 @@ extern "C" bool MacSetPrivacyMode(bool on) {
         // 1. Unregister display reconfiguration callback
         CGDisplayRemoveReconfigurationCallback(DisplayReconfigurationCallback, NULL);
         
-        // 2. Input - restore
-        if (g_eventTap) {
-            CGEventTapEnable(g_eventTap, false);
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), g_runLoopSource, kCFRunLoopCommonModes);
-            CFRelease(g_runLoopSource);
-            CFRelease(g_eventTap);
-            g_eventTap = NULL;
-            g_runLoopSource = NULL;
-        }
+        // 2. Input - restore (tear down EventTap on main thread)
+        TeardownEventTapOnMainThread();
 
         // 3. Gamma - restore using UUID to find current DisplayID
         bool restoreSuccess = true;
