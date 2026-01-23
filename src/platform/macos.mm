@@ -308,11 +308,10 @@ static bool g_privacyModeActive = false;
 // Use CFStringRef (UUID) as key instead of CGDirectDisplayID for stability across reconnections
 // CGDirectDisplayID can change when displays are reconnected, but UUID remains stable
 static std::map<std::string, std::vector<CGGammaValue>> g_originalGammas;
-// Map UUID to current DisplayID for restoration
-static std::map<std::string, CGDirectDisplayID> g_uuidToDisplayId;
 
 // The event source user data value used by enigo library for injected events.
 // This allows us to distinguish remote input (which should be allowed) from local physical input.
+// See: libs/enigo/src/macos/macos_impl.rs - ENIGO_INPUT_EXTRA_VALUE
 static const int64_t ENIGO_INPUT_EXTRA_VALUE = 100;
 
 // Helper function to get UUID string from DisplayID
@@ -375,15 +374,19 @@ static CGDirectDisplayID FindDisplayIdByUUID(const std::string& targetUuid) {
 }
 
 // Helper function to apply blackout to a single display
-static void ApplyBlackoutToDisplay(CGDirectDisplayID display) {
+static bool ApplyBlackoutToDisplay(CGDirectDisplayID display) {
     uint32_t capacity = CGDisplayGammaTableCapacity(display);
     if (capacity > 0) {
         std::vector<CGGammaValue> zeros(capacity, 0.0f);
         CGError error = CGSetDisplayTransferByTable(display, capacity, zeros.data(), zeros.data(), zeros.data());
         if (error != kCGErrorSuccess) {
             NSLog(@"ApplyBlackoutToDisplay: Failed to set gamma for display %u (error %d)", (unsigned)display, error);
+            return false;
         }
+        return true;
     }
+    NSLog(@"ApplyBlackoutToDisplay: Display %u has zero gamma table capacity, blackout not supported", (unsigned)display);
+    return false;
 }
 
 // Display reconfiguration callback to handle display connect/disconnect events
@@ -427,12 +430,8 @@ static void DisplayReconfigurationCallback(CGDirectDisplayID display, CGDisplayC
                     all.insert(all.end(), green.begin(), green.begin() + sampleCount);
                     all.insert(all.end(), blue.begin(), blue.begin() + sampleCount);
                     g_originalGammas[uuid] = all;
-                    g_uuidToDisplayId[uuid] = display;
                 }
             }
-        } else {
-            // Update the DisplayID mapping for existing UUID
-            g_uuidToDisplayId[uuid] = display;
         }
         
         // Apply blackout to the new display immediately
@@ -459,9 +458,7 @@ static void DisplayReconfigurationCallback(CGDirectDisplayID display, CGDisplayC
         // A display was removed - update our mapping and reapply blackout to remaining displays
         NSLog(@"Display %u removed during privacy mode", (unsigned)display);
         std::string uuid = GetDisplayUUID(display);
-        if (!uuid.empty()) {
-            g_uuidToDisplayId.erase(uuid);
-        }
+        (void)uuid; // UUID retrieved for potential future use or logging
         
         // When a display is removed, macOS may reconfigure other displays and restore their gamma.
         // Schedule a delayed re-application of blackout to all remaining online displays.
@@ -619,8 +616,12 @@ extern "C" bool MacSetPrivacyMode(bool on) {
             std::string uuid = GetDisplayUUID(d);
             
             if (uuid.empty()) {
-                NSLog(@"MacSetPrivacyMode: Failed to get UUID for display %u, skipping", (unsigned)d);
-                continue;
+                NSLog(@"MacSetPrivacyMode: Failed to get UUID for display %u, privacy mode requires all displays", (unsigned)d);
+                // Clean up and return false since privacy mode requires ALL displays to be blacked out
+                CGDisplayRemoveReconfigurationCallback(DisplayReconfigurationCallback, NULL);
+                TeardownEventTapOnMainThread();
+                g_originalGammas.clear();
+                return false;
             }
             
             // Save original gamma using UUID as key (stable across reconnections)
@@ -635,12 +636,12 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                         all.insert(all.end(), green.begin(), green.begin() + sampleCount);
                         all.insert(all.end(), blue.begin(), blue.begin() + sampleCount);
                         g_originalGammas[uuid] = all;
-                        g_uuidToDisplayId[uuid] = d;
+                    } else {
+                        NSLog(@"MacSetPrivacyMode: Failed to get gamma table for display %u (UUID: %s)", (unsigned)d, uuid.c_str());
                     }
+                } else {
+                    NSLog(@"MacSetPrivacyMode: Display %u (UUID: %s) has zero gamma table capacity, not supported", (unsigned)d, uuid.c_str());
                 }
-            } else {
-                // Update DisplayID mapping in case it changed
-                g_uuidToDisplayId[uuid] = d;
             }
 
             // Set to black only if we have saved original gamma for this display
@@ -656,6 +657,8 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                     } else {
                         blackoutSuccessCount++;
                     }
+                } else {
+                    NSLog(@"MacSetPrivacyMode: Display %u (UUID: %s) has zero gamma table capacity for blackout", (unsigned)d, uuid.c_str());
                 }
             }
         }
@@ -683,7 +686,7 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                         CGError error = CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
                         if (error != kCGErrorSuccess) {
                             std::string displayName = GetDisplayName(d);
-                            NSLog(@"Failed to restore gamma for display %u (Name: %s, ID: %u, UUID: %s, error: %d)", displayName.c_str(), (unsigned)d, uuid.c_str(), error);
+                            NSLog(@"Failed to restore gamma for display (Name: %s, ID: %u, UUID: %s, error: %d)", displayName.c_str(), (unsigned)d, uuid.c_str(), error);
                             cleanupRestoreFailed = true;
                         }
                     }
@@ -695,7 +698,6 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                 CGDisplayRestoreColorSyncSettings();
             }
             g_originalGammas.clear();
-            g_uuidToDisplayId.clear();
             return false;
         }
         
@@ -745,7 +747,6 @@ extern "C" bool MacSetPrivacyMode(bool on) {
         
         // Clean up
         g_originalGammas.clear();
-        g_uuidToDisplayId.clear();
         g_privacyModeActive = false;
         
         return restoreSuccess;

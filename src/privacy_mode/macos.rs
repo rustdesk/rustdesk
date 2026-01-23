@@ -34,9 +34,13 @@ impl PrivacyMode for PrivacyModeImpl {
         unsafe {
             MacSetPrivacyMode(false);
         }
+        self.conn_id = 0;
     }
 
     fn turn_on_privacy(&mut self, conn_id: i32) -> ResultType<bool> {
+        if self.check_on_conn_id(conn_id)? {
+            return Ok(true);
+        }
         let success = unsafe { MacSetPrivacyMode(true) };
         if !success {
             return Err(anyhow!("Failed to turn on privacy mode"));
@@ -45,7 +49,8 @@ impl PrivacyMode for PrivacyModeImpl {
         Ok(true)
     }
 
-    fn turn_off_privacy(&mut self, _conn_id: i32, _state: Option<PrivacyModeState>) -> ResultType<()> {
+    fn turn_off_privacy(&mut self, conn_id: i32, _state: Option<PrivacyModeState>) -> ResultType<()> {
+        self.check_off_conn_id(conn_id)?;
         let success = unsafe { MacSetPrivacyMode(false) };
         if !success {
             return Err(anyhow!("Failed to turn off privacy mode"));
