@@ -389,6 +389,10 @@ static bool ApplyBlackoutToDisplay(CGDirectDisplayID display) {
     return false;
 }
 
+// Forward declaration - defined later in the file
+// Must be called while holding g_privacyModeMutex
+static bool TurnOffPrivacyModeInternal();
+
 // Display reconfiguration callback to handle display connect/disconnect events
 static void DisplayReconfigurationCallback(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *userInfo) {
     (void)userInfo;
@@ -414,7 +418,8 @@ static void DisplayReconfigurationCallback(CGDirectDisplayID display, CGDisplayC
         NSLog(@"Display %u added during privacy mode, applying blackout", (unsigned)display);
         std::string uuid = GetDisplayUUID(display);
         if (uuid.empty()) {
-            NSLog(@"Failed to get UUID for newly added display %u", (unsigned)display);
+            NSLog(@"Failed to get UUID for newly added display %u, exiting privacy mode", (unsigned)display);
+            TurnOffPrivacyModeInternal();
             return;
         }
         
@@ -430,12 +435,24 @@ static void DisplayReconfigurationCallback(CGDirectDisplayID display, CGDisplayC
                     all.insert(all.end(), green.begin(), green.begin() + sampleCount);
                     all.insert(all.end(), blue.begin(), blue.begin() + sampleCount);
                     g_originalGammas[uuid] = all;
+                } else {
+                    NSLog(@"DisplayReconfigurationCallback: Failed to get gamma table for display %u (UUID: %s), exiting privacy mode", (unsigned)display, uuid.c_str());
+                    TurnOffPrivacyModeInternal();
+                    return;
                 }
+            } else {
+                NSLog(@"DisplayReconfigurationCallback: Display %u (UUID: %s) has zero gamma table capacity, exiting privacy mode", (unsigned)display, uuid.c_str());
+                TurnOffPrivacyModeInternal();
+                return;
             }
         }
         
         // Apply blackout to the new display immediately
-        ApplyBlackoutToDisplay(display);
+        if (!ApplyBlackoutToDisplay(display)) {
+            NSLog(@"DisplayReconfigurationCallback: Failed to blackout display %u (UUID: %s), exiting privacy mode", (unsigned)display, uuid.c_str());
+            TurnOffPrivacyModeInternal();
+            return;
+        }
         
         // Schedule a delayed re-application to handle ColorSync restoration
         // macOS may restore default gamma for ALL displays after a new display is added,
@@ -586,6 +603,55 @@ static void TeardownEventTapOnMainThread() {
     }
 }
 
+// Internal function to turn off privacy mode without acquiring the mutex
+// Must be called while holding g_privacyModeMutex
+static bool TurnOffPrivacyModeInternal() {
+    if (!g_privacyModeActive) {
+        return true;
+    }
+    
+    // 1. Unregister display reconfiguration callback
+    CGDisplayRemoveReconfigurationCallback(DisplayReconfigurationCallback, NULL);
+    
+    // 2. Input - restore (tear down EventTap on main thread)
+    TeardownEventTapOnMainThread();
+
+    // 3. Gamma - restore using UUID to find current DisplayID
+    bool restoreSuccess = true;
+    for (auto const& [uuid, gamma] : g_originalGammas) {
+        // Find current DisplayID for this UUID (handles ID changes after reconnection)
+        CGDirectDisplayID d = FindDisplayIdByUUID(uuid);
+        
+        if (d == kCGNullDirectDisplay) {
+            NSLog(@"Display with UUID %s no longer online, skipping gamma restore", uuid.c_str());
+            continue;
+        }
+        
+        uint32_t sampleCount = gamma.size() / 3;
+        if (sampleCount > 0) {
+            const CGGammaValue* red = gamma.data();
+            const CGGammaValue* green = red + sampleCount;
+            const CGGammaValue* blue = green + sampleCount;
+            CGError error = CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
+            if (error != kCGErrorSuccess) {
+                NSLog(@"Failed to restore gamma table for display %u (UUID: %s, error %d)", (unsigned)d, uuid.c_str(), error);
+                restoreSuccess = false;
+            }
+        }
+    }
+    
+    // 4. Fallback: Always call CGDisplayRestoreColorSyncSettings as a safety net
+    // This ensures displays return to normal even if our restoration failed or
+    // if the system (ColorSync/Night Shift) modified gamma during privacy mode
+    CGDisplayRestoreColorSyncSettings();
+    
+    // Clean up
+    g_originalGammas.clear();
+    g_privacyModeActive = false;
+    
+    return restoreSuccess;
+}
+
 extern "C" bool MacSetPrivacyMode(bool on) {
     std::lock_guard<std::mutex> lock(g_privacyModeMutex);
     if (on) {
@@ -705,50 +771,6 @@ extern "C" bool MacSetPrivacyMode(bool on) {
         return true;
 
     } else {
-        // Not in privacy mode
-        if (!g_privacyModeActive) {
-            return true;
-        }
-        
-        // 1. Unregister display reconfiguration callback
-        CGDisplayRemoveReconfigurationCallback(DisplayReconfigurationCallback, NULL);
-        
-        // 2. Input - restore (tear down EventTap on main thread)
-        TeardownEventTapOnMainThread();
-
-        // 3. Gamma - restore using UUID to find current DisplayID
-        bool restoreSuccess = true;
-        for (auto const& [uuid, gamma] : g_originalGammas) {
-            // Find current DisplayID for this UUID (handles ID changes after reconnection)
-            CGDirectDisplayID d = FindDisplayIdByUUID(uuid);
-            
-            if (d == kCGNullDirectDisplay) {
-                NSLog(@"Display with UUID %s no longer online, skipping gamma restore", uuid.c_str());
-                continue;
-            }
-            
-            uint32_t sampleCount = gamma.size() / 3;
-            if (sampleCount > 0) {
-                const CGGammaValue* red = gamma.data();
-                const CGGammaValue* green = red + sampleCount;
-                const CGGammaValue* blue = green + sampleCount;
-                CGError error = CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
-                if (error != kCGErrorSuccess) {
-                    NSLog(@"Failed to restore gamma table for display %u (UUID: %s, error %d)", (unsigned)d, uuid.c_str(), error);
-                    restoreSuccess = false;
-                }
-            }
-        }
-        
-        // 4. Fallback: Always call CGDisplayRestoreColorSyncSettings as a safety net
-        // This ensures displays return to normal even if our restoration failed or
-        // if the system (ColorSync/Night Shift) modified gamma during privacy mode
-        CGDisplayRestoreColorSyncSettings();
-        
-        // Clean up
-        g_originalGammas.clear();
-        g_privacyModeActive = false;
-        
-        return restoreSuccess;
+        return TurnOffPrivacyModeInternal();
     }
 }
