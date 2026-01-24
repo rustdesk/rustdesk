@@ -737,7 +737,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", "Druk op {} om af te sluiten."),
         ("rel-mouse-permission-lost-tip", "De toetsenbordcontrole is uitgeschakeld. De relatieve muismodus is uitgeschakeld."),
         ("Changelog", "Wijzigingenlogboek"),
-        ("keep-awake-during-outgoing-sessions-label", ""),
-        ("keep-awake-during-incoming-sessions-label", ""),
+        ("keep-awake-during-outgoing-sessions-label", "Houd het scherm open tijdens de uitgaande sessies."),
+        ("keep-awake-during-incoming-sessions-label", "Houd het scherm open tijdens de inkomende sessies."),
     ].iter().cloned().collect();
 }
