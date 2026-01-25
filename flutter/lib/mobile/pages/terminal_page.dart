@@ -164,6 +164,13 @@ class _TerminalPageState extends State<TerminalPage>
                     autofocus: true,
                     textStyle: _getTerminalStyle(),
                     backgroundOpacity: 0.7,
+                    // The following comment is from xterm.dart source code:
+                    // Workaround to detect delete key for platforms and IMEs that do not
+                    // emit a hardware delete event. Preferred on mobile platforms. [false] by
+                    // default.
+                    //
+                    // Android works fine without this workaround.
+                    deleteDetection: isIOS,
                     padding: _calculatePadding(heightPx),
                     onSecondaryTapDown: (details, offset) async {
                       final selection = _terminalModel.terminalController.selection;
