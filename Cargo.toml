@@ -76,7 +76,6 @@ crossbeam-queue = "0.3"
 hex = "0.4"
 chrono = "0.4"
 cidr-utils = "0.5"
-libloading = "0.8"
 fon = "0.6"
 zip = "0.6"
 shutdown_hooks = "0.1"
@@ -177,6 +176,7 @@ bytemuck = "1.23"
 ttf-parser = "0.25"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libxdo-sys = "0.11"
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
 rust-pulsectl = { git = "https://github.com/rustdesk-org/pulsectl" }
@@ -206,6 +206,11 @@ android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
 exclude = ["vdi/host", "examples/custom_plugin"]
+
+# Patch libxdo-sys to use a stub implementation that doesn't require libxdo
+# This allows building and running on systems without libxdo installed (e.g., Wayland-only)
+[patch.crates-io]
+libxdo-sys = { path = "libs/libxdo-sys-stub" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
