@@ -357,27 +357,6 @@ static std::string GetDisplayUUID(CGDirectDisplayID displayId) {
     return "";
 }
 
-// Helper function to get display name from DisplayID
-static std::string GetDisplayName(CGDirectDisplayID displayId) {
-    NSArray<NSScreen *> *screens = [NSScreen screens];
-    for (NSScreen *screen in screens) {
-        NSDictionary *deviceDescription = [screen deviceDescription];
-        NSNumber *screenNumber = [deviceDescription objectForKey:@"NSScreenNumber"];
-        CGDirectDisplayID screenDisplayID = [screenNumber unsignedIntValue];
-        if (screenDisplayID == displayId) {
-            // localizedName is available on macOS 10.15+
-            if (@available(macOS 10.15, *)) {
-                NSString *name = [screen localizedName];
-                if (name) {
-                    return std::string([name UTF8String]);
-                }
-            }
-            break;
-        }
-    }
-    return "Unknown";
-}
-
 // Helper function to find DisplayID by UUID from current online displays
 static CGDirectDisplayID FindDisplayIdByUUID(const std::string& targetUuid) {
     uint32_t count = 0;
@@ -415,9 +394,7 @@ static bool RestoreAllGammas() {
             const CGGammaValue* blue = green + sampleCount;
             CGError error = CGSetDisplayTransferByTable(d, sampleCount, red, green, blue);
             if (error != kCGErrorSuccess) {
-                std::string displayName = GetDisplayName(d);
-                NSLog(@"Failed to restore gamma for display (Name: %s, ID: %u, UUID: %s, error: %d)", 
-                      displayName.c_str(), (unsigned)d, uuid.c_str(), error);
+                NSLog(@"Failed to restore gamma for display (ID: %u, UUID: %s, error: %d)", (unsigned)d, uuid.c_str(), error);
                 allSuccess = false;
             }
         }
@@ -897,8 +874,7 @@ extern "C" bool MacSetPrivacyMode(bool on) {
                     blackoutAttemptCount++;
                     CGError error = CGSetDisplayTransferByTable(d, capacity, zeros.data(), zeros.data(), zeros.data());
                     if (error != kCGErrorSuccess) {
-                        std::string displayName = GetDisplayName(d);
-                        NSLog(@"MacSetPrivacyMode: Failed to blackout display (Name: %s, ID: %u, UUID: %s, error: %d)", displayName.c_str(), (unsigned)d, uuid.c_str(), error);
+                        NSLog(@"MacSetPrivacyMode: Failed to blackout display (ID: %u, UUID: %s, error: %d)", (unsigned)d, uuid.c_str(), error);
                     } else {
                         blackoutSuccessCount++;
                     }
