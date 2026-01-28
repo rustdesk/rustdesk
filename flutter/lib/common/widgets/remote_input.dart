@@ -107,6 +107,8 @@ class _RawTouchGestureDetectorRegionState
   // For mouse mode, we need to block the events when the cursor is in a blocked area.
   // So we need to cache the last tap down position.
   Offset? _lastTapDownPositionForMouseMode;
+  // Cache global position for onTap (which lacks position info).
+  Offset? _lastTapDownGlobalPosition;
 
   FFI get ffi => widget.ffi;
   FfiModel get ffiModel => widget.ffiModel;
@@ -136,6 +138,7 @@ class _RawTouchGestureDetectorRegionState
 
   onTapDown(TapDownDetails d) async {
     lastDeviceKind = d.kind;
+    _lastTapDownGlobalPosition = d.globalPosition;
     if (isNotTouchBasedDevice()) {
       return;
     }
@@ -154,6 +157,10 @@ class _RawTouchGestureDetectorRegionState
     if (isNotTouchBasedDevice()) {
       return;
     }
+    // Filter duplicate touch tap events on iOS (Magic Mouse issue).
+    if (inputModel.shouldIgnoreTouchTap(d.globalPosition)) {
+      return;
+    }
     if (handleTouch) {
       final isMoved =
           await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
@@ -169,6 +176,11 @@ class _RawTouchGestureDetectorRegionState
 
   onTap() async {
     if (isNotTouchBasedDevice()) {
+      return;
+    }
+    // Filter duplicate touch tap events on iOS (Magic Mouse issue).
+    final lastPos = _lastTapDownGlobalPosition;
+    if (lastPos != null && inputModel.shouldIgnoreTouchTap(lastPos)) {
       return;
     }
     if (!handleTouch) {
