@@ -359,22 +359,11 @@ static std::string GetDisplayUUID(CGDirectDisplayID displayId) {
 
 // Helper function to get display name from DisplayID
 static std::string GetDisplayName(CGDirectDisplayID displayId) {
-    NSArray<NSScreen *> *screens = [NSScreen screens];
-    for (NSScreen *screen in screens) {
-        NSDictionary *deviceDescription = [screen deviceDescription];
-        NSNumber *screenNumber = [deviceDescription objectForKey:@"NSScreenNumber"];
-        CGDirectDisplayID screenDisplayID = [screenNumber unsignedIntValue];
-        if (screenDisplayID == displayId) {
-            // localizedName is available on macOS 10.15+
-            if (@available(macOS 10.15, *)) {
-                NSString *name = [screen localizedName];
-                if (name) {
-                    return std::string([name UTF8String]);
-                }
-            }
-            break;
-        }
-    }
+    // Note: NSScreen.localizedName is only available on macOS 10.15+
+    // Since we target 10.14, we avoid using @available checks that would
+    // require __isPlatformVersionAtLeast runtime function.
+    // For now, we just return "Unknown" for all displays.
+    // This is only used for logging purposes, so it doesn't affect functionality.
     return "Unknown";
 }
 
