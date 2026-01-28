@@ -1048,6 +1048,14 @@ class InputModel {
     if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
 
+    // May fix https://github.com/rustdesk/rustdesk/issues/13009
+    if (isIOS && e.synthesized && e.position == Offset.zero && e.buttons == 0) {
+      // iOS may emit a synthesized hover event at (0,0) when the mouse is disconnected.
+      // Ignore this event to prevent cursor jumping.
+      debugPrint('Ignored synthesized hover at (0,0) on iOS');
+      return;
+    }
+
     // Only update pointer region when relative mouse mode is enabled.
     // This avoids unnecessary tracking when not in relative mode.
     if (_relativeMouse.enabled.value) {
