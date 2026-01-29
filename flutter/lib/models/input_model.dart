@@ -826,6 +826,9 @@ class InputModel {
   Map<String, dynamic> _getMouseEvent(PointerEvent evt, String type) {
     final Map<String, dynamic> out = {};
 
+    bool hasStaleButtonsOnMouseUp =
+        type == _kMouseEventUp && evt.buttons == _lastButtons;
+
     // Check update event type and set buttons to be sent.
     int buttons = _lastButtons;
     if (type == _kMouseEventMove) {
@@ -850,7 +853,7 @@ class InputModel {
         buttons = evt.buttons;
       }
     }
-    _lastButtons = evt.buttons;
+    _lastButtons = hasStaleButtonsOnMouseUp ? 0 : evt.buttons;
 
     out['buttons'] = buttons;
     out['type'] = type;
@@ -1218,6 +1221,28 @@ class InputModel {
     _trackpadLastDelta = Offset.zero;
   }
 
+  // iOS Magic Mouse duplicate event detection.
+  // When using Magic Mouse on iPad, iOS may emit both mouse and touch events
+  // for the same click in certain areas (like top-left corner).
+  int _lastMouseDownTimeMs = 0;
+  ui.Offset _lastMouseDownPos = ui.Offset.zero;
+
+  /// Check if a touch tap event should be ignored because it's a duplicate
+  /// of a recent mouse event (iOS Magic Mouse issue).
+  bool shouldIgnoreTouchTap(ui.Offset pos) {
+    if (!isIOS) return false;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final dt = nowMs - _lastMouseDownTimeMs;
+    final distance = (_lastMouseDownPos - pos).distance;
+    // If touch tap is within 2000ms and 80px of the last mouse down,
+    // it's likely a duplicate event from the same Magic Mouse click.
+    if (dt >= 0 && dt < 2000 && distance < 80.0) {
+      debugPrint("shouldIgnoreTouchTap: IGNORED (dt=$dt, dist=$distance)");
+      return true;
+    }
+    return false;
+  }
+
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
@@ -1226,6 +1251,13 @@ class InputModel {
     _windowRect = null;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
+
+    // Track mouse down events for duplicate detection on iOS.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (e.kind == ui.PointerDeviceKind.mouse) {
+      _lastMouseDownTimeMs = nowMs;
+      _lastMouseDownPos = e.position;
+    }
 
     if (_relativeMouse.enabled.value) {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
