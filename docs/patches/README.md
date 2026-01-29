@@ -1,32 +1,24 @@
 # Patches for hbb_common
 
-This directory contains patches that should be applied to the `hbb_common` library submodule.
+This directory contains patches for reference. The changes described have already been applied to the `hbb_common` submodule in this PR.
 
 ## hbb_common-log-rotation.patch
+
+**Status**: ✅ Already applied in this PR (submodule commit 0c401fd)
 
 **Purpose**: Add size-based log rotation to prevent excessive disk usage
 
 **Apply to**: `libs/hbb_common` submodule  
 **Target repository**: https://github.com/rustdesk/hbb_common
 
-### How to apply
+### Reference Information
 
-#### Option 1: Apply in hbb_common repository
+This patch file is provided for:
+- Documentation of the exact changes made
+- Reference for maintainers
+- Potential cherry-picking to other branches if needed
 
-```bash
-cd /path/to/hbb_common
-git apply /path/to/rustdesk/docs/patches/hbb_common-log-rotation.patch
-git commit -m "Add size-based log rotation to prevent excessive disk usage"
-```
-
-#### Option 2: Apply in rustdesk repository submodule
-
-```bash
-cd libs/hbb_common
-git apply ../../docs/patches/hbb_common-log-rotation.patch
-git commit -m "Add size-based log rotation to prevent excessive disk usage"
-# Note: This creates a local commit in the submodule
-```
+The changes have already been implemented in the submodule updated by this PR.
 
 ### What it does
 

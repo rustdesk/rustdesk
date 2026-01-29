@@ -15,23 +15,7 @@ RustDesk uses `flexi_logger` for logging with automatic log rotation. Logs are w
 
 ### Current Rotation Policy
 
-The logging system (implemented in `libs/hbb_common/src/lib.rs`) currently uses:
-
-```rust
-.rotate(
-    Criterion::Age(Age::Day),    // Rotate daily
-    Naming::Timestamps,
-    Cleanup::KeepLogFiles(31),   // Keep last 31 days
-)
-```
-
-**Limitation**: Individual log files have no size limit. If a single day's activity generates excessive logs, the file could grow very large and consume significant disk space.
-
-## Recommended Enhancement
-
-### Size-Based Rotation
-
-To prevent individual log files from growing unbounded, add size-based rotation:
+The logging system (implemented in `libs/hbb_common/src/lib.rs`) uses size-based rotation:
 
 ```rust
 .rotate(
@@ -51,11 +35,11 @@ To prevent individual log files from growing unbounded, add size-based rotation:
 
 ### Implementation
 
-The change needs to be made in the `hbb_common` library:
+The implementation is in the `hbb_common` library:
 
 **File**: `libs/hbb_common/src/lib.rs`  
 **Function**: `init_log()`  
-**Line**: ~405
+**Line**: ~407
 
 ```diff
 - Criterion::Age(Age::Day),
