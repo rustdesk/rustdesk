@@ -1,0 +1,32 @@
+From: GitHub Copilot <github-copilot@github.com>
+Subject: [PATCH] Add size-based log rotation to prevent excessive disk usage
+
+This patch adds size-based rotation to the flexi_logger configuration
+to prevent individual log files from growing unbounded. Logs will now
+rotate when they reach 100MB OR daily (whichever comes first).
+
+With the existing 31-file cleanup policy, this limits total log storage
+to approximately 3.1GB, preventing excessive disk space consumption.
+
+---
+ src/lib.rs | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/lib.rs b/src/lib.rs
+index d9713b9..ba21e90 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -402,7 +402,9 @@ pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHand
+                     })
+                     .format(opt_format)
+                     .rotate(
+-                        Criterion::Age(Age::Day),
++                        // Rotate logs daily OR when they reach 100MB to prevent excessive disk usage
++                        // With 31 files max, this limits total log storage to ~3.1GB
++                        Criterion::AgeOrSize(Age::Day, 100_000_000),
+                         Naming::Timestamps,
+                         Cleanup::KeepLogFiles(31),
+                     )
+-- 
+2.43.0
+
