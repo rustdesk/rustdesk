@@ -692,6 +692,7 @@ async fn sync_and_watch_config_dir() {
 
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
+    let mut is_root_config_empty = false;
     let tries = if crate::is_server() { 30 } else { 3 };
     log::debug!("#tries of ipc service connection: {}", tries);
     use hbb_common::sleep;
@@ -717,6 +718,14 @@ async fn sync_and_watch_config_dir() {
                                             Config2::set(config2);
                                             log::info!("sync config2 from root");
                                         }
+                                    } else {
+                                        // only on macos, because this issue was only reproduced on macos
+                                        #[cfg(target_os = "macos")]
+                                        {
+                                            // root config is empty, mark for sync in watch loop
+                                            // to prevent root from generating a new config on login screen
+                                            is_root_config_empty = true;
+                                        }
                                     }
                                     synced = true;
                                 }
@@ -729,8 +738,14 @@ async fn sync_and_watch_config_dir() {
                 loop {
                     sleep(CONFIG_SYNC_INTERVAL_SECS).await;
                     let cfg = (Config::get(), Config2::get());
-                    if cfg != cfg0 {
-                        log::info!("config updated, sync to root");
+                    let should_sync =
+                        cfg != cfg0 || (is_root_config_empty && !cfg.0.is_empty());
+                    if should_sync {
+                        if is_root_config_empty {
+                            log::info!("root config is empty, sync our config to root");
+                        } else {
+                            log::info!("config updated, sync to root");
+                        }
                         match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
@@ -745,6 +760,7 @@ async fn sync_and_watch_config_dir() {
                             _ => {
                                 cfg0 = cfg;
                                 conn.next_timeout(1000).await.ok();
+                                is_root_config_empty = false;
                             }
                         }
                     }
