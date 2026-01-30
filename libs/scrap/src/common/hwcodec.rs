@@ -772,7 +772,7 @@ mod tests {
 
     #[test]
     fn test_h264_h265_bitrate_calculation() {
-        // Test with 1920x1080 resolution (base bitrate = 2073 kbps)
+        // Test with 1920x1080 resolution (base_bitrate() returns 2073 kbps for 1080p)
         let width = 1920;
         let height = 1080;
 
@@ -797,8 +797,8 @@ mod tests {
         let best_ratio = 1.5;
         let h265_best = HwRamEncoder::calc_bitrate(width, height, best_ratio, false);
         
-        // At best quality, should use significantly more bitrate
-        assert!(h265_best > h265_balanced * 1.5,
+        // At best quality, should use significantly more bitrate (>50% more)
+        assert!((h265_best as f64) > (h265_balanced as f64 * 1.5),
                 "Best quality should use >50% more bitrate than balanced");
 
         // Test with BR_SPEED (0.5) - low quality setting  
