@@ -41,6 +41,10 @@ class _TerminalPageState extends State<TerminalPage>
   final GlobalKey _keyboardKey = GlobalKey();
   double _keyboardHeight = 0;
   late bool _showTerminalExtraKeys;
+  
+  // For iOS edge swipe gesture
+  double _swipeStartX = 0;
+  double _swipeCurrentX = 0;
 
   // For web only.
   // 'monospace' does not work on web, use Google Fonts, `??` is only for null safety.
@@ -147,7 +151,7 @@ class _TerminalPageState extends State<TerminalPage>
   }
 
   Widget buildBody() {
-    return Scaffold(
+    final scaffold = Scaffold(
       resizeToAvoidBottomInset: false, // Disable automatic layout adjustment; manually control UI updates to prevent flickering when the keyboard shows/hides
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
@@ -195,6 +199,30 @@ class _TerminalPageState extends State<TerminalPage>
         ],
       ),
     );
+
+    // Add iOS edge swipe gesture to exit (similar to Android back button)
+    if (isIOS) {
+      return GestureDetector(
+        onHorizontalDragStart: (details) {
+          _swipeStartX = details.globalPosition.dx;
+        },
+        onHorizontalDragUpdate: (details) {
+          _swipeCurrentX = details.globalPosition.dx;
+        },
+        onHorizontalDragEnd: (details) {
+          // Check if swipe started from left edge and moved right
+          if (_swipeStartX < 50 && (_swipeCurrentX - _swipeStartX) > 100) {
+            // Trigger exit same as Android back button
+            clientClose(sessionId, _ffi);
+          }
+          _swipeStartX = 0;
+          _swipeCurrentX = 0;
+        },
+        child: scaffold,
+      );
+    }
+    
+    return scaffold;
   }
 
   Widget _buildFloatingKeyboard() {
