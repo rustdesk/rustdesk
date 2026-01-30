@@ -21,7 +21,7 @@ jobs:
           channel: 'stable'
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v1.3.1  # Обновлённая версия
+        uses: microsoft/setup-msbuild@v1.3.1
 
       # Проверка конфигурации серверов
       - name: Verify Config Settings
@@ -36,33 +36,60 @@ jobs:
           }
         shell: pwsh
 
-      # Сборка приложения
+      # Сборка БЕЗ hwcodec/vram (надёжный вариант)
       - name: Build RustDesk
         run: |
-          python ./build.py --portable --flutter --hwcodec --vram --skip-portable-pack
+          python ./build.py --portable --flutter --skip-portable-pack
+          
+          # Проверяем успешность сборки
+          if (-not (Test-Path "./flutter/build/windows/x64/runner/Release")) {
+            Write-Error "Build failed: Release directory not found"
+            Get-ChildItem -Path "./flutter/build/windows/x64/runner/" -Recurse -ErrorAction SilentlyContinue
+            exit 1
+          }
+          
           Move-Item -Path ./flutter/build/windows/x64/runner/Release -Destination ./rustdesk
         shell: pwsh
 
       # Создание одиночного .exe файла
       - name: Create single EXE
         run: |
-          # Удаляем строку с dpiAware из манифеста через PowerShell (надёжнее для Windows)
-          $content = Get-Content -Path res/manifest.xml -Raw
-          $content = $content -replace '\s*<dpiAware>.*?</dpiAware>', ''
-          Set-Content -Path res/manifest.xml -Value $content
+          # Корректное удаление dpiAware через PowerShell (безопасная замена sed)
+          $manifestPath = "res/manifest.xml"
+          if (Test-Path $manifestPath) {
+            $content = Get-Content -Path $manifestPath -Raw
+            # Удаляем всю секцию <application> с dpiAware
+            $content = $content -replace '(?ms)\s*<application\b[^>]*>.*?</application>', ''
+            Set-Content -Path $manifestPath -Value $content
+          }
 
+          # Генерация портативного пакета
           cd libs/portable
           pip install -r requirements.txt
           python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
           cd ../..
 
+          # Перемещаем результат
           New-Item -ItemType Directory -Path ./dist -Force
-          Move-Item -Path ./target/release/rustdesk-portable-packer.exe -Destination ./dist/rustdesk-custom.exe
+          
+          $packerPath = "./target/release/rustdesk-portable-packer.exe"
+          if (-not (Test-Path $packerPath)) {
+            $packerPath = "./rustdesk/rustdesk-portable-packer.exe"
+          }
+          
+          if (-not (Test-Path $packerPath)) {
+            Write-Error "rustdesk-portable-packer.exe not found in expected locations"
+            Get-ChildItem -Path "./target/release/" -Filter "*rustdesk*" -Recurse -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "./rustdesk/" -Filter "*rustdesk*" -Recurse -ErrorAction SilentlyContinue
+            exit 1
+          }
+          
+          Move-Item -Path $packerPath -Destination ./dist/rustdesk-custom.exe
         shell: pwsh
 
       # Загрузка результата сборки
       - name: Upload Single EXE
-        uses: actions/upload-artifact@v4  # Исправлено: актуальная версия v4
+        uses: actions/upload-artifact@v4
         with:
           name: rustdesk-single-exe
           path: ./dist/rustdesk-custom.exe
