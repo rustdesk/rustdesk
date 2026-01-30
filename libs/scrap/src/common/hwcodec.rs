@@ -264,16 +264,20 @@ impl HwRamEncoder {
                 5.0
             }
         } else if h264 {
+            // Increased base multiplier from 2.0 to 2.5 to improve image quality
+            // while maintaining H264's compression efficiency
+            if base > threshold {
+                1.0 + 1.5 / (1.0 + (base - threshold) * decay_rate)
+            } else {
+                2.5
+            }
+        } else {
+            // H265: Increased base multiplier from 1.5 to 2.0 to fix poor image quality
+            // H265 should be more efficient than H264, but needs sufficient bitrate
             if base > threshold {
                 1.0 + 1.0 / (1.0 + (base - threshold) * decay_rate)
             } else {
                 2.0
-            }
-        } else {
-            if base > threshold {
-                1.0 + 0.5 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                1.5
             }
         };
         (base * factor) as u32
