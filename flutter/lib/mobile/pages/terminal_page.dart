@@ -196,6 +196,8 @@ class _TerminalPageState extends State<TerminalPage>
             ),
           ),
           if (_showTerminalExtraKeys) _buildFloatingKeyboard(),
+          // iOS-style circular back button in top-right corner
+          if (isIOS) _buildBackButton(),
         ],
       ),
     );
@@ -244,6 +246,37 @@ class _TerminalPageState extends State<TerminalPage>
     }
     
     return scaffold;
+  }
+
+  Widget _buildBackButton() {
+    return Positioned(
+      top: 16, // iOS standard margin
+      right: 16, // iOS standard margin  
+      child: SafeArea(
+        child: Container(
+          width: 44, // iOS standard tap target size
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.5), // Half transparency
+            shape: BoxShape.circle,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: () {
+                clientClose(sessionId, _ffi);
+              },
+              child: Icon(
+                Icons.chevron_left, // iOS-style back arrow
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildFloatingKeyboard() {
