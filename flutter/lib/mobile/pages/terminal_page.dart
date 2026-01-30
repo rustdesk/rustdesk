@@ -45,6 +45,7 @@ class _TerminalPageState extends State<TerminalPage>
   // For iOS edge swipe gesture
   double _swipeStartX = 0;
   double _swipeCurrentX = 0;
+  PointerDeviceKind? _swipeDeviceKind;
 
   // For web only.
   // 'monospace' does not work on web, use Google Fonts, `??` is only for null safety.
@@ -218,23 +219,29 @@ class _TerminalPageState extends State<TerminalPage>
             onHorizontalDragStart: (details) {
               _swipeStartX = details.globalPosition.dx;
               _swipeCurrentX = details.globalPosition.dx; // Reset to start position
+              _swipeDeviceKind = details.kind; // Track device kind
             },
             onHorizontalDragUpdate: (details) {
               _swipeCurrentX = details.globalPosition.dx;
             },
             onHorizontalDragEnd: (details) {
-              // Check if swipe started from left edge and moved right
-              if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
-                // Trigger exit same as Android back button
-                clientClose(sessionId, _ffi);
+              // Only allow touch-based devices (not mouse/trackpad)
+              if (_swipeDeviceKind != null && kTouchBasedDeviceKinds.contains(_swipeDeviceKind)) {
+                // Check if swipe started from left edge and moved right
+                if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
+                  // Trigger exit same as Android back button
+                  clientClose(sessionId, _ffi);
+                }
               }
               _swipeStartX = 0;
               _swipeCurrentX = 0;
+              _swipeDeviceKind = null;
             },
             onHorizontalDragCancel: () {
               // Reset state if gesture is interrupted
               _swipeStartX = 0;
               _swipeCurrentX = 0;
+              _swipeDeviceKind = null;
             },
             child: scaffold,
           );
