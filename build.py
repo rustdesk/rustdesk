@@ -534,7 +534,7 @@ def main():
             return
         system2(f'cargo build {release_flag} --features ' + features)
         # system2(f'upx.exe target/{configuration_lower}/rustdesk.exe')
-        os.rename(f'target/{configuration_lower}/rustdesk.exe', 'target/{configuration_lower}/RustDesk.exe')
+        os.rename(f'target/{configuration_lower}/rustdesk.exe', f'target/{configuration_lower}/RustDesk.exe')
         pa = os.environ.get('P')
         if pa:
             # https://certera.com/kb/tutorial-guide-for-safenet-authentication-client-for-code-signing/
