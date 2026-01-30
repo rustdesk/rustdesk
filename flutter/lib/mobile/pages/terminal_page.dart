@@ -201,6 +201,7 @@ class _TerminalPageState extends State<TerminalPage>
     );
 
     // Add iOS edge swipe gesture to exit (similar to Android back button)
+    // Supports both touch and trackpad input (iPadOS with external trackpad/Magic Keyboard)
     if (isIOS) {
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -213,6 +214,7 @@ class _TerminalPageState extends State<TerminalPage>
           return GestureDetector(
             // Use translucent to allow terminal gestures to still work
             behavior: HitTestBehavior.translucent,
+            // GestureDetector supports all pointer devices by default (touch, mouse, trackpad)
             onHorizontalDragStart: (details) {
               _swipeStartX = details.globalPosition.dx;
               _swipeCurrentX = details.globalPosition.dx; // Reset to start position
@@ -222,6 +224,7 @@ class _TerminalPageState extends State<TerminalPage>
             },
             onHorizontalDragEnd: (details) {
               // Check if swipe started from left edge and moved right
+              // Works for both touch swipes and trackpad gestures
               if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
                 // Trigger exit same as Android back button
                 clientClose(sessionId, _ffi);
