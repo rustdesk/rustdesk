@@ -215,6 +215,7 @@ class _TerminalPageState extends State<TerminalPage>
             behavior: HitTestBehavior.translucent,
             onHorizontalDragStart: (details) {
               _swipeStartX = details.globalPosition.dx;
+              _swipeCurrentX = details.globalPosition.dx; // Reset to start position
             },
             onHorizontalDragUpdate: (details) {
               _swipeCurrentX = details.globalPosition.dx;
