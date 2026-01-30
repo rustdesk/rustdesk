@@ -202,23 +202,40 @@ class _TerminalPageState extends State<TerminalPage>
 
     // Add iOS edge swipe gesture to exit (similar to Android back button)
     if (isIOS) {
-      return GestureDetector(
-        onHorizontalDragStart: (details) {
-          _swipeStartX = details.globalPosition.dx;
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = constraints.maxWidth;
+          // Use percentage of screen width for edge detection (10% from left edge)
+          final edgeThreshold = screenWidth * 0.1;
+          // Require 25% of screen width movement to trigger exit
+          final swipeThreshold = screenWidth * 0.25;
+          
+          return GestureDetector(
+            // Use translucent to allow terminal gestures to still work
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragStart: (details) {
+              _swipeStartX = details.globalPosition.dx;
+            },
+            onHorizontalDragUpdate: (details) {
+              _swipeCurrentX = details.globalPosition.dx;
+            },
+            onHorizontalDragEnd: (details) {
+              // Check if swipe started from left edge and moved right
+              if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
+                // Trigger exit same as Android back button
+                clientClose(sessionId, _ffi);
+              }
+              _swipeStartX = 0;
+              _swipeCurrentX = 0;
+            },
+            onHorizontalDragCancel: () {
+              // Reset state if gesture is interrupted
+              _swipeStartX = 0;
+              _swipeCurrentX = 0;
+            },
+            child: scaffold,
+          );
         },
-        onHorizontalDragUpdate: (details) {
-          _swipeCurrentX = details.globalPosition.dx;
-        },
-        onHorizontalDragEnd: (details) {
-          // Check if swipe started from left edge and moved right
-          if (_swipeStartX < 50 && (_swipeCurrentX - _swipeStartX) > 100) {
-            // Trigger exit same as Android back button
-            clientClose(sessionId, _ffi);
-          }
-          _swipeStartX = 0;
-          _swipeCurrentX = 0;
-        },
-        child: scaffold,
       );
     }
     
