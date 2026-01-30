@@ -1,0 +1,54 @@
+name: Custom Windows EXE Build
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      # Убедитесь, что ваши настройки серверов сохранены
+      - name: Verify Config Settings
+        run: |
+          Get-Content libs/hbb_common/src/config.rs | Select-String "web-srv.smol-it.ru"
+          Get-Content libs/hbb_common/src/config.rs | Select-String "HFbRpr1f56XisOb5Ext6PNnWFpjyO3Ew6SLzfbJg88w="
+
+      # Сборка приложения
+      - name: Build RustDesk
+        run: |
+          python3 ./build.py --portable --flutter --hwcodec --vram --skip-portable-pack
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+
+      # Создание одиночного .exe файла (самораспаковывающийся установщик)
+      - name: Create single EXE
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml
+          cd libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          cd ../..
+          mkdir -p ./dist
+          mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
+
+      # Загрузка результата
+      - name: Upload Single EXE
+        uses: actions/upload-artifact@v3
+        with:
+          name: rustdesk-single-exe
+          path: ./dist/rustdesk-custom.exe
