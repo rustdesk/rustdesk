@@ -765,3 +765,53 @@ pub fn start_check_process() {
         std::thread::spawn(f);
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_h264_h265_bitrate_calculation() {
+        // Test with 1920x1080 resolution (base bitrate = 2073 kbps)
+        let width = 1920;
+        let height = 1080;
+
+        // Test with BR_BALANCED (0.67) - default quality setting
+        let balanced_ratio = 0.67;
+        let h264_balanced = HwRamEncoder::calc_bitrate(width, height, balanced_ratio, true);
+        let h265_balanced = HwRamEncoder::calc_bitrate(width, height, balanced_ratio, false);
+
+        // H265 should get ~2777 kbps with new multiplier (was ~2084 with old 1.5x)
+        assert!(h265_balanced >= 2700 && h265_balanced <= 2850, 
+                "H265 balanced bitrate should be ~2777 kbps, got {} kbps", h265_balanced);
+        
+        // H264 should get ~3472 kbps with new multiplier (was ~2778 with old 2.0x)
+        assert!(h264_balanced >= 3400 && h264_balanced <= 3550,
+                "H264 balanced bitrate should be ~3472 kbps, got {} kbps", h264_balanced);
+
+        // H264 should have higher bitrate than H265 at same quality
+        assert!(h264_balanced > h265_balanced,
+                "H264 should have higher bitrate than H265");
+
+        // Test with BR_BEST (1.5) - best quality setting
+        let best_ratio = 1.5;
+        let h265_best = HwRamEncoder::calc_bitrate(width, height, best_ratio, false);
+        
+        // At best quality, should use significantly more bitrate
+        assert!(h265_best > h265_balanced * 1.5,
+                "Best quality should use >50% more bitrate than balanced");
+
+        // Test with BR_SPEED (0.5) - low quality setting  
+        let speed_ratio = 0.5;
+        let h265_speed = HwRamEncoder::calc_bitrate(width, height, speed_ratio, false);
+        
+        // At speed quality, should use less bitrate
+        assert!(h265_speed < h265_balanced,
+                "Speed quality should use less bitrate than balanced");
+
+        // Verify bitrate scales proportionally with resolution
+        let hd_bitrate = HwRamEncoder::calc_bitrate(1280, 720, balanced_ratio, false);
+        assert!(hd_bitrate < h265_balanced,
+                "720p should use less bitrate than 1080p");
+    }
+}
