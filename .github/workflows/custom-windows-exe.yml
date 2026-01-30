@@ -21,34 +21,49 @@ jobs:
           channel: 'stable'
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v1.0.2
+        uses: microsoft/setup-msbuild@v1.3.1  # Обновлённая версия
 
-      # Убедитесь, что ваши настройки серверов сохранены
+      # Проверка конфигурации серверов
       - name: Verify Config Settings
         run: |
-          Get-Content libs/hbb_common/src/config.rs | Select-String "web-srv.smol-it.ru"
-          Get-Content libs/hbb_common/src/config.rs | Select-String "HFbRpr1f56XisOb5Ext6PNnWFpjyO3Ew6SLzfbJg88w="
+          if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "web-srv.smol-it.ru")) {
+            Write-Error "web-srv.smol-it.ru not found in config.rs"
+            exit 1
+          }
+          if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "HFbRpr1f56XisOb5Ext6PNnWFpjyO3Ew6SLzfbJg88w=")) {
+            Write-Error "API key not found in config.rs"
+            exit 1
+          }
+        shell: pwsh
 
       # Сборка приложения
       - name: Build RustDesk
         run: |
-          python3 ./build.py --portable --flutter --hwcodec --vram --skip-portable-pack
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          python ./build.py --portable --flutter --hwcodec --vram --skip-portable-pack
+          Move-Item -Path ./flutter/build/windows/x64/runner/Release -Destination ./rustdesk
+        shell: pwsh
 
-      # Создание одиночного .exe файла (самораспаковывающийся установщик)
+      # Создание одиночного .exe файла
       - name: Create single EXE
         run: |
-          sed -i '/dpiAware/d' res/manifest.xml
-          cd libs/portable
-          pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
-          cd ../..
-          mkdir -p ./dist
-          mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
+          # Удаляем строку с dpiAware из манифеста через PowerShell (надёжнее для Windows)
+          $content = Get-Content -Path res/manifest.xml -Raw
+          $content = $content -replace '\s*<dpiAware>.*?</dpiAware>', ''
+          Set-Content -Path res/manifest.xml -Value $content
 
-      # Загрузка результата
+          cd libs/portable
+          pip install -r requirements.txt
+          python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          cd ../..
+
+          New-Item -ItemType Directory -Path ./dist -Force
+          Move-Item -Path ./target/release/rustdesk-portable-packer.exe -Destination ./dist/rustdesk-custom.exe
+        shell: pwsh
+
+      # Загрузка результата сборки
       - name: Upload Single EXE
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # Исправлено: актуальная версия v4
         with:
           name: rustdesk-single-exe
           path: ./dist/rustdesk-custom.exe
+          retention-days: 30
