@@ -22,27 +22,27 @@ class PeerTabModel with ChangeNotifier {
   WeakReference<FFI> parent;
   int get currentTab => _currentTab;
   int _currentTab = 0; // index in tabNames
-  static const int maxTabCount = 5;
+  static const int maxTabCount = 3; //   5改成3     e68
   static const List<String> tabNames = [
     'Recent sessions',
     'Favorites',
     'Discovered',
-    'Address book',
-    'Accessible devices',
+    // 'Address book',    //   删除地址簿    e68
+    // 'Accessible devices',   //  删除可访问的设备     e68
   ];
   static const List<IconData> icons = [
     Icons.access_time_filled,
     Icons.star,
     Icons.explore,
-    IconFont.addressBook,
-    IconFont.deviceGroupFill,
+    // IconFont.addressBook,  //   删除地址簿    e68
+    // IconFont.deviceGroupFill, //  删除可访问的设备     e68
   ];
   List<bool> isEnabled = List.from([
     true,
     true,
     !isWeb && bind.mainGetLocalOption(key: "disable-discovery-panel") != "Y",
-    !(bind.isDisableAb() || bind.isDisableAccount()),
-    !(bind.isDisableGroupPanel() || bind.isDisableAccount()),
+    // !(bind.isDisableAb() || bind.isDisableAccount()),  //   删除地址簿    e68
+    // !(bind.isDisableGroupPanel() || bind.isDisableAccount()), //  删除可访问的设备     e68
   ]);
   final List<bool> _isVisible = List.filled(maxTabCount, true, growable: false);
   List<bool> get isVisibleEnabled => () {
