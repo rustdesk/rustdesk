@@ -174,8 +174,8 @@ flutter:
         - asset: assets/more.ttf
     - family: SourceHanSansSC
       fonts:
-      - asset: assets/fonts/SourceHanSansSC-Regular.otf
-      - asset: assets/fonts/SourceHanSansSC-Bold.otf
+      - asset: assets/SourceHanSansSC-Regular.otf
+      - asset: assets/SourceHanSansSC-Bold.otf
         weight: 700
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
