@@ -1124,44 +1124,57 @@ class CustomAlertDialog extends StatelessWidget {
 
 Widget createDialogContent(String text) {
   final RegExp linkRegExp = RegExp(r'(https?://[^\s]+)');
-  final List<TextSpan> spans = [];
-  int start = 0;
-  bool hasLink = false;
-
-  linkRegExp.allMatches(text).forEach((match) {
-    hasLink = true;
-    if (match.start > start) {
-      spans.add(TextSpan(text: text.substring(start, match.start)));
-    }
-    spans.add(TextSpan(
-      text: match.group(0) ?? '',
-      style: TextStyle(
-        color: Colors.blue,
-        decoration: TextDecoration.underline,
-      ),
-      recognizer: TapGestureRecognizer()
-        ..onTap = () {
-          String linkText = match.group(0) ?? '';
-          linkText = linkText.replaceAll(RegExp(r'[.,;!?]+$'), '');
-          launchUrl(Uri.parse(linkText));
-        },
-    ));
-    start = match.end;
-  });
-
-  if (start < text.length) {
-    spans.add(TextSpan(text: text.substring(start)));
-  }
+  bool hasLink = linkRegExp.hasMatch(text);
 
   if (!hasLink) {
     return SelectableText(text, style: const TextStyle(fontSize: 15));
   }
 
-  return SelectableText.rich(
-    TextSpan(
-      style: TextStyle(color: Colors.black, fontSize: 15),
-      children: spans,
-    ),
+  return Builder(
+    builder: (context) {
+      final List<TextSpan> spans = [];
+      int start = 0;
+      
+      // Get theme-aware colors
+      final textColor = Theme.of(context).textTheme.bodyMedium?.color;
+      final linkColor = Theme.of(context).brightness == Brightness.dark
+          ? Colors.lightBlue
+          : Colors.blue;
+
+      linkRegExp.allMatches(text).forEach((match) {
+        if (match.start > start) {
+          spans.add(TextSpan(text: text.substring(start, match.start)));
+        }
+        spans.add(TextSpan(
+          text: match.group(0) ?? '',
+          style: TextStyle(
+            color: linkColor,
+            decoration: TextDecoration.underline,
+          ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () {
+              String linkText = match.group(0) ?? '';
+              linkText = linkText.replaceAll(RegExp(r'[.,;!?]+$'), '');
+              launchUrl(Uri.parse(linkText));
+            },
+        ));
+        start = match.end;
+      });
+
+      if (start < text.length) {
+        spans.add(TextSpan(text: text.substring(start)));
+      }
+
+      return SelectableText.rich(
+        TextSpan(
+          style: TextStyle(
+            color: textColor,
+            fontSize: 15,
+          ),
+          children: spans,
+        ),
+      );
+    },
   );
 }
 
