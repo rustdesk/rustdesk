@@ -355,7 +355,7 @@ def build_flutter_deb(version, features):
         system2(f'cargo build --features {features} --lib {release_flag}')
         ffi_bindgen_function_refactor()
     os.chdir('flutter')
-    system2(f'flutter build linux {release_flag}')
+    system2(f'flutter build linux {debug_flag}')
     system2('mkdir -p tmpdeb/usr/bin/')
     system2('mkdir -p tmpdeb/usr/share/rustdesk')
     system2('mkdir -p tmpdeb/etc/rustdesk/')
