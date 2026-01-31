@@ -9652,16 +9652,18 @@ dependencies = [
 
 [[package]]
 name = "webm"
-version = "1.1.0"
-source = "git+https://github.com/rustdesk-org/rust-webm#d2c4d3ac133c7b0e4c0f656da710b48391981e64"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10bc0bbde92953f4853a977388180c1fe19c018cdb54dea1152e8d7fdbb10c52"
 dependencies = [
  "webm-sys",
 ]
 
 [[package]]
 name = "webm-sys"
-version = "1.0.4"
-source = "git+https://github.com/rustdesk-org/rust-webm#d2c4d3ac133c7b0e4c0f656da710b48391981e64"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2638f978256596fe3eef55c8587549d01744682eea7ef1c68e0fd966b93fab3"
 dependencies = [
  "cc",
 ]
