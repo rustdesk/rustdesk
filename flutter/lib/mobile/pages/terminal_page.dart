@@ -46,7 +46,6 @@ class _TerminalPageState extends State<TerminalPage>
   // For iOS edge swipe gesture
   double _swipeStartX = 0;
   double _swipeCurrentX = 0;
-  PointerDeviceKind? _swipeDeviceKind;
 
   // For web only.
   // 'monospace' does not work on web, use Google Fonts, `??` is only for null safety.
@@ -198,8 +197,8 @@ class _TerminalPageState extends State<TerminalPage>
             ),
           ),
           if (_showTerminalExtraKeys) _buildFloatingKeyboard(),
-          // iOS-style circular back button in top-right corner
-          if (isIOS) _buildBackButton(),
+          // iOS-style circular close button in top-right corner
+          if (isIOS) _buildCloseButton(),
         ],
       ),
     );
@@ -209,73 +208,91 @@ class _TerminalPageState extends State<TerminalPage>
       return LayoutBuilder(
         builder: (context, constraints) {
           final screenWidth = constraints.maxWidth;
-          // Use percentage of screen width for edge detection (10% from left edge)
-          final edgeThreshold = screenWidth * 0.1;
-          // Require 25% of screen width movement to trigger exit
-          final swipeThreshold = screenWidth * 0.25;
-          
-          return GestureDetector(
-            // Use translucent to allow terminal gestures to still work
+          // Base thresholds on screen width but clamp to reasonable logical pixel ranges
+          // Edge detection region: ~10% of width, clamped between 20 and 80 logical pixels
+          final edgeThreshold = (screenWidth * 0.1).clamp(20.0, 80.0);
+          // Required horizontal movement: ~25% of width, clamped between 80 and 300 logical pixels
+          final swipeThreshold = (screenWidth * 0.25).clamp(80.0, 300.0);
+
+          return RawGestureDetector(
             behavior: HitTestBehavior.translucent,
-            onHorizontalDragStart: (details) {
-              _swipeStartX = details.globalPosition.dx;
-              _swipeCurrentX = details.globalPosition.dx; // Reset to start position
-              _swipeDeviceKind = details.kind; // Track device kind
-            },
-            onHorizontalDragUpdate: (details) {
-              _swipeCurrentX = details.globalPosition.dx;
-            },
-            onHorizontalDragEnd: (details) {
-              // Only allow touch-based devices (not mouse/trackpad)
-              if (_swipeDeviceKind != null && kTouchBasedDeviceKinds.contains(_swipeDeviceKind)) {
-                // Check if swipe started from left edge and moved right
-                if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
-                  // Trigger exit same as Android back button
-                  clientClose(sessionId, _ffi);
-                }
-              }
-              _swipeStartX = 0;
-              _swipeCurrentX = 0;
-              _swipeDeviceKind = null;
-            },
-            onHorizontalDragCancel: () {
-              // Reset state if gesture is interrupted
-              _swipeStartX = 0;
-              _swipeCurrentX = 0;
-              _swipeDeviceKind = null;
+            gestures: <Type, GestureRecognizerFactory>{
+              HorizontalDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<HorizontalDragGestureRecognizer>(
+                () => HorizontalDragGestureRecognizer(
+                  debugOwner: this,
+                  // Only respond to touch input, exclude mouse/trackpad
+                  supportedDevices: kTouchBasedDeviceKinds,
+                ),
+                (HorizontalDragGestureRecognizer instance) {
+                  instance
+                    // Capture initial touch-down position (before touch slop)
+                    ..onDown = (details) {
+                      _swipeStartX = details.localPosition.dx;
+                      _swipeCurrentX = details.localPosition.dx;
+                    }
+                    ..onUpdate = (details) {
+                      _swipeCurrentX = details.localPosition.dx;
+                    }
+                    ..onEnd = (details) {
+                      // Check if swipe started from left edge and moved right
+                      if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
+                        clientClose(sessionId, _ffi);
+                      }
+                      _swipeStartX = 0;
+                      _swipeCurrentX = 0;
+                    }
+                    ..onCancel = () {
+                      _swipeStartX = 0;
+                      _swipeCurrentX = 0;
+                    };
+                },
+              ),
             },
             child: scaffold,
           );
         },
       );
     }
-    
+
     return scaffold;
   }
 
-  Widget _buildBackButton() {
+  Widget _buildCloseButton() {
     return Positioned(
-      top: 16, // iOS standard margin
-      right: 16, // iOS standard margin  
+      top: 0,
+      right: 0,
       child: SafeArea(
-        child: Container(
-          width: 44, // iOS standard tap target size
-          height: 44,
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.5), // Half transparency
-            shape: BoxShape.circle,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(22),
-              onTap: () {
-                clientClose(sessionId, _ffi);
-              },
-              child: Icon(
-                Icons.chevron_left, // iOS-style back arrow
-                color: Colors.white,
-                size: 28,
+        minimum: const EdgeInsets.only(
+          top: 16, // iOS standard margin
+          right: 16, // iOS standard margin
+        ),
+        child: Semantics(
+          button: true,
+          label: translate('Close'),
+          child: Container(
+            width: 44, // iOS standard tap target size
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.5), // Half transparency
+              shape: BoxShape.circle,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () {
+                  clientClose(sessionId, _ffi);
+                },
+                child: Tooltip(
+                  message: translate('Close'),
+                  child: const Icon(
+                    Icons.chevron_left, // iOS-style back arrow
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
               ),
             ),
           ),
