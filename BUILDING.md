@@ -76,9 +76,12 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
         - `libtool` (`libtool-bin`)
         They are often already installed, but if not, install with your distribution's package manager (e.g. `apt install pkg-config autoconf make cmake g++-13 ...`).
 
-        > [Linux] NB: On alternatives-based systems, if Clang is installed before GCC, then `/usr/bin/c++` might run Clang instead of GCC. If this happens, you will likely encounter build errors. One way to fix this might be to remove the Clang and GCC packages and then reinstall them starting with GCC `g++` (`g++-13`).
-
-        > [Linux] NB: On the newest systems, as of this writing, `g++` installs version 15. This is not compatible with all of the Rust crates needed by RustDesk and will cause build errors. When an earlier version is installed, however, the `/usr/bin/c++` link might not be configured to run it. You may need to explicitly configure your system's alternatives mechanism, with a command such as `update-alternatives --install /usr/bin/c++ c++ ``which g++-13`` 13`, or manually create a symbolic link from `/usr/bin/c++` to the correct path for a compatible `g++` version.
+        > [Linux] NB: If Clang is installed before GCC, then `/usr/bin/c++` might run Clang instead of GCC. If your distribution provides GCC 15 or newer for `c++`, then `g++` will not be compatible with all of the C++ code used in RustDesk's build and will cause build errors. The GCC version that the sensitive dependencies target is GCC 13. If `/usr/bin/c++` is provided by a newer version of GCC or by Clang, you may need to explicitly override the compiler. This can be done with environment variables:
+        >
+        > ```
+        > export CC=`which gcc-13`
+        > export CXX=`which g++-13`
+        > ```
 
         > [Linux] NB: The previous point notwithstanding, the latest version of the development package for `libstdc++` (e.g. `apt install libstdc++-15-dev`) may still need to be installed in order for the Rust build output to link properly.
     - [Linux / OS X] UI toolkit: Flutter on Linux and OS X requires Gtk 3.
