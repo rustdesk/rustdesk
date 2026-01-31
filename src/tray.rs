@@ -57,10 +57,18 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .context("Failed to open icon")?;
 
-    #[cfg(target_os = "macos")]
-    let mut event_loop = EventLoopBuilder::new().build();
-    #[cfg(not(target_os = "macos"))]
-    let event_loop = EventLoopBuilder::new().build();
+    let event_loop = {
+        #[allow(unused_mut)]
+        let mut event_loop = EventLoopBuilder::new().build();
+
+        #[cfg(target_os = "macos")]
+        {
+            use tao::platform::macos::EventLoopExtMacOS;
+            event_loop.set_activation_policy(tao::platform::macos::ActivationPolicy::Accessory);
+        }
+
+        event_loop
+    };
 
     let tray_menu = Menu::new();
     let quit_i = MenuItem::new(translate("Stop service".to_owned()), true, None);
@@ -121,11 +129,6 @@ fn make_tray() -> hbb_common::ResultType<()> {
     });
     #[cfg(windows)]
     let mut last_click = std::time::Instant::now();
-    #[cfg(target_os = "macos")]
-    {
-        use tao::platform::macos::EventLoopExtMacOS;
-        event_loop.set_activation_policy(tao::platform::macos::ActivationPolicy::Accessory);
-    }
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(
             std::time::Instant::now() + std::time::Duration::from_millis(100),
