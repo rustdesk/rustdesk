@@ -42,7 +42,6 @@ class _TerminalPageState extends State<TerminalPage>
   final GlobalKey _keyboardKey = GlobalKey();
   double _keyboardHeight = 0;
   late bool _showTerminalExtraKeys;
-  
   // For iOS edge swipe gesture
   double _swipeStartX = 0;
   double _swipeCurrentX = 0;
