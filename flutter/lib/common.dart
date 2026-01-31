@@ -1135,11 +1135,8 @@ Widget createDialogContent(String text) {
       final List<TextSpan> spans = [];
       int start = 0;
       
-      // Get theme-aware colors
+      // Get theme-aware color for non-link text
       final textColor = Theme.of(context).textTheme.bodyMedium?.color;
-      final linkColor = Theme.of(context).brightness == Brightness.dark
-          ? Colors.lightBlue
-          : Colors.blue;
 
       linkRegExp.allMatches(text).forEach((match) {
         if (match.start > start) {
@@ -1148,7 +1145,7 @@ Widget createDialogContent(String text) {
         spans.add(TextSpan(
           text: match.group(0) ?? '',
           style: TextStyle(
-            color: linkColor,
+            color: Colors.blue,
             decoration: TextDecoration.underline,
           ),
           recognizer: TapGestureRecognizer()
