@@ -85,8 +85,8 @@ mod pa_impl {
             return data;
         }
 
-        let mut buf = vec![];
-        buf = unsafe { hbb_common::mem::aligned_u8_vec(data.len(), 4) };
+        let mut buf =
+            unsafe { hbb_common::mem::aligned_u8_vec(data.len(), 4) };
         buf.extend_from_slice(data.as_ref());
         buf
     }
