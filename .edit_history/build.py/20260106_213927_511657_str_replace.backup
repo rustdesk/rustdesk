@@ -1,3 +1,4 @@
+# BACKUP METADATA: {'timestamp': '20260106_213927_511657', 'operation': 'str_replace', 'file': '/users/kimera/projects/test/rustdesk/build.py', 'checksum': 'c947a6f191c09c5217e2245fef996edd17ece7683cf78c35351f87c4b00b9b08'}
 #!/usr/bin/env python3
 
 import os
@@ -9,10 +10,7 @@ import shutil
 import hashlib
 import argparse
 import sys
-import subprocess
-import shlex
 from pathlib import Path
-from typing import List, Union
 
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
@@ -41,95 +39,10 @@ def get_deb_extra_depends() -> str:
         return ", libatomic1"
     return ""
 
-def safe_mkdir(path: str, parents: bool = True) -> None:
-    """
-    Safely create directory without shell execution.
-    
-    Args:
-        path: Directory path to create
-        parents: Create parent directories if needed
-    """
-    try:
-        Path(path).mkdir(parents=parents, exist_ok=True)
-    except Exception as e:
-        sys.stderr.write(f"Error creating directory {path}: {e}\n")
-        sys.exit(-1)
-
-
-def safe_copy(src: str, dst: str, recursive: bool = False) -> None:
-    """
-    Safely copy files or directories without shell execution.
-    
-    Args:
-        src: Source path
-        dst: Destination path
-        recursive: If True, copy directories recursively
-    """
-    try:
-        src_path = Path(src)
-        dst_path = Path(dst)
-        
-        if not src_path.exists():
-            raise FileNotFoundError(f"Source does not exist: {src}")
-        
-        if src_path.is_dir():
-            if recursive:
-                shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
-            else:
-                raise ValueError(f"Use recursive=True to copy directories: {src}")
-        else:
-            # Ensure destination directory exists
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_path, dst_path)
-            
-    except Exception as e:
-        sys.stderr.write(f"Error copying {src} to {dst}: {e}\n")
-        sys.exit(-1)
-
-
-def system2(cmd: Union[str, List[str]]) -> None:
-    """
-    Execute command safely without shell interpretation.
-    
-    SECURITY: This function replaces os.system() to prevent command injection.
-    Commands are executed using subprocess with shell=False.
-    
-    Args:
-        cmd: Command string or list of arguments
-        
-    Raises:
-        SystemExit: If command fails
-    """
-    try:
-        # Parse command string into argument list if needed
-        if isinstance(cmd, str):
-            args = shlex.split(cmd)
-        else:
-            args = cmd
-        
-        # Execute without shell to prevent injection
-        result = subprocess.run(
-            args,
-            check=True,
-            capture_output=True,
-            text=True,
-            shell=False  # CRITICAL: Prevents shell injection
-        )
-        
-        # Print output if any
-        if result.stdout:
-            print(result.stdout, end='')
-            
-    except subprocess.CalledProcessError as e:
-        sys.stderr.write(f"Error occurred when executing: `{' '.join(args)}`\n")
-        if e.stderr:
-            sys.stderr.write(f"Error output: {e.stderr}\n")
-        sys.exit(-1)
-    except FileNotFoundError as e:
-        sys.stderr.write(f"Command not found: {args[0]}\n")
-        sys.exit(-1)
-    except Exception as e:
-        sys.stderr.write(f"Unexpected error: {e}\n")
+def system2(cmd):
+    exit_code = os.system(cmd)
+    if exit_code != 0:
+        sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
 
 
@@ -703,18 +616,13 @@ def main():
                     'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
                 system2(
                     'cp res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
-                
-                # SECURITY FIX: Replace os.system() with safe functions
-                safe_mkdir('tmpdeb/etc/rustdesk/')
-                safe_copy('res/startwm.sh', 'tmpdeb/etc/rustdesk/startwm.sh')
-                safe_mkdir('tmpdeb/etc/X11/rustdesk/')
-                safe_copy('res/xorg.conf', 'tmpdeb/etc/X11/rustdesk/xorg.conf')
-                
-                # Copy DEBIAN directory recursively
-                safe_copy('DEBIAN', 'tmpdeb/DEBIAN', recursive=True)
-                
-                safe_mkdir('tmpdeb/etc/pam.d/')
-                safe_copy('pam.d/rustdesk.debian', 'tmpdeb/etc/pam.d/rustdesk')
+                os.system('mkdir -p tmpdeb/etc/rustdesk/')
+                os.system('cp -a res/startwm.sh tmpdeb/etc/rustdesk/')
+                os.system('mkdir -p tmpdeb/etc/X11/rustdesk/')
+                os.system('cp res/xorg.conf tmpdeb/etc/X11/rustdesk/')
+                os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
+                os.system('mkdir -p tmpdeb/etc/pam.d/')
+                os.system('cp pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
                 system2('strip tmpdeb/usr/bin/rustdesk')
                 system2('mkdir -p tmpdeb/usr/share/rustdesk')
                 system2('mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/share/rustdesk/')
