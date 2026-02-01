@@ -1,0 +1,172 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Source Files\capture">
+      <UniqueIdentifier>{bd78eb0e-0894-4f11-a2f5-2cc02731bc52}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\codec">
+      <UniqueIdentifier>{dd2d68d6-6559-413b-948b-f718b34cde0a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external">
+      <UniqueIdentifier>{fd52358a-9b99-43b4-b717-f3a77580a52b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\nvEncDXGIOutputDuplicationSample">
+      <UniqueIdentifier>{bdbd71f9-8ed4-4bdd-a8c3-612f5858504d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\render">
+      <UniqueIdentifier>{2089080f-479d-4d89-8cf5-7ac8e52b11d1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\common">
+      <UniqueIdentifier>{3514d21d-4a74-44b9-b21b-bea909cda0b2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\vpl">
+      <UniqueIdentifier>{ad9c7b01-cd0a-40a2-afe6-f81133ac0e15}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\vpl\libvpl">
+      <UniqueIdentifier>{ad00df31-d9af-432b-b452-b3ab9c2b381c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\vpl\libvpl\src">
+      <UniqueIdentifier>{b5498eaa-1ff8-4c2b-b5c3-7c71a0a2efcc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\vpl\libvpl\src\windows">
+      <UniqueIdentifier>{bbca452b-a73f-4d37-a393-627c0db2617c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\vpl\libvpl\src\mfx_config_interface">
+      <UniqueIdentifier>{cb497035-08af-4b38-9abd-e4616861d366}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\vpl\sample_common">
+      <UniqueIdentifier>{85b55a79-fab7-428c-bc6c-fdf0a58b4704}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\vpl\sample_common\vm">
+      <UniqueIdentifier>{a3824aee-0800-467f-964b-61a76000e160}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\capture\src\dxgi.cpp">
+      <Filter>Source Files\capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\render\src\dxgi_sdl.cpp">
+      <Filter>Source Files\render</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\native\common\log.cpp">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\native\common\platform\win\win.cpp">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\native\gpucodec\data.c">
+      <Filter>Source Files\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\native\gpucodec\gpucodec_utils.c">
+      <Filter>Source Files\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_critical_section.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_dispatcher.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_dispatcher_log.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_dispatcher_main.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_driver_store_loader.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_dxva2_device.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_function_table.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_library_iterator.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_load_dll.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\windows\mfx_win_reg_key.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\mfx_config_interface\mfx_config_interface.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\mfx_config_interface</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\mfx_config_interface\mfx_config_interface_string_api.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src\mfx_config_interface</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\mfx_dispatcher_vpl.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\mfx_dispatcher_vpl_config.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\mfx_dispatcher_vpl_loader.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\mfx_dispatcher_vpl_log.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\mfx_dispatcher_vpl_lowlatency.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\libvpl\src\mfx_dispatcher_vpl_msdk.cpp">
+      <Filter>Source Files\external\vpl\libvpl\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\avc_bitstream.cpp">
+      <Filter>Source Files\external\vpl\sample_common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\avc_nal_spl.cpp">
+      <Filter>Source Files\external\vpl\sample_common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\avc_spl.cpp">
+      <Filter>Source Files\external\vpl\sample_common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\base_allocator.cpp">
+      <Filter>Source Files\external\vpl\sample_common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\sample_utils.cpp">
+      <Filter>Source Files\external\vpl\sample_common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\vm\atomic.cpp">
+      <Filter>Source Files\external\vpl\sample_common\vm</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\vm\shared_object.cpp">
+      <Filter>Source Files\external\vpl\sample_common\vm</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\vm\thread_windows.cpp">
+      <Filter>Source Files\external\vpl\sample_common\vm</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\vm\time.cpp">
+      <Filter>Source Files\external\vpl\sample_common\vm</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\nvEncDXGIOutputDuplicationSample\DDAImpl.cpp">
+      <Filter>Source Files\external\nvEncDXGIOutputDuplicationSample</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\native\vpl\vpl_decode.cpp">
+      <Filter>Source Files\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\native\vpl\vpl_encode.cpp">
+      <Filter>Source Files\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\externals\libvpl_v2023.4.0\tools\legacy\sample_common\src\d3d11_allocator.cpp">
+      <Filter>Source Files\external\vpl\sample_common</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

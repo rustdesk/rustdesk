@@ -1,0 +1,83 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="source">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="source\externals">
+      <UniqueIdentifier>{a09eabb2-ceac-4062-b19e-244b29176c2b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="source\externals\AMF_v1.4.29">
+      <UniqueIdentifier>{8adb5a7a-3fba-4330-9a43-dc4251f2ff2f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="source\externals\nvEncDXGIOutputDuplicationSample">
+      <UniqueIdentifier>{2bc8fd1a-5082-40fb-a6b5-ac8c3b84d450}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="source\render">
+      <UniqueIdentifier>{6edc9023-4c96-4474-b544-20059b2e32ac}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="source\codec">
+      <UniqueIdentifier>{ccee2176-d5f2-46b3-b138-538ac9bd7d13}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="source\common">
+      <UniqueIdentifier>{8a1b8e43-9bdb-4e28-98d9-854c8e8bf107}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="source\capture">
+      <UniqueIdentifier>{a65898d7-8992-40d0-9141-7b4f10415e1f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\externals\AMF_v1.4.29\amf\public\common\AMFFactory.cpp">
+      <Filter>source\externals\AMF_v1.4.29</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\externals\AMF_v1.4.29\amf\public\common\AMFSTL.cpp">
+      <Filter>source\externals\AMF_v1.4.29</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\externals\AMF_v1.4.29\amf\public\common\Thread.cpp">
+      <Filter>source\externals\AMF_v1.4.29</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\externals\AMF_v1.4.29\amf\public\common\Windows\ThreadWindows.cpp">
+      <Filter>source\externals\AMF_v1.4.29</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\externals\AMF_v1.4.29\amf\public\common\TraceAdapter.cpp">
+      <Filter>source\externals\AMF_v1.4.29</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\externals\nvEncDXGIOutputDuplicationSample\DDAImpl.cpp">
+      <Filter>source\externals\nvEncDXGIOutputDuplicationSample</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\externals\nvEncDXGIOutputDuplicationSample\Preproc.cpp">
+      <Filter>source\externals\nvEncDXGIOutputDuplicationSample</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\src\platform\win\win.cpp">
+      <Filter>source\common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\capture\src\dxgi.cpp">
+      <Filter>source\capture</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\render\src\dxgi_sdl.cpp">
+      <Filter>source\render</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\codec\src\data.c">
+      <Filter>source\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\codec\src\utils.c">
+      <Filter>source\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\amf\src\common.cpp">
+      <Filter>source\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\amf\src\decode.cpp">
+      <Filter>source\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\amf\src\encode.cpp">
+      <Filter>source\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\src\log.cpp">
+      <Filter>source\common</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
