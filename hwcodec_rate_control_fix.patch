@@ -1,0 +1,69 @@
+From: GitHub Copilot <copilot@github.com>
+Date: Sat, 1 Feb 2026 13:47:00 +0000
+Subject: [PATCH] Add rate control buffer settings to improve quality at low FPS
+
+This patch adds proper rate control buffer parameters to the FFmpeg hardware
+encoder configuration to maintain consistent image quality at lower frame rates.
+
+Problem:
+--------
+At the same bitrate, hardware encoding currently uses less bandwidth than
+software encoding because the hardware encoder does not set min/max rate control
+or buffer size parameters. This results in poor image quality with hardware
+encoding at lower FPS (e.g., 10 FPS), while quality is acceptable at higher FPS.
+
+Solution:
+---------
+Following Sunshine's approach (https://github.com/LizardByte/Sunshine), this patch:
+1. Sets rc_max_rate = bitrate to cap the maximum rate
+2. Sets rc_min_rate = bitrate (for CBR mode) to maintain consistent quality
+3. Sets rc_buffer_size = bitrate / fps (one frame worth of buffer) to prevent
+   quality degradation at low FPS
+
+These settings constrain the encoder to maintain consistent quality across all
+FPS settings, preventing the encoder from sacrificing quality to save bandwidth
+at lower frame rates.
+
+Testing:
+--------
+With these changes, hardware encoding at 10 FPS with 2 Mbps bitrate should
+maintain image quality similar to Sunshine at the same settings.
+
+---
+ cpp/common/util.cpp | 19 ++++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/cpp/common/util.cpp b/cpp/common/util.cpp
+index 1234567..89abcde 100644
+--- a/cpp/common/util.cpp
++++ b/cpp/common/util.cpp
+@@ -34,10 +34,23 @@ void set_av_codec_ctx(AVCodecContext *c, const std::string &name, int kbs,
+   /* put sample parameters */
+   // https://github.com/FFmpeg/FFmpeg/blob/415f012359364a77e8394436f222b74a8641a3ee/libavcodec/encode.c#L581
+   if (kbs > 0) {
+-    c->bit_rate = kbs * 1000;
++    int64_t bitrate = kbs * 1000;
++    c->bit_rate = bitrate;
++    
++    // Set rate control parameters to maintain quality at lower FPS
++    // Similar to Sunshine's approach: https://github.com/LizardByte/Sunshine/blob/master/src/video.cpp
++    c->rc_max_rate = bitrate;
++    
+     if (name.find("qsv") != std::string::npos) {
+-      c->rc_max_rate = c->bit_rate;
+-      c->bit_rate--; // cbr with vbr
++      // QSV uses VBR mode with same max rate for better quality
++      c->bit_rate--; // cbr with vbr
++    } else {
++      // For other encoders, set min rate to match max rate for CBR
++      c->rc_min_rate = bitrate;
++    }
++    
++    // Set buffer size to one frame worth of data to prevent quality degradation at low FPS
++    if (fps > 0) {
++      c->rc_buffer_size = bitrate / fps;
+     }
+   }
+   /* frames per second */
+-- 
+2.34.1

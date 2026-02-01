@@ -54,4 +54,5 @@ examples/**/target/
 vcpkg_installed
 flutter/lib/generated_plugin_registrant.dart
 libsciter.dylib
-flutter/web/
+flutter/web/libs/hwcodec_patched/.git
+libs/hwcodec_local
