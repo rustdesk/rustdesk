@@ -3462,6 +3462,12 @@ impl Connection {
     }
 
     fn refresh_video_display(&self, display: Option<usize>) {
+        log::debug!(
+            "refresh_video_display: conn_id={}, display={:?}, source={:?}",
+            self.inner.id,
+            display,
+            self.video_source()
+        );
         video_service::refresh();
         self.server.upgrade().map(|s| {
             s.read().unwrap().set_video_service_opt(
