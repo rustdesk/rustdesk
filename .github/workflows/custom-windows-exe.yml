@@ -6,7 +6,7 @@ env:
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
   VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
-  RUST_VERSION: "1.82"  # Обязательно 1.82+ для совместимости с yoke v0.8.1
+  RUST_VERSION: "1.82"
   FLUTTER_VERSION: "3.24.5"
 
 jobs:
@@ -18,19 +18,18 @@ jobs:
         with:
           submodules: recursive
 
-      # ВАЖНО: НЕ удаляем и не заменяем Cargo.lock — используем оригинальный из репозитория
-      # Современные версии RustDesk требуют актуального Cargo.lock для работы с новыми зависимостями
-      - name: Verify Cargo.lock exists
+      - name: Verify Cargo.lock exists (critical for dependency resolution)
         shell: pwsh
         run: |
           if (-not (Test-Path "Cargo.lock")) {
-            Write-Error "Cargo.lock not found in repository! This is required for dependency resolution."
-            Write-Error "Please commit Cargo.lock to your repository or use an official RustDesk branch/tag."
+            Write-Error "ERROR: Cargo.lock not found!"
+            Write-Error "This file is REQUIRED for reproducible builds with correct dependency versions."
+            Write-Error "Please commit Cargo.lock to your repository from the same commit/tag as your source code."
             exit 1
           }
-          Write-Host "✓ Cargo.lock found (required for yoke/flutter_rust_bridge compatibility)"
+          Write-Host "✓ Cargo.lock found (ensures compatible flutter_rust_bridge version)"
 
-      - name: Install Rust toolchain (1.82+ required for yoke v0.8.1)
+      - name: Install Rust toolchain (1.82+ required)
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
@@ -52,7 +51,7 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
-      - name: Install vcpkg dependencies (via bash)
+      - name: Install vcpkg dependencies
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
@@ -67,9 +66,9 @@ jobs:
             --triplet "$VCPKG_DEFAULT_TRIPLET" \
             --x-install-root="$VCPKG_ROOT/installed"
           
-          # Проверяем наличие заголовочных файлов opus (критично для magnum-opus)
+          # Verify opus headers exist
           if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
-            echo "ERROR: opus headers missing! Build will fail."
+            echo "ERROR: opus headers missing!"
             ls -la "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/" 2>/dev/null || true
             exit 1
           fi
@@ -88,7 +87,28 @@ jobs:
           }
           Write-Host "✓ Config settings verified"
 
-      - name: Build RustDesk (without hwcodec/vram for CI stability)
+      - name: Generate flutter_rust_bridge bindings (CRITICAL STEP)
+        shell: bash
+        run: |
+          cd flutter
+          
+          # Install Dart/Flutter dependencies
+          flutter pub get
+          
+          # Generate bridge bindings (creates src/bridge_generated.rs)
+          flutter pub run flutter_rust_bridge:generate
+          
+          cd ..
+          
+          # Verify generated file exists
+          if [ ! -f "src/bridge_generated.rs" ]; then
+            echo "ERROR: bridge_generated.rs not generated!"
+            ls -la src/ | grep -i bridge || true
+            exit 1
+          fi
+          echo "✓ bridge_generated.rs successfully generated"
+
+      - name: Build RustDesk (without hwcodec/vram)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
@@ -99,15 +119,15 @@ jobs:
           export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
           export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
           
-          # Сборка БЕЗ hwcodec/vram — они не критичны для базовой работы и часто ломают билд в CI
+          # Build WITHOUT hwcodec/vram for CI stability
           python ./build.py --portable --flutter --skip-portable-pack
           
-          # Проверяем успешность сборки
+          # Verify build success
           if [ ! -d "./flutter/build/windows/x64/runner/Release" ]; then
             echo "ERROR: Release directory not found!"
-            echo "=== Flutter build directory contents ==="
+            echo "=== Flutter build directory ==="
             find ./flutter/build -type d 2>/dev/null | head -30 || true
-            echo "=== Target release directory ==="
+            echo "=== Target directory ==="
             ls -la ./target/release/ 2>/dev/null | head -20 || true
             exit 1
           fi
@@ -118,17 +138,17 @@ jobs:
       - name: Create single EXE (self-extracting)
         shell: bash
         run: |
-          # Удаляем dpiAware через sed (работает в bash на Windows)
+          # Remove dpiAware safely
           sed -i '/dpiAware/d' res/manifest.xml
           echo "✓ dpiAware removed from manifest.xml"
           
-          # Генерация портативного пакета
+          # Generate portable packer
           cd libs/portable
           pip install -r requirements.txt
           python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
           cd ../..
           
-          # Перемещаем результат
+          # Move result
           mkdir -p ./dist
           if [ -f "./target/release/rustdesk-portable-packer.exe" ]; then
             mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
