@@ -3,9 +3,10 @@ on:
   workflow_dispatch:
 
 env:
-  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"  # Актуальный коммит из официального билда
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
-  RUST_VERSION: "1.75"  # Совместимая версия из официального билда
+  VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
+  RUST_VERSION: "1.75"
 
 jobs:
   build-windows-exe:
@@ -17,7 +18,7 @@ jobs:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
@@ -39,23 +40,39 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
-      - name: Install vcpkg dependencies
-        shell: pwsh
+      # КРИТИЧЕСКИ ВАЖНО: установка зависимостей через bash (Git Bash), а не PowerShell
+      - name: Install vcpkg dependencies (via bash)
+        shell: bash
+        env:
+          VCPKG_ROOT: "C:/vcpkg"
+          VCPKG_DEFAULT_TRIPLET: ${{ env.VCPKG_DEFAULT_TRIPLET }}
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}
         run: |
-          $env:VCPKG_DEFAULT_TRIPLET = "${{ env.VCPKG_DEFAULT_TRIPLET }}"
-          $env:VCPKG_ROOT = "C:\vcpkg"
+          export VCPKG_ROOT="C:/vcpkg"
+          export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
+          export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
           
           # Устанавливаем зависимости из vcpkg.json проекта
-          & $env:VCPKG_ROOT\vcpkg install --triplet $env:VCPKG_DEFAULT_TRIPLET --x-install-root="$env:VCPKG_ROOT\installed"
+          "$VCPKG_ROOT/vcpkg" install \
+            --triplet "$VCPKG_DEFAULT_TRIPLET" \
+            --x-install-root="$VCPKG_ROOT/installed"
           
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "vcpkg install failed"
-            Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Filter "*.log" -Recurse | ForEach-Object {
-              Write-Host "=== $($_.Name) ==="
-              Get-Content $_ -Tail 50
-            }
+          if [ $? -ne 0 ]; then
+            echo "=== vcpkg install failed, showing logs ==="
+            find "$VCPKG_ROOT/buildtrees" -name "*.log" -type f | while read log; do
+              echo "=== $log ==="
+              tail -n 50 "$log"
+            done
             exit 1
-          }
+          fi
+          
+          # Проверяем, что opus установлен корректно
+          if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
+            echo "ERROR: opus headers not found!"
+            ls -la "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/"
+            exit 1
+          fi
+          echo "opus headers found at: $VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/"
 
       - name: Verify Config Settings
         shell: pwsh
@@ -69,49 +86,50 @@ jobs:
             exit 1
           }
 
-      - name: Build RustDesk (без hwcodec/vram для надёжности)
-        shell: pwsh
+      # Сборка БЕЗ hwcodec/vram для надёжности (они не критичны для базовой работы)
+      - name: Build RustDesk
+        shell: bash
         env:
-          VCPKG_ROOT: "C:\vcpkg"
+          VCPKG_ROOT: "C:/vcpkg"
           VCPKG_DEFAULT_TRIPLET: ${{ env.VCPKG_DEFAULT_TRIPLET }}
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}
         run: |
-          # Сборка без hwcodec/vram — они требуют сложной настройки FFmpeg в CI
+          export VCPKG_ROOT="C:/vcpkg"
+          export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
+          export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
+          
+          # Сборка без hwcodec/vram — они требуют сложной настройки и часто ломают билд в CI
           python ./build.py --portable --flutter --skip-portable-pack
           
           # Проверяем успешность сборки
-          $releasePath = "./flutter/build/windows/x64/runner/Release"
-          if (-not (Test-Path $releasePath)) {
-            Write-Error "Build failed: Release directory not found at $releasePath"
-            Write-Host "=== Directory contents ==="
-            Get-ChildItem -Path "./flutter/build/windows/x64/runner/" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
+          if [ ! -d "./flutter/build/windows/x64/runner/Release" ]; then
+            echo "ERROR: Release directory not found!"
+            echo "=== Directory structure ==="
+            find ./flutter/build -type d -name "Release" 2>/dev/null || find ./flutter/build -type d | head -20
             exit 1
-          }
+          fi
           
-          Move-Item -Path $releasePath -Destination ./rustdesk -Force
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          echo "Build successful, Release directory moved to ./rustdesk"
 
       - name: Create single EXE (self-extracting)
         shell: pwsh
         run: |
-          # Безопасное удаление dpiAware из манифеста через PowerShell
+          # Безопасное удаление dpiAware через PowerShell
           $manifestPath = "res/manifest.xml"
           if (Test-Path $manifestPath) {
             $content = Get-Content -Path $manifestPath -Raw
-            # Удаляем всю секцию с dpiAware
             $content = $content -replace '(?ms)\s*<application>.*?</application>', ''
             Set-Content -Path $manifestPath -Value $content -Encoding UTF8
             Write-Host "dpiAware removed from manifest.xml"
-          } else {
-            Write-Warning "manifest.xml not found, skipping dpiAware removal"
           }
 
           # Генерация портативного пакета
           Set-Location libs/portable
           pip install -r requirements.txt
-          
           python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
-          
           Set-Location ../..
-          
+
           # Перемещаем результат
           $packerSrc = "./target/release/rustdesk-portable-packer.exe"
           $packerDst = "./dist/rustdesk-custom.exe"
@@ -122,14 +140,13 @@ jobs:
           
           if (Test-Path $packerSrc) {
             Move-Item -Path $packerSrc -Destination $packerDst -Force
+            Write-Host "Single EXE created at: $packerDst"
+            Get-Item $packerDst | Format-List Name, Length, LastWriteTime
           } else {
             Write-Error "rustdesk-portable-packer.exe not found at $packerSrc"
             Get-ChildItem -Path "./target/release/" -Filter "*rustdesk*" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
             exit 1
           }
-          
-          Write-Host "Single EXE created at: $packerDst"
-          Get-Item $packerDst | Format-List Name, Length, LastWriteTime
 
       - name: Upload Single EXE Artifact
         uses: actions/upload-artifact@v4
