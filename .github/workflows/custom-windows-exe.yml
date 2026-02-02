@@ -6,8 +6,9 @@ env:
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
   VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
-  RUST_VERSION: "1.82"  # Требуется для современных зависимостей (yoke v0.8.1+)
+  RUST_VERSION: "1.82"  # Обязательно 1.82+ для yoke v0.8.1
   FLUTTER_VERSION: "3.24.5"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
 
 jobs:
   build-windows-exe:
@@ -18,38 +19,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Verify bridge files exist (critical!)
-        shell: pwsh
-        run: |
-          # Эти файлы ДОЛЖНЫ быть в репозитории — они уже сгенерированы официальной командой
-          $requiredFiles = @(
-            "src/bridge_generated.rs",
-            "src/bridge_generated.io.rs",
-            "src/frb_generated.io.rs"
-          )
-          
-          foreach ($file in $requiredFiles) {
-            if (-not (Test-Path $file)) {
-              Write-Error "MISSING: $file"
-              Write-Error "This file must be committed to your repository."
-              Write-Error "Copy it from official RustDesk repo (same version/tag):"
-              Write-Error "https://github.com/rustdesk/rustdesk/tree/master/src"
-              exit 1
-            }
-          }
-          Write-Host "✓ All bridge files found (no generation needed)"
-
-      - name: Verify Cargo.lock exists (critical for dependency resolution)
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "Cargo.lock")) {
-            Write-Error "Cargo.lock not found! This file is REQUIRED."
-            Write-Error "Please commit Cargo.lock from the same version/tag as your source code."
-            exit 1
-          }
-          Write-Host "✓ Cargo.lock found"
-
-      - name: Install Rust toolchain
+      - name: Install Rust toolchain (1.82+)
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
@@ -86,13 +56,35 @@ jobs:
             --triplet "$VCPKG_DEFAULT_TRIPLET" \
             --x-install-root="$VCPKG_ROOT/installed"
           
-          # Verify opus headers exist (critical for magnum-opus)
+          # Проверяем наличие заголовочных файлов opus
           if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
             echo "ERROR: opus headers missing!"
-            ls -la "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/" 2>/dev/null || true
             exit 1
           fi
           echo "✓ opus headers verified"
+
+      - name: Generate flutter_rust_bridge files (CRITICAL)
+        shell: bash
+        run: |
+          # Устанавливаем генератор
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --locked --force
+          
+          # Генерируем бриджи
+          ~/.cargo/bin/flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+          
+          # Копируем для iOS
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+          
+          # Проверяем, что файлы созданы
+          if [ ! -f "src/bridge_generated.rs" ] || [ ! -f "src/bridge_generated.io.rs" ]; then
+            echo "ERROR: bridge files not generated!"
+            ls -la src/ | grep -i bridge || true
+            exit 1
+          fi
+          echo "✓ Bridge files generated successfully"
 
       - name: Verify Config Settings
         shell: pwsh
@@ -107,7 +99,7 @@ jobs:
           }
           Write-Host "✓ Config settings verified"
 
-      - name: Build RustDesk (without hwcodec/vram for CI stability)
+      - name: Build RustDesk (без hwcodec/vram для надёжности)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
@@ -118,16 +110,13 @@ jobs:
           export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
           export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
           
-          # Сборка БЕЗ hwcodec/vram — они не критичны для базовой работы и часто ломают билд в CI
+          # Сборка БЕЗ hwcodec/vram — они не критичны для базовой работы
           python ./build.py --portable --flutter --skip-portable-pack
           
-          # Verify build success
+          # Проверяем успешность сборки
           if [ ! -d "./flutter/build/windows/x64/runner/Release" ]; then
             echo "ERROR: Release directory not found!"
-            echo "=== Flutter build directory ==="
-            find ./flutter/build -type d 2>/dev/null | head -30 || true
-            echo "=== Target directory ==="
-            ls -la ./target/release/ 2>/dev/null | head -20 || true
+            find ./flutter/build -type d 2>/dev/null | head -20
             exit 1
           fi
           
@@ -137,27 +126,18 @@ jobs:
       - name: Create single EXE (self-extracting)
         shell: bash
         run: |
-          # Remove dpiAware safely
+          # Удаляем dpiAware
           sed -i '/dpiAware/d' res/manifest.xml
-          echo "✓ dpiAware removed from manifest.xml"
           
-          # Generate portable packer
+          # Генерация портативного пакета
           cd libs/portable
           pip install -r requirements.txt
           python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
           cd ../..
           
-          # Move result
+          # Перемещаем результат
           mkdir -p ./dist
-          if [ -f "./target/release/rustdesk-portable-packer.exe" ]; then
-            mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
-          elif [ -f "./rustdesk/rustdesk-portable-packer.exe" ]; then
-            mv ./rustdesk/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
-          else
-            echo "ERROR: rustdesk-portable-packer.exe not found!"
-            find . -name "rustdesk-portable-packer.exe" 2>/dev/null || true
-            exit 1
-          fi
+          mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
           
           echo "✓ Single EXE created: ./dist/rustdesk-custom.exe"
           ls -lh ./dist/rustdesk-custom.exe
