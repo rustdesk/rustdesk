@@ -2,29 +2,63 @@ name: Custom Windows EXE Build
 on:
   workflow_dispatch:
 
+env:
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"  # Актуальный коммит из официального билда
+  VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
+  RUST_VERSION: "1.75"  # Совместимая версия из официального билда
+
 jobs:
   build-windows-exe:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install Rust
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
+          components: rustfmt
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.24.5'
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.3.1
 
-      # Проверка конфигурации серверов
+      - name: Setup vcpkg with binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: 'C:\vcpkg'
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: pwsh
+        run: |
+          $env:VCPKG_DEFAULT_TRIPLET = "${{ env.VCPKG_DEFAULT_TRIPLET }}"
+          $env:VCPKG_ROOT = "C:\vcpkg"
+          
+          # Устанавливаем зависимости из vcpkg.json проекта
+          & $env:VCPKG_ROOT\vcpkg install --triplet $env:VCPKG_DEFAULT_TRIPLET --x-install-root="$env:VCPKG_ROOT\installed"
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "vcpkg install failed"
+            Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Filter "*.log" -Recurse | ForEach-Object {
+              Write-Host "=== $($_.Name) ==="
+              Get-Content $_ -Tail 50
+            }
+            exit 1
+          }
+
       - name: Verify Config Settings
+        shell: pwsh
         run: |
           if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "web-srv.smol-it.ru")) {
             Write-Error "web-srv.smol-it.ru not found in config.rs"
@@ -34,61 +68,70 @@ jobs:
             Write-Error "API key not found in config.rs"
             exit 1
           }
-        shell: pwsh
 
-      # Сборка БЕЗ hwcodec/vram (надёжный вариант)
-      - name: Build RustDesk
+      - name: Build RustDesk (без hwcodec/vram для надёжности)
+        shell: pwsh
+        env:
+          VCPKG_ROOT: "C:\vcpkg"
+          VCPKG_DEFAULT_TRIPLET: ${{ env.VCPKG_DEFAULT_TRIPLET }}
         run: |
+          # Сборка без hwcodec/vram — они требуют сложной настройки FFmpeg в CI
           python ./build.py --portable --flutter --skip-portable-pack
           
           # Проверяем успешность сборки
-          if (-not (Test-Path "./flutter/build/windows/x64/runner/Release")) {
-            Write-Error "Build failed: Release directory not found"
-            Get-ChildItem -Path "./flutter/build/windows/x64/runner/" -Recurse -ErrorAction SilentlyContinue
+          $releasePath = "./flutter/build/windows/x64/runner/Release"
+          if (-not (Test-Path $releasePath)) {
+            Write-Error "Build failed: Release directory not found at $releasePath"
+            Write-Host "=== Directory contents ==="
+            Get-ChildItem -Path "./flutter/build/windows/x64/runner/" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
             exit 1
           }
           
-          Move-Item -Path ./flutter/build/windows/x64/runner/Release -Destination ./rustdesk
-        shell: pwsh
+          Move-Item -Path $releasePath -Destination ./rustdesk -Force
 
-      # Создание одиночного .exe файла
-      - name: Create single EXE
+      - name: Create single EXE (self-extracting)
+        shell: pwsh
         run: |
-          # Корректное удаление dpiAware через PowerShell (безопасная замена sed)
+          # Безопасное удаление dpiAware из манифеста через PowerShell
           $manifestPath = "res/manifest.xml"
           if (Test-Path $manifestPath) {
             $content = Get-Content -Path $manifestPath -Raw
-            # Удаляем всю секцию <application> с dpiAware
-            $content = $content -replace '(?ms)\s*<application\b[^>]*>.*?</application>', ''
-            Set-Content -Path $manifestPath -Value $content
+            # Удаляем всю секцию с dpiAware
+            $content = $content -replace '(?ms)\s*<application>.*?</application>', ''
+            Set-Content -Path $manifestPath -Value $content -Encoding UTF8
+            Write-Host "dpiAware removed from manifest.xml"
+          } else {
+            Write-Warning "manifest.xml not found, skipping dpiAware removal"
           }
 
           # Генерация портативного пакета
-          cd libs/portable
+          Set-Location libs/portable
           pip install -r requirements.txt
-          python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
-          cd ../..
-
-          # Перемещаем результат
-          New-Item -ItemType Directory -Path ./dist -Force
           
-          $packerPath = "./target/release/rustdesk-portable-packer.exe"
-          if (-not (Test-Path $packerPath)) {
-            $packerPath = "./rustdesk/rustdesk-portable-packer.exe"
+          python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          
+          Set-Location ../..
+          
+          # Перемещаем результат
+          $packerSrc = "./target/release/rustdesk-portable-packer.exe"
+          $packerDst = "./dist/rustdesk-custom.exe"
+          
+          if (-not (Test-Path (Split-Path $packerDst -Parent))) {
+            New-Item -ItemType Directory -Path (Split-Path $packerDst -Parent) -Force | Out-Null
           }
           
-          if (-not (Test-Path $packerPath)) {
-            Write-Error "rustdesk-portable-packer.exe not found in expected locations"
-            Get-ChildItem -Path "./target/release/" -Filter "*rustdesk*" -Recurse -ErrorAction SilentlyContinue
-            Get-ChildItem -Path "./rustdesk/" -Filter "*rustdesk*" -Recurse -ErrorAction SilentlyContinue
+          if (Test-Path $packerSrc) {
+            Move-Item -Path $packerSrc -Destination $packerDst -Force
+          } else {
+            Write-Error "rustdesk-portable-packer.exe not found at $packerSrc"
+            Get-ChildItem -Path "./target/release/" -Filter "*rustdesk*" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
             exit 1
           }
           
-          Move-Item -Path $packerPath -Destination ./dist/rustdesk-custom.exe
-        shell: pwsh
+          Write-Host "Single EXE created at: $packerDst"
+          Get-Item $packerDst | Format-List Name, Length, LastWriteTime
 
-      # Загрузка результата сборки
-      - name: Upload Single EXE
+      - name: Upload Single EXE Artifact
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-single-exe
