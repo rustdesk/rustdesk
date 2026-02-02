@@ -18,33 +18,19 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Restore or verify Cargo.lock (critical for version compatibility)
+      - name: Restore official Cargo.lock (critical for version compatibility)
         shell: pwsh
         run: |
-          # Если Cargo.lock отсутствует — копируем из официального репозитория
-          if (-not (Test-Path "Cargo.lock")) {
-            Write-Host "Cargo.lock not found! Downloading compatible version from official RustDesk..."
-            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/rustdesk/rustdesk/14f39d3d0/Cargo.lock" -OutFile "Cargo.lock"
-            Write-Host "✓ Cargo.lock restored from official repository"
-          } else {
-            Write-Host "✓ Cargo.lock found in repository"
+          # Удаляем существующий Cargo.lock если он есть (чтобы избежать конфликтов версий)
+          if (Test-Path "Cargo.lock") {
+            Remove-Item -Force "Cargo.lock"
+            Write-Host "✓ Removed existing Cargo.lock"
           }
           
-          # Проверяем, что в lock-файле есть совместимая версия flutter_rust_bridge
-          $lockContent = Get-Content "Cargo.lock" -Raw
-          if ($lockContent -match 'name = "flutter_rust_bridge"\s+version = "1\.7[0-9]\.') {
-            Write-Host "✓ Compatible flutter_rust_bridge version detected in Cargo.lock"
-          } else {
-            Write-Warning "⚠️  flutter_rust_bridge version might be incompatible. Patching..."
-            # Принудительно фиксируем совместимую версию через патч
-            $patch = @"
-              
-[patch.crates-io]
-flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge", rev = "v1.76.0" }
-"@
-            Add-Content -Path "Cargo.toml" -Value $patch
-            Write-Host "✓ Applied flutter_rust_bridge patch (v1.76.0)"
-          }
+          # Клонируем официальный репозиторий для получения совместимого Cargo.lock
+          git clone --depth 1 --branch 1.2.4 https://github.com/rustdesk/rustdesk.git /tmp/rustdesk-official
+          Copy-Item -Path "/tmp/rustdesk-official/Cargo.lock" -Destination "Cargo.lock" -Force
+          Write-Host "✓ Restored official Cargo.lock from RustDesk v1.2.4"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
@@ -68,7 +54,7 @@ flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge", 
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
-      - name: Install vcpkg dependencies (via bash for path safety)
+      - name: Install vcpkg dependencies (via bash)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
@@ -83,9 +69,9 @@ flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge", 
             --triplet "$VCPKG_DEFAULT_TRIPLET" \
             --x-install-root="$VCPKG_ROOT/installed"
           
-          # Verify opus headers exist (critical for magnum-opus build)
+          # Проверяем наличие заголовочных файлов opus
           if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
-            echo "ERROR: opus headers missing! Build will fail."
+            echo "ERROR: opus headers missing!"
             ls -la "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/" 2>/dev/null || true
             exit 1
           fi
@@ -104,7 +90,7 @@ flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge", 
           }
           Write-Host "✓ Config settings verified"
 
-      - name: Build RustDesk (without hwcodec/vram for CI stability)
+      - name: Build RustDesk (without hwcodec/vram)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
@@ -115,16 +101,13 @@ flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge", 
           export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
           export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
           
-          # --locked гарантирует использование версий из Cargo.lock
+          # Сборка БЕЗ hwcodec/vram — они не критичны и часто ломают билд в CI
           python ./build.py --portable --flutter --skip-portable-pack --locked
           
-          # Verify build success
+          # Проверяем успешность сборки
           if [ ! -d "./flutter/build/windows/x64/runner/Release" ]; then
             echo "ERROR: Release directory not found!"
-            echo "=== Build artifacts ==="
-            find ./target/release -name "*rustdesk*" 2>/dev/null | head -10 || true
-            echo "=== Flutter build directory ==="
-            find ./flutter/build -type d 2>/dev/null | head -20 || true
+            find ./flutter/build -type d 2>/dev/null | head -20
             exit 1
           fi
           
@@ -134,7 +117,7 @@ flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge", 
       - name: Create single EXE (self-extracting)
         shell: pwsh
         run: |
-          # Remove dpiAware safely via PowerShell regex
+          # Безопасное удаление dpiAware через PowerShell
           $manifestPath = "res/manifest.xml"
           if (Test-Path $manifestPath) {
             $content = Get-Content -Path $manifestPath -Raw
@@ -143,13 +126,13 @@ flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge", 
             Write-Host "✓ dpiAware removed from manifest.xml"
           }
 
-          # Generate portable packer
+          # Генерация портативного пакета
           Set-Location libs/portable
           pip install -r requirements.txt
           python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
           Set-Location ../..
 
-          # Move result
+          # Перемещаем результат
           $packerSrc = "./target/release/rustdesk-portable-packer.exe"
           $packerDst = "./dist/rustdesk-custom.exe"
           
