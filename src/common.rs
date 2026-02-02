@@ -2304,7 +2304,7 @@ pub fn str2color(s: &str, alpha: u8) -> u32 {
 /// Returns: Some(true) = enabled, Some(false) = disabled, None = not set or invalid
 pub fn get_control_permission(
     permissions: u64,
-    permission: hbb_common::rendezvous_proto::control_permissions::Permission,
+    permission: hbb_common::rendezvous_proto::controlled_config::Permission,
 ) -> Option<bool> {
     use hbb_common::protobuf::Enum;
     let index = permission.value();

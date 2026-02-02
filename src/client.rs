@@ -507,6 +507,10 @@ impl Client {
                             relay_server = ph.relay_server;
                             peer_addr = AddrMangle::decode(&ph.socket_addr);
                             feedback = ph.feedback;
+                            if !ph.controller_config.easy_access_token.is_empty() {
+                                interface.get_lch().write().unwrap().easy_access_token =
+                                    Some(ph.controller_config.easy_access_token.to_vec());
+                            }
                             let s = udp.0.take();
                             if ph.is_udp && s.is_some() {
                                 if let Some(s) = s {
@@ -534,6 +538,10 @@ impl Client {
                             start.elapsed(),
                             rr.relay_server
                         );
+                        if !rr.controller_config.easy_access_token.is_empty() {
+                            interface.get_lch().write().unwrap().easy_access_token =
+                                Some(rr.controller_config.easy_access_token.to_vec());
+                        }
                         start = Instant::now();
                         let mut connect_futures = Vec::new();
                         if let Some(s) = ipv6.0 {
@@ -1755,6 +1763,7 @@ pub struct LoginConfigHandler {
     pub enable_trusted_devices: bool,
     pub record_state: bool,
     pub record_permission: bool,
+    pub easy_access_token: Option<Vec<u8>>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -2610,7 +2619,7 @@ impl LoginConfigHandler {
 
     /// Create a [`Message`] for login.
     fn create_login_msg(
-        &self,
+        &mut self,
         os_username: String,
         os_password: String,
         password: Vec<u8>,
@@ -2627,16 +2636,15 @@ impl LoginConfigHandler {
         };
         let mut avatar = get_builtin_option(keys::OPTION_AVATAR);
         if avatar.is_empty() {
-            avatar = serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option(
-                "user_info",
-            ))
-            .ok()
-            .and_then(|x| {
-                x.get("avatar")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.trim().to_owned())
-            })
-            .unwrap_or_default();
+            avatar =
+                serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option("user_info"))
+                    .ok()
+                    .and_then(|x| {
+                        x.get("avatar")
+                            .and_then(|x| x.as_str())
+                            .map(|x| x.trim().to_owned())
+                    })
+                    .unwrap_or_default();
         }
         avatar = resolve_avatar_url(avatar);
         let mut display_name = get_builtin_option(keys::OPTION_DISPLAY_NAME);
@@ -2682,6 +2690,11 @@ impl LoginConfigHandler {
         } else {
             Bytes::new()
         };
+        let easy_access_token: Bytes = self
+            .easy_access_token
+            .take() // consume: single use only
+            .unwrap_or_default()
+            .into();
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -2699,6 +2712,7 @@ impl LoginConfigHandler {
             .into(),
             hwid,
             avatar,
+            easy_access_token,
             ..Default::default()
         };
         match self.conn_type {
@@ -3533,7 +3547,7 @@ async fn send_login(
     peer: &mut Stream,
 ) {
     let msg_out = lc
-        .read()
+        .write()
         .unwrap()
         .create_login_msg(os_username, os_password, password);
     allow_err!(peer.send(&msg_out).await);
@@ -3593,7 +3607,7 @@ async fn send_switch_login_request(
     msg_out.set_switch_sides_response(SwitchSidesResponse {
         uuid: Bytes::from(uuid.as_bytes().to_vec()),
         lr: hbb_common::protobuf::MessageField::some(
-            lc.read()
+            lc.write()
                 .unwrap()
                 .create_login_msg("".to_owned(), "".to_owned(), vec![])
                 .login_request()
