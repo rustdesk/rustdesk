@@ -1084,7 +1084,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
         },
         Data::ControlPermissionsRemoteModify(_) => {
-            use hbb_common::rendezvous_proto::control_permissions::Permission;
+            use hbb_common::rendezvous_proto::controlled_config::Permission;
             let state =
                 crate::server::get_control_permission_state(Permission::remote_modify, true);
             allow_err!(
@@ -1095,7 +1095,7 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         #[cfg(target_os = "windows")]
         Data::FileTransferEnabledState(_) => {
-            use hbb_common::rendezvous_proto::control_permissions::Permission;
+            use hbb_common::rendezvous_proto::controlled_config::Permission;
             let state = crate::server::get_control_permission_state(Permission::file, false);
             let enabled = state.unwrap_or_else(|| {
                 crate::server::Connection::is_permission_enabled_locally(
