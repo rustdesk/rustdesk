@@ -7,6 +7,7 @@ env:
   VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
   VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
   RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
 
 jobs:
   build-windows-exe:
@@ -17,31 +18,57 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Restore or verify Cargo.lock (critical for version compatibility)
+        shell: pwsh
+        run: |
+          # Если Cargo.lock отсутствует — копируем из официального репозитория
+          if (-not (Test-Path "Cargo.lock")) {
+            Write-Host "Cargo.lock not found! Downloading compatible version from official RustDesk..."
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/rustdesk/rustdesk/14f39d3d0/Cargo.lock" -OutFile "Cargo.lock"
+            Write-Host "✓ Cargo.lock restored from official repository"
+          } else {
+            Write-Host "✓ Cargo.lock found in repository"
+          }
+          
+          # Проверяем, что в lock-файле есть совместимая версия flutter_rust_bridge
+          $lockContent = Get-Content "Cargo.lock" -Raw
+          if ($lockContent -match 'name = "flutter_rust_bridge"\s+version = "1\.7[0-9]\.') {
+            Write-Host "✓ Compatible flutter_rust_bridge version detected in Cargo.lock"
+          } else {
+            Write-Warning "⚠️  flutter_rust_bridge version might be incompatible. Patching..."
+            # Принудительно фиксируем совместимую версию через патч
+            $patch = @"
+              
+[patch.crates-io]
+flutter_rust_bridge = { git = "https://github.com/fzyzcjy/flutter_rust_bridge", rev = "v1.76.0" }
+"@
+            Add-Content -Path "Cargo.toml" -Value $patch
+            Write-Host "✓ Applied flutter_rust_bridge patch (v1.76.0)"
+          }
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
-          components: rustfmt
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.24.5'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.3.1
 
-      - name: Setup vcpkg with binary cache
+      - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: 'C:\vcpkg'
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
-      # КРИТИЧЕСКИ ВАЖНО: установка зависимостей через bash (Git Bash), а не PowerShell
-      - name: Install vcpkg dependencies (via bash)
+      - name: Install vcpkg dependencies (via bash for path safety)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
@@ -52,27 +79,17 @@ jobs:
           export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
           export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
           
-          # Устанавливаем зависимости из vcpkg.json проекта
           "$VCPKG_ROOT/vcpkg" install \
             --triplet "$VCPKG_DEFAULT_TRIPLET" \
             --x-install-root="$VCPKG_ROOT/installed"
           
-          if [ $? -ne 0 ]; then
-            echo "=== vcpkg install failed, showing logs ==="
-            find "$VCPKG_ROOT/buildtrees" -name "*.log" -type f | while read log; do
-              echo "=== $log ==="
-              tail -n 50 "$log"
-            done
-            exit 1
-          fi
-          
-          # Проверяем, что opus установлен корректно
+          # Verify opus headers exist (critical for magnum-opus build)
           if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
-            echo "ERROR: opus headers not found!"
-            ls -la "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/"
+            echo "ERROR: opus headers missing! Build will fail."
+            ls -la "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/" 2>/dev/null || true
             exit 1
           fi
-          echo "opus headers found at: $VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/"
+          echo "✓ opus headers verified"
 
       - name: Verify Config Settings
         shell: pwsh
@@ -85,9 +102,9 @@ jobs:
             Write-Error "API key not found in config.rs"
             exit 1
           }
+          Write-Host "✓ Config settings verified"
 
-      # Сборка БЕЗ hwcodec/vram для надёжности (они не критичны для базовой работы)
-      - name: Build RustDesk
+      - name: Build RustDesk (without hwcodec/vram for CI stability)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
@@ -98,57 +115,57 @@ jobs:
           export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
           export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
           
-          # Сборка без hwcodec/vram — они требуют сложной настройки и часто ломают билд в CI
-          python ./build.py --portable --flutter --skip-portable-pack
+          # --locked гарантирует использование версий из Cargo.lock
+          python ./build.py --portable --flutter --skip-portable-pack --locked
           
-          # Проверяем успешность сборки
+          # Verify build success
           if [ ! -d "./flutter/build/windows/x64/runner/Release" ]; then
             echo "ERROR: Release directory not found!"
-            echo "=== Directory structure ==="
-            find ./flutter/build -type d -name "Release" 2>/dev/null || find ./flutter/build -type d | head -20
+            echo "=== Build artifacts ==="
+            find ./target/release -name "*rustdesk*" 2>/dev/null | head -10 || true
+            echo "=== Flutter build directory ==="
+            find ./flutter/build -type d 2>/dev/null | head -20 || true
             exit 1
           fi
           
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
-          echo "Build successful, Release directory moved to ./rustdesk"
+          echo "✓ Build successful"
 
       - name: Create single EXE (self-extracting)
         shell: pwsh
         run: |
-          # Безопасное удаление dpiAware через PowerShell
+          # Remove dpiAware safely via PowerShell regex
           $manifestPath = "res/manifest.xml"
           if (Test-Path $manifestPath) {
             $content = Get-Content -Path $manifestPath -Raw
-            $content = $content -replace '(?ms)\s*<application>.*?</application>', ''
+            $content = $content -replace '(?ms)\s*<application\b[^>]*>.*?</application>', ''
             Set-Content -Path $manifestPath -Value $content -Encoding UTF8
-            Write-Host "dpiAware removed from manifest.xml"
+            Write-Host "✓ dpiAware removed from manifest.xml"
           }
 
-          # Генерация портативного пакета
+          # Generate portable packer
           Set-Location libs/portable
           pip install -r requirements.txt
           python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
           Set-Location ../..
 
-          # Перемещаем результат
+          # Move result
           $packerSrc = "./target/release/rustdesk-portable-packer.exe"
           $packerDst = "./dist/rustdesk-custom.exe"
           
-          if (-not (Test-Path (Split-Path $packerDst -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $packerDst -Parent) -Force | Out-Null
-          }
+          New-Item -ItemType Directory -Path (Split-Path $packerDst -Parent) -Force | Out-Null
           
           if (Test-Path $packerSrc) {
             Move-Item -Path $packerSrc -Destination $packerDst -Force
-            Write-Host "Single EXE created at: $packerDst"
+            Write-Host "✓ Single EXE created: $packerDst"
             Get-Item $packerDst | Format-List Name, Length, LastWriteTime
           } else {
-            Write-Error "rustdesk-portable-packer.exe not found at $packerSrc"
+            Write-Error "rustdesk-portable-packer.exe not found!"
             Get-ChildItem -Path "./target/release/" -Filter "*rustdesk*" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
             exit 1
           }
 
-      - name: Upload Single EXE Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-single-exe
