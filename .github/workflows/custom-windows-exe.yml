@@ -6,7 +6,7 @@ env:
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
   VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
-  RUST_VERSION: "1.75"
+  RUST_VERSION: "1.82"  # Обязательно 1.82+ для совместимости с yoke v0.8.1
   FLUTTER_VERSION: "3.24.5"
 
 jobs:
@@ -18,21 +18,19 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Restore official Cargo.lock (critical for version compatibility)
+      # ВАЖНО: НЕ удаляем и не заменяем Cargo.lock — используем оригинальный из репозитория
+      # Современные версии RustDesk требуют актуального Cargo.lock для работы с новыми зависимостями
+      - name: Verify Cargo.lock exists
         shell: pwsh
         run: |
-          # Удаляем существующий Cargo.lock если он есть
-          if (Test-Path "Cargo.lock") {
-            Remove-Item -Force "Cargo.lock"
-            Write-Host "✓ Removed existing Cargo.lock"
+          if (-not (Test-Path "Cargo.lock")) {
+            Write-Error "Cargo.lock not found in repository! This is required for dependency resolution."
+            Write-Error "Please commit Cargo.lock to your repository or use an official RustDesk branch/tag."
+            exit 1
           }
-          
-          # Клонируем официальный репозиторий для получения совместимого Cargo.lock
-          git clone --depth 1 --branch 1.2.4 https://github.com/rustdesk/rustdesk.git /tmp/rustdesk-official
-          Copy-Item -Path "/tmp/rustdesk-official/Cargo.lock" -Destination "Cargo.lock" -Force
-          Write-Host "✓ Restored official Cargo.lock from RustDesk v1.2.4"
+          Write-Host "✓ Cargo.lock found (required for yoke/flutter_rust_bridge compatibility)"
 
-      - name: Install Rust toolchain
+      - name: Install Rust toolchain (1.82+ required for yoke v0.8.1)
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
@@ -69,9 +67,9 @@ jobs:
             --triplet "$VCPKG_DEFAULT_TRIPLET" \
             --x-install-root="$VCPKG_ROOT/installed"
           
-          # Проверяем наличие заголовочных файлов opus
+          # Проверяем наличие заголовочных файлов opus (критично для magnum-opus)
           if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
-            echo "ERROR: opus headers missing!"
+            echo "ERROR: opus headers missing! Build will fail."
             ls -la "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/" 2>/dev/null || true
             exit 1
           fi
@@ -101,8 +99,7 @@ jobs:
           export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
           export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
           
-          # ВАЖНО: убран флаг --locked (его нет в build.py)
-          # Сборка БЕЗ hwcodec/vram для надёжности в CI
+          # Сборка БЕЗ hwcodec/vram — они не критичны для базовой работы и часто ломают билд в CI
           python ./build.py --portable --flutter --skip-portable-pack
           
           # Проверяем успешность сборки
@@ -110,6 +107,8 @@ jobs:
             echo "ERROR: Release directory not found!"
             echo "=== Flutter build directory contents ==="
             find ./flutter/build -type d 2>/dev/null | head -30 || true
+            echo "=== Target release directory ==="
+            ls -la ./target/release/ 2>/dev/null | head -20 || true
             exit 1
           fi
           
