@@ -70,6 +70,13 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "rustdesk");
   }
 
+  // Ask the window manager to disable any configured shortcuts so we can capture all input events.
+  GtkNative* native = gtk_widget_get_native(GTK_WIDGET(window));
+  if (native != NULL) {
+    GdkSurface* surface = gtk_native_get_surface(native);
+    gdk_toplevel_inhibit_system_shortcuts(GDK_TOPLEVEL(surface), NULL);
+  }
+
   // auto bdw = bitsdojo_window_from(window); // <--- add this line
   // bdw->setCustomFrame(true);               // <-- add this line
   int width = 800, height = 600;
