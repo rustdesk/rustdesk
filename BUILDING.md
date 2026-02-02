@@ -238,7 +238,7 @@ RustDesk is undeniably complicated to build, with lots of moving parts. There ar
 
     1. The build of the Rust core crate underlying RustDesk is done using Cargo. The exact parameters to Cargo are important. The `build.py` script does the correct builds in sequence. At a minimum, the `--flutter` flag must be passed into `build.py`; without it, the resulting `librustdesk.dll` lacks the numerous exported functions that the Flutter front-end relies upon.
 
-        - Windows: The build processes underlying Rust crate compilation will require that the Visual C++ build tools be available in the ambient environment. Run these commands from a `Developer Command Prompt for Visual Studio`, or explicitly run `vsvars.
+        - Windows: The build processes underlying Rust crate compilation will require that the Visual C++ build tools be available in the ambient environment. Run these commands from a `Developer Command Prompt for Visual Studio`, or explicitly run `vsvars`.
 
         - The output from the build is placed into a subdirectory of `target` named after the build profile -- `debug` or `release`. Note that Rust builds can consume a very large amount of disk space. As of this writing, a build output folder in `target` may require 40GB or more of disk space for a full build.
 
