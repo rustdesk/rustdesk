@@ -90,6 +90,13 @@ pub mod client {
         }
 
         fn key_sequence(&mut self, sequence: &str) {
+            // Sequence events are normally handled in the --server process before reaching here.
+            // Forward via IPC as a fallback — input_text_wayland can still handle ASCII chars
+            // via keysym/uinput, though non-ASCII will be skipped (no clipboard in --service).
+            log::debug!(
+                "UInputKeyboard::key_sequence called (len={})",
+                sequence.len()
+            );
             allow_err!(self.send(Data::Keyboard(DataKeyboard::Sequence(sequence.to_string()))));
         }
 
@@ -178,6 +185,9 @@ pub mod client {
 pub mod service {
     use super::*;
     use hbb_common::lazy_static;
+    use scrap::wayland::{
+        pipewire::RDP_SESSION_INFO, remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop,
+    };
     use std::{collections::HashMap, sync::Mutex};
 
     lazy_static::lazy_static! {
@@ -309,6 +319,9 @@ pub mod service {
                 ('/', (evdev::Key::KEY_SLASH, false)),
                 (';', (evdev::Key::KEY_SEMICOLON, false)),
                 ('\'', (evdev::Key::KEY_APOSTROPHE, false)),
+                // Space is intentionally in both KEY_MAP_LAYOUT (char-to-evdev for text input)
+                // and KEY_MAP (Key::Space for key events). Both maps serve different lookup paths.
+                (' ', (evdev::Key::KEY_SPACE, false)),
 
                 // Shift + key
                 ('A', (evdev::Key::KEY_A, true)),
@@ -364,6 +377,155 @@ pub mod service {
         static ref RESOLUTION: Mutex<((i32, i32), (i32, i32))> = Mutex::new(((0, 0), (0, 0)));
     }
 
+    /// Input text on Wayland using layout-independent methods.
+    /// ASCII chars (0x20-0x7E): Portal keysym or uinput fallback
+    /// Non-ASCII chars: skipped — this runs in the --service (root) process where clipboard
+    /// operations are unreliable (typically no user session environment).
+    /// Non-ASCII input is normally handled by the --server process via input_text_via_clipboard_server.
+    fn input_text_wayland(text: &str, keyboard: &mut VirtualDevice) {
+        let portal_info = {
+            let session_info = RDP_SESSION_INFO.lock().unwrap();
+            session_info
+                .as_ref()
+                .map(|info| (info.conn.clone(), info.session.clone()))
+        };
+
+        for c in text.chars() {
+            let keysym = char_to_keysym(c);
+            if can_input_via_keysym(c, keysym) {
+                // Try Portal first — down+up on the same channel
+                if let Some((ref conn, ref session)) = portal_info {
+                    let portal = scrap::wayland::pipewire::get_portal(conn);
+                    if portal
+                        .notify_keyboard_keysym(session, HashMap::new(), keysym, 1)
+                        .is_ok()
+                    {
+                        if let Err(e) =
+                            portal.notify_keyboard_keysym(session, HashMap::new(), keysym, 0)
+                        {
+                            log::warn!(
+                                "input_text_wayland: portal key-up failed for keysym {:#x}: {:?}",
+                                keysym,
+                                e
+                            );
+                        }
+                        continue;
+                    }
+                }
+                // Portal unavailable or failed, fallback to uinput (down+up together)
+                let key = enigo::Key::Layout(c);
+                if let Ok((evdev_key, is_shift)) = map_key(&key) {
+                    let mut shift_pressed = false;
+                    if is_shift {
+                        let shift_down =
+                            InputEvent::new(EventType::KEY, evdev::Key::KEY_LEFTSHIFT.code(), 1);
+                        if keyboard.emit(&[shift_down]).is_ok() {
+                            shift_pressed = true;
+                        } else {
+                            log::warn!("input_text_wayland: failed to press Shift for '{}'", c);
+                        }
+                    }
+                    let key_down = InputEvent::new(EventType::KEY, evdev_key.code(), 1);
+                    let key_up = InputEvent::new(EventType::KEY, evdev_key.code(), 0);
+                    allow_err!(keyboard.emit(&[key_down, key_up]));
+                    if shift_pressed {
+                        let shift_up =
+                            InputEvent::new(EventType::KEY, evdev::Key::KEY_LEFTSHIFT.code(), 0);
+                        allow_err!(keyboard.emit(&[shift_up]));
+                    }
+                }
+            } else {
+                log::debug!("Skipping non-ASCII character in uinput service (no clipboard access)");
+            }
+        }
+    }
+
+    /// Send a single key down or up event for a Layout character.
+    /// Used by KeyDown/KeyUp to maintain correct press/release semantics.
+    /// `down`: true for key press, false for key release.
+    fn input_char_wayland_key_event(chr: char, down: bool, keyboard: &mut VirtualDevice) {
+        let keysym = char_to_keysym(chr);
+        let portal_state: u32 = if down { 1 } else { 0 };
+
+        if can_input_via_keysym(chr, keysym) {
+            let portal_info = {
+                let session_info = RDP_SESSION_INFO.lock().unwrap();
+                session_info
+                    .as_ref()
+                    .map(|info| (info.conn.clone(), info.session.clone()))
+            };
+            if let Some((ref conn, ref session)) = portal_info {
+                let portal = scrap::wayland::pipewire::get_portal(conn);
+                if portal
+                    .notify_keyboard_keysym(session, HashMap::new(), keysym, portal_state)
+                    .is_ok()
+                {
+                    return;
+                }
+            }
+            // Portal unavailable or failed, fallback to uinput
+            let key = enigo::Key::Layout(chr);
+            if let Ok((evdev_key, is_shift)) = map_key(&key) {
+                if down {
+                    // Press: Shift↓ (if needed) → Key↓
+                    if is_shift {
+                        let shift_down =
+                            InputEvent::new(EventType::KEY, evdev::Key::KEY_LEFTSHIFT.code(), 1);
+                        if let Err(e) = keyboard.emit(&[shift_down]) {
+                            log::warn!("input_char_wayland_key_event: failed to press Shift for '{}': {:?}", chr, e);
+                        }
+                    }
+                    let key_down = InputEvent::new(EventType::KEY, evdev_key.code(), 1);
+                    allow_err!(keyboard.emit(&[key_down]));
+                } else {
+                    // Release: Key↑ → Shift↑ (if needed)
+                    let key_up = InputEvent::new(EventType::KEY, evdev_key.code(), 0);
+                    allow_err!(keyboard.emit(&[key_up]));
+                    if is_shift {
+                        let shift_up =
+                            InputEvent::new(EventType::KEY, evdev::Key::KEY_LEFTSHIFT.code(), 0);
+                        if let Err(e) = keyboard.emit(&[shift_up]) {
+                            log::warn!("input_char_wayland_key_event: failed to release Shift for '{}': {:?}", chr, e);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Non-ASCII: no reliable down/up semantics available.
+            // Clipboard paste is atomic and handled elsewhere.
+            log::debug!(
+                "Skipping non-ASCII character key {} in uinput service",
+                if down { "down" } else { "up" }
+            );
+        }
+    }
+
+    /// Check if character can be input via keysym (ASCII printable with valid keysym).
+    #[inline]
+    pub(crate) fn can_input_via_keysym(c: char, keysym: i32) -> bool {
+        // ASCII printable: 0x20 (space) to 0x7E (tilde)
+        (c as u32 >= 0x20 && c as u32 <= 0x7E) && keysym != 0
+    }
+
+    /// Convert a Unicode character to X11 keysym.
+    pub(crate) fn char_to_keysym(c: char) -> i32 {
+        let codepoint = c as u32;
+        if codepoint == 0 {
+            // Null character has no keysym
+            0
+        } else if (0x20..=0x7E).contains(&codepoint) {
+            // ASCII printable (0x20-0x7E): keysym == Unicode codepoint
+            codepoint as i32
+        } else if (0xA0..=0xFF).contains(&codepoint) {
+            // Latin-1 supplement (0xA0-0xFF): keysym == Unicode codepoint (per X11 keysym spec)
+            codepoint as i32
+        } else {
+            // Everything else (control chars 0x01-0x1F, DEL 0x7F, and all other non-ASCII Unicode):
+            // keysym = 0x01000000 | codepoint (X11 Unicode keysym encoding)
+            (0x0100_0000 | codepoint) as i32
+        }
+    }
+
     fn create_uinput_keyboard() -> ResultType<VirtualDevice> {
         // TODO: ensure keys here
         let mut keys = AttributeSet::<evdev::Key>::new();
@@ -390,13 +552,13 @@ pub mod service {
 
     pub fn map_key(key: &enigo::Key) -> ResultType<(evdev::Key, bool)> {
         if let Some(k) = KEY_MAP.get(&key) {
-            log::trace!("mapkey {:?}, get {:?}", &key, &k);
+            log::trace!("mapkey matched in KEY_MAP, evdev={:?}", &k);
             return Ok((k.clone(), false));
         } else {
             match key {
                 enigo::Key::Layout(c) => {
                     if let Some((k, is_shift)) = KEY_MAP_LAYOUT.get(&c) {
-                        log::trace!("mapkey {:?}, get {:?}", &key, k);
+                        log::trace!("mapkey Layout matched, evdev={:?}", k);
                         return Ok((k.clone(), is_shift.clone()));
                     }
                 }
@@ -421,41 +583,68 @@ pub mod service {
         keyboard: &mut VirtualDevice,
         data: &DataKeyboard,
     ) {
-        log::trace!("handle_keyboard {:?}", &data);
+        let data_desc = match data {
+            DataKeyboard::Sequence(seq) => format!("Sequence(len={})", seq.len()),
+            DataKeyboard::KeyDown(Key::Layout(_))
+            | DataKeyboard::KeyUp(Key::Layout(_))
+            | DataKeyboard::KeyClick(Key::Layout(_)) => "Layout(<redacted>)".to_string(),
+            _ => format!("{:?}", data),
+        };
+        log::trace!("handle_keyboard received: {}", data_desc);
         match data {
-            DataKeyboard::Sequence(_seq) => {
-                // ignore
+            DataKeyboard::Sequence(seq) => {
+                // Normally handled by --server process (input_text_via_clipboard_server).
+                // Fallback: input_text_wayland handles ASCII via keysym/uinput;
+                // non-ASCII will be skipped (no clipboard access in --service process).
+                if !seq.is_empty() {
+                    input_text_wayland(seq, keyboard);
+                }
             }
             DataKeyboard::KeyDown(enigo::Key::Raw(code)) => {
-                let down_event = InputEvent::new(EventType::KEY, *code - 8, 1);
-                allow_err!(keyboard.emit(&[down_event]));
-            }
-            DataKeyboard::KeyUp(enigo::Key::Raw(code)) => {
-                let up_event = InputEvent::new(EventType::KEY, *code - 8, 0);
-                allow_err!(keyboard.emit(&[up_event]));
-            }
-            DataKeyboard::KeyDown(key) => {
-                if let Ok((k, is_shift)) = map_key(key) {
-                    if is_shift {
-                        let down_event =
-                            InputEvent::new(EventType::KEY, evdev::Key::KEY_LEFTSHIFT.code(), 1);
-                        allow_err!(keyboard.emit(&[down_event]));
-                    }
-                    let down_event = InputEvent::new(EventType::KEY, k.code(), 1);
+                if *code < 8 {
+                    log::error!("Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping", code);
+                } else {
+                    let down_event = InputEvent::new(EventType::KEY, *code - 8, 1);
                     allow_err!(keyboard.emit(&[down_event]));
                 }
             }
-            DataKeyboard::KeyUp(key) => {
-                if let Ok((k, _)) = map_key(key) {
-                    let up_event = InputEvent::new(EventType::KEY, k.code(), 0);
+            DataKeyboard::KeyUp(enigo::Key::Raw(code)) => {
+                if *code < 8 {
+                    log::error!("Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping", code);
+                } else {
+                    let up_event = InputEvent::new(EventType::KEY, *code - 8, 0);
                     allow_err!(keyboard.emit(&[up_event]));
                 }
             }
+            DataKeyboard::KeyDown(key) => {
+                if let Key::Layout(chr) = key {
+                    input_char_wayland_key_event(*chr, true, keyboard);
+                } else {
+                    if let Ok((k, _is_shift)) = map_key(key) {
+                        let down_event = InputEvent::new(EventType::KEY, k.code(), 1);
+                        allow_err!(keyboard.emit(&[down_event]));
+                    }
+                }
+            }
+            DataKeyboard::KeyUp(key) => {
+                if let Key::Layout(chr) = key {
+                    input_char_wayland_key_event(*chr, false, keyboard);
+                } else {
+                    if let Ok((k, _)) = map_key(key) {
+                        let up_event = InputEvent::new(EventType::KEY, k.code(), 0);
+                        allow_err!(keyboard.emit(&[up_event]));
+                    }
+                }
+            }
             DataKeyboard::KeyClick(key) => {
-                if let Ok((k, _)) = map_key(key) {
-                    let down_event = InputEvent::new(EventType::KEY, k.code(), 1);
-                    let up_event = InputEvent::new(EventType::KEY, k.code(), 0);
-                    allow_err!(keyboard.emit(&[down_event, up_event]));
+                if let Key::Layout(chr) = key {
+                    input_text_wayland(&chr.to_string(), keyboard);
+                } else {
+                    if let Ok((k, _is_shift)) = map_key(key) {
+                        let down_event = InputEvent::new(EventType::KEY, k.code(), 1);
+                        let up_event = InputEvent::new(EventType::KEY, k.code(), 0);
+                        allow_err!(keyboard.emit(&[down_event, up_event]));
+                    }
                 }
             }
             DataKeyboard::GetKeyState(key) => {
@@ -580,9 +769,13 @@ pub mod service {
     }
 
     fn spawn_keyboard_handler(mut stream: Connection) {
+        log::debug!("spawn_keyboard_handler: new keyboard handler connection");
         tokio::spawn(async move {
             let mut keyboard = match create_uinput_keyboard() {
-                Ok(keyboard) => keyboard,
+                Ok(keyboard) => {
+                    log::debug!("UInput keyboard device created successfully");
+                    keyboard
+                }
                 Err(e) => {
                     log::error!("Failed to create keyboard {}", e);
                     return;
@@ -602,6 +795,7 @@ pub mod service {
                                         handle_keyboard(&mut stream, &mut keyboard, &data).await;
                                     }
                                     _ => {
+                                        log::warn!("Unexpected data type in keyboard handler");
                                     }
                                 }
                             }
