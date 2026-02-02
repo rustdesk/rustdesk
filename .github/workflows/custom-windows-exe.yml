@@ -21,7 +21,7 @@ jobs:
       - name: Restore official Cargo.lock (critical for version compatibility)
         shell: pwsh
         run: |
-          # Удаляем существующий Cargo.lock если он есть (чтобы избежать конфликтов версий)
+          # Удаляем существующий Cargo.lock если он есть
           if (Test-Path "Cargo.lock") {
             Remove-Item -Force "Cargo.lock"
             Write-Host "✓ Removed existing Cargo.lock"
@@ -90,7 +90,7 @@ jobs:
           }
           Write-Host "✓ Config settings verified"
 
-      - name: Build RustDesk (without hwcodec/vram)
+      - name: Build RustDesk (without hwcodec/vram for CI stability)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
@@ -101,13 +101,15 @@ jobs:
           export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
           export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
           
-          # Сборка БЕЗ hwcodec/vram — они не критичны и часто ломают билд в CI
-          python ./build.py --portable --flutter --skip-portable-pack --locked
+          # ВАЖНО: убран флаг --locked (его нет в build.py)
+          # Сборка БЕЗ hwcodec/vram для надёжности в CI
+          python ./build.py --portable --flutter --skip-portable-pack
           
           # Проверяем успешность сборки
           if [ ! -d "./flutter/build/windows/x64/runner/Release" ]; then
             echo "ERROR: Release directory not found!"
-            find ./flutter/build -type d 2>/dev/null | head -20
+            echo "=== Flutter build directory contents ==="
+            find ./flutter/build -type d 2>/dev/null | head -30 || true
             exit 1
           fi
           
@@ -115,38 +117,32 @@ jobs:
           echo "✓ Build successful"
 
       - name: Create single EXE (self-extracting)
-        shell: pwsh
+        shell: bash
         run: |
-          # Безопасное удаление dpiAware через PowerShell
-          $manifestPath = "res/manifest.xml"
-          if (Test-Path $manifestPath) {
-            $content = Get-Content -Path $manifestPath -Raw
-            $content = $content -replace '(?ms)\s*<application\b[^>]*>.*?</application>', ''
-            Set-Content -Path $manifestPath -Value $content -Encoding UTF8
-            Write-Host "✓ dpiAware removed from manifest.xml"
-          }
-
+          # Удаляем dpiAware через sed (работает в bash на Windows)
+          sed -i '/dpiAware/d' res/manifest.xml
+          echo "✓ dpiAware removed from manifest.xml"
+          
           # Генерация портативного пакета
-          Set-Location libs/portable
+          cd libs/portable
           pip install -r requirements.txt
           python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
-          Set-Location ../..
-
+          cd ../..
+          
           # Перемещаем результат
-          $packerSrc = "./target/release/rustdesk-portable-packer.exe"
-          $packerDst = "./dist/rustdesk-custom.exe"
-          
-          New-Item -ItemType Directory -Path (Split-Path $packerDst -Parent) -Force | Out-Null
-          
-          if (Test-Path $packerSrc) {
-            Move-Item -Path $packerSrc -Destination $packerDst -Force
-            Write-Host "✓ Single EXE created: $packerDst"
-            Get-Item $packerDst | Format-List Name, Length, LastWriteTime
-          } else {
-            Write-Error "rustdesk-portable-packer.exe not found!"
-            Get-ChildItem -Path "./target/release/" -Filter "*rustdesk*" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
+          mkdir -p ./dist
+          if [ -f "./target/release/rustdesk-portable-packer.exe" ]; then
+            mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
+          elif [ -f "./rustdesk/rustdesk-portable-packer.exe" ]; then
+            mv ./rustdesk/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
+          else
+            echo "ERROR: rustdesk-portable-packer.exe not found!"
+            find . -name "rustdesk-portable-packer.exe" 2>/dev/null || true
             exit 1
-          }
+          fi
+          
+          echo "✓ Single EXE created: ./dist/rustdesk-custom.exe"
+          ls -lh ./dist/rustdesk-custom.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
