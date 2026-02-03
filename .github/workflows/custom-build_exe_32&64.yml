@@ -22,7 +22,6 @@ jobs:
         run: |
           if (-not (Test-Path "Cargo.lock")) {
             Write-Host "Cargo.lock not found, restoring from official repository..."
-            # Используем актуальный коммит из ветки 1.2.4 (последняя с поддержкой x86)
             $commit = "d6c8a3b9c0e7a8f9b3e0e8c3a0f9a8b3e0e8c3a0"  # Замените на актуальный коммит вашей версии
             Invoke-WebRequest -Uri "https://raw.githubusercontent.com/rustdesk/rustdesk/$commit/Cargo.lock" -OutFile "Cargo.lock"
             Write-Host "✓ Cargo.lock restored"
@@ -127,18 +126,19 @@ jobs:
           }
           Write-Host "✓ Config settings verified"
 
+      # ===== СБОРКА X64 =====
       - name: Build RustDesk (x64)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
           VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
           VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
-          CMAKE_GENERATOR_PLATFORM: "x64"
+          WINDOWS_BUILD_ARCH: "x64"  # КРИТИЧЕСКИ ВАЖНО для выбора архитектуры
         run: |
           export VCPKG_ROOT="C:/vcpkg"
           export VCPKG_DEFAULT_TRIPLET="x64-windows-static"
           export VCPKG_DEFAULT_HOST_TRIPLET="x64-windows-static"
-          export CMAKE_GENERATOR_PLATFORM="x64"
+          export WINDOWS_BUILD_ARCH="x64"
           
           python ./build.py --portable --flutter --skip-portable-pack
           
@@ -151,6 +151,7 @@ jobs:
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk-x64
           echo "✓ x64 build successful"
 
+      # ===== СБОРКА X86 =====
       - name: Install vcpkg dependencies (x86)
         shell: bash
         env:
@@ -178,19 +179,19 @@ jobs:
           VCPKG_ROOT: "C:/vcpkg"
           VCPKG_DEFAULT_TRIPLET: "x86-windows-static"
           VCPKG_DEFAULT_HOST_TRIPLET: "x86-windows-static"
-          CMAKE_GENERATOR_PLATFORM: "Win32"  # КРИТИЧЕСКИ ВАЖНО для 32-битной сборки
+          WINDOWS_BUILD_ARCH: "x86"  # КРИТИЧЕСКИ ВАЖНО для выбора архитектуры
         run: |
           export VCPKG_ROOT="C:/vcpkg"
           export VCPKG_DEFAULT_TRIPLET="x86-windows-static"
           export VCPKG_DEFAULT_HOST_TRIPLET="x86-windows-static"
-          export CMAKE_GENERATOR_PLATFORM="Win32"
+          export WINDOWS_BUILD_ARCH="x86"
           
-          # Очищаем предыдущую сборку чтобы избежать конфликтов
-          rm -rf ./flutter/build/windows/Win32
+          # ОЧИЩАЕМ ПРЕДЫДУЩУЮ СБОРКУ чтобы избежать конфликтов
+          rm -rf ./flutter/build/windows
           
           python ./build.py --portable --flutter --skip-portable-pack
           
-          # Проверяем оба возможных пути (некоторые версии Flutter используют разные имена)
+          # Проверяем оба возможных пути (некоторые версии используют разные имена)
           if [ -d "./flutter/build/windows/Win32/runner/Release" ]; then
             mv ./flutter/build/windows/Win32/runner/Release ./rustdesk-x86
             echo "✓ x86 build successful (Win32 path)"
@@ -199,6 +200,8 @@ jobs:
             echo "✓ x86 build successful (x86 path)"
           else
             echo "ERROR: Release directory not found for x86!"
+            echo "=== Build output ==="
+            cat ./flutter/build/windows/CMakeCache.txt 2>/dev/null || echo "CMakeCache.txt not found"
             echo "=== Available directories ==="
             find ./flutter/build/windows -type d 2>/dev/null | head -30
             exit 1
@@ -207,8 +210,8 @@ jobs:
       - name: Create single EXE (x64)
         shell: bash
         run: |
-          # Восстанавливаем оригинальный манифест для x64 сборки
-          git checkout res/manifest.xml || true
+          # Восстанавливаем оригинальный манифест
+          git checkout res/manifest.xml 2>/dev/null || true
           
           sed -i '/dpiAware/d' res/manifest.xml
           
@@ -224,8 +227,8 @@ jobs:
       - name: Create single EXE (x86)
         shell: bash
         run: |
-          # Восстанавливаем оригинальный манифест для x86 сборки
-          git checkout res/manifest.xml || true
+          # Восстанавливаем оригинальный манифест
+          git checkout res/manifest.xml 2>/dev/null || true
           
           sed -i '/dpiAware/d' res/manifest.xml
           
@@ -245,11 +248,14 @@ jobs:
           }
           
           # Проверяем, что оба файла существуют
-          if (-not (Test-Path "./dist/rustdesk-custom-x64.exe")) {
+          $x64Exists = Test-Path "./dist/rustdesk-custom-x64.exe"
+          $x86Exists = Test-Path "./dist/rustdesk-custom-x86.exe"
+          
+          if (-not $x64Exists) {
             Write-Error "x64 EXE not found!"
             exit 1
           }
-          if (-not (Test-Path "./dist/rustdesk-custom-x86.exe")) {
+          if (-not $x86Exists) {
             Write-Error "x86 EXE not found!"
             exit 1
           }
