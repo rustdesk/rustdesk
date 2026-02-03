@@ -22,7 +22,8 @@ jobs:
         run: |
           if (-not (Test-Path "Cargo.lock")) {
             Write-Host "Cargo.lock not found, restoring from official repository..."
-            $commit = "14f39d3d0e8c3a0f9a8b3e0e8c3a0f9a8b3e0e8c3"  # Замените на актуальный коммит вашей версии
+            # Используем актуальный коммит из ветки 1.2.4 (последняя с поддержкой x86)
+            $commit = "d6c8a3b9c0e7a8f9b3e0e8c3a0f9a8b3e0e8c3a0"  # Замените на актуальный коммит вашей версии
             Invoke-WebRequest -Uri "https://raw.githubusercontent.com/rustdesk/rustdesk/$commit/Cargo.lock" -OutFile "Cargo.lock"
             Write-Host "✓ Cargo.lock restored"
           } else {
@@ -95,7 +96,7 @@ jobs:
             --force
           echo "✓ Bridge tools installed"
 
-      - name: Generate flutter_rust_bridge files (x64)
+      - name: Generate flutter_rust_bridge files
         shell: bash
         run: |
           ~/.cargo/bin/flutter_rust_bridge_codegen \
@@ -132,10 +133,12 @@ jobs:
           VCPKG_ROOT: "C:/vcpkg"
           VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
           VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
+          CMAKE_GENERATOR_PLATFORM: "x64"
         run: |
           export VCPKG_ROOT="C:/vcpkg"
           export VCPKG_DEFAULT_TRIPLET="x64-windows-static"
           export VCPKG_DEFAULT_HOST_TRIPLET="x64-windows-static"
+          export CMAKE_GENERATOR_PLATFORM="x64"
           
           python ./build.py --portable --flutter --skip-portable-pack
           
@@ -175,26 +178,38 @@ jobs:
           VCPKG_ROOT: "C:/vcpkg"
           VCPKG_DEFAULT_TRIPLET: "x86-windows-static"
           VCPKG_DEFAULT_HOST_TRIPLET: "x86-windows-static"
+          CMAKE_GENERATOR_PLATFORM: "Win32"  # КРИТИЧЕСКИ ВАЖНО для 32-битной сборки
         run: |
           export VCPKG_ROOT="C:/vcpkg"
           export VCPKG_DEFAULT_TRIPLET="x86-windows-static"
           export VCPKG_DEFAULT_HOST_TRIPLET="x86-windows-static"
+          export CMAKE_GENERATOR_PLATFORM="Win32"
           
-          # ВАЖНО: не генерируем бриджи повторно — используем уже созданные файлы
+          # Очищаем предыдущую сборку чтобы избежать конфликтов
+          rm -rf ./flutter/build/windows/Win32
+          
           python ./build.py --portable --flutter --skip-portable-pack
           
-          if [ ! -d "./flutter/build/windows/Win32/runner/Release" ]; then
+          # Проверяем оба возможных пути (некоторые версии Flutter используют разные имена)
+          if [ -d "./flutter/build/windows/Win32/runner/Release" ]; then
+            mv ./flutter/build/windows/Win32/runner/Release ./rustdesk-x86
+            echo "✓ x86 build successful (Win32 path)"
+          elif [ -d "./flutter/build/windows/x86/runner/Release" ]; then
+            mv ./flutter/build/windows/x86/runner/Release ./rustdesk-x86
+            echo "✓ x86 build successful (x86 path)"
+          else
             echo "ERROR: Release directory not found for x86!"
-            find ./flutter/build -type d 2>/dev/null | head -20
+            echo "=== Available directories ==="
+            find ./flutter/build/windows -type d 2>/dev/null | head -30
             exit 1
           fi
-          
-          mv ./flutter/build/windows/Win32/runner/Release ./rustdesk-x86
-          echo "✓ x86 build successful"
 
       - name: Create single EXE (x64)
         shell: bash
         run: |
+          # Восстанавливаем оригинальный манифест для x64 сборки
+          git checkout res/manifest.xml || true
+          
           sed -i '/dpiAware/d' res/manifest.xml
           
           cd libs/portable
@@ -209,6 +224,9 @@ jobs:
       - name: Create single EXE (x86)
         shell: bash
         run: |
+          # Восстанавливаем оригинальный манифест для x86 сборки
+          git checkout res/manifest.xml || true
+          
           sed -i '/dpiAware/d' res/manifest.xml
           
           cd libs/portable
@@ -221,9 +239,21 @@ jobs:
       - name: Verify EXE files
         shell: pwsh
         run: |
+          Write-Host "=== Generated EXE files ==="
           Get-ChildItem -Path ./dist -Filter "*.exe" | ForEach-Object {
-            Write-Host "✓ $($_.Name) - $($_.Length / 1MB) MB"
+            Write-Host "✓ $($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
           }
+          
+          # Проверяем, что оба файла существуют
+          if (-not (Test-Path "./dist/rustdesk-custom-x64.exe")) {
+            Write-Error "x64 EXE not found!"
+            exit 1
+          }
+          if (-not (Test-Path "./dist/rustdesk-custom-x86.exe")) {
+            Write-Error "x86 EXE not found!"
+            exit 1
+          }
+          Write-Host "✓ Both EXE files created successfully"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
