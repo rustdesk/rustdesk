@@ -4,37 +4,38 @@ on:
 
 env:
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
-  RUST_VERSION: "1.75"  # Официальная версия из билда RustDesk (гарантирует совместимость)
-  FLUTTER_VERSION: "3.22.3"  # Совместимая версия для генерации бриджей
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.22.3"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
 
 jobs:
   build-windows-exe:
     runs-on: windows-2022
-    strategy:
-      matrix:
-        include:
-          - arch: x64
-            rust_target: x86_64-pc-windows-msvc
-            vcpkg_triplet: x64-windows-static
-            output_name: rustdesk-custom-x64.exe
-          - arch: x86
-            rust_target: i686-pc-windows-msvc
-            vcpkg_triplet: x86-windows-static
-            output_name: rustdesk-custom-x86.exe
-      fail-fast: false
-
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      - name: Restore official Cargo.lock
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "Cargo.lock")) {
+            Write-Host "Cargo.lock not found, restoring from official repository..."
+            $commit = "14f39d3d0e8c3a0f9a8b3e0e8c3a0f9a8b3e0e8c3"  # Замените на актуальный коммит вашей версии
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/rustdesk/rustdesk/$commit/Cargo.lock" -OutFile "Cargo.lock"
+            Write-Host "✓ Cargo.lock restored"
+          } else {
+            Write-Host "✓ Cargo.lock found"
+          }
+
       - name: Install Rust toolchain with rustfmt
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          targets: ${{ matrix.rust_target }}
+          targets: |
+            x86_64-pc-windows-msvc
+            i686-pc-windows-msvc
           components: rustfmt
 
       - name: Install Flutter
@@ -53,37 +54,35 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
-      - name: Install vcpkg dependencies
+      - name: Install vcpkg dependencies (x64)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
-          VCPKG_DEFAULT_TRIPLET: ${{ matrix.vcpkg_triplet }}
-          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.vcpkg_triplet }}
+          VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
+          VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
         run: |
           export VCPKG_ROOT="C:/vcpkg"
-          export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
-          export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
+          export VCPKG_DEFAULT_TRIPLET="x64-windows-static"
+          export VCPKG_DEFAULT_HOST_TRIPLET="x64-windows-static"
           
           "$VCPKG_ROOT/vcpkg" install \
             --triplet "$VCPKG_DEFAULT_TRIPLET" \
             --x-install-root="$VCPKG_ROOT/installed"
           
-          # Verify opus headers exist
           if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
-            echo "ERROR: opus headers missing for ${{ matrix.arch }}!"
+            echo "ERROR: opus headers missing!"
             exit 1
           fi
-          echo "✓ opus headers verified for ${{ matrix.arch }}"
+          echo "✓ opus headers verified (x64)"
 
       - name: Prepare Flutter dependencies
         shell: bash
         run: |
           cd flutter
-          # Patch for compatibility (as in official build)
           sed -i 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
           flutter pub get
           cd ..
-          echo "✓ Flutter dependencies installed for ${{ matrix.arch }}"
+          echo "✓ Flutter dependencies installed"
 
       - name: Install bridge generation tools
         shell: bash
@@ -94,10 +93,9 @@ jobs:
             --features "uuid" \
             --locked \
             --force
-          echo "✓ Bridge tools installed for ${{ matrix.arch }}"
+          echo "✓ Bridge tools installed"
 
-      - name: Generate flutter_rust_bridge files (x64 only - shared between architectures)
-        if: matrix.arch == 'x64'
+      - name: Generate flutter_rust_bridge files (x64)
         shell: bash
         run: |
           ~/.cargo/bin/flutter_rust_bridge_codegen \
@@ -113,22 +111,7 @@ jobs:
             ls -la src/ | grep -i bridge || true
             exit 1
           fi
-          echo "✓ Bridge files generated"
-
-      - name: Wait for bridge files (x86)
-        if: matrix.arch == 'x86'
-        shell: bash
-        run: |
-          # Wait for x64 job to generate bridge files
-          for i in {1..30}; do
-            if [ -f "src/bridge_generated.rs" ] && [ -f "src/bridge_generated.io.rs" ]; then
-              echo "✓ Bridge files available"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "ERROR: bridge files not available after 60 seconds!"
-          exit 1
+          echo "✓ Bridge files generated successfully"
 
       - name: Verify Config Settings
         shell: pwsh
@@ -141,85 +124,110 @@ jobs:
             Write-Error "API key not found in config.rs"
             exit 1
           }
-          Write-Host "✓ Config settings verified for ${{ matrix.arch }}"
+          Write-Host "✓ Config settings verified"
 
-      - name: Build RustDesk (${{ matrix.arch }})
+      - name: Build RustDesk (x64)
         shell: bash
         env:
           VCPKG_ROOT: "C:/vcpkg"
-          VCPKG_DEFAULT_TRIPLET: ${{ matrix.vcpkg_triplet }}
-          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.vcpkg_triplet }}
+          VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
+          VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
         run: |
           export VCPKG_ROOT="C:/vcpkg"
-          export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
-          export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
+          export VCPKG_DEFAULT_TRIPLET="x64-windows-static"
+          export VCPKG_DEFAULT_HOST_TRIPLET="x64-windows-static"
           
-          # Build WITHOUT hwcodec/vram for CI stability (especially important for x86)
           python ./build.py --portable --flutter --skip-portable-pack
           
-          # Verify build success
-          if [ ! -d "./flutter/build/windows/${{ matrix.arch == 'x64' && 'x64' || 'Win32' }}/runner/Release" ]; then
-            echo "ERROR: Release directory not found for ${{ matrix.arch }}!"
+          if [ ! -d "./flutter/build/windows/x64/runner/Release" ]; then
+            echo "ERROR: Release directory not found for x64!"
             find ./flutter/build -type d 2>/dev/null | head -20
             exit 1
           fi
           
-          mv "./flutter/build/windows/${{ matrix.arch == 'x64' && 'x64' || 'Win32' }}/runner/Release" "./rustdesk-${{ matrix.arch }}"
-          echo "✓ Build successful for ${{ matrix.arch }}"
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk-x64
+          echo "✓ x64 build successful"
 
-      - name: Create single EXE (${{ matrix.arch }})
+      - name: Install vcpkg dependencies (x86)
+        shell: bash
+        env:
+          VCPKG_ROOT: "C:/vcpkg"
+          VCPKG_DEFAULT_TRIPLET: "x86-windows-static"
+          VCPKG_DEFAULT_HOST_TRIPLET: "x86-windows-static"
+        run: |
+          export VCPKG_ROOT="C:/vcpkg"
+          export VCPKG_DEFAULT_TRIPLET="x86-windows-static"
+          export VCPKG_DEFAULT_HOST_TRIPLET="x86-windows-static"
+          
+          "$VCPKG_ROOT/vcpkg" install \
+            --triplet "$VCPKG_DEFAULT_TRIPLET" \
+            --x-install-root="$VCPKG_ROOT/installed"
+          
+          if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
+            echo "ERROR: opus headers missing for x86!"
+            exit 1
+          fi
+          echo "✓ opus headers verified (x86)"
+
+      - name: Build RustDesk (x86)
+        shell: bash
+        env:
+          VCPKG_ROOT: "C:/vcpkg"
+          VCPKG_DEFAULT_TRIPLET: "x86-windows-static"
+          VCPKG_DEFAULT_HOST_TRIPLET: "x86-windows-static"
+        run: |
+          export VCPKG_ROOT="C:/vcpkg"
+          export VCPKG_DEFAULT_TRIPLET="x86-windows-static"
+          export VCPKG_DEFAULT_HOST_TRIPLET="x86-windows-static"
+          
+          # ВАЖНО: не генерируем бриджи повторно — используем уже созданные файлы
+          python ./build.py --portable --flutter --skip-portable-pack
+          
+          if [ ! -d "./flutter/build/windows/Win32/runner/Release" ]; then
+            echo "ERROR: Release directory not found for x86!"
+            find ./flutter/build -type d 2>/dev/null | head -20
+            exit 1
+          fi
+          
+          mv ./flutter/build/windows/Win32/runner/Release ./rustdesk-x86
+          echo "✓ x86 build successful"
+
+      - name: Create single EXE (x64)
         shell: bash
         run: |
-          # Remove dpiAware
           sed -i '/dpiAware/d' res/manifest.xml
           
-          # Generate portable packer
           cd libs/portable
           pip install -r requirements.txt
-          python ./generate.py -f "../../rustdesk-${{ matrix.arch }}/" -o . -e "../../rustdesk-${{ matrix.arch }}/rustdesk.exe"
+          python ./generate.py -f "../../rustdesk-x64/" -o . -e "../../rustdesk-x64/rustdesk.exe"
           cd ../..
           
-          # Move result
           mkdir -p ./dist
-          mv ./target/release/rustdesk-portable-packer.exe "./dist/${{ matrix.output_name }}"
+          mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom-x64.exe
+          echo "✓ x64 single EXE created"
+
+      - name: Create single EXE (x86)
+        shell: bash
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml
           
-          echo "✓ Single EXE created: ./dist/${{ matrix.output_name }}"
-          ls -lh "./dist/${{ matrix.output_name }}"
+          cd libs/portable
+          python ./generate.py -f "../../rustdesk-x86/" -o . -e "../../rustdesk-x86/rustdesk.exe"
+          cd ../..
+          
+          mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom-x86.exe
+          echo "✓ x86 single EXE created"
+
+      - name: Verify EXE files
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path ./dist -Filter "*.exe" | ForEach-Object {
+            Write-Host "✓ $($_.Name) - $($_.Length / 1MB) MB"
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rustdesk-single-exe-${{ matrix.arch }}
-          path: "./dist/${{ matrix.output_name }}"
-          retention-days: 30
-
-  release:
-    needs: build-windows-exe
-    runs-on: windows-2022
-    steps:
-      - name: Download x64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: rustdesk-single-exe-x64
-          path: ./dist
-
-      - name: Download x86 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: rustdesk-single-exe-x86
-          path: ./dist
-
-      - name: Create release package
-        shell: pwsh
-        run: |
-          $version = "1.0.0-custom"
-          $zipName = "rustdesk-$version-windows.zip"
-          Compress-Archive -Path "./dist/*" -DestinationPath "./$zipName"
-          Write-Host "✓ Release package created: $zipName"
-
-      - name: Upload release package
-        uses: actions/upload-artifact@v4
-        with:
-          name: rustdesk-release-package
-          path: ./*.zip
+          name: rustdesk-single-exe
+          path: ./dist/
           retention-days: 30
