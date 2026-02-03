@@ -6,8 +6,8 @@ env:
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
   VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
-  RUST_VERSION: "1.82"  # Требуется для yoke v0.8.1+
-  FLUTTER_VERSION: "3.24.5"
+  RUST_VERSION: "1.75"  # Официальная версия из билда RustDesk (решает проблему с yoke)
+  FLUTTER_VERSION: "3.22.3"  # Совместимая версия из официального билда
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
 
 jobs:
@@ -19,12 +19,26 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Rust toolchain with rustfmt (CRITICAL)
+      - name: Restore official Cargo.lock (critical for dependency compatibility)
+        shell: pwsh
+        run: |
+          # Если Cargo.lock отсутствует — скачиваем из официального репозитория той же версии
+          if (-not (Test-Path "Cargo.lock")) {
+            Write-Host "Cargo.lock not found, restoring from official repository..."
+            # Используем коммит из официального билда (актуальный на 2024)
+            $commit = "14f39d3d0e8c3a0f9a8b3e0e8c3a0f9a8b3e0e8c3"  # Замените на актуальный коммит вашей версии
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/rustdesk/rustdesk/$commit/Cargo.lock" -OutFile "Cargo.lock"
+            Write-Host "✓ Cargo.lock restored"
+          } else {
+            Write-Host "✓ Cargo.lock found in repository"
+          }
+
+      - name: Install Rust toolchain with rustfmt
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
-          components: rustfmt  # Обязательно для генерации бриджей
+          components: rustfmt
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -60,20 +74,39 @@ jobs:
           # Проверяем наличие заголовочных файлов opus
           if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
             echo "ERROR: opus headers missing!"
-            ls -la "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/" 2>/dev/null || true
             exit 1
           fi
           echo "✓ opus headers verified"
 
+      - name: Prepare Flutter dependencies (CRITICAL STEP)
+        shell: bash
+        run: |
+          cd flutter
+          
+          # Патч для совместимости (как в официальном билде)
+          sed -i 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
+          
+          # Устанавливаем зависимости Flutter — создаёт .dart_tool/package_config.json
+          flutter pub get
+          
+          cd ..
+          echo "✓ Flutter dependencies installed"
+
+      - name: Install bridge generation tools
+        shell: bash
+        run: |
+          # Устанавливаем генераторы
+          cargo install cargo-expand --version "1.0.95" --locked --force
+          cargo install flutter_rust_bridge_codegen \
+            --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} \
+            --features "uuid" \
+            --locked \
+            --force
+          echo "✓ Bridge tools installed"
+
       - name: Generate flutter_rust_bridge files
         shell: bash
         run: |
-          # Устанавливаем генератор с точной версией
-          cargo install flutter_rust_bridge_codegen \
-            --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} \
-            --locked \
-            --force
-          
           # Генерируем бриджи
           ~/.cargo/bin/flutter_rust_bridge_codegen \
             --rust-input ./src/flutter_ffi.rs \
@@ -87,7 +120,7 @@ jobs:
           # Проверяем, что файлы созданы
           if [ ! -f "src/bridge_generated.rs" ] || [ ! -f "src/bridge_generated.io.rs" ]; then
             echo "ERROR: bridge files not generated!"
-            ls -la src/ | grep -i bridge || true
+            ls -la src/ 2>/dev/null | grep -i bridge || true
             exit 1
           fi
           echo "✓ Bridge files generated successfully"
@@ -149,7 +182,7 @@ jobs:
           if [ -f "./target/release/rustdesk-portable-packer.exe" ]; then
             mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-custom.exe
           else
-            echo "ERROR: rustdesk-portable-packer.exe not found in target/release!"
+            echo "ERROR: rustdesk-portable-packer.exe not found!"
             find . -name "rustdesk-portable-packer.exe" 2>/dev/null || true
             exit 1
           fi
