@@ -128,11 +128,11 @@ jobs:
       - name: Verify Config Settings
         shell: pwsh
         run: |
-          if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "web-srv.smol-it.ru")) {
-            Write-Error "web-srv.smol-it.ru not found in config.rs"
+          if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "id.smol-it.ru")) {
+            Write-Error "id.smol-it.ru not found in config.rs"
             exit 1
           }
-          if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "HFbRpr1f56XisOb5Ext6PNnWFpjyO3Ew6SLzfbJg88w=")) {
+          if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "musi19RhPi9hHexXhYQsi6IcxJ9Bm7OchmtMljN3j2I=")) {
             Write-Error "API key not found in config.rs"
             exit 1
           }
