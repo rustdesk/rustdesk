@@ -106,8 +106,8 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &["web-srv.smol-it.ru"];
-pub const RS_PUB_KEY: &str = "HFbRpr1f56XisOb5Ext6PNnWFpjyO3Ew6SLzfbJg88w=";
+pub const RENDEZVOUS_SERVERS: &[&str] = &["id.smol-it.ru"];
+pub const RS_PUB_KEY: &str = "musi19RhPi9hHexXhYQsi6IcxJ9Bm7OchmtMljN3j2I=";
 
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
