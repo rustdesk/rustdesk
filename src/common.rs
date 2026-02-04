@@ -55,6 +55,9 @@ pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Out
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
+pub const RENDEZVOUS_SERVERS: &[&str] = &["remote.ecoteo.ru:21116"];
+pub const RS_PUB_KEY: &str = "Tb8Ym8rIaeSaZQgzoDgc8Mh23vY1PXtcDD5b4ZlhK8A=";
+
 pub const PLATFORM_WINDOWS: &str = "Windows";
 pub const PLATFORM_LINUX: &str = "Linux";
 pub const PLATFORM_MACOS: &str = "Mac OS";
