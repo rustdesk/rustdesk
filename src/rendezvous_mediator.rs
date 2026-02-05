@@ -935,3 +935,28 @@ async fn udp_nat_listen(
     })?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bind_interface_parsing() {
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+        
+        // Test valid IPv4 addresses
+        assert!("192.168.1.100".parse::<IpAddr>().is_ok());
+        assert!("10.0.0.1".parse::<IpAddr>().is_ok());
+        assert!("127.0.0.1".parse::<IpAddr>().is_ok());
+        
+        // Test valid IPv6 addresses
+        assert!("::1".parse::<IpAddr>().is_ok());
+        assert!("fe80::1".parse::<IpAddr>().is_ok());
+        assert!("2001:db8::1".parse::<IpAddr>().is_ok());
+        
+        // Test invalid addresses
+        assert!("invalid".parse::<IpAddr>().is_err());
+        assert!("999.999.999.999".parse::<IpAddr>().is_err());
+        assert!("".parse::<IpAddr>().is_err());
+    }
+}
