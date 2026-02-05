@@ -769,7 +769,13 @@ async fn direct_server(server: ServerPtr) {
         ) || option2bool("stop-service", &Config::get_option("stop-service"));
         if !disabled && listener.is_none() {
             port = get_direct_port();
-            match hbb_common::tcp::listen_any(port as _).await {
+            let bind_interface = Config::get_bind_interface();
+            let result = if bind_interface.is_empty() {
+                hbb_common::tcp::listen_any(port as _).await
+            } else {
+                hbb_common::tcp::listen_on(&bind_interface, port as _).await
+            };
+            match result {
                 Ok(l) => {
                     listener = Some(l);
                     log::info!(
