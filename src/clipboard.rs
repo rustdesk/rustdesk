@@ -238,6 +238,19 @@ pub fn update_clipboard(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     });
 }
 
+/// Awaitable version of `update_clipboard` that ensures the clipboard write
+/// completes before returning. Used on the server (controlled) side so that
+/// the clipboard content is ready before a subsequent paste keystroke is
+/// processed, preventing a race condition when speech-to-text tools (or
+/// similar) update the clipboard and immediately trigger Cmd+V / Ctrl+V.
+#[cfg(not(target_os = "android"))]
+pub async fn update_clipboard_blocking(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
+    let _ = hbb_common::tokio::task::spawn_blocking(move || {
+        update_clipboard_(multi_clipboards, side);
+    })
+    .await;
+}
+
 #[cfg(not(target_os = "android"))]
 pub struct ClipboardContext {
     inner: arboard::Clipboard,
