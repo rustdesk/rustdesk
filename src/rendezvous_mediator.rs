@@ -761,7 +761,7 @@ fn get_direct_port() -> i32 {
 
 async fn listen_with_bind_interface(port: u16) -> ResultType<hbb_common::tokio::net::TcpListener> {
     use hbb_common::tokio::net::{TcpListener, TcpSocket};
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+    use std::net::{IpAddr, SocketAddr};
     
     let bind_interface = Config::get_option("bind-interface");
     
@@ -786,7 +786,9 @@ async fn listen_with_bind_interface(port: u16) -> ResultType<hbb_common::tokio::
         socket.set_reuseaddr(true).ok();
         
         socket.bind(socket_addr)?;
-        Ok(socket.listen(1024)?)
+        // Use the same backlog as listen_any (128)
+        const DEFAULT_BACKLOG: u32 = 128;
+        Ok(socket.listen(DEFAULT_BACKLOG)?)
     }
 }
 
@@ -942,7 +944,7 @@ mod tests {
 
     #[test]
     fn test_bind_interface_parsing() {
-        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+        use std::net::IpAddr;
         
         // Test valid IPv4 addresses
         assert!("192.168.1.100".parse::<IpAddr>().is_ok());
