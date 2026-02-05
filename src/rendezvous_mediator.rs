@@ -749,6 +749,9 @@ impl RendezvousMediator {
     }
 }
 
+// Socket backlog value used for TCP listeners, matching the value in hbb_common::tcp
+const SOCKET_BACKLOG: u32 = 128;
+
 fn get_direct_port() -> i32 {
     let mut port = Config::get_option("direct-access-port")
         .parse::<i32>()
@@ -782,13 +785,11 @@ async fn listen_with_bind_interface(port: u16) -> ResultType<hbb_common::tokio::
         
         // Set socket options
         #[cfg(all(unix, not(target_os = "illumos")))]
-        socket.set_reuseport(true).ok();
-        socket.set_reuseaddr(true).ok();
+        allow_err!(socket.set_reuseport(true));
+        allow_err!(socket.set_reuseaddr(true));
         
         socket.bind(socket_addr)?;
-        // Use the same backlog as listen_any (128)
-        const DEFAULT_BACKLOG: u32 = 128;
-        Ok(socket.listen(DEFAULT_BACKLOG)?)
+        Ok(socket.listen(SOCKET_BACKLOG)?)
     }
 }
 
@@ -941,11 +942,10 @@ async fn udp_nat_listen(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::IpAddr;
 
     #[test]
     fn test_bind_interface_parsing() {
-        use std::net::IpAddr;
-        
         // Test valid IPv4 addresses
         assert!("192.168.1.100".parse::<IpAddr>().is_ok());
         assert!("10.0.0.1".parse::<IpAddr>().is_ok());
