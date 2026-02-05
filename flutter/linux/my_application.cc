@@ -6,6 +6,11 @@
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
+#if defined(GDK_WINDOWING_WAYLAND) && defined(HAS_KEYBOARD_SHORTCUTS_INHIBIT)
+#include "wayland_shortcuts_inhibit.h"
+#endif
+
+#include <desktop_multi_window/desktop_multi_window_plugin.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -70,13 +75,6 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "rustdesk");
   }
 
-  // Ask the window manager to disable any configured shortcuts so we can capture all input events.
-  GtkNative* native = gtk_widget_get_native(GTK_WIDGET(window));
-  if (native != NULL) {
-    GdkSurface* surface = gtk_native_get_surface(native);
-    gdk_toplevel_inhibit_system_shortcuts(GDK_TOPLEVEL(surface), NULL);
-  }
-
   // auto bdw = bitsdojo_window_from(window); // <--- add this line
   // bdw->setCustomFrame(true);               // <-- add this line
   int width = 800, height = 600;
@@ -97,6 +95,13 @@ static void my_application_activate(GApplication* application) {
   try_set_transparent(window, gtk_window_get_screen(window), view);
   gtk_widget_show(GTK_WIDGET(window));
   gtk_widget_show(GTK_WIDGET(view));
+
+#if defined(GDK_WINDOWING_WAYLAND) && defined(HAS_KEYBOARD_SHORTCUTS_INHIBIT)
+  // Register callback for sub-windows created by desktop_multi_window plugin
+  // Only sub-windows (remote windows) need keyboard shortcuts inhibition
+  desktop_multi_window_plugin_set_window_created_callback(
+      (WindowCreatedCallback)wayland_shortcuts_inhibit_init_for_subwindow);
+#endif
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
