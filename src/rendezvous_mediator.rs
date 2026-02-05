@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use hbb_common::{
     allow_err,
-    anyhow::{self, bail},
+    anyhow::{self, bail, Context},
     config::{
         self, keys::*, option2bool, use_ws, Config, CONNECT_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT,
     },
@@ -759,6 +759,37 @@ fn get_direct_port() -> i32 {
     port
 }
 
+async fn listen_with_bind_interface(port: u16) -> ResultType<hbb_common::tokio::net::TcpListener> {
+    use hbb_common::tokio::net::{TcpListener, TcpSocket};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+    
+    let bind_interface = Config::get_option("bind-interface");
+    
+    if bind_interface.is_empty() {
+        // Use the default listen_any behavior
+        hbb_common::tcp::listen_any(port).await
+    } else {
+        // Parse the bind interface address
+        let addr: IpAddr = bind_interface.parse()
+            .with_context(|| format!("Invalid bind interface address: {}", bind_interface))?;
+        let socket_addr = SocketAddr::new(addr, port);
+        
+        // Create and bind socket
+        let socket = match socket_addr {
+            SocketAddr::V4(..) => TcpSocket::new_v4()?,
+            SocketAddr::V6(..) => TcpSocket::new_v6()?,
+        };
+        
+        // Set socket options
+        #[cfg(all(unix, not(target_os = "illumos")))]
+        socket.set_reuseport(true).ok();
+        socket.set_reuseaddr(true).ok();
+        
+        socket.bind(socket_addr)?;
+        Ok(socket.listen(1024)?)
+    }
+}
+
 async fn direct_server(server: ServerPtr) {
     let mut listener = None;
     let mut port = 0;
@@ -769,13 +800,7 @@ async fn direct_server(server: ServerPtr) {
         ) || option2bool("stop-service", &Config::get_option("stop-service"));
         if !disabled && listener.is_none() {
             port = get_direct_port();
-            let bind_interface = Config::get_bind_interface();
-            let result = if bind_interface.is_empty() {
-                hbb_common::tcp::listen_any(port as _).await
-            } else {
-                hbb_common::tcp::listen_on(&bind_interface, port as _).await
-            };
-            match result {
+            match listen_with_bind_interface(port as _).await {
                 Ok(l) => {
                     listener = Some(l);
                     log::info!(
