@@ -730,5 +730,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input note here", "введите заметку"),
         ("note-at-conn-end-tip", "Запрашивать заметку в конце соединения"),
         ("Show terminal extra keys", "Показывать дополнительные кнопки терминала"),
+        ("Relative mouse mode", "Режим относительного перемещения мыши"),
+        ("rel-mouse-not-supported-peer-tip", "Режим относительного перемещения мыши не поддерживается подключённым узлом."),
+        ("rel-mouse-not-ready-tip", "Режим относительного перемещения мыши ещё не готов. Попробуйте снова."),
+        ("rel-mouse-lock-failed-tip", "Невозможно заблокировать курсор. Режим относительного перемещения мыши отключён."),
+        ("rel-mouse-exit-{}-tip", "Нажмите {} для выхода."),
+        ("rel-mouse-permission-lost-tip", "Разрешение на использование клавиатуры отменено. Режим относительного перемещения мыши отключён."),
+        ("Changelog", "Журнал изменений"),
+        ("keep-awake-during-outgoing-sessions-label", "Не отключать экран во время исходящих сеансов"),
+        ("keep-awake-during-incoming-sessions-label", "Не отключать экран во время входящих сеансов"),
     ].iter().cloned().collect();
 }

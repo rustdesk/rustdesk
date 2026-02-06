@@ -106,7 +106,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to delete this empty directory?", "Voulez-vous vraiment supprimer ce répertoire vide ?"),
         ("Are you sure you want to delete the file of this directory?", "Voulez-vous vraiment supprimer le fichier de ce répertoire ?"),
         ("Do this for all conflicts", "Appliquer à tous les conflits"),
-        ("This is irreversible!", "Ceci est irréversible !"),
+        ("This is irreversible!", "Cette action est irréversible !"),
         ("Deleting", "Suppression"),
         ("files", "fichiers"),
         ("Waiting", "En attente"),
@@ -730,5 +730,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input note here", "saisir la note ici"),
         ("note-at-conn-end-tip", "Proposer de rédiger une note une fois la connexion terminée"),
         ("Show terminal extra keys", "Afficher les touches supplémentaires du terminal"),
+        ("Relative mouse mode", "Mode souris relative"),
+        ("rel-mouse-not-supported-peer-tip", "Le mode souris relative n’est pas pris en charge par l’appareil distant."),
+        ("rel-mouse-not-ready-tip", "Le mode souris relative n’est pas encore prêt ; veuillez réessayer."),
+        ("rel-mouse-lock-failed-tip", "Échec du verrouillage du curseur. Le mode souris relative a été désactivé."),
+        ("rel-mouse-exit-{}-tip", "Appuyez sur {} pour quitter."),
+        ("rel-mouse-permission-lost-tip", "L’autorisation de contrôle du clavier a été révoquée. Le mode souris relative a été désactivé."),
+        ("Changelog", "Journal des modifications"),
+        ("keep-awake-during-outgoing-sessions-label", "Maintenir l’écran allumé lors des sessions sortantes"),
+        ("keep-awake-during-incoming-sessions-label", "Maintenir l’écran allumé lors des sessions entrantes"),
     ].iter().cloned().collect();
 }

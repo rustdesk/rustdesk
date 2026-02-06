@@ -23,6 +23,9 @@ pub mod win_mag;
 #[cfg(windows)]
 pub mod win_topmost_window;
 
+#[cfg(target_os = "macos")]
+pub mod macos;
+
 #[cfg(windows)]
 mod win_virtual_display;
 #[cfg(windows)]
@@ -105,7 +108,14 @@ lazy_static::lazy_static! {
         }
         #[cfg(not(windows))]
         {
-            "".to_owned()
+            #[cfg(target_os = "macos")]
+            {
+                macos::PRIVACY_MODE_IMPL.to_owned()
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                "".to_owned()
+            }
         }
     };
 
@@ -127,7 +137,13 @@ pub type PrivacyModeCreator = fn(impl_key: &str) -> Box<dyn PrivacyMode>;
 lazy_static::lazy_static! {
     static ref PRIVACY_MODE_CREATOR: Arc<Mutex<HashMap<&'static str, PrivacyModeCreator>>> = {
         #[cfg(not(windows))]
-        let map: HashMap<&'static str, PrivacyModeCreator> = HashMap::new();
+        let mut map: HashMap<&'static str, PrivacyModeCreator> = HashMap::new();
+        #[cfg(target_os = "macos")]
+        {
+            map.insert(macos::PRIVACY_MODE_IMPL, |impl_key: &str| {
+                Box::new(macos::PrivacyModeImpl::new(impl_key))
+            });
+        }
         #[cfg(windows)]
         let mut map: HashMap<&'static str, PrivacyModeCreator> = HashMap::new();
         #[cfg(windows)]
@@ -333,7 +349,14 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
 
         vec_impls
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        // No translation is intended for privacy_mode_impl_macos_tip as it is a 
+        // placeholder for macOS specific privacy mode implementation which currently
+        // doesn't provide multiple modes like Windows does.
+        vec![(macos::PRIVACY_MODE_IMPL, "privacy_mode_impl_macos_tip")]
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         Vec::new()
     }

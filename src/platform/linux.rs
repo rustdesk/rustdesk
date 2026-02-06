@@ -6,28 +6,25 @@ use hbb_common::{
     anyhow::anyhow,
     bail,
     config::{keys::OPTION_ALLOW_LINUX_HEADLESS, Config},
-    libc::{c_char, c_int, c_long, c_void},
+    libc::{c_char, c_int, c_long, c_uint, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
     regex::{Captures, Regex},
     users::{get_user_by_name, os::unix::UserExt},
 };
+use libxdo_sys::{self, xdo_t, Window};
 use std::{
     cell::RefCell,
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     process::{Child, Command},
     string::String,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
     time::{Duration, Instant},
 };
 use terminfo::{capability as cap, Database};
 use wallpaper;
-
-type Xdo = *const c_void;
 
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
@@ -35,13 +32,20 @@ static mut UNMODIFIED: bool = true;
 const INVALID_TERM_VALUES: [&str; 3] = ["", "unknown", "dumb"];
 const SHELL_PROCESSES: [&str; 4] = ["bash", "zsh", "fish", "sh"];
 
+// Terminal type constants
+const TERM_XTERM_256COLOR: &str = "xterm-256color";
+const TERM_SCREEN_256COLOR: &str = "screen-256color";
+const TERM_XTERM: &str = "xterm";
+
 lazy_static::lazy_static! {
     pub static ref IS_X11: bool = hbb_common::platform::linux::is_x11_or_headless();
+    // Cache for TERM value - once TERM_XTERM_256COLOR is found, reuse it directly
+    static ref CACHED_TERM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     static ref DATABASE_XTERM_256COLOR: Option<Database> = {
-        match Database::from_name("xterm-256color") {
+        match Database::from_name(TERM_XTERM_256COLOR) {
             Ok(database) => Some(database),
             Err(err) => {
-                log::error!("Failed to initialize xterm-256color database: {}", err);
+                log::error!("Failed to initialize {} database: {}", TERM_XTERM_256COLOR, err);
                 None
             }
         }
@@ -79,32 +83,18 @@ lazy_static::lazy_static! {
 }
 
 thread_local! {
-    static XDO: RefCell<Xdo> = RefCell::new(unsafe { xdo_new(std::ptr::null()) });
+    // XDO context - created via libxdo-sys (which uses dynamic loading stub).
+    // If libxdo is not available, xdo will be null and xdo-based functions become no-ops.
+    static XDO: RefCell<*mut xdo_t> = RefCell::new({
+        let xdo = unsafe { libxdo_sys::xdo_new(std::ptr::null()) };
+        if xdo.is_null() {
+            log::warn!("Failed to create xdo context, xdo functions will be disabled");
+        } else {
+            log::info!("xdo context created successfully");
+        }
+        xdo
+    });
     static DISPLAY: RefCell<*mut c_void> = RefCell::new(unsafe { XOpenDisplay(std::ptr::null())});
-}
-
-extern "C" {
-    fn xdo_get_mouse_location(
-        xdo: Xdo,
-        x: *mut c_int,
-        y: *mut c_int,
-        screen_num: *mut c_int,
-    ) -> c_int;
-    fn xdo_new(display: *const c_char) -> Xdo;
-    fn xdo_get_active_window(xdo: Xdo, window: *mut *mut c_void) -> c_int;
-    fn xdo_get_window_location(
-        xdo: Xdo,
-        window: *mut c_void,
-        x: *mut c_int,
-        y: *mut c_int,
-        screen_num: *mut c_int,
-    ) -> c_int;
-    fn xdo_get_window_size(
-        xdo: Xdo,
-        window: *mut c_void,
-        width: *mut c_int,
-        height: *mut c_int,
-    ) -> c_int;
 }
 
 #[link(name = "X11")]
@@ -152,14 +142,19 @@ fn sleep_millis(millis: u64) {
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     let mut res = None;
     XDO.with(|xdo| {
-        if let Ok(xdo) = xdo.try_borrow_mut() {
+        if let Ok(xdo) = xdo.try_borrow() {
             if xdo.is_null() {
                 return;
             }
             let mut x: c_int = 0;
             let mut y: c_int = 0;
             unsafe {
-                xdo_get_mouse_location(*xdo, &mut x as _, &mut y as _, std::ptr::null_mut());
+                libxdo_sys::xdo_get_mouse_location(
+                    *xdo as *const _,
+                    &mut x as _,
+                    &mut y as _,
+                    std::ptr::null_mut(),
+                );
             }
             res = Some((x, y));
         }
@@ -167,27 +162,77 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
     res
 }
 
+pub fn set_cursor_pos(x: i32, y: i32) -> bool {
+    let mut res = false;
+    XDO.with(|xdo| {
+        match xdo.try_borrow() {
+            Ok(xdo) => {
+                if xdo.is_null() {
+                    log::debug!("set_cursor_pos: xdo is null");
+                    return;
+                }
+                unsafe {
+                    let ret = libxdo_sys::xdo_move_mouse(*xdo as *const _, x, y, 0);
+                    if ret != 0 {
+                        log::debug!(
+                            "set_cursor_pos: xdo_move_mouse failed with code {} for coordinates ({}, {})",
+                            ret, x, y
+                        );
+                    }
+                    res = ret == 0;
+                }
+            }
+            Err(_) => {
+                log::debug!("set_cursor_pos: failed to borrow xdo");
+            }
+        }
+    });
+    res
+}
+
+/// Clip cursor - Linux implementation is a no-op.
+///
+/// On X11, there's no direct equivalent to Windows ClipCursor. XGrabPointer
+/// can confine the pointer but requires a window handle and has side effects.
+///
+/// On Wayland, pointer constraints require the zwp_pointer_constraints_v1
+/// protocol which is compositor-dependent.
+///
+/// For relative mouse mode on Linux, the Flutter side uses pointer warping
+/// (set_cursor_pos) to re-center the cursor after each movement, which achieves
+/// a similar effect without requiring cursor clipping.
+///
+/// Returns true (always succeeds as no-op).
+pub fn clip_cursor(_rect: Option<(i32, i32, i32, i32)>) -> bool {
+    // Log only once per process to avoid flooding logs when called frequently.
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    if !LOGGED.swap(true, Ordering::Relaxed) {
+        log::debug!("clip_cursor called (no-op on Linux, this message is logged only once)");
+    }
+    true
+}
+
 pub fn reset_input_cache() {}
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     let mut res = None;
     XDO.with(|xdo| {
-        if let Ok(xdo) = xdo.try_borrow_mut() {
+        if let Ok(xdo) = xdo.try_borrow() {
             if xdo.is_null() {
                 return;
             }
             let mut x: c_int = 0;
             let mut y: c_int = 0;
-            let mut width: c_int = 0;
-            let mut height: c_int = 0;
-            let mut window: *mut c_void = std::ptr::null_mut();
+            let mut width: c_uint = 0;
+            let mut height: c_uint = 0;
+            let mut window: Window = 0;
 
             unsafe {
-                if xdo_get_active_window(*xdo, &mut window) != 0 {
+                if libxdo_sys::xdo_get_active_window(*xdo as *const _, &mut window) != 0 {
                     return;
                 }
-                if xdo_get_window_location(
-                    *xdo,
+                if libxdo_sys::xdo_get_window_location(
+                    *xdo as *const _,
                     window,
                     &mut x as _,
                     &mut y as _,
@@ -196,11 +241,17 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
                 {
                     return;
                 }
-                if xdo_get_window_size(*xdo, window, &mut width as _, &mut height as _) != 0 {
+                if libxdo_sys::xdo_get_window_size(
+                    *xdo as *const _,
+                    window,
+                    &mut width,
+                    &mut height,
+                ) != 0
+                {
                     return;
                 }
-                let center_x = x + width / 2;
-                let center_y = y + height / 2;
+                let center_x = x + (width / 2) as c_int;
+                let center_y = y + (height / 2) as c_int;
                 res = displays.iter().position(|d| {
                     center_x >= d.x
                         && center_x < d.x + d.width
@@ -310,12 +361,12 @@ fn start_uinput_service() {
 /// modern features required by many applications.
 fn suggest_best_term() -> String {
     if is_running_in_tmux() || is_running_in_screen() {
-        return "screen-256color".to_string();
+        return TERM_SCREEN_256COLOR.to_string();
     }
-    if term_supports_256_colors("xterm-256color") {
-        return "xterm-256color".to_string();
+    if term_supports_256_colors(TERM_XTERM_256COLOR) {
+        return TERM_XTERM_256COLOR.to_string();
     }
-    "xterm".to_string()
+    TERM_XTERM.to_string()
 }
 
 fn is_running_in_tmux() -> bool {
@@ -332,7 +383,7 @@ fn supports_256_colors(db: &Database) -> bool {
 
 fn term_supports_256_colors(term: &str) -> bool {
     match term {
-        "xterm-256color" => DATABASE_XTERM_256COLOR
+        TERM_XTERM_256COLOR => DATABASE_XTERM_256COLOR
             .as_ref()
             .map_or(false, |db| supports_256_colors(db)),
         _ => Database::from_name(term).map_or(false, |db| supports_256_colors(&db)),
@@ -340,25 +391,143 @@ fn term_supports_256_colors(term: &str) -> bool {
 }
 
 fn get_cur_term(uid: &str) -> Option<String> {
+    // Check cache first - if TERM_XTERM_256COLOR was found before, reuse it
+    if let Ok(cache) = CACHED_TERM.lock() {
+        if let Some(ref cached) = *cache {
+            if cached == TERM_XTERM_256COLOR {
+                return Some(cached.clone());
+            }
+        }
+    }
+
     if uid.is_empty() {
         return None;
     }
 
+    // Check current process environment
     if let Ok(term) = std::env::var("TERM") {
-        if !INVALID_TERM_VALUES.contains(&term.as_str()) {
+        if term == TERM_XTERM_256COLOR {
+            if let Ok(mut cache) = CACHED_TERM.lock() {
+                *cache = Some(term.clone());
+            }
             return Some(term);
         }
     }
 
-    for proc in SHELL_PROCESSES {
-        // Construct a regex pattern to match either the process name followed by '$' or 'bin/' followed by the process name.
-        let term = get_env("TERM", uid, &format!("{}$|bin/{}", proc, proc));
-        if !INVALID_TERM_VALUES.contains(&term.as_str()) {
-            return Some(term);
+    // Collect all TERM values from shell processes, looking for TERM_XTERM_256COLOR
+    let terms = get_all_term_values(uid);
+
+    // Prefer TERM_XTERM_256COLOR
+    if terms.iter().any(|t| t == TERM_XTERM_256COLOR) {
+        if let Ok(mut cache) = CACHED_TERM.lock() {
+            *cache = Some(TERM_XTERM_256COLOR.to_string());
+        }
+        return Some(TERM_XTERM_256COLOR.to_string());
+    }
+
+    // Return first valid TERM if no TERM_XTERM_256COLOR found
+    let fallback = terms.into_iter().next();
+    if let Some(ref term) = fallback {
+        log::debug!(
+            "TERM_XTERM_256COLOR not found, using fallback TERM: {}",
+            term
+        );
+    }
+    fallback
+}
+
+/// Get all TERM values from shell processes (bash, zsh, fish, sh).
+/// Returns a Vec of unique, valid TERM values.
+fn get_all_term_values(uid: &str) -> Vec<String> {
+    let Ok(uid_num) = uid.parse::<u32>() else {
+        return Vec::new();
+    };
+
+    // Build regex pattern to match shell processes using only argv[0] (the executable path)
+    // Pattern: match process name at start or after '/', followed by space or end
+    // e.g., "bash", "/bin/bash", "/usr/bin/zsh"
+    let shell_pattern = SHELL_PROCESSES
+        .iter()
+        .map(|p| format!(r"(^|/){p}(\s|$)"))
+        .collect::<Vec<_>>()
+        .join("|");
+    let Ok(re) = Regex::new(&shell_pattern) else {
+        return Vec::new();
+    };
+
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+
+    let mut terms = Vec::new();
+
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(pid_str) = file_name.to_str() else {
+            continue;
+        };
+        if !pid_str.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+
+        let proc_path = entry.path();
+
+        // Check if process belongs to the specified uid
+        if let Ok(meta) = std::fs::metadata(&proc_path) {
+            use std::os::unix::fs::MetadataExt;
+            if meta.uid() != uid_num {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        // Check cmdline matches process pattern
+        // /proc/<pid>/cmdline is a sequence of null-terminated strings; the first
+        // one (argv[0]) is the executable path. Match the regex only against that
+        // to avoid false positives from arguments (e.g., "python /path/to/bash-script.py").
+        let cmdline_path = proc_path.join("cmdline");
+        let Ok(cmdline) = std::fs::read(&cmdline_path) else {
+            continue;
+        };
+        let exe_end = cmdline
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(cmdline.len());
+        let exe_str = String::from_utf8_lossy(&cmdline[..exe_end]);
+        if !re.is_match(&exe_str) {
+            continue;
+        }
+
+        // Read environ and extract TERM
+        let environ_path = proc_path.join("environ");
+        let Ok(environ) = std::fs::read(&environ_path) else {
+            continue;
+        };
+
+        for part in environ.split(|&b| b == 0) {
+            if part.is_empty() {
+                continue;
+            }
+            if let Some(eq) = part.iter().position(|&b| b == b'=') {
+                let key_bytes = &part[..eq];
+                if key_bytes == b"TERM" {
+                    let val_bytes = &part[eq + 1..];
+                    let term = String::from_utf8_lossy(val_bytes).into_owned();
+                    if !INVALID_TERM_VALUES.contains(&term.as_str()) && !terms.contains(&term) {
+                        // Early return if we found the preferred term
+                        if term == TERM_XTERM_256COLOR {
+                            return vec![term];
+                        }
+                        terms.push(term);
+                    }
+                    break;
+                }
+            }
         }
     }
 
-    None
+    terms
 }
 
 #[inline]

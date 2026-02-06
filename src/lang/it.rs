@@ -730,5 +730,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input note here", "Inserisci nota qui"),
         ("note-at-conn-end-tip", "Visualizza nota alla fine della connessione"),
         ("Show terminal extra keys", "Visualizza tasti aggiuntivi terminale"),
+        ("Relative mouse mode", "Modalità relativa mouse"),
+        ("rel-mouse-not-supported-peer-tip", "La modalità mouse relativa non è supportata dal peer connesso."),
+        ("rel-mouse-not-ready-tip", "La modalità mouse relativa non è ancora pronta. Riprova."),
+        ("rel-mouse-lock-failed-tip", "Impossibile bloccare il cursore. La modalità mouse relativa è stata disabilitata."),
+        ("rel-mouse-exit-{}-tip", "Premi {} per uscire."),
+        ("rel-mouse-permission-lost-tip", "È stata revocato l'accesso alla tastiera. La modalità mouse relativa è stata disabilitata."),
+        ("Changelog", "Novità programma"),
+        ("keep-awake-during-outgoing-sessions-label", "Mantieni lo schermo attivo durante le sessioni in uscita"),
+        ("keep-awake-during-incoming-sessions-label", "Mantieni lo schermo attivo durante le sessioni in ingresso"),
     ].iter().cloned().collect();
 }

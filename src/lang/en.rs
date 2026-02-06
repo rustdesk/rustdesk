@@ -262,5 +262,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("disable-udp-tip", "Controls whether to use TCP only.\nWhen this option enabled, RustDesk will not use UDP 21116 any more, TCP 21116 will be used instead."),
         ("server-oss-not-support-tip", "NOTE: RustDesk server OSS doesn't include this feature."),
         ("note-at-conn-end-tip", "Ask for note at end of connection"),
+        ("rel-mouse-not-supported-peer-tip", "Relative Mouse Mode is not supported by the connected peer."),
+        ("rel-mouse-not-ready-tip", "Relative Mouse Mode is not ready yet. Please try again."),
+        ("rel-mouse-lock-failed-tip", "Failed to lock cursor. Relative Mouse Mode has been disabled."),
+        ("rel-mouse-exit-{}-tip", "Press {} to exit."),
+        ("rel-mouse-permission-lost-tip", "Keyboard permission was revoked. Relative Mouse Mode has been disabled."),
+        ("keep-awake-during-outgoing-sessions-label", "Keep screen awake during outgoing sessions"),
+        ("keep-awake-during-incoming-sessions-label", "Keep screen awake during incoming sessions"),
     ].iter().cloned().collect();
 }

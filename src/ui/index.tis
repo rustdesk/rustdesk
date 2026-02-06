@@ -16,6 +16,8 @@ const disable_ab = handler.is_disable_ab();
 const hide_server_settings = handler.get_builtin_option("hide-server-settings") == "Y";
 const hide_proxy_settings = handler.get_builtin_option("hide-proxy-settings") == "Y";
 const hide_websocket_settings = handler.get_builtin_option("hide-websocket-settings") == "Y";
+const disable_change_permanent_password = handler.get_builtin_option("disable-change-permanent-password") == "Y";
+const disable_change_id = handler.get_builtin_option("disable-change-id") == "Y";
 
 // html min-width, min-height not working on mac, below works for all
 if (incoming_only) {
@@ -266,6 +268,7 @@ class Enhancements: Reactor.Component {
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
                 {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
+                <li #keep-awake-during-incoming-sessions><span>{svg_checkmark}</span>{translate("keep-awake-during-incoming-sessions-label")}</li>
             </menu>
         </li>;
     }
@@ -281,6 +284,13 @@ class Enhancements: Reactor.Component {
                 }
             } else if (el.id && el.id.indexOf("allow-") == 0) {
                 var enabled = handler.get_option(el.id) == "Y";
+                el.attributes.toggleClass("selected", enabled);
+                var is_opt_fixed = handler.is_option_fixed(el.id);
+                if (is_opt_fixed) {
+                    el.state.disabled = true;
+                }
+            } else if (el.id == "keep-awake-during-incoming-sessions") {
+                var enabled = handler.get_option(el.id) != "N";
                 el.attributes.toggleClass("selected", enabled);
                 var is_opt_fixed = handler.is_option_fixed(el.id);
                 if (is_opt_fixed) {
@@ -302,6 +312,8 @@ class Enhancements: Reactor.Component {
             }
         } else if (v.indexOf("allow-") == 0) {
             handler.set_option(v, handler.get_option(v) == 'Y' ? default_option_no : 'Y');
+        } else if (v == 'keep-awake-during-incoming-sessions') {
+            handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : default_option_yes);
         } else if (v == 'screen-recording') {
             var show_root_dir = is_win && handler.is_installed();
             var user_dir = handler.video_save_directory(false);
@@ -508,11 +520,11 @@ class MyIdMenu: Reactor.Component {
                 {!disable_settings && is_win && handler.is_installed() ? <ShareRdp /> : ""}
                 {!disable_settings && <DirectServer />}
                 {!disable_settings && false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
-                {handler.is_ok_change_id() ? <div .separator /> : ""}
-                {!disable_account && (username ? 
+                {!disable_change_id && handler.is_ok_change_id() ? <div .separator /> : ""}
+                {!disable_account && (username ?
                 <li #logout>{translate('Logout')} ({username})</li> :
                 <li #login>{translate('Login')}</li>)}
-                {!disable_settings && handler.is_ok_change_id() && key_confirmed && connect_status > 0 ? <li #change-id>{translate('Change ID')}</li> : ""}
+                {!disable_change_id && !disable_settings && handler.is_ok_change_id() && key_confirmed && connect_status > 0 ? <li #change-id>{translate('Change ID')}</li> : ""}
                 <div .separator />
                 <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <Languages />
@@ -1050,7 +1062,7 @@ class PasswordArea: Reactor.Component {
             { !show_password ? '' : <li #use-permanent-password><span>{svg_checkmark}</span>{translate('Use permanent password')}</li> }
             { !show_password ? '' : <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li> }
             { !show_password ? '' : <div .separator /> }
-            { !show_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
+            { !show_password || disable_change_permanent_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
             { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
             <div .separator />
             <li #tfa><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
@@ -1394,7 +1406,16 @@ function self.onMouse(evt) {
 }
 
 function check_if_overlay() {
-    if (handler.get_option('allow-remote-config-modification') != 'Y') {
+    var enabled;
+    var is_enabled_by_control_permissions = handler.is_remote_modify_enabled_by_control_permissions();
+    if (is_enabled_by_control_permissions == "true") {
+        enabled = true;
+    } else if (is_enabled_by_control_permissions == "false") {
+        enabled = false;
+    } else {
+        enabled = handler.get_option('allow-remote-config-modification') == 'Y';
+    }
+    if (!enabled) {
         var time0 = getTime();
         handler.check_mouse_time();
         self.timer(120ms, function() {

@@ -116,12 +116,51 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
-        #[allow(invalid_value)]
-        let mut out = mem::MaybeUninit::uninit().assume_init();
-        if GetCursorPos(&mut out) == FALSE {
+        let mut out = mem::MaybeUninit::<POINT>::uninit();
+        if GetCursorPos(out.as_mut_ptr()) == FALSE {
             return None;
         }
-        return Some((out.x, out.y));
+        let out = out.assume_init();
+        Some((out.x, out.y))
+    }
+}
+
+pub fn set_cursor_pos(x: i32, y: i32) -> bool {
+    unsafe {
+        if SetCursorPos(x, y) == FALSE {
+            let err = GetLastError();
+            log::warn!("SetCursorPos failed: x={}, y={}, error_code={}", x, y, err);
+            return false;
+        }
+        true
+    }
+}
+
+/// Clip cursor to a rectangle. Pass None to unclip.
+pub fn clip_cursor(rect: Option<(i32, i32, i32, i32)>) -> bool {
+    unsafe {
+        let result = match rect {
+            Some((left, top, right, bottom)) => {
+                let r = RECT {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                };
+                ClipCursor(&r)
+            }
+            None => ClipCursor(std::ptr::null()),
+        };
+        if result == FALSE {
+            let err = GetLastError();
+            log::warn!(
+                "ClipCursor failed: rect={:?}, error_code={}",
+                rect,
+                err
+            );
+            return false;
+        }
+        true
     }
 }
 
