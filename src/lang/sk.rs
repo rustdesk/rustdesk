@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "Zobraziť RustDesk"),
         ("This PC", "Tento počítač"),
         ("or", "alebo"),
-        ("Continue with", "Pokračovať s"),
         ("Elevate", "Zvýšiť"),
         ("Zoom cursor", "Kurzor priblíženia"),
         ("Accept sessions via password", "Prijímanie relácií pomocou hesla"),
@@ -739,5 +738,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Changelog", ""),
         ("keep-awake-during-outgoing-sessions-label", ""),
         ("keep-awake-during-incoming-sessions-label", ""),
+        ("Continue with {}", "Pokračovať s {}"),
     ].iter().cloned().collect();
 }
