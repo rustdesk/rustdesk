@@ -1173,24 +1173,24 @@ impl<T: InvokeUiSession> Remote<T> {
         if limited_fps > custom_fps {
             limited_fps = custom_fps;
         }
-        let last_auto_fps = self.handler.lc.read().unwrap().last_auto_fps.clone();
+        let last_send_fps = self.handler.lc.read().unwrap().last_send_fps.clone();
         let displays = self.video_threads.keys().cloned().collect::<Vec<_>>();
         let mut fps_trending = |display: usize| {
             let thread = self.video_threads.get_mut(&display)?;
             let ctl = &mut thread.fps_control;
             let len = thread.video_queue.read().unwrap().len();
             let decode_fps = thread.decode_fps.read().unwrap().clone()?;
-            let last_auto_fps = last_auto_fps.clone().unwrap_or(custom_fps as _);
+            let last_send_fps = last_send_fps.clone().unwrap_or(custom_fps as _);
             if ctl.inactive_counter > inactive_threshold {
                 return None;
             }
-            if len > 1 && last_auto_fps > limited_fps || len > std::cmp::max(1, decode_fps / 2) {
+            if len > 1 && last_send_fps > limited_fps || len > std::cmp::max(1, decode_fps / 2) {
                 ctl.idle_counter = 0;
                 return Some(false);
             }
             if len <= 1 {
                 ctl.idle_counter += 1;
-                if ctl.idle_counter > 3 && last_auto_fps + 3 <= limited_fps {
+                if ctl.idle_counter > 3 && last_send_fps + 3 <= limited_fps {
                     return Some(true);
                 }
             }
@@ -1202,7 +1202,7 @@ impl<T: InvokeUiSession> Remote<T> {
         let trendings: Vec<_> = displays.iter().map(|k| fps_trending(*k)).collect();
         let should_decrease = trendings.iter().any(|v| *v == Some(false));
         let should_increase = !should_decrease && trendings.iter().any(|v| *v == Some(true));
-        if last_auto_fps.is_none() || should_decrease || should_increase {
+        if last_send_fps.is_none() || should_decrease || should_increase {
             // limited_fps to ensure decoding is faster than encoding
             let mut auto_fps = limited_fps;
             if should_decrease && limited_fps < max_queue_len {
@@ -1211,7 +1211,7 @@ impl<T: InvokeUiSession> Remote<T> {
             if auto_fps < 1 {
                 auto_fps = 1;
             }
-            if Some(auto_fps) != last_auto_fps {
+            if Some(auto_fps) != last_send_fps {
                 let mut misc = Misc::new();
                 misc.set_option(OptionMessage {
                     custom_fps: auto_fps as _,
@@ -1221,7 +1221,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 msg.set_misc(misc);
                 self.sender.send(Data::Message(msg)).ok();
                 log::info!("Set fps to {}", auto_fps);
-                self.handler.lc.write().unwrap().last_auto_fps = Some(auto_fps);
+                self.handler.lc.write().unwrap().last_send_fps = Some(auto_fps);
             }
         }
         // send refresh

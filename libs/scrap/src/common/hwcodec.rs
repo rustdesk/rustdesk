@@ -253,30 +253,21 @@ impl HwRamEncoder {
     }
 
     pub fn calc_bitrate(width: usize, height: usize, ratio: f32, h264: bool) -> u32 {
-        let base = base_bitrate(width as _, height as _) as f32 * ratio;
-        let threshold = 2000.0;
-        let decay_rate = 0.001; // 1000 * 0.001 = 1
+        let base = base_bitrate(width as _, height as _) as f32;
+        // Monotonically increasing formula: factor = 1.0 + C / (1.0 + base / scale)
+        // d(bitrate)/d(base) = 1 + C/(1+base/scale)² > 0, always positive
+        // Hardware encoder needs higher bitrate for better fluency and quality
+        let scale = 2000.0;
         let factor: f32 = if cfg!(target_os = "android") {
             // https://stackoverflow.com/questions/26110337/what-are-valid-bit-rates-to-set-for-mediacodec?rq=3
-            if base > threshold {
-                1.0 + 4.0 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                5.0
-            }
+            1.0 + 6.0 / (1.0 + base / scale)
         } else if h264 {
-            if base > threshold {
-                1.0 + 1.0 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                2.0
-            }
+            1.0 + 1.8 / (1.0 + base / scale)
         } else {
-            if base > threshold {
-                1.0 + 0.5 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                1.5
-            }
+            1.0 + 1.2 / (1.0 + base / scale)
         };
-        (base * factor) as u32
+        // ratio is multiplied at the end for linear scaling with quality settings
+        (base * factor * ratio) as u32
     }
 
     pub fn check_bitrate_range(_config: &HwRamEncoderConfig, bitrate: u32) -> u32 {
