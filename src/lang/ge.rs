@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "RustDesk-ის ჩვენება"),
         ("This PC", "ეს კომპიუტერი"),
         ("or", "ან"),
-        ("Continue with", "გაგრძელება"),
         ("Elevate", "უფლებების აწევა"),
         ("Zoom cursor", "კურსორის მასშტაბირება"),
         ("Accept sessions via password", "სესიების მიღება პაროლით"),
@@ -737,5 +736,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", ""),
         ("rel-mouse-permission-lost-tip", ""),
         ("Changelog", ""),
+        ("keep-awake-during-outgoing-sessions-label", ""),
+        ("keep-awake-during-incoming-sessions-label", ""),
+        ("Continue with {}", "{}-ით გაგრძელება"),
     ].iter().cloned().collect();
 }

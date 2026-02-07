@@ -59,7 +59,8 @@ class CanvasCoords {
     model.scale = json['scale'];
     model.scrollX = json['scrollX'];
     model.scrollY = json['scrollY'];
-    model.scrollStyle = ScrollStyle.fromJson(json['scrollStyle'], ScrollStyle.scrollauto);
+    model.scrollStyle =
+        ScrollStyle.fromJson(json['scrollStyle'], ScrollStyle.scrollauto);
     model.size = Size(json['size']['w'], json['size']['h']);
     return model;
   }
@@ -418,6 +419,74 @@ class InputModel {
     });
   }
 
+  // https://github.com/flutter/flutter/issues/157241
+  // Infer CapsLock state from the character output.
+  // This is needed because Flutter's HardwareKeyboard.lockModesEnabled may report
+  // incorrect CapsLock state on iOS.
+  bool _getIosCapsFromCharacter(KeyEvent e) {
+    if (!isIOS) return false;
+    final ch = e.character;
+    return _getIosCapsFromCharacterImpl(
+        ch, HardwareKeyboard.instance.isShiftPressed);
+  }
+
+  // RawKeyEvent version of _getIosCapsFromCharacter.
+  bool _getIosCapsFromRawCharacter(RawKeyEvent e) {
+    if (!isIOS) return false;
+    final ch = e.character;
+    return _getIosCapsFromCharacterImpl(ch, e.isShiftPressed);
+  }
+
+  // Shared implementation for inferring CapsLock state from character.
+  // Uses Unicode-aware case detection to support non-ASCII letters (e.g., ü/Ü, é/É).
+  //
+  // Limitations:
+  // 1. This inference assumes the client and server use the same keyboard layout.
+  //    If layouts differ (e.g., client uses EN, server uses DE), the character output
+  //    may not match expectations. For example, ';' on EN layout maps to 'ö' on DE
+  //    layout, making it impossible to correctly infer CapsLock state from the
+  //    character alone.
+  // 2. On iOS, CapsLock+Shift produces uppercase letters (unlike desktop where it
+  //    produces lowercase). This method cannot handle that case correctly.
+  bool _getIosCapsFromCharacterImpl(String? ch, bool shiftPressed) {
+    if (ch == null || ch.length != 1) return false;
+    // Use Dart's built-in Unicode-aware case detection
+    final upper = ch.toUpperCase();
+    final lower = ch.toLowerCase();
+    final isUpper = upper == ch && lower != ch;
+    final isLower = lower == ch && upper != ch;
+    // Skip non-letter characters (e.g., numbers, symbols, CJK characters without case)
+    if (!isUpper && !isLower) return false;
+    return isUpper != shiftPressed;
+  }
+
+  int _buildLockModes(bool iosCapsLock) {
+    const capslock = 1;
+    const numlock = 2;
+    const scrolllock = 3;
+    int lockModes = 0;
+    if (isIOS) {
+      if (iosCapsLock) {
+        lockModes |= (1 << capslock);
+      }
+      // Ignore "NumLock/ScrollLock" on iOS for now.
+    } else {
+      if (HardwareKeyboard.instance.lockModesEnabled
+          .contains(KeyboardLockMode.capsLock)) {
+        lockModes |= (1 << capslock);
+      }
+      if (HardwareKeyboard.instance.lockModesEnabled
+          .contains(KeyboardLockMode.numLock)) {
+        lockModes |= (1 << numlock);
+      }
+      if (HardwareKeyboard.instance.lockModesEnabled
+          .contains(KeyboardLockMode.scrollLock)) {
+        lockModes |= (1 << scrolllock);
+      }
+    }
+    return lockModes;
+  }
+
   // This function must be called after the peer info is received.
   // Because `sessionGetKeyboardMode` relies on the peer version.
   updateKeyboardMode() async {
@@ -550,6 +619,11 @@ class InputModel {
       return KeyEventResult.handled;
     }
 
+    bool iosCapsLock = false;
+    if (isIOS && e is RawKeyDownEvent) {
+      iosCapsLock = _getIosCapsFromRawCharacter(e);
+    }
+
     final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
       if (!e.repeat) {
@@ -586,7 +660,7 @@ class InputModel {
 
     // * Currently mobile does not enable map mode
     if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
-      mapKeyboardModeRaw(e);
+      mapKeyboardModeRaw(e, iosCapsLock);
     } else {
       legacyKeyboardModeRaw(e);
     }
@@ -620,6 +694,11 @@ class InputModel {
       commandPressed: command,
     )) {
       return KeyEventResult.handled;
+    }
+
+    bool iosCapsLock = false;
+    if (isIOS && (e is KeyDownEvent || e is KeyRepeatEvent)) {
+      iosCapsLock = _getIosCapsFromCharacter(e);
     }
 
     if (e is KeyUpEvent) {
@@ -667,7 +746,8 @@ class InputModel {
           e.character ?? '',
           e.physicalKey.usbHidUsage & 0xFFFF,
           // Show repeat event be converted to "release+press" events?
-          e is KeyDownEvent || e is KeyRepeatEvent);
+          e is KeyDownEvent || e is KeyRepeatEvent,
+          iosCapsLock);
     } else {
       legacyKeyboardMode(e);
     }
@@ -676,23 +756,9 @@ class InputModel {
   }
 
   /// Send Key Event
-  void newKeyboardMode(String character, int usbHid, bool down) {
-    const capslock = 1;
-    const numlock = 2;
-    const scrolllock = 3;
-    int lockModes = 0;
-    if (HardwareKeyboard.instance.lockModesEnabled
-        .contains(KeyboardLockMode.capsLock)) {
-      lockModes |= (1 << capslock);
-    }
-    if (HardwareKeyboard.instance.lockModesEnabled
-        .contains(KeyboardLockMode.numLock)) {
-      lockModes |= (1 << numlock);
-    }
-    if (HardwareKeyboard.instance.lockModesEnabled
-        .contains(KeyboardLockMode.scrollLock)) {
-      lockModes |= (1 << scrolllock);
-    }
+  void newKeyboardMode(
+      String character, int usbHid, bool down, bool iosCapsLock) {
+    final lockModes = _buildLockModes(iosCapsLock);
     bind.sessionHandleFlutterKeyEvent(
         sessionId: sessionId,
         character: character,
@@ -701,7 +767,7 @@ class InputModel {
         downOrUp: down);
   }
 
-  void mapKeyboardModeRaw(RawKeyEvent e) {
+  void mapKeyboardModeRaw(RawKeyEvent e, bool iosCapsLock) {
     int positionCode = -1;
     int platformCode = -1;
     bool down;
@@ -732,27 +798,14 @@ class InputModel {
     } else {
       down = false;
     }
-    inputRawKey(e.character ?? '', platformCode, positionCode, down);
+    inputRawKey(
+        e.character ?? '', platformCode, positionCode, down, iosCapsLock);
   }
 
   /// Send raw Key Event
-  void inputRawKey(String name, int platformCode, int positionCode, bool down) {
-    const capslock = 1;
-    const numlock = 2;
-    const scrolllock = 3;
-    int lockModes = 0;
-    if (HardwareKeyboard.instance.lockModesEnabled
-        .contains(KeyboardLockMode.capsLock)) {
-      lockModes |= (1 << capslock);
-    }
-    if (HardwareKeyboard.instance.lockModesEnabled
-        .contains(KeyboardLockMode.numLock)) {
-      lockModes |= (1 << numlock);
-    }
-    if (HardwareKeyboard.instance.lockModesEnabled
-        .contains(KeyboardLockMode.scrollLock)) {
-      lockModes |= (1 << scrolllock);
-    }
+  void inputRawKey(String name, int platformCode, int positionCode, bool down,
+      bool iosCapsLock) {
+    final lockModes = _buildLockModes(iosCapsLock);
     bind.sessionHandleFlutterRawKeyEvent(
         sessionId: sessionId,
         name: name,
@@ -826,6 +879,9 @@ class InputModel {
   Map<String, dynamic> _getMouseEvent(PointerEvent evt, String type) {
     final Map<String, dynamic> out = {};
 
+    bool hasStaleButtonsOnMouseUp =
+        type == _kMouseEventUp && evt.buttons == _lastButtons;
+
     // Check update event type and set buttons to be sent.
     int buttons = _lastButtons;
     if (type == _kMouseEventMove) {
@@ -850,7 +906,7 @@ class InputModel {
         buttons = evt.buttons;
       }
     }
-    _lastButtons = evt.buttons;
+    _lastButtons = hasStaleButtonsOnMouseUp ? 0 : evt.buttons;
 
     out['buttons'] = buttons;
     out['type'] = type;
@@ -1048,6 +1104,14 @@ class InputModel {
     if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
 
+    // May fix https://github.com/rustdesk/rustdesk/issues/13009
+    if (isIOS && e.synthesized && e.position == Offset.zero && e.buttons == 0) {
+      // iOS may emit a synthesized hover event at (0,0) when the mouse is disconnected.
+      // Ignore this event to prevent cursor jumping.
+      debugPrint('Ignored synthesized hover at (0,0) on iOS');
+      return;
+    }
+
     // Only update pointer region when relative mouse mode is enabled.
     // This avoids unnecessary tracking when not in relative mode.
     if (_relativeMouse.enabled.value) {
@@ -1210,6 +1274,28 @@ class InputModel {
     _trackpadLastDelta = Offset.zero;
   }
 
+  // iOS Magic Mouse duplicate event detection.
+  // When using Magic Mouse on iPad, iOS may emit both mouse and touch events
+  // for the same click in certain areas (like top-left corner).
+  int _lastMouseDownTimeMs = 0;
+  ui.Offset _lastMouseDownPos = ui.Offset.zero;
+
+  /// Check if a touch tap event should be ignored because it's a duplicate
+  /// of a recent mouse event (iOS Magic Mouse issue).
+  bool shouldIgnoreTouchTap(ui.Offset pos) {
+    if (!isIOS) return false;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final dt = nowMs - _lastMouseDownTimeMs;
+    final distance = (_lastMouseDownPos - pos).distance;
+    // If touch tap is within 2000ms and 80px of the last mouse down,
+    // it's likely a duplicate event from the same Magic Mouse click.
+    if (dt >= 0 && dt < 2000 && distance < 80.0) {
+      debugPrint("shouldIgnoreTouchTap: IGNORED (dt=$dt, dist=$distance)");
+      return true;
+    }
+    return false;
+  }
+
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
@@ -1218,6 +1304,13 @@ class InputModel {
     _windowRect = null;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
+
+    // Track mouse down events for duplicate detection on iOS.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (e.kind == ui.PointerDeviceKind.mouse) {
+      _lastMouseDownTimeMs = nowMs;
+      _lastMouseDownPos = e.position;
+    }
 
     if (_relativeMouse.enabled.value) {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
@@ -1760,9 +1853,9 @@ class InputModel {
   // Simulate a key press event.
   // `usbHidUsage` is the USB HID usage code of the key.
   Future<void> tapHidKey(int usbHidUsage) async {
-    newKeyboardMode(kKeyFlutterKey, usbHidUsage, true);
+    newKeyboardMode(kKeyFlutterKey, usbHidUsage, true, false);
     await Future.delayed(Duration(milliseconds: 100));
-    newKeyboardMode(kKeyFlutterKey, usbHidUsage, false);
+    newKeyboardMode(kKeyFlutterKey, usbHidUsage, false, false);
   }
 
   Future<void> onMobileVolumeUp() async =>

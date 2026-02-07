@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "RustDesk を表示"),
         ("This PC", "この PC"),
         ("or", "または"),
-        ("Continue with", "で続行"),
         ("Elevate", "昇格"),
         ("Zoom cursor", "カーソルを拡大する"),
         ("Accept sessions via password", "パスワードでセッションを承認"),
@@ -737,5 +736,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", ""),
         ("rel-mouse-permission-lost-tip", ""),
         ("Changelog", ""),
+        ("keep-awake-during-outgoing-sessions-label", ""),
+        ("keep-awake-during-incoming-sessions-label", ""),
+        ("Continue with {}", "{} で続行"),
     ].iter().cloned().collect();
 }

@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "RustDesk ஐ காட்டு"),
         ("This PC", "இந்த PC"),
         ("or", "அல்லது"),
-        ("Continue with", "உடன் தொடர்"),
         ("Elevate", "உயர்த்து"),
         ("Zoom cursor", "கர்சரை பெரிதாக்கு"),
         ("Accept sessions via password", "கடவுச்சொல் வழியாக அமர்வுகளை ஏற்று"),
@@ -737,5 +736,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", ""),
         ("rel-mouse-permission-lost-tip", ""),
         ("Changelog", ""),
+        ("keep-awake-during-outgoing-sessions-label", ""),
+        ("keep-awake-during-incoming-sessions-label", ""),
+        ("Continue with {}", "{} உடன் தொடர்"),
     ].iter().cloned().collect();
 }

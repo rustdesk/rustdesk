@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "Prikaži RustDesk"),
         ("This PC", "Ta računalnik"),
         ("or", "ali"),
-        ("Continue with", "Nadaljuj z"),
         ("Elevate", "Povzdig pravic"),
         ("Zoom cursor", "Prilagodi velikost miškinega kazalca"),
         ("Accept sessions via password", "Sprejmi seje z geslom"),
@@ -737,5 +736,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", ""),
         ("rel-mouse-permission-lost-tip", ""),
         ("Changelog", ""),
+        ("keep-awake-during-outgoing-sessions-label", ""),
+        ("keep-awake-during-incoming-sessions-label", ""),
+        ("Continue with {}", "Nadaljuj z {}"),
     ].iter().cloned().collect();
 }

@@ -1124,18 +1124,23 @@ class CustomAlertDialog extends StatelessWidget {
 
 Widget createDialogContent(String text) {
   final RegExp linkRegExp = RegExp(r'(https?://[^\s]+)');
+  bool hasLink = linkRegExp.hasMatch(text);
+
+  // Early return: no link, use default theme color
+  if (!hasLink) {
+    return SelectableText(text, style: const TextStyle(fontSize: 15));
+  }
+
   final List<TextSpan> spans = [];
   int start = 0;
-  bool hasLink = false;
 
   linkRegExp.allMatches(text).forEach((match) {
-    hasLink = true;
     if (match.start > start) {
       spans.add(TextSpan(text: text.substring(start, match.start)));
     }
     spans.add(TextSpan(
       text: match.group(0) ?? '',
-      style: TextStyle(
+      style: const TextStyle(
         color: Colors.blue,
         decoration: TextDecoration.underline,
       ),
@@ -1153,13 +1158,9 @@ Widget createDialogContent(String text) {
     spans.add(TextSpan(text: text.substring(start)));
   }
 
-  if (!hasLink) {
-    return SelectableText(text, style: const TextStyle(fontSize: 15));
-  }
-
   return SelectableText.rich(
     TextSpan(
-      style: TextStyle(color: Colors.black, fontSize: 15),
+      style: const TextStyle(fontSize: 15),
       children: spans,
     ),
   );
@@ -1578,7 +1579,7 @@ bool option2bool(String option, String value) {
       option == kOptionForceAlwaysRelay) {
     res = value == "Y";
   } else {
-    assert(false);
+    // "" is true
     res = value != "N";
   }
   return res;
@@ -1596,9 +1597,6 @@ String bool2option(String option, bool b) {
       option == kOptionForceAlwaysRelay) {
     res = b ? 'Y' : defaultOptionNo;
   } else {
-    if (option != kOptionEnableUdpPunch && option != kOptionEnableIpv6Punch) {
-      assert(false);
-    }
     res = b ? 'Y' : 'N';
   }
   return res;
@@ -2684,19 +2682,43 @@ class SimpleWrapper<T> {
 /// This manager handles multiple tabs within the same isolate.
 class WakelockManager {
   static final Set<UniqueKey> _enabledKeys = {};
+  // Don't use WakelockPlus.enabled, it causes error on Android:
+  // Unhandled Exception: FormatException: Message corrupted
+  //
+  // On Linux, multiple enable() calls create only one inhibit, but each disable()
+  // only releases if _cookie != null. So we need our own _enabled state to avoid
+  // calling disable() when not enabled.
+  // See: https://github.com/fluttercommunity/wakelock_plus/blob/0c74e5bbc6aefac57b6c96bb7ef987705ed559ec/wakelock_plus/lib/src/wakelock_plus_linux_plugin.dart#L48
+  static bool _enabled = false;
 
-  static void enable(UniqueKey key) {
-    if (isLinux) return;
-    _enabledKeys.add(key);
-    WakelockPlus.enable();
+  static void enable(UniqueKey key, {bool isServer = false}) {
+    // Check if we should keep awake during outgoing sessions
+    if (!isServer) {
+      final keepAwake =
+          mainGetLocalBoolOptionSync(kOptionKeepAwakeDuringOutgoingSessions);
+      if (!keepAwake) {
+        return; // Don't enable wakelock if user disabled keep awake
+      }
+    }
+    if (isDesktop) {
+      _enabledKeys.add(key);
+    }
+    if (!_enabled) {
+      _enabled = true;
+      WakelockPlus.enable();
+    }
   }
 
   static void disable(UniqueKey key) {
-    if (isLinux) return;
-    if (_enabledKeys.remove(key)) {
-      if (_enabledKeys.isEmpty) {
-        WakelockPlus.disable();
+    if (isDesktop) {
+      _enabledKeys.remove(key);
+      if (_enabledKeys.isNotEmpty) {
+        return;
       }
+    }
+    if (_enabled) {
+      WakelockPlus.disable();
+      _enabled = false;
     }
   }
 }
