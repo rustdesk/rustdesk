@@ -216,23 +216,26 @@ class MainFlutterWindow: NSWindow {
                     AVCaptureDevice.requestAccess(for: .audio, completionHandler: { granted in
                         if granted {
                             // Instantiate an audio capture session to trigger macOS registration
-                            if let audioDevice = AVCaptureDevice.default(for: .audio) {
-                                do {
-                                    let audioInput = try AVCaptureDeviceInput(device: audioDevice)
-                                    let captureSession = AVCaptureSession()
-                                    captureSession.beginConfiguration()
-                                    if captureSession.canAddInput(audioInput) {
-                                        captureSession.addInput(audioInput)
+                            // This needs to run on main thread to ensure proper lifecycle
+                            DispatchQueue.main.async {
+                                if let audioDevice = AVCaptureDevice.default(for: .audio) {
+                                    do {
+                                        let audioInput = try AVCaptureDeviceInput(device: audioDevice)
+                                        let captureSession = AVCaptureSession()
+                                        captureSession.beginConfiguration()
+                                        if captureSession.canAddInput(audioInput) {
+                                            captureSession.addInput(audioInput)
+                                        }
+                                        captureSession.commitConfiguration()
+                                        // Start and immediately stop the session to trigger registration
+                                        captureSession.startRunning()
+                                        // Keep a strong reference and stop after a brief moment
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [captureSession] in
+                                            captureSession.stopRunning()
+                                        }
+                                    } catch {
+                                        NSLog("[RustDesk] Error creating audio capture session for permission registration: %@. The app may not appear in System Settings > Privacy & Security > Microphone. Please verify permissions manually.", error.localizedDescription)
                                     }
-                                    captureSession.commitConfiguration()
-                                    // Start and immediately stop the session to trigger registration
-                                    captureSession.startRunning()
-                                    // Stop after a brief moment to ensure registration is complete
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        captureSession.stopRunning()
-                                    }
-                                } catch {
-                                    NSLog("[RustDesk] Error creating audio capture session for permission registration: %@", error.localizedDescription)
                                 }
                             }
                         }
