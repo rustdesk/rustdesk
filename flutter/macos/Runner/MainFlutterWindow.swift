@@ -209,10 +209,13 @@ class MainFlutterWindow: NSWindow {
                         break
                     }
                 case "requestRecordAudio":
+                    // Request microphone access and trigger system registration
+                    // On macOS 13+, apps only appear in System Settings > Privacy & Security > Microphone
+                    // after they actually attempt to use the microphone, not just request permission.
+                    // We create a brief capture session to ensure proper registration.
                     AVCaptureDevice.requestAccess(for: .audio, completionHandler: { granted in
                         if granted {
-                            // Actually instantiate an audio device to ensure macOS registers the app
-                            // in System Settings > Privacy & Security > Microphone
+                            // Instantiate an audio capture session to trigger macOS registration
                             if let audioDevice = AVCaptureDevice.default(for: .audio) {
                                 do {
                                     let audioInput = try AVCaptureDeviceInput(device: audioDevice)
