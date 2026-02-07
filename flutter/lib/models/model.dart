@@ -2215,7 +2215,11 @@ class CanvasModel with ChangeNotifier {
     double w = size.width - leftToEdge - rightToEdge;
     double h = size.height - topToEdge - bottomToEdge;
     if (isMobile) {
+      // Account for safe area (notch, home indicator)
+      w = w - mediaData.padding.left - mediaData.padding.right;
       h = h -
+          mediaData.padding.top -
+          mediaData.padding.bottom -
           mediaData.viewInsets.bottom -
           (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
               0);
