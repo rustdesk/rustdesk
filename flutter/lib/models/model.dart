@@ -2215,14 +2215,25 @@ class CanvasModel with ChangeNotifier {
     double w = size.width - leftToEdge - rightToEdge;
     double h = size.height - topToEdge - bottomToEdge;
     if (isMobile) {
-      // Account for safe area (notch, home indicator)
-      w = w - mediaData.padding.left - mediaData.padding.right;
-      h = h -
-          mediaData.padding.top -
-          mediaData.padding.bottom -
-          mediaData.viewInsets.bottom -
-          (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
-              0);
+      // Account for safe area insets
+      // Portrait: handle all four directions (top, bottom, left, right)
+      // Landscape: only handle left/right (notch on sides), bottom home indicator auto-hides
+      final isPortrait = size.height > size.width;
+      if (isPortrait) {
+        w = w - mediaData.padding.left - mediaData.padding.right;
+        h = h -
+            mediaData.padding.top -
+            mediaData.padding.bottom -
+            mediaData.viewInsets.bottom -
+            (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
+                0);
+      } else {
+        w = w - mediaData.padding.left - mediaData.padding.right;
+        h = h -
+            mediaData.viewInsets.bottom -
+            (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
+                0);
+      }
     }
     return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
   }
