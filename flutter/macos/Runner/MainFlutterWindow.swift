@@ -229,12 +229,15 @@ class MainFlutterWindow: NSWindow {
                                         captureSession.commitConfiguration()
                                         // Start and immediately stop the session to trigger registration
                                         captureSession.startRunning()
-                                        // Keep a strong reference and stop after a brief moment
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [captureSession] in
+                                        // Minimum delay required for macOS to register the app in System Settings
+                                        let registrationDelay: TimeInterval = 0.1
+                                        // Keep a strong reference and stop after the registration delay
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + registrationDelay) { [captureSession] in
                                             captureSession.stopRunning()
                                         }
                                     } catch {
-                                        NSLog("[RustDesk] Error creating audio capture session for permission registration: %@. The app may not appear in System Settings > Privacy & Security > Microphone. Please verify permissions manually.", error.localizedDescription)
+                                        NSLog("[RustDesk] Failed to create audio capture session: %@", error.localizedDescription)
+                                        NSLog("[RustDesk] The app may not appear in System Settings > Privacy & Security > Microphone")
                                     }
                                 }
                             }
