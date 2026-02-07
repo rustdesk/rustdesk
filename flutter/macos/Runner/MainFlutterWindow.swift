@@ -210,6 +210,29 @@ class MainFlutterWindow: NSWindow {
                     }
                 case "requestRecordAudio":
                     AVCaptureDevice.requestAccess(for: .audio, completionHandler: { granted in
+                        if granted {
+                            // Actually instantiate an audio device to ensure macOS registers the app
+                            // in System Settings > Privacy & Security > Microphone
+                            if let audioDevice = AVCaptureDevice.default(for: .audio) {
+                                do {
+                                    let audioInput = try AVCaptureDeviceInput(device: audioDevice)
+                                    let captureSession = AVCaptureSession()
+                                    captureSession.beginConfiguration()
+                                    if captureSession.canAddInput(audioInput) {
+                                        captureSession.addInput(audioInput)
+                                    }
+                                    captureSession.commitConfiguration()
+                                    // Start and immediately stop the session to trigger registration
+                                    captureSession.startRunning()
+                                    // Stop after a brief moment to ensure registration is complete
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        captureSession.stopRunning()
+                                    }
+                                } catch {
+                                    NSLog("[RustDesk] Error creating audio capture session for permission registration: %@", error.localizedDescription)
+                                }
+                            }
+                        }
                         DispatchQueue.main.async {
                             result(granted)
                         }
