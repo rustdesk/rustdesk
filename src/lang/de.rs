@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "RustDesk anzeigen"),
         ("This PC", "Dieser PC"),
         ("or", "oder"),
-        ("Continue with", "Fortfahren mit"),
         ("Elevate", "Zugriff gewähren"),
         ("Zoom cursor", "Cursor vergrößern"),
         ("Accept sessions via password", "Sitzung mit Passwort bestätigen"),
@@ -562,8 +561,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Sie können eine ID, eine direkte IP oder eine Domäne mit einem Port (<domain>:<port>) eingeben.\nWenn Sie auf ein Gerät auf einem anderen Server zugreifen wollen, fügen Sie bitte die Serveradresse (<id>@<server_address>?key=<key_value>) hinzu, zum Beispiel\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nWenn Sie auf ein Gerät auf einem öffentlichen Server zugreifen wollen, geben Sie bitte \"<id>@public\" ein. Der Schlüssel wird für öffentliche Server nicht benötigt.\n\nWenn Sie bei der ersten Verbindung die Verwendung einer Relay-Verbindung erzwingen wollen, fügen Sie \"/r\" am Ende der ID hinzu, zum Beispiel \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Modus 1"),
         ("privacy_mode_impl_virtual_display_tip", "Modus 2"),
-        ("Enter privacy mode", "Datenschutzmodus aktivieren"),
-        ("Exit privacy mode", "Datenschutzmodus beenden"),
+        ("Enter privacy mode", "Datenschutzmodus aktiviert"),
+        ("Exit privacy mode", "Datenschutzmodus beendet"),
         ("idd_not_support_under_win10_2004_tip", "Indirekter Grafiktreiber wird nicht unterstützt. Windows 10, Version 2004 oder neuer ist erforderlich."),
         ("input_source_1_tip", "Eingangsquelle 1"),
         ("input_source_2_tip", "Eingangsquelle 2"),
@@ -739,5 +738,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Changelog", "Änderungsprotokoll"),
         ("keep-awake-during-outgoing-sessions-label", "Bildschirm während ausgehender Sitzungen aktiv halten"),
         ("keep-awake-during-incoming-sessions-label", "Bildschirm während eingehender Sitzungen aktiv halten"),
+        ("Continue with {}", "Fortfahren mit {}"),
     ].iter().cloned().collect();
 }

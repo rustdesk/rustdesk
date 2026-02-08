@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "Εμφάνιση RustDesk"),
         ("This PC", "Αυτός ο υπολογιστής"),
         ("or", "ή"),
-        ("Continue with", "Συνέχεια με"),
         ("Elevate", "Ανύψωση"),
         ("Zoom cursor", "Kέρσορας μεγέθυνσης"),
         ("Accept sessions via password", "Αποδοχή συνεδριών με κωδικό πρόσβασης"),
@@ -739,5 +738,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Changelog", ""),
         ("keep-awake-during-outgoing-sessions-label", ""),
         ("keep-awake-during-incoming-sessions-label", ""),
+        ("Continue with {}", "Συνέχεια με {}"),
     ].iter().cloned().collect();
 }

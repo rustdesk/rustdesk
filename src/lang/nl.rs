@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "Toon RustDesk"),
         ("This PC", "Deze PC"),
         ("or", "of"),
-        ("Continue with", "Ga verder met"),
         ("Elevate", "Verhoog"),
         ("Zoom cursor", "Zoom cursor"),
         ("Accept sessions via password", "Sessies accepteren via wachtwoord"),
@@ -737,7 +736,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("rel-mouse-exit-{}-tip", "Druk op {} om af te sluiten."),
         ("rel-mouse-permission-lost-tip", "De toetsenbordcontrole is uitgeschakeld. De relatieve muismodus is uitgeschakeld."),
         ("Changelog", "Wijzigingenlogboek"),
-        ("keep-awake-during-outgoing-sessions-label", ""),
-        ("keep-awake-during-incoming-sessions-label", ""),
+        ("keep-awake-during-outgoing-sessions-label", "Houd het scherm open tijdens de uitgaande sessies."),
+        ("keep-awake-during-incoming-sessions-label", "Houd het scherm open tijdens de inkomende sessies."),
+        ("Continue with {}", "Ga verder met {}"),
     ].iter().cloned().collect();
 }
