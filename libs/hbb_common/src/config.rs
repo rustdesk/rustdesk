@@ -8,7 +8,7 @@ use std::{
     sync::{Mutex, RwLock},
     time::{Duration, Instant, SystemTime},
 };
-
+use log;
 use anyhow::Result;
 use bytes::Bytes;
 use rand::Rng;
@@ -788,31 +788,39 @@ impl Config {
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {
-        let s = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
-        if !s.is_empty() {
-            return vec![s];
-        }
-        let s = Self::get_option("custom-rendezvous-server");
-        if !s.is_empty() {
-            return vec![s];
-        }
-        let s = PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
-        if !s.is_empty() {
-            return vec![s];
-        }
-        let serial_obsolute = CONFIG2.read().unwrap().serial > SERIAL;
-        if serial_obsolute {
-            let ss: Vec<String> = Self::get_option("rendezvous-servers")
-                .split(',')
-                .filter(|x| x.contains('.'))
-                .map(|x| x.to_owned())
-                .collect();
-            if !ss.is_empty() {
-                return ss;
-            }
-        }
+    // === ПРИНУДИТЕЛЬНОЕ ИСПОЛЬЗОВАНИЕ ВАШИХ СЕРВЕРОВ В ПРОДАКШН ===
+    #[cfg(not(debug_assertions))]
+    {
+        // Игнорируем ВСЕ локальные настройки и всегда используем серверы из конфига
         return RENDEZVOUS_SERVERS.iter().map(|x| x.to_string()).collect();
     }
+    
+    // === ОРИГИНАЛЬНАЯ ЛОГИКА ДЛЯ ОТЛАДОЧНЫХ СБОРОК ===
+    let s = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
+    if !s.is_empty() {
+        return vec![s];
+    }
+    let s = Self::get_option("custom-rendezvous-server");
+    if !s.is_empty() {
+        return vec![s];
+    }
+    let s = PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
+    if !s.is_empty() {
+        return vec![s];
+    }
+    let serial_obsolute = CONFIG2.read().unwrap().serial > SERIAL;
+    if serial_obsolute {
+        let ss: Vec<String> = Self::get_option("rendezvous-servers")
+            .split(',')
+            .filter(|x| x.contains('.'))
+            .map(|x| x.to_owned())
+            .collect();
+        if !ss.is_empty() {
+            return ss;
+        }
+    }
+    RENDEZVOUS_SERVERS.iter().map(|x| x.to_string()).collect()
+}
 
     pub fn reset_online() {
         *ONLINE.lock().unwrap() = Default::default();
@@ -1085,6 +1093,13 @@ impl Config {
     }
 
     pub fn set_option(k: String, v: String) {
+        #[cfg(not(debug_assertions))]
+        {
+            if k == "custom-rendezvous-server" || k == "rendezvous-servers" || k == "key" {
+                log::info!("Ignoring attempt to change server config in production build");
+                return;
+            }
+        }        
         if !is_option_can_save(&OVERWRITE_SETTINGS, &k, &DEFAULT_SETTINGS, &v) {
             let mut config = CONFIG2.write().unwrap();
             if config.options.remove(&k).is_some() {
