@@ -8,7 +8,6 @@ use std::{
     sync::{Mutex, RwLock},
     time::{Duration, Instant, SystemTime},
 };
-use log;
 use anyhow::Result;
 use bytes::Bytes;
 use rand::Rng;
