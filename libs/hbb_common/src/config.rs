@@ -788,30 +788,36 @@ impl Config {
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {
-        let s = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
-        if !s.is_empty() {
-            return vec![s];
-        }
-        let s = Self::get_option("custom-rendezvous-server");
-        if !s.is_empty() {
-            return vec![s];
-        }
-        let s = PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
-        if !s.is_empty() {
-            return vec![s];
-        }
-        let serial_obsolute = CONFIG2.read().unwrap().serial > SERIAL;
-        if serial_obsolute {
-            let ss: Vec<String> = Self::get_option("rendezvous-servers")
-                .split(',')
-                .filter(|x| x.contains('.'))
-                .map(|x| x.to_owned())
-                .collect();
+    // === ЖЁСТКАЯ ПРИВЯЗКА К СЕРВЕРУ В ПРОДАКШН ===
+    // Игнорируем ВСЕ локальные настройки — всегда используем сервер из конфига
+    #[cfg(not(debug_assertions))]
+    return RENDEZVOUS_SERVERS.iter().map(|x| x.to_string()).collect();
+    
+    // Оригинальная логика остаётся только для отладочных сборок (для разработки)
+    let s = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
+    if !s.is_empty() {
+        return vec![s];
+    }
+    let s = Self::get_option("custom-rendezvous-server");
+    if !s.is_empty() {
+        return vec![s];
+    }
+    let s = PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
+    if !s.is_empty() {
+        return vec![s];
+    }
+    let serial_obsolute = CONFIG2.read().unwrap().serial > SERIAL;
+    if serial_obsolute {
+        let ss: Vec<String> = Self::get_option("rendezvous-servers")
+            .split(',')
+            .filter(|x| x.contains('.'))
+            .map(|x| x.to_owned())
+            .collect();
             if !ss.is_empty() {
                 return ss;
             }
-        }
-        return RENDEZVOUS_SERVERS.iter().map(|x| x.to_string()).collect();
+        }    
+        RENDEZVOUS_SERVERS.iter().map(|x| x.to_string()).collect()
     }
 
     pub fn reset_online() {
