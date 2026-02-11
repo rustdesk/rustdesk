@@ -2088,3 +2088,122 @@ pub fn is_selinux_enforcing() -> bool {
         },
     }
 }
+
+/// Get the app ID for shortcuts inhibitor permission.
+/// Returns different ID based on whether running in Flatpak or native.
+/// The ID must match the installed .desktop filename, as GNOME Shell's
+/// inhibitShortcutsDialog uses `Shell.WindowTracker.get_window_app(window).get_id()`.
+fn get_shortcuts_inhibitor_app_id() -> String {
+    if is_flatpak() {
+        // In Flatpak, FLATPAK_ID is set automatically by the runtime to the app ID
+        // (e.g., "com.rustdesk.RustDesk"). This is the most reliable source.
+        // Fall back to constructing from app name if not available.
+        match std::env::var("FLATPAK_ID") {
+            Ok(id) if !id.is_empty() => format!("{}.desktop", id),
+            _ => {
+                let app_name = crate::get_app_name();
+                format!("com.{}.{}.desktop", app_name.to_lowercase(), app_name)
+            }
+        }
+    } else {
+        format!("{}.desktop", crate::get_app_name().to_lowercase())
+    }
+}
+
+const PERMISSION_STORE_DEST: &str = "org.freedesktop.impl.portal.PermissionStore";
+const PERMISSION_STORE_PATH: &str = "/org/freedesktop/impl/portal/PermissionStore";
+const PERMISSION_STORE_IFACE: &str = "org.freedesktop.impl.portal.PermissionStore";
+
+/// Clear GNOME shortcuts inhibitor permission via D-Bus.
+/// This allows the permission dialog to be shown again.
+pub fn clear_gnome_shortcuts_inhibitor_permission() -> ResultType<()> {
+    let app_id = get_shortcuts_inhibitor_app_id();
+    log::info!(
+        "Clearing shortcuts inhibitor permission for app_id: {}, is_flatpak: {}",
+        app_id,
+        is_flatpak()
+    );
+
+    let conn = dbus::blocking::Connection::new_session()?;
+    let proxy = conn.with_proxy(
+        PERMISSION_STORE_DEST,
+        PERMISSION_STORE_PATH,
+        std::time::Duration::from_secs(3),
+    );
+
+    // DeletePermission(s table, s id, s app) -> ()
+    let result: Result<(), dbus::Error> = proxy.method_call(
+        PERMISSION_STORE_IFACE,
+        "DeletePermission",
+        ("gnome", "shortcuts-inhibitor", app_id.as_str()),
+    );
+
+    match result {
+        Ok(()) => {
+            log::info!("Successfully cleared GNOME shortcuts inhibitor permission");
+            Ok(())
+        }
+        Err(e) => {
+            let err_name = e.name().unwrap_or("");
+            // If the permission doesn't exist, that's also fine
+            if err_name == "org.freedesktop.portal.Error.NotFound"
+                || err_name == "org.freedesktop.DBus.Error.UnknownObject"
+                || err_name == "org.freedesktop.DBus.Error.ServiceUnknown"
+            {
+                log::info!("GNOME shortcuts inhibitor permission was not set ({})", err_name);
+                Ok(())
+            } else {
+                bail!("Failed to clear permission: {}", e)
+            }
+        }
+    }
+}
+
+/// Check if GNOME shortcuts inhibitor permission exists.
+pub fn has_gnome_shortcuts_inhibitor_permission() -> bool {
+    let app_id = get_shortcuts_inhibitor_app_id();
+
+    let conn = match dbus::blocking::Connection::new_session() {
+        Ok(c) => c,
+        Err(e) => {
+            log::debug!("Failed to connect to session bus: {}", e);
+            return false;
+        }
+    };
+    let proxy = conn.with_proxy(
+        PERMISSION_STORE_DEST,
+        PERMISSION_STORE_PATH,
+        std::time::Duration::from_secs(3),
+    );
+
+    // Lookup(s table, s id) -> (a{sas} permissions, v data)
+    // We only need the permissions dict; check if app_id is a key.
+    let result: Result<
+        (
+            std::collections::HashMap<String, Vec<String>>,
+            dbus::arg::Variant<Box<dyn dbus::arg::RefArg>>,
+        ),
+        dbus::Error,
+    > = proxy.method_call(
+        PERMISSION_STORE_IFACE,
+        "Lookup",
+        ("gnome", "shortcuts-inhibitor"),
+    );
+
+    match result {
+        Ok((permissions, _)) => {
+            let found = permissions.contains_key(&app_id);
+            log::debug!(
+                "Shortcuts inhibitor permission lookup: app_id={}, found={}, keys={:?}",
+                app_id,
+                found,
+                permissions.keys().collect::<Vec<_>>()
+            );
+            found
+        }
+        Err(e) => {
+            log::debug!("Failed to query shortcuts inhibitor permission: {}", e);
+            false
+        }
+    }
+}
