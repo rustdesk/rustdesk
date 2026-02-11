@@ -55,6 +55,10 @@ pub struct HwRamEncoder {
     pub pixfmt: AVPixelFormat,
     bitrate: u32, //kbs
     config: HwRamEncoderConfig,
+    // Frame statistics for quality monitoring
+    frame_count: u64,
+    total_frame_size: u64,
+    last_quality_log: std::time::Instant,
 }
 
 impl EncoderApi for HwRamEncoder {
@@ -94,13 +98,35 @@ impl EncoderApi for HwRamEncoder {
                     }
                 };
                 match Encoder::new(ctx.clone()) {
-                    Ok(encoder) => Ok(HwRamEncoder {
-                        encoder,
-                        format,
-                        pixfmt: ctx.pixfmt,
-                        bitrate,
-                        config,
-                    }),
+                    Ok(encoder) => {
+                        // Log detailed encoder information for diagnostics
+                        log::info!(
+                            "Hardware encoder created successfully: name='{}', format={:?}, resolution={}x{}, bitrate={} kbps, fps={}, gop={}, rate_control={:?}",
+                            config.name,
+                            format,
+                            config.width,
+                            config.height,
+                            bitrate,
+                            DEFAULT_FPS,
+                            gop,
+                            rc
+                        );
+                        // Log GPU signature for hardware-specific issue tracking
+                        let gpu_sig = hwcodec::common::get_gpu_signature();
+                        if !gpu_sig.is_empty() {
+                            log::info!("GPU signature: {}", gpu_sig);
+                        }
+                        Ok(HwRamEncoder {
+                            encoder,
+                            format,
+                            pixfmt: ctx.pixfmt,
+                            bitrate,
+                            config,
+                            frame_count: 0,
+                            total_frame_size: 0,
+                            last_quality_log: std::time::Instant::now(),
+                        })
+                    }
                     Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
             }
@@ -171,6 +197,7 @@ impl EncoderApi for HwRamEncoder {
     }
 
     fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
+        let old_bitrate = self.bitrate;
         let mut bitrate = Self::bitrate(
             &self.config.name,
             self.config.width,
@@ -181,6 +208,22 @@ impl EncoderApi for HwRamEncoder {
             bitrate = Self::check_bitrate_range(&self.config, bitrate);
             self.encoder.set_bitrate(bitrate as _).ok();
             self.bitrate = bitrate;
+            
+            // Log quality changes for hardware-specific diagnostics
+            if old_bitrate != bitrate {
+                log::info!(
+                    "Hardware encoder quality changed: encoder='{}', ratio={:.2}, bitrate {} -> {} kbps",
+                    self.config.name,
+                    ratio,
+                    old_bitrate,
+                    bitrate
+                );
+            }
+            
+            // Reset statistics on quality change
+            self.frame_count = 0;
+            self.total_frame_size = 0;
+            self.last_quality_log = std::time::Instant::now();
         }
         self.config.quality = ratio;
         Ok(())
@@ -234,6 +277,43 @@ impl HwRamEncoder {
             Ok(v) => {
                 let mut data = Vec::<EncodeFrame>::new();
                 data.append(v);
+                
+                // Monitor encoding quality by tracking frame sizes
+                if !data.is_empty() {
+                    self.frame_count += data.len() as u64;
+                    let frame_sizes: u64 = data.iter().map(|f| f.data.len() as u64).sum();
+                    self.total_frame_size += frame_sizes;
+                    
+                    // Log quality statistics every 300 frames (10 seconds at 30fps)
+                    if self.frame_count % 300 == 0 && self.last_quality_log.elapsed().as_secs() >= 10 {
+                        let avg_frame_size = self.total_frame_size / self.frame_count;
+                        let expected_frame_size = (self.bitrate as u64 * 1000) / (8 * DEFAULT_FPS as u64);
+                        
+                        // Log if actual frame size is significantly different from expected
+                        let ratio = avg_frame_size as f64 / expected_frame_size as f64;
+                        if ratio < 0.3 || ratio > 3.0 {
+                            log::warn!(
+                                "Hardware encoder quality issue detected: encoder='{}', avg_frame_size={} bytes, expected={} bytes, ratio={:.2}, bitrate={} kbps",
+                                self.config.name,
+                                avg_frame_size,
+                                expected_frame_size,
+                                ratio,
+                                self.bitrate
+                            );
+                        } else {
+                            log::debug!(
+                                "Hardware encoder stats: encoder='{}', frames={}, avg_size={} bytes, expected={} bytes, ratio={:.2}",
+                                self.config.name,
+                                self.frame_count,
+                                avg_frame_size,
+                                expected_frame_size,
+                                ratio
+                            );
+                        }
+                        self.last_quality_log = std::time::Instant::now();
+                    }
+                }
+                
                 Ok(data)
             }
             Err(_) => Ok(Vec::<EncodeFrame>::new()),
@@ -252,6 +332,18 @@ impl HwRamEncoder {
         Self::calc_bitrate(width, height, ratio, name.contains("h264"))
     }
 
+    /// Calculate bitrate for hardware encoders based on resolution and quality ratio.
+    /// 
+    /// NOTE: Hardware encoder quality can vary significantly across different GPUs/drivers.
+    /// Some hardware may require higher bitrates than others to achieve acceptable quality.
+    /// The multipliers below provide a baseline, but specific hardware (especially older
+    /// GPUs or certain driver versions) may still produce poor quality output even with
+    /// these settings. Monitor logs for "Hardware encoder quality issue detected" warnings.
+    /// 
+    /// If quality issues persist on specific hardware:
+    /// - Check GPU driver version and update if needed
+    /// - Consider forcing VP8/VP9 software codec as fallback
+    /// - File bug report with GPU model and driver version
     pub fn calc_bitrate(width: usize, height: usize, ratio: f32, h264: bool) -> u32 {
         let base = base_bitrate(width as _, height as _) as f32 * ratio;
         let threshold = 2000.0;
@@ -264,16 +356,20 @@ impl HwRamEncoder {
                 5.0
             }
         } else if h264 {
+            // Increased base multiplier from 2.0 to 2.5 to improve image quality
+            // while maintaining H264's compression efficiency
+            if base > threshold {
+                1.0 + 1.5 / (1.0 + (base - threshold) * decay_rate)
+            } else {
+                2.5
+            }
+        } else {
+            // H265: Increased base multiplier from 1.5 to 2.0 to fix poor image quality
+            // H265 should be more efficient than H264, but needs sufficient bitrate
             if base > threshold {
                 1.0 + 1.0 / (1.0 + (base - threshold) * decay_rate)
             } else {
                 2.0
-            }
-        } else {
-            if base > threshold {
-                1.0 + 0.5 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                1.5
             }
         };
         (base * factor) as u32
@@ -760,4 +856,54 @@ pub fn start_check_process() {
     ONCE.call_once(|| {
         std::thread::spawn(f);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_h264_h265_bitrate_calculation() {
+        // Test with 1920x1080 resolution (base_bitrate() returns 2073 kbps for 1080p)
+        let width = 1920;
+        let height = 1080;
+
+        // Test with BR_BALANCED (0.67) - default quality setting
+        let balanced_ratio = 0.67;
+        let h264_balanced = HwRamEncoder::calc_bitrate(width, height, balanced_ratio, true);
+        let h265_balanced = HwRamEncoder::calc_bitrate(width, height, balanced_ratio, false);
+
+        // H265 should get ~2777 kbps with new multiplier (was ~2084 with old 1.5x)
+        assert!(h265_balanced >= 2700 && h265_balanced <= 2850, 
+                "H265 balanced bitrate should be ~2777 kbps, got {} kbps", h265_balanced);
+        
+        // H264 should get ~3472 kbps with new multiplier (was ~2778 with old 2.0x)
+        assert!(h264_balanced >= 3400 && h264_balanced <= 3550,
+                "H264 balanced bitrate should be ~3472 kbps, got {} kbps", h264_balanced);
+
+        // H264 should have higher bitrate than H265 at same quality
+        assert!(h264_balanced > h265_balanced,
+                "H264 should have higher bitrate than H265");
+
+        // Test with BR_BEST (1.5) - best quality setting
+        let best_ratio = 1.5;
+        let h265_best = HwRamEncoder::calc_bitrate(width, height, best_ratio, false);
+        
+        // At best quality, should use significantly more bitrate (>50% more)
+        assert!((h265_best as f64) > (h265_balanced as f64 * 1.5),
+                "Best quality should use >50% more bitrate than balanced");
+
+        // Test with BR_SPEED (0.5) - low quality setting  
+        let speed_ratio = 0.5;
+        let h265_speed = HwRamEncoder::calc_bitrate(width, height, speed_ratio, false);
+        
+        // At speed quality, should use less bitrate
+        assert!(h265_speed < h265_balanced,
+                "Speed quality should use less bitrate than balanced");
+
+        // Verify bitrate scales proportionally with resolution
+        let hd_bitrate = HwRamEncoder::calc_bitrate(1280, 720, balanced_ratio, false);
+        assert!(hd_bitrate < h265_balanced,
+                "720p should use less bitrate than 1080p");
+    }
 }
