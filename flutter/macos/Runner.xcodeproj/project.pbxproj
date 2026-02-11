@@ -74,7 +74,7 @@
 		7436B85D94E8F7B5A9324869 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		7ED2B35E2BB007420099885C /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = AppIcon.icns; path = Runner/AppIcon.icns; sourceTree = "<group>"; };
-		84010BA7292CF66600152837 /* liblibrustdesk.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = liblibrustdesk.dylib; path = ../../target/release/liblibrustdesk.dylib; sourceTree = "<group>"; };
+		84010BA7292CF66600152837 /* liblibrustdesk.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = liblibrustdesk.dylib; path = "librustdesk/liblibrustdesk.dylib"; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		C3BB669FF6190AE1B11BCAEA /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		CCB6FE9A2848A6B800E58D48 /* bridge_generated.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = bridge_generated.h; path = Runner/bridge_generated.h; sourceTree = "<group>"; };
@@ -186,6 +186,7 @@
 			buildConfigurationList = 33CC10FB2044A3C60003C045 /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
 				610B125EE2B990E4D4B30D05 /* [CP] Check Pods Manifest.lock */,
+				BC0C0C012ECA94BB00092595 /* Stage Debug or Release Rust Build Output */,
 				33CC10E92044A3C60003C045 /* Sources */,
 				33CC10EA2044A3C60003C045 /* Frameworks */,
 				33CC10EB2044A3C60003C045 /* Resources */,
@@ -337,6 +338,25 @@
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
+		};
+		BC0C0C012ECA94BB00092595 /* Stage Debug or Release Rust Build Output */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stage Debug or Release Rust Build Output";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"librustdesk/liblibrustdesk.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "LIBRUSTDESK_LIBRARY=librustdesk\nLIBRUSTDESK_LIBRARY_FILE=lib$LIBRUSTDESK_LIBRARY.dylib\n\nif [ \"$CONFIGURATION\" == \"Release\" ]; then\n  LIBRUSTDESK_DIR=../../target/release\nelif [ \"$CONFIGURATION\" == \"Debug\" ]; then\n  LIBRUSTDESK_DIR=../../target/debug\nelse\n  echo Unrecognized configuration: $CONFIGURATION\n  exit 1\nfi\n\nLIBRUSTDESK_LIBRARY_PATH=$LIBRUSTDESK_DIR/$LIBRUSTDESK_LIBRARY_FILE\n\nif [ ! -f $LIBRUSTDESK_LIBRARY_PATH ]; then\n  echo \"Didn't find $LIBRUSTDESK_LIBRARY_FILE at path: $LIBRUSTDESK_LIBRARY_PATH\"\n  exit 2\nfi\n\nSTAGE_PATH=librustdesk\n\necho Copying $LIBRUSTDESK_LIBRARY_PATH to \"$STAGE_PATH/\"\nmkdir -p \"$STAGE_PATH\"\ncp \"$LIBRUSTDESK_LIBRARY_PATH\" \"$STAGE_PATH/\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
