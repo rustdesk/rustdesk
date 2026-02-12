@@ -767,9 +767,11 @@ impl Config {
     pub fn get_rendezvous_servers() -> Vec<String> {
         // === ГАРАНТИРОВАННАЯ ПРИВЯЗКА К ВАШИМ СЕРВЕРАМ В РЕЛИЗНОЙ СБОРКЕ ===
         #[cfg(not(debug_assertions))]
-        return vec!["id.smol-it.ru".to_string()];
-        
-        // Оригинальная логика остаётся только для отладочных сборок
+        {
+            return vec!["id.smol-it.ru".to_string()];
+        }
+    
+        // === ОРИГИНАЛЬНАЯ ЛОГИКА ДЛЯ ОТЛАДОЧНЫХ СБОРОК ===
         let s = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
         if !s.is_empty() {
             return vec![s];
