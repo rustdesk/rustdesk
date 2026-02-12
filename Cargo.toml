@@ -1,15 +1,15 @@
 [package]
-name = "rustdesk"
+name = "kassatkadesk"
 version = "1.4.5"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["kassatkadesk by Sergey Glukhov <support@kassatka.online>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "KassatkaDesk Remote Desktop"
+default-run = "kassatkadesk"
 rust-version = "1.75"
 
 [lib]
-name = "librustdesk"
+name = "libkassatkadesk"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
@@ -214,9 +214,9 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
-FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+ProductName = "KassatkaDesk"
+FileDescription = "KassatkaDesk Remote Desktop"
+OriginalFilename = "kassatkadesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"

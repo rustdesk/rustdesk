@@ -45,7 +45,7 @@ const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     #[cfg(feature = "unix-file-copy-paste")]
     ClipboardFormat::FileUrl,
     ClipboardFormat::Special(CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET),
-    ClipboardFormat::Special(RUSTDESK_CLIPBOARD_OWNER_FORMAT),
+    ClipboardFormat::Special(KASSATKADESK_CLIPBOARD_OWNER_FORMAT),
 ];
 
 #[cfg(not(target_os = "android"))]

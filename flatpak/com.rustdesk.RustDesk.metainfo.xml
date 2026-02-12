@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.rustdesk.RustDesk</id>
-  <developer id="com.rustdesk">
-    <name>RustDesk</name>
+  <id>com.kassatkadesk.KassatkaDesk</id>
+  <developer id="com.kassatkadesk">
+    <name>KassatkaDesk</name>
   </developer>
-  <launchable type="desktop-id">com.rustdesk.RustDesk.desktop</launchable>
+  <launchable type="desktop-id">com.kassatkadesk.KassatkaDesk.desktop</launchable>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-only</project_license>
-  <name>RustDesk</name>
+  <name>KassatkaDesk</name>
   <summary>Secure remote desktop access</summary>
   <description>
     <p>
-        RustDesk is a full-featured open source remote control alternative for self-hosting and security with minimal configuration.
+        KassatkaDesk is a full-featured open source remote control alternative for self-hosting and security with minimal configuration.
     </p>
     <ul>
       <li> Works on Windows, macOS, Linux, iOS, Android, Web. </li>
@@ -38,15 +38,15 @@
     <color type="primary" scheme_preference="light">#d9eaf8</color>
     <color type="primary" scheme_preference="dark">#0160ee</color>
   </branding>
-  <url type="homepage">https://rustdesk.com</url>
-  <url type="bugtracker">https://github.com/rustdesk/rustdesk/issues</url>
-  <url type="faq">https://github.com/rustdesk/rustdesk/wiki/FAQ</url>
-  <url type="help">https://rustdesk.com/docs</url>
-  <url type="donation">https://ko-fi.com/rustdesk</url>
-  <url type="vcs-browser">https://github.com/rustdesk/rustdesk</url>
-  <url type="translate">https://github.com/rustdesk/rustdesk/tree/master/src/lang</url>
-  <url type="contribute">https://github.com/rustdesk/rustdesk/blob/master/docs/CONTRIBUTING.md</url>
-  <url type="contact">https://rustdesk.com/docs/en/technical-support</url>
+  <url type="homepage">https://kassatkadesk.com</url>
+  <url type="bugtracker">https://github.com/kassatkadesk/kassatkadesk/issues</url>
+  <url type="faq">https://github.com/kassatkadesk/kassatkadesk/wiki/FAQ</url>
+  <url type="help">https://kassatkadesk.com/docs</url>
+  <url type="donation">https://ko-fi.com/kassatkadesk</url>
+  <url type="vcs-browser">https://github.com/kassatkadesk/kassatkadesk</url>
+  <url type="translate">https://github.com/kassatkadesk/kassatkadesk/tree/master/src/lang</url>
+  <url type="contribute">https://github.com/kassatkadesk/kassatkadesk/blob/master/docs/CONTRIBUTING.md</url>
+  <url type="contact">https://kassatkadesk.com/docs/en/technical-support</url>
   <requires>
     <display_length compare="ge">600</display_length>
     <internet>always</internet>

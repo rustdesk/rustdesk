@@ -11,8 +11,8 @@
 #
 # It accepts the following arguments:
 #
-# - versionName from https://github.com/rustdesk/rustdesk/releases/download/fdroid-version/rustdesk-version.txt
-# - versionCode from https://github.com/rustdesk/rustdesk/releases/download/fdroid-version/rustdesk-version.txt
+# - versionName from https://github.com/kassatkadesk/kassatkadesk/releases/download/fdroid-version/kassatkadesk-version.txt
+# - versionCode from https://github.com/kassatkadesk/kassatkadesk/releases/download/fdroid-version/kassatkadesk-version.txt
 # - Android architecture to build APK for: armeabi-v7a arm64-v8av x86 x86_64
 # - The build step to execute:
 #
@@ -136,7 +136,7 @@ prebuild)
 		.env.CARGO_NDK_VERSION \
 		.github/workflows/flutter-build.yml)"
 
-	# Flutter used to compile main Rustdesk library
+	# Flutter used to compile main KassatkaDesk library
 
 	FLUTTER_VERSION="$(yq -r \
 		.env.ANDROID_FLUTTER_VERSION \
@@ -312,7 +312,7 @@ prebuild)
 	git apply res/fdroid/patches/*.patch
 
 	# If Flutter version used to generate bridge files differs from Flutter
-	# version used to compile Rustdesk library, generate bridge using the
+	# version used to compile KassatkaDesk library, generate bridge using the
 	# `FLUTTER_BRIDGE_VERSION` an restore the pubspec later
 
 	if [ "${FLUTTER_VERSION}" != "${FLUTTER_BRIDGE_VERSION}" ]; then
@@ -397,7 +397,7 @@ build)
 	# '.github/workflows/flutter-build.yml'
 	#
 
-	# Flutter used to compile main Rustdesk library
+	# Flutter used to compile main KassatkaDesk library
 
 	FLUTTER_VERSION="$(yq -r \
 		.env.ANDROID_FLUTTER_VERSION \
@@ -447,7 +447,7 @@ build)
 
 	bash flutter/build_android_deps.sh "${ANDROID_ABI}"
 
-	# Build rustdesk lib
+	# Build kassatkadesk lib
 
 	cargo ndk \
 		--platform 21 \
@@ -459,8 +459,8 @@ build)
 
 	mkdir -p "flutter/android/app/src/main/jniLibs/${ANDROID_ABI}"
 
-	cp "target/${RUST_TARGET}/release/liblibrustdesk.so" \
-		"flutter/android/app/src/main/jniLibs/${ANDROID_ABI}/librustdesk.so"
+	cp "target/${RUST_TARGET}/release/liblibkassatkadesk.so" \
+		"flutter/android/app/src/main/jniLibs/${ANDROID_ABI}/libkassatkadesk.so"
 
 	cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${NDK_TARGET}/libc++_shared.so" \
 		"flutter/android/app/src/main/jniLibs/${ANDROID_ABI}/"
