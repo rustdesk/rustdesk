@@ -765,16 +765,15 @@ impl Config {
     }
 
     pub fn get_rendezvous_server() -> String {
-        // === ЖЁСТКАЯ ПРИВЯЗКА К СЕРВЕРУ ИЗ КОНСТАНТЫ В РЕЛИЗНОЙ СБОРКЕ ===
+        // ЖЁСТКАЯ ПРИВЯЗКА К СЕРВЕРУ В РЕЛИЗНОЙ СБОРКЕ
         #[cfg(not(debug_assertions))]
         {
-            // Берём первый сервер из конфига (гарантированно не пустой)
-            let server = RENDEZVOUS_SERVERS[0]; // или: *RENDEZVOUS_SERVERS.first().unwrap()
-            return if server.contains(':') {
-                server.to_string()
+            let server = RENDEZVOUS_SERVERS[0];  // Берём первый сервер из константы
+            if server.contains(':') {
+                return server.to_string();
             } else {
-                format!("{}:{}", server, RENDEZVOUS_PORT)
-            };
+                return format!("{}:{}", server, RENDEZVOUS_PORT);
+            }
         }
         
         // Оригинальная логика для отладочных сборок
@@ -801,13 +800,13 @@ impl Config {
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {
-        // === ЖЁСТКАЯ ПРИВЯЗКА К СПИСКУ СЕРВЕРОВ В РЕЛИЗНОЙ СБОРКЕ ===
+        // ЖЁСТКАЯ ПРИВЯЗКА К СПИСКУ СЕРВЕРОВ В РЕЛИЗНОЙ СБОРКЕ
         #[cfg(not(debug_assertions))]
         {
             return RENDEZVOUS_SERVERS.iter().map(|x| x.to_string()).collect();
         }
         
-        // Оригинальная логика остаётся только для отладочных сборок
+        // Оригинальная логика для отладочных сборок
         let s = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
         if !s.is_empty() {
             return vec![s];
