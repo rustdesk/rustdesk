@@ -764,14 +764,50 @@ impl Config {
         }
     }
 
-    pub fn get_rendezvous_servers() -> Vec<String> {
-        // === ГАРАНТИРОВАННАЯ ПРИВЯЗКА К ВАШИМ СЕРВЕРАМ В РЕЛИЗНОЙ СБОРКЕ ===
+    pub fn get_rendezvous_server() -> String {
+        // === ЖЁСТКАЯ ПРИВЯЗКА К СЕРВЕРУ ИЗ КОНСТАНТЫ В РЕЛИЗНОЙ СБОРКЕ ===
         #[cfg(not(debug_assertions))]
         {
-            return vec!["id.smol-it.ru".to_string()];
+            // Берём первый сервер из конфига (гарантированно не пустой)
+            let server = RENDEZVOUS_SERVERS[0]; // или: *RENDEZVOUS_SERVERS.first().unwrap()
+            return if server.contains(':') {
+                server.to_string()
+            } else {
+                format!("{}:{}", server, RENDEZVOUS_PORT)
+            };
         }
-    
-        // === ОРИГИНАЛЬНАЯ ЛОГИКА ДЛЯ ОТЛАДОЧНЫХ СБОРОК ===
+        
+        // Оригинальная логика для отладочных сборок
+        let mut rendezvous_server = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
+        if rendezvous_server.is_empty() {
+            rendezvous_server = Self::get_option("custom-rendezvous-server");
+        }
+        if rendezvous_server.is_empty() {
+            rendezvous_server = PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
+        }
+        if rendezvous_server.is_empty() {
+            rendezvous_server = CONFIG2.read().unwrap().rendezvous_server.clone();
+        }
+        if rendezvous_server.is_empty() {
+            rendezvous_server = Self::get_rendezvous_servers()
+                .drain(..)
+                .next()
+                .unwrap_or_default();
+        }
+        if !rendezvous_server.contains(':') {
+            rendezvous_server = format!("{rendezvous_server}:{RENDEZVOUS_PORT}");
+        }
+        rendezvous_server
+    }
+
+    pub fn get_rendezvous_servers() -> Vec<String> {
+        // === ЖЁСТКАЯ ПРИВЯЗКА К СПИСКУ СЕРВЕРОВ В РЕЛИЗНОЙ СБОРКЕ ===
+        #[cfg(not(debug_assertions))]
+        {
+            return RENDEZVOUS_SERVERS.iter().map(|x| x.to_string()).collect();
+        }
+        
+        // Оригинальная логика остаётся только для отладочных сборок
         let s = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
         if !s.is_empty() {
             return vec![s];

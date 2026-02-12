@@ -347,7 +347,7 @@ pub fn check_ws(endpoint: &str) -> String {
         return endpoint.to_string();
     };
 
-    let custom_rendezvous_server = Config::get_rendezvous_servers().first().cloned().unwrap_or_default();
+    let custom_rendezvous_server = Config::get_rendezvous_server().first().cloned().unwrap_or_default();
     let relay_server = Config::get_option(OPTION_RELAY_SERVER);
     let rendezvous_port = split_host_port(&custom_rendezvous_server)
         .map(|(_, p)| p)
