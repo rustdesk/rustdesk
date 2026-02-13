@@ -1,0 +1,254 @@
+name: Custom Windows EXE Build (x64 + MSI)
+on:
+  workflow_dispatch:
+
+env:
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
+  VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.22.3"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  RUSTDESK_VERSION: "1.0.0-custom"
+  RUSTDESK_NAME: "AvtoDesk"
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore official Cargo.lock
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "Cargo.lock")) {
+            Write-Host "Cargo.lock not found, restoring from official repository..."
+            $commit = "d6c8a3b9c0e7a8f9b3e0e8c3a0f9a8b3e0e8c3a0"
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/rustdesk/rustdesk/$commit/Cargo.lock" -OutFile "Cargo.lock"
+            Write-Host "✓ Cargo.lock restored"
+          } else {
+            Write-Host "✓ Cargo.lock found"
+          }
+
+      - name: Install Rust toolchain with rustfmt
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Setup MSBuild (for MSI build)
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: 'C:\vcpkg'
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        env:
+          VCPKG_ROOT: "C:/vcpkg"
+          VCPKG_DEFAULT_TRIPLET: ${{ env.VCPKG_DEFAULT_TRIPLET }}
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}
+        run: |
+          export VCPKG_ROOT="C:/vcpkg"
+          export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
+          export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
+          
+          "$VCPKG_ROOT/vcpkg" install \
+            --triplet "$VCPKG_DEFAULT_TRIPLET" \
+            --x-install-root="$VCPKG_ROOT/installed"
+          
+          if [ ! -f "$VCPKG_ROOT/installed/$VCPKG_DEFAULT_TRIPLET/include/opus/opus_multistream.h" ]; then
+            echo "ERROR: opus headers missing!"
+            exit 1
+          fi
+          echo "✓ opus headers verified"
+
+      - name: Prepare Flutter dependencies
+        shell: bash
+        run: |
+          cd flutter
+          sed -i 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
+          flutter pub get
+          cd ..
+          echo "✓ Flutter dependencies installed"
+
+      - name: Install bridge generation tools
+        shell: bash
+        run: |
+          cargo install cargo-expand --version "1.0.95" --locked --force
+          cargo install flutter_rust_bridge_codegen \
+            --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} \
+            --features "uuid" \
+            --locked \
+            --force
+          echo "✓ Bridge tools installed"
+
+      - name: Generate flutter_rust_bridge files
+        shell: bash
+        run: |
+          ~/.cargo/bin/flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h \
+            --rust-output ./src/bridge_generated.rs
+          
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+          
+          if [ ! -f "src/bridge_generated.rs" ] || [ ! -f "src/bridge_generated.io.rs" ]; then
+            echo "ERROR: bridge files not generated!"
+            ls -la src/ | grep -i bridge || true
+            exit 1
+          fi
+          echo "✓ Bridge files generated successfully"
+
+      - name: Verify Config Settings
+        shell: pwsh
+        run: |
+          if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "id.smol-it.ru")) {
+            Write-Error "id.smol-it.ru not found in config.rs"
+            exit 1
+          }
+          if (-not (Select-String -Path libs/hbb_common/src/config.rs -Pattern "musi19RhPi9hHexXhYQsi6IcxJ9Bm7OchmtMljN3j2I=")) {
+            Write-Error "API key not found in config.rs"
+            exit 1
+          }
+          Write-Host "✓ Config settings verified"
+
+      - name: Build RustDesk (x64)
+        shell: bash
+        env:
+          VCPKG_ROOT: "C:/vcpkg"
+          VCPKG_DEFAULT_TRIPLET: ${{ env.VCPKG_DEFAULT_TRIPLET }}
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}
+        run: |
+          export VCPKG_ROOT="C:/vcpkg"
+          export VCPKG_DEFAULT_TRIPLET="${VCPKG_DEFAULT_TRIPLET}"
+          export VCPKG_DEFAULT_HOST_TRIPLET="${VCPKG_DEFAULT_HOST_TRIPLET}"
+          
+          python ./build.py --portable --flutter --skip-portable-pack
+          
+          if [ ! -d "./flutter/build/windows/x64/runner/Release" ]; then
+            echo "ERROR: Release directory not found!"
+            find ./flutter/build -type d 2>/dev/null | head -20
+            exit 1
+          fi
+          
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          echo "✓ Build successful"
+
+      # === КРИТИЧЕСКИ ВАЖНЫЙ ШАГ: переименование файла перед созданием установщика ===
+      - name: Rename rustdesk.exe to AvtoDesk.exe
+        shell: pwsh
+        run: |
+          $srcExe = "./rustdesk/rustdesk.exe"
+          $dstExe = "./rustdesk/AvtoDesk.exe"
+          
+          if (Test-Path $srcExe) {
+            # Переименовываем основной экзешник
+            Rename-Item -Path $srcExe -NewName "AvtoDesk.exe"
+            Write-Host "✓ Renamed rustdesk.exe → AvtoDesk.exe"
+          } else {
+            Write-Error "ERROR: rustdesk.exe not found at $srcExe!"
+            Get-ChildItem -Path "./rustdesk/" -Filter "*.exe" | Format-Table Name
+            exit 1
+          }
+          
+          # Проверяем результат
+          if (-not (Test-Path $dstExe)) {
+            Write-Error "AvtoDesk.exe not found after rename!"
+            exit 1
+          }
+          
+          Write-Host "✓ Executable successfully renamed to AvtoDesk.exe"
+
+      - name: Build MSI installer
+        shell: pwsh
+        run: |
+          # Подготовка файлов для установщика с правильным именем приложения
+          cd res/msi
+          python preprocess.py --arp -d ../../rustdesk --app-name "${{ env.RUSTDESK_NAME }}"
+          
+          # Восстановление NuGet-пакетов
+          nuget restore msi.sln
+          
+          # Сборка MSI с кастомными параметрами
+          msbuild msi.sln `
+            -p:Configuration=Release `
+            -p:Platform=x64 `
+            -p:TargetVersion=Windows10 `
+            -p:ProductVersion="${{ env.RUSTDESK_VERSION }}" `
+            -p:ProductName="${{ env.RUSTDESK_NAME }}" `
+            -p:Manufacturer="Your Company" `
+            -maxcpucount:2
+          
+          # Перемещение результата
+          $msiSource = "./Package/bin/x64/Release/en-us/Package.msi"
+          $msiDest = "../../dist/${{ env.RUSTDESK_NAME }}-${{ env.RUSTDESK_VERSION }}-x64.msi"
+          
+          if (Test-Path $msiSource) {
+            New-Item -ItemType Directory -Path "../../dist" -Force | Out-Null
+            Move-Item -Path $msiSource -Destination $msiDest -Force
+            Write-Host "✓ MSI installer created: $msiDest"
+            Get-Item $msiDest | Format-List Name, Length, LastWriteTime
+          } else {
+            Write-Error "MSI file not found at $msiSource!"
+            Get-ChildItem -Path "./Package/bin/x64/Release/" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
+            exit 1
+          }
+
+      - name: Create single EXE (self-extracting)
+        shell: bash
+        run: |
+          # Удаляем dpiAware из манифеста
+          sed -i '/dpiAware/d' res/manifest.xml
+          
+          # Генерация портативного пакета с правильным именем экзешника
+          cd libs/portable
+          pip install -r requirements.txt
+          python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/AvtoDesk.exe
+          cd ../..
+          
+          mkdir -p ./dist
+          mv ./target/release/rustdesk-portable-packer.exe "./dist/${{ env.RUSTDESK_NAME }}-custom.exe"
+          echo "✓ Single EXE created: ./dist/${{ env.RUSTDESK_NAME }}-custom.exe"
+          ls -lh "./dist/${{ env.RUSTDESK_NAME }}-custom.exe"
+
+      - name: Verify build artifacts
+        shell: pwsh
+        run: |
+          Write-Host "=== Generated artifacts ==="
+          Get-ChildItem -Path ./dist -Filter "*.exe" | ForEach-Object {
+            Write-Host "✓ EXE: $($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
+          }
+          Get-ChildItem -Path ./dist -Filter "*.msi" | ForEach-Object {
+            Write-Host "✓ MSI: $($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
+          }
+          
+          # Проверка существования файлов
+          $exePath = "./dist/${{ env.RUSTDESK_NAME }}-custom.exe"
+          $msiPath = "./dist/${{ env.RUSTDESK_NAME }}-${{ env.RUSTDESK_VERSION }}-x64.msi"
+          
+          if (-not (Test-Path $exePath)) { Write-Error "EXE not found at $exePath!"; exit 1 }
+          if (-not (Test-Path $msiPath)) { Write-Error "MSI not found at $msiPath!"; exit 1 }
+          Write-Host "✓ All artifacts created successfully"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-build-artifacts
+          path: ./dist/
+          retention-days: 30
