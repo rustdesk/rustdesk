@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "A RustDesk megjelenítése"),
         ("This PC", "Ez a számítógép"),
         ("or", "vagy"),
-        ("Continue with", "Folytatás a következővel"),
         ("Elevate", "Hozzáférés engedélyezése"),
         ("Zoom cursor", "Kurzor nagyítása"),
         ("Accept sessions via password", "Munkamenetek elfogadása jelszóval"),
@@ -739,5 +738,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Changelog", "Változáslista"),
         ("keep-awake-during-outgoing-sessions-label", "Képernyő aktív állapotban tartása a kimenő munkamenetek során"),
         ("keep-awake-during-incoming-sessions-label", "Képernyő aktív állapotban tartása a bejövő munkamenetek során"),
+        ("Continue with {}", "Folytatás a következővel: {}"),
     ].iter().cloned().collect();
 }

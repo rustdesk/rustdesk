@@ -68,6 +68,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   double _viewInsetsBottom = 0;
   final _uniqueKey = UniqueKey();
   Timer? _timerDidChangeMetrics;
+  Timer? _iosKeyboardWorkaroundTimer;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -140,6 +141,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     await gFFI.close();
     _timer?.cancel();
     _timerDidChangeMetrics?.cancel();
+    _iosKeyboardWorkaroundTimer?.cancel();
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -206,7 +208,24 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           gFFI.ffiModel.pi.version.isNotEmpty) {
         gFFI.invokeMethod("enable_soft_keyboard", false);
       }
+
+      // Workaround for iOS: physical keyboard input fails after virtual keyboard is hidden
+      // https://github.com/flutter/flutter/issues/39900
+      // https://github.com/rustdesk/rustdesk/discussions/11843#discussioncomment-13499698 - Virtual keyboard issue
+      if (isIOS) {
+        _iosKeyboardWorkaroundTimer?.cancel();
+        _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 100), () {
+          if (!mounted) return;
+          _physicalFocusNode.unfocus();
+          _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 50), () {
+            if (!mounted) return;
+            _physicalFocusNode.requestFocus();
+          });
+        });
+      }
     } else {
+      _iosKeyboardWorkaroundTimer?.cancel();
+      _iosKeyboardWorkaroundTimer = null;
       _timer?.cancel();
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
