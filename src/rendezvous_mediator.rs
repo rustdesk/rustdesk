@@ -40,6 +40,7 @@ lazy_static::lazy_static! {
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
+static SENT_REGISTER_PK: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
@@ -689,6 +690,7 @@ impl RendezvousMediator {
             ..Default::default()
         });
         socket.send(&msg_out).await?;
+        SENT_REGISTER_PK.store(true, Ordering::SeqCst);
         Ok(())
     }
 
@@ -903,4 +905,29 @@ async fn udp_nat_listen(
         )
     })?;
     Ok(())
+}
+
+// When config is not yet synced from root, register_pk may have already been sent with a new generated pk.
+// After config sync completes, the pk may change. This struct detects pk changes and triggers
+// a re-registration by setting key_confirmed to false.
+// NOTE:
+// This only corrects PK registration for the current ID. If root uses a non-default mac-generated ID,
+// this does not resolve the multi-ID issue by itself.
+pub struct CheckIfResendPk {
+    pk: Option<Vec<u8>>,
+}
+impl CheckIfResendPk {
+    pub fn new() -> Self {
+        Self {
+            pk: Config::get_cached_pk(),
+        }
+    }
+}
+impl Drop for CheckIfResendPk {
+    fn drop(&mut self) {
+        if SENT_REGISTER_PK.load(Ordering::SeqCst) && Config::get_cached_pk() != self.pk {
+            Config::set_key_confirmed(false);
+            log::info!("Set key_confirmed to false due to pk changed, will resend register_pk");
+        }
+    }
 }
