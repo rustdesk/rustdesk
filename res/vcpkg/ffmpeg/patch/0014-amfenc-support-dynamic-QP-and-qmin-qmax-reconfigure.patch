@@ -1,0 +1,176 @@
+From 817066f5804d914762410d1fd07c36cc45462ed5 Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Mon, 23 Feb 2026 22:18:39 +0800
+Subject: [PATCH] amfenc: support dynamic QP and qmin/qmax reconfigure
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/amfenc.c | 119 +++++++++++++++++++++++++++++++++++++++++---
+ libavcodec/amfenc.h |  11 +++-
+ 2 files changed, 121 insertions(+), 9 deletions(-)
+
+diff --git a/libavcodec/amfenc.c b/libavcodec/amfenc.c
+index a53a05b16b..eb960d0e8a 100644
+--- a/libavcodec/amfenc.c
++++ b/libavcodec/amfenc.c
+@@ -275,7 +275,14 @@ static int amf_init_context(AVCodecContext *avctx)
+ 
+     ctx->hwsurfaces_in_queue = 0;
+     ctx->hwsurfaces_in_queue_max = 16;
+-    ctx->av_bitrate = avctx->bit_rate;
++    ctx->last_bit_rate = avctx->bit_rate;
++    ctx->last_qp_i = ctx->qp_i;
++    ctx->last_qp_p = ctx->qp_p;
++    ctx->last_qp_b = ctx->qp_b;
++    ctx->last_min_qp_i = ctx->min_qp_i;
++    ctx->last_max_qp_i = ctx->max_qp_i;
++    ctx->last_min_qp_p = ctx->min_qp_p;
++    ctx->last_max_qp_p = ctx->max_qp_p;
+ 
+     // configure AMF logger
+     // the return of these functions indicates old state and do not affect behaviour
+@@ -645,16 +652,112 @@ static int reconfig_encoder(AVCodecContext *avctx)
+ {
+     AmfContext *ctx = avctx->priv_data;
+     AMF_RESULT  res = AMF_OK;
++    int is_cqp = (avctx->codec->id == AV_CODEC_ID_H264 &&
++                  ctx->rate_control_mode == AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_CONSTANT_QP) ||
++                 (avctx->codec->id == AV_CODEC_ID_HEVC &&
++                  ctx->rate_control_mode == AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_CONSTANT_QP);
++
++    if (ctx->last_bit_rate != avctx->bit_rate) {
++        if (!is_cqp) {
++            av_log(ctx, AV_LOG_INFO, "change bitrate from %d to %d\n", ctx->last_bit_rate, avctx->bit_rate);
++            if (avctx->codec->id == AV_CODEC_ID_H264) {
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_TARGET_BITRATE, avctx->bit_rate);
++            } else if (avctx->codec->id == AV_CODEC_ID_HEVC) {
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_TARGET_BITRATE, avctx->bit_rate);
++            }
++        }
++        ctx->last_bit_rate = avctx->bit_rate;
++    }
++
++    // Dynamic QP/qmin/qmax reconfiguration
++    // Reference: https://amd.github.io/ama-sdk/latest/tuning_video_quality.html#dynamic-encoder-parameters
++    // CQP mode: dynamic QP, qmin, qmax
++    // CBR/VBR modes: dynamic qmin, qmax (not QP)
++    if (avctx->codec->id == AV_CODEC_ID_H264) {
++
++        // Dynamic QP (CQP mode only)
++        if (is_cqp) {
++            if (ctx->qp_i >= 0 && ctx->qp_i != ctx->last_qp_i) {
++                av_log(ctx, AV_LOG_VERBOSE, "change QP I from %d to %d\n", ctx->last_qp_i, ctx->qp_i);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_QP_I, ctx->qp_i);
++                ctx->last_qp_i = ctx->qp_i;
++            }
++            if (ctx->qp_p >= 0 && ctx->qp_p != ctx->last_qp_p) {
++                av_log(ctx, AV_LOG_VERBOSE, "change QP P from %d to %d\n", ctx->last_qp_p, ctx->qp_p);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_QP_P, ctx->qp_p);
++                ctx->last_qp_p = ctx->qp_p;
++            }
++            if (ctx->qp_b >= 0 && ctx->qp_b != ctx->last_qp_b) {
++                av_log(ctx, AV_LOG_VERBOSE, "change QP B from %d to %d\n", ctx->last_qp_b, ctx->qp_b);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_QP_B, ctx->qp_b);
++                ctx->last_qp_b = ctx->qp_b;
++            }
++        }
++
++        // Dynamic qmin/qmax (all modes)
++        if (avctx->qmin >= 0 && avctx->qmin != ctx->last_min_qp_i) {
++            int qval = FFMIN(avctx->qmin, 51);
++            av_log(ctx, AV_LOG_VERBOSE, "change min QP from %d to %d\n", ctx->last_min_qp_i, qval);
++            AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_MIN_QP, qval);
++            ctx->last_min_qp_i = avctx->qmin;
++        }
++        if (avctx->qmax >= 0 && avctx->qmax != ctx->last_max_qp_i) {
++            int qval = FFMIN(avctx->qmax, 51);
++            av_log(ctx, AV_LOG_VERBOSE, "change max QP from %d to %d\n", ctx->last_max_qp_i, qval);
++            AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_MAX_QP, qval);
++            ctx->last_max_qp_i = avctx->qmax;
++        }
++    } else if (avctx->codec->id == AV_CODEC_ID_HEVC) {
++
++        // Dynamic QP (CQP mode only)
++        if (is_cqp) {
++            if (ctx->qp_i >= 0 && ctx->qp_i != ctx->last_qp_i) {
++                av_log(ctx, AV_LOG_VERBOSE, "change QP I from %d to %d\n", ctx->last_qp_i, ctx->qp_i);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_QP_I, ctx->qp_i);
++                ctx->last_qp_i = ctx->qp_i;
++            }
++            if (ctx->qp_p >= 0 && ctx->qp_p != ctx->last_qp_p) {
++                av_log(ctx, AV_LOG_VERBOSE, "change QP P from %d to %d\n", ctx->last_qp_p, ctx->qp_p);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_QP_P, ctx->qp_p);
++                ctx->last_qp_p = ctx->qp_p;
++            }
++        }
+ 
+-    if (ctx->av_bitrate != avctx->bit_rate) {
+-        av_log(ctx, AV_LOG_INFO, "change bitrate from %d to %d\n", ctx->av_bitrate, avctx->bit_rate);
+-        ctx->av_bitrate = avctx->bit_rate;
+-        if (avctx->codec->id == AV_CODEC_ID_H264) {
+-            AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_TARGET_BITRATE, avctx->bit_rate);
+-        } else if (avctx->codec->id == AV_CODEC_ID_HEVC) {
+-            AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_TARGET_BITRATE, avctx->bit_rate);
++        // Dynamic qmin/qmax (all modes) - HEVC has per-frame-type min/max
++        {
++            int new_val = ctx->min_qp_i >= 0 ? ctx->min_qp_i : (avctx->qmin >= 0 ? FFMIN(avctx->qmin, 51) : -1);
++            if (new_val >= 0 && new_val != ctx->last_min_qp_i) {
++                av_log(ctx, AV_LOG_VERBOSE, "change min QP I from %d to %d\n", ctx->last_min_qp_i, new_val);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_MIN_QP_I, new_val);
++                ctx->last_min_qp_i = new_val;
++            }
++        }
++        {
++            int new_val = ctx->max_qp_i >= 0 ? ctx->max_qp_i : (avctx->qmax >= 0 ? FFMIN(avctx->qmax, 51) : -1);
++            if (new_val >= 0 && new_val != ctx->last_max_qp_i) {
++                av_log(ctx, AV_LOG_VERBOSE, "change max QP I from %d to %d\n", ctx->last_max_qp_i, new_val);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_MAX_QP_I, new_val);
++                ctx->last_max_qp_i = new_val;
++            }
++        }
++        {
++            int new_val = ctx->min_qp_p >= 0 ? ctx->min_qp_p : (avctx->qmin >= 0 ? FFMIN(avctx->qmin, 51) : -1);
++            if (new_val >= 0 && new_val != ctx->last_min_qp_p) {
++                av_log(ctx, AV_LOG_VERBOSE, "change min QP P from %d to %d\n", ctx->last_min_qp_p, new_val);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_MIN_QP_P, new_val);
++                ctx->last_min_qp_p = new_val;
++            }
++        }
++        {
++            int new_val = ctx->max_qp_p >= 0 ? ctx->max_qp_p : (avctx->qmax >= 0 ? FFMIN(avctx->qmax, 51) : -1);
++            if (new_val >= 0 && new_val != ctx->last_max_qp_p) {
++                av_log(ctx, AV_LOG_VERBOSE, "change max QP P from %d to %d\n", ctx->last_max_qp_p, new_val);
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_MAX_QP_P, new_val);
++                ctx->last_max_qp_p = new_val;
++            }
+         }
+     }
++
+     return 0;
+ }
+ 
+diff --git a/libavcodec/amfenc.h b/libavcodec/amfenc.h
+index 481e0fb75d..8d4ee064dd 100644
+--- a/libavcodec/amfenc.h
++++ b/libavcodec/amfenc.h
+@@ -115,7 +115,16 @@ typedef struct AmfContext {
+     int                 max_b_frames;
+     int                 qvbr_quality_level;
+     int                 hw_high_motion_quality_boost;
+-    int64_t             av_bitrate;
++    int64_t             last_bit_rate;
++
++    // Dynamic reconfiguration tracking
++    int                 last_qp_i;
++    int                 last_qp_p;
++    int                 last_qp_b;
++    int                 last_min_qp_i;
++    int                 last_max_qp_i;
++    int                 last_min_qp_p;
++    int                 last_max_qp_p;
+ 
+     // HEVC - specific options
+ 
+-- 
+2.43.0.windows.1
+

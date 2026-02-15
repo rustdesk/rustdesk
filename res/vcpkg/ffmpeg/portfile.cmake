@@ -28,6 +28,9 @@ vcpkg_from_github(
     patch/0010.disable-loading-DLLs-from-app-dir.patch
     patch/0011-android-mediacodec-encode-align-64.patch
     patch/0012-fix-macos-big-sur-CVBufferCopyAttachments.patch
+    patch/0013-nvenc-support-dynamic-constQP-reconfigure.patch
+    patch/0014-amfenc-support-dynamic-QP-and-qmin-qmax-reconfigure.patch
+    patch/0015-amfenc-support-dynamic-VBV-buffer-size-initial-fulln.patch
 )
 
 if(SOURCE_PATH MATCHES " ")

@@ -1,5 +1,5 @@
 use super::*;
-use scrap::codec::{Quality, BR_BALANCED, BR_BEST, BR_SPEED};
+use scrap::codec::{ratio_for_qp, Quality, RcState, BR_BALANCED, BR_BEST, BR_SPEED};
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
@@ -108,7 +108,7 @@ pub struct VideoQoS {
     ratio: f32,
     users: HashMap<i32, UserData>,
     displays: HashMap<String, DisplayData>,
-    bitrate_store: u32,
+    rc_state: RcState,
     adjust_ratio_instant: Instant,
     abr_config: bool,
     new_user_instant: Instant,
@@ -121,7 +121,7 @@ impl Default for VideoQoS {
             ratio: BR_BALANCED,
             users: Default::default(),
             displays: Default::default(),
-            bitrate_store: 0,
+            rc_state: Default::default(),
             adjust_ratio_instant: Instant::now(),
             abr_config: true,
             new_user_instant: Instant::now(),
@@ -146,14 +146,19 @@ impl VideoQoS {
         }
     }
 
-    // Store bitrate for later use
-    pub fn store_bitrate(&mut self, bitrate: u32) {
-        self.bitrate_store = bitrate;
+    // Store rate control state for later use
+    pub fn store_rc_state(&mut self, rc_state: RcState) {
+        self.rc_state = rc_state;
     }
 
     // Get stored bitrate
-    pub fn bitrate(&self) -> u32 {
-        self.bitrate_store
+    pub fn bitrate_in_test_delay(&self) -> u32 {
+        if self.rc_state.qp_mode {
+            // For CQP mode, bitrate is not fixed, return 0 to indicate it's not applicable
+            0
+        } else {
+            self.rc_state.bitrate
+        }
     }
 
     // Get current bitrate ratio with bounds checking
@@ -413,6 +418,16 @@ impl VideoQoS {
             .1
     }
 
+    pub fn latest_image_quality(&self) -> ImageQuality {
+        let quality = self.latest_quality();
+        match quality {
+            Quality::Best => ImageQuality::Best,
+            Quality::Balanced => ImageQuality::Balanced,
+            Quality::Low => ImageQuality::Low,
+            Quality::Custom(_) => ImageQuality::NotSet, // For custom quality, we don't handle this in rate control, change this if needed
+        }
+    }
+
     // Adjust quality ratio based on network delay and screen changes
     fn adjust_ratio(&mut self, dynamic_screen: bool) {
         if !self.in_vbr_state() {
@@ -427,14 +442,7 @@ impl VideoQoS {
         let target_quality = self.latest_quality();
         let target_ratio = self.latest_quality().ratio();
         let current_ratio = self.ratio;
-        let current_bitrate = self.bitrate();
-
-        // Calculate ratio for adding 150kbps bandwidth
-        let ratio_add_150kbps = if current_bitrate > 0 {
-            Some((current_bitrate + 150) as f32 * current_ratio / current_bitrate as f32)
-        } else {
-            None
-        };
+        let rc_state = self.rc_state;
 
         // Set minimum ratio based on quality mode
         // Best(0.6) > Balanced(0.4) > Low(0.25) >= Custom(0.2~0.6)
@@ -483,12 +491,23 @@ impl VideoQoS {
         }
 
         // Limit quality increase rate for better stability
-        if let Some(ratio_add_150kbps) = ratio_add_150kbps {
-            if v > ratio_add_150kbps
-                && ratio_add_150kbps > current_ratio
-                && current_ratio >= BR_SPEED
-            {
-                v = ratio_add_150kbps;
+        if v > current_ratio && current_ratio >= BR_SPEED {
+            if rc_state.qp_mode {
+                // For CQP mode, limit QP decrease to 1 step per adjustment period
+                let max_ratio = ratio_for_qp(rc_state.qp - 1, current_ratio, v);
+                if v > max_ratio {
+                    v = max_ratio;
+                }
+            } else {
+                // For CBR/VBR mode, cap increase to equivalent of adding 150kbps bandwidth
+                let current_bitrate = rc_state.bitrate;
+                if current_bitrate > 0 {
+                    let ratio_add_150kbps =
+                        (current_bitrate + 150) as f32 * current_ratio / current_bitrate as f32;
+                    if v > ratio_add_150kbps {
+                        v = ratio_add_150kbps;
+                    }
+                }
             }
         }
 

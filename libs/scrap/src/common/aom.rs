@@ -14,6 +14,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
     log,
+    message_proto::ImageQuality,
     message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
     ResultType,
 };
@@ -266,9 +267,19 @@ impl EncoderApi for AomEncoder {
         Ok(())
     }
 
-    fn bitrate(&self) -> u32 {
+    fn rc_state(&self) -> crate::codec::RcState {
         let c = unsafe { *self.ctx.config.enc.to_owned() };
-        c.rc_target_bitrate
+        crate::codec::RcState {
+            bitrate: c.rc_target_bitrate,
+            qp: ((c.rc_min_quantizer + c.rc_max_quantizer) / 2) as i32,
+            qp_min: c.rc_min_quantizer as i32,
+            qp_max: c.rc_max_quantizer as i32,
+            qp_mode: false,
+        }
+    }
+
+    fn rc_changed(&self, _image_quality: ImageQuality) -> bool {
+        false
     }
 
     fn support_changing_quality(&self) -> bool {
@@ -287,7 +298,12 @@ impl EncoderApi for AomEncoder {
 }
 
 impl AomEncoder {
-    pub fn encode<'a>(&'a mut self, ms: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames<'a>> {
+    pub fn encode<'a>(
+        &'a mut self,
+        ms: i64,
+        data: &[u8],
+        stride_align: usize,
+    ) -> Result<EncodeFrames<'a>> {
         let bpp = if self.i444 { 24 } else { 12 };
         if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));

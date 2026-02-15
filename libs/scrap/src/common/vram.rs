@@ -5,19 +5,19 @@ use std::{
 };
 
 use crate::{
-    codec::{enable_vram_option, EncoderApi, EncoderCfg},
-    hwcodec::HwCodecConfig,
+    codec::{enable_vram_option, EncoderApi, EncoderCfg, Quality},
+    hwcodec::{HwCodecConfig, AMD_BITRATE_MULTIPLIER, RC_BITRATE_MODE},
     AdapterDevice, CodecFormat, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
 use hbb_common::{
     anyhow::{anyhow, bail, Context},
     bytes::Bytes,
     log,
-    message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
+    message_proto::{EncodedVideoFrame, EncodedVideoFrames, ImageQuality, VideoFrame},
     ResultType,
 };
 use hwcodec::{
-    common::{DataFormat, Driver, MAX_GOP},
+    common::{DataFormat, Driver, RateControl, MAX_GOP},
     vram::{
         decode::{self, DecodeFrame, Decoder},
         encode::{self, EncodeFrame, Encoder},
@@ -40,6 +40,7 @@ pub struct VRamEncoderConfig {
     pub width: usize,
     pub height: usize,
     pub quality: f32,
+    pub image_quality: ImageQuality,
     pub feature: FeatureContext,
     pub keyframe_interval: Option<usize>,
 }
@@ -49,8 +50,13 @@ pub struct VRamEncoder {
     pub format: DataFormat,
     ctx: EncodeContext,
     bitrate: u32,
+    qp: i32,
+    qp_min: i32,
+    qp_max: i32,
     last_frame_len: usize,
     same_bad_len_counter: usize,
+    rc: RateControl,
+    config: VRamEncoderConfig,
 }
 
 impl EncoderApi for VRamEncoder {
@@ -60,13 +66,11 @@ impl EncoderApi for VRamEncoder {
     {
         match cfg {
             EncoderCfg::VRAM(config) => {
-                let bitrate = Self::bitrate(
-                    config.feature.data_format,
-                    config.width,
-                    config.height,
-                    config.quality,
-                );
+                let bitrate =
+                    Self::bitrate(&config.feature, config.width, config.height, config.quality);
                 let gop = config.keyframe_interval.unwrap_or(MAX_GOP as _) as i32;
+                let (qp, qp_min, qp_max) = crate::codec::qp_for_ratio(config.quality);
+                let rc = Self::rate_control(&config.feature, config.image_quality);
                 let ctx = EncodeContext {
                     f: config.feature.clone(),
                     d: DynamicContext {
@@ -76,6 +80,10 @@ impl EncoderApi for VRamEncoder {
                         kbitrate: bitrate as _,
                         framerate: 30,
                         gop,
+                        qp,
+                        qp_min,
+                        qp_max,
+                        rc,
                     },
                 };
                 match Encoder::new(ctx.clone()) {
@@ -84,8 +92,13 @@ impl EncoderApi for VRamEncoder {
                         ctx,
                         format: config.feature.data_format,
                         bitrate,
+                        qp,
+                        qp_min,
+                        qp_max,
                         last_frame_len: 0,
                         same_bad_len_counter: 0,
+                        rc,
+                        config,
                     }),
                     Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
@@ -172,21 +185,38 @@ impl EncoderApi for VRamEncoder {
 
     fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
         let bitrate = Self::bitrate(
-            self.ctx.f.data_format,
+            &self.ctx.f,
             self.ctx.d.width as _,
             self.ctx.d.height as _,
             ratio,
         );
-        if bitrate > 0 {
+        if bitrate > 0 && bitrate != self.bitrate {
             if self.encoder.set_bitrate((bitrate) as _).is_ok() {
                 self.bitrate = bitrate;
             }
         }
+        let (qp, qp_min, qp_max) = crate::codec::qp_for_ratio(ratio);
+        if qp != self.qp || qp_min != self.qp_min || qp_max != self.qp_max {
+            self.encoder.set_qp(qp, qp_min, qp_max).ok();
+            self.qp = qp;
+            self.qp_min = qp_min;
+            self.qp_max = qp_max;
+        }
         Ok(())
     }
 
-    fn bitrate(&self) -> u32 {
-        self.bitrate
+    fn rc_state(&self) -> crate::codec::RcState {
+        crate::codec::RcState {
+            bitrate: self.bitrate,
+            qp: self.qp,
+            qp_min: self.qp_min,
+            qp_max: self.qp_max,
+            qp_mode: self.rc == RateControl::RC_CQP,
+        }
+    }
+
+    fn rc_changed(&self, image_quality: ImageQuality) -> bool {
+        Self::rate_control(&self.config.feature, image_quality) != self.rc
     }
 
     fn support_changing_quality(&self) -> bool {
@@ -283,8 +313,19 @@ impl VRamEncoder {
         }
     }
 
-    pub fn bitrate(fmt: DataFormat, width: usize, height: usize, ratio: f32) -> u32 {
-        crate::hwcodec::HwRamEncoder::calc_bitrate(width, height, ratio, fmt == DataFormat::H264)
+    pub fn bitrate(f: &FeatureContext, width: usize, height: usize, ratio: f32) -> u32 {
+        let multiplier = if f.vendor == Driver::AMF {
+            AMD_BITRATE_MULTIPLIER
+        } else {
+            1.0
+        };
+        crate::hwcodec::HwRamEncoder::calc_bitrate(
+            width,
+            height,
+            ratio,
+            f.data_format == DataFormat::H264,
+            multiplier,
+        )
     }
 
     pub fn set_not_use(video_service_name: String, not_use: bool) {
@@ -307,6 +348,16 @@ impl VRamEncoder {
                 .unwrap()
                 .remove(&video_service_name);
         }
+    }
+
+    fn rate_control(f: &FeatureContext, image_quality: ImageQuality) -> RateControl {
+        if image_quality == ImageQuality::Best {
+            return RateControl::RC_CQP;
+        }
+        if f.vendor == Driver::MFX {
+            return RateControl::RC_VBR;
+        }
+        RC_BITRATE_MODE
     }
 }
 
@@ -382,6 +433,7 @@ pub struct VRamDecoderImage<'a> {
 impl VRamDecoderImage<'_> {}
 
 pub(crate) fn check_available_vram() -> (Vec<FeatureContext>, Vec<DecodeContext>, String) {
+    let (qp, qp_min, qp_max) = crate::codec::qp_for_ratio(Quality::default().ratio());
     let d = DynamicContext {
         device: None,
         width: 1280,
@@ -389,6 +441,10 @@ pub(crate) fn check_available_vram() -> (Vec<FeatureContext>, Vec<DecodeContext>
         kbitrate: 5000,
         framerate: 60,
         gop: MAX_GOP as _,
+        qp,
+        qp_min,
+        qp_max,
+        rc: RC_BITRATE_MODE,
     };
     let encoders = encode::available(d);
     let decoders = decode::available();

@@ -1,0 +1,91 @@
+From 6209f4bd3a476a115040c9a603f5528a3cfc7d2e Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Mon, 23 Feb 2026 17:22:47 +0800
+Subject: [PATCH] nvenc support dynamic constQP reconfigure
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/nvenc.c | 53 +++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 52 insertions(+), 1 deletion(-)
+
+diff --git a/libavcodec/nvenc.c b/libavcodec/nvenc.c
+index f4c559b7ce..b7ceaadf02 100644
+--- a/libavcodec/nvenc.c
++++ b/libavcodec/nvenc.c
+@@ -2689,7 +2689,7 @@ static void reconfig_encoder(AVCodecContext *avctx, const AVFrame *frame)
+     NV_ENC_RECONFIGURE_PARAMS params = { 0 };
+     int needs_reconfig = 0;
+     int needs_encode_config = 0;
+-    int reconfig_bitrate = 0, reconfig_dar = 0;
++    int reconfig_bitrate = 0, reconfig_dar = 0, reconfig_qp = 0;
+     int dw, dh;
+ 
+     params.version = NV_ENC_RECONFIGURE_PARAMS_VER;
+@@ -2749,6 +2749,54 @@ static void reconfig_encoder(AVCodecContext *avctx, const AVFrame *frame)
+         }
+     }
+ 
++    if (ctx->rc == NV_ENC_PARAMS_RC_CONSTQP) {
++        NV_ENC_RC_PARAMS *rc = &params.reInitEncodeParams.encodeConfig->rcParams;
++        NV_ENC_QP new_qp = ctx->encode_config.rcParams.constQP;
++#if CONFIG_AV1_NVENC_ENCODER
++        int qmax = avctx->codec->id == AV_CODEC_ID_AV1 ? 255 : 51;
++#else
++        int qmax = 51;
++#endif
++
++        if (ctx->init_qp_p >= 0) {
++            new_qp.qpInterP = ctx->init_qp_p;
++            if (ctx->init_qp_i >= 0 && ctx->init_qp_b >= 0) {
++                new_qp.qpIntra = ctx->init_qp_i;
++                new_qp.qpInterB = ctx->init_qp_b;
++            } else if (avctx->i_quant_factor != 0.0 && avctx->b_quant_factor != 0.0) {
++                new_qp.qpIntra = av_clip(
++                    new_qp.qpInterP * fabs(avctx->i_quant_factor) + avctx->i_quant_offset + 0.5, 0, qmax);
++                new_qp.qpInterB = av_clip(
++                    new_qp.qpInterP * fabs(avctx->b_quant_factor) + avctx->b_quant_offset + 0.5, 0, qmax);
++            } else {
++                new_qp.qpIntra = new_qp.qpInterP;
++                new_qp.qpInterB = new_qp.qpInterP;
++            }
++        } else if (ctx->cqp >= 0) {
++            new_qp.qpInterP = new_qp.qpInterB = new_qp.qpIntra = ctx->cqp;
++            if (avctx->b_quant_factor != 0.0)
++                new_qp.qpInterB = av_clip(ctx->cqp * fabs(avctx->b_quant_factor) + avctx->b_quant_offset + 0.5, 0, qmax);
++            if (avctx->i_quant_factor != 0.0)
++                new_qp.qpIntra = av_clip(ctx->cqp * fabs(avctx->i_quant_factor) + avctx->i_quant_offset + 0.5, 0, qmax);
++        }
++
++        if (new_qp.qpInterP != ctx->encode_config.rcParams.constQP.qpInterP ||
++            new_qp.qpIntra  != ctx->encode_config.rcParams.constQP.qpIntra  ||
++            new_qp.qpInterB != ctx->encode_config.rcParams.constQP.qpInterB) {
++            av_log(avctx, AV_LOG_VERBOSE,
++                   "constQP change: P %d->%d I %d->%d B %d->%d\n",
++                   ctx->encode_config.rcParams.constQP.qpInterP, new_qp.qpInterP,
++                   ctx->encode_config.rcParams.constQP.qpIntra,  new_qp.qpIntra,
++                   ctx->encode_config.rcParams.constQP.qpInterB, new_qp.qpInterB);
++
++            rc->constQP = new_qp;
++            reconfig_qp = 1;
++
++            needs_encode_config = 1;
++            needs_reconfig = 1;
++        }
++    }
++
+     if (!needs_encode_config)
+         params.reInitEncodeParams.encodeConfig = NULL;
+ 
+@@ -2768,6 +2816,9 @@ static void reconfig_encoder(AVCodecContext *avctx, const AVFrame *frame)
+                 ctx->encode_config.rcParams.vbvBufferSize = params.reInitEncodeParams.encodeConfig->rcParams.vbvBufferSize;
+             }
+ 
++            if (reconfig_qp) {
++                ctx->encode_config.rcParams.constQP = params.reInitEncodeParams.encodeConfig->rcParams.constQP;
++            }
+         }
+     }
+ }
+-- 
+2.43.0.windows.1
+

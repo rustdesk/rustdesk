@@ -930,7 +930,7 @@ impl Connection {
                         let mut msg_out = Message::new();
                         msg_out.set_test_delay(TestDelay{
                             last_delay: conn.network_delay,
-                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate(),
+                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate_in_test_delay(),
                             ..Default::default()
                         });
                         conn.send(msg_out.into()).await;
@@ -5346,9 +5346,8 @@ mod raii {
         }
 
         pub fn check_wake_lock_on_setting_changed() {
-            let current = config::Config::get_bool_option(
-                keys::OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS,
-            );
+            let current =
+                config::Config::get_bool_option(keys::OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS);
             let cached = *WAKELOCK_KEEP_AWAKE_OPTION.lock().unwrap();
             if cached != Some(current) {
                 Self::check_wake_lock();
