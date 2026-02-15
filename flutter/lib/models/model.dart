@@ -2216,23 +2216,20 @@ class CanvasModel with ChangeNotifier {
     double h = size.height - topToEdge - bottomToEdge;
     if (isMobile) {
       // Account for safe area insets
+      w = w - mediaData.padding.left - mediaData.padding.right;
+      h = h -
+          mediaData.viewInsets.bottom -
+          (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
+              0);
       // Portrait: handle all four directions (top, bottom, left, right)
       // Landscape: only handle left/right (notch on sides), bottom home indicator auto-hides
       final isPortrait = size.height > size.width;
       if (isPortrait) {
-        w = w - mediaData.padding.left - mediaData.padding.right;
-        h = h -
-            mediaData.padding.top -
-            mediaData.padding.bottom -
-            mediaData.viewInsets.bottom -
-            (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
-                0);
-      } else {
-        w = w - mediaData.padding.left - mediaData.padding.right;
-        h = h -
-            mediaData.viewInsets.bottom -
-            (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
-                0);
+        // We need to subtract top/bottom padding in portrait mode to avoid
+        // the image being truncated.
+        // With this adjustment https://github.com/user-attachments/assets/30ed4559-c27e-432b-847f-8fec23c9f998
+        // Without this adjustment, the image will be truncated in both portrait and landscape modes when the device has non-zero top/bottom padding (e.g. Samsung devices with hole-punch cameras).
+        h = h - mediaData.padding.top - mediaData.padding.bottom;
       }
     }
     return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
