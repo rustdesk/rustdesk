@@ -29,20 +29,21 @@ delay:
 
 // Constants
 pub const FPS: u32 = 30;
-pub const MIN_FPS: u32 = 1;
+pub const MIN_FPS: u32 = 1; // Absolute minimum fps, used for final clamp
+pub const MIN_AUTO_FPS: u32 = 5; // Minimum fps for auto adjustment, prevents fps from dropping too low
 pub const MAX_FPS: u32 = 120;
 pub const INIT_FPS: u32 = 15;
 
 // Bitrate ratio constants for different quality levels
 const BR_MAX: f32 = 40.0; // 2000 * 2 / 100
-const BR_MIN: f32 = 0.2;
-const BR_MIN_HIGH_RESOLUTION: f32 = 0.1; // For high resolution, BR_MIN is still too high, so we set a lower limit
+const BR_MIN: f32 = 0.2; // Absolute minimum bitrate ratio (user can set this low)
 const MAX_BR_MULTIPLE: f32 = 1.0;
 
 const HISTORY_DELAY_LEN: usize = 2;
 const ADJUST_RATIO_INTERVAL: usize = 3; // Adjust quality ratio every 3 seconds
 const DYNAMIC_SCREEN_THRESHOLD: usize = 2; // Allow increase quality ratio if encode more than 2 times in one second
 const DELAY_THRESHOLD_150MS: u32 = 150; // 150ms is the threshold for good network condition
+const NEW_CONNECTION_PROTECT_SECS: u64 = RttCalculator::MIN_SAMPLES as u64 + 1; // Don't decrease bitrate within first N seconds of new connection.
 
 #[derive(Default, Debug, Clone)]
 struct UserDelay {
@@ -157,7 +158,7 @@ impl VideoQoS {
 
     // Get current bitrate ratio with bounds checking
     pub fn ratio(&mut self) -> f32 {
-        if self.ratio < BR_MIN_HIGH_RESOLUTION || self.ratio > BR_MAX {
+        if self.ratio < BR_MIN || self.ratio > BR_MAX {
             self.ratio = BR_BALANCED;
         }
         self.ratio
@@ -321,7 +322,7 @@ impl VideoQoS {
                 user.delay.quick_increase_fps_count = 0;
             }
 
-            fps = fps.clamp(MIN_FPS, highest_fps);
+            fps = fps.clamp(MIN_AUTO_FPS.min(highest_fps), highest_fps);
             // first network delay message
             adjust_ratio = user.delay.fps.is_none();
             user.delay.fps = Some(fps);
@@ -428,13 +429,6 @@ impl VideoQoS {
         let current_ratio = self.ratio;
         let current_bitrate = self.bitrate();
 
-        // Calculate minimum ratio for high resolution (1Mbps baseline)
-        let ratio_1mbps = if current_bitrate > 0 {
-            Some((current_ratio * 1000.0 / current_bitrate as f32).max(BR_MIN_HIGH_RESOLUTION))
-        } else {
-            None
-        };
-
         // Calculate ratio for adding 150kbps bandwidth
         let ratio_add_150kbps = if current_bitrate > 0 {
             Some((current_bitrate + 150) as f32 * current_ratio / current_bitrate as f32)
@@ -443,29 +437,24 @@ impl VideoQoS {
         };
 
         // Set minimum ratio based on quality mode
+        // Best(0.6) > Balanced(0.4) > Low(0.25) >= Custom(0.2~0.6)
         let min = match target_quality {
-            Quality::Best => {
-                // For Best quality, ensure minimum 1Mbps for high resolution
-                let mut min = BR_BEST / 2.5;
-                if let Some(ratio_1mbps) = ratio_1mbps {
-                    if min > ratio_1mbps {
-                        min = ratio_1mbps;
-                    }
+            Quality::Best => BR_BEST / 2.5,
+            Quality::Balanced => BR_BALANCED / 2.5,
+            Quality::Low => BR_SPEED / 2.0,
+            Quality::Custom(v) => {
+                if v >= BR_BEST {
+                    BR_BEST / 2.5
+                } else if v >= BR_BALANCED {
+                    BR_BALANCED / 2.5
+                } else if v >= BR_SPEED {
+                    BR_SPEED / 2.0
+                } else {
+                    BR_MIN
                 }
-                min.max(BR_MIN)
             }
-            Quality::Balanced => {
-                let mut min = (BR_BALANCED / 2.0).min(0.4);
-                if let Some(ratio_1mbps) = ratio_1mbps {
-                    if min > ratio_1mbps {
-                        min = ratio_1mbps;
-                    }
-                }
-                min.max(BR_MIN_HIGH_RESOLUTION)
-            }
-            Quality::Low => BR_MIN_HIGH_RESOLUTION,
-            Quality::Custom(_) => BR_MIN_HIGH_RESOLUTION,
-        };
+        }
+        .max(BR_MIN);
         let max = target_ratio * MAX_BR_MULTIPLE;
 
         let mut v = current_ratio;
@@ -503,7 +492,15 @@ impl VideoQoS {
             }
         }
 
-        self.ratio = v.clamp(min, max);
+        // Protect new connections from bitrate decrease due to network fluctuation.
+        // User-initiated quality changes (e.g., Best -> Balanced) will still take effect.
+        let new_connection_protection =
+            self.new_user_instant.elapsed().as_secs() < NEW_CONNECTION_PROTECT_SECS;
+        if new_connection_protection && v < current_ratio {
+            v = current_ratio;
+        }
+
+        self.ratio = v.clamp(min.min(max), max);
         self.adjust_ratio_instant = Instant::now();
     }
 
@@ -519,8 +516,9 @@ impl VideoQoS {
             .unwrap_or(INIT_FPS);
 
         if self.users.iter().any(|u| u.1.delay.response_delayed) {
-            if fps > MIN_FPS + 1 {
-                fps = MIN_FPS + 1;
+            // Use MIN_AUTO_FPS instead of MIN_FPS for response delay fallback
+            if fps > MIN_AUTO_FPS + 1 {
+                fps = MIN_AUTO_FPS + 1;
             }
         }
 
@@ -532,7 +530,7 @@ impl VideoQoS {
         }
 
         // Ensure fps stays within valid range
-        self.fps = fps.clamp(MIN_FPS, highest_fps);
+        self.fps = fps.clamp(MIN_FPS.min(highest_fps), highest_fps);
     }
 }
 
@@ -546,7 +544,7 @@ struct RttCalculator {
 
 impl RttCalculator {
     const WINDOW_SAMPLES: usize = 60; // Keep last 60 samples
-    const MIN_SAMPLES: usize = 10; // Require at least 10 samples
+    const MIN_SAMPLES: usize = 5; // Require at least 5 samples
     const ALPHA: f32 = 0.5; // Smoothing factor for weighted average
 
     /// Update RTT estimates with a new sample

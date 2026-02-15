@@ -1745,7 +1745,7 @@ pub struct LoginConfigHandler {
     pub save_ab_password_to_recent: bool, // true: connected with ab password
     pub other_server: Option<(String, String, String)>,
     pub custom_fps: Arc<Mutex<Option<usize>>>,
-    pub last_auto_fps: Option<usize>,
+    pub last_send_fps: Option<usize>,
     pub adapter_luid: Option<i64>,
     pub mark_unsupported: Vec<CodecFormat>,
     pub selected_windows_session_id: Option<u32>,
@@ -2444,6 +2444,7 @@ impl LoginConfigHandler {
             self.save_config(config);
         }
         *self.custom_fps.lock().unwrap() = Some(fps as _);
+        self.last_send_fps = Some(fps as _);
         msg_out
     }
 
