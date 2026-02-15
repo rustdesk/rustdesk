@@ -2225,11 +2225,14 @@ class CanvasModel with ChangeNotifier {
       // Landscape: only handle left/right (notch on sides), bottom home indicator auto-hides
       final isPortrait = size.height > size.width;
       if (isPortrait) {
-        // We need to subtract top/bottom padding in portrait mode to avoid
-        // the image being truncated.
-        // With this adjustment https://github.com/user-attachments/assets/30ed4559-c27e-432b-847f-8fec23c9f998
-        // Without this adjustment, the image will be truncated in both portrait and landscape modes when the device has non-zero top/bottom padding (e.g. Samsung devices with hole-punch cameras).
-        h = h - mediaData.padding.top - mediaData.padding.bottom;
+        // We need to subtract top/bottom padding in portrait mode to avoid the image being truncated.
+        // top - 59.0, bottom - 34.0 on iOS 15
+        //
+        // iOS -> Android, potrait, adjust mode.
+        // h = h https://github.com/user-attachments/assets/30ed4559-c27e-432b-847f-8fec23c9f998 top and bottom are truncated
+        // h = h - top - bottom https://github.com/user-attachments/assets/12a98817-3b4e-43aa-be0f-4b03cf364b7e there are extra blank spaces
+        // h = h - top - https://github.com/user-attachments/assets/95f047f2-7f47-4a36-8113-5023989a0c81 works fine
+        h = h - mediaData.padding.top;
       }
     }
     return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
