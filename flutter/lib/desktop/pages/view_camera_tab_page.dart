@@ -250,11 +250,11 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Obx(() => Text(
               translate(
-                  toolbarState.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
+                  toolbarState.hide.isTrue ? 'Show Toolbar' : 'Hide Toolbar'),
               style: style,
             )),
         proc: () {
-          toolbarState.switchShow(sessionId);
+          toolbarState.switchHide(sessionId);
           cancelFunc();
         },
         padding: padding,

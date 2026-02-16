@@ -32,7 +32,11 @@ use std::{
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::Mutex,
 };
+
+// macOS boolean_t is defined as `int` in <mach/boolean.h>
+type BooleanT = hbb_common::libc::c_int;
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
@@ -41,6 +45,11 @@ static mut LATEST_SEED: i32 = 0;
 // Using a fixed temporary directory for updates is preferable to
 // using one that includes the custom client name.
 const UPDATE_TEMP_DIR: &str = "/tmp/.rustdeskupdate";
+
+/// Global mutex to serialize CoreGraphics cursor operations.
+/// This prevents race conditions between cursor visibility (hide depth tracking)
+/// and cursor positioning/clipping operations.
+static CG_CURSOR_MUTEX: Mutex<()> = Mutex::new(());
 
 extern "C" {
     fn CGSCurrentCursorSeed() -> i32;
@@ -64,6 +73,8 @@ extern "C" {
     fn majorVersion() -> u32;
     fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
     fn MacSetMode(display: u32, width: u32, height: u32, tryHiDPI: bool) -> BOOL;
+    fn CGWarpMouseCursorPosition(newCursorPosition: CGPoint) -> CGError;
+    fn CGAssociateMouseAndMouseCursorPosition(connected: BooleanT) -> CGError;
 }
 
 pub fn major_version() -> u32 {
@@ -385,6 +396,99 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
     pt.y -= frame.origin.y;
     Some((pt.x as _, pt.y as _))
     */
+}
+
+/// Warp the mouse cursor to the specified screen position.
+///
+/// # Thread Safety
+/// This function affects global cursor state and acquires `CG_CURSOR_MUTEX`.
+/// Callers must ensure no nested calls occur while the mutex is held.
+///
+/// # Arguments
+/// * `x` - X coordinate in screen points (macOS uses points, not pixels)
+/// * `y` - Y coordinate in screen points
+pub fn set_cursor_pos(x: i32, y: i32) -> bool {
+    // Acquire lock with deadlock detection in debug builds.
+    // In debug builds, try_lock detects re-entrant calls early; on failure we return immediately.
+    // In release builds, we use blocking lock() which will wait if contended.
+    #[cfg(debug_assertions)]
+    let _guard = match CG_CURSOR_MUTEX.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::WouldBlock) => {
+            log::error!("[BUG] set_cursor_pos: CG_CURSOR_MUTEX is already held - potential deadlock!");
+            debug_assert!(false, "Re-entrant call to set_cursor_pos detected");
+            return false;
+        }
+        Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+    };
+    #[cfg(not(debug_assertions))]
+    let _guard = CG_CURSOR_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let result = CGWarpMouseCursorPosition(CGPoint {
+            x: x as f64,
+            y: y as f64,
+        });
+        if result != CGError::Success {
+            log::error!(
+                "CGWarpMouseCursorPosition({}, {}) returned error: {:?}",
+                x,
+                y,
+                result
+            );
+        }
+        result == CGError::Success
+    }
+}
+
+/// Toggle pointer lock (dissociate/associate mouse from cursor position).
+///
+/// On macOS, cursor clipping is not supported directly like Windows ClipCursor.
+/// Instead, we use CGAssociateMouseAndMouseCursorPosition to dissociate mouse
+/// movement from cursor position, achieving a "pointer lock" effect.
+///
+/// # Thread Safety
+/// This function affects global cursor state and acquires `CG_CURSOR_MUTEX`.
+/// Callers must ensure only one owner toggles pointer lock at a time;
+/// nested Some/None transitions from different call sites may cause unexpected behavior.
+///
+/// # Arguments
+/// * `rect` - When `Some(_)`, dissociates mouse from cursor (enables pointer lock).
+///            When `None`, re-associates mouse with cursor (disables pointer lock).
+///            The rect coordinate values are ignored on macOS; only `Some`/`None` matters.
+///            The parameter signature matches Windows for API consistency.
+pub fn clip_cursor(rect: Option<(i32, i32, i32, i32)>) -> bool {
+    // Acquire lock with deadlock detection in debug builds.
+    // In debug builds, try_lock detects re-entrant calls early; on failure we return immediately.
+    // In release builds, we use blocking lock() which will wait if contended.
+    #[cfg(debug_assertions)]
+    let _guard = match CG_CURSOR_MUTEX.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::WouldBlock) => {
+            log::error!("[BUG] clip_cursor: CG_CURSOR_MUTEX is already held - potential deadlock!");
+            debug_assert!(false, "Re-entrant call to clip_cursor detected");
+            return false;
+        }
+        Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+    };
+    #[cfg(not(debug_assertions))]
+    let _guard = CG_CURSOR_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    // CGAssociateMouseAndMouseCursorPosition takes a boolean_t:
+    //   1 (true)  = associate mouse with cursor position (normal mode)
+    //   0 (false) = dissociate mouse from cursor position (pointer lock mode)
+    // When rect is Some, we want pointer lock (dissociate), so associate = false (0).
+    // When rect is None, we want normal mode (associate), so associate = true (1).
+    let associate: BooleanT = if rect.is_some() { 0 } else { 1 };
+    unsafe {
+        let result = CGAssociateMouseAndMouseCursorPosition(associate);
+        if result != CGError::Success {
+            log::warn!(
+                "CGAssociateMouseAndMouseCursorPosition({}) returned error: {:?}",
+                associate,
+                result
+            );
+        }
+        result == CGError::Success
+    }
 }
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
