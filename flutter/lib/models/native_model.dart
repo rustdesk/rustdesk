@@ -118,17 +118,17 @@ class PlatformFFI {
   Future<void> init(String appType) async {
     _appType = appType;
     final dylib = isAndroid
-        ? DynamicLibrary.open('librustdesk.so')
+        ? DynamicLibrary.open('libgamedesk.so')
         : isLinux
-            ? DynamicLibrary.open('librustdesk.so')
+            ? DynamicLibrary.open('libgamedesk.so')
             : isWindows
-                ? DynamicLibrary.open('librustdesk.dll')
+                ? DynamicLibrary.open('libgamedesk.dll')
                 :
                 // Use executable itself as the dynamic library for MacOS.
                 // Multiple dylib instances will cause some global instances to be invalid.
                 // eg. `lazy_static` objects in rust side, will be created more than once, which is not expected.
                 //
-                // isMacOS? DynamicLibrary.open("liblibrustdesk.dylib") :
+                // isMacOS? DynamicLibrary.open("liblibgamedesk.dylib") :
                 DynamicLibrary.process();
     debugPrint('initializing FFI $_appType');
     try {

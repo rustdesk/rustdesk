@@ -1,4 +1,4 @@
-package com.carriez.flutter_hbb
+package me.blocker.gamedesk
 
 /**
  * Handle remote input and dispatch android gesture

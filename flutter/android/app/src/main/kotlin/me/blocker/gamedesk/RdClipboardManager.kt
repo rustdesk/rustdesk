@@ -1,4 +1,4 @@
-package com.carriez.flutter_hbb
+package me.blocker.gamedesk
 
 import java.nio.ByteBuffer
 import java.util.Timer

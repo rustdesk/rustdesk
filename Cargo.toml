@@ -9,7 +9,7 @@ default-run = "rustdesk"
 rust-version = "1.75"
 
 [lib]
-name = "librustdesk"
+name = "libgamedesk"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]

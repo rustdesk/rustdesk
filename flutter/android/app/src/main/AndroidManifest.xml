@@ -23,7 +23,7 @@
     </queries>
 
     <application
-        android:name="com.carriez.flutter_hbb.MainApplication"
+        android:name="me.blocker.gamedesk.MainApplication"
         android:icon="@mipmap/ic_launcher"
         android:label="GameDesk"
         android:requestLegacyExternalStorage="true"
@@ -31,19 +31,19 @@
         android:supportsRtl="true">
 
         <receiver
-            android:name="com.carriez.flutter_hbb.BootReceiver"
+            android:name="me.blocker.gamedesk.BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <!--ACTION_BOOT_COMPLETED for debug test on no root device-->
-                <action android:name="com.carriez.flutter_hbb.DEBUG_BOOT_COMPLETED" />
+                <action android:name="me.blocker.gamedesk.DEBUG_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 
         <service
-            android:name="com.carriez.flutter_hbb.InputService"
+            android:name="me.blocker.gamedesk.InputService"
             android:enabled="true"
             android:exported="false"
             android:label="RustDesk Input"
@@ -58,7 +58,7 @@
         </service>
 
         <activity
-            android:name="com.carriez.flutter_hbb.MainActivity"
+            android:name="me.blocker.gamedesk.MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode|navigation"
             android:exported="true"
             android:hardwareAccelerated="true"
@@ -81,17 +81,17 @@
         </activity>
 
         <activity
-            android:name="com.carriez.flutter_hbb.PermissionRequestTransparentActivity"
+            android:name="me.blocker.gamedesk.PermissionRequestTransparentActivity"
             android:excludeFromRecents="true"
             android:theme="@style/Transparent" />
 
         <service
-            android:name="com.carriez.flutter_hbb.MainService"
+            android:name="me.blocker.gamedesk.MainService"
             android:enabled="true"
             android:foregroundServiceType="mediaProjection" />
 
         <service
-            android:name="com.carriez.flutter_hbb.FloatingWindowService"
+            android:name="me.blocker.gamedesk.FloatingWindowService"
             android:enabled="true" />
 
         <!--
