@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
@@ -15,6 +16,7 @@ class TerminalPage extends StatefulWidget {
     required this.tabController,
     required this.isSharedPassword,
     required this.terminalId,
+    required this.tabKey,
     this.forceRelay,
     this.connToken,
   }) : super(key: key);
@@ -25,6 +27,8 @@ class TerminalPage extends StatefulWidget {
   final bool? isSharedPassword;
   final String? connToken;
   final int terminalId;
+  /// Tab key for focus management, passed from parent to avoid duplicate construction
+  final String tabKey;
   final SimpleWrapper<State<TerminalPage>?> _lastState = SimpleWrapper(null);
 
   FFI get ffi => (_lastState.value! as _TerminalPageState)._ffi;
@@ -42,10 +46,15 @@ class _TerminalPageState extends State<TerminalPage>
   late FFI _ffi;
   late TerminalModel _terminalModel;
   double? _cellHeight;
+  final FocusNode _terminalFocusNode = FocusNode(canRequestFocus: false);
+  StreamSubscription<DesktopTabState>? _tabStateSubscription;
 
   @override
   void initState() {
     super.initState();
+
+    // Listen for tab selection changes to request focus
+    _tabStateSubscription = widget.tabController.state.listen(_onTabStateChanged);
 
     // Use shared FFI instance from connection manager
     _ffi = TerminalConnectionManager.getConnection(
@@ -63,6 +72,13 @@ class _TerminalPageState extends State<TerminalPage>
 
     _terminalModel.onResizeExternal = (w, h, pw, ph) {
       _cellHeight = ph * 1.0;
+
+      // Enable focus once terminal has valid dimensions (first valid resize)
+      if (!_terminalFocusNode.canRequestFocus && w > 0 && h > 0) {
+        _terminalFocusNode.canRequestFocus = true;
+        // Auto-focus if this tab is currently selected
+        _requestFocusIfSelected();
+      }
 
       // Schedule the setState for the next frame
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -99,12 +115,40 @@ class _TerminalPageState extends State<TerminalPage>
 
   @override
   void dispose() {
+    // Cancel tab state subscription to prevent memory leak
+    _tabStateSubscription?.cancel();
     // Unregister terminal model from FFI
     _ffi.unregisterTerminalModel(widget.terminalId);
     _terminalModel.dispose();
+    _terminalFocusNode.dispose();
     // Release connection reference instead of closing directly
     TerminalConnectionManager.releaseConnection(widget.id);
     super.dispose();
+  }
+
+  void _onTabStateChanged(DesktopTabState state) {
+    // Check if this tab is now selected and request focus
+    if (state.selected >= 0 && state.selected < state.tabs.length) {
+      final selectedTab = state.tabs[state.selected];
+      if (selectedTab.key == widget.tabKey && mounted) {
+        _requestFocusIfSelected();
+      }
+    }
+  }
+
+  void _requestFocusIfSelected() {
+    if (!mounted || !_terminalFocusNode.canRequestFocus) return;
+    // Use post-frame callback to ensure widget is fully laid out in focus tree
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Re-check conditions after frame: mounted, focusable, still selected, not already focused
+      if (!mounted || !_terminalFocusNode.canRequestFocus || _terminalFocusNode.hasFocus) return;
+      final state = widget.tabController.state.value;
+      if (state.selected >= 0 && state.selected < state.tabs.length) {
+        if (state.tabs[state.selected].key == widget.tabKey) {
+          _terminalFocusNode.requestFocus();
+        }
+      }
+    });
   }
 
   // This method ensures that the number of visible rows is an integer by computing the
@@ -131,7 +175,9 @@ class _TerminalPageState extends State<TerminalPage>
           return TerminalView(
             _terminalModel.terminal,
             controller: _terminalModel.terminalController,
-            autofocus: true,
+            focusNode: _terminalFocusNode,
+            // Note: autofocus is not used here because focus is managed manually
+            // via _onTabStateChanged() to handle tab switching properly.
             backgroundOpacity: 0.7,
             padding: _calculatePadding(heightPx),
             onSecondaryTapDown: (details, offset) async {
