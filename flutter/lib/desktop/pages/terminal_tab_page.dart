@@ -194,7 +194,10 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         final currentTab = tabController.state.value.selectedTabInfo;
         assert(call.arguments is String,
             "Expected String arguments for kWindowEventActiveSession, got ${call.arguments.runtimeType}");
-        if (currentTab.key.startsWith(call.arguments)) {
+        // Use lastIndexOf to handle peerIds containing underscores
+        final lastUnderscore = currentTab.key.lastIndexOf('_');
+        if (lastUnderscore > 0 &&
+            currentTab.key.substring(0, lastUnderscore) == call.arguments) {
           windowOnTop(windowId());
           return true;
         }
@@ -329,7 +332,10 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   void _addNewTerminal(String peerId, {int? terminalId}) {
     // Find first tab for this peer to get connection parameters
     final firstTab = tabController.state.value.tabs.firstWhere(
-      (tab) => tab.key.startsWith('$peerId\_'),
+      (tab) {
+        final last = tab.key.lastIndexOf('_');
+        return last > 0 && tab.key.substring(0, last) == peerId;
+      },
     );
     if (firstTab.page is TerminalPage) {
       final page = firstTab.page as TerminalPage;
@@ -350,9 +356,10 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
 
   void _addNewTerminalForCurrentPeer({int? terminalId}) {
     final currentTab = tabController.state.value.selectedTabInfo;
-    final parts = currentTab.key.split('_');
-    if (parts.isNotEmpty) {
-      final peerId = parts[0];
+    final tabKey = currentTab.key;
+    final lastUnderscore = tabKey.lastIndexOf('_');
+    if (lastUnderscore > 0) {
+      final peerId = tabKey.substring(0, lastUnderscore);
       _addNewTerminal(peerId, terminalId: terminalId);
     }
   }
@@ -369,9 +376,10 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
           labelGetter: DesktopTab.tablabelGetter,
           tabMenuBuilder: (key) {
             // Extract peerId from tab key (format: "peerId_terminalId")
-            final parts = key.split('_');
-            if (parts.isEmpty) return Container();
-            final peerId = parts[0];
+            // Use lastIndexOf to handle peerIds containing underscores
+            final lastUnderscore = key.lastIndexOf('_');
+            if (lastUnderscore <= 0) return Container();
+            final peerId = key.substring(0, lastUnderscore);
             return _tabMenuBuilder(peerId, () {});
           },
         ));
