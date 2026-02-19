@@ -26,11 +26,20 @@ class TerminalModel with ChangeNotifier {
   final _inputBuffer = <String>[];
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
+  // Uses List<String> chunks to avoid truncating ANSI escape sequences mid-stream.
   final _pendingOutputChunks = <String>[];
-  int _pendingOutputSize = 0;
+  int _pendingOutputSize = 0;  // in characters (UTF-16 code units)
+  // Local buffer limit (characters) - roughly matches server's DEFAULT_REQUEST_BUFFER_BYTES (8KB).
+  // Server counts UTF-8 bytes while this counts UTF-16 code units; for CJK-heavy output the
+  // effective size may differ (1 CJK char = 3 UTF-8 bytes vs 1 UTF-16 code unit), but this is
+  // acceptable as an approximate cap to prevent unbounded memory growth.
   static const int _kMaxOutputBufferChars = 8 * 1024;
   // View ready state: true when terminal has valid dimensions, safe to write
   bool _terminalViewReady = false;
+  // When true, flush will send RIS (Reset to Initial State) before buffered output.
+  // This avoids putting RIS into _pendingOutputChunks where it could be evicted
+  // by the FIFO capacity control when large replay data arrives before view is ready.
+  bool _needsClearOnFlush = false;
 
   bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
 
@@ -216,25 +225,15 @@ class TerminalModel with ChangeNotifier {
     }
   }
 
-  static bool getSuccessFromEvt(Map<String, dynamic> evt) {
-    if (evt.containsKey('success')) {
-      final v = evt['success'];
-      if (v is bool) {
-        // Desktop and mobile
-        return v;
-      } else if (v is String) {
-        // Web
-        return v.toLowerCase() == 'true';
-      } else {
-        // Unexpected type, log and handle gracefully
-        debugPrint(
-            '[TerminalModel] Unexpected success type: ${v.runtimeType}, value: $v. Expected bool or String.');
-        return false;
-      }
-    } else {
-      debugPrint('[TerminalModel] Event does not contain success');
-      return false;
+  /// Parse a boolean value from event map, handling both bool and String types (for web compatibility).
+  static bool getBoolFromEvt(Map<String, dynamic> evt, String key, {bool defaultValue = false}) {
+    final v = evt[key];
+    if (v is bool) return v;
+    if (v is String) return v.toLowerCase() == 'true';
+    if (v != null) {
+      debugPrint('[TerminalModel] Unexpected type for "$key": ${v.runtimeType}, value: $v');
     }
+    return defaultValue;
   }
 
   void handleTerminalResponse(Map<String, dynamic> evt) {
@@ -265,17 +264,46 @@ class TerminalModel with ChangeNotifier {
   }
 
   void _handleTerminalOpened(Map<String, dynamic> evt) {
-    final bool success = getSuccessFromEvt(evt);
+    final bool success = getBoolFromEvt(evt, 'success');
     final String message = evt['message'] ?? '';
     final String? serviceId = evt['service_id'];
+    final bool reconnected = getBoolFromEvt(evt, 'reconnected');
 
     debugPrint(
-        '[TerminalModel] Terminal opened response: success=$success, message=$message, service_id=$serviceId');
+        '[TerminalModel] Terminal opened response: success=$success, message=$message, service_id=$serviceId, reconnected=$reconnected');
 
     if (success) {
       _terminalOpened = true;
 
       // Service ID is now saved on the Rust side in handle_terminal_response
+      // Note: buffer for reconnection is automatically pushed by the server
+      // via pending_buffer in handle_open, no client request needed.
+
+      if (reconnected) {
+        // Clear terminal to avoid duplicate output: the server will replay
+        // recent history via pending_buffer, so discard local state first.
+        _pendingOutputChunks.clear();
+        _pendingOutputSize = 0;
+
+        if (_terminalViewReady) {
+          // View is already ready — clear screen immediately, subsequent
+          // pending_buffer data will be written directly via _writeToTerminal.
+          terminal.write('\x1bc'); // RIS: Reset to Initial State
+          debugPrint('[TerminalModel] Reconnection detected, cleared terminal immediately');
+        } else {
+          // View not ready yet — defer the clear to flush time so it cannot
+          // be evicted by FIFO capacity control in the pending buffer.
+          _needsClearOnFlush = true;
+          debugPrint('[TerminalModel] Reconnection detected, will clear terminal on flush');
+        }
+      }
+
+      // Fallback: if terminal view is not yet ready but already has valid
+      // dimensions (e.g. layout completed before open response arrived),
+      // mark view ready now to avoid output stuck in buffer indefinitely.
+      if (!_terminalViewReady && terminal.viewWidth > 0 && terminal.viewHeight > 0) {
+        _markViewReady();
+      }
 
       // Process any buffered input
       _processBufferedInputAsync().then((_) {
@@ -380,6 +408,13 @@ class TerminalModel with ChangeNotifier {
   }
 
   void _flushOutputBuffer() {
+    // Send RIS before buffered output if reconnection requested a clear.
+    // This is done here (not in _writeToTerminal) to guarantee the clear
+    // cannot be evicted by FIFO capacity control in the pending buffer.
+    if (_needsClearOnFlush) {
+      _needsClearOnFlush = false;
+      terminal.write('\x1bc'); // RIS: Reset to Initial State (clears screen + scrollback)
+    }
     if (_pendingOutputChunks.isEmpty) return;
     debugPrint(
         '[TerminalModel] Flushing $_pendingOutputSize buffered chars (${_pendingOutputChunks.length} chunks)');
@@ -417,6 +452,7 @@ class TerminalModel with ChangeNotifier {
     _inputBuffer.clear();
     _pendingOutputChunks.clear();
     _pendingOutputSize = 0;
+    _needsClearOnFlush = false;
     // Terminal cleanup is handled server-side when service closes
     super.dispose();
   }
