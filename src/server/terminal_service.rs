@@ -777,6 +777,32 @@ impl TerminalServiceProxy {
     ) -> Result<Option<TerminalResponse>> {
         let mut response = TerminalResponse::new();
 
+        // When the client requests a terminal_id that doesn't exist but there are
+        // surviving persistent sessions, remap the lowest-ID session to the requested
+        // terminal_id. This handles the case where _nextTerminalId resets to 1 on
+        // reconnect but the server-side sessions have non-contiguous IDs (e.g. {2: htop}).
+        //
+        // The client's requested terminal_id may not match any surviving session ID
+        // (e.g. _nextTerminalId incremented beyond the surviving IDs). This remap is a
+        // one-time handle reassignment — only the first reconnect triggers it because
+        // needs_session_sync is cleared afterward. Remaining sessions are communicated
+        // back via `persistent_sessions` with their original server-side IDs.
+        if !service.sessions.contains_key(&open.terminal_id)
+            && service.needs_session_sync
+            && !service.sessions.is_empty()
+        {
+            if let Some(&lowest_id) = service.sessions.keys().min() {
+                log::info!(
+                    "Remapping persistent session {} -> {} for reconnection",
+                    lowest_id,
+                    open.terminal_id
+                );
+                if let Some(session_arc) = service.sessions.remove(&lowest_id) {
+                    service.sessions.insert(open.terminal_id, session_arc);
+                }
+            }
+        }
+
         // Check if terminal already exists
         if let Some(session_arc) = service.sessions.get(&open.terminal_id) {
             // Reconnect to existing terminal
@@ -824,7 +850,7 @@ impl TerminalServiceProxy {
 
         // Create new terminal session
         log::info!(
-            "Creating new terminal {} for service: {}",
+            "Creating new terminal {} for service {}",
             open.terminal_id,
             service.service_id
         );

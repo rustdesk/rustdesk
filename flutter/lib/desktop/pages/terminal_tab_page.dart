@@ -94,6 +94,21 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     _closingTabs.add(tabKey);
 
     try {
+      // Snapshot peerTabCount BEFORE any await to avoid race with concurrent
+      // _closeAllTabs clearing tabController (which would make the live count
+      // drop to 0 and incorrectly trigger session persistence).
+      // Note: the snapshot may become stale if other individual tabs are closed
+      // during the audit dialog, but this is an acceptable trade-off.
+      int? snapshotPeerTabCount;
+      final parsed = _parseTabKey(tabKey);
+      if (parsed != null) {
+        final (peerId, _) = parsed;
+        snapshotPeerTabCount = tabController.state.value.tabs.where((t) {
+          final p = _parseTabKey(t.key);
+          return p != null && p.$1 == peerId;
+        }).length;
+      }
+
       if (await desktopTryShowTabAuditDialogCloseCancelled(
         id: tabKey,
         tabController: tabController,
@@ -104,7 +119,8 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       // Close terminal session if not in persistent mode.
       // Wrapped separately so session cleanup failure never blocks UI tab removal.
       try {
-        await _closeTerminalSessionIfNeeded(tabKey);
+        await _closeTerminalSessionIfNeeded(tabKey,
+            peerTabCount: snapshotPeerTabCount);
       } catch (e) {
         debugPrint('[TerminalTabPage] Session cleanup failed for $tabKey: $e');
       }
@@ -125,14 +141,17 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     final tabKeys = tabController.state.value.tabs.map((t) => t.key).toList();
     // Remove all UI tabs immediately (same instant behavior as the old tabController.clear())
     tabController.clear();
-    // Run session cleanup in parallel with bounded timeout (closeTerminal() has internal 3s timeout)
+    // Run session cleanup in parallel with bounded timeout (closeTerminal() has internal 3s timeout).
+    // Skip tabs already being closed by a concurrent _closeTab() to avoid duplicate FFI calls.
     final futures = tabKeys
-        .map((tabKey) => _closeTerminalSessionIfNeeded(tabKey, persistAll: true)
-                .catchError((e) {
-              debugPrint(
-                  '[TerminalTabPage] Session cleanup failed for $tabKey: $e');
-            }))
-        .toList();
+        .where((tabKey) => !_closingTabs.contains(tabKey))
+        .map((tabKey) async {
+      try {
+        await _closeTerminalSessionIfNeeded(tabKey, persistAll: true);
+      } catch (e) {
+        debugPrint('[TerminalTabPage] Session cleanup failed for $tabKey: $e');
+      }
+    }).toList();
     if (futures.isNotEmpty) {
       await Future.wait(futures).timeout(
         const Duration(seconds: 4),
@@ -152,7 +171,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   /// - `false` (tab close): only persist the last session for the peer,
   ///   close others so only the most recent disconnected session survives.
   Future<void> _closeTerminalSessionIfNeeded(String tabKey,
-      {bool persistAll = false}) async {
+      {bool persistAll = false, int? peerTabCount}) async {
     final parsed = _parseTabKey(tabKey);
     if (parsed == null) return;
     final (peerId, terminalId) = parsed;
@@ -170,12 +189,14 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         // Window close: persist all sessions
         return;
       }
-      // Tab close: only persist if this is the last tab for this peer
-      final peerTabCount = tabController.state.value.tabs.where((t) {
-        final p = _parseTabKey(t.key);
-        return p != null && p.$1 == peerId;
-      }).length;
-      if (peerTabCount <= 1) {
+      // Tab close: only persist if this is the last tab for this peer.
+      // Use the snapshot value if provided (avoids race with concurrent tab removal).
+      final effectivePeerTabCount = peerTabCount ??
+          tabController.state.value.tabs.where((t) {
+            final p = _parseTabKey(t.key);
+            return p != null && p.$1 == peerId;
+          }).length;
+      if (effectivePeerTabCount <= 1) {
         // Last tab for this peer — persist the session
         return;
       }
@@ -368,7 +389,6 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         }
       }
 
-      // TODO: Close-tab shortcut is currently non-functional.
       // Use Cmd+W on macOS, Ctrl+Shift+W on other platforms
       if (event.logicalKey == LogicalKeyboardKey.keyW) {
         if (isMacOS &&
