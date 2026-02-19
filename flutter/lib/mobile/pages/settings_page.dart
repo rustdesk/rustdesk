@@ -688,7 +688,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               SettingsTile(
                 title: Obx(() => Text(gFFI.userModel.userName.value.isEmpty
                     ? translate('Login')
-                    : '${translate('Logout')} (${gFFI.userModel.userName.value})')),
+                    : '${translate('Logout')} (${gFFI.userModel.accountLabelWithHandle})')),
                 leading: Icon(Icons.person),
                 onPressed: (context) {
                   if (gFFI.userModel.userName.value.isEmpty) {

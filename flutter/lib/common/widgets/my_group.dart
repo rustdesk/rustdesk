@@ -158,9 +158,9 @@ class _MyGroupState extends State<MyGroup> {
     return Obx(() {
       final userItems = gFFI.groupModel.users.where((p0) {
         if (searchAccessibleItemNameText.isNotEmpty) {
-          return p0.name
-              .toLowerCase()
-              .contains(searchAccessibleItemNameText.value.toLowerCase());
+          final search = searchAccessibleItemNameText.value.toLowerCase();
+          return p0.name.toLowerCase().contains(search) ||
+              p0.displayNameOrName.toLowerCase().contains(search);
         }
         return true;
       }).toList();
@@ -187,6 +187,7 @@ class _MyGroupState extends State<MyGroup> {
 
   Widget _buildUserItem(UserPayload user) {
     final username = user.name;
+    final displayName = user.displayNameOrName;
     return InkWell(onTap: () {
       isSelectedDeviceGroup.value = false;
       if (selectedAccessibleItemName.value != username) {
@@ -229,7 +230,7 @@ class _MyGroupState extends State<MyGroup> {
                     ),
                   ),
                 ).marginOnly(right: 4),
-                if (isMe) Flexible(child: Text(username)),
+                if (isMe) Flexible(child: Text(displayName)),
                 if (isMe)
                   Flexible(
                     child: Container(
@@ -246,7 +247,7 @@ class _MyGroupState extends State<MyGroup> {
                       ),
                     ),
                   ),
-                if (!isMe) Expanded(child: Text(username)),
+                if (!isMe) Expanded(child: Text(displayName)),
               ],
             ).paddingSymmetric(vertical: 4),
           ),
