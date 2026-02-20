@@ -164,6 +164,12 @@ class _MyGroupState extends State<MyGroup> {
         }
         return true;
       }).toList();
+      // Count occurrences of each displayNameOrName to detect duplicates
+      final displayNameCount = <String, int>{};
+      for (final u in userItems) {
+        final dn = u.displayNameOrName;
+        displayNameCount[dn] = (displayNameCount[dn] ?? 0) + 1;
+      }
       final deviceGroupItems = gFFI.groupModel.deviceGroups.where((p0) {
         if (searchAccessibleItemNameText.isNotEmpty) {
           return p0.name
@@ -177,7 +183,8 @@ class _MyGroupState extends State<MyGroup> {
           itemCount: deviceGroupItems.length + userItems.length,
           itemBuilder: (context, index) => index < deviceGroupItems.length
               ? _buildDeviceGroupItem(deviceGroupItems[index])
-              : _buildUserItem(userItems[index - deviceGroupItems.length]));
+              : _buildUserItem(userItems[index - deviceGroupItems.length],
+                  displayNameCount));
       var maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
       return Obx(() => stateGlobal.isPortrait.isFalse
           ? listView(false)
@@ -185,9 +192,14 @@ class _MyGroupState extends State<MyGroup> {
     });
   }
 
-  Widget _buildUserItem(UserPayload user) {
+  Widget _buildUserItem(UserPayload user, Map<String, int> displayNameCount) {
     final username = user.name;
-    final displayName = user.displayNameOrName;
+    final dn = user.displayNameOrName;
+    final isDuplicate = (displayNameCount[dn] ?? 0) > 1;
+    final displayName =
+        isDuplicate && user.displayName.trim().isNotEmpty
+            ? '${user.displayName} (@$username)'
+            : dn;
     return InkWell(onTap: () {
       isSelectedDeviceGroup.value = false;
       if (selectedAccessibleItemName.value != username) {
@@ -223,7 +235,7 @@ class _MyGroupState extends State<MyGroup> {
                     alignment: Alignment.center,
                     child: Center(
                       child: Text(
-                        username.characters.first.toUpperCase(),
+                        displayName.characters.first.toUpperCase(),
                         style: TextStyle(color: Colors.white),
                         textAlign: TextAlign.center,
                       ),

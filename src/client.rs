@@ -2632,6 +2632,7 @@ impl LoginConfigHandler {
                     .map(|x| {
                         x.get("display_name")
                             .and_then(|x| x.as_str())
+                            .map(|x| x.trim())
                             .filter(|x| !x.is_empty())
                             .or_else(|| x.get("name").and_then(|x| x.as_str()))
                             .map(|x| x.to_owned())
