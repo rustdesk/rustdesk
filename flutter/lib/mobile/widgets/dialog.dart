@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
+import 'package:flutter_hbb/consts.dart';
 
 void _showSuccess() {
   showToast(translate("Successful"));
@@ -286,6 +287,12 @@ void showServerSettingsWithValue(
         dialogButton('Cancel', onPressed: () {
           close();
         }, isOutline: true),
+        dialogButton('Cargar Servidor Idecom', onPressed: () {
+          setState(() {
+            idCtrl.text = kPresetIdServer;
+            keyCtrl.text = kPresetKey;
+          });
+        }),
         dialogButton(
           'OK',
           onPressed: () async {

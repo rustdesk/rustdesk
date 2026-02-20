@@ -34,6 +34,10 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import kotlin.concurrent.thread
 
+// === SAF Import (nuevos) ===
+import android.util.Base64
+import androidx.documentfile.provider.DocumentFile
+// === FIN SAF Import ===
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -49,6 +53,12 @@ class MainActivity : FlutterActivity() {
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
+
+    // === SAF Import (nuevos) ===
+    private var safChannel: MethodChannel? = null
+    private val REQ_PICK_TREE = 9001
+    private var pendingSafResult: MethodChannel.Result? = null
+    // === FIN SAF Import ===
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -69,6 +79,31 @@ class MainActivity : FlutterActivity() {
                 Log.e("MainActivity", "Failed to setCodecInfo: ${e.message}", e)
             }
         }
+
+        // === SAF Import: canal extra "rustdesk.storage" ===
+        safChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "rustdesk.storage")
+        safChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pickTree" -> {
+                    pendingSafResult = result
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                        putExtra(Intent.EXTRA_LOCAL_ONLY, true)
+                    }
+                    startActivityForResult(intent, REQ_PICK_TREE)
+                }
+                "readTomlsFromTree" -> {
+                    val treeUriStr = call.argument<String>("treeUri")
+                    if (treeUriStr.isNullOrEmpty()) {
+                        result.error("ARG", "treeUri requerido", null)
+                    } else {
+                        val out = readTomlsFromTree(android.net.Uri.parse(treeUriStr))
+                        result.success(out)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // === FIN SAF Import ===
     }
 
     override fun onResume() {
@@ -90,7 +125,34 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        // === SAF Import: manejar primero nuestro request ===
+        if (requestCode == REQ_PICK_TREE) {
+            val res = pendingSafResult
+            pendingSafResult = null
+            if (res != null) {
+                if (resultCode == RESULT_OK) {
+                    val treeUri = data?.data
+                    if (treeUri != null) {
+                        val flags = (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                        try {
+                            contentResolver.takePersistableUriPermission(treeUri, flags)
+                        } catch (_: Exception) {
+                            // Algunos OEM no soportan persistencia; seguimos igualmente.
+                        }
+                        res.success(treeUri.toString())
+                    } else {
+                        res.success(null)
+                    }
+                } else {
+                    res.success(null) // cancelado
+                }
+            }
+            // No retornamos aún; dejamos seguir para que otros códigos también se procesen y al final llamar a super.
+        }
+        // === FIN SAF Import ===
+
         super.onActivityResult(requestCode, resultCode, data)
+
         if (requestCode == REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION && resultCode == RES_FAILED) {
             flutterMethodChannel?.invokeMethod("on_media_projection_canceled", null)
         }
@@ -411,4 +473,31 @@ class MainActivity : FlutterActivity() {
         super.onStart()
         stopService(Intent(this, FloatingWindowService::class.java))
     }
+
+    // === SAF Import: lector de TOML en carpeta seleccionada ===
+    private fun readTomlsFromTree(treeUri: android.net.Uri): List<Map<String, Any>> {
+        val root = DocumentFile.fromTreeUri(this, treeUri) ?: return emptyList()
+        val result = mutableListOf<Map<String, Any>>()
+
+        fun walk(dir: DocumentFile, rel: String = "") {
+            val files = dir.listFiles()
+            for (f in files) {
+                if (f.isDirectory) {
+                    walk(f, rel + (f.name ?: "dir") + "/")
+                } else if (f.isFile) {
+                    val name = f.name?.lowercase() ?: ""
+                    if (name.endsWith(".toml")) {
+                        val bytes = contentResolver.openInputStream(f.uri)?.use { it.readBytes() } ?: ByteArray(0)
+                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val logicalName = (rel + (f.name ?: "unknown.toml"))
+                        result.add(mapOf("name" to logicalName, "base64" to b64))
+                    }
+                }
+            }
+        }
+
+        walk(root, "")
+        return result
+    }
+    // === FIN SAF Import ===
 }

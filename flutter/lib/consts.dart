@@ -682,3 +682,17 @@ extension WindowsTargetExt on int {
 }
 
 const kCheckSoftwareUpdateFinish = 'check_software_update_finish';
+
+// =====================
+// Presets para ID server y KEY
+// =====================
+const String kPresetIdServer = '';
+// Si tu clave es una sola línea, usa esta forma:
+const String kPresetKey = '';
+// Si tu clave está en formato PEM multilínea, comenta la línea anterior y usa esto:
+// const String kPresetKey = '''
+// -----BEGIN PUBLIC KEY-----
+//
+// -----END PUBLIC KEY-----
+// ''';
+
