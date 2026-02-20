@@ -12,7 +12,11 @@
             include "common.tis";
             var p = view.parameters;
             view.refresh = function() {
+                var draft_input = $(input);
+                var draft = draft_input ? (draft_input.value || "") : "";
                 $(body).content(<ChatBox msgs={p.msgs} callback={p.callback} />);
+                var next_input = $(input);
+                if (next_input) next_input.value = draft;
                 view.focus = $(input);
             }
             function self.closing() {
