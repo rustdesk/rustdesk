@@ -20,10 +20,14 @@ lazy_static::lazy_static! {
     static ref TX_MSG : Mutex<Sender<UpdateMsg>> = Mutex::new(start_auto_update_check());
 }
 
+// RustC doesn't recognize sites where this is referenced
+#[allow(dead_code)]
 static CONTROLLING_SESSION_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 const DUR_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 
+// RustC doesn't recognize some call sites
+#[allow(dead_code)]
 pub fn update_controlling_session_count(count: usize) {
     CONTROLLING_SESSION_COUNT.store(count, Ordering::SeqCst);
 }

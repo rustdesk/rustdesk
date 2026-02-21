@@ -21,14 +21,18 @@ use hbb_common::{
     rendezvous_proto::ConnType,
     ResultType,
 };
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use std::{
+    path::PathBuf,
+    time::Duration,
+};
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{
         atomic::{AtomicI32, Ordering},
         Arc,
     },
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
 
 pub type SessionID = uuid::Uuid;

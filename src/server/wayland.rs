@@ -1,5 +1,5 @@
 use super::*;
-use hbb_common::{allow_err, anyhow, platform::linux::DISTRO};
+use hbb_common::{allow_err, platform::linux::DISTRO};
 use scrap::{
     is_cursor_embedded, set_map_err,
     wayland::pipewire::{fill_displays, try_fix_logical_size},

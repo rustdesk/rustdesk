@@ -119,6 +119,8 @@ pub struct TelegramBot {
     pub chat_id: String,
 }
 
+// RustC doesn't recognize call sites for some methods
+#[allow(dead_code)]
 impl TelegramBot {
     fn into_string(&self) -> ResultType<String> {
         let token = encrypt_vec_or_original(self.token_str.as_bytes(), "00", 1024);
@@ -162,6 +164,8 @@ pub async fn send_2fa_code_to_telegram(text: &str, bot: TelegramBot) -> ResultTy
     Ok(())
 }
 
+// RustC doesn't recognize some call sites
+#[allow(dead_code)]
 pub fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> {
     let url = format!("https://api.telegram.org/bot{}/getUpdates", bot_token);
     // because caller is in tokio runtime, so we must call post_request_sync in new thread.

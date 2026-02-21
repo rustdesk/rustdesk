@@ -9,6 +9,7 @@ use hbb_common::get_version_number;
 use hbb_common::protobuf::MessageField;
 use scrap::Display;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::LazyLock;
 
 // https://github.com/rustdesk/rustdesk/discussions/6042, avoiding dbus call
 
@@ -22,8 +23,12 @@ struct ChangedResolution {
     changed: (i32, i32),
 }
 
+#[cfg(windows)]
+static IS_CAPTURER_MAGNIFIER_SUPPORTED: LazyLock<bool> = LazyLock::new(|| {
+    scrap::CapturerMag::is_supported()
+});
+
 lazy_static::lazy_static! {
-    static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
     static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
     // Initial primary display index.
     // It should not be updated when displays changed.
@@ -149,14 +154,6 @@ pub fn restore_resolutions() {
     }
     // Can be cleared because restore resolutions is called when there is no client connected.
     CHANGED_RESOLUTIONS.write().unwrap().clear();
-}
-
-#[inline]
-fn is_capturer_mag_supported() -> bool {
-    #[cfg(windows)]
-    return scrap::CapturerMag::is_supported();
-    #[cfg(not(windows))]
-    false
 }
 
 #[inline]
