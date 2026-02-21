@@ -209,7 +209,39 @@ class MainFlutterWindow: NSWindow {
                         break
                     }
                 case "requestRecordAudio":
+                    // Request microphone access and trigger system registration
+                    // On macOS 13+, apps only appear in System Settings > Privacy & Security > Microphone
+                    // after they actually attempt to use the microphone, not just request permission.
+                    // We create a brief capture session to ensure proper registration.
                     AVCaptureDevice.requestAccess(for: .audio, completionHandler: { granted in
+                        if granted {
+                            // Instantiate an audio capture session to trigger macOS registration
+                            // This needs to run on main thread to ensure proper lifecycle
+                            DispatchQueue.main.async {
+                                if let audioDevice = AVCaptureDevice.default(for: .audio) {
+                                    do {
+                                        let audioInput = try AVCaptureDeviceInput(device: audioDevice)
+                                        let captureSession = AVCaptureSession()
+                                        captureSession.beginConfiguration()
+                                        if captureSession.canAddInput(audioInput) {
+                                            captureSession.addInput(audioInput)
+                                        }
+                                        captureSession.commitConfiguration()
+                                        // Start and immediately stop the session to trigger registration
+                                        captureSession.startRunning()
+                                        // Minimum delay required for macOS to register the app in System Settings
+                                        let registrationDelay: TimeInterval = 0.1
+                                        // Keep a strong reference and stop after the registration delay
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + registrationDelay) { [captureSession] in
+                                            captureSession.stopRunning()
+                                        }
+                                    } catch {
+                                        NSLog("[RustDesk] Failed to create audio capture session: %@", error.localizedDescription)
+                                        NSLog("[RustDesk] The app may not appear in System Settings > Privacy & Security > Microphone")
+                                    }
+                                }
+                            }
+                        }
                         DispatchQueue.main.async {
                             result(granted)
                         }
