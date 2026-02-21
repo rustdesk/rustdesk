@@ -187,7 +187,11 @@ class _ServerPageState extends State<ServerPage> {
     _updateTimer = periodic_immediate(const Duration(seconds: 3), () async {
       await gFFI.serverModel.fetchID();
     });
-    gFFI.serverModel.checkAndroidPermission();
+    if (isAndroid) {
+      gFFI.serverModel.checkAndroidPermission();
+    } else if (isIOS) {
+      gFFI.serverModel.checkIOSPermission();
+    }
   }
 
   @override
@@ -246,7 +250,7 @@ class ServiceNotRunningNotification extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(translate("android_start_service_tip"),
+            Text(translate(isAndroid ? "android_start_service_tip" : "Start screen sharing service"),
                     style:
                         const TextStyle(fontSize: 12, color: MyTheme.darkGray))
                 .marginOnly(bottom: 8),
@@ -581,7 +585,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-    final hasAudioPermission = androidVersion >= 30;
+    final hasAudioPermission = isIOS || androidVersion >= 30;
     return PaddingCard(
         title: translate("Permissions"),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -605,10 +609,11 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                   : serverModel.toggleService),
           PermissionRow(translate("Input Control"), serverModel.inputOk,
               serverModel.toggleInput),
-          PermissionRow(translate("Transfer file"), serverModel.fileOk,
-              serverModel.toggleFile),
+          if (!isIOS)
+            PermissionRow(translate("Transfer file"), serverModel.fileOk,
+                serverModel.toggleFile),
           hasAudioPermission
-              ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
+              ? PermissionRow(translate(isIOS ? "Microphone" : "Audio Capture"), serverModel.audioOk,
                   serverModel.toggleAudio)
               : Row(children: [
                   Icon(Icons.info_outline).marginOnly(right: 15),
@@ -618,8 +623,19 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                     style: const TextStyle(color: MyTheme.darkGray),
                   ))
                 ]),
-          PermissionRow(translate("Enable clipboard"), serverModel.clipboardOk,
-              serverModel.toggleClipboard),
+          if (!isIOS)
+            PermissionRow(translate("Enable clipboard"), serverModel.clipboardOk,
+                serverModel.toggleClipboard),
+          if (isIOS) ...[
+            Row(children: [
+              Icon(Icons.info_outline, size: 16).marginOnly(right: 8),
+              Expanded(
+                  child: Text(
+                translate("File transfer and clipboard sync are not available during iOS screen sharing"),
+                style: const TextStyle(fontSize: 12, color: MyTheme.darkGray),
+              ))
+            ]).marginOnly(top: 8),
+          ],
         ]));
   }
 }

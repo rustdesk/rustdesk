@@ -26,7 +26,7 @@ lazy_static::lazy_static! {
     static ref VOICE_CALL_INPUT_DEVICE: Arc::<Mutex::<Option<String>>> = Default::default();
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "ios")))]
 pub fn new() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
     GenericService::repeat::<cpal_impl::State, _, _>(&svc.clone(), 33, cpal_impl::run);
@@ -37,6 +37,13 @@ pub fn new() -> GenericService {
 pub fn new() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
     GenericService::run(&svc.clone(), pa_impl::run);
+    svc.sp
+}
+
+#[cfg(target_os = "ios")]
+pub fn new() -> GenericService {
+    let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
+    GenericService::repeat::<ios_impl::State, _, _>(&svc.clone(), 33, ios_impl::run);
     svc.sp
 }
 
@@ -523,5 +530,142 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             sp.send(msg_out);
         }
         Err(_) => {}
+    }
+}
+
+#[cfg(target_os = "ios")]
+mod ios_impl {
+    use super::*;
+    use std::sync::mpsc::{channel, Receiver, Sender};
+    use std::thread;
+    
+    const SAMPLE_RATE: u32 = 48000;
+    const CHANNELS: u16 = 2;
+    const FRAMES_PER_BUFFER: usize = 480; // 10ms at 48kHz
+    
+    pub struct State {
+        encoder: Option<Encoder>,
+        receiver: Option<Receiver<Vec<f32>>>,
+        sender: Option<Sender<Vec<f32>>>,
+        format: Option<AudioFormat>,
+    }
+    
+    impl Default for State {
+        fn default() -> Self {
+            Self {
+                encoder: None,
+                receiver: None,
+                sender: None,
+                format: None,
+            }
+        }
+    }
+    
+    pub fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
+        if RESTARTING.load(Ordering::SeqCst) {
+            log::info!("Restarting iOS audio service");
+            state.encoder = None;
+            state.receiver = None;
+            state.sender = None;
+            state.format = None;
+            RESTARTING.store(false, Ordering::SeqCst);
+            return Ok(());
+        }
+        
+        // Initialize encoder if needed
+        if state.encoder.is_none() {
+            match Encoder::new(SAMPLE_RATE, Stereo, LowDelay) {
+                Ok(encoder) => state.encoder = Some(encoder),
+                Err(e) => {
+                    log::error!("Failed to create Opus encoder: {}", e);
+                    return Ok(());
+                }
+            }
+            
+            // Set up audio format
+            state.format = Some(AudioFormat {
+                sample_rate: SAMPLE_RATE,
+                channels: CHANNELS as _,
+                ..Default::default()
+            });
+            
+            // Create channel for audio data
+            let (tx, rx) = channel();
+            state.sender = Some(tx.clone());
+            state.receiver = Some(rx);
+            
+            // Set up audio callback
+            let tx_clone = tx.clone();
+            std::thread::spawn(move || {
+                setup_ios_audio_callback(tx_clone);
+            });
+            
+            log::info!("iOS audio service initialized with {}Hz {} channels", SAMPLE_RATE, CHANNELS);
+        }
+        
+        // Send audio format
+        if let Some(format) = &state.format {
+            sp.send_shared(format.clone());
+        }
+        
+        // Process audio data
+        if let Some(receiver) = &state.receiver {
+            // Non-blocking receive to avoid blocking the service
+            while let Ok(audio_data) = receiver.try_recv() {
+                if let Some(encoder) = &mut state.encoder {
+                    send_f32(&audio_data, encoder, &sp);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    lazy_static::lazy_static! {
+        static ref AUDIO_SENDER: Arc<Mutex<Option<Sender<Vec<f32>>>>> = Arc::new(Mutex::new(None));
+    }
+    
+    fn setup_ios_audio_callback(sender: Sender<Vec<f32>>) {
+        // Set up the audio callback from iOS
+        // Check current audio permission setting
+        let audio_enabled = Config::get_option("enable-audio") != "N";
+        unsafe {
+            scrap::ios::ffi::enable_audio(audio_enabled, false);
+            
+            // Set the audio callback
+            scrap::ios::ffi::set_audio_callback(Some(audio_callback));
+        }
+        
+        // Store sender in a thread-safe way
+        *AUDIO_SENDER.lock().unwrap() = Some(sender);
+    }
+    
+    extern "C" fn audio_callback(data: *const u8, size: u32, is_mic: bool) {
+        // Only process microphone audio when enabled
+        if !is_mic {
+            return;
+        }
+        
+        if let Some(ref sender) = *AUDIO_SENDER.lock().unwrap() {
+            // Convert audio data from bytes to f32
+            // Assuming audio comes as 16-bit PCM stereo at 48kHz
+            let samples = size as usize / 2; // 16-bit = 2 bytes per sample
+            let mut float_data = Vec::with_capacity(samples);
+            
+            unsafe {
+                let data_slice = std::slice::from_raw_parts(data as *const i16, samples);
+                for &sample in data_slice {
+                    // Convert i16 to f32 normalized to [-1.0, 1.0]
+                    float_data.push(sample as f32 / 32768.0);
+                }
+            }
+            
+            // Send in chunks matching our frame size
+            for chunk in float_data.chunks(FRAMES_PER_BUFFER * CHANNELS as usize) {
+                if chunk.len() == FRAMES_PER_BUFFER * CHANNELS as usize {
+                    let _ = sender.send(chunk.to_vec());
+                }
+            }
+        }
     }
 }
