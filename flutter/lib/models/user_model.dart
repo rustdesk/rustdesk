@@ -16,9 +16,23 @@ bool refreshingUser = false;
 
 class UserModel {
   final RxString userName = ''.obs;
+  final RxString displayName = ''.obs;
   final RxBool isAdmin = false.obs;
   final RxString networkError = ''.obs;
   bool get isLogin => userName.isNotEmpty;
+  String get displayNameOrUserName =>
+      displayName.value.trim().isEmpty ? userName.value : displayName.value;
+  String get accountLabelWithHandle {
+    final username = userName.value.trim();
+    if (username.isEmpty) {
+      return '';
+    }
+    final preferred = displayName.value.trim();
+    if (preferred.isEmpty || preferred == username) {
+      return username;
+    }
+    return '$preferred (@$username)';
+  }
   WeakReference<FFI> parent;
 
   UserModel(this.parent) {
@@ -98,7 +112,8 @@ class UserModel {
   _updateLocalUserInfo() {
     final userInfo = getLocalUserInfo();
     if (userInfo != null) {
-      userName.value = userInfo['name'];
+      userName.value = (userInfo['name'] ?? '').toString();
+      displayName.value = (userInfo['display_name'] ?? '').toString();
     }
   }
 
@@ -110,10 +125,12 @@ class UserModel {
       await gFFI.groupModel.reset();
     }
     userName.value = '';
+    displayName.value = '';
   }
 
   _parseAndUpdateUser(UserPayload user) {
     userName.value = user.name;
+    displayName.value = user.displayName;
     isAdmin.value = user.isAdmin;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
     if (isWeb) {
