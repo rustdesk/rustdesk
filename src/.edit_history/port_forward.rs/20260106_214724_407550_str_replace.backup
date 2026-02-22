@@ -1,7 +1,7 @@
+# BACKUP METADATA: {'timestamp': '20260106_214724_407550', 'operation': 'str_replace', 'file': '/users/kimera/projects/test/rustdesk/src/port_forward.rs', 'checksum': '6a41d9eb3f01c8c50b4b7baa9a2e2c8a5e2c93120b61ab2876ef4620e1b748cd'}
 use std::sync::{Arc, RwLock};
 
 use crate::client::*;
-use crate::security::{sanitize_command_arg, validate_port};
 use hbb_common::{
     allow_err, bail,
     config::READ_TIMEOUT,
@@ -16,67 +16,27 @@ use hbb_common::{
     ResultType, Stream,
 };
 
-/// Run Windows RDP client with validated inputs
-///
-/// SECURITY FIX (VULN-013): Validates all inputs to prevent command injection
 fn run_rdp(port: u16) {
-    // SECURITY: Validate port number
-    if let Err(e) = validate_port(port) {
-        log::error!("Invalid RDP port: {}", e);
-        return;
-    }
-
-    // Delete existing localhost credential
     std::process::Command::new("cmdkey")
         .arg("/delete:localhost")
         .output()
         .ok();
-
-    // Get credentials from environment
     let username = std::env::var("rdp_username").unwrap_or_default();
     let password = std::env::var("rdp_password").unwrap_or_default();
-
-    // SECURITY: Validate and sanitize username and password
     if !username.is_empty() || !password.is_empty() {
         let mut args = vec!["/generic:localhost".to_owned()];
-
         if !username.is_empty() {
-            // SECURITY: Sanitize username to prevent injection
-            match sanitize_command_arg(&username) {
-                Ok(safe_username) => {
-                    args.push(format!("/user:{}", safe_username));
-                }
-                Err(e) => {
-                    log::error!("Invalid RDP username: {}", e);
-                    return;
-                }
-            }
+            args.push(format!("/user:{}", username));
         }
-
         if !password.is_empty() {
-            // SECURITY: Sanitize password to prevent injection
-            match sanitize_command_arg(&password) {
-                Ok(safe_password) => {
-                    args.push(format!("/pass:{}", safe_password));
-                }
-                Err(e) => {
-                    log::error!("Invalid RDP password: {}", e);
-                    return;
-                }
-            }
+            args.push(format!("/pass:{}", password));
         }
-
-        log::debug!("RDP credential args: {:?}", args);
-
-        // Execute cmdkey with validated arguments
+        println!("{:?}", args);
         std::process::Command::new("cmdkey")
             .args(&args)
             .output()
             .ok();
     }
-
-    // Launch mstsc with validated port
-    // SECURITY: Port is validated above, formatted directly without user input
     std::process::Command::new("mstsc")
         .arg(format!("/v:localhost:{}", port))
         .spawn()
