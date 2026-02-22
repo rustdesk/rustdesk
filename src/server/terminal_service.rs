@@ -30,8 +30,20 @@ const MAX_OUTPUT_BUFFER_SIZE: usize = 1024 * 1024; // 1MB per terminal
 const MAX_BUFFER_LINES: usize = 10000;
 const MAX_SERVICES: usize = 100; // Maximum number of persistent terminal services
 const SERVICE_IDLE_TIMEOUT: Duration = Duration::from_secs(3600); // 1 hour idle timeout
-const CHANNEL_BUFFER_SIZE: usize = 100; // Number of messages to buffer in channel
+const CHANNEL_BUFFER_SIZE: usize = 500; // Number of messages to buffer in channel (increased to reduce data loss)
 const COMPRESS_THRESHOLD: usize = 512; // Compress terminal data larger than this
+                                       // Default max bytes for buffer request.
+const DEFAULT_REQUEST_BUFFER_BYTES: usize = 8 * 1024;
+
+/// Session state machine for terminal streaming.
+#[derive(Debug)]
+enum SessionState {
+    /// Session is closed, not streaming data to client.
+    Closed,
+    /// Session is active, streaming data to client.
+    /// pending_buffer: historical buffer to send before real-time data (set on reconnection).
+    Active { pending_buffer: Option<Vec<u8>> },
+}
 
 lazy_static::lazy_static! {
     // Global registry of persistent terminal services indexed by service_id
@@ -433,16 +445,43 @@ impl OutputBuffer {
     }
 
     fn get_recent(&self, max_bytes: usize) -> Vec<u8> {
-        let mut result = Vec::new();
+        if max_bytes == 0 {
+            return Vec::new();
+        }
+        let mut chunks: Vec<&[u8]> = Vec::new();
         let mut size = 0;
 
-        // Get recent lines up to max_bytes
+        // Collect whole chunks from newest to oldest, preserving chronological continuity.
+        // If the newest chunk alone exceeds max_bytes, take its tail (truncation may split
+        // an ANSI escape, but the terminal will self-correct on subsequent output).
         for line in self.lines.iter().rev() {
             if size + line.len() > max_bytes {
+                if size == 0 && line.len() > max_bytes {
+                    // Single oversized chunk: take the tail to preserve the most recent content.
+                    // Align offset forward to a UTF-8 char boundary to avoid producing
+                    // invalid UTF-8 (which could cause issues in protobuf or Dart decoding).
+                    let mut offset = line.len() - max_bytes;
+                    while offset < line.len() && (line[offset] & 0b1100_0000) == 0b1000_0000 {
+                        offset += 1; // skip UTF-8 continuation bytes
+                    }
+                    // If we skipped past all remaining bytes (degenerate data), drop the
+                    // chunk entirely rather than producing invalid UTF-8.
+                    if offset < line.len() {
+                        chunks.push(&line[offset..]);
+                        size = line.len() - offset;
+                    }
+                }
                 break;
             }
             size += line.len();
-            result.splice(0..0, line.iter().cloned());
+            chunks.push(line);
+        }
+
+        // Reverse to restore chronological order and concatenate
+        chunks.reverse();
+        let mut result = Vec::with_capacity(size);
+        for chunk in chunks {
+            result.extend_from_slice(chunk);
         }
 
         result
@@ -469,7 +508,8 @@ pub struct TerminalSession {
     cols: u16,
     // Track if we've already sent the closed message
     closed_message_sent: bool,
-    is_opened: bool,
+    // Session state machine for reconnection handling
+    state: SessionState,
     // Helper mode: PTY is managed by helper process, communication via message protocol
     #[cfg(target_os = "windows")]
     is_helper_mode: bool,
@@ -496,7 +536,7 @@ impl TerminalSession {
             rows,
             cols,
             closed_message_sent: false,
-            is_opened: false,
+            state: SessionState::Closed,
             #[cfg(target_os = "windows")]
             is_helper_mode: false,
             #[cfg(target_os = "windows")]
@@ -511,7 +551,7 @@ impl TerminalSession {
     // This helper function is to ensure that the threads are joined before the child process is dropped.
     // Though this is not strictly necessary on macOS.
     fn stop(&mut self) {
-        self.is_opened = false;
+        self.state = SessionState::Closed;
         self.exiting.store(true, Ordering::SeqCst);
 
         // Drop the input channel to signal writer thread to exit
@@ -668,7 +708,7 @@ impl PersistentTerminalService {
             (
                 session.rows,
                 session.cols,
-                session.output_buffer.get_recent(4096),
+                session.output_buffer.get_recent(DEFAULT_REQUEST_BUFFER_BYTES),
             )
         })
     }
@@ -683,7 +723,7 @@ impl PersistentTerminalService {
         self.needs_session_sync = true;
         for session in self.sessions.values() {
             let mut session = session.lock().unwrap();
-            session.is_opened = false;
+            session.state = SessionState::Closed;
         }
     }
 }
@@ -807,11 +847,26 @@ impl TerminalServiceProxy {
         if let Some(session_arc) = service.sessions.get(&open.terminal_id) {
             // Reconnect to existing terminal
             let mut session = session_arc.lock().unwrap();
-            session.is_opened = true;
+            // Directly enter Active state with pending buffer for immediate streaming.
+            // Historical buffer is sent first by read_outputs(), then real-time data follows.
+            // No overlap: pending_buffer comes from output_buffer (pre-disconnect history),
+            // while received_data in read_outputs() comes from the channel (post-reconnect).
+            // During disconnect, read_outputs() is not called so output_buffer is not updated.
+            let buffer = session
+                .output_buffer
+                .get_recent(DEFAULT_REQUEST_BUFFER_BYTES);
+            session.state = SessionState::Active {
+                pending_buffer: if buffer.is_empty() {
+                    None
+                } else {
+                    Some(buffer)
+                },
+            };
             let mut opened = TerminalOpened::new();
             opened.terminal_id = open.terminal_id;
             opened.success = true;
             opened.message = "Reconnected to existing terminal".to_string();
+            opened.reconnected = true;
             opened.pid = session.pid;
             opened.service_id = self.service_id.clone();
             if service.needs_session_sync {
@@ -828,13 +883,6 @@ impl TerminalServiceProxy {
                 service.needs_session_sync = false;
             }
             response.set_opened(opened);
-
-            // Send buffered output
-            let buffer = session.output_buffer.get_recent(4096);
-            if !buffer.is_empty() {
-                // We'll need to send this separately or extend the protocol
-                // For now, just acknowledge the reconnection
-            }
 
             return Ok(Some(response));
         }
@@ -945,6 +993,8 @@ impl TerminalServiceProxy {
         let reader_thread = thread::spawn(move || {
             let mut reader = reader;
             let mut buf = vec![0u8; 4096];
+            let mut drop_count: u64 = 0;
+            let mut last_drop_warn = Instant::now();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
@@ -958,14 +1008,35 @@ impl TerminalServiceProxy {
                             break;
                         }
                         let data = buf[..n].to_vec();
-                        // Try to send, if channel is full, drop the data
+                        // Use try_send to avoid blocking the reader thread when channel is full.
+                        // During disconnect, the run loop (sp.ok()) stops and read_outputs() is
+                        // no longer called, so the channel won't be drained. Blocking send would
+                        // deadlock the reader thread in that case.
+                        // Note: data produced during disconnect may be lost if channel fills up,
+                        // since output_buffer is only updated in read_outputs(). The buffer will
+                        // contain history from before the disconnect, not data produced after it.
                         match output_tx.try_send(data) {
-                            Ok(_) => {}
+                            Ok(_) => {
+                                // Flush accumulated drop warning if any
+                                if drop_count > 0 {
+                                    log::warn!(
+                                        "Terminal {} output channel full, dropped {} chunks (reconnection buffer may have gaps)",
+                                        terminal_id, drop_count
+                                    );
+                                    drop_count = 0;
+                                }
+                            }
                             Err(mpsc::TrySendError::Full(_)) => {
-                                log::debug!(
-                                    "Terminal {} output channel full, dropping data",
-                                    terminal_id
-                                );
+                                drop_count += 1;
+                                // Rate-limit warnings: at most once per 5 seconds
+                                if last_drop_warn.elapsed() >= Duration::from_secs(5) {
+                                    log::warn!(
+                                        "Terminal {} output channel full, dropped {} chunks (reconnection buffer may have gaps)",
+                                        terminal_id, drop_count
+                                    );
+                                    drop_count = 0;
+                                    last_drop_warn = Instant::now();
+                                }
                             }
                             Err(mpsc::TrySendError::Disconnected(_)) => {
                                 log::debug!("Terminal {} output channel disconnected", terminal_id);
@@ -996,7 +1067,9 @@ impl TerminalServiceProxy {
         session.output_rx = Some(output_rx);
         session.reader_thread = Some(reader_thread);
         session.writer_thread = Some(writer_thread);
-        session.is_opened = true;
+        session.state = SessionState::Active {
+            pending_buffer: None,
+        };
 
         let mut opened = TerminalOpened::new();
         opened.terminal_id = open.terminal_id;
@@ -1158,6 +1231,8 @@ impl TerminalServiceProxy {
         let terminal_id = open.terminal_id;
         let reader_thread = thread::spawn(move || {
             let mut buf = vec![0u8; 4096];
+            let mut drop_count: u64 = 0;
+            let mut last_drop_warn = Instant::now();
             loop {
                 match output_pipe.read(&mut buf) {
                     Ok(0) => {
@@ -1170,13 +1245,27 @@ impl TerminalServiceProxy {
                             break;
                         }
                         let data = buf[..n].to_vec();
+                        // Use try_send to avoid blocking the reader thread (same as direct PTY mode)
                         match output_tx.try_send(data) {
-                            Ok(_) => {}
+                            Ok(_) => {
+                                if drop_count > 0 {
+                                    log::warn!(
+                                        "Terminal {} (helper) output channel full, dropped {} chunks (reconnection buffer may have gaps)",
+                                        terminal_id, drop_count
+                                    );
+                                    drop_count = 0;
+                                }
+                            }
                             Err(mpsc::TrySendError::Full(_)) => {
-                                log::debug!(
-                                    "Terminal {} output channel full, dropping data",
-                                    terminal_id
-                                );
+                                drop_count += 1;
+                                if last_drop_warn.elapsed() >= Duration::from_secs(5) {
+                                    log::warn!(
+                                        "Terminal {} (helper) output channel full, dropped {} chunks (reconnection buffer may have gaps)",
+                                        terminal_id, drop_count
+                                    );
+                                    drop_count = 0;
+                                    last_drop_warn = Instant::now();
+                                }
                             }
                             Err(mpsc::TrySendError::Disconnected(_)) => {
                                 log::debug!("Terminal {} output channel disconnected", terminal_id);
@@ -1211,7 +1300,9 @@ impl TerminalServiceProxy {
         session.output_rx = Some(output_rx);
         session.reader_thread = Some(reader_thread);
         session.writer_thread = Some(writer_thread);
-        session.is_opened = true;
+        session.state = SessionState::Active {
+            pending_buffer: None,
+        };
         session.is_helper_mode = true;
         session.helper_process_handle = Some(SendableHandle::new(helper_raw_handle));
 
@@ -1358,6 +1449,28 @@ impl TerminalServiceProxy {
         }
     }
 
+    /// Helper to create a TerminalResponse with optional compression.
+    fn create_terminal_data_response(terminal_id: i32, data: Vec<u8>) -> TerminalResponse {
+        let mut response = TerminalResponse::new();
+        let mut terminal_data = TerminalData::new();
+        terminal_data.terminal_id = terminal_id;
+
+        if data.len() > COMPRESS_THRESHOLD {
+            let compressed = compress::compress(&data);
+            if compressed.len() < data.len() {
+                terminal_data.data = bytes::Bytes::from(compressed);
+                terminal_data.compressed = true;
+            } else {
+                terminal_data.data = bytes::Bytes::from(data);
+            }
+        } else {
+            terminal_data.data = bytes::Bytes::from(data);
+        }
+
+        response.set_data(terminal_data);
+        response
+    }
+
     pub fn read_outputs(&self) -> Vec<TerminalResponse> {
         let service = match get_service(&self.service_id) {
             Some(s) => s,
@@ -1399,12 +1512,8 @@ impl TerminalServiceProxy {
                     closed_terminals.push(terminal_id);
                 }
 
-                if !session.is_opened {
-                    // Skip the session if it is not opened.
-                    continue;
-                }
-
-                // Read from output channel
+                // Read from output channel (always read to prevent channel overflow,
+                // even when session is not opened - data will be buffered for reconnection)
                 let mut has_activity = false;
                 let mut received_data = Vec::new();
                 if let Some(output_rx) = &session.output_rx {
@@ -1415,37 +1524,33 @@ impl TerminalServiceProxy {
                     }
                 }
 
-                // Update buffer after reading
+                if has_activity {
+                    session.update_activity();
+                }
+
+                // Update buffer (always buffer for reconnection support)
                 for data in &received_data {
                     session.output_buffer.append(data);
                 }
 
-                // Process received data for responses
-                for data in received_data {
-                    let mut response = TerminalResponse::new();
-                    let mut terminal_data = TerminalData::new();
-                    terminal_data.terminal_id = terminal_id;
+                // Skip sending responses if session is not Active.
+                // Data is already buffered above and will be sent on next reconnection.
+                let pending_buffer = match &mut session.state {
+                    SessionState::Active { pending_buffer } => pending_buffer,
+                    _ => continue,
+                };
 
-                    // Compress data if it exceeds threshold
-                    if data.len() > COMPRESS_THRESHOLD {
-                        let compressed = compress::compress(&data);
-                        if compressed.len() < data.len() {
-                            terminal_data.data = bytes::Bytes::from(compressed);
-                            terminal_data.compressed = true;
-                        } else {
-                            // Compression didn't help, send uncompressed
-                            terminal_data.data = bytes::Bytes::from(data);
-                        }
-                    } else {
-                        terminal_data.data = bytes::Bytes::from(data);
+                // Send pending buffer response first (set on reconnection in handle_open).
+                // This ensures historical buffer is sent before any real-time data.
+                if let Some(buffer) = pending_buffer.take() {
+                    if !buffer.is_empty() {
+                        responses.push(Self::create_terminal_data_response(terminal_id, buffer));
                     }
-
-                    response.set_data(terminal_data);
-                    responses.push(response);
                 }
 
-                if has_activity {
-                    session.update_activity();
+                // Send real-time data after historical buffer
+                for data in received_data {
+                    responses.push(Self::create_terminal_data_response(terminal_id, data));
                 }
             }
         }
