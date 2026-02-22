@@ -2232,11 +2232,12 @@ impl Connection {
 
             // https://github.com/rustdesk/rustdesk-server-pro/discussions/646
             // `is_logon` is used to check login with `OPTION_ALLOW_LOGON_SCREEN_PASSWORD` == "Y".
-            // `is_logon_ui()` is used on Windows, because there's no good way to detect `is_locked()`.
-            // Detecting `is_logon_ui()` (if `LogonUI.exe` running) is a workaround.
+            // `is_logon_ui()` is a fallback for logon UI detection on Windows.
             #[cfg(target_os = "windows")]
             let is_logon = || {
-                crate::platform::is_prelogin() || {
+                crate::platform::is_prelogin()
+                    || crate::platform::is_locked()
+                    || {
                     match crate::platform::is_logon_ui() {
                         Ok(result) => result,
                         Err(e) => {
