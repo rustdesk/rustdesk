@@ -192,6 +192,8 @@ impl VideoFrameController {
     }
 }
 
+
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VideoSource {
     Monitor,
@@ -648,6 +650,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
     let mut first_frame = true;
+    let mut logged_invalid_frame = false;
     let capture_width = c.width;
     let capture_height = c.height;
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
@@ -719,8 +722,29 @@ fn run(vs: VideoService) -> ResultType<()> {
         let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
         let res = match c.frame(spf) {
             Ok(frame) => {
-                repeat_encode_counter = 0;
-                if frame.valid() {
+                if !frame.valid() {
+                    if !logged_invalid_frame {
+                        logged_invalid_frame = true;
+                        match &frame {
+                            scrap::Frame::PixelBuffer(f) => {
+                                log::debug!(
+                                    "capturer returned invalid frame (pixelbuffer), len={}, w={}, h={}, treating as WouldBlock",
+                                    f.data().len(),
+                                    f.width(),
+                                    f.height()
+                                );
+                            }
+                            scrap::Frame::Texture((texture, _)) => {
+                                log::debug!(
+                                    "capturer returned invalid frame (texture={texture:?}), treating as WouldBlock"
+                                );
+                            }
+                        }
+                    }
+                    Err(std::io::Error::new(WouldBlock, "empty frame"))
+                } else {
+                    repeat_encode_counter = 0;
+
                     let screenshot = SCREENSHOTS.lock().unwrap().remove(&display_idx);
                     if let Some(mut screenshot) = screenshot {
                         let restore_vram = screenshot.restore_vram;
@@ -779,16 +803,18 @@ fn run(vs: VideoService) -> ResultType<()> {
                     )?;
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
-                }
-                #[cfg(windows)]
-                {
-                    #[cfg(feature = "vram")]
-                    if try_gdi == 1 && !c.is_gdi() {
-                        VRamEncoder::set_fallback_gdi(sp.name(), false);
+
+                    #[cfg(windows)]
+                    {
+                        #[cfg(feature = "vram")]
+                        if try_gdi == 1 && !c.is_gdi() {
+                            VRamEncoder::set_fallback_gdi(sp.name(), false);
+                        }
+                        try_gdi = 0;
                     }
-                    try_gdi = 0;
+
+                    Ok(())
                 }
-                Ok(())
             }
             Err(err) => Err(err),
         };
@@ -1417,3 +1443,5 @@ fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, da
         log::error!("Failed to send screenshot, {}", e);
     }
 }
+
+

@@ -68,6 +68,7 @@ pub struct Remote<T: InvokeUiSession> {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     is_connected: bool,
     first_frame: bool,
+    watchdog: ClientFirstFrameWatchdog,
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     client_conn_id: i32, // used for file clipboard
     data_count: Arc<AtomicUsize>,
@@ -115,6 +116,7 @@ impl<T: InvokeUiSession> Remote<T> {
             last_update_jobs_status: (Instant::now(), Default::default()),
             is_connected: false,
             first_frame: false,
+            watchdog: ClientFirstFrameWatchdog::new(Duration::from_secs(3)),
             #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
             client_conn_id: 0,
             data_count: Arc::new(AtomicUsize::new(0)),
@@ -279,6 +281,22 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _ = status_timer.tick() => {
+                            if self.watchdog.check(self.is_connected, self.first_frame, self.handler.is_default(), Instant::now()) {
+                                let (id, display) = {
+                                    let lch = self.handler.lc.read().unwrap();
+                                    let display = lch
+                                        .peer_info
+                                        .as_ref()
+                                        .map(|p| p.current_display)
+                                        .unwrap_or(0);
+                                    (lch.id.clone(), display)
+                                };
+                                log::warn!(
+                                    "No first video frame received, id={id}, display={display}, sending refresh"
+                                );
+                                self.handler.refresh_video(display as _);
+                            }
+
                             let elapsed = fps_instant.elapsed().as_millis();
                             if elapsed < 1000 {
                                 continue;
@@ -1284,8 +1302,14 @@ impl<T: InvokeUiSession> Remote<T> {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
                 Some(message::Union::VideoFrame(vf)) => {
+                    let display = vf.display as usize;
                     if !self.first_frame {
                         self.first_frame = true;
+                        log::info!(
+                            "First video frame received, id={}, display={}",
+                            self.handler.get_id(),
+                            display
+                        );
                         self.handler.close_success();
                         self.handler.adapt_size();
                         self.send_toggle_virtual_display_msg(peer).await;
@@ -1293,7 +1317,6 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     self.video_format = CodecFormat::from(&vf);
 
-                    let display = vf.display as usize;
                     if !self.video_threads.contains_key(&display) {
                         self.new_video_thread(display);
                     }
@@ -2439,3 +2462,72 @@ impl Drop for VideoThread {
         *self.discard_queue.write().unwrap() = true;
     }
 }
+
+struct ClientFirstFrameWatchdog {
+    deadline: Option<Instant>,
+    timeout: Duration,
+}
+
+impl ClientFirstFrameWatchdog {
+    fn new(timeout: Duration) -> Self {
+        Self { deadline: None, timeout }
+    }
+
+    // Returns true if refresh should be triggered
+    fn check(&mut self, is_connected: bool, first_frame_received: bool, is_default: bool, now: Instant) -> bool {
+        if is_connected && !first_frame_received && is_default {
+            if let Some(d) = self.deadline {
+                if now > d {
+                    self.deadline = Some(now + self.timeout);
+                    return true;
+                }
+            } else {
+                self.deadline = Some(now + self.timeout);
+            }
+        } else {
+            self.deadline = None;
+        }
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_client_first_frame_watchdog() {
+        let timeout = Duration::from_secs(3);
+        let mut watchdog = ClientFirstFrameWatchdog::new(timeout);
+        let start = Instant::now();
+
+        // Not connected: no trigger, no deadline set
+        assert!(!watchdog.check(false, false, true, start));
+        assert!(watchdog.deadline.is_none());
+
+        // Connected, default, no frame: deadline set to start + 3s
+        assert!(!watchdog.check(true, false, true, start));
+        assert!(watchdog.deadline.is_some());
+        assert_eq!(watchdog.deadline.unwrap(), start + timeout);
+
+        // Advance 2s: no trigger
+        assert!(!watchdog.check(true, false, true, start + Duration::from_secs(2)));
+
+        // Advance 4s: trigger!
+        assert!(watchdog.check(true, false, true, start + Duration::from_secs(4)));
+        // Deadline reset to +3s from now (start+4s) -> start+7s
+        assert_eq!(watchdog.deadline.unwrap(), start + Duration::from_secs(4) + timeout);
+
+        // Frame received: reset
+        assert!(!watchdog.check(true, true, true, start + Duration::from_secs(5)));
+        assert!(watchdog.deadline.is_none());
+
+        // Not default: reset
+        watchdog.check(true, false, true, start); // set deadline
+        assert!(watchdog.deadline.is_some());
+        watchdog.check(true, false, false, start); // reset
+        assert!(watchdog.deadline.is_none());
+    }
+}
+
