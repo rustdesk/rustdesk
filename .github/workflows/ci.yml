@@ -35,7 +35,7 @@ jobs:
   #       default: true
   #       profile: minimal
   #       components: rustfmt
-  #   - uses: actions/checkout@v3
+  #   - uses: actions/checkout@v6
   #   - run: cargo fmt -- --check
 
   # min_version:
@@ -43,7 +43,7 @@ jobs:
   #   runs-on: ubuntu-20.04
   #   steps:
   #   - name: Checkout source code
-  #     uses: actions/checkout@v3
+  #     uses: actions/checkout@v6
   #     with:
   #       submodules: recursive
 
@@ -99,7 +99,7 @@ jobs:
         swap-storage: false
 
     - name: Export GitHub Actions cache environment variables
-      uses: actions/github-script@v6
+      uses: actions/github-script@v8
       with:
         script: |
           core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
