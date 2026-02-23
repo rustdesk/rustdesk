@@ -103,7 +103,7 @@ class ButtonOP extends StatelessWidget {
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Center(
-                        child: Text('${translate("Continue with")} $opLabel')),
+                        child: Text(translate("Continue with {$opLabel}"))),
                   ),
                 ),
               ],

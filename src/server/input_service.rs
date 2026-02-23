@@ -111,6 +111,10 @@ struct Input {
 
 const KEY_CHAR_START: u64 = 9999;
 
+// XKB keycode for Insert key (evdev KEY_INSERT code 110 + 8 for XKB offset)
+#[cfg(target_os = "linux")]
+const XKB_KEY_INSERT: u16 = evdev::Key::KEY_INSERT.code() + 8;
+
 #[derive(Clone, Default)]
 pub struct MouseCursorSub {
     inner: ConnInner,
@@ -1105,8 +1109,12 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             // Clamp delta to prevent extreme/malicious values from reaching OS APIs.
             // This matches the Flutter client's kMaxRelativeMouseDelta constant.
             const MAX_RELATIVE_MOUSE_DELTA: i32 = 10000;
-            let dx = evt.x.clamp(-MAX_RELATIVE_MOUSE_DELTA, MAX_RELATIVE_MOUSE_DELTA);
-            let dy = evt.y.clamp(-MAX_RELATIVE_MOUSE_DELTA, MAX_RELATIVE_MOUSE_DELTA);
+            let dx = evt
+                .x
+                .clamp(-MAX_RELATIVE_MOUSE_DELTA, MAX_RELATIVE_MOUSE_DELTA);
+            let dy = evt
+                .y
+                .clamp(-MAX_RELATIVE_MOUSE_DELTA, MAX_RELATIVE_MOUSE_DELTA);
             en.mouse_move_relative(dx, dy);
             // Get actual cursor position after relative movement for tracking
             if let Some((x, y)) = crate::get_cursor_pos() {
@@ -1465,18 +1473,24 @@ fn map_keyboard_mode(evt: &KeyEvent) {
     // Wayland
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() {
-        let mut en = ENIGO.lock().unwrap();
-        let code = evt.chr() as u16;
-
-        if evt.down {
-            en.key_down(enigo::Key::Raw(code)).ok();
-        } else {
-            en.key_up(enigo::Key::Raw(code));
-        }
+        wayland_send_raw_key(evt.chr() as u16, evt.down);
         return;
     }
 
     sim_rdev_rawkey_position(evt.chr() as _, evt.down);
+}
+
+/// Send raw keycode on Wayland via the active backend (uinput or RemoteDesktop portal).
+/// The keycode is expected to be a Linux keycode (evdev code + 8 for X11 compatibility).
+#[cfg(target_os = "linux")]
+#[inline]
+fn wayland_send_raw_key(code: u16, down: bool) {
+    let mut en = ENIGO.lock().unwrap();
+    if down {
+        en.key_down(enigo::Key::Raw(code)).ok();
+    } else {
+        en.key_up(enigo::Key::Raw(code));
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -1559,6 +1573,20 @@ fn need_to_uppercase(en: &mut Enigo) -> bool {
 }
 
 fn process_chr(en: &mut Enigo, chr: u32, down: bool) {
+    // On Wayland with uinput mode, use clipboard for character input
+    #[cfg(target_os = "linux")]
+    if !crate::platform::linux::is_x11() && wayland_use_uinput() {
+        // Skip clipboard for hotkeys (Ctrl/Alt/Meta pressed)
+        if !is_hotkey_modifier_pressed(en) {
+            if down {
+                if let Ok(c) = char::try_from(chr) {
+                    input_char_via_clipboard_server(en, c);
+                }
+            }
+            return;
+        }
+    }
+
     let key = char_value_to_key(chr);
 
     if down {
@@ -1578,13 +1606,134 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool) {
 }
 
 fn process_unicode(en: &mut Enigo, chr: u32) {
+    // On Wayland with uinput mode, use clipboard for character input
+    #[cfg(target_os = "linux")]
+    if !crate::platform::linux::is_x11() && wayland_use_uinput() {
+        if let Ok(c) = char::try_from(chr) {
+            input_char_via_clipboard_server(en, c);
+        }
+        return;
+    }
+
     if let Ok(chr) = char::try_from(chr) {
         en.key_sequence(&chr.to_string());
     }
 }
 
 fn process_seq(en: &mut Enigo, sequence: &str) {
+    // On Wayland with uinput mode, use clipboard for text input
+    #[cfg(target_os = "linux")]
+    if !crate::platform::linux::is_x11() && wayland_use_uinput() {
+        input_text_via_clipboard_server(en, sequence);
+        return;
+    }
+
     en.key_sequence(&sequence);
+}
+
+/// Delay in milliseconds to wait for clipboard to sync on Wayland.
+/// This is an empirical value — Wayland provides no callback or event to confirm
+/// clipboard content has been received by the compositor. Under heavy system load,
+/// this delay may be insufficient, but there is no reliable alternative mechanism.
+#[cfg(target_os = "linux")]
+const CLIPBOARD_SYNC_DELAY_MS: u64 = 50;
+
+/// Internal: Set clipboard content without delay.
+/// Returns true if clipboard was set successfully.
+#[cfg(target_os = "linux")]
+fn set_clipboard_content(text: &str) -> bool {
+    use arboard::{Clipboard, LinuxClipboardKind, SetExtLinux};
+
+    let mut clipboard = match Clipboard::new() {
+        Ok(cb) => cb,
+        Err(e) => {
+            log::error!("set_clipboard_content: failed to create clipboard: {:?}", e);
+            return false;
+        }
+    };
+
+    // Set both CLIPBOARD and PRIMARY selections
+    // Terminal uses PRIMARY for Shift+Insert, GUI apps use CLIPBOARD
+    if let Err(e) = clipboard
+        .set()
+        .clipboard(LinuxClipboardKind::Clipboard)
+        .text(text.to_owned())
+    {
+        log::error!("set_clipboard_content: failed to set CLIPBOARD: {:?}", e);
+        return false;
+    }
+    if let Err(e) = clipboard
+        .set()
+        .clipboard(LinuxClipboardKind::Primary)
+        .text(text.to_owned())
+    {
+        log::warn!("set_clipboard_content: failed to set PRIMARY: {:?}", e);
+        // Continue anyway, CLIPBOARD might work
+    }
+
+    true
+}
+
+/// Set clipboard content for paste operation (sync version for use in blocking contexts).
+///
+/// Note: The original clipboard content is intentionally NOT restored after paste.
+/// Restoring clipboard could cause race conditions where subsequent keystrokes
+/// might accidentally paste the old clipboard content instead of the intended input.
+/// This trade-off prioritizes input reliability over preserving clipboard state.
+#[cfg(target_os = "linux")]
+#[inline]
+pub(super) fn set_clipboard_for_paste_sync(text: &str) -> bool {
+    if !set_clipboard_content(text) {
+        return false;
+    }
+    std::thread::sleep(std::time::Duration::from_millis(CLIPBOARD_SYNC_DELAY_MS));
+    true
+}
+
+/// Check if a character is ASCII printable (0x20-0x7E).
+#[cfg(target_os = "linux")]
+#[inline]
+pub(super) fn is_ascii_printable(c: char) -> bool {
+    c as u32 >= 0x20 && c as u32 <= 0x7E
+}
+
+/// Input a single character via clipboard + Shift+Insert in server process.
+#[cfg(target_os = "linux")]
+#[inline]
+fn input_char_via_clipboard_server(en: &mut Enigo, chr: char) {
+    input_text_via_clipboard_server(en, &chr.to_string());
+}
+
+/// Input text via clipboard + Shift+Insert in server process.
+/// Shift+Insert is more universal than Ctrl+V, works in both GUI apps and terminals.
+///
+/// Note: Clipboard content is NOT restored after paste - see `set_clipboard_for_paste_sync` for rationale.
+#[cfg(target_os = "linux")]
+fn input_text_via_clipboard_server(en: &mut Enigo, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    if !set_clipboard_for_paste_sync(text) {
+        return;
+    }
+
+    // Use ENIGO's custom_keyboard directly to avoid creating new IPC connections
+    // which would cause excessive logging and keyboard device creation/destruction
+    if en.key_down(Key::Shift).is_err() {
+        log::error!("input_text_via_clipboard_server: failed to press Shift, skipping paste");
+        return;
+    }
+    if en.key_down(Key::Raw(XKB_KEY_INSERT)).is_err() {
+        log::error!("input_text_via_clipboard_server: failed to press Insert, releasing Shift");
+        en.key_up(Key::Shift);
+        return;
+    }
+    en.key_up(Key::Raw(XKB_KEY_INSERT));
+    en.key_up(Key::Shift);
+
+    // Brief delay to allow the target application to process the paste event.
+    // Empirical value — no reliable synchronization mechanism exists on Wayland.
+    std::thread::sleep(std::time::Duration::from_millis(20));
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1621,6 +1770,64 @@ fn is_function_key(ck: &EnumOrUnknown<ControlKey>) -> bool {
     return res;
 }
 
+/// Check if any hotkey modifier (Ctrl/Alt/Meta) is currently pressed.
+/// Used to detect hotkey combinations like Ctrl+C, Alt+Tab, etc.
+///
+/// Note: Shift is intentionally NOT checked here. Shift+character produces a different
+/// character (e.g., Shift+a → 'A'), which is normal text input, not a hotkey.
+/// Shift is only relevant as a hotkey modifier when combined with Ctrl/Alt/Meta
+/// (e.g., Ctrl+Shift+Z), in which case this function already returns true via Ctrl.
+#[cfg(target_os = "linux")]
+#[inline]
+fn is_hotkey_modifier_pressed(en: &mut Enigo) -> bool {
+    get_modifier_state(Key::Control, en)
+        || get_modifier_state(Key::RightControl, en)
+        || get_modifier_state(Key::Alt, en)
+        || get_modifier_state(Key::RightAlt, en)
+        || get_modifier_state(Key::Meta, en)
+        || get_modifier_state(Key::RWin, en)
+}
+
+/// Release Shift keys before character input in Legacy/Translate mode.
+/// In these modes, the character has already been converted by the client,
+/// so we should input it directly without Shift modifier affecting the result.
+///
+/// Note: Does NOT release Shift if hotkey modifiers (Ctrl/Alt/Meta) are pressed,
+/// to preserve combinations like Ctrl+Shift+Z.
+#[cfg(target_os = "linux")]
+fn release_shift_for_char_input(en: &mut Enigo) {
+    // Don't release Shift if hotkey modifiers (Ctrl/Alt/Meta) are pressed.
+    // This preserves combinations like Ctrl+Shift+Z.
+    if is_hotkey_modifier_pressed(en) {
+        return;
+    }
+
+    // In translate mode, the client has already converted the keystroke to a character
+    // (e.g., Shift+a → 'A'). We release Shift here so the server inputs the character
+    // directly without Shift affecting the result.
+    //
+    // Shift is intentionally NOT restored after input — the client will send an explicit
+    // Shift key_up event when the user physically releases Shift. Restoring it here would
+    // cause a brief Shift re-press that could interfere with the next input event.
+
+    let is_x11 = crate::platform::linux::is_x11();
+
+    if get_modifier_state(Key::Shift, en) {
+        if !is_x11 {
+            en.key_up(Key::Shift);
+        } else {
+            simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
+        }
+    }
+    if get_modifier_state(Key::RightShift, en) {
+        if !is_x11 {
+            en.key_up(Key::RightShift);
+        } else {
+            simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+        }
+    }
+}
+
 fn legacy_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
@@ -1640,11 +1847,24 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
             process_control_key(&mut en, &ck, down)
         }
         Some(key_event::Union::Chr(chr)) => {
+            // For character input in Legacy mode, we need to release Shift first.
+            // The character has already been converted by the client, so we should
+            // input it directly without Shift modifier affecting the result.
+            // Only Ctrl/Alt/Meta should be kept for hotkeys like Ctrl+C.
+            #[cfg(target_os = "linux")]
+            release_shift_for_char_input(&mut en);
+
             let record_key = chr as u64 + KEY_CHAR_START;
             record_pressed_key(KeysDown::EnigoKey(record_key), down);
             process_chr(&mut en, chr, down)
         }
-        Some(key_event::Union::Unicode(chr)) => process_unicode(&mut en, chr),
+        Some(key_event::Union::Unicode(chr)) => {
+            // Same as Chr: release Shift for Unicode input
+            #[cfg(target_os = "linux")]
+            release_shift_for_char_input(&mut en);
+
+            process_unicode(&mut en, chr)
+        }
         Some(key_event::Union::Seq(ref seq)) => process_seq(&mut en, seq),
         _ => {}
     }
@@ -1665,6 +1885,51 @@ fn translate_process_code(code: u32, down: bool) {
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match &evt.union {
         Some(key_event::Union::Seq(seq)) => {
+            // On Wayland, handle character input directly in this (--server) process using clipboard.
+            // This function runs in the --server process (logged-in user session), which has
+            // WAYLAND_DISPLAY and XDG_RUNTIME_DIR — so clipboard operations work here.
+            //
+            // Why not let it go through uinput IPC:
+            // 1. For uinput mode: the uinput service thread runs in the --service (root) process,
+            //    which typically lacks user session environment. Clipboard operations there are
+            //    unreliable. Handling clipboard here avoids that issue.
+            // 2. For RDP input mode: Portal's notify_keyboard_keysym API interprets keysyms
+            //    based on its internal modifier state, which may not match our released state.
+            //    Using clipboard bypasses this issue entirely.
+            #[cfg(target_os = "linux")]
+            if !crate::platform::linux::is_x11() {
+                let mut en = ENIGO.lock().unwrap();
+
+                // Check if this is a hotkey (Ctrl/Alt/Meta pressed)
+                // For hotkeys, we send character-based key events via Enigo instead of
+                // using the clipboard. This relies on the local keyboard layout for
+                // mapping characters to physical keys.
+                // This assumes client and server use the same keyboard layout (common case).
+                // Note: For non-Latin keyboards (e.g., Arabic), hotkeys may not work
+                // correctly if the character cannot be mapped to a key via KEY_MAP_LAYOUT.
+                // This is a known limitation - most common hotkeys (Ctrl+A/C/V/Z) use Latin
+                // characters which are mappable on most keyboard layouts.
+                if is_hotkey_modifier_pressed(&mut en) {
+                    // For hotkeys, send character-based key events via Enigo.
+                    // This relies on the local keyboard layout mapping (KEY_MAP_LAYOUT).
+                    for chr in seq.chars() {
+                        if !is_ascii_printable(chr) {
+                            log::warn!(
+                                "Hotkey with non-ASCII character may not work correctly on non-Latin keyboard layouts"
+                            );
+                        }
+                        en.key_click(Key::Layout(chr));
+                    }
+                    return;
+                }
+
+                // Normal text input: release Shift and use clipboard
+                release_shift_for_char_input(&mut en);
+
+                input_text_via_clipboard_server(&mut en, seq);
+                return;
+            }
+
             // Fr -> US
             // client: Shift + & => 1(send to remote)
             // remote: Shift + 1 => !
@@ -1682,11 +1947,16 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
                 #[cfg(target_os = "linux")]
                 let simulate_win_hot_key = false;
                 if !simulate_win_hot_key {
-                    if get_modifier_state(Key::Shift, &mut en) {
-                        simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
-                    }
-                    if get_modifier_state(Key::RightShift, &mut en) {
-                        simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+                    #[cfg(target_os = "linux")]
+                    release_shift_for_char_input(&mut en);
+                    #[cfg(target_os = "windows")]
+                    {
+                        if get_modifier_state(Key::Shift, &mut en) {
+                            simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
+                        }
+                        if get_modifier_state(Key::RightShift, &mut en) {
+                            simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+                        }
                     }
                 }
                 for chr in seq.chars() {
@@ -1706,7 +1976,16 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
         Some(key_event::Union::Chr(..)) => {
             #[cfg(target_os = "windows")]
             translate_process_code(evt.chr(), evt.down);
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(target_os = "linux")]
+            {
+                if !crate::platform::linux::is_x11() {
+                    // Wayland: use uinput to send raw keycode
+                    wayland_send_raw_key(evt.chr() as u16, evt.down);
+                } else {
+                    sim_rdev_rawkey_position(evt.chr() as _, evt.down);
+                }
+            }
+            #[cfg(target_os = "macos")]
             sim_rdev_rawkey_position(evt.chr() as _, evt.down);
         }
         Some(key_event::Union::Unicode(..)) => {
@@ -1717,7 +1996,11 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
             simulate_win2win_hotkey(*code, evt.down);
         }
         _ => {
-            log::debug!("Unreachable. Unexpected key event {:?}", &evt);
+            log::debug!(
+                "Unreachable. Unexpected key event (mode={:?}, down={:?})",
+                &evt.mode,
+                &evt.down
+            );
         }
     }
 }

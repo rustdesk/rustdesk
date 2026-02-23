@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
@@ -41,6 +42,9 @@ class _TerminalPageState extends State<TerminalPage>
   final GlobalKey _keyboardKey = GlobalKey();
   double _keyboardHeight = 0;
   late bool _showTerminalExtraKeys;
+  // For iOS edge swipe gesture
+  double _swipeStartX = 0;
+  double _swipeCurrentX = 0;
 
   // For web only.
   // 'monospace' does not work on web, use Google Fonts, `??` is only for null safety.
@@ -147,7 +151,7 @@ class _TerminalPageState extends State<TerminalPage>
   }
 
   Widget buildBody() {
-    return Scaffold(
+    final scaffold = Scaffold(
       resizeToAvoidBottomInset: false, // Disable automatic layout adjustment; manually control UI updates to prevent flickering when the keyboard shows/hides
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
@@ -164,6 +168,13 @@ class _TerminalPageState extends State<TerminalPage>
                     autofocus: true,
                     textStyle: _getTerminalStyle(),
                     backgroundOpacity: 0.7,
+                    // The following comment is from xterm.dart source code:
+                    // Workaround to detect delete key for platforms and IMEs that do not
+                    // emit a hardware delete event. Preferred on mobile platforms. [false] by
+                    // default.
+                    //
+                    // Android works fine without this workaround.
+                    deleteDetection: isIOS,
                     padding: _calculatePadding(heightPx),
                     onSecondaryTapDown: (details, offset) async {
                       final selection = _terminalModel.terminalController.selection;
@@ -185,7 +196,106 @@ class _TerminalPageState extends State<TerminalPage>
             ),
           ),
           if (_showTerminalExtraKeys) _buildFloatingKeyboard(),
+          // iOS-style circular close button in top-right corner
+          if (isIOS) _buildCloseButton(),
         ],
+      ),
+    );
+
+    // Add iOS edge swipe gesture to exit (similar to Android back button)
+    if (isIOS) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = constraints.maxWidth;
+          // Base thresholds on screen width but clamp to reasonable logical pixel ranges
+          // Edge detection region: ~10% of width, clamped between 20 and 80 logical pixels
+          final edgeThreshold = (screenWidth * 0.1).clamp(20.0, 80.0);
+          // Required horizontal movement: ~25% of width, clamped between 80 and 300 logical pixels
+          final swipeThreshold = (screenWidth * 0.25).clamp(80.0, 300.0);
+
+          return RawGestureDetector(
+            behavior: HitTestBehavior.translucent,
+            gestures: <Type, GestureRecognizerFactory>{
+              HorizontalDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<HorizontalDragGestureRecognizer>(
+                () => HorizontalDragGestureRecognizer(
+                  debugOwner: this,
+                  // Only respond to touch input, exclude mouse/trackpad
+                  supportedDevices: kTouchBasedDeviceKinds,
+                ),
+                (HorizontalDragGestureRecognizer instance) {
+                  instance
+                    // Capture initial touch-down position (before touch slop)
+                    ..onDown = (details) {
+                      _swipeStartX = details.localPosition.dx;
+                      _swipeCurrentX = details.localPosition.dx;
+                    }
+                    ..onUpdate = (details) {
+                      _swipeCurrentX = details.localPosition.dx;
+                    }
+                    ..onEnd = (details) {
+                      // Check if swipe started from left edge and moved right
+                      if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
+                        clientClose(sessionId, _ffi);
+                      }
+                      _swipeStartX = 0;
+                      _swipeCurrentX = 0;
+                    }
+                    ..onCancel = () {
+                      _swipeStartX = 0;
+                      _swipeCurrentX = 0;
+                    };
+                },
+              ),
+            },
+            child: scaffold,
+          );
+        },
+      );
+    }
+
+    return scaffold;
+  }
+
+  Widget _buildCloseButton() {
+    return Positioned(
+      top: 0,
+      right: 0,
+      child: SafeArea(
+        minimum: const EdgeInsets.only(
+          top: 16, // iOS standard margin
+          right: 16, // iOS standard margin
+        ),
+        child: Semantics(
+          button: true,
+          label: translate('Close'),
+          child: Container(
+            width: 44, // iOS standard tap target size
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.5), // Half transparency
+              shape: BoxShape.circle,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () {
+                  clientClose(sessionId, _ffi);
+                },
+                child: Tooltip(
+                  message: translate('Close'),
+                  child: const Icon(
+                    Icons.chevron_left, // iOS-style back arrow
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

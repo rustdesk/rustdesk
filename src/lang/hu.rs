@@ -384,7 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "A RustDesk megjelenítése"),
         ("This PC", "Ez a számítógép"),
         ("or", "vagy"),
-        ("Continue with", "Folytatás a következővel"),
         ("Elevate", "Hozzáférés engedélyezése"),
         ("Zoom cursor", "Kurzor nagyítása"),
         ("Accept sessions via password", "Munkamenetek elfogadása jelszóval"),

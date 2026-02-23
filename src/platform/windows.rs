@@ -107,9 +107,9 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
             let center_x = rect.left + (rect.right - rect.left) / 2;
             let center_y = rect.top + (rect.bottom - rect.top) / 2;
             center_x >= display.x
-                && center_x <= display.x + display.width
+                && center_x < display.x + display.width
                 && center_y >= display.y
-                && center_y <= display.y + display.height
+                && center_y < display.y + display.height
         })
     }
 }

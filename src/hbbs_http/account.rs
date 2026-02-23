@@ -80,6 +80,8 @@ pub enum UserStatus {
 pub struct UserPayload {
     pub name: String,
     #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
     pub email: Option<String>,
     #[serde(default)]
     pub note: Option<String>,
@@ -268,7 +270,12 @@ impl OidcSession {
                             );
                             LocalConfig::set_option(
                                 "user_info".to_owned(),
-                                serde_json::json!({ "name": auth_body.user.name, "status": auth_body.user.status }).to_string(),
+                                serde_json::json!({
+                                    "name": auth_body.user.name,
+                                    "display_name": auth_body.user.display_name,
+                                    "status": auth_body.user.status
+                                })
+                                .to_string(),
                             );
                         }
                     }

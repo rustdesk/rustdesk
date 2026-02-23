@@ -82,6 +82,10 @@ type ConnMap = HashMap<i32, ConnInner>;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const CONFIG_SYNC_INTERVAL_SECS: f32 = 0.3;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+// 3s is enough for at least one initial sync attempt:
+// 0.3s backoff + up to 1s connect timeout + up to 1s response timeout.
+const CONFIG_SYNC_INITIAL_WAIT_SECS: u64 = 3;
 
 lazy_static::lazy_static! {
     pub static ref CHILD_PROCESS: Childs = Default::default();
@@ -600,7 +604,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        tokio::spawn(async { sync_and_watch_config_dir().await });
+        wait_initial_config_sync().await;
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
         #[cfg(feature = "hwcodec")]
@@ -685,13 +689,43 @@ pub async fn start_ipc_url_server() {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-async fn sync_and_watch_config_dir() {
+async fn wait_initial_config_sync() {
     if crate::platform::is_root() {
         return;
     }
 
+    // Non-server process should not block startup, but still keeps background sync/watch alive.
+    if !crate::is_server() {
+        tokio::spawn(async move {
+            sync_and_watch_config_dir(None).await;
+        });
+        return;
+    }
+
+    let (sync_done_tx, mut sync_done_rx) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(async move {
+        sync_and_watch_config_dir(Some(sync_done_tx)).await;
+    });
+
+    // Server process waits up to N seconds for initial root->local sync to reduce stale-start window.
+    tokio::select! {
+        _ = &mut sync_done_rx => {
+        }
+        _ = tokio::time::sleep(Duration::from_secs(CONFIG_SYNC_INITIAL_WAIT_SECS)) => {
+            log::warn!(
+                "timed out waiting {}s for initial config sync, continue startup and keep syncing in background",
+                CONFIG_SYNC_INITIAL_WAIT_SECS
+            );
+        }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Sender<()>>) {
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
+    let mut is_root_config_empty = false;
+    let mut sync_done_tx = sync_done_tx;
     let tries = if crate::is_server() { 30 } else { 3 };
     log::debug!("#tries of ipc service connection: {}", tries);
     use hbb_common::sleep;
@@ -706,6 +740,8 @@ async fn sync_and_watch_config_dir() {
                                 Data::SyncConfig(Some(configs)) => {
                                     let (config, config2) = *configs;
                                     let _chk = crate::ipc::CheckIfRestart::new();
+                                    #[cfg(target_os = "macos")]
+                                    let _chk_pk = crate::CheckIfResendPk::new();
                                     if !config.is_empty() {
                                         if cfg0.0 != config {
                                             cfg0.0 = config.clone();
@@ -717,8 +753,20 @@ async fn sync_and_watch_config_dir() {
                                             Config2::set(config2);
                                             log::info!("sync config2 from root");
                                         }
+                                    } else {
+                                        // only on macos, because this issue was only reproduced on macos
+                                        #[cfg(target_os = "macos")]
+                                        {
+                                            // root config is empty, mark for sync in watch loop
+                                            // to prevent root from generating a new config on login screen
+                                            is_root_config_empty = true;
+                                        }
                                     }
                                     synced = true;
+                                    // Notify startup waiter once initial sync phase finishes successfully.
+                                    if let Some(tx) = sync_done_tx.take() {
+                                        let _ = tx.send(());
+                                    }
                                 }
                                 _ => {}
                             };
@@ -729,8 +777,14 @@ async fn sync_and_watch_config_dir() {
                 loop {
                     sleep(CONFIG_SYNC_INTERVAL_SECS).await;
                     let cfg = (Config::get(), Config2::get());
-                    if cfg != cfg0 {
-                        log::info!("config updated, sync to root");
+                    let should_sync =
+                        cfg != cfg0 || (is_root_config_empty && !cfg.0.is_empty());
+                    if should_sync {
+                        if is_root_config_empty {
+                            log::info!("root config is empty, sync our config to root");
+                        } else {
+                            log::info!("config updated, sync to root");
+                        }
                         match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
@@ -745,6 +799,7 @@ async fn sync_and_watch_config_dir() {
                             _ => {
                                 cfg0 = cfg;
                                 conn.next_timeout(1000).await.ok();
+                                is_root_config_empty = false;
                             }
                         }
                     }
@@ -754,6 +809,10 @@ async fn sync_and_watch_config_dir() {
                 log::info!("#{} try: failed to connect to ipc_service", i);
             }
         }
+    }
+    // Notify startup waiter even when initial sync is skipped/failed, to avoid unnecessary waiting.
+    if let Some(tx) = sync_done_tx.take() {
+        let _ = tx.send(());
     }
     log::warn!("skipped config sync");
 }

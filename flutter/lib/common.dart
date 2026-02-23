@@ -1124,18 +1124,23 @@ class CustomAlertDialog extends StatelessWidget {
 
 Widget createDialogContent(String text) {
   final RegExp linkRegExp = RegExp(r'(https?://[^\s]+)');
+  bool hasLink = linkRegExp.hasMatch(text);
+
+  // Early return: no link, use default theme color
+  if (!hasLink) {
+    return SelectableText(text, style: const TextStyle(fontSize: 15));
+  }
+
   final List<TextSpan> spans = [];
   int start = 0;
-  bool hasLink = false;
 
   linkRegExp.allMatches(text).forEach((match) {
-    hasLink = true;
     if (match.start > start) {
       spans.add(TextSpan(text: text.substring(start, match.start)));
     }
     spans.add(TextSpan(
       text: match.group(0) ?? '',
-      style: TextStyle(
+      style: const TextStyle(
         color: Colors.blue,
         decoration: TextDecoration.underline,
       ),
@@ -1153,13 +1158,9 @@ Widget createDialogContent(String text) {
     spans.add(TextSpan(text: text.substring(start)));
   }
 
-  if (!hasLink) {
-    return SelectableText(text, style: const TextStyle(fontSize: 15));
-  }
-
   return SelectableText.rich(
     TextSpan(
-      style: TextStyle(color: Colors.black, fontSize: 15),
+      style: const TextStyle(fontSize: 15),
       children: spans,
     ),
   );

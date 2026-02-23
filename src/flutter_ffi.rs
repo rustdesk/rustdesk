@@ -2759,6 +2759,11 @@ pub fn main_get_common(key: String) -> String {
             None => "",
         }
         .to_string();
+    } else if key == "has-gnome-shortcuts-inhibitor-permission" {
+        #[cfg(target_os = "linux")]
+        return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();
+        #[cfg(not(target_os = "linux"))]
+        return false.to_string();
     } else {
         if key.starts_with("download-data-") {
             let id = key.replace("download-data-", "");
@@ -2919,6 +2924,29 @@ pub fn main_set_common(_key: String, _value: String) {
         crate::hbbs_http::downloader::remove(&_value);
     } else if _key == "cancel-downloader" {
         crate::hbbs_http::downloader::cancel(&_value);
+    }
+
+    #[cfg(target_os = "linux")]
+    if _key == "clear-gnome-shortcuts-inhibitor-permission" {
+        std::thread::spawn(move || {
+            let (success, msg) =
+                match crate::platform::linux::clear_gnome_shortcuts_inhibitor_permission() {
+                    Ok(_) => (true, "".to_owned()),
+                    Err(e) => (false, e.to_string()),
+                };
+            let data = HashMap::from([
+                (
+                    "name",
+                    serde_json::json!("clear-gnome-shortcuts-inhibitor-permission-res"),
+                ),
+                ("success", serde_json::json!(success)),
+                ("msg", serde_json::json!(msg)),
+            ]);
+            let _res = flutter::push_global_event(
+                flutter::APP_TYPE_MAIN,
+                serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+            );
+        });
     }
 }
 
