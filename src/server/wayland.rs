@@ -166,7 +166,14 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
                 log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                 try_fix_logical_size(&mut all);
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
+
+                // Bail early if no displays were found: the portal session was likely revoked (e.g., after screen lock).
+                if all.is_empty() {
+                    log::warn!("check_init: no displays from PipeWire portal, session revoked. Closing stale session so next attempt triggers re-authorization.");
+                    scrap::wayland::pipewire::close_session();
+                    bail!("No displays returned by PipeWire portal. Try reconnecting to request a new screen-sharing session.");
+                }
+
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 super::display_service::check_update_displays(&all);
@@ -190,24 +197,45 @@ pub(super) async fn check_init() -> ResultType<()> {
                 );
 
                 // Create individual CapDisplayInfo for each display with its own capturer
-                for (idx, display) in all.into_iter().enumerate() {
-                    let capturer =
-                        Box::into_raw(Box::new(Capturer::new(display).with_context(|| {
-                            format!("Failed to create capturer for display {}", idx)
-                        })?));
-                    let capturer = CapturerPtr(capturer);
+                let init_result: ResultType<()> = (|| {
+                    for (idx, display) in all.into_iter().enumerate() {
+                        let capturer =
+                            Box::into_raw(Box::new(Capturer::new(display).with_context(|| {
+                                format!("Failed to create capturer for display {}. Try reconnecting to request a new screen sharing session.", idx)
+                            })?));
+                        let capturer = CapturerPtr(capturer);
 
-                    let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
-                        rects: rects.clone(),
-                        displays: displays.clone(),
-                        num,
-                        primary,
-                        current: idx,
-                        capturer,
-                    }));
+                        let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
+                            rects: rects.clone(),
+                            displays: displays.clone(),
+                            num,
+                            primary,
+                            current: idx,
+                            capturer,
+                        }));
 
-                    lock.insert(idx, cap_display_info as u64);
+                        lock.insert(idx, cap_display_info as u64);
+                    }
+                    Ok(())
+                })();
+
+                if let Err(e) = init_result {
+                    log::error!("check_init: capturer loop failed, cleaning up partial state: {:?}", e);
+                    for (_, addr) in lock.iter() {
+                        let cap_display_info: *mut CapDisplayInfo = *addr as _;
+                        unsafe {
+                            let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
+                            let _box_cap_display_info = Box::from_raw(cap_display_info);
+                        }
+                    }
+                    lock.clear();
+
+                    scrap::wayland::pipewire::close_session();
+                    return Err(e);
                 }
+
+                // Only mark as initialized after the entire loop succeeds.
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
             }
         }
     }
@@ -224,7 +252,12 @@ pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
             Ok(cap_display_info.displays.clone())
         }
     } else {
-        bail!("Failed to get capturer display info");
+        drop(cap_map);
+        log::warn!(
+            "get_displays: map empty after check_init(); resetting PIPEWIRE_INITIALIZED to allow retry."
+        );
+        *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+        bail!("Failed to get capturer display info. Please re-authorize screen sharing.");
     }
 }
 
@@ -265,26 +298,52 @@ pub(super) fn get_capturer_for_display(
     if is_x11() {
         bail!("Do not call this function if not wayland");
     }
-    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    if let Some(addr) = cap_map.get(&display_idx) {
-        let cap_display_info: *const CapDisplayInfo = *addr as _;
-        unsafe {
-            let cap_display_info = &*cap_display_info;
-            let rect = cap_display_info.rects[cap_display_info.current];
-            Ok(super::video_service::CapturerInfo {
-                origin: rect.0,
-                width: rect.1,
-                height: rect.2,
-                ndisplay: cap_display_info.num,
-                current: cap_display_info.current,
-                privacy_mode_id: 0,
-                _capturer_privacy_mode_id: 0,
-                capturer: Box::new(cap_display_info.capturer.clone()),
-            })
+
+    let build_capturer_info =
+        |addr: u64| -> ResultType<super::video_service::CapturerInfo> {
+            let cap_display_info: *const CapDisplayInfo = addr as _;
+            unsafe {
+                let cap_display_info = &*cap_display_info;
+                let rect = cap_display_info.rects[cap_display_info.current];
+                Ok(super::video_service::CapturerInfo {
+                    origin: rect.0,
+                    width: rect.1,
+                    height: rect.2,
+                    ndisplay: cap_display_info.num,
+                    current: cap_display_info.current,
+                    privacy_mode_id: 0,
+                    _capturer_privacy_mode_id: 0,
+                    capturer: Box::new(cap_display_info.capturer.clone()),
+                })
+            }
+        };
+
+    {
+        let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+        if let Some(&addr) = cap_map.get(&display_idx) {
+            return build_capturer_info(addr);
         }
+    }
+
+    log::warn!(
+        "get_capturer_for_display: display {} not found in CAP_DISPLAY_INFO. \
+         Attempting PipeWire session re-initialization (session may have been revoked \
+         after screen lock or idle timeout).",
+        display_idx
+    );
+    clear();
+    ensure_inited()?;
+
+    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+    if let Some(&addr) = cap_map.get(&display_idx) {
+        log::info!(
+            "get_capturer_for_display: re-initialization succeeded for display {}.",
+            display_idx
+        );
+        build_capturer_info(addr)
     } else {
         bail!(
-            "Failed to get capturer display info for display {}",
+            "Failed to get capturer display info for display {}. A new screen sharing permission grant may be required on the remote side.",
             display_idx
         );
     }
