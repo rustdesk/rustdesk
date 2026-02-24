@@ -1679,59 +1679,55 @@ impl Connection {
         #[cfg(target_os = "linux")]
         {
             if !crate::platform::linux::is_x11() {
-                return self.update_wayland_displays_on_login().await;
+                let first = super::display_service::update_get_sync_displays_on_login().await;
+                if first.is_ok() {
+                    return first;
+                }
+
+                log::warn!(
+                    "Wayland login: display init failed, waiting for re-authorization: {:?}",
+                    first.as_ref().err()
+                );
+                let mut msg_out = Message::new();
+                msg_out.set_message_box(MessageBox {
+                    msgtype: "nook-nocancel-hasclose".to_owned(),
+                    title: "Wayland".to_owned(),
+                    text: "select-wayland-screen-tip".to_owned(),
+                    link: "".to_owned(),
+                    ..Default::default()
+                });
+                self.send(msg_out).await;
+
+                const WAYLAND_AUTH_TIMEOUT_SECS: u64 = 120;
+                let deadline =
+                    time::Instant::now() + Duration::from_secs(WAYLAND_AUTH_TIMEOUT_SECS);
+                let mut result = first;
+                loop {
+                    time::sleep(Duration::from_secs(1)).await;
+                    result = super::display_service::update_get_sync_displays_on_login().await;
+                    if result.is_ok() {
+                        log::info!(
+                            "Wayland login: re-authorization succeeded ({} display(s))",
+                            result.as_ref().map(|d| d.len()).unwrap_or(0)
+                        );
+                        break;
+                    }
+                    if time::Instant::now() >= deadline {
+                        log::error!(
+                            "Wayland login: timed out after {}s waiting for re-authorization",
+                            WAYLAND_AUTH_TIMEOUT_SECS
+                        );
+                        break;
+                    }
+                    log::debug!(
+                        "Wayland login: still waiting for portal authorization ({:?})",
+                        result.as_ref().err()
+                    );
+                }
+                return result;
             }
         }
         super::display_service::update_get_sync_displays_on_login().await
-    }
-
-    #[cfg(target_os = "linux")]
-    async fn update_wayland_displays_on_login(&mut self) -> ResultType<Vec<DisplayInfo>> {
-        let first = super::display_service::update_get_sync_displays_on_login().await;
-        if first.is_ok() {
-            return first;
-        }
-
-        log::warn!(
-            "Wayland login: display init failed, waiting for re-authorization: {:?}",
-            first.as_ref().err()
-        );
-        let mut msg_out = Message::new();
-        msg_out.set_message_box(MessageBox {
-            msgtype: "nook-nocancel-hasclose".to_owned(),
-            title: "Wayland".to_owned(),
-            text: "select-wayland-screen-tip".to_owned(),
-            link: "".to_owned(),
-            ..Default::default()
-        });
-        self.send(msg_out).await;
-
-        const WAYLAND_AUTH_TIMEOUT_SECS: u64 = 120;
-        let deadline = time::Instant::now() + Duration::from_secs(WAYLAND_AUTH_TIMEOUT_SECS);
-        let mut result = first;
-        loop {
-            time::sleep(Duration::from_secs(1)).await;
-            result = super::display_service::update_get_sync_displays_on_login().await;
-            if result.is_ok() {
-                log::info!(
-                    "Wayland login: re-authorization succeeded ({} display(s))",
-                    result.as_ref().map(|d| d.len()).unwrap_or(0)
-                );
-                break;
-            }
-            if time::Instant::now() >= deadline {
-                log::error!(
-                    "Wayland login: timed out after {}s waiting for re-authorization",
-                    WAYLAND_AUTH_TIMEOUT_SECS
-                );
-                break;
-            }
-            log::debug!(
-                "Wayland login: still waiting for portal authorization ({:?})",
-                result.as_ref().err()
-            );
-        }
-        result
     }
 
     fn try_sub_camera_displays(&mut self) {
