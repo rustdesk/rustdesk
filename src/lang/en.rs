@@ -120,6 +120,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "Keyboard settings"),
         ("Full Access", "Full access"),
         ("Screen Share", "Screen share"),
+        ("select-wayland-screen-tip", "Select screen to share"),
         ("JumpLink", "View"),
         ("Select screen to share", "Select screen to share"),
         ("One-time Password", "One-time password"),

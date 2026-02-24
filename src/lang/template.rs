@@ -377,6 +377,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", ""),
         ("Full Access", ""),
         ("Screen Share", ""),
+        ("select-wayland-screen-tip", ""),
         ("Wayland requires Ubuntu 21.04 or higher version.", ""),
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", ""),
         ("JumpLink", ""),
