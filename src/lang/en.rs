@@ -121,7 +121,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Full Access", "Full access"),
         ("Screen Share", "Screen share"),
         ("JumpLink", "View"),
-        ("Please Select the screen to be shared(Operate on the peer side).", "Please select the screen to be shared(Operate on the peer side)."),
+        ("Select screen to share", "Select screen to share"),
         ("One-time Password", "One-time password"),
         ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using permanent password"),
         ("wayland_experiment_tip", "Wayland support is in experimental stage, please use X11 if you require unattended access."),

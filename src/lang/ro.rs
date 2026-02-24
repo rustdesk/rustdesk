@@ -380,7 +380,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland necesită Ubuntu 21.04 sau o versiune superioară."),
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland necesită o versiune superioară a distribuției Linux. Încearcă desktopul X11 sau schimbă sistemul de operare."),
         ("JumpLink", "Afișează"),
-        ("Please Select the screen to be shared(Operate on the peer side).", "Partajează ecranul care urmează să fie partajat (operează din partea dispozitivului pereche)."),
+        ("Select screen to share", "Partajează ecranul care urmează să fie partajat (operează din partea dispozitivului pereche)."),
         ("Show RustDesk", "Afișează RustDesk"),
         ("This PC", "Acest PC"),
         ("or", "sau"),

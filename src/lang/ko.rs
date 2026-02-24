@@ -380,7 +380,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland는 Ubuntu 21.04 이상 버전이 필요합니다."),
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland는 상위 버전의 Linux 배포판이 필요합니다. X11 데스크탑을 사용하거나 OS를 변경하세요."),
         ("JumpLink", "점프 링크"),
-        ("Please Select the screen to be shared(Operate on the peer side).", "공유할 화면을 선택하세요 (피어 측에서 작동)"),
+        ("Select screen to share", "공유할 화면을 선택하세요 (피어 측에서 작동)"),
         ("Show RustDesk", "RustDesk 표시"),
         ("This PC", "이 PC"),
         ("or", "또는"),

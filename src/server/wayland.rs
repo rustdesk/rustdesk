@@ -115,7 +115,7 @@ pub(super) fn is_inited() -> Option<Message> {
             let res = MessageBox {
                 msgtype: "nook-nocancel-hasclose".to_owned(),
                 title: "Wayland".to_owned(),
-                text: "Please Select the screen to be shared(Operate on the peer side).".to_owned(),
+                text: "Select screen to share".to_owned(),
                 link: "".to_owned(),
                 ..Default::default()
             };
