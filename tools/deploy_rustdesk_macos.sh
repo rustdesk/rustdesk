@@ -1,25 +1,29 @@
 #!/bin/bash
 # ============================================================
 #  Déploiement massif RustDesk — macOS
-#  Usage : sudo bash deploy_rustdesk_macos.sh
+#  Usage : sudo bash deploy_rustdesk_macos.sh [OPTIONS]
+#
+#  Options :
+#    --force      Re-applique la config même si déjà faite
+#    --reinstall  Réinstalle RustDesk même s'il est déjà présent
 #
 #  Ce script :
-#   1. Décode le string de config et affiche les valeurs
+#   1. Installe RustDesk si absent (téléchargement depuis GitHub)
 #   2. Installe les fichiers helpers dans /Library/Application Support/
 #   3. Installe un LaunchAgent qui configure chaque utilisateur à son login
 #   4. Applique immédiatement la config aux utilisateurs déjà existants
-#
-#  Pour forcer une ré-application (ex: changement de serveur) :
-#    sudo bash deploy_rustdesk_macos.sh --force
 # ============================================================
 set -euo pipefail
 
 FORCE=false
-[[ "${1:-}" == "--force" ]] && FORCE=true
+REINSTALL=false
+for arg in "$@"; do
+    [[ "$arg" == "--force"     ]] && FORCE=true
+    [[ "$arg" == "--reinstall" ]] && REINSTALL=true
+done
 
 # ────────────────────────────────────────────────────────────
-# Config — générée depuis le string :
-#   9JSP4MFUyQWOslVUH1UcUJER...
+# Config serveur
 # ────────────────────────────────────────────────────────────
 RDSERVER="antoineca.synology.me"
 RDRELAY="antoineca.synology.me"
@@ -36,7 +40,83 @@ echo "  API     : ${RDAPI:-<vide>}"
 echo ""
 
 # ────────────────────────────────────────────────────────────
-# Chemins
+# 1. Installation de RustDesk
+# ────────────────────────────────────────────────────────────
+APP="/Applications/RustDesk.app"
+
+if [[ -d "$APP" && "$REINSTALL" == "false" ]]; then
+    echo "RustDesk déjà installé — passe à la configuration."
+    echo "  (utiliser --reinstall pour forcer une réinstallation)"
+else
+    echo "Installation de RustDesk..."
+
+    # Détection architecture
+    if [[ "$(arch)" == "arm64" ]]; then
+        ARCH_SUFFIX="aarch64"
+    else
+        ARCH_SUFFIX="x86_64"
+    fi
+    echo "  Architecture : $ARCH_SUFFIX"
+
+    # Récupérer l'URL du DMG via l'API GitHub (plus fiable que le scraping HTML)
+    echo "  Récupération de la dernière version..."
+    DMG_URL=$(curl -sf https://api.github.com/repos/rustdesk/rustdesk/releases/latest \
+        | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+arch = sys.argv[1]
+for asset in data.get('assets', []):
+    url = asset.get('browser_download_url', '')
+    if arch in url and url.endswith('.dmg'):
+        print(url)
+        break
+" "$ARCH_SUFFIX")
+
+    if [[ -z "$DMG_URL" ]]; then
+        echo "ERREUR : impossible de trouver le DMG pour $ARCH_SUFFIX." >&2
+        exit 1
+    fi
+    echo "  URL : $DMG_URL"
+
+    # Téléchargement dans un dossier temporaire
+    WORKDIR=$(mktemp -d)
+    DMG_FILE="$WORKDIR/rustdesk.dmg"
+    MOUNT_POINT="/Volumes/RustDesk"
+
+    echo "  Téléchargement..."
+    curl -L --progress-bar "$DMG_URL" -o "$DMG_FILE"
+
+    # Démontage préventif si le point de montage est déjà utilisé
+    if [[ -d "$MOUNT_POINT" ]]; then
+        hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true
+    fi
+
+    # Montage
+    echo "  Montage du DMG..."
+    if ! hdiutil attach "$DMG_FILE" -mountpoint "$MOUNT_POINT" -quiet; then
+        echo "ERREUR : impossible de monter le DMG." >&2
+        rm -rf "$WORKDIR"
+        exit 1
+    fi
+
+    # Copie vers /Applications
+    echo "  Copie vers /Applications..."
+    rm -rf "$APP"
+    cp -R "$MOUNT_POINT/RustDesk.app" /Applications/
+
+    # Supprimer le flag quarantine (évite le blocage Gatekeeper au 1er lancement)
+    xattr -rd com.apple.quarantine "$APP" 2>/dev/null || true
+
+    # Démontage et nettoyage
+    hdiutil detach "$MOUNT_POINT" -quiet
+    rm -rf "$WORKDIR"
+
+    echo "  RustDesk installé dans /Applications."
+fi
+echo ""
+
+# ────────────────────────────────────────────────────────────
+# Chemins helpers
 # ────────────────────────────────────────────────────────────
 SYSDIR="/Library/Application Support/com.carriez.RustDesk"
 AGENT_PLIST="/Library/LaunchAgents/com.carriez.rustdesk-config.plist"
@@ -45,7 +125,7 @@ SENTINEL_NAME=".rustdesk_config_applied_v1"
 mkdir -p "$SYSDIR"
 
 # ────────────────────────────────────────────────────────────
-# 1. server.env  (lu par le script per-user)
+# 2. server.env  (lu par le script per-user)
 # ────────────────────────────────────────────────────────────
 cat > "$SYSDIR/server.env" << ENV_EOF
 RDSERVER="$RDSERVER"
@@ -56,7 +136,7 @@ ENV_EOF
 chmod 644 "$SYSDIR/server.env"
 
 # ────────────────────────────────────────────────────────────
-# 2. update_config.py  (met à jour le TOML sans l'écraser)
+# 3. update_config.py  (met à jour le TOML sans l'écraser)
 # ────────────────────────────────────────────────────────────
 cat > "$SYSDIR/update_config.py" << 'PY_EOF'
 #!/usr/bin/env python3
@@ -104,7 +184,7 @@ PY_EOF
 chmod 755 "$SYSDIR/update_config.py"
 
 # ────────────────────────────────────────────────────────────
-# 3. apply_config.sh  (exécuté en contexte utilisateur)
+# 4. apply_config.sh  (exécuté en contexte utilisateur)
 # ────────────────────────────────────────────────────────────
 cat > "$SYSDIR/apply_config.sh" << SH_EOF
 #!/bin/bash
@@ -124,7 +204,7 @@ SH_EOF
 chmod 755 "$SYSDIR/apply_config.sh"
 
 # ────────────────────────────────────────────────────────────
-# 4. LaunchAgent (s'exécute au login de chaque utilisateur)
+# 5. LaunchAgent (s'exécute au login de chaque utilisateur)
 # ────────────────────────────────────────────────────────────
 cat > "$AGENT_PLIST" << 'PLIST_EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -147,9 +227,9 @@ PLIST_EOF
 chmod 644 "$AGENT_PLIST"
 
 # ────────────────────────────────────────────────────────────
-# 5. Appliquer immédiatement aux utilisateurs existants
+# 6. Appliquer immédiatement aux utilisateurs existants
 # ────────────────────────────────────────────────────────────
-echo "Application aux comptes existants..."
+echo "Application de la config aux comptes existants..."
 APPLIED=0
 SKIPPED=0
 
@@ -183,6 +263,8 @@ echo ""
 echo "  Fichiers déployés dans : $SYSDIR"
 echo "  LaunchAgent            : $AGENT_PLIST"
 echo ""
-echo "  Pour forcer une ré-application :"
+echo "  Pour forcer une ré-application de la config :"
 echo "    sudo bash $(basename "$0") --force"
+echo "  Pour réinstaller RustDesk + réappliquer la config :"
+echo "    sudo bash $(basename "$0") --reinstall --force"
 echo "────────────────────────────────────────"
