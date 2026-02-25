@@ -13,6 +13,7 @@ use dbus::{
     arg::{OwnedFd, PropMap, RefArg, Variant},
     blocking::{Proxy, SyncConnection},
     message::{MatchRule, MessageType},
+    channel::Sender,
     Message,
 };
 
@@ -95,6 +96,14 @@ pub fn try_close_session() {
     }
 }
 
+pub fn force_close_dead_session() {
+    if let Ok(mut rdp_info) = RDP_SESSION_INFO.lock() {
+        *rdp_info = None;
+    }
+    clear_wayland_displays_cache();
+    HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
+}
+
 pub struct RdpSessionInfo {
     pub conn: Arc<SyncConnection>,
     pub streams: Vec<PwStreamInfo>,
@@ -102,7 +111,15 @@ pub struct RdpSessionInfo {
     pub session: dbus::Path<'static>,
     pub is_support_restore_token: bool,
     pub resolution: Arc<Mutex<Option<(usize, usize)>>>,
+    pub keepalive_flag: Arc<AtomicBool>,
 }
+
+impl Drop for RdpSessionInfo {
+    fn drop(&mut self) {
+        self.keepalive_flag.store(false, Ordering::SeqCst);
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
     pub path: u64,
@@ -270,7 +287,7 @@ impl PipeWireRecorder {
         let src = gst::ElementFactory::make("pipewiresrc", None)?;
         src.set_property("fd", &capturable.fd.as_raw_fd())?;
         src.set_property("path", &format!("{}", capturable.path))?;
-        src.set_property("keepalive_time", &1_000.as_raw_fd())?;
+        src.set_property("keepalive_time", &1000i32)?;
 
         // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
         // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
@@ -306,7 +323,15 @@ impl PipeWireRecorder {
             "[gstreamer] Setting pipeline {} to PLAYING state...",
             capturable.fd.as_raw_fd()
         );
-        pipeline.set_state(gst::State::Playing)?;
+        if let Err(e) = pipeline.set_state(gst::State::Playing) {
+            warn!(
+                "[gstreamer] Failed to set PLAYING state: {:?}. Session likely revoked by user or token expired.",
+                e
+            );
+            
+            config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
+            return Err(hbb_common::anyhow::Error::msg(format!("SESSION_REVOKED: GStreamer failed: {:?}", e)));
+        }
 
         // If `is_server_running()` is false, it means using remote_desktop_portal,
         // which does not use multiple streams, so no need to wait for state change.
@@ -323,9 +348,16 @@ impl PipeWireRecorder {
                 }
                 (result, state, pending) => {
                     warn!(
-                    "[gstreamer] Pipeline {} state change incomplete: result={:?}, state={:?}, pending={:?}",
-                    capturable.fd.as_raw_fd(), result, state, pending
-                );
+                        "[gstreamer] Pipeline {} state change incomplete: result={:?}, state={:?}, pending={:?}",
+                        capturable.fd.as_raw_fd(), result, state, pending
+                    );
+
+                    if let Err(err) = result {
+                        warn!("[gstreamer] Pipeline error detected. Session was likely terminated, clearing XDP token...");
+                        config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
+                        let _ = pipeline.set_state(gst::State::Null);
+                        return Err(hbb_common::anyhow::Error::msg(format!("SESSION_REVOKED: GStreamer pipeline failed: {:?}", err)));
+                    }
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(150));
@@ -934,16 +966,48 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     if rdp_connection.is_none() {
         let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop(false)?;
         let conn = Arc::new(conn);
+        let keepalive_flag = Arc::new(AtomicBool::new(true));
 
         let rdp_info = RdpSessionInfo {
-            conn,
+            conn: conn.clone(),
             streams,
             fd,
-            session,
+            session: session.clone(),
             is_support_restore_token,
             resolution: Arc::new(Mutex::new(None)),
+            keepalive_flag: keepalive_flag.clone(),
         };
         *rdp_connection = Some(rdp_info);
+
+        let conn_clone = conn.clone();
+        let session_clone = session.clone();
+        std::thread::spawn(move || {
+            let mut ticks = 0;
+            while keepalive_flag.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_secs(1));
+                ticks += 1;
+                
+                if ticks >= 60 {
+                    ticks = 0;
+                    if !is_server_running() {
+                        if let Ok(msg) = Message::new_method_call(
+                            "org.freedesktop.portal.Desktop",
+                            "/org/freedesktop/portal/desktop",
+                            "org.freedesktop.portal.RemoteDesktop",
+                            "NotifyPointerMotion",
+                        ) {
+                            let msg = msg.append1((
+                                session_clone.clone(),
+                                HashMap::<String, Variant<Box<dyn RefArg>>>::new(),
+                                0.0f64,
+                                0.0f64,
+                            ));
+                            let _ = conn_clone.send(msg);
+                        }
+                    }
+                }
+            }
+        });
     }
 
     let rdp_info = match rdp_connection.as_mut() {
