@@ -13,7 +13,6 @@ use dbus::{
     arg::{OwnedFd, PropMap, RefArg, Variant},
     blocking::{Proxy, SyncConnection},
     message::{MatchRule, MessageType},
-    channel::Sender,
     Message,
 };
 
@@ -111,12 +110,14 @@ pub struct RdpSessionInfo {
     pub session: dbus::Path<'static>,
     pub is_support_restore_token: bool,
     pub resolution: Arc<Mutex<Option<(usize, usize)>>>,
-    pub keepalive_flag: Arc<AtomicBool>,
+    inhibit_request_path: Option<dbus::Path<'static>>,
 }
 
 impl Drop for RdpSessionInfo {
     fn drop(&mut self) {
-        self.keepalive_flag.store(false, Ordering::SeqCst);
+        if let Some(ref path) = self.inhibit_request_path {
+            release_inhibit(&self.conn, path);
+        }
     }
 }
 
@@ -957,6 +958,38 @@ fn on_start_response(
     }
 }
 
+fn request_inhibit(conn: &SyncConnection) -> Option<dbus::Path<'static>> {
+    let proxy = conn.with_proxy(
+        "org.freedesktop.portal.Desktop",
+        "/org/freedesktop/portal/desktop",
+        Duration::from_millis(1000),
+    );
+    let mut args: PropMap = HashMap::new();
+    args.insert("handle_token".to_string(), Variant(Box::new("inhibit1".to_string())),);
+    // flags: 4 = inhibit idle, 8 = inhibit suspend
+    match proxy.method_call::<(dbus::Path<'static>,), _, _, _>("org.freedesktop.portal.Inhibit", "Inhibit", ("", 8u32, args)) {
+        Ok((path,)) => {
+            debug!("Inhibit requested, request path: {:?}", path);
+            Some(path)
+        }
+        Err(e) => {
+            warn!("Failed to request inhibit: {}", e);
+            None
+        }
+    }
+}
+
+fn release_inhibit(conn: &SyncConnection, path: &dbus::Path<'static>) {
+    let proxy = conn.with_proxy(
+        "org.freedesktop.portal.Desktop",
+        path,
+        Duration::from_millis(1000),
+    );
+    if let Err(e) = proxy.method_call::<(), _, _, _>("org.freedesktop.portal.Request", "Close", ()) {
+        warn!("Failed to release inhibit: {}", e);
+    }
+}
+
 pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     let mut rdp_connection = match RDP_SESSION_INFO.lock() {
         Ok(conn) => conn,
@@ -966,7 +999,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     if rdp_connection.is_none() {
         let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop(false)?;
         let conn = Arc::new(conn);
-        let keepalive_flag = Arc::new(AtomicBool::new(true));
+        let inhibit_path = request_inhibit(&conn);
 
         let rdp_info = RdpSessionInfo {
             conn: conn.clone(),
@@ -975,51 +1008,9 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
             session: session.clone(),
             is_support_restore_token,
             resolution: Arc::new(Mutex::new(None)),
-            keepalive_flag: keepalive_flag.clone(),
+            inhibit_request_path: inhibit_path,
         };
         *rdp_connection = Some(rdp_info);
-
-        let conn_clone = conn.clone();
-        let session_clone = session.clone();
-
-        // Remote Desktop sessions are observed to time out after ~15 minutes of inactivity.
-        // Pinging every 60s gives a wide safety margin while keeping DBus traffic negligible.
-        const KEEPALIVE_INTERVAL_SECS: u64 = 60;
-
-        std::thread::spawn(move || {
-            let mut ticks = 0;
-            while keepalive_flag.load(Ordering::SeqCst) {
-                std::thread::sleep(Duration::from_secs(1));
-                ticks += 1;
-                if ticks >= KEEPALIVE_INTERVAL_SECS {
-                    ticks = 0;
-                    if !is_server_running() {
-                        match Message::new_method_call(
-                            "org.freedesktop.portal.Desktop",
-                            "/org/freedesktop/portal/desktop",
-                            "org.freedesktop.portal.RemoteDesktop",
-                            "NotifyPointerMotion",
-                        ) {
-                            Ok(msg) => {
-                                let msg = msg.append1((
-                                    session_clone.clone(),
-                                    HashMap::<String, Variant<Box<dyn RefArg>>>::new(),
-                                    0.0f64,
-                                    0.0f64,
-                                ));
-                                if let Err(_) = conn_clone.send(msg) {
-                                    // Session may have been revoked; the keepalive is no longer effective.
-                                    break;
-                                }
-                            }
-                            Err(_) => {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        });
     }
 
     let rdp_info = match rdp_connection.as_mut() {
