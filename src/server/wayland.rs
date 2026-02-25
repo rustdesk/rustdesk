@@ -27,6 +27,7 @@ pub fn init() {
 }
 
 pub(super) fn increment_active_display_count() -> usize {
+    let _cap_map_guard = CAP_DISPLAY_INFO.read().unwrap();
     let mut count = ACTIVE_DISPLAY_COUNT.write().unwrap();
     *count += 1;
     *count
@@ -292,11 +293,15 @@ pub(super) fn get_primary() -> ResultType<usize> {
     }
 }
 
-pub fn clear() {
+pub fn clear() -> bool {
     if is_x11() {
-        return;
+        return true;
     }
     let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
+    let active_count = *ACTIVE_DISPLAY_COUNT.read().unwrap();
+    if active_count > 0 {
+        return false;
+    }
     for (_, addr) in write_lock.iter() {
         let cap_display_info: *mut CapDisplayInfo = *addr as _;
         unsafe {
@@ -305,9 +310,8 @@ pub fn clear() {
         }
     }
     write_lock.clear();
-
-    // Reset PipeWire initialization flag to allow recreation on next init
     *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+    true
 }
 
 pub(super) fn get_capturer_for_display(
@@ -348,13 +352,10 @@ pub(super) fn get_capturer_for_display(
         display_idx
     );
 
-    // Wait until all active capturers have exited before reinitializing.
-    let active_count = *ACTIVE_DISPLAY_COUNT.read().unwrap();
-    if active_count > 0 {
+    if !clear() {
         bail!(
-            "Display {} not found in CAP_DISPLAY_INFO, but {} active capturer(s) are still running. Skipping reinitialization now.",
-            display_idx,
-            active_count
+            "Display {} not found in CAP_DISPLAY_INFO, but active capturer(s) are still running. Skipping reinitialization now.",
+            display_idx
         );
     }
 
@@ -362,7 +363,6 @@ pub(super) fn get_capturer_for_display(
         "get_capturer_for_display: no active capturers, reinitializing PipeWire session for display {}.",
         display_idx
     );
-    clear();
     ensure_inited()?;
 
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
@@ -374,7 +374,8 @@ pub(super) fn get_capturer_for_display(
         build_capturer_info(addr)
     } else {
         bail!(
-            "Failed to get capturer display info for display {}. A new screen sharing permission grant may be required on the remote side.",
+            "Failed to get capturer for display {} after reinitialization. \
+            A new screen-sharing grant may be required.",
             display_idx
         );
     }

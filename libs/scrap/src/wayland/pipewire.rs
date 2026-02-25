@@ -328,7 +328,7 @@ impl PipeWireRecorder {
                 "[gstreamer] Failed to set PLAYING state: {:?}. Session likely revoked by user or token expired.",
                 e
             );
-            
+            let _ = pipeline.set_state(gst::State::Null);
             config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
             return Err(hbb_common::anyhow::Error::msg(format!("SESSION_REVOKED: GStreamer failed: {:?}", e)));
         }
@@ -981,28 +981,40 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
 
         let conn_clone = conn.clone();
         let session_clone = session.clone();
+
+        // Remote Desktop sessions are observed to time out after ~15 minutes of inactivity.
+        // Pinging every 60s gives a wide safety margin while keeping DBus traffic negligible.
+        const KEEPALIVE_INTERVAL_SECS: u64 = 60;
+
         std::thread::spawn(move || {
             let mut ticks = 0;
             while keepalive_flag.load(Ordering::SeqCst) {
                 std::thread::sleep(Duration::from_secs(1));
                 ticks += 1;
-                
-                if ticks >= 60 {
+                if ticks >= KEEPALIVE_INTERVAL_SECS {
                     ticks = 0;
                     if !is_server_running() {
-                        if let Ok(msg) = Message::new_method_call(
+                        match Message::new_method_call(
                             "org.freedesktop.portal.Desktop",
                             "/org/freedesktop/portal/desktop",
                             "org.freedesktop.portal.RemoteDesktop",
                             "NotifyPointerMotion",
                         ) {
-                            let msg = msg.append1((
-                                session_clone.clone(),
-                                HashMap::<String, Variant<Box<dyn RefArg>>>::new(),
-                                0.0f64,
-                                0.0f64,
-                            ));
-                            let _ = conn_clone.send(msg);
+                            Ok(msg) => {
+                                let msg = msg.append1((
+                                    session_clone.clone(),
+                                    HashMap::<String, Variant<Box<dyn RefArg>>>::new(),
+                                    0.0f64,
+                                    0.0f64,
+                                ));
+                                if let Err(_) = conn_clone.send(msg) {
+                                    // Session may have been revoked; the keepalive is no longer effective.
+                                    break;
+                                }
+                            }
+                            Err(_) => {
+                                break;
+                            }
                         }
                     }
                 }
