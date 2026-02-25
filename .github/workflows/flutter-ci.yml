@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - master
+      - wayland-drm-backend
     paths-ignore:
       - ".github/**"
       - "docs/**"
