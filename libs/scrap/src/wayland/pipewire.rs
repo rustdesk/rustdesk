@@ -98,9 +98,9 @@ pub fn try_close_session() {
 pub fn force_close_dead_session() {
     if let Ok(mut rdp_info) = RDP_SESSION_INFO.lock() {
         *rdp_info = None;
+        clear_wayland_displays_cache();
+        HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
     }
-    clear_wayland_displays_cache();
-    HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
 }
 
 pub struct RdpSessionInfo {
@@ -325,13 +325,28 @@ impl PipeWireRecorder {
             capturable.fd.as_raw_fd()
         );
         if let Err(e) = pipeline.set_state(gst::State::Playing) {
-            warn!(
-                "[gstreamer] Failed to set PLAYING state: {:?}. Session likely revoked by user or token expired.",
-                e
-            );
             let _ = pipeline.set_state(gst::State::Null);
-            config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
-            return Err(hbb_common::anyhow::Error::msg(format!("SESSION_REVOKED: GStreamer failed: {:?}", e)));
+
+            let is_revoked = if !is_server_running() {
+                // remote_desktop_portal: always treat sync failure as revocation.
+                true
+            } else {
+                // screencast_portal: only treat as revocation when a stale token exists.
+                !config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY).is_empty()
+            };
+
+            if is_revoked {
+                warn!("[gstreamer] Failed to set PLAYING state, session was likely revoked: {:?}", e);
+                config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
+                return Err(hbb_common::anyhow::Error::msg(format!("SESSION_REVOKED: GStreamer failed: {:?}", e)));
+            } else {
+                warn!(
+                    "[gstreamer] Failed to set PLAYING state on a fresh screencast session \
+                    (no restore token). Likely a pipeline misconfiguration: {:?}",
+                    e
+                );
+                return Err(hbb_common::anyhow::Error::msg(format!("GStreamer pipeline failed to start: {:?}", e)));
+            }
         }
 
         // If `is_server_running()` is false, it means using remote_desktop_portal,
@@ -354,7 +369,7 @@ impl PipeWireRecorder {
                     );
 
                     if let Err(err) = result {
-                        warn!("[gstreamer] Pipeline error detected. Session was likely terminated, clearing XDP token...");
+                        warn!("[gstreamer] Async pipeline error detected. Session was likely terminated, clearing XDP token...");
                         config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
                         let _ = pipeline.set_state(gst::State::Null);
                         return Err(hbb_common::anyhow::Error::msg(format!("SESSION_REVOKED: GStreamer pipeline failed: {:?}", err)));
@@ -966,8 +981,11 @@ fn request_inhibit(conn: &SyncConnection) -> Option<dbus::Path<'static>> {
     );
     let mut args: PropMap = HashMap::new();
     args.insert("handle_token".to_string(), Variant(Box::new("inhibit1".to_string())),);
-    // flags: 4 = inhibit idle, 8 = inhibit suspend
-    match proxy.method_call::<(dbus::Path<'static>,), _, _, _>("org.freedesktop.portal.Inhibit", "Inhibit", ("", 8u32, args)) {
+    // flags: 8 = inhibit idle, 4 = inhibit suspend
+    // Based on current testing, Dim Screen will forcibly terminate the session.
+    // Solving this problem requires preventing entry into the idle state.
+    // However, for future considerations, entering the suspended state is also prevented here.
+    match proxy.method_call::<(dbus::Path<'static>,), _, _, _>("org.freedesktop.portal.Inhibit", "Inhibit", ("", 12u32, args)) {
         Ok((path,)) => {
             debug!("Inhibit requested, request path: {:?}", path);
             Some(path)
