@@ -288,7 +288,7 @@ impl PipeWireRecorder {
         let src = gst::ElementFactory::make("pipewiresrc", None)?;
         src.set_property("fd", &capturable.fd.as_raw_fd())?;
         src.set_property("path", &format!("{}", capturable.path))?;
-        src.set_property("keepalive_time", &1000i32)?;
+        src.set_property("keepalive_time", &1_000.as_raw_fd())?;
 
         // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
         // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
@@ -1020,10 +1020,10 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
         let inhibit_path = request_inhibit(&conn);
 
         let rdp_info = RdpSessionInfo {
-            conn: conn.clone(),
+            conn,
             streams,
             fd,
-            session: session.clone(),
+            session,
             is_support_restore_token,
             resolution: Arc::new(Mutex::new(None)),
             inhibit_request_path: inhibit_path,

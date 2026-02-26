@@ -1599,11 +1599,8 @@ impl Connection {
             }
 
             try_activate_screen();
-            
-            let displays_result =
-                super::display_service::update_get_sync_displays_on_login().await;
 
-            match displays_result {
+            match super::display_service::update_get_sync_displays_on_login().await {
                 Err(err) => {
                     res.set_error(format!("{}", err));
                 }

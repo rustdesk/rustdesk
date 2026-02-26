@@ -236,10 +236,10 @@ pub(super) async fn check_init() -> ResultType<()> {
 
                         let err_str = format!("{:?}", e);
                         if err_str.contains("SESSION_REVOKED") {
+                            log::warn!("check_init: Detected Wayland session death. Forcing hard reset");
+                            *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+                            scrap::wayland::pipewire::force_close_dead_session();
                             if retry_count < MAX_RETRIES {
-                                log::warn!("check_init: Detected Wayland session death. Forcing hard reset");
-                                *PIPEWIRE_INITIALIZED.write().unwrap() = false;
-                                scrap::wayland::pipewire::force_close_dead_session();
                                 retry_count += 1;
                                 continue;
                             }
@@ -293,15 +293,11 @@ pub(super) fn get_primary() -> ResultType<usize> {
     }
 }
 
-pub fn clear() -> bool {
+pub fn clear() {
     if is_x11() {
-        return true;
+        return;
     }
     let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
-    let active_count = *ACTIVE_DISPLAY_COUNT.read().unwrap();
-    if active_count > 0 {
-        return false;
-    }
     for (_, addr) in write_lock.iter() {
         let cap_display_info: *mut CapDisplayInfo = *addr as _;
         unsafe {
@@ -310,8 +306,9 @@ pub fn clear() -> bool {
         }
     }
     write_lock.clear();
+
+    // Reset PipeWire initialization flag to allow recreation on next init
     *PIPEWIRE_INITIALIZED.write().unwrap() = false;
-    true
 }
 
 pub(super) fn get_capturer_for_display(
@@ -352,10 +349,12 @@ pub(super) fn get_capturer_for_display(
         display_idx
     );
 
-    if !clear() {
+    // Wait until all active capturers have exited before reinitializing.
+    let active_count = *ACTIVE_DISPLAY_COUNT.read().unwrap();
+    if active_count > 0 {
         bail!(
-            "Display {} not found in CAP_DISPLAY_INFO, but active capturer(s) are still running. Skipping reinitialization now.",
-            display_idx
+            "Display {} not found in CAP_DISPLAY_INFO, but {} active capturer(s) are still running. Skipping reinitialization now.",
+            display_idx, active_count
         );
     }
 
@@ -363,6 +362,7 @@ pub(super) fn get_capturer_for_display(
         "get_capturer_for_display: no active capturers, reinitializing PipeWire session for display {}.",
         display_idx
     );
+    clear();
     ensure_inited()?;
 
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
@@ -374,8 +374,7 @@ pub(super) fn get_capturer_for_display(
         build_capturer_info(addr)
     } else {
         bail!(
-            "Failed to get capturer for display {} after reinitialization. \
-            A new screen-sharing grant may be required.",
+            "Failed to get capturer for display {}",
             display_idx
         );
     }
