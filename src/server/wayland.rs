@@ -369,6 +369,9 @@ pub(super) fn get_capturer_for_display(
         "get_capturer_for_display: no active capturers, reinitializing PipeWire session for display {}.",
         display_idx
     );
+    
+    // to-do: Potential use-after-free: clone() aliases raw pointer and clear() frees it.
+    // Requires ownership refactor to make lifetime sound.
     clear();
     ensure_inited()?;
 
