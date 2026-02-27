@@ -128,137 +128,144 @@ pub(super) fn is_inited() -> Option<Message> {
     }
 }
 
-pub(super) async fn check_init() -> ResultType<()> {
-    let mut retry_count = 0;
-    const MAX_RETRIES: usize = 1;
-    loop {
-        if !is_x11() {
-            if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
-                if crate::input_service::wayland_use_uinput() {
-                    if let Some((minx, maxx, miny, maxy)) =
-                        scrap::wayland::display::get_desktop_rect_for_uinput()
-                    {
-                        log::info!(
-                            "update mouse resolution: ({}, {}), ({}, {})",
-                            minx,
-                            maxx,
-                            miny,
-                            maxy
-                        );
-                        allow_err!(
-                            input_service::update_mouse_resolution(minx, maxx, miny, maxy).await
-                        );
-                    } else {
-                        log::warn!("Failed to get desktop rect for uinput");
-                    }
-                }
-
-                let mut lock = CAP_DISPLAY_INFO.write().unwrap();
-                if lock.is_empty() {
-                    // Check if PipeWire is already initialized to prevent duplicate recorder creation
-                    if *PIPEWIRE_INITIALIZED.read().unwrap() {
-                        log::warn!("wayland_diag: Preventing duplicate PipeWire initialization");
-                        return Ok(());
-                    }
-
-                    let mut all = Display::all()?;
-                    log::debug!("Initializing displays with fill_displays()");
-                    {
-                        let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
-                        let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
-                        fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)?;
-                    }
-                    log::debug!("Attempting to fix logical size with try_fix_logical_size()");
-                    try_fix_logical_size(&mut all);
-
-                    // Bail early if no displays were found: the portal session was likely revoked (e.g., after screen lock).
-                    if all.is_empty() {
-                        log::warn!("check_init: no displays from PipeWire portal, session revoked. Closing stale session so next attempt triggers re-authorization.");
-                        scrap::wayland::pipewire::close_session();
-                        bail!("No displays returned by PipeWire portal. Try reconnecting to request a new screen-sharing session.");
-                    }
-
-                    let num = all.len();
-                    let primary = super::display_service::get_primary_2(&all);
-                    super::display_service::check_update_displays(&all);
-                    let mut displays = super::display_service::get_sync_displays();
-                    for display in displays.iter_mut() {
-                        display.cursor_embedded = is_cursor_embedded();
-                    }
-
-                    let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
-                    for d in &all {
-                        rects.push((d.origin(), d.width(), d.height()));
-                    }
-
-                    log::debug!(
-                        "#displays={}, primary={}, rects: {:?}, cpus={}/{}",
-                        num,
-                        primary,
-                        rects,
-                        num_cpus::get_physical(),
-                        num_cpus::get()
+async fn check_init_once() -> ResultType<()> {
+    if !is_x11() {
+        if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
+            if crate::input_service::wayland_use_uinput() {
+                if let Some((minx, maxx, miny, maxy)) =
+                    scrap::wayland::display::get_desktop_rect_for_uinput()
+                {
+                    log::info!(
+                        "update mouse resolution: ({}, {}), ({}, {})",
+                        minx,
+                        maxx,
+                        miny,
+                        maxy
                     );
-
-                    // Create individual CapDisplayInfo for each display with its own capturer
-                    let init_result: ResultType<()> = (|| {
-                        for (idx, display) in all.into_iter().enumerate() {
-                            let capturer =
-                                Box::into_raw(Box::new(Capturer::new(display).with_context(|| {
-                                    format!("Failed to create capturer for display {}. Try reconnecting to request a new screen sharing session.", idx)
-                                })?));
-                            let capturer = CapturerPtr(capturer);
-
-                            let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
-                                rects: rects.clone(),
-                                displays: displays.clone(),
-                                num,
-                                primary,
-                                current: idx,
-                                capturer,
-                            }));
-
-                            lock.insert(idx, cap_display_info as u64);
-                        }
-                        Ok(())
-                    })();
-
-                    if let Err(e) = init_result {
-                        log::error!("check_init: capturer loop failed, cleaning up partial state: {:?}", e);
-                        for (_, addr) in lock.iter() {
-                            let cap_display_info: *mut CapDisplayInfo = *addr as _;
-                            unsafe {
-                                let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
-                                let _box_cap_display_info = Box::from_raw(cap_display_info);
-                            }
-                        }
-                        lock.clear();
-
-                        let err_str = format!("{:?}", e);
-                        if err_str.contains("SESSION_REVOKED") {
-                            log::warn!("check_init: Detected Wayland session death. Forcing hard reset");
-                            *PIPEWIRE_INITIALIZED.write().unwrap() = false;
-                            scrap::wayland::pipewire::force_close_dead_session();
-                            if retry_count < MAX_RETRIES {
-                                retry_count += 1;
-                                continue;
-                            }
-                        } else {
-                            scrap::wayland::pipewire::close_session();
-                        }
-
-                        return Err(e);
-                    }
-
-                    // Only mark as initialized after the entire loop succeeds.
-                    *PIPEWIRE_INITIALIZED.write().unwrap() = true;
-                    break;
+                    allow_err!(
+                        input_service::update_mouse_resolution(minx, maxx, miny, maxy).await
+                    );
+                } else {
+                    log::warn!("Failed to get desktop rect for uinput");
                 }
             }
+
+            let mut lock = CAP_DISPLAY_INFO.write().unwrap();
+            if lock.is_empty() {
+                // Check if PipeWire is already initialized to prevent duplicate recorder creation
+                if *PIPEWIRE_INITIALIZED.read().unwrap() {
+                    log::warn!("wayland_diag: Preventing duplicate PipeWire initialization");
+                    return Ok(());
+                }
+
+                let mut all = Display::all()?;
+                log::debug!("Initializing displays with fill_displays()");
+                {
+                    let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
+                    let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
+                    fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)?;
+                }
+                log::debug!("Attempting to fix logical size with try_fix_logical_size()");
+                try_fix_logical_size(&mut all);
+
+                // Bail early if no displays were found: the portal session was likely revoked (e.g., after screen lock).
+                if all.is_empty() {
+                    log::warn!("check_init: no displays from PipeWire portal, session revoked.");
+                    scrap::wayland::pipewire::close_session();
+                    bail!("No displays returned by PipeWire portal. Try reconnecting to request a new screen-sharing session.");
+                }
+
+                let num = all.len();
+                let primary = super::display_service::get_primary_2(&all);
+                super::display_service::check_update_displays(&all);
+                let mut displays = super::display_service::get_sync_displays();
+                for display in displays.iter_mut() {
+                    display.cursor_embedded = is_cursor_embedded();
+                }
+
+                let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
+                for d in &all {
+                    rects.push((d.origin(), d.width(), d.height()));
+                }
+
+                log::debug!(
+                    "#displays={}, primary={}, rects: {:?}, cpus={}/{}",
+                    num,
+                    primary,
+                    rects,
+                    num_cpus::get_physical(),
+                    num_cpus::get()
+                );
+
+                // Create individual CapDisplayInfo for each display with its own capturer
+                let init_result: ResultType<()> = (|| {
+
+                for (idx, display) in all.into_iter().enumerate() {
+                    let capturer =
+                        Box::into_raw(Box::new(Capturer::new(display).with_context(|| {
+                            format!("Failed to create capturer for display {}", idx)
+                        })?));
+                    let capturer = CapturerPtr(capturer);
+
+                    let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
+                        rects: rects.clone(),
+                        displays: displays.clone(),
+                        num,
+                        primary,
+                        current: idx,
+                        capturer,
+                    }));
+
+                    lock.insert(idx, cap_display_info as u64);
+                }
+
+                Ok(())
+                })();
+
+                if let Err(e) = init_result {
+                    log::error!("check_init: capturer loop failed, cleaning up partial state: {:?}", e);
+                    for (_, addr) in lock.iter() {
+                        let cap_display_info: *mut CapDisplayInfo = *addr as _;
+                        unsafe {
+                            let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
+                            let _box_cap_display_info = Box::from_raw(cap_display_info);
+                        }
+                    }
+                    lock.clear();
+
+                    let err_str = format!("{:?}", e);
+                    if err_str.contains("SESSION_REVOKED") {
+                        log::warn!("check_init: Detected Wayland session death. Forcing hard reset");
+                        *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+                        scrap::wayland::pipewire::force_close_dead_session();
+                    } else {
+                        scrap::wayland::pipewire::close_session();
+                    }
+
+                    return Err(e);
+                }
+
+                // Only mark as initialized after the entire loop succeeds.
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
+            }
         }
-        break;
     }
     Ok(())
+}
+
+pub(super) async fn check_init() -> ResultType<()> {
+    const MAX_RETRIES: usize = 1;
+    let mut retry_count = 0;
+    loop {
+        let result = check_init_once().await;
+        if let Err(ref e) = result {
+            if format!("{:?}", e).contains("SESSION_REVOKED") && retry_count < MAX_RETRIES {
+                retry_count += 1;
+                continue;
+            }
+        }
+        return result;
+    }
 }
 
 pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
@@ -276,7 +283,7 @@ pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
             "get_displays: map empty after check_init(); resetting PIPEWIRE_INITIALIZED to allow retry."
         );
         *PIPEWIRE_INITIALIZED.write().unwrap() = false;
-        bail!("Failed to get capturer display info. Please re-authorize screen sharing.");
+        bail!("Failed to get capturer display info");
     }
 }
 
@@ -374,7 +381,7 @@ pub(super) fn get_capturer_for_display(
         build_capturer_info(addr)
     } else {
         bail!(
-            "Failed to get capturer for display {}",
+            "Failed to get capturer display info for display {}",
             display_idx
         );
     }
