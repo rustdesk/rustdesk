@@ -163,6 +163,17 @@ impl std::fmt::Display for GStreamerError {
 
 impl Error for GStreamerError {}
 
+#[derive(Debug)]
+pub struct SessionRevokedError;
+
+impl std::fmt::Display for SessionRevokedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SESSION_REVOKED")
+    }
+}
+
+impl Error for SessionRevokedError {}
+
 #[derive(Clone)]
 pub struct PipeWireCapturable {
     // connection needs to be kept alive for recording
@@ -328,17 +339,19 @@ impl PipeWireRecorder {
             let _ = pipeline.set_state(gst::State::Null);
 
             let is_revoked = if !is_server_running() {
-                // remote_desktop_portal: always treat sync failure as revocation.
+                // remote_desktop_portal: the portal opened the fd, so a PLAYING failure
+                // means the underlying PipeWire node is gone -> session revoked.
                 true
             } else {
-                // screencast_portal: only treat as revocation when a stale token exists.
+                // screencast_portal: only treat as revoked when a persisted restore token
+                // exists, meaning we were trying to resume a prior session.
                 !config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY).is_empty()
             };
 
             if is_revoked {
                 warn!("[gstreamer] Failed to set PLAYING state, session was likely revoked: {:?}", e);
                 config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
-                return Err(hbb_common::anyhow::Error::msg(format!("SESSION_REVOKED: GStreamer failed: {:?}", e)));
+                return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
             } else {
                 warn!(
                     "[gstreamer] Failed to set PLAYING state on a fresh screencast session \
@@ -368,11 +381,11 @@ impl PipeWireRecorder {
                         capturable.fd.as_raw_fd(), result, state, pending
                     );
 
-                    if let Err(err) = result {
+                    if let Err(_) = result {
                         warn!("[gstreamer] Async pipeline error detected. Session was likely terminated, clearing XDP token...");
                         config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
                         let _ = pipeline.set_state(gst::State::Null);
-                        return Err(hbb_common::anyhow::Error::msg(format!("SESSION_REVOKED: GStreamer pipeline failed: {:?}", err)));
+                        return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
                     }
                 }
             }

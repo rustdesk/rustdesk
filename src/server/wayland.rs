@@ -261,6 +261,8 @@ pub(super) async fn check_init() -> ResultType<()> {
         if let Err(ref e) = result {
             if format!("{:?}", e).contains("SESSION_REVOKED") && retry_count < MAX_RETRIES {
                 retry_count += 1;
+                // Brief pause before re-requesting the portal permission dialog, to avoid back-to-back prompts firing immediately.
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 continue;
             }
         }
