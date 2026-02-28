@@ -366,6 +366,7 @@ class InputModel {
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
   int _lastWheelTsUs = 0;
+  int _lastTrackpadTsUs = 0;
 
   // Wheel acceleration thresholds.
   static const int _wheelAccelFastThresholdUs = 40000; // 40ms
@@ -375,6 +376,8 @@ class InputModel {
   // Wheel burst acceleration (empirical tuning).
   // Applies only to fast, non-smooth bursts to preserve single-step scrolling.
   // Flutter uses microseconds for dt, so velocity is in delta/us.
+  static const double _trackpadAxisNoiseThreshold = 0.1;
+  static const double _trackpadAxisLockRatio = 2.0;
 
   // Relative mouse mode (for games/3D apps).
   final relativeMouseMode = false.obs;
@@ -975,6 +978,7 @@ class InputModel {
     _pointerMovedAfterEnter = false;
     _pointerInsideImage = enter;
     _lastWheelTsUs = 0;
+    _lastTrackpadTsUs = 0;
 
     // Fix status
     if (!enter) {
@@ -1143,6 +1147,7 @@ class InputModel {
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;
+    _lastTrackpadTsUs = 0;
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
@@ -1172,6 +1177,8 @@ class InputModel {
     if (isMacOS && peerPlatform == kPeerPlatformWindows) {
       delta *= _trackpadAdjustMacToWin;
     }
+    _lastTrackpadTsUs = e.timeStamp.inMicroseconds;
+    delta = _filterTrackpadDeltaAxis(delta);
     _trackpadLastDelta = delta;
 
     var x = delta.dx.toInt();
@@ -1202,6 +1209,22 @@ class InputModel {
             msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
       }
     }
+  }
+
+  Offset _filterTrackpadDeltaAxis(Offset delta) {
+    final absDx = delta.dx.abs();
+    final absDy = delta.dy.abs();
+    if (absDx < _trackpadAxisNoiseThreshold &&
+        absDy < _trackpadAxisNoiseThreshold) {
+      return delta;
+    }
+    if (absDy >= absDx * _trackpadAxisLockRatio) {
+      return Offset(0, delta.dy);
+    }
+    if (absDx >= absDy * _trackpadAxisLockRatio) {
+      return Offset(delta.dx, 0);
+    }
+    return delta;
   }
 
   void _scheduleFling(double x, double y, int delay) {
