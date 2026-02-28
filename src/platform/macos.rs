@@ -279,6 +279,9 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
             }
+            Ok(status) if !status.success() => {
+                log::warn!("run osascript failed with status: {}", status);
+            }
             _ => {
                 let installed = std::path::Path::new(&agent_plist_file).exists();
                 log::info!("Agent file {} installed: {}", &agent_plist_file, installed);
@@ -851,32 +854,33 @@ pub fn update_me() -> ResultType<()> {
     if is_installed_daemon && !is_service_stopped {
         let agent = format!("{}_server.plist", crate::get_full_name());
         let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
-        std::process::Command::new("launchctl")
-            .args(&["unload", "-w", &agent_plist_file])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .ok();
         update_daemon_agent(agent_plist_file, app_dir, true);
     } else {
         // `kill -9` may not work without "administrator privileges"
-        let update_body = format!(
-            r#"
-do shell script "
-pgrep -x '{app_name}' | grep -v {pid} | xargs kill -9 && rm -rf '/Applications/{app_name}.app' && ditto '{app_dir}' '/Applications/{app_name}.app' && chown -R {user}:staff '/Applications/{app_name}.app' && xattr -r -d com.apple.quarantine '/Applications/{app_name}.app'
-" with prompt "{app_name} wants to update itself" with administrator privileges
-    "#,
-            app_name = app_name,
-            pid = std::process::id(),
-            app_dir = app_dir,
-            user = get_active_username()
-        );
-        match Command::new("osascript")
+        let update_body = r#"
+on run {app_name, cur_pid, app_dir, user_name}
+    set app_bundle to "/Applications/" & app_name & ".app"
+    set app_bundle_q to quoted form of app_bundle
+    set app_dir_q to quoted form of app_dir
+    set user_name_q to quoted form of user_name
+
+    set kill_others to "pids=$(pgrep -x '" & app_name & "' | grep -vx " & cur_pid & " || true); if [ -n \"$pids\" ]; then echo \"$pids\" | xargs kill -9 || true; fi;"
+    set copy_files to "rm -rf " & app_bundle_q & " && ditto " & app_dir_q & " " & app_bundle_q & " && chown -R " & user_name_q & ":staff " & app_bundle_q & " && (xattr -r -d com.apple.quarantine " & app_bundle_q & " || true);"
+    set sh to "set -e;" & kill_others & copy_files
+
+    do shell script sh with prompt app_name & " wants to update itself" with administrator privileges
+end run
+        "#;
+        let active_user = get_active_username();
+        let status = Command::new("osascript")
             .arg("-e")
             .arg(update_body)
-            .status()
-        {
+            .arg(app_name.to_string())
+            .arg(std::process::id().to_string())
+            .arg(app_dir)
+            .arg(active_user)
+            .status();
+        match status {
             Ok(status) if !status.success() => {
                 log::error!("osascript execution failed with status: {}", status);
             }
