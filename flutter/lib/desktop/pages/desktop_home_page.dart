@@ -430,12 +430,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
-    final isWindowsInstalled = isWindows && bind.mainIsInstalled();
-    if (updateUrl.isNotEmpty &&
+    if (!bind.isCustomClient() &&
+        updateUrl.isNotEmpty &&
         !isCardClosed &&
-        (isWindowsInstalled ||
-            (!bind.isCustomClient() &&
-                bind.mainUriPrefixSync().contains('rustdesk')))) {
+        bind.mainUriPrefixSync().contains('rustdesk')) {
       final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
       String btnText = isToUpdate ? 'Update' : 'Download';
       GestureTapCallback onPressed = () async {

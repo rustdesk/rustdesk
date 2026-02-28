@@ -940,9 +940,7 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 }
 
 pub fn check_software_update() {
-    let is_windows_installed = cfg!(target_os = "windows") && is_installed();
-    let should_check_update = is_windows_installed || !is_custom_client();
-    if !should_check_update {
+    if is_custom_client() {
         return;
     }
     let opt = LocalConfig::get_option(keys::OPTION_ENABLE_CHECK_UPDATE);
