@@ -538,6 +538,15 @@ fn run(vs: VideoService) -> ResultType<()> {
     // But for now, we do not support multi-screen capture on wayland.
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
+
+    #[cfg(windows)]
+    let last_portable_service_running = crate::portable_service::client::running();
+    #[cfg(not(windows))]
+    let last_portable_service_running = false;
+
+    let display_idx = vs.idx;
+    let sp = vs.sp;
+    let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
     #[cfg(target_os = "linux")]
     let _wayland_call_on_ret = {
         // Increment active display count when starting
@@ -554,15 +563,6 @@ fn run(vs: VideoService) -> ResultType<()> {
             }),
         }
     };
-
-    #[cfg(windows)]
-    let last_portable_service_running = crate::portable_service::client::running();
-    #[cfg(not(windows))]
-    let last_portable_service_running = false;
-
-    let display_idx = vs.idx;
-    let sp = vs.sp;
-    let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
     #[cfg(windows)]
     if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
         log::info!("disable dxgi with option, fall back to gdi");
