@@ -3938,9 +3938,7 @@ void earlyAssert() {
 
 void checkUpdate() {
   if (!isWeb) {
-    final isWindowsInstalled = isWindows && bind.mainIsInstalled();
-    final shouldCheckUpdate = isWindowsInstalled || !bind.isCustomClient();
-    if (shouldCheckUpdate) {
+    if (!bind.isCustomClient()) {
       platformFFI.registerEventHandler(
           kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
           (Map<String, dynamic> evt) async {
