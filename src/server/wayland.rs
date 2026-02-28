@@ -349,6 +349,7 @@ pub(super) fn get_capturer_for_display(
     {
         let cap_map = CAP_DISPLAY_INFO.read().unwrap();
         if let Some(&addr) = cap_map.get(&display_idx) {
+            increment_active_display_count();
             return build_capturer_info(addr);
         }
     }
@@ -383,6 +384,7 @@ pub(super) fn get_capturer_for_display(
             "get_capturer_for_display: re-initialization succeeded for display {}.",
             display_idx
         );
+        increment_active_display_count();
         build_capturer_info(addr)
     } else {
         bail!(

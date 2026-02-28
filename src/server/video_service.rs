@@ -549,9 +549,6 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
     #[cfg(target_os = "linux")]
     let _wayland_call_on_ret = {
-        // Increment active display count when starting
-        let _display_count = super::wayland::increment_active_display_count();
-
         SimpleCallOnReturn {
             b: true,
             f: Box::new(|| {
