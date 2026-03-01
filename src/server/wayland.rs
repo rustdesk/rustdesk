@@ -27,7 +27,6 @@ pub fn init() {
 }
 
 pub(super) fn increment_active_display_count() -> usize {
-    let _cap_map_guard = CAP_DISPLAY_INFO.read().unwrap();
     let mut count = ACTIVE_DISPLAY_COUNT.write().unwrap();
     *count += 1;
     *count
@@ -349,7 +348,6 @@ pub(super) fn get_capturer_for_display(
     {
         let cap_map = CAP_DISPLAY_INFO.read().unwrap();
         if let Some(&addr) = cap_map.get(&display_idx) {
-            increment_active_display_count();
             return build_capturer_info(addr);
         }
     }
@@ -361,7 +359,7 @@ pub(super) fn get_capturer_for_display(
 
     // Wait until all active capturers have exited before reinitializing.
     let active_count = *ACTIVE_DISPLAY_COUNT.read().unwrap();
-    if active_count > 0 {
+    if active_count > 1 {
         bail!(
             "Display {} not found in CAP_DISPLAY_INFO, but {} active capturer(s) are still running. Skipping reinitialization now.",
             display_idx, active_count
@@ -384,7 +382,6 @@ pub(super) fn get_capturer_for_display(
             "get_capturer_for_display: re-initialization succeeded for display {}.",
             display_idx
         );
-        increment_active_display_count();
         build_capturer_info(addr)
     } else {
         bail!(
