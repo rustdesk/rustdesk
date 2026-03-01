@@ -1593,9 +1593,7 @@ fn need_to_uppercase(en: &mut Enigo) -> bool {
     get_modifier_state(Key::Shift, en) || get_modifier_state(Key::CapsLock, en)
 }
 
-fn process_chr(en: &mut Enigo, chr: u32, down: bool, hotkey: bool) {
-    let _ = hotkey;
-
+fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
     // On Wayland with uinput mode, use clipboard for character input
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
@@ -1611,7 +1609,7 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, hotkey: bool) {
     }
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    if !hotkey {
+    if !_hotkey {
         if down {
             if let Ok(chr) = char::try_from(chr) {
                 let mut s = chr.to_string();
