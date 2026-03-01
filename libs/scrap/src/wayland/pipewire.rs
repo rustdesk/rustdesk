@@ -350,7 +350,9 @@ impl PipeWireRecorder {
 
             if is_revoked {
                 warn!("[gstreamer] Failed to set PLAYING state, session was likely revoked: {:?}", e);
-                config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
+                if is_server_running() {
+                    config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
+                }
                 return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
             } else {
                 warn!(
@@ -383,7 +385,9 @@ impl PipeWireRecorder {
 
                     if let Err(_) = result {
                         warn!("[gstreamer] Async pipeline error detected. Session was likely terminated, clearing XDP token...");
-                        config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
+                        if is_server_running() {
+                            config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
+                        }
                         let _ = pipeline.set_state(gst::State::Null);
                         return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
                     }
