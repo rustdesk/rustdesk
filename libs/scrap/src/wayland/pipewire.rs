@@ -1034,6 +1034,8 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     if rdp_connection.is_none() {
         let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop(false)?;
         let conn = Arc::new(conn);
+        // to-do: Add an option like "Keep awake while RustDesk is running" to avoid
+        // impacting users whose sessions are not automatically terminated upon entering the Dim Screen.
         let inhibit_path = if !is_server_running() { request_inhibit(&conn) } else { None };
 
         let rdp_info = RdpSessionInfo {
