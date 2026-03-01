@@ -48,6 +48,11 @@ fn get_update_temp_dir() -> PathBuf {
     Path::new("/tmp").join(format!(".rustdeskupdate-{}", euid))
 }
 
+#[inline]
+fn get_update_temp_dir_string() -> String {
+    get_update_temp_dir().to_string_lossy().into_owned()
+}
+
 /// Global mutex to serialize CoreGraphics cursor operations.
 /// This prevents race conditions between cursor visibility (hide depth tracking)
 /// and cursor positioning/clipping operations.
@@ -891,8 +896,7 @@ end run
 }
 
 pub fn update_from_dmg(dmg_path: &str) -> ResultType<()> {
-    let update_temp_dir = get_update_temp_dir();
-    let update_temp_dir = update_temp_dir.to_string_lossy().to_string();
+    let update_temp_dir = get_update_temp_dir_string();
     println!("Starting update from DMG: {}", dmg_path);
     extract_dmg(dmg_path, &update_temp_dir)?;
     println!("DMG extracted");
@@ -902,15 +906,13 @@ pub fn update_from_dmg(dmg_path: &str) -> ResultType<()> {
 }
 
 pub fn update_to(_file: &str) -> ResultType<()> {
-    let update_temp_dir = get_update_temp_dir();
-    let update_temp_dir = update_temp_dir.to_string_lossy().to_string();
+    let update_temp_dir = get_update_temp_dir_string();
     update_extracted(&update_temp_dir)?;
     Ok(())
 }
 
 pub fn extract_update_dmg(file: &str) {
-    let update_temp_dir = get_update_temp_dir();
-    let update_temp_dir = update_temp_dir.to_string_lossy().to_string();
+    let update_temp_dir = get_update_temp_dir_string();
     let mut evt: HashMap<&str, String> =
         HashMap::from([("name", "extract-update-dmg".to_string())]);
     match extract_dmg(file, &update_temp_dir) {
