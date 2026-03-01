@@ -285,21 +285,6 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
             _ => {
                 let installed = std::path::Path::new(&agent_plist_file).exists();
                 log::info!("Agent file {} installed: {}", &agent_plist_file, installed);
-                if installed {
-                    // Unload first, or load may not work if already loaded.
-                    // We hope that the load operation can immediately trigger a start.
-                    std::process::Command::new("launchctl")
-                        .args(&["unload", "-w", &agent_plist_file])
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .status()
-                        .ok();
-                    let status = std::process::Command::new("launchctl")
-                        .args(&["load", "-w", &agent_plist_file])
-                        .status();
-                    log::info!("launch server, status: {:?}", &status);
-                }
             }
         }
     };
