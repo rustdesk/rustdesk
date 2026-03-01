@@ -1034,7 +1034,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     if rdp_connection.is_none() {
         let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop(false)?;
         let conn = Arc::new(conn);
-        let inhibit_path = request_inhibit(&conn);
+        let inhibit_path = if !is_server_running() { request_inhibit(&conn) } else { None };
 
         let rdp_info = RdpSessionInfo {
             conn,
