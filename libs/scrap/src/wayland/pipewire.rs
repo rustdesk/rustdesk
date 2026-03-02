@@ -338,29 +338,12 @@ impl PipeWireRecorder {
         if let Err(e) = pipeline.set_state(gst::State::Playing) {
             let _ = pipeline.set_state(gst::State::Null);
 
-            let is_revoked = if !is_server_running() {
-                // remote_desktop_portal: the portal opened the fd, so a PLAYING failure
-                // means the underlying PipeWire node is gone -> session revoked.
-                true
-            } else {
-                // screencast_portal: only treat as revoked when a persisted restore token
-                // exists, meaning we were trying to resume a prior session.
-                !config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY).is_empty()
-            };
-
-            if is_revoked {
-                warn!("[gstreamer] Failed to set PLAYING state, session was likely revoked: {:?}", e);
-                if is_server_running() {
-                    config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
-                }
-                return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
-            } else {
-                warn!(
-                    "[gstreamer] Failed to set PLAYING state on a fresh screencast session \
-                    (no restore token). Likely a pipeline misconfiguration: {:?}",
-                    e
-                );
+            if is_server_running() {
+                warn!("[gstreamer] Failed to set PLAYING state: {:?}", e);
                 return Err(hbb_common::anyhow::Error::msg(format!("GStreamer pipeline failed to start: {:?}", e)));
+            } else {
+                warn!("[gstreamer] Failed to set PLAYING state, session was likely revoked: {:?}", e);
+                return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
             }
         }
 
@@ -384,10 +367,7 @@ impl PipeWireRecorder {
                     );
 
                     if let Err(_) = result {
-                        warn!("[gstreamer] Async pipeline error detected. Session was likely terminated, clearing XDP token...");
-                        if is_server_running() {
-                            config::LocalConfig::set_option(RESTORE_TOKEN_CONF_KEY.to_owned(), "".to_owned());
-                        }
+                        warn!("[gstreamer] Async pipeline error detected. Session was likely terminated.");
                         let _ = pipeline.set_state(gst::State::Null);
                         return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
                     }
