@@ -1609,9 +1609,11 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
     }
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    if !_hotkey && down {
-        if let Ok(chr) = char::try_from(chr) {
-            en.key_sequence(&chr.to_string());
+    if !_hotkey {
+        if down {
+            if let Ok(chr) = char::try_from(chr) {
+                en.key_sequence(&chr.to_string());
+            }
         }
         return;
     }
