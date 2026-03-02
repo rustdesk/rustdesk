@@ -1612,11 +1612,7 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
     if !_hotkey {
         if down {
             if let Ok(chr) = char::try_from(chr) {
-                let mut s = chr.to_string();
-                if need_to_uppercase(en) {
-                    s = s.to_uppercase();
-                }
-                en.key_sequence(&s);
+                en.key_sequence(&chr.to_string());
             }
         }
         return;
