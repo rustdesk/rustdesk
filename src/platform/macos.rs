@@ -859,9 +859,10 @@ on run {app_name, cur_pid, app_dir, user_name}
     set app_dir_q to quoted form of app_dir
     set user_name_q to quoted form of user_name
 
+    set check_source to "test -d " & app_dir_q & " || exit 1;"
     set kill_others to "pids=$(pgrep -x '" & app_name & "' | grep -vx " & cur_pid & " || true); if [ -n \"$pids\" ]; then echo \"$pids\" | xargs kill -9 || true; fi;"
     set copy_files to "rm -rf " & app_bundle_q & " && ditto " & app_dir_q & " " & app_bundle_q & " && chown -R " & user_name_q & ":staff " & app_bundle_q & " && (xattr -r -d com.apple.quarantine " & app_bundle_q & " || true);"
-    set sh to "set -e;" & kill_others & copy_files
+    set sh to "set -e;" & check_source & kill_others & copy_files
 
     do shell script sh with prompt app_name & " wants to update itself" with administrator privileges
 end run
