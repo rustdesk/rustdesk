@@ -97,6 +97,7 @@ pub mod screenshot;
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
+const RELAY_RACE_DELAY: Duration = Duration::from_millis(90);
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
 
 #[cfg(target_os = "linux")]
@@ -302,10 +303,6 @@ impl Client {
                 (check_port(other_server, RENDEZVOUS_PORT), Vec::new(), true)
             }
         };
-
-        if crate::get_ipv6_punch_enabled() {
-            crate::test_ipv6().await;
-        }
 
         let (stop_udp_tx, stop_udp_rx) = oneshot::channel::<()>();
         let udp =
@@ -515,12 +512,26 @@ impl Client {
                                 }
                             }
                             let s = ipv6.0.take();
+                            if ph.socket_addr_v6.is_empty() {
+                                log::debug!(
+                                    "PunchHoleResponse socket_addr_v6 is empty from hbbs/peer"
+                                );
+                            } else {
+                                log::info!(
+                                    "PunchHoleResponse socket_addr_v6={}",
+                                    AddrMangle::decode(&ph.socket_addr_v6)
+                                );
+                            }
                             if !ph.socket_addr_v6.is_empty() && s.is_some() {
                                 let addr = AddrMangle::decode(&ph.socket_addr_v6);
                                 if addr.port() > 0 {
                                     if let Some(s) = s {
                                         allow_err!(s.connect(addr).await);
                                         ipv6.0 = Some(s);
+                                        log::info!(
+                                            "IPv6 UDP socket connected to peer addr {} from PunchHoleResponse",
+                                            addr
+                                        );
                                     }
                                 }
                             }
@@ -535,36 +546,47 @@ impl Client {
                             rr.relay_server
                         );
                         start = Instant::now();
+                        signed_id_pk = rr.pk().into();
                         let mut connect_futures = Vec::new();
-                        if let Some(s) = ipv6.0 {
+                        if let Some(s) = ipv6.0.take() {
                             let addr = AddrMangle::decode(&rr.socket_addr_v6);
-                            if addr.port() > 0 {
-                                if s.connect(addr).await.is_ok() {
-                                    connect_futures
-                                        .push(udp_nat_connect(s, "IPv6", CONNECT_TIMEOUT).boxed());
-                                }
+                            log::info!("RelayResponse socket_addr_v6={}", addr);
+                            if addr.port() > 0 && s.connect(addr).await.is_ok() {
+                                connect_futures
+                                    .push(udp_nat_connect(s, "IPv6", CONNECT_TIMEOUT).boxed());
+                                log::info!(
+                                    "IPv6 UDP socket connected to peer addr {} from RelayResponse",
+                                    addr
+                                );
                             }
                         }
-                        signed_id_pk = rr.pk().into();
-                        let fut = Self::create_relay(
-                            &peer,
-                            rr.uuid,
-                            rr.relay_server,
-                            &key,
-                            conn_type,
-                            my_addr.is_ipv4(),
-                        );
+
+                        let relay_uuid = rr.uuid.clone();
+                        let relay_server = rr.relay_server.clone();
+                        let key_for_relay = key.clone();
+                        let peer_for_relay = peer.clone();
+                        let force_relay = interface.is_force_relay();
                         connect_futures.push(
                             async move {
-                                let conn = fut.await?;
+                                if !force_relay {
+                                    tokio::time::sleep(RELAY_RACE_DELAY).await;
+                                }
+                                let conn = Self::create_relay(
+                                    &peer_for_relay,
+                                    relay_uuid,
+                                    relay_server,
+                                    &key_for_relay,
+                                    conn_type,
+                                    my_addr.is_ipv4(),
+                                )
+                                .await?;
                                 Ok((conn, None, if use_ws() { "WebSocket" } else { "Relay" }))
                             }
                             .boxed(),
                         );
-                        // Run all connection attempts concurrently, return the first successful one
+
                         let (conn, kcp, typ) = match select_ok(connect_futures).await {
                             Ok(conn) => (Ok(conn.0 .0), conn.0 .1, conn.0 .2),
-
                             Err(e) => (Err(e), None, ""),
                         };
                         let mut conn = conn?;
@@ -653,6 +675,7 @@ impl Client {
         &'static str,
     )> {
         let direct_failures = interface.get_lch().read().unwrap().direct_failures;
+        let has_ipv6_punch = udp_socket_v6.is_some();
         let mut connect_timeout = 0;
         const MIN: u64 = 1000;
         if is_local || peer_nat_type == NatType::SYMMETRIC {
@@ -684,6 +707,15 @@ impl Client {
                 connect_timeout = MIN;
             }
         }
+        if has_ipv6_punch && !interface.is_force_relay() {
+            let mut ipv6_timeout = CONNECT_TIMEOUT;
+            if direct_failures > 0 {
+                ipv6_timeout = std::cmp::max(ipv6_timeout, punch_time_used * 6);
+            }
+            if connect_timeout < ipv6_timeout {
+                connect_timeout = ipv6_timeout;
+            }
+        }
         log::info!("peer address: {}, timeout: {}", peer, connect_timeout);
         let start = std::time::Instant::now();
 
@@ -702,25 +734,52 @@ impl Client {
         if let Some(udp_socket_v6) = udp_socket_v6 {
             connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).boxed());
         }
+        if !interface.is_force_relay() && !relay_server.is_empty() {
+            let peer_id = peer_id.to_owned();
+            let relay_server = relay_server.to_owned();
+            let rendezvous_server = rendezvous_server.to_owned();
+            let key = key.to_owned();
+            let token = token.to_owned();
+            let relay_secure = !signed_id_pk.is_empty();
+            connect_futures.push(
+                async move {
+                    tokio::time::sleep(RELAY_RACE_DELAY).await;
+                    let conn = Self::request_relay(
+                        &peer_id,
+                        relay_server,
+                        &rendezvous_server,
+                        relay_secure,
+                        &key,
+                        &token,
+                        conn_type,
+                    )
+                    .await?;
+                    Ok((conn, None, "Relay"))
+                }
+                .boxed(),
+            );
+        }
         // Run all connection attempts concurrently, return the first successful one
         let (mut conn, kcp, mut typ) = match select_ok(connect_futures).await {
             Ok(conn) => (Ok(conn.0 .0), conn.0 .1, conn.0 .2),
             Err(e) => (Err(e), None, ""),
         };
 
-        let mut direct = !conn.is_err();
+        let mut direct = !conn.is_err() && typ != "Relay" && typ != "WebSocket";
         if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
-                conn = Self::request_relay(
-                    peer_id,
-                    relay_server.to_owned(),
-                    rendezvous_server,
-                    !signed_id_pk.is_empty(),
-                    key,
-                    token,
-                    conn_type,
-                )
-                .await;
+                if interface.is_force_relay() || typ != "Relay" {
+                    conn = Self::request_relay(
+                        peer_id,
+                        relay_server.to_owned(),
+                        rendezvous_server,
+                        !signed_id_pk.is_empty(),
+                        key,
+                        token,
+                        conn_type,
+                    )
+                    .await;
+                }
                 if let Err(e) = conn {
                     // this direct is mainly used by on_establish_connection_error, so we update it here before bail
                     interface.update_direct(Some(false));
