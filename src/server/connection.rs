@@ -560,10 +560,9 @@ impl Connection {
                     match data {
                         ipc::Data::Authorize => {
                             conn.require_2fa.take();
-                            if !conn.connect_port_forward_if_needed().await {
+                            if !conn.send_logon_response().await {
                                 break;
                             }
-                            conn.send_logon_response().await;
                             if conn.port_forward_socket.is_some() {
                                 break;
                             }
@@ -1382,9 +1381,9 @@ impl Connection {
         }
     }
 
-    async fn send_logon_response(&mut self) {
+    async fn send_logon_response(&mut self) -> bool {
         if self.authorized {
-            return;
+            return true;
         }
         if self.require_2fa.is_some() && !self.is_recent_session(true) && !self.from_switch {
             self.require_2fa.as_ref().map(|totp| {
@@ -1415,7 +1414,10 @@ impl Connection {
                 }
             });
             self.send_login_error(crate::client::REQUIRE_2FA).await;
-            return;
+            return true;
+        }
+        if !self.connect_port_forward_if_needed().await {
+            return false;
         }
         self.authorized = true;
         let (conn_type, auth_conn_type) = if self.file_transfer.is_some() {
@@ -1538,7 +1540,7 @@ impl Connection {
             res.set_peer_info(pi);
             msg_out.set_login_response(res);
             self.send(msg_out).await;
-            return;
+            return true;
         }
         #[cfg(target_os = "linux")]
         if self.is_remote() {
@@ -1561,7 +1563,7 @@ impl Connection {
                 let mut msg_out = Message::new();
                 msg_out.set_login_response(res);
                 self.send(msg_out).await;
-                return;
+                return true;
             }
         }
         #[allow(unused_mut)]
@@ -1715,6 +1717,7 @@ impl Connection {
                 self.try_sub_monitor_services();
             }
         }
+        true
     }
 
     fn try_sub_camera_displays(&mut self) {
@@ -2295,10 +2298,9 @@ impl Connection {
                 if err_msg.is_empty() {
                     #[cfg(target_os = "linux")]
                     self.linux_headless_handle.wait_desktop_cm_ready().await;
-                    if !self.connect_port_forward_if_needed().await {
+                    if !self.send_logon_response().await {
                         return false;
                     }
-                    self.send_logon_response().await;
                     self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
                 } else {
                     self.send_login_error(err_msg).await;
@@ -2334,10 +2336,9 @@ impl Connection {
                     if err_msg.is_empty() {
                         #[cfg(target_os = "linux")]
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
-                        if !self.connect_port_forward_if_needed().await {
+                        if !self.send_logon_response().await {
                             return false;
                         }
-                        self.send_logon_response().await;
                         self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
                     } else {
                         self.send_login_error(err_msg).await;
@@ -2355,10 +2356,9 @@ impl Connection {
                         self.update_failure(failure, true, 1);
                         self.require_2fa.take();
                         raii::AuthedConnID::set_session_2fa(self.session_key());
-                        if !self.connect_port_forward_if_needed().await {
+                        if !self.send_logon_response().await {
                             return false;
                         }
-                        self.send_logon_response().await;
                         self.try_start_cm(
                             self.lr.my_id.to_owned(),
                             self.lr.my_name.to_owned(),
@@ -2409,10 +2409,9 @@ impl Connection {
                     if let Some((_instant, uuid_old)) = uuid_old {
                         if uuid == uuid_old {
                             self.from_switch = true;
-                            if !self.connect_port_forward_if_needed().await {
+                            if !self.send_logon_response().await {
                                 return false;
                             }
-                            self.send_logon_response().await;
                             self.try_start_cm(
                                 lr.my_id.clone(),
                                 lr.my_name.clone(),
