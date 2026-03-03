@@ -2172,8 +2172,8 @@ async fn stun_probe_on_socket(socket: &UdpSocket) -> Vec<SocketAddr> {
         }
         let per_server = std::cmp::min(remaining, std::time::Duration::from_millis(1500));
 
-        let stun_addr = match stun_server
-            .to_socket_addrs()
+        let stun_addr = match tokio::net::lookup_host(stun_server)
+            .await
             .ok()
             .and_then(|mut it| it.find(|x| x.is_ipv6()))
         {
@@ -2224,15 +2224,15 @@ pub async fn get_ipv6_socket() -> Option<(Arc<UdpSocket>, bytes::Bytes)> {
         socket.local_addr().ok().map(|a| a.ip())
     }
 
-    let socket = match UdpSocket::bind(SocketAddr::from(([0u16; 8], 0))).await {
+    let local_addr_ip = route_probe_ipv6()?;
+
+    let socket = match UdpSocket::bind(SocketAddr::from((local_addr_ip, 0))).await {
         Ok(s) => s,
         Err(err) => {
             log::warn!("Failed to create UDP socket for IPv6: {err}");
             return None;
         }
     };
-
-    let local_addr_ip = route_probe_ipv6()?;
 
     if is_usable_global_ipv6(local_addr_ip) {
         let socket_port = socket.local_addr().ok()?.port();
