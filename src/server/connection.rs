@@ -1368,7 +1368,20 @@ impl Connection {
                 self.port_forward_socket = Some(Framed::new(sock, BytesCodec::new()));
                 true
             }
-            _ => {
+            Ok(Err(e)) => {
+                log::warn!("Port forward connect failed for {}: {}", addr, e);
+                if is_rdp {
+                    addr = "RDP".to_owned();
+                }
+                self.send_login_error(format!(
+                    "Failed to access remote {}. Please make sure it is reachable/open.",
+                    addr
+                ))
+                .await;
+                false
+            }
+            Err(e) => {
+                log::warn!("Port forward connect timed out for {}: {}", addr, e);
                 if is_rdp {
                     addr = "RDP".to_owned();
                 }
@@ -1382,6 +1395,8 @@ impl Connection {
         }
     }
 
+    // Returns whether this connection should be kept alive.
+    // `true` does not necessarily mean authorization succeeded (e.g. REQUIRE_2FA case).
     async fn send_logon_response_and_keep_alive(&mut self) -> bool {
         if self.authorized {
             return true;
@@ -1415,6 +1430,7 @@ impl Connection {
                 }
             });
             self.send_login_error(crate::client::REQUIRE_2FA).await;
+            // Keep the connection alive so the client can continue with 2FA.
             return true;
         }
         if !self.connect_port_forward_if_needed().await {
