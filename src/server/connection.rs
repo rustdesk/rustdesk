@@ -560,7 +560,7 @@ impl Connection {
                     match data {
                         ipc::Data::Authorize => {
                             conn.require_2fa.take();
-                            if !conn.send_logon_response().await {
+                            if !conn.send_logon_response_and_keep_alive().await {
                                 break;
                             }
                             if conn.port_forward_socket.is_some() {
@@ -1357,9 +1357,10 @@ impl Connection {
         if self.port_forward_socket.is_some() {
             return true;
         }
-        let Some(login_request::Union::PortForward(mut pf)) = self.lr.union.clone() else {
+        let Some(login_request::Union::PortForward(pf)) = self.lr.union.as_ref() else {
             return true;
         };
+        let mut pf = pf.clone();
         let (mut addr, is_rdp) = Self::normalize_port_forward_target(&mut pf);
         self.port_forward_address = addr.clone();
         match timeout(3000, TcpStream::connect(&addr)).await {
@@ -1372,7 +1373,7 @@ impl Connection {
                     addr = "RDP".to_owned();
                 }
                 self.send_login_error(format!(
-                    "Failed to access remote {}, please make sure if it is open",
+                    "Failed to access remote {}. Please make sure it is reachable/open.",
                     addr
                 ))
                 .await;
@@ -1381,7 +1382,7 @@ impl Connection {
         }
     }
 
-    async fn send_logon_response(&mut self) -> bool {
+    async fn send_logon_response_and_keep_alive(&mut self) -> bool {
         if self.authorized {
             return true;
         }
@@ -2257,9 +2258,7 @@ impl Connection {
             // `is_logon_ui()` is a fallback for logon UI detection on Windows.
             #[cfg(target_os = "windows")]
             let is_logon = || {
-                crate::platform::is_prelogin()
-                    || crate::platform::is_locked()
-                    || {
+                crate::platform::is_prelogin() || crate::platform::is_locked() || {
                     match crate::platform::is_logon_ui() {
                         Ok(result) => result,
                         Err(e) => {
@@ -2298,7 +2297,7 @@ impl Connection {
                 if err_msg.is_empty() {
                     #[cfg(target_os = "linux")]
                     self.linux_headless_handle.wait_desktop_cm_ready().await;
-                    if !self.send_logon_response().await {
+                    if !self.send_logon_response_and_keep_alive().await {
                         return false;
                     }
                     self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
@@ -2336,7 +2335,7 @@ impl Connection {
                     if err_msg.is_empty() {
                         #[cfg(target_os = "linux")]
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
-                        if !self.send_logon_response().await {
+                        if !self.send_logon_response_and_keep_alive().await {
                             return false;
                         }
                         self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
@@ -2356,7 +2355,7 @@ impl Connection {
                         self.update_failure(failure, true, 1);
                         self.require_2fa.take();
                         raii::AuthedConnID::set_session_2fa(self.session_key());
-                        if !self.send_logon_response().await {
+                        if !self.send_logon_response_and_keep_alive().await {
                             return false;
                         }
                         self.try_start_cm(
@@ -2409,7 +2408,7 @@ impl Connection {
                     if let Some((_instant, uuid_old)) = uuid_old {
                         if uuid == uuid_old {
                             self.from_switch = true;
-                            if !self.send_logon_response().await {
+                            if !self.send_logon_response_and_keep_alive().await {
                                 return false;
                             }
                             self.try_start_cm(
@@ -5377,9 +5376,8 @@ mod raii {
         }
 
         pub fn check_wake_lock_on_setting_changed() {
-            let current = config::Config::get_bool_option(
-                keys::OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS,
-            );
+            let current =
+                config::Config::get_bool_option(keys::OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS);
             let cached = *WAKELOCK_KEEP_AWAKE_OPTION.lock().unwrap();
             if cached != Some(current) {
                 Self::check_wake_lock();
