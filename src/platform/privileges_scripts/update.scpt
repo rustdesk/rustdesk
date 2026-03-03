@@ -4,6 +4,7 @@ on run {daemon_file, agent_file, user, cur_pid, source_dir}
   set daemon_plist to "/Library/LaunchDaemons/com.carriez.RustDesk_service.plist"
   set app_bundle to "/Applications/RustDesk.app"
 
+  set check_source to "test -d " & quoted form of source_dir & " || exit 1;"
   set resolve_uid to "uid=$(id -u " & quoted form of user & " 2>/dev/null || true);"
   set unload_agent to "if [ -n \"$uid\" ]; then launchctl bootout gui/$uid " & quoted form of agent_plist & " 2>/dev/null || launchctl bootout user/$uid " & quoted form of agent_plist & " 2>/dev/null || launchctl unload -w " & quoted form of agent_plist & " || true; else launchctl unload -w " & quoted form of agent_plist & " || true; fi;"
   set unload_service to "launchctl unload -w " & daemon_plist & " || true;"
@@ -19,7 +20,7 @@ on run {daemon_file, agent_file, user, cur_pid, source_dir}
   set kickstart_agent to "if [ -n \"$uid\" ]; then launchctl kickstart -k gui/$uid/$agent_label 2>/dev/null || launchctl kickstart -k user/$uid/$agent_label 2>/dev/null || true; fi;"
   set load_agent to agent_label_cmd & bootstrap_agent & kickstart_agent
 
-  set sh to "set -e;" & resolve_uid & unload_agent & unload_service & kill_others & copy_files & write_daemon_plist & write_agent_plist & load_service & load_agent
+  set sh to "set -e;" & check_source & resolve_uid & unload_agent & unload_service & kill_others & copy_files & write_daemon_plist & write_agent_plist & load_service & load_agent
 
   do shell script sh with prompt "RustDesk wants to update itself" with administrator privileges
 end run
