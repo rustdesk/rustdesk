@@ -560,6 +560,9 @@ impl Connection {
                     match data {
                         ipc::Data::Authorize => {
                             conn.require_2fa.take();
+                            if !conn.connect_port_forward_if_needed().await {
+                                break;
+                            }
                             conn.send_logon_response().await;
                             if conn.port_forward_socket.is_some() {
                                 break;
@@ -1336,6 +1339,47 @@ impl Connection {
     #[inline]
     async fn post_audit_async(url: String, v: Value) -> ResultType<String> {
         crate::post_request(url, v.to_string(), "").await
+    }
+
+    fn normalize_port_forward_target(pf: &mut PortForward) -> (String, bool) {
+        let mut is_rdp = false;
+        if pf.host == "RDP" && pf.port == 0 {
+            pf.host = "localhost".to_owned();
+            pf.port = 3389;
+            is_rdp = true;
+        }
+        if pf.host.is_empty() {
+            pf.host = "localhost".to_owned();
+        }
+        (format!("{}:{}", pf.host, pf.port), is_rdp)
+    }
+
+    async fn connect_port_forward_if_needed(&mut self) -> bool {
+        if self.port_forward_socket.is_some() {
+            return true;
+        }
+        let Some(login_request::Union::PortForward(mut pf)) = self.lr.union.clone() else {
+            return true;
+        };
+        let (mut addr, is_rdp) = Self::normalize_port_forward_target(&mut pf);
+        self.port_forward_address = addr.clone();
+        match timeout(3000, TcpStream::connect(&addr)).await {
+            Ok(Ok(sock)) => {
+                self.port_forward_socket = Some(Framed::new(sock, BytesCodec::new()));
+                true
+            }
+            _ => {
+                if is_rdp {
+                    addr = "RDP".to_owned();
+                }
+                self.send_login_error(format!(
+                    "Failed to access remote {}, please make sure if it is open",
+                    addr
+                ))
+                .await;
+                false
+            }
+        }
     }
 
     async fn send_logon_response(&mut self) {
@@ -2178,33 +2222,8 @@ impl Connection {
                         sleep(1.).await;
                         return false;
                     }
-                    let mut is_rdp = false;
-                    if pf.host == "RDP" && pf.port == 0 {
-                        pf.host = "localhost".to_owned();
-                        pf.port = 3389;
-                        is_rdp = true;
-                    }
-                    if pf.host.is_empty() {
-                        pf.host = "localhost".to_owned();
-                    }
-                    let mut addr = format!("{}:{}", pf.host, pf.port);
-                    self.port_forward_address = addr.clone();
-                    match timeout(3000, TcpStream::connect(&addr)).await {
-                        Ok(Ok(sock)) => {
-                            self.port_forward_socket = Some(Framed::new(sock, BytesCodec::new()));
-                        }
-                        _ => {
-                            if is_rdp {
-                                addr = "RDP".to_owned();
-                            }
-                            self.send_login_error(format!(
-                                "Failed to access remote {}, please make sure if it is open",
-                                addr
-                            ))
-                            .await;
-                            return false;
-                        }
-                    }
+                    let (addr, _is_rdp) = Self::normalize_port_forward_target(&mut pf);
+                    self.port_forward_address = addr;
                 }
                 _ => {
                     if !self.check_privacy_mode_on().await {
@@ -2276,6 +2295,9 @@ impl Connection {
                 if err_msg.is_empty() {
                     #[cfg(target_os = "linux")]
                     self.linux_headless_handle.wait_desktop_cm_ready().await;
+                    if !self.connect_port_forward_if_needed().await {
+                        return false;
+                    }
                     self.send_logon_response().await;
                     self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
                 } else {
@@ -2312,6 +2334,9 @@ impl Connection {
                     if err_msg.is_empty() {
                         #[cfg(target_os = "linux")]
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
+                        if !self.connect_port_forward_if_needed().await {
+                            return false;
+                        }
                         self.send_logon_response().await;
                         self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
                     } else {
@@ -2330,6 +2355,9 @@ impl Connection {
                         self.update_failure(failure, true, 1);
                         self.require_2fa.take();
                         raii::AuthedConnID::set_session_2fa(self.session_key());
+                        if !self.connect_port_forward_if_needed().await {
+                            return false;
+                        }
                         self.send_logon_response().await;
                         self.try_start_cm(
                             self.lr.my_id.to_owned(),
@@ -2381,6 +2409,9 @@ impl Connection {
                     if let Some((_instant, uuid_old)) = uuid_old {
                         if uuid == uuid_old {
                             self.from_switch = true;
+                            if !self.connect_port_forward_if_needed().await {
+                                return false;
+                            }
                             self.send_logon_response().await;
                             self.try_start_cm(
                                 lr.my_id.clone(),
