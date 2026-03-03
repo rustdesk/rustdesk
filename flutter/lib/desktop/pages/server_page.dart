@@ -1,7 +1,6 @@
 // original cm window in Sciter version.
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -569,37 +568,12 @@ class _CmHeaderState extends State<_CmHeader>
   bool get wantKeepAlive => true;
 
   Widget _buildClientAvatar() {
-    const borderRadius = BorderRadius.all(Radius.circular(15.0));
-    final avatar = client.avatar.trim();
-    if (avatar.startsWith('data:image/')) {
-      final comma = avatar.indexOf(',');
-      if (comma > 0) {
-        try {
-          final bytes = base64Decode(avatar.substring(comma + 1));
-          return ClipRRect(
-            borderRadius: borderRadius,
-            child: Image.memory(
-              bytes,
-              width: 70,
-              height: 70,
-              fit: BoxFit.cover,
-            ),
-          );
-        } catch (_) {}
-      }
-    } else if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
-      return ClipRRect(
-        borderRadius: borderRadius,
-        child: Image.network(
-          avatar,
-          width: 70,
-          height: 70,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildInitialAvatar(),
-        ),
-      );
-    }
-    return _buildInitialAvatar();
+    return buildAvatarWidget(
+      avatar: client.avatar,
+      size: 70,
+      borderRadius: 15,
+      fallback: _buildInitialAvatar(),
+    )!;
   }
 
   Widget _buildInitialAvatar() {
@@ -612,7 +586,7 @@ class _CmHeaderState extends State<_CmHeader>
         borderRadius: BorderRadius.circular(15.0),
       ),
       child: Text(
-        client.name[0],
+        client.name.isNotEmpty ? client.name[0] : '?',
         style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,

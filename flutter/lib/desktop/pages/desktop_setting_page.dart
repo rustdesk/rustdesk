@@ -2061,7 +2061,8 @@ class _AccountState extends State<_Account> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 13,
-                              color: Theme.of(context).textTheme.bodySmall?.color,
+                              color:
+                                  Theme.of(context).textTheme.bodySmall?.color,
                             ),
                           ),
                         ),
@@ -2076,28 +2077,13 @@ class _AccountState extends State<_Account> {
   }
 
   Widget? _buildUserAvatar() {
-    final avatar = gFFI.userModel.avatar.value.trim();
-    if (avatar.isEmpty) return null;
-    const radius = 22.0;
-    if (avatar.startsWith('data:image/')) {
-      final comma = avatar.indexOf(',');
-      if (comma > 0) {
-        try {
-          return CircleAvatar(
-            radius: radius,
-            backgroundImage: MemoryImage(base64Decode(avatar.substring(comma + 1))),
-          );
-        } catch (_) {
-          return null;
-        }
-      }
-    } else if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundImage: NetworkImage(avatar),
-      );
-    }
-    return null;
+    // Resolve relative avatar path at display time
+    final avatar =
+        bind.mainResolveAvatarUrl(avatar: gFFI.userModel.avatar.value);
+    return buildAvatarWidget(
+      avatar: avatar,
+      size: 44,
+    );
   }
 }
 

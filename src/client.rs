@@ -33,7 +33,7 @@ use crate::{
     create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
     secure_tcp,
-    ui_interface::{get_builtin_option, use_texture_render},
+    ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
 };
 #[cfg(feature = "unix-file-copy-paste")]
@@ -2638,6 +2638,7 @@ impl LoginConfigHandler {
             })
             .unwrap_or_default();
         }
+        avatar = resolve_avatar_url(avatar);
         let mut display_name = get_builtin_option(keys::OPTION_DISPLAY_NAME);
         if display_name.is_empty() {
             display_name =

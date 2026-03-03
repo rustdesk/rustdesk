@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -857,28 +856,17 @@ class ClientInfo extends StatelessWidget {
   }
 
   Widget _buildAvatar(BuildContext context) {
-    final avatar = client.avatar.trim();
-    if (avatar.isNotEmpty) {
-      if (avatar.startsWith('data:image/')) {
-        final comma = avatar.indexOf(',');
-        if (comma > 0) {
-          try {
-            return CircleAvatar(
-              backgroundImage: MemoryImage(base64Decode(avatar.substring(comma + 1))),
-            );
-          } catch (_) {}
-        }
-      } else if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
-        return CircleAvatar(backgroundImage: NetworkImage(avatar));
-      }
-    }
-    // Show character as before if no avatar
-    return CircleAvatar(
+    final fallback = CircleAvatar(
       backgroundColor: str2color(
           client.name,
           Theme.of(context).brightness == Brightness.light ? 255 : 150),
-      child: Text(client.name[0]),
+      child: Text(client.name.isNotEmpty ? client.name[0] : '?'),
     );
+    return buildAvatarWidget(
+      avatar: client.avatar,
+      size: 40,
+      fallback: fallback,
+    )!;
   }
 }
 

@@ -17,6 +17,7 @@ lazy_static::lazy_static! {
 
 const QUERY_INTERVAL_SECS: f32 = 1.0;
 const QUERY_TIMEOUT_SECS: u64 = 60 * 3;
+
 const REQUESTING_ACCOUNT_AUTH: &str = "Requesting account auth";
 const WAITING_ACCOUNT_AUTH: &str = "Waiting account auth";
 const LOGIN_ACCOUNT_AUTH: &str = "Login account auth";

@@ -34,6 +34,7 @@ class UserModel {
     }
     return '$preferred (@$username)';
   }
+
   WeakReference<FFI> parent;
 
   UserModel(this.parent) {
@@ -88,7 +89,6 @@ class UserModel {
       }
 
       final user = UserPayload.fromJson(data);
-      user.avatar = _resolveAvatar(user.avatar, url);
       _parseAndUpdateUser(user);
     } catch (e) {
       debugPrint('Failed to refreshCurrentUser: $e');
@@ -138,7 +138,6 @@ class UserModel {
     avatar.value = user.avatar;
     isAdmin.value = user.isAdmin;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
-    _updateLocalUserInfo();
     if (isWeb) {
       // ugly here, tmp solution
       bind.mainSetLocalOption(key: 'verifier', value: user.verifier ?? '');
