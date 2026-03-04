@@ -1877,6 +1877,7 @@ impl Connection {
             port_forward: self.port_forward_address.clone(),
             peer_id,
             name,
+            avatar: self.lr.avatar.clone(),
             authorized,
             keyboard: self.keyboard,
             clipboard: self.clipboard,

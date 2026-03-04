@@ -1101,6 +1101,10 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
+pub fn main_resolve_avatar_url(avatar: String) -> SyncReturn<String> {
+    SyncReturn(resolve_avatar_url(avatar))
+}
+
 pub fn main_http_request(url: String, method: String, body: Option<String>, header: String) {
     http_request(url, method, body, header)
 }

@@ -689,7 +689,15 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 title: Obx(() => Text(gFFI.userModel.userName.value.isEmpty
                     ? translate('Login')
                     : '${translate('Logout')} (${gFFI.userModel.accountLabelWithHandle})')),
-                leading: Icon(Icons.person),
+                leading: Obx(() {
+                  final avatar = bind.mainResolveAvatarUrl(
+                      avatar: gFFI.userModel.avatar.value);
+                  return buildAvatarWidget(
+                        avatar: avatar,
+                        size: 40,
+                      ) ??
+                      Icon(Icons.person);
+                }),
                 onPressed: (context) {
                   if (gFFI.userModel.userName.value.isEmpty) {
                     loginDialog();

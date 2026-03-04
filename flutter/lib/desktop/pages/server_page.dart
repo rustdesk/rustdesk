@@ -462,23 +462,7 @@ class _CmHeaderState extends State<_CmHeader>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 70,
-            height: 70,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: str2color(client.name),
-              borderRadius: BorderRadius.circular(15.0),
-            ),
-            child: Text(
-              client.name[0],
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: 55,
-              ),
-            ),
-          ).marginOnly(right: 10.0),
+          _buildClientAvatar().marginOnly(right: 10.0),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.start,
@@ -582,6 +566,35 @@ class _CmHeaderState extends State<_CmHeader>
 
   @override
   bool get wantKeepAlive => true;
+
+  Widget _buildClientAvatar() {
+    return buildAvatarWidget(
+      avatar: client.avatar,
+      size: 70,
+      borderRadius: 15,
+      fallback: _buildInitialAvatar(),
+    )!;
+  }
+
+  Widget _buildInitialAvatar() {
+    return Container(
+      width: 70,
+      height: 70,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: str2color(client.name),
+        borderRadius: BorderRadius.circular(15.0),
+      ),
+      child: Text(
+        client.name.isNotEmpty ? client.name[0] : '?',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+          fontSize: 55,
+        ),
+      ),
+    );
+  }
 }
 
 class _PrivilegeBoard extends StatefulWidget {
