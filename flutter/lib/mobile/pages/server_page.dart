@@ -857,16 +857,16 @@ class ClientInfo extends StatelessWidget {
 
   Widget _buildAvatar(BuildContext context) {
     final fallback = CircleAvatar(
-      backgroundColor: str2color(
-          client.name,
+      backgroundColor: str2color(client.name,
           Theme.of(context).brightness == Brightness.light ? 255 : 150),
       child: Text(client.name.isNotEmpty ? client.name[0] : '?'),
     );
     return buildAvatarWidget(
-      avatar: client.avatar,
-      size: 40,
-      fallback: fallback,
-    )!;
+          avatar: client.avatar,
+          size: 40,
+          fallback: fallback,
+        ) ??
+        fallback;
   }
 }
 

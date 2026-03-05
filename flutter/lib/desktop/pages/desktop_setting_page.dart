@@ -2039,7 +2039,7 @@ class _AccountState extends State<_Account> {
               return Row(
                 children: [
                   if (avatarWidget != null) avatarWidget,
-                  if (avatarWidget != null) const SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

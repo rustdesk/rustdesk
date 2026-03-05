@@ -694,7 +694,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       avatar: gFFI.userModel.avatar.value);
                   return buildAvatarWidget(
                         avatar: avatar,
-                        size: 40,
+                        size: 28,
                         borderRadius: null,
                         fallback: Icon(Icons.person),
                       ) ??
