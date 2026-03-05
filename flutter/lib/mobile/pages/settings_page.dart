@@ -617,7 +617,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         onToggle: (bool v) async {
           await mainSetLocalBoolOption(kOptionEnableShowTerminalExtraKeys, v);
           final newValue =
-            mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+              mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
           setState(() {
             _showTerminalExtraKeys = newValue;
           });
@@ -694,7 +694,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       avatar: gFFI.userModel.avatar.value);
                   return buildAvatarWidget(
                         avatar: avatar,
-                        size: 40,
+                        size: 28,
+                        borderRadius: null,
+                        fallback: Icon(Icons.person),
                       ) ??
                       Icon(Icons.person);
                 }),
@@ -837,10 +839,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ),
           if (!incomingOnly)
             SettingsTile.switchTile(
-              title: Text(translate('keep-awake-during-outgoing-sessions-label')),
+              title:
+                  Text(translate('keep-awake-during-outgoing-sessions-label')),
               initialValue: _preventSleepWhileConnected,
               onToggle: (v) async {
-                await mainSetLocalBoolOption(kOptionKeepAwakeDuringOutgoingSessions, v);
+                await mainSetLocalBoolOption(
+                    kOptionKeepAwakeDuringOutgoingSessions, v);
                 setState(() {
                   _preventSleepWhileConnected = v;
                 });

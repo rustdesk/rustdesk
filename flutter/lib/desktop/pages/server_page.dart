@@ -569,11 +569,12 @@ class _CmHeaderState extends State<_CmHeader>
 
   Widget _buildClientAvatar() {
     return buildAvatarWidget(
-      avatar: client.avatar,
-      size: 70,
-      borderRadius: 15,
-      fallback: _buildInitialAvatar(),
-    )!;
+          avatar: client.avatar,
+          size: 70,
+          borderRadius: 15,
+          fallback: _buildInitialAvatar(),
+        ) ??
+        _buildInitialAvatar();
   }
 
   Widget _buildInitialAvatar() {
