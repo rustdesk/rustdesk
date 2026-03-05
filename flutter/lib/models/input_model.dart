@@ -348,8 +348,8 @@ class InputModel {
   final _trackpadAdjustPeerLinux = 0.06;
   // This is an experience value.
   final _trackpadAdjustMacToWin = 2.50;
-  // Ignore directional locking for very small mixed-axis deltas to avoid
-  // over-filtering subtle movements near zero.
+  // Ignore directional locking for very small deltas on both axes (including
+  // tiny single-axis movement) to avoid over-filtering near zero.
   static const double _trackpadAxisNoiseThreshold = 0.2;
   // Lock to dominant axis only when one axis is clearly stronger.
   // 1.6 means the dominant axis must be >= 60% larger than the other.
