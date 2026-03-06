@@ -348,6 +348,12 @@ class InputModel {
   final _trackpadAdjustPeerLinux = 0.06;
   // This is an experience value.
   final _trackpadAdjustMacToWin = 2.50;
+  // Ignore directional locking for very small deltas on both axes (including
+  // tiny single-axis movement) to avoid over-filtering near zero.
+  static const double _trackpadAxisNoiseThreshold = 0.2;
+  // Lock to dominant axis only when one axis is clearly stronger.
+  // 1.6 means the dominant axis must be >= 60% larger than the other.
+  static const double _trackpadAxisLockRatio = 1.6;
   int _trackpadSpeed = kDefaultTrackpadSpeed;
   double _trackpadSpeedInner = kDefaultTrackpadSpeed / 100.0;
   var _trackpadScrollUnsent = Offset.zero;
@@ -1177,7 +1183,6 @@ class InputModel {
     if (isMacOS && peerPlatform == kPeerPlatformWindows) {
       delta *= _trackpadAdjustMacToWin;
     }
-    _lastTrackpadTsUs = e.timeStamp.inMicroseconds;
     delta = _filterTrackpadDeltaAxis(delta);
     _trackpadLastDelta = delta;
 
@@ -1214,10 +1219,12 @@ class InputModel {
   Offset _filterTrackpadDeltaAxis(Offset delta) {
     final absDx = delta.dx.abs();
     final absDy = delta.dy.abs();
+    // Keep diagonal intent when movement is tiny on both axes.
     if (absDx < _trackpadAxisNoiseThreshold &&
         absDy < _trackpadAxisNoiseThreshold) {
       return delta;
     }
+    // Dominant-axis lock to reduce accidental cross-axis scrolling noise.
     if (absDy >= absDx * _trackpadAxisLockRatio) {
       return Offset(0, delta.dy);
     }

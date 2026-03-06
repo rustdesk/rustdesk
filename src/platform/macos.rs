@@ -42,9 +42,16 @@ static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
 static mut LATEST_SEED: i32 = 0;
 
-// Using a fixed temporary directory for updates is preferable to
-// using one that includes the custom client name.
-const UPDATE_TEMP_DIR: &str = "/tmp/.rustdeskupdate";
+#[inline]
+fn get_update_temp_dir() -> PathBuf {
+    let euid = unsafe { hbb_common::libc::geteuid() };
+    Path::new("/tmp").join(format!(".rustdeskupdate-{}", euid))
+}
+
+#[inline]
+fn get_update_temp_dir_string() -> String {
+    get_update_temp_dir().to_string_lossy().into_owned()
+}
 
 /// Global mutex to serialize CoreGraphics cursor operations.
 /// This prevents race conditions between cursor visibility (hide depth tracking)
@@ -279,24 +286,12 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
             }
+            Ok(status) if !status.success() => {
+                log::warn!("run osascript failed with status: {}", status);
+            }
             _ => {
                 let installed = std::path::Path::new(&agent_plist_file).exists();
                 log::info!("Agent file {} installed: {}", &agent_plist_file, installed);
-                if installed {
-                    // Unload first, or load may not work if already loaded.
-                    // We hope that the load operation can immediately trigger a start.
-                    std::process::Command::new("launchctl")
-                        .args(&["unload", "-w", &agent_plist_file])
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .status()
-                        .ok();
-                    let status = std::process::Command::new("launchctl")
-                        .args(&["load", "-w", &agent_plist_file])
-                        .status();
-                    log::info!("launch server, status: {:?}", &status);
-                }
             }
         }
     };
@@ -415,7 +410,9 @@ pub fn set_cursor_pos(x: i32, y: i32) -> bool {
     let _guard = match CG_CURSOR_MUTEX.try_lock() {
         Ok(guard) => guard,
         Err(std::sync::TryLockError::WouldBlock) => {
-            log::error!("[BUG] set_cursor_pos: CG_CURSOR_MUTEX is already held - potential deadlock!");
+            log::error!(
+                "[BUG] set_cursor_pos: CG_CURSOR_MUTEX is already held - potential deadlock!"
+            );
             debug_assert!(false, "Re-entrant call to set_cursor_pos detected");
             return false;
         }
@@ -822,7 +819,8 @@ pub fn quit_gui() {
 
 #[inline]
 pub fn try_remove_temp_update_dir(dir: Option<&str>) {
-    let target_path = Path::new(dir.unwrap_or(UPDATE_TEMP_DIR));
+    let target_path_buf = dir.map(PathBuf::from).unwrap_or_else(get_update_temp_dir);
+    let target_path = target_path_buf.as_path();
     if target_path.exists() {
         std::fs::remove_dir_all(target_path).ok();
     }
@@ -851,32 +849,34 @@ pub fn update_me() -> ResultType<()> {
     if is_installed_daemon && !is_service_stopped {
         let agent = format!("{}_server.plist", crate::get_full_name());
         let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
-        std::process::Command::new("launchctl")
-            .args(&["unload", "-w", &agent_plist_file])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .ok();
         update_daemon_agent(agent_plist_file, app_dir, true);
     } else {
         // `kill -9` may not work without "administrator privileges"
-        let update_body = format!(
-            r#"
-do shell script "
-pgrep -x '{app_name}' | grep -v {pid} | xargs kill -9 && rm -rf '/Applications/{app_name}.app' && ditto '{app_dir}' '/Applications/{app_name}.app' && chown -R {user}:staff '/Applications/{app_name}.app' && xattr -r -d com.apple.quarantine '/Applications/{app_name}.app'
-" with prompt "{app_name} wants to update itself" with administrator privileges
-    "#,
-            app_name = app_name,
-            pid = std::process::id(),
-            app_dir = app_dir,
-            user = get_active_username()
-        );
-        match Command::new("osascript")
+        let update_body = r#"
+on run {app_name, cur_pid, app_dir, user_name}
+    set app_bundle to "/Applications/" & app_name & ".app"
+    set app_bundle_q to quoted form of app_bundle
+    set app_dir_q to quoted form of app_dir
+    set user_name_q to quoted form of user_name
+
+    set check_source to "test -d " & app_dir_q & " || exit 1;"
+    set kill_others to "pids=$(pgrep -x '" & app_name & "' | grep -vx " & cur_pid & " || true); if [ -n \"$pids\" ]; then echo \"$pids\" | xargs kill -9 || true; fi;"
+    set copy_files to "rm -rf " & app_bundle_q & " && ditto " & app_dir_q & " " & app_bundle_q & " && chown -R " & user_name_q & ":staff " & app_bundle_q & " && (xattr -r -d com.apple.quarantine " & app_bundle_q & " || true);"
+    set sh to "set -e;" & check_source & kill_others & copy_files
+
+    do shell script sh with prompt app_name & " wants to update itself" with administrator privileges
+end run
+        "#;
+        let active_user = get_active_username();
+        let status = Command::new("osascript")
             .arg("-e")
             .arg(update_body)
-            .status()
-        {
+            .arg(app_name.to_string())
+            .arg(std::process::id().to_string())
+            .arg(app_dir)
+            .arg(active_user)
+            .status();
+        match status {
             Ok(status) if !status.success() => {
                 log::error!("osascript execution failed with status: {}", status);
             }
@@ -897,25 +897,28 @@ pgrep -x '{app_name}' | grep -v {pid} | xargs kill -9 && rm -rf '/Applications/{
 }
 
 pub fn update_from_dmg(dmg_path: &str) -> ResultType<()> {
+    let update_temp_dir = get_update_temp_dir_string();
     println!("Starting update from DMG: {}", dmg_path);
-    extract_dmg(dmg_path, UPDATE_TEMP_DIR)?;
+    extract_dmg(dmg_path, &update_temp_dir)?;
     println!("DMG extracted");
-    update_extracted(UPDATE_TEMP_DIR)?;
+    update_extracted(&update_temp_dir)?;
     println!("Update process started");
     Ok(())
 }
 
 pub fn update_to(_file: &str) -> ResultType<()> {
-    update_extracted(UPDATE_TEMP_DIR)?;
+    let update_temp_dir = get_update_temp_dir_string();
+    update_extracted(&update_temp_dir)?;
     Ok(())
 }
 
 pub fn extract_update_dmg(file: &str) {
+    let update_temp_dir = get_update_temp_dir_string();
     let mut evt: HashMap<&str, String> =
         HashMap::from([("name", "extract-update-dmg".to_string())]);
-    match extract_dmg(file, UPDATE_TEMP_DIR) {
+    match extract_dmg(file, &update_temp_dir) {
         Ok(_) => {
-            log::info!("Extracted dmg file to {}", UPDATE_TEMP_DIR);
+            log::info!("Extracted dmg file to {}", update_temp_dir);
         }
         Err(e) => {
             evt.insert("err", e.to_string());

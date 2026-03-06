@@ -841,13 +841,7 @@ class ClientInfo extends StatelessWidget {
                   flex: -1,
                   child: Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: CircleAvatar(
-                          backgroundColor: str2color(
-                              client.name,
-                              Theme.of(context).brightness == Brightness.light
-                                  ? 255
-                                  : 150),
-                          child: Text(client.name[0])))),
+                      child: _buildAvatar(context))),
               Expanded(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -859,6 +853,20 @@ class ClientInfo extends StatelessWidget {
             ],
           ),
         ]));
+  }
+
+  Widget _buildAvatar(BuildContext context) {
+    final fallback = CircleAvatar(
+      backgroundColor: str2color(client.name,
+          Theme.of(context).brightness == Brightness.light ? 255 : 150),
+      child: Text(client.name.isNotEmpty ? client.name[0] : '?'),
+    );
+    return buildAvatarWidget(
+          avatar: client.avatar,
+          size: 40,
+          fallback: fallback,
+        ) ??
+        fallback;
   }
 }
 

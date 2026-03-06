@@ -809,7 +809,7 @@ fn record_key_is_control_key(record_key: u64) -> bool {
 
 #[inline]
 fn record_key_is_chr(record_key: u64) -> bool {
-    record_key < KEY_CHAR_START
+    record_key >= KEY_CHAR_START
 }
 
 #[inline]
@@ -1513,6 +1513,27 @@ fn get_control_key_value(key_event: &KeyEvent) -> i32 {
     }
 }
 
+#[inline]
+fn has_hotkey_modifiers(key_event: &KeyEvent) -> bool {
+    key_event.modifiers.iter().any(|ck| {
+        let v = ck.value();
+        v == ControlKey::Control.value()
+            || v == ControlKey::RControl.value()
+            || v == ControlKey::Meta.value()
+            || v == ControlKey::RWin.value()
+            || {
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                {
+                    v == ControlKey::Alt.value() || v == ControlKey::RAlt.value()
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    false
+                }
+            }
+    })
+}
+
 fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
     let ck_value = get_control_key_value(key_event);
     fix_modifiers(&key_event.modifiers[..], en, ck_value);
@@ -1572,7 +1593,7 @@ fn need_to_uppercase(en: &mut Enigo) -> bool {
     get_modifier_state(Key::Shift, en) || get_modifier_state(Key::CapsLock, en)
 }
 
-fn process_chr(en: &mut Enigo, chr: u32, down: bool) {
+fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
     // On Wayland with uinput mode, use clipboard for character input
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
@@ -1585,6 +1606,16 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool) {
             }
             return;
         }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    if !_hotkey {
+        if down {
+            if let Ok(chr) = char::try_from(chr) {
+                en.key_sequence(&chr.to_string());
+            }
+        }
+        return;
     }
 
     let key = char_value_to_key(chr);
@@ -1856,7 +1887,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
             let record_key = chr as u64 + KEY_CHAR_START;
             record_pressed_key(KeysDown::EnigoKey(record_key), down);
-            process_chr(&mut en, chr, down)
+            process_chr(&mut en, chr, down, has_hotkey_modifiers(evt))
         }
         Some(key_event::Union::Unicode(chr)) => {
             // Same as Chr: release Shift for Unicode input

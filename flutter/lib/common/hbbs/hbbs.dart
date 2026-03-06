@@ -26,6 +26,7 @@ enum UserStatus { kDisabled, kNormal, kUnverified }
 class UserPayload {
   String name = '';
   String displayName = '';
+  String avatar = '';
   String email = '';
   String note = '';
   String? verifier;
@@ -35,6 +36,7 @@ class UserPayload {
   UserPayload.fromJson(Map<String, dynamic> json)
       : name = json['name'] ?? '',
         displayName = json['display_name'] ?? '',
+        avatar = json['avatar'] ?? '',
         email = json['email'] ?? '',
         note = json['note'] ?? '',
         verifier = json['verifier'],
@@ -49,6 +51,7 @@ class UserPayload {
     final Map<String, dynamic> map = {
       'name': name,
       'display_name': displayName,
+      'avatar': avatar,
       'status': status == UserStatus.kDisabled
           ? 0
           : status == UserStatus.kUnverified

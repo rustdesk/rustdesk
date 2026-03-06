@@ -1451,6 +1451,9 @@ function set_local_user_info(user) {
     if (user.display_name) {
         user_info.display_name = user.display_name;
     }
+    if (user.avatar) {
+        user_info.avatar = user.avatar;
+    }
     if (user.status) {
         user_info.status = user.status;
     }
