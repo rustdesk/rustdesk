@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "marvadesk"
 version = "1.4.2"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["MarvaDesk <info@marvadesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "MarvaDesk Remote Desktop - Soporte remoto"
+default-run = "marvadesk"
 rust-version = "1.75"
 
 [lib]
@@ -23,6 +23,7 @@ path = "src/service.rs"
 [features]
 inline = []
 cli = []
+quicksupport = []  # Cliente solo recepción (QuickSupport): sin ajustes ni conexiones salientes
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
@@ -202,10 +203,10 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
-FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+LegalCopyright = "Copyright © 2025 MarvaDesk. All rights reserved."
+ProductName = "MarvaDesk"
+FileDescription = "MarvaDesk Remote Desktop - Soporte remoto"
+OriginalFilename = "marvadesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -221,8 +222,8 @@ hound = "3.5"
 docopt = "1.1"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "MarvaDesk"
+identifier = "com.solucionesmarva.desk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

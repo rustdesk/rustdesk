@@ -8,8 +8,8 @@
  <string>HZF9JMC8YN</string>
  <key>provisioningProfiles</key>
  <dict>
- <key>com.carriez.flutterHbb</key>
- <string>rustdesk-ios-prod-app-store</string>
+ <key>com.solucionesmarva.desk</key>
+ <string>marvadesk-ios-prod-app-store</string>
  </dict>
  </dict>
  </plist>

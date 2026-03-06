@@ -1540,6 +1540,28 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    // MarvaDesk: servidor y clave fijos, no editables
+    {
+        use config::{keys, OVERWRITE_SETTINGS, BUILTIN_SETTINGS, RENDEZVOUS_SERVERS, RS_PUB_KEY};
+        let mut overwrite = OVERWRITE_SETTINGS.write().unwrap();
+        overwrite.insert(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(), RENDEZVOUS_SERVERS[0].to_string());
+        overwrite.insert(keys::OPTION_KEY.to_string(), RS_PUB_KEY.to_string());
+        drop(overwrite);
+        let mut buildin = BUILTIN_SETTINGS.write().unwrap();
+        buildin.insert(keys::OPTION_HIDE_SERVER_SETTINGS.to_string(), "Y".to_string());
+        buildin.insert("hide-network-settings".to_string(), "Y".to_string());
+        buildin.insert("hide-proxy-settings".to_string(), "Y".to_string());
+        buildin.insert("hide-websocket-settings".to_string(), "Y".to_string());
+        drop(buildin);
+    }
+    #[cfg(feature = "quicksupport")]
+    {
+        use config::HARD_SETTINGS;
+        let mut hard = HARD_SETTINGS.write().unwrap();
+        hard.insert("conn-type".to_string(), "incoming".to_string());
+        hard.insert("disable-settings".to_string(), "Y".to_string());
+        drop(hard);
+    }
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());

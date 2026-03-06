@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=MarvaDesk
+NoDisplay=true
+MimeType=x-scheme-handler/marvadesk;
+TryExec=marvadesk
+Exec=marvadesk %u
+Icon=marvadesk
+Terminal=false
+Type=Application
+StartupNotify=false
+StartupWMClass=marvadesk

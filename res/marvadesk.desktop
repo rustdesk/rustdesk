@@ -1,0 +1,19 @@
+[Desktop Entry]
+Name=MarvaDesk
+GenericName=Remote Desktop
+Comment=Soporte remoto - MarvaDesk
+Exec=marvadesk %u
+Icon=marvadesk
+Terminal=false
+Type=Application
+StartupNotify=true
+Categories=Network;RemoteAccess;GTK;
+Keywords=internet;linux;dart;rust;remote-control;p2p;teamviewer;rust-lang;rdp;remote-desktop;vnc;
+Actions=new-window;
+StartupWMClass=marvadesk
+
+X-Desktop-File-Install-Version=0.23
+
+[Desktop Action new-window]
+Name=Open a New Window
+Exec=marvadesk %u
