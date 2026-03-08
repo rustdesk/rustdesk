@@ -32,6 +32,10 @@ class CanvasCoords {
   double scale = 1.0;
   double scrollX = 0;
   double scrollY = 0;
+  double displayWidth = 0;
+  double displayHeight = 0;
+  double paddingX = 0;
+  double paddingY = 0;
   ScrollStyle scrollStyle = ScrollStyle.scrollauto;
   Size size = Size.zero;
 
@@ -44,6 +48,10 @@ class CanvasCoords {
       'scale': scale,
       'scrollX': scrollX,
       'scrollY': scrollY,
+      'displayWidth': displayWidth,
+      'displayHeight': displayHeight,
+      'paddingX': paddingX,
+      'paddingY': paddingY,
       'scrollStyle': scrollStyle.toJson(),
       'size': {
         'w': size.width,
@@ -59,6 +67,10 @@ class CanvasCoords {
     model.scale = json['scale'];
     model.scrollX = json['scrollX'];
     model.scrollY = json['scrollY'];
+    model.displayWidth = (json['displayWidth'] ?? 0).toDouble();
+    model.displayHeight = (json['displayHeight'] ?? 0).toDouble();
+    model.paddingX = (json['paddingX'] ?? 0).toDouble();
+    model.paddingY = (json['paddingY'] ?? 0).toDouble();
     model.scrollStyle =
         ScrollStyle.fromJson(json['scrollStyle'], ScrollStyle.scrollauto);
     model.size = Size(json['size']['w'], json['size']['h']);
@@ -72,6 +84,10 @@ class CanvasCoords {
     coords.scale = model.scale;
     coords.scrollX = model.scrollX;
     coords.scrollY = model.scrollY;
+    coords.displayWidth = model.getDisplayWidth().toDouble();
+    coords.displayHeight = model.getDisplayHeight().toDouble();
+    coords.paddingX = model.displayPaddingX;
+    coords.paddingY = model.displayPaddingY;
     coords.scrollStyle = model.scrollStyle;
     coords.size = model.size;
     return coords;
@@ -1792,8 +1808,12 @@ class InputModel {
     final nearThr = 3;
     var nearRight = (canvas.size.width - x) < nearThr;
     var nearBottom = (canvas.size.height - y) < nearThr;
-    final imageWidth = rect.width * canvas.scale;
-    final imageHeight = rect.height * canvas.scale;
+    final displayWidth =
+        canvas.displayWidth > 0 ? canvas.displayWidth : rect.width;
+    final displayHeight =
+        canvas.displayHeight > 0 ? canvas.displayHeight : rect.height;
+    final imageWidth = displayWidth * canvas.scale;
+    final imageHeight = displayHeight * canvas.scale;
     if (canvas.scrollStyle != ScrollStyle.scrollauto) {
       x += imageWidth * canvas.scrollX;
       y += imageHeight * canvas.scrollY;
@@ -1821,8 +1841,19 @@ class InputModel {
         y += step;
       }
     }
-    x += rect.left;
-    y += rect.top;
+    final paddedX = x;
+    final paddedY = y;
+    x = paddedX - canvas.paddingX + rect.left;
+    y = paddedY - canvas.paddingY + rect.top;
+
+    final insidePaddedRect = paddedX >= 0 &&
+        paddedY >= 0 &&
+        paddedX <= displayWidth &&
+        paddedY <= displayHeight;
+    if (insidePaddedRect) {
+      x = x.clamp(rect.left, rect.right).toDouble();
+      y = y.clamp(rect.top, rect.bottom).toDouble();
+    }
 
     if (onExit) {
       final pos = setNearestEdge(x, y, rect);
