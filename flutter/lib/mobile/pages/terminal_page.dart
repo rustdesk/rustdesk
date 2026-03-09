@@ -83,7 +83,10 @@ class _TerminalPageState extends State<TerminalPage>
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
 
-    _showTerminalExtraKeys = mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+    // Web desktop users have full hardware keyboard access, so the on-screen
+    // terminal extra keys bar is unnecessary and disabled.
+    _showTerminalExtraKeys = !isWebDesktop &&
+        mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager

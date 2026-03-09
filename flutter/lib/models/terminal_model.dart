@@ -266,8 +266,8 @@ class TerminalModel with ChangeNotifier {
 
   void _handleTerminalOpened(Map<String, dynamic> evt) {
     final bool success = getSuccessFromEvt(evt);
-    final String message = evt['message'] ?? '';
-    final String? serviceId = evt['service_id'];
+    final String message = evt['message']?.toString() ?? '';
+    final String? serviceId = evt['service_id']?.toString();
 
     debugPrint(
         '[TerminalModel] Terminal opened response: success=$success, message=$message, service_id=$serviceId');
@@ -275,7 +275,18 @@ class TerminalModel with ChangeNotifier {
     if (success) {
       _terminalOpened = true;
 
-      // Service ID is now saved on the Rust side in handle_terminal_response
+      // On reconnect ("Reconnected to existing terminal"), server may replay recent output.
+      // If this TerminalView instance is reused (not rebuilt), duplicate lines can appear.
+      // We intentionally accept this tradeoff for now to keep logic simple.
+
+      // Fallback: if terminal view is not yet ready but already has valid
+      // dimensions (e.g. layout completed before open response arrived),
+      // mark view ready now to avoid output stuck in buffer indefinitely.
+      if (!_terminalViewReady &&
+          terminal.viewWidth > 0 &&
+          terminal.viewHeight > 0) {
+        _markViewReady();
+      }
 
       // Process any buffered input
       _processBufferedInputAsync().then((_) {
@@ -358,8 +369,7 @@ class TerminalModel with ChangeNotifier {
       // because it only affects the pre-layout buffering window and the
       // terminal will self-correct on subsequent output.
       if (text.length >= _kMaxOutputBufferChars) {
-        final truncated =
-            text.substring(text.length - _kMaxOutputBufferChars);
+        final truncated = text.substring(text.length - _kMaxOutputBufferChars);
         _pendingOutputChunks
           ..clear()
           ..add(truncated);

@@ -134,6 +134,7 @@ pub struct Client {
     pub is_terminal: bool,
     pub port_forward: String,
     pub name: String,
+    pub avatar: String,
     pub peer_id: String,
     pub keyboard: bool,
     pub clipboard: bool,
@@ -220,6 +221,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         port_forward: String,
         peer_id: String,
         name: String,
+        avatar: String,
         authorized: bool,
         keyboard: bool,
         clipboard: bool,
@@ -240,6 +242,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             is_terminal,
             port_forward,
             name: name.clone(),
+            avatar,
             peer_id: peer_id.clone(),
             keyboard,
             clipboard,
@@ -500,9 +503,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
+                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(target_os = "windows")]
                                     {
@@ -823,6 +826,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 port_forward,
                 peer_id,
                 name,
+                avatar,
                 authorized,
                 keyboard,
                 clipboard,
@@ -843,6 +847,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     port_forward,
                     peer_id,
                     name,
+                    avatar,
                     authorized,
                     keyboard,
                     clipboard,

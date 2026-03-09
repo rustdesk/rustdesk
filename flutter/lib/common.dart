@@ -3063,6 +3063,11 @@ Future<void> start_service(bool is_start) async {
 }
 
 Future<bool> canBeBlocked() async {
+  if (isWeb) {
+    // Web can only act as a controller, never as a controlled side,
+    // so it should never be blocked by a remote session.
+    return false;
+  }
   // First check control permission
   final controlPermission = await bind.mainGetCommon(
       key: "is-remote-modify-enabled-by-control-permissions");
@@ -4112,4 +4117,44 @@ String mouseButtonsToPeer(int buttons) {
     default:
       return '';
   }
+}
+
+/// Build an avatar widget from an avatar URL or data URI string.
+/// Returns [fallback] if avatar is empty or cannot be decoded.
+/// [borderRadius] defaults to [size]/2 (circle).
+Widget? buildAvatarWidget({
+  required String avatar,
+  required double size,
+  double? borderRadius,
+  Widget? fallback,
+}) {
+  final trimmed = avatar.trim();
+  if (trimmed.isEmpty) return fallback;
+
+  ImageProvider? imageProvider;
+  if (trimmed.startsWith('data:image/')) {
+    final comma = trimmed.indexOf(',');
+    if (comma > 0) {
+      try {
+        imageProvider = MemoryImage(base64Decode(trimmed.substring(comma + 1)));
+      } catch (_) {}
+    }
+  } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    imageProvider = NetworkImage(trimmed);
+  }
+
+  if (imageProvider == null) return fallback;
+
+  final radius = borderRadius ?? size / 2;
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(radius),
+    child: Image(
+      image: imageProvider,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) =>
+          fallback ?? SizedBox.shrink(),
+    ),
+  );
 }

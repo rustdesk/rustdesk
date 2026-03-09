@@ -36,6 +36,8 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   int _nextTerminalId = 1;
   // Lightweight idempotency guard for async close operations
   final Set<String> _closingTabs = {};
+  // When true, all session cleanup should persist (window-level close in progress)
+  bool _windowClosing = false;
 
   _TerminalTabPageState(Map<String, dynamic> params) {
     Get.put(DesktopTabController(tabType: DesktopTabType.terminal));
@@ -139,6 +141,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   /// UI tabs are removed immediately; session cleanup runs in parallel with a
   /// bounded timeout so window close is not blocked indefinitely.
   Future<void> _closeAllTabs() async {
+    _windowClosing = true;
     final tabKeys = tabController.state.value.tabs.map((t) => t.key).toList();
     // Remove all UI tabs immediately (same instant behavior as the old tabController.clear())
     tabController.clear();
@@ -171,8 +174,17 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   /// - `true` (window close): persist all sessions, don't close any.
   /// - `false` (tab close): only persist the last session for the peer,
   ///   close others so only the most recent disconnected session survives.
+  ///
+  /// Note: if [_windowClosing] is true, persistAll is forced to true so that
+  /// in-flight _closeTab() calls don't accidentally close sessions that the
+  /// window-close flow intends to preserve.
   Future<void> _closeTerminalSessionIfNeeded(String tabKey,
       {bool persistAll = false, int? peerTabCount}) async {
+    // If window close is in progress, override to persist all sessions
+    // even if this call originated from an individual tab close.
+    if (_windowClosing) {
+      persistAll = true;
+    }
     final parsed = _parseTabKey(tabKey);
     if (parsed == null) return;
     final (peerId, terminalId) = parsed;

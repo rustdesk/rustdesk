@@ -245,7 +245,20 @@ pub fn get_builtin_option(key: &str) -> String {
 
 #[inline]
 pub fn set_local_option(key: String, value: String) {
-    LocalConfig::set_option(key.clone(), value.clone());
+    LocalConfig::set_option(key.clone(), value);
+}
+
+/// Resolve relative avatar path (e.g. "/avatar/xxx") to absolute URL
+/// by prepending the API server address.
+pub fn resolve_avatar_url(avatar: String) -> String {
+    let avatar = avatar.trim().to_owned();
+    if avatar.starts_with('/') {
+        let api_server = get_api_server();
+        if !api_server.is_empty() {
+            return format!("{}{}", api_server.trim_end_matches('/'), avatar);
+        }
+    }
+    avatar
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
