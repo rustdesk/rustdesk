@@ -1768,15 +1768,29 @@ Future<void> saveWindowPosition(WindowType type,
       // if is not resizable. The reason is unknown.
       //
       // `setResizable(!bind.isIncomingOnly());` in main.dart
-      isMaximized =
-          bind.isIncomingOnly() ? false : await windowManager.isMaximized();
+      // On Linux, the GtkWindow may already be destroyed when this is called
+      // during onWindowClose (via _saveFrame(flush: true)). Querying a destroyed
+      // window causes SIGSEGV in the native plugin. Guard with try-catch and
+      // fall back to the last saved position if the window is no longer available.
+      try {
+        isMaximized =
+            bind.isIncomingOnly() ? false : await windowManager.isMaximized();
+      } catch (e) {
+        debugPrint('Failed to query isMaximized (window may be closing): $e');
+        isMaximized = false;
+      }
       if (isFullscreen || isMaximized) {
         setPreFrame();
       } else {
-        position = await windowManager.getPosition(
-            ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
-        sz = await windowManager.getSize(
-            ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+        try {
+          position = await windowManager.getPosition(
+              ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+          sz = await windowManager.getSize(
+              ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+        } catch (e) {
+          debugPrint('Failed to query window position/size (window may be closing): $e');
+          setPreFrame();
+        }
       }
       break;
     default:
