@@ -2686,8 +2686,7 @@ class CanvasModel with ChangeNotifier {
     if (targetOffset == null || targetScale == null) {
       return;
     }
-    _timerMobileRestoreCanvasOffset =
-        Timer(Duration(milliseconds: 100), () async {
+    _timerMobileRestoreCanvasOffset = Timer(Duration(milliseconds: 100), () {
       updateSize();
       _x = targetOffset.dx;
       _y = targetOffset.dy;
