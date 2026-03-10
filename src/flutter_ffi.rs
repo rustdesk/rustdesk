@@ -930,6 +930,10 @@ pub fn main_get_login_device_info() -> SyncReturn<String> {
     SyncReturn(get_login_device_info_json())
 }
 
+pub fn main_mdm_set_id(new_id: String) {
+    set_id(new_id)
+}
+
 pub fn main_change_id(new_id: String) {
     change_id(new_id)
 }
@@ -1015,6 +1019,7 @@ pub fn main_set_options(json: String) {
         set_options(map)
     }
 }
+
 
 pub fn main_test_if_valid_server(server: String, test_with_proxy: bool) -> String {
     test_if_valid_server(server, test_with_proxy)

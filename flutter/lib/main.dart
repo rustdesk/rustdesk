@@ -23,6 +23,8 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:managed_configurations/managed_configurations.dart';
+
 import 'common.dart';
 import 'consts.dart';
 import 'mobile/pages/home_page.dart';
@@ -185,6 +187,55 @@ void runMobileApp() async {
   draggablePositions.load();
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
+
+  final managedConfig = ManagedConfigurations();
+  final managedAppConfig = await managedConfig.getManagedConfigurations;
+  // from here on all configuration for MDM version
+  bind.mainSetLocalOption(key: "show-scam-warning", value: "N");
+
+  RxString idServerMsg = ''.obs;
+  RxString relayServerMsg = ''.obs;
+  RxString apiServerMsg = ''.obs;
+
+  String idServer = "";
+  String relayServer = "";
+  String serverKey = "";
+  final errMsgs = [
+    idServerMsg,
+    relayServerMsg,
+    apiServerMsg,
+  ];
+
+  managedAppConfig?.forEach((key, value) {
+
+    switch (key) {
+      case "password":
+        bind.mainSetPermanentPassword(password: value);
+        break;
+      case "idServer":
+        idServer=value;
+        break;
+      case "relayServer":
+        relayServer=value;
+        break;
+      case "key":
+        print("key : $value");
+        serverKey=value;
+        break;
+      case "id":
+        bind.mainMdmSetId(newId: value);
+        break;
+    }
+  });
+  await setServerConfig(
+      null,
+      errMsgs,
+      ServerConfig(
+          idServer: idServer.trim(),
+          relayServer: relayServer.trim(),
+          apiServer: "".trim(),
+          key: serverKey.trim()));
+
   runApp(App());
   await initUniLinks();
 }

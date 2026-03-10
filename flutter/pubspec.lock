@@ -873,6 +873,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.2-main.4"
+  managed_configurations:
+    dependency: "direct main"
+    description:
+      name: managed_configurations
+      sha256: ee517d73244e645afd735c7c95a1c6130eb6794570838cf75316382e24f03b0d
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.1"
   matcher:
     dependency: transitive
     description:
@@ -1473,7 +1481,7 @@ packages:
     source: hosted
     version: "1.1.16"
   vector_math:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: vector_math
       sha256: "80b3257d1492ce4d091729e3a67a60407d227c27241d6927be0130c98e741803"

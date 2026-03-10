@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<restrictions xmlns:android="http://schemas.android.com/apk/res/android">
+    <restriction
+        android:key="password"
+        android:title="Connection_Password"
+        android:restrictionType="string" />
+    <restriction
+        android:key="id"
+        android:title="Connection_ID"
+        android:restrictionType="string"/>
+    <restriction
+        android:key="idServer"
+        android:title="ID_Server_Address"
+        android:restrictionType="string"/>
+    <restriction
+        android:key="relayServer"
+        android:title="Relay_Server_Address"
+        android:restrictionType="string" />
+    <restriction
+        android:key="key"
+        android:title="Server_Pub_Key"
+        android:restrictionType="string" />
+</restrictions>
