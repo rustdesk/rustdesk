@@ -24,6 +24,118 @@ static RESTARTING: AtomicBool = AtomicBool::new(false);
 
 lazy_static::lazy_static! {
     static ref VOICE_CALL_INPUT_DEVICE: Arc::<Mutex::<Option<String>>> = Default::default();
+    static ref AUDIO_BACKEND: Arc::<Mutex::<AudioBackend>> = Arc::new(Mutex::new(AudioBackend::default()));
+}
+
+/// Audio backend selection for Windows
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioBackend {
+    /// Default WASAPI backend
+    Wasapi,
+    /// ASIO low-latency backend
+    #[cfg(all(windows, feature = "asio"))]
+    Asio,
+}
+
+impl Default for AudioBackend {
+    fn default() -> Self {
+        AudioBackend::Wasapi
+    }
+}
+
+impl AudioBackend {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            #[cfg(all(windows, feature = "asio"))]
+            "asio" => AudioBackend::Asio,
+            _ => AudioBackend::Wasapi,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AudioBackend::Wasapi => "wasapi",
+            #[cfg(all(windows, feature = "asio"))]
+            AudioBackend::Asio => "asio",
+        }
+    }
+}
+
+/// Check if ASIO is available on the system
+#[cfg(all(windows, feature = "asio"))]
+pub fn is_asio_available() -> bool {
+    cpal::available_hosts()
+        .iter()
+        .any(|host| *host == cpal::HostId::Asio)
+}
+
+#[cfg(not(all(windows, feature = "asio")))]
+pub fn is_asio_available() -> bool {
+    false
+}
+
+/// Get the current audio backend
+pub fn get_audio_backend() -> AudioBackend {
+    AUDIO_BACKEND.lock().unwrap().clone()
+}
+
+/// Set the audio backend (WASAPI or ASIO)
+pub fn set_audio_backend(backend: AudioBackend) {
+    let mut current = AUDIO_BACKEND.lock().unwrap();
+    if *current != backend {
+        *current = backend;
+        log::info!("Audio backend changed to: {:?}", backend);
+        restart();
+    }
+}
+
+/// Get available audio backends for the current platform
+pub fn available_audio_backends() -> Vec<AudioBackend> {
+    let mut backends = vec![AudioBackend::Wasapi];
+    #[cfg(all(windows, feature = "asio"))]
+    if is_asio_available() {
+        backends.push(AudioBackend::Asio);
+    }
+    backends
+}
+
+/// Get all available audio devices for a specific backend
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn get_audio_devices(backend: AudioBackend) -> Vec<String> {
+    let mut devices = Vec::new();
+    
+    #[cfg(all(windows, feature = "asio"))]
+    {
+        if backend == AudioBackend::Asio {
+            if let Ok(host) = cpal::host_from_id(cpal::HostId::Asio) {
+                if let Ok(device_list) = host.devices() {
+                    for device in device_list {
+                        if let Ok(name) = device.name() {
+                            devices.push(name);
+                        }
+                    }
+                }
+            }
+            return devices;
+        }
+    }
+    
+    // Default WASAPI/other backends
+    let host = cpal::default_host();
+    if let Ok(device_list) = host.devices() {
+        for device in device_list {
+            if let Ok(name) = device.name() {
+                devices.push(name);
+            }
+        }
+    }
+    
+    devices
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn get_audio_devices(_backend: AudioBackend) -> Vec<String> {
+    Vec::new()
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -183,6 +295,11 @@ mod cpal_impl {
         static ref HOST_SCREEN_CAPTURE_KIT: Result<Host, cpal::HostUnavailable> = cpal::host_from_id(cpal::HostId::ScreenCaptureKit);
     }
 
+    #[cfg(all(windows, feature = "asio"))]
+    lazy_static::lazy_static! {
+        static ref HOST_ASIO: Result<Host, cpal::HostUnavailable> = cpal::host_from_id(cpal::HostId::Asio);
+    }
+
     #[derive(Default)]
     pub struct State {
         stream: Option<(Box<dyn StreamTrait>, Arc<Message>)>,
@@ -192,6 +309,29 @@ mod cpal_impl {
         fn reset(&mut self) {
             self.stream.take();
         }
+    }
+
+    /// Get the current audio host based on the selected backend
+    fn get_host() -> ResultType<&'static Host> {
+        #[cfg(all(windows, feature = "asio"))]
+        {
+            if super::get_audio_backend() == super::AudioBackend::Asio {
+                return HOST_ASIO.as_ref()
+                    .map_err(|e| anyhow::anyhow!("ASIO host unavailable: {:?}", e));
+            }
+        }
+        Ok(&HOST)
+    }
+
+    /// Check if ASIO host is available
+    #[cfg(all(windows, feature = "asio"))]
+    fn is_asio_host_available() -> bool {
+        HOST_ASIO.is_ok()
+    }
+
+    #[cfg(not(all(windows, feature = "asio")))]
+    fn is_asio_host_available() -> bool {
+        false
     }
 
     fn run_restart(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
@@ -283,10 +423,21 @@ mod cpal_impl {
     #[cfg(windows)]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
+        
+        #[cfg(feature = "asio")]
+        {
+            if super::get_audio_backend() == super::AudioBackend::Asio {
+                log::info!("Using ASIO audio backend");
+                return get_asio_device(&audio_input);
+            }
+        }
+        
         if !audio_input.is_empty() {
             return get_audio_input(&audio_input);
         }
-        let device = HOST
+        
+        let host = get_host()?;
+        let device = host
             .default_output_device()
             .with_context(|| "Failed to get default output device for loopback")?;
         log::info!(
@@ -301,6 +452,35 @@ mod cpal_impl {
         Ok((device, format))
     }
 
+    #[cfg(all(windows, feature = "asio"))]
+    fn get_asio_device(audio_input: &str) -> ResultType<(Device, SupportedStreamConfig)> {
+        let host = HOST_ASIO.as_ref()
+            .map_err(|e| anyhow!("ASIO host unavailable: {:?}", e))?;
+        
+        // If a specific device is requested, try to find it
+        if !audio_input.is_empty() {
+            for device in host.devices()? {
+                if let Ok(name) = device.name() {
+                    if name == audio_input {
+                        log::info!("Found requested ASIO device: {}", name);
+                        let format = device.default_input_config()?;
+                        return Ok((device, format));
+                    }
+                }
+            }
+        }
+        
+        // Otherwise use the default ASIO device
+        let device = host.default_input_device()
+            .or_else(|| host.default_output_device())
+            .with_context(|| "No ASIO device available")?;
+        
+        log::info!("Using default ASIO device: {}", device.name().unwrap_or_default());
+        let format = device.default_input_config()?;
+        log::info!("ASIO input format: {:?}", format);
+        Ok((device, format))
+    }
+
     #[cfg(not(any(windows, feature = "screencapturekit")))]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
@@ -309,6 +489,10 @@ mod cpal_impl {
 
     fn get_audio_input(audio_input: &str) -> ResultType<(Device, SupportedStreamConfig)> {
         let mut device = None;
+        
+        // Get the appropriate host based on current backend
+        let host = get_host()?;
+        
         #[cfg(feature = "screencapturekit")]
         if !audio_input.is_empty() && is_screen_capture_kit_available() {
             for d in HOST_SCREEN_CAPTURE_KIT
@@ -322,10 +506,31 @@ mod cpal_impl {
                 }
             }
         }
+        
         if device.is_none() && !audio_input.is_empty() {
-            for d in HOST
+            for d in host
                 .devices()
                 .with_context(|| "Failed to get audio devices")?
+            {
+                if d.name().unwrap_or("".to_owned()) == audio_input {
+                    device = Some(d);
+                    break;
+                }
+            }
+        }
+        
+        let device = device.unwrap_or(
+            host.default_input_device()
+                .with_context(|| "Failed to get default input device for loopback")?,
+        );
+        log::info!("Input device: {}", device.name().unwrap_or("".to_owned()));
+        let format = device
+            .default_input_config()
+            .map_err(|e| anyhow!(e))
+            .with_context(|| "Failed to get default input format")?;
+        log::info!("Default input format: {:?}", format);
+        Ok((device, format))
+    }
             {
                 if d.name().unwrap_or("".to_owned()) == audio_input {
                     device = Some(d);
