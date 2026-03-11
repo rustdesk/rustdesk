@@ -6,10 +6,11 @@ on:
   workflow_call:
 
 env:
-  CARGO_EXPAND_VERSION: "1.0.95"
-  FLUTTER_VERSION: "3.22.3"
-  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
-  RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
+  CARGO_EXPAND_VERSION: '1.0.95'
+  FLUTTER_VERSION: '3.22.3'
+  FLUTTER_RUST_BRIDGE_VERSION: '1.80.1'
+  # webm 2.2.0 uses 2024-edition let-chains; keep bridge generation on current stable
+  RUST_VERSION: '1.94.0'
 
 jobs:
   generate_bridge:
@@ -21,7 +22,7 @@ jobs:
           - {
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-22.04,
-              extra-build-args: "",
+              extra-build-args: '',
             }
     steps:
       - name: Checkout source code
@@ -53,7 +54,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: "rustfmt"
+          components: 'rustfmt'
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -69,7 +70,7 @@ jobs:
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: "stable"
+          channel: 'stable'
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
