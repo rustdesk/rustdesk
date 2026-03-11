@@ -2681,6 +2681,7 @@ class CanvasModel with ChangeNotifier {
 
   void restoreMobileOffsetAfterSoftKeyboard() {
     _timerMobileRestoreCanvasOffset?.cancel();
+    _timerMobileFocusCanvasCursor?.cancel();
     final targetOffset = _offsetBeforeMobileSoftKeyboard;
     final targetScale = _scaleBeforeMobileSoftKeyboard;
     if (targetOffset == null || targetScale == null) {
