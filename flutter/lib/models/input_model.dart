@@ -1332,6 +1332,17 @@ class InputModel {
     return false;
   }
 
+  /// iOS may emit a synthesized touch event after a real mouse click.
+  /// This helper ignores touch-down events that arrive shortly after a mouse down,
+  /// even when the position is far (e.g., near the top edge).
+  bool shouldIgnoreTouchAfterMouse(ui.Offset pos, int nowMs) {
+    if (!isIOS) return false;
+    if (shouldIgnoreTouchTap(pos)) return true;
+    const int kTouchAfterMouseWindowMs = 700;
+    final dt = nowMs - _lastMouseDownTimeMs;
+    return dt >= 0 && dt < kTouchAfterMouseWindowMs;
+  }
+
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
@@ -1344,6 +1355,9 @@ class InputModel {
     // Track mouse down events for duplicate detection on iOS.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (e.kind == ui.PointerDeviceKind.mouse) {
+      if (!isPhysicalMouse.value) {
+        isPhysicalMouse.value = true;
+      }
       _lastMouseDownTimeMs = nowMs;
       _lastMouseDownPos = e.position;
     }
@@ -1353,6 +1367,10 @@ class InputModel {
     }
 
     if (e.kind != ui.PointerDeviceKind.mouse) {
+      // Ignore duplicate touch events that follow a recent mouse click (iOS Magic Mouse issue).
+      if (isPhysicalMouse.value && shouldIgnoreTouchAfterMouse(e.position, nowMs)) {
+        return;
+      }
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
       }
