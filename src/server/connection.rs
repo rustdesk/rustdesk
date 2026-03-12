@@ -2298,17 +2298,12 @@ impl Connection {
     }
 
     fn verify_easy_access(&self) -> bool {
-        let lr_token_bytes = &self.lr.easy_access_token;
-        let lr_sig_bytes = &self.lr.easy_access_signature;
+        let lr_challenge_bytes = &self.lr.easy_access_challenge;
         let conn_config = match self.conn_config.as_ref() {
-            Some(c) if !c.easy_access_token.is_empty() => c,
+            Some(c) if !c.easy_access_signature.is_empty() => c,
             _ => return false,
         };
-        if lr_token_bytes.is_empty() {
-            return false;
-        }
-        if conn_config.easy_access_token.as_ref() != lr_token_bytes {
-            log::warn!("Easy access token mismatch");
+        if lr_challenge_bytes.is_empty() {
             return false;
         }
         if conn_config.manager_id.is_empty() {
@@ -2322,11 +2317,11 @@ impl Connection {
                 return false;
             }
         };
-        if lr_sig_bytes.is_empty() {
+        if conn_config.easy_access_signature.is_empty() {
             log::warn!("Easy access signature missing");
             return false;
         }
-        let sig = match sign::Signature::from_bytes(lr_sig_bytes) {
+        let sig = match sign::Signature::from_bytes(&conn_config.easy_access_signature) {
             Ok(sig) => sig,
             Err(_) => {
                 log::warn!("Easy access signature invalid");
@@ -2340,11 +2335,11 @@ impl Connection {
                 return false;
             }
         };
-        if !sign::verify_detached(&sig, self.hash.challenge.as_bytes(), &pk) {
+        if !sign::verify_detached(&sig, lr_challenge_bytes, &pk) {
             log::warn!("Easy access signature verify failed");
             return false;
         }
-        log::info!("Easy access token and signature verified");
+        log::info!("Easy access challenge and signature verified");
         true
     }
 
@@ -2590,7 +2585,7 @@ impl Connection {
             {
                 // Consume the token so it cannot be reused
                 if let Some(c) = self.conn_config.as_mut() {
-                    c.easy_access_token = Default::default();
+                    c.easy_access_signature = Default::default();
                     c.manager_id = Default::default();
                 }
                 // Easy access: token verified, skip password validation and click accept
