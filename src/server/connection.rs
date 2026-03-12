@@ -97,6 +97,32 @@ fn get_easy_access_manager_pk(manager_id: &[u8]) -> Option<Vec<u8>> {
     hbb_common::base64::decode(pk_b64).ok()
 }
 
+async fn sync_easy_access_manager_pk(manager_id: &[u8]) -> Option<Vec<u8>> {
+    let manager_id_str = match uuid::Uuid::from_slice(manager_id) {
+        Ok(id) => id.to_string(),
+        Err(_) => {
+            log::warn!("Easy access manager_id invalid");
+            return None;
+        }
+    };
+    log::warn!("Easy access manager_id not found in local cache, forcing full refresh from hbbs",);
+    if let Err(err) = crate::hbbs_http::sync::sync_easy_access_managers(true).await {
+        log::warn!(
+            "Failed to force refresh easy access managers from hbbs: {}",
+            err
+        );
+        return None;
+    }
+    let pk = get_easy_access_manager_pk(manager_id);
+    if pk.is_none() {
+        log::warn!(
+            "Easy access manager_id {} not found after sync",
+            manager_id_str
+        );
+    }
+    pk
+}
+
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 lazy_static::lazy_static! {
     static ref WALLPAPER_REMOVER: Arc<Mutex<Option<WallPaperRemover>>> = Default::default();
@@ -2093,31 +2119,33 @@ impl Connection {
         Self::is_permission_enabled_locally(enable_prefix_option)
     }
 
-    fn verify_easy_access(&self) -> bool {
-        let lr_challenge_bytes = &self.lr.easy_access_challenge;
-        let conn_config = match self.conn_config.as_ref() {
-            Some(c) if !c.easy_access_signature.is_empty() => c,
+    async fn verify_easy_access(&self) -> bool {
+        let lr_challenge_bytes = self.lr.easy_access_challenge.clone();
+        let (manager_id, easy_access_signature) = match self.conn_config.as_ref() {
+            Some(c) if !c.easy_access_signature.is_empty() => {
+                (c.manager_id.clone(), c.easy_access_signature.clone())
+            }
             _ => return false,
         };
         if lr_challenge_bytes.is_empty() {
             return false;
         }
-        if conn_config.manager_id.is_empty() {
+        if manager_id.is_empty() {
             log::warn!("Easy access manager_id missing");
             return false;
         }
-        let pk = match get_easy_access_manager_pk(&conn_config.manager_id) {
+        let pk = match get_easy_access_manager_pk(&manager_id) {
             Some(pk) => pk,
-            None => {
-                log::warn!("Easy access manager_id not found in local cache");
-                return false;
-            }
+            None => match sync_easy_access_manager_pk(&manager_id).await {
+                Some(pk) => pk,
+                None => return false,
+            },
         };
-        if conn_config.easy_access_signature.is_empty() {
+        if easy_access_signature.is_empty() {
             log::warn!("Easy access signature missing");
             return false;
         }
-        let sig = match sign::Signature::from_bytes(&conn_config.easy_access_signature) {
+        let sig = match sign::Signature::from_bytes(&easy_access_signature) {
             Ok(sig) => sig,
             Err(_) => {
                 log::warn!("Easy access signature invalid");
@@ -2131,7 +2159,7 @@ impl Connection {
                 return false;
             }
         };
-        if !sign::verify_detached(&sig, lr_challenge_bytes, &pk) {
+        if !sign::verify_detached(&sig, &lr_challenge_bytes, &pk) {
             log::warn!("Easy access signature verify failed");
             return false;
         }
@@ -2359,7 +2387,8 @@ impl Connection {
                 self.send_login_error(crate::client::LOGIN_MSG_OFFLINE)
                     .await;
                 return false;
-            } else if hbb_common::config::is_allow_easy_access() && self.verify_easy_access() {
+            } else if hbb_common::config::is_allow_easy_access() && self.verify_easy_access().await
+            {
                 // Consume the token so it cannot be reused
                 if let Some(c) = self.conn_config.as_mut() {
                     c.easy_access_signature = Default::default();

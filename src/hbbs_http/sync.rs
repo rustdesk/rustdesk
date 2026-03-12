@@ -10,6 +10,7 @@ use hbb_common::{
     config::{self, keys, Config, LocalConfig},
     log,
     tokio::{self, sync::broadcast, time::Instant},
+    ResultType,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -53,6 +54,57 @@ pub struct StrategyOptions {
 pub struct EasyAccessManager {
     pub manager_id: String,
     pub pk: String,
+}
+
+fn store_easy_access_managers(managers: Value, version: Option<String>) {
+    match serde_json::from_value::<Vec<EasyAccessManager>>(managers) {
+        Ok(items) => {
+            let managers_json = if items.is_empty() {
+                "".to_owned()
+            } else {
+                serde_json::to_string(&items).unwrap_or_default()
+            };
+            Config::set_option("easy-access-managers".to_string(), managers_json);
+            if let Some(version) = version {
+                Config::set_option("easy-access-version".to_string(), version);
+            }
+        }
+        Err(err) => {
+            log::warn!("failed to parse easy_access_managers: {}", err);
+        }
+    }
+}
+
+fn handle_easy_access_sync_response(rsp: &mut HashMap<String, Value>) {
+    if let Some(managers) = rsp.remove("easy_access_managers") {
+        let version = rsp
+            .remove("easy_access_version")
+            .and_then(|v| serde_json::from_value::<String>(v).ok());
+        store_easy_access_managers(managers, version);
+    }
+}
+
+pub async fn sync_easy_access_managers(force_full: bool) -> ResultType<()> {
+    let url = heartbeat_url();
+    if url.is_empty() {
+        return Ok(());
+    }
+    let mut v = Value::default();
+    v["id"] = json!(Config::get_id());
+    v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
+    v["ver"] = json!(hbb_common::get_version_number(crate::VERSION));
+    v["modified_at"] = json!(LocalConfig::get_option("strategy_timestamp")
+        .parse::<i64>()
+        .unwrap_or(0));
+    v["easy_access_version"] = json!(if force_full {
+        "".to_owned()
+    } else {
+        easy_access_version()
+    });
+    let s = crate::post_request(url, v.to_string(), "").await?;
+    let mut rsp = serde_json::from_str::<HashMap<String, Value>>(&s)?;
+    handle_easy_access_sync_response(&mut rsp);
+    Ok(())
 }
 
 struct InfoUploaded {
@@ -247,9 +299,9 @@ async fn start_hbbs_sync_async() {
                 }
                 let modified_at = LocalConfig::get_option("strategy_timestamp").parse::<i64>().unwrap_or(0);
                 v["modified_at"] = json!(modified_at);
-                v["easy_access_modified_at"] = json!(easy_access_modified_at());
+                v["easy_access_version"] = json!(easy_access_version());
                 if let Ok(s) = crate::post_request(url.clone(), v.to_string(), "").await {
-                    if let Ok(mut rsp) = serde_json::from_str::<HashMap::<&str, Value>>(&s) {
+                    if let Ok(mut rsp) = serde_json::from_str::<HashMap<String, Value>>(&s) {
                         if rsp.remove("sysinfo").is_some() {
                             info_uploaded.uploaded = false;
                             config::Status::set("sysinfo_hash", "".to_owned());
@@ -273,34 +325,7 @@ async fn start_hbbs_sync_async() {
                                 handle_config_options(strategy.config_options);
                             }
                         }
-                        if let Some(managers) = rsp.remove("easy_access_managers") {
-                            let mut modified_at = None;
-                            if let Some(v) = rsp.remove("easy_access_modified_at") {
-                                modified_at = serde_json::from_value::<i64>(v).ok();
-                            }
-                            match serde_json::from_value::<Vec<EasyAccessManager>>(managers) {
-                                Ok(items) => {
-                                    let managers_json = if items.is_empty() {
-                                        "".to_owned()
-                                    } else {
-                                        serde_json::to_string(&items).unwrap_or_default()
-                                    };
-                                    Config::set_option(
-                                        "easy-access-managers".to_string(),
-                                        managers_json,
-                                    );
-                                    if let Some(ts) = modified_at {
-                                        Config::set_option(
-                                            "easy-access-modified-at".to_string(),
-                                            ts.to_string(),
-                                        );
-                                    }
-                                }
-                                Err(err) => {
-                                    log::warn!("failed to parse easy_access_managers: {}", err);
-                                }
-                            }
-                        }
+                        handle_easy_access_sync_response(&mut rsp);
                     }
                 }
             }
@@ -319,10 +344,8 @@ fn heartbeat_url() -> String {
     format!("{}/api/heartbeat", url)
 }
 
-fn easy_access_modified_at() -> i64 {
-    Config::get_option("easy-access-modified-at")
-        .parse::<i64>()
-        .unwrap_or(0)
+fn easy_access_version() -> String {
+    Config::get_option("easy-access-version")
 }
 
 fn handle_config_options(config_options: HashMap<String, String>) {
