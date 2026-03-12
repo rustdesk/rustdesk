@@ -507,13 +507,9 @@ impl Client {
                             relay_server = ph.relay_server;
                             peer_addr = AddrMangle::decode(&ph.socket_addr);
                             feedback = ph.feedback;
-                            if !ph.controller_config.easy_access_token.is_empty() {
-                                interface.get_lch().write().unwrap().easy_access_token =
-                                    Some(ph.controller_config.easy_access_token.to_vec());
-                            }
-                            if !ph.controller_config.sk.is_empty() {
-                                interface.get_lch().write().unwrap().easy_access_user_sk =
-                                    Some(ph.controller_config.sk.to_vec());
+                            if !ph.controller_config.easy_access_challenge.is_empty() {
+                                interface.get_lch().write().unwrap().easy_access_challenge =
+                                    Some(ph.controller_config.easy_access_challenge.to_vec());
                             }
                             let s = udp.0.take();
                             if ph.is_udp && s.is_some() {
@@ -542,13 +538,9 @@ impl Client {
                             start.elapsed(),
                             rr.relay_server
                         );
-                        if !rr.controller_config.easy_access_token.is_empty() {
-                            interface.get_lch().write().unwrap().easy_access_token =
-                                Some(rr.controller_config.easy_access_token.to_vec());
-                        }
-                        if !rr.controller_config.sk.is_empty() {
-                            interface.get_lch().write().unwrap().easy_access_user_sk =
-                                Some(rr.controller_config.sk.to_vec());
+                        if !rr.controller_config.easy_access_challenge.is_empty() {
+                            interface.get_lch().write().unwrap().easy_access_challenge =
+                                Some(rr.controller_config.easy_access_challenge.to_vec());
                         }
                         start = Instant::now();
                         let mut connect_futures = Vec::new();
@@ -1771,8 +1763,7 @@ pub struct LoginConfigHandler {
     pub enable_trusted_devices: bool,
     pub record_state: bool,
     pub record_permission: bool,
-    pub easy_access_token: Option<Vec<u8>>,
-    pub easy_access_user_sk: Option<Vec<u8>>,
+    pub easy_access_challenge: Option<Vec<u8>>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -2699,25 +2690,11 @@ impl LoginConfigHandler {
         } else {
             Bytes::new()
         };
-        let easy_access_token: Bytes = self
-            .easy_access_token
+        let easy_access_challenge: Bytes = self
+            .easy_access_challenge
             .take() // consume: single use only
             .unwrap_or_default()
             .into();
-        let easy_access_signature: Bytes = if !easy_access_token.is_empty() {
-            let sk_bytes = self.easy_access_user_sk.take().unwrap_or_default();
-            if sk_bytes.is_empty() || self.hash.challenge.is_empty() {
-                Bytes::new()
-            } else if let Some(sk) = sign::SecretKey::from_slice(&sk_bytes) {
-                let sig = sign::sign_detached(self.hash.challenge.as_bytes(), &sk);
-                sig.as_ref().to_vec().into()
-            } else {
-                log::warn!("invalid easy access user secret key");
-                Bytes::new()
-            }
-        } else {
-            Bytes::new()
-        };
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -2735,8 +2712,7 @@ impl LoginConfigHandler {
             .into(),
             hwid,
             avatar,
-            easy_access_token,
-            easy_access_signature,
+            easy_access_challenge,
             ..Default::default()
         };
         match self.conn_type {
