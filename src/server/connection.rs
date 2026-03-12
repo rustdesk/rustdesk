@@ -34,7 +34,9 @@ use hbb_common::{
     message_proto::{option_message::BoolOption, permission_info::Permission},
     password_security::{self as password, ApproveMode},
     sha2::{Digest, Sha256},
-    sleep, timeout,
+    sleep,
+    sodiumoxide::crypto::sign,
+    timeout,
     tokio::{
         net::TcpStream,
         sync::mpsc,
@@ -45,7 +47,7 @@ use hbb_common::{
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::{call_main_service_key_event, call_main_service_pointer_input};
 use scrap::camera;
-use serde_derive::Serialize;
+use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, value::Value};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::Ordering;
@@ -75,6 +77,24 @@ lazy_static::lazy_static! {
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
     static ref WAKELOCK_KEEP_AWAKE_OPTION: Arc::<Mutex<Option<bool>>> = Default::default();
+}
+
+fn get_easy_access_manager_pk(manager_id: &[u8]) -> Option<Vec<u8>> {
+    if manager_id.is_empty() {
+        return None;
+    }
+    let manager_id = uuid::Uuid::from_slice(manager_id).ok()?.to_string();
+    let json = Config::get_option("easy-access-managers");
+    if json.is_empty() {
+        return None;
+    }
+    let managers: Vec<crate::hbbs_http::sync::EasyAccessManager> =
+        serde_json::from_str(&json).ok()?;
+    let pk_b64 = managers
+        .iter()
+        .find(|m| m.manager_id == manager_id)
+        .map(|m| m.pk.clone())?;
+    hbb_common::base64::decode(pk_b64).ok()
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -2073,19 +2093,54 @@ impl Connection {
         Self::is_permission_enabled_locally(enable_prefix_option)
     }
 
-    fn verify_easy_access_token(&self, lr_token_bytes: &[u8]) -> bool {
-        let conn_token = match self.conn_config.as_ref() {
-            Some(c) if !c.easy_access_token.is_empty() => &c.easy_access_token,
+    fn verify_easy_access(&self) -> bool {
+        let lr_token_bytes = &self.lr.easy_access_token;
+        let lr_sig_bytes = &self.lr.easy_access_signature;
+        let conn_config = match self.conn_config.as_ref() {
+            Some(c) if !c.easy_access_token.is_empty() => c,
             _ => return false,
         };
         if lr_token_bytes.is_empty() {
             return false;
         }
-        if conn_token.as_ref() != lr_token_bytes {
+        if conn_config.easy_access_token.as_ref() != lr_token_bytes {
             log::warn!("Easy access token mismatch");
             return false;
         }
-        log::info!("Easy access token verified");
+        if conn_config.manager_id.is_empty() {
+            log::warn!("Easy access manager_id missing");
+            return false;
+        }
+        let pk = match get_easy_access_manager_pk(&conn_config.manager_id) {
+            Some(pk) => pk,
+            None => {
+                log::warn!("Easy access manager_id not found in local cache");
+                return false;
+            }
+        };
+        if lr_sig_bytes.is_empty() {
+            log::warn!("Easy access signature missing");
+            return false;
+        }
+        let sig = match sign::Signature::from_bytes(lr_sig_bytes) {
+            Ok(sig) => sig,
+            Err(_) => {
+                log::warn!("Easy access signature invalid");
+                return false;
+            }
+        };
+        let pk = match sign::PublicKey::from_slice(&pk) {
+            Some(pk) => pk,
+            None => {
+                log::warn!("Easy access public key invalid");
+                return false;
+            }
+        };
+        if !sign::verify_detached(&sig, self.hash.challenge.as_bytes(), &pk) {
+            log::warn!("Easy access signature verify failed");
+            return false;
+        }
+        log::info!("Easy access token and signature verified");
         true
     }
 
@@ -2182,7 +2237,6 @@ impl Connection {
             if self.authorized {
                 return true;
             }
-            let easy_access_token_bytes = lr.easy_access_token.clone();
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
                     if !Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &self.conn_config) {
@@ -2310,18 +2364,17 @@ impl Connection {
                 self.send_login_error(crate::client::LOGIN_MSG_OFFLINE)
                     .await;
                 return false;
-            } else if hbb_common::config::is_allow_easy_access()
-                && self.verify_easy_access_token(&easy_access_token_bytes)
-            {
+            } else if hbb_common::config::is_allow_easy_access() && self.verify_easy_access() {
                 // Consume the token so it cannot be reused
                 if let Some(c) = self.conn_config.as_mut() {
                     c.easy_access_token = Default::default();
+                    c.manager_id = Default::default();
                 }
                 // Easy access: token verified, skip password validation and click accept
                 if err_msg.is_empty() {
                     #[cfg(target_os = "linux")]
                     self.linux_headless_handle.wait_desktop_cm_ready().await;
-                    self.send_logon_response().await;
+                    self.send_logon_response_and_keep_alive().await;
                     self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
                 } else {
                     self.send_login_error(err_msg).await;

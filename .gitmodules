@@ -1,4 +1,4 @@
 [submodule "libs/hbb_common"]
 	path = libs/hbb_common
 	url = https://github.com/21pages/hbb_common
-	branch = easy_access
+	branch = easy_access_manager
