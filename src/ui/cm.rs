@@ -28,6 +28,7 @@ impl InvokeUiCM for SciterHandler {
                 client.port_forward.clone(),
                 client.peer_id.clone(),
                 client.name.clone(),
+                client.avatar.clone(),
                 client.authorized,
                 client.keyboard,
                 client.clipboard,

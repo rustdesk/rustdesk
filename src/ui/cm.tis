@@ -42,9 +42,11 @@ class Body: Reactor.Component
         return <div .content style="size:*">
             <div .left-panel>
                 <div .icon-and-id>
+                    {c.avatar ?
+                    <img .icon src={c.avatar} /> :
                     <div .icon style={"background: " + string2RGB(c.name, 1)}>
                     {c.name[0].toUpperCase()}
-                    </div>
+                    </div>}
                     <div>
                         <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
                         <div .id>({c.peer_id})</div>
@@ -366,7 +368,7 @@ function bring_to_top(idx=-1) {
     }
 }
 
-handler.addConnection = function(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
+handler.addConnection = function(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
     stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
@@ -385,6 +387,7 @@ handler.addConnection = function(id, is_file_transfer, is_view_camera, is_termin
     conn = {
         id: id, is_file_transfer: is_file_transfer, is_view_camera: is_view_camera, is_terminal: is_terminal, peer_id: peer_id,
         port_forward: port_forward,
+        avatar: avatar,
         name: name, authorized: authorized, time: new Date(), now: new Date(),
         keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,
         audio: audio, file: file, restart: restart, recording: recording,

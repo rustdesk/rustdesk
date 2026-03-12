@@ -142,6 +142,14 @@ function resetWheel() {
 }
 
 var INERTIA_ACCELERATION = 30;
+var WHEEL_ACCEL_VELOCITY_THRESHOLD = 5000;
+var WHEEL_ACCEL_DT_FAST = 0.04;
+var WHEEL_ACCEL_DT_MEDIUM = 0.08;
+var WHEEL_ACCEL_VALUE_FAST = 3;
+var WHEEL_ACCEL_VALUE_MEDIUM = 2;
+// Wheel burst acceleration (empirical tuning).
+// Applies only on fast, non-smooth wheel bursts to keep single-step scroll unchanged.
+// Sciter uses seconds for dt, so velocity is in delta/sec.
 
 // not good, precision not enough to simulate acceleration effect,
 // seems have to use pixel based rather line based delta
@@ -237,12 +245,28 @@ function handler.onMouse(evt)
         // mouseWheelDistance = 8 * [currentUserDefs floatForKey:@"com.apple.scrollwheel.scaling"];
         mask = 3; 
         {
-            var (dx, dy) = evt.wheelDeltas;
-            if (dx > 0) dx = 1;
-            else if (dx < 0) dx = -1;
-            if (dy > 0) dy = 1;
-            else if (dy < 0) dy = -1;
-            if (Math.abs(dx) > Math.abs(dy)) {
+            var now = getTime();
+            var dt = last_wheel_time > 0 ? (now - last_wheel_time) / 1000 : 0;
+            var (raw_dx, raw_dy) = evt.wheelDeltas;
+            var dx = 0;
+            var dy = 0;
+            var abs_dx = Math.abs(raw_dx);
+            var abs_dy = Math.abs(raw_dy);
+            var dominant = abs_dx > abs_dy ? abs_dx : abs_dy;
+            var is_smooth = dominant < 1;
+            var accel = 1;
+            if (!is_smooth && dt > 0 && (is_win || is_linux) && get_peer_platform() == "Mac OS") {
+                var velocity = dominant / dt;
+                if (velocity >= WHEEL_ACCEL_VELOCITY_THRESHOLD) {
+                    if (dt < WHEEL_ACCEL_DT_FAST) accel = WHEEL_ACCEL_VALUE_FAST;
+                    else if (dt < WHEEL_ACCEL_DT_MEDIUM) accel = WHEEL_ACCEL_VALUE_MEDIUM;
+                }
+            }
+            if (raw_dx > 0) dx = accel;
+            else if (raw_dx < 0) dx = -accel;
+            if (raw_dy > 0) dy = accel;
+            else if (raw_dy < 0) dy = -accel;
+            if (abs_dx > abs_dy) {
                 dy = 0;
             } else {
                 dx = 0;
@@ -253,8 +277,6 @@ function handler.onMouse(evt)
             wheel_delta_y = acc_wheel_delta_y.toInteger();
             acc_wheel_delta_x -= wheel_delta_x;
             acc_wheel_delta_y -= wheel_delta_y;
-            var now = getTime();
-            var dt = last_wheel_time > 0 ? (now - last_wheel_time) / 1000 : 0;
             if (dt > 0) {
                 var vx = dx / dt;
                 var vy = dy / dt;
@@ -297,11 +319,13 @@ function handler.onMouse(evt)
         entered = true;
         stdout.println("enter");
         handler.enter(handler.get_keyboard_mode());
+        last_wheel_time = 0;
         return keyboard_enabled;
       case Event.MOUSE_LEAVE:
         entered = false;
         stdout.println("leave");
         handler.leave(handler.get_keyboard_mode());
+        last_wheel_time = 0;
         if (is_left_down && get_peer_platform() == "Android") {
             is_left_down = false;
             handler.send_mouse((1 << 3) | 2, 0, 0, evt.altKey,

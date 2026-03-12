@@ -19,6 +19,22 @@ import window_manager
 import window_size
 import texture_rgba_renderer
 
+// Global state for relative mouse mode
+// All properties and methods must be accessed on the main thread since they
+// interact with NSEvent monitors, CoreGraphics APIs, and Flutter channels.
+// Note: We avoid @MainActor to maintain macOS 10.14 compatibility.
+class RelativeMouseState {
+    static let shared = RelativeMouseState()
+
+    var enabled = false
+    var eventMonitor: Any?
+    var deltaChannel: FlutterMethodChannel?
+    var accumulatedDeltaX: CGFloat = 0
+    var accumulatedDeltaY: CGFloat = 0
+
+    private init() {}
+}
+
 class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
         rustdesk_core_main();
@@ -64,6 +80,104 @@ class MainFlutterWindow: NSWindow {
         window.appearance = NSAppearance(named: themeName == "light" ? .aqua : .darkAqua)
     }
 
+    private func enableNativeRelativeMouseMode(channel: FlutterMethodChannel) -> Bool {
+        assert(Thread.isMainThread, "enableNativeRelativeMouseMode must be called on the main thread")
+        let state = RelativeMouseState.shared
+        if state.enabled {
+            // Already enabled: update the channel so this caller receives deltas.
+            state.deltaChannel = channel
+            return true
+        }
+
+        // Dissociate mouse from cursor position - this locks the cursor in place
+        // Do this FIRST before setting any state
+        let result = CGAssociateMouseAndMouseCursorPosition(0)
+        if result != CGError.success {
+            NSLog("[RustDesk] Failed to dissociate mouse from cursor position: %d", result.rawValue)
+            return false
+        }
+
+        // Only set state after CG call succeeds
+        state.deltaChannel = channel
+        state.accumulatedDeltaX = 0
+        state.accumulatedDeltaY = 0
+
+        // Add local event monitor to capture mouse delta.
+        // Note: Local event monitors are always called on the main thread,
+        // so accessing main-thread-only state is safe here.
+        state.eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]) { [weak state] event in
+            guard let state = state else { return event }
+            // Guard against race: mode may be disabled between weak capture and this check.
+            guard state.enabled else { return event }
+            let deltaX = event.deltaX
+            let deltaY = event.deltaY
+
+            if deltaX != 0 || deltaY != 0 {
+                // Accumulate delta (main thread only - NSEvent local monitors always run on main thread)
+                state.accumulatedDeltaX += deltaX
+                state.accumulatedDeltaY += deltaY
+
+                // Only send if we have integer movement
+                let intX = Int(state.accumulatedDeltaX)
+                let intY = Int(state.accumulatedDeltaY)
+
+                if intX != 0 || intY != 0 {
+                    state.accumulatedDeltaX -= CGFloat(intX)
+                    state.accumulatedDeltaY -= CGFloat(intY)
+
+                    // Send delta to Flutter (already on main thread)
+                    state.deltaChannel?.invokeMethod("onMouseDelta", arguments: ["dx": intX, "dy": intY])
+                }
+            }
+
+            return event
+        }
+
+        // Check if monitor was created successfully
+        if state.eventMonitor == nil {
+            NSLog("[RustDesk] Failed to create event monitor for relative mouse mode")
+            // Re-associate mouse since we failed
+            CGAssociateMouseAndMouseCursorPosition(1)
+            state.deltaChannel = nil
+            return false
+        }
+
+        // Set enabled LAST after everything succeeds
+        state.enabled = true
+        return true
+    }
+
+    private func disableNativeRelativeMouseMode() {
+        assert(Thread.isMainThread, "disableNativeRelativeMouseMode must be called on the main thread")
+        let state = RelativeMouseState.shared
+        if !state.enabled { return }
+
+        state.enabled = false
+
+        // Remove event monitor
+        if let monitor = state.eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            state.eventMonitor = nil
+        }
+
+        state.deltaChannel = nil
+        state.accumulatedDeltaX = 0
+        state.accumulatedDeltaY = 0
+
+        // Re-associate mouse with cursor position (non-blocking with async retry)
+        let result = CGAssociateMouseAndMouseCursorPosition(1)
+        if result != CGError.success {
+            NSLog("[RustDesk] Failed to re-associate mouse with cursor position: %d, scheduling retry...", result.rawValue)
+            // Non-blocking retry after 50ms
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                let retryResult = CGAssociateMouseAndMouseCursorPosition(1)
+                if retryResult != CGError.success {
+                    NSLog("[RustDesk] Retry failed to re-associate mouse: %d. Cursor may remain locked.", retryResult.rawValue)
+                }
+            }
+        }
+    }
+
     public func setMethodHandler(registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "org.rustdesk.rustdesk/host", binaryMessenger: registrar.messenger)
         channel.setMethodCallHandler({
@@ -96,7 +210,9 @@ class MainFlutterWindow: NSWindow {
                     }
                 case "requestRecordAudio":
                     AVCaptureDevice.requestAccess(for: .audio, completionHandler: { granted in
-                        result(granted)
+                        DispatchQueue.main.async {
+                            result(granted)
+                        }
                     })
                     break
                 case "bumpMouse":
@@ -145,11 +261,22 @@ class MainFlutterWindow: NSWindow {
                     // This function's main action is to toggle whether the mouse cursor is
                     // associated with the mouse position, but setting it to true when it's
                     // already true has the side-effect of cancelling this motion suppression.
-                    CGAssociateMouseAndMouseCursorPosition(1 /* true */)
+                    //
+                    // However, we must NOT call this when relative mouse mode is active,
+                    // as it would break the pointer lock established by enableNativeRelativeMouseMode.
+                    if !RelativeMouseState.shared.enabled {
+                        CGAssociateMouseAndMouseCursorPosition(1 /* true */)
+                    }
 
                     result(true)
 
-                    break
+                case "enableNativeRelativeMouseMode":
+                    let success = self.enableNativeRelativeMouseMode(channel: channel)
+                    result(success)
+
+                case "disableNativeRelativeMouseMode":
+                    self.disableNativeRelativeMouseMode()
+                    result(true)
 
                 default:
                     result(FlutterMethodNotImplemented)

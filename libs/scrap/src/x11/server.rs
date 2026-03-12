@@ -98,7 +98,7 @@ unsafe fn check_x11_shm_available(c: *mut xcb_connection_t) -> Result<(), Error>
     let mut e: *mut xcb_generic_error_t = std::ptr::null_mut();
     let reply = xcb_shm_query_version_reply(c, cookie, &mut e as _);
     if reply.is_null() {
-        // TODO: Should seperate SHM disabled from SHM not supported?
+        // TODO: Should separate SHM disabled from SHM not supported?
         return Err(Error::UnsupportedExtension);
     } else {
         // https://github.com/FFmpeg/FFmpeg/blob/6229e4ac425b4566446edefb67d5c225eb397b58/libavdevice/xcbgrab.c#L229

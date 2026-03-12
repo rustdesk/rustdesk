@@ -140,7 +140,7 @@ pub fn core_main() -> Option<Vec<String>> {
     {
         _is_quick_support |= !crate::platform::is_installed()
             && args.is_empty()
-            && (arg_exe.to_lowercase().contains("-qs-")
+            && (is_quick_support_exe(&arg_exe)
                 || config::LocalConfig::get_option("pre-elevate-service") == "Y"
                 || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
         crate::portable_service::client::set_quick_support(_is_quick_support);
@@ -187,7 +187,10 @@ pub fn core_main() -> Option<Vec<String>> {
         }
 
         #[cfg(windows)]
-        hbb_common::config::PeerConfig::preload_peers();
+        {
+            crate::platform::try_remove_temp_update_files();
+            hbb_common::config::PeerConfig::preload_peers();
+        }
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
         #[cfg(windows)]
@@ -202,17 +205,24 @@ pub fn core_main() -> Option<Vec<String>> {
                 if config::is_disable_installation() {
                     return None;
                 }
-                let res = platform::update_me(false);
-                let text = match res {
-                    Ok(_) => translate("Update successfully!".to_string()),
-                    Err(err) => {
-                        log::error!("Failed with error: {err}");
-                        translate("Update failed!".to_string())
+
+                let text = match crate::platform::prepare_custom_client_update() {
+                    Err(e) => {
+                        log::error!("Error preparing custom client update: {}", e);
+                        "Update failed!".to_string()
                     }
+                    Ok(false) => "Update failed!".to_string(),
+                    Ok(true) => match platform::update_me(false) {
+                        Ok(_) => "Update successfully!".to_string(),
+                        Err(err) => {
+                            log::error!("Failed with error: {err}");
+                            "Update failed!".to_string()
+                        }
+                    },
                 };
                 Toast::new(Toast::POWERSHELL_APP_ID)
                     .title(&config::APP_NAME.read().unwrap())
-                    .text1(&text)
+                    .text1(&translate(text))
                     .sound(Some(Sound::Default))
                     .duration(Duration::Short)
                     .show()
@@ -406,6 +416,10 @@ pub fn core_main() -> Option<Vec<String>> {
                 println!("Settings are disabled!");
                 return None;
             }
+            if config::Config::is_disable_change_permanent_password() {
+                println!("Changing permanent password is disabled!");
+                return None;
+            }
             if args.len() == 2 {
                 if crate::platform::is_installed() && is_root() {
                     if let Err(err) = crate::ipc::set_permanent_password(args[1].to_owned()) {
@@ -419,6 +433,10 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--set-unlock-pin" {
+            if config::Config::is_disable_unlock_pin() {
+                println!("Unlock PIN is disabled!");
+                return None;
+            }
             #[cfg(feature = "flutter")]
             if args.len() == 2 {
                 if crate::platform::is_installed() && is_root() {
@@ -438,6 +456,10 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--set-id" {
             if config::is_disable_settings() {
                 println!("Settings are disabled!");
+                return None;
+            }
+            if config::Config::is_disable_change_id() {
+                println!("Changing ID is disabled!");
                 return None;
             }
             if args.len() == 2 {
@@ -602,6 +624,17 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
             crate::ipc::hwcodec_process();
+            return None;
+        } else if args[0] == "--terminal-helper" {
+            // Terminal helper process - runs as user to create ConPTY
+            // This is needed because ConPTY has compatibility issues with CreateProcessAsUserW
+            #[cfg(target_os = "windows")]
+            {
+                let helper_args: Vec<String> = args[1..].to_vec();
+                if let Err(e) = crate::server::terminal_helper::run_terminal_helper(&helper_args) {
+                    log::error!("Terminal helper failed: {}", e);
+                }
+            }
             return None;
         } else if args[0] == "--cm" {
             // call connection manager to establish connections
@@ -805,4 +838,13 @@ fn is_root() -> bool {
     }
     #[allow(unreachable_code)]
     crate::platform::is_root()
+}
+
+/// Check if the executable is a Quick Support version.
+/// Note: This function must be kept in sync with `libs/portable/src/main.rs`.
+#[cfg(windows)]
+#[inline]
+fn is_quick_support_exe(exe: &str) -> bool {
+    let exe = exe.to_lowercase();
+    exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
 }

@@ -71,6 +71,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _ignoreBatteryOpt = false;
   var _enableStartOnBoot = false;
   var _checkUpdateOnStartup = false;
+  var _showTerminalExtraKeys = false;
   var _floatingWindowDisabled = false;
   var _keepScreenOn = KeepScreenOn.duringControlled; // relay on floating window
   var _enableAbr = false;
@@ -99,6 +100,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _enableIpv6Punch = false;
   var _isUsingPublicServer = false;
   var _allowAskForNoteAtEndOfConnection = false;
+  var _preventSleepWhileConnected = true;
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -139,6 +141,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _enableIpv6Punch = mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
     _allowAskForNoteAtEndOfConnection =
         mainGetLocalBoolOptionSync(kOptionAllowAskForNoteAtEndOfConnection);
+    _preventSleepWhileConnected =
+        mainGetLocalBoolOptionSync(kOptionKeepAwakeDuringOutgoingSessions);
+    _showTerminalExtraKeys =
+        mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
   }
 
   @override
@@ -602,6 +608,23 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       );
     }
 
+    enhancementsTiles.add(
+      SettingsTile.switchTile(
+        initialValue: _showTerminalExtraKeys,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(translate('Show terminal extra keys')),
+        ]),
+        onToggle: (bool v) async {
+          await mainSetLocalBoolOption(kOptionEnableShowTerminalExtraKeys, v);
+          final newValue =
+              mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+          setState(() {
+            _showTerminalExtraKeys = newValue;
+          });
+        },
+      ),
+    );
+
     onFloatingWindowChanged(bool toValue) async {
       if (toValue) {
         if (!await AndroidPermissionManager.check(kSystemAlertWindow)) {
@@ -665,8 +688,18 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               SettingsTile(
                 title: Obx(() => Text(gFFI.userModel.userName.value.isEmpty
                     ? translate('Login')
-                    : '${translate('Logout')} (${gFFI.userModel.userName.value})')),
-                leading: Icon(Icons.person),
+                    : '${translate('Logout')} (${gFFI.userModel.accountLabelWithHandle})')),
+                leading: Obx(() {
+                  final avatar = bind.mainResolveAvatarUrl(
+                      avatar: gFFI.userModel.avatar.value);
+                  return buildAvatarWidget(
+                        avatar: avatar,
+                        size: 28,
+                        borderRadius: null,
+                        fallback: Icon(Icons.person),
+                      ) ??
+                      Icon(Icons.person);
+                }),
                 onPressed: (context) {
                   if (gFFI.userModel.userName.value.isEmpty) {
                     loginDialog();
@@ -786,19 +819,37 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               showThemeSettings(gFFI.dialogManager);
             },
           ),
-          SettingsTile.switchTile(
-            title: Text(translate('note-at-conn-end-tip')),
-            initialValue: _allowAskForNoteAtEndOfConnection,
-            onToggle: (v) async {
-              await mainSetLocalBoolOption(
-                  kOptionAllowAskForNoteAtEndOfConnection, v);
-              final newValue = mainGetLocalBoolOptionSync(
-                  kOptionAllowAskForNoteAtEndOfConnection);
-              setState(() {
-                _allowAskForNoteAtEndOfConnection = newValue;
-              });
-            },
-          )
+          if (!bind.isDisableAccount())
+            SettingsTile.switchTile(
+              title: Text(translate('note-at-conn-end-tip')),
+              initialValue: _allowAskForNoteAtEndOfConnection,
+              onToggle: (v) async {
+                if (v && !gFFI.userModel.isLogin) {
+                  final res = await loginDialog();
+                  if (res != true) return;
+                }
+                await mainSetLocalBoolOption(
+                    kOptionAllowAskForNoteAtEndOfConnection, v);
+                final newValue = mainGetLocalBoolOptionSync(
+                    kOptionAllowAskForNoteAtEndOfConnection);
+                setState(() {
+                  _allowAskForNoteAtEndOfConnection = newValue;
+                });
+              },
+            ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
+              title:
+                  Text(translate('keep-awake-during-outgoing-sessions-label')),
+              initialValue: _preventSleepWhileConnected,
+              onToggle: (v) async {
+                await mainSetLocalBoolOption(
+                    kOptionKeepAwakeDuringOutgoingSessions, v);
+                setState(() {
+                  _preventSleepWhileConnected = v;
+                });
+              },
+            ),
         ]),
         if (isAndroid)
           SettingsSection(title: Text(translate('Hardware Codec')), tiles: [

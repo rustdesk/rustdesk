@@ -186,7 +186,26 @@ pub fn translate_locale(name: String, locale: &str) -> String {
                 && !name.starts_with("upgrade_rustdesk_server_pro")
                 && name != "powered_by_me"
             {
-                s = s.replace("RustDesk", &crate::get_app_name());
+                let app_name = crate::get_app_name();
+                if !app_name.contains("RustDesk") {
+                    s = s.replace("RustDesk", &app_name);
+                } else {
+                    // https://github.com/rustdesk/rustdesk-server-pro/issues/845
+                    // If app_name contains "RustDesk" (e.g., "RustDesk-Admin"), we need to avoid
+                    // replacing "RustDesk" within the already-substituted app_name, which would
+                    // cause duplication like "RustDesk-Admin" -> "RustDesk-Admin-Admin".
+                    //
+                    // app_name only contains alphanumeric and hyphen.
+                    const PLACEHOLDER: &str = "#A-P-P-N-A-M-E#";
+                    if !s.contains(PLACEHOLDER) {
+                        s = s.replace(&app_name, PLACEHOLDER);
+                        s = s.replace("RustDesk", &app_name);
+                        s = s.replace(PLACEHOLDER, &app_name);
+                    } else {
+                        // It's very unlikely to reach here.
+                        // Skip replacement to avoid incorrect result.
+                    }
+                }
             }
         }
         s

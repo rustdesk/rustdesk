@@ -107,6 +107,8 @@ class _RawTouchGestureDetectorRegionState
   // For mouse mode, we need to block the events when the cursor is in a blocked area.
   // So we need to cache the last tap down position.
   Offset? _lastTapDownPositionForMouseMode;
+  // Cache global position for onTap (which lacks position info).
+  Offset? _lastTapDownGlobalPosition;
 
   FFI get ffi => widget.ffi;
   FfiModel get ffiModel => widget.ffiModel;
@@ -136,6 +138,7 @@ class _RawTouchGestureDetectorRegionState
 
   onTapDown(TapDownDetails d) async {
     lastDeviceKind = d.kind;
+    _lastTapDownGlobalPosition = d.globalPosition;
     if (isNotTouchBasedDevice()) {
       return;
     }
@@ -154,11 +157,16 @@ class _RawTouchGestureDetectorRegionState
     if (isNotTouchBasedDevice()) {
       return;
     }
+    // Filter duplicate touch tap events on iOS (Magic Mouse issue).
+    if (inputModel.shouldIgnoreTouchTap(d.globalPosition)) {
+      return;
+    }
     if (handleTouch) {
       final isMoved =
           await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
       if (isMoved) {
-        if (lastTapDownDetails != null) {
+        // If pan already handled 'down', don't send it again.
+        if (lastTapDownDetails != null && !_touchModePanStarted) {
           await inputModel.tapDown(MouseButtons.left);
         }
         await inputModel.tapUp(MouseButtons.left);
@@ -168,6 +176,11 @@ class _RawTouchGestureDetectorRegionState
 
   onTap() async {
     if (isNotTouchBasedDevice()) {
+      return;
+    }
+    // Filter duplicate touch tap events on iOS (Magic Mouse issue).
+    final lastPos = _lastTapDownGlobalPosition;
+    if (lastPos != null && inputModel.shouldIgnoreTouchTap(lastPos)) {
       return;
     }
     if (!handleTouch) {
@@ -372,7 +385,10 @@ class _RawTouchGestureDetectorRegionState
         await ffi.cursorModel
             .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
       }
-      await inputModel.sendMouse('down', MouseButtons.left);
+      // In relative mouse mode, skip mouse down - only send movement via sendMobileRelativeMouseMove
+      if (!inputModel.relativeMouseMode.value) {
+        await inputModel.sendMouse('down', MouseButtons.left);
+      }
       await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
     } else {
       final offset = ffi.cursorModel.offset;
@@ -397,7 +413,12 @@ class _RawTouchGestureDetectorRegionState
     if (handleTouch && !_touchModePanStarted) {
       return;
     }
-    await ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
+    // In relative mouse mode, send delta directly without position tracking.
+    if (inputModel.relativeMouseMode.value) {
+      await inputModel.sendMobileRelativeMouseMove(d.delta.dx, d.delta.dy);
+    } else {
+      await ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
+    }
   }
 
   onOneFingerPanEnd(DragEndDetails d) async {
@@ -409,8 +430,19 @@ class _RawTouchGestureDetectorRegionState
       ffi.cursorModel.clearRemoteWindowCoords();
     }
     if (handleTouch) {
-      await inputModel.sendMouse('up', MouseButtons.left);
+      // In relative mouse mode, skip mouse up - matches the skipped mouse down in onOneFingerPanStart
+      if (!inputModel.relativeMouseMode.value) {
+        await inputModel.sendMouse('up', MouseButtons.left);
+      }
     }
+  }
+
+  // Reset `_touchModePanStarted` if the one-finger pan gesture is cancelled
+  // or rejected by the gesture arena. Without this, the flag can remain
+  // stuck in the "started" state and cause issues such as the Magic Mouse
+  // double-click problem on iPad with magic mouse.
+  onOneFingerPanCancel() {
+    _touchModePanStarted = false;
   }
 
   // scale + pan event
@@ -546,6 +578,7 @@ class _RawTouchGestureDetectorRegionState
         instance
           ..onOneFingerPanUpdate = onOneFingerPanUpdate
           ..onOneFingerPanEnd = onOneFingerPanEnd
+          ..onOneFingerPanCancel = onOneFingerPanCancel
           ..onTwoFingerScaleStart = onTwoFingerScaleStart
           ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
           ..onTwoFingerScaleEnd = onTwoFingerScaleEnd

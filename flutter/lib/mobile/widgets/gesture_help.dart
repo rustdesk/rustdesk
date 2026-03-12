@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
 class GestureIcons {
@@ -39,11 +41,13 @@ class GestureHelp extends StatefulWidget {
       {Key? key,
       required this.touchMode,
       required this.onTouchModeChange,
-      required this.virtualMouseMode})
+      required this.virtualMouseMode,
+      this.inputModel})
       : super(key: key);
   final bool touchMode;
   final OnTouchModeChange onTouchModeChange;
   final VirtualMouseMode virtualMouseMode;
+  final InputModel? inputModel;
 
   @override
   State<StatefulWidget> createState() =>
@@ -59,6 +63,14 @@ class _GestureHelpState extends State<GestureHelp> {
       : _virtualMouseMode = virtualMouseMode {
     _touchMode = touchMode;
     _selectedIndex = _touchMode ? 1 : 0;
+  }
+
+  /// Helper to exit relative mouse mode when certain conditions are met.
+  /// This reduces code duplication across multiple UI callbacks.
+  void _exitRelativeMouseModeIf(bool condition) {
+    if (condition) {
+      widget.inputModel?.setRelativeMouseMode(false);
+    }
   }
 
   @override
@@ -103,6 +115,8 @@ class _GestureHelpState extends State<GestureHelp> {
                               _selectedIndex = index ?? 0;
                               _touchMode = index == 0 ? false : true;
                               widget.onTouchModeChange(_touchMode);
+                              // Exit relative mouse mode when switching to touch mode
+                              _exitRelativeMouseModeIf(_touchMode);
                             }
                           });
                         },
@@ -117,12 +131,18 @@ class _GestureHelpState extends State<GestureHelp> {
                               onChanged: (value) async {
                                 if (value == null) return;
                                 await _virtualMouseMode.toggleVirtualMouse();
+                                // Exit relative mouse mode when virtual mouse is hidden
+                                _exitRelativeMouseModeIf(
+                                    !_virtualMouseMode.showVirtualMouse);
                                 setState(() {});
                               },
                             ),
                             InkWell(
                               onTap: () async {
                                 await _virtualMouseMode.toggleVirtualMouse();
+                                // Exit relative mouse mode when virtual mouse is hidden
+                                _exitRelativeMouseModeIf(
+                                    !_virtualMouseMode.showVirtualMouse);
                                 setState(() {});
                               },
                               child: Text(translate('Show virtual mouse')),
@@ -196,6 +216,10 @@ class _GestureHelpState extends State<GestureHelp> {
                                       if (value == null) return;
                                       await _virtualMouseMode
                                           .toggleVirtualJoystick();
+                                      // Exit relative mouse mode when joystick is hidden
+                                      _exitRelativeMouseModeIf(
+                                          !_virtualMouseMode
+                                              .showVirtualJoystick);
                                       setState(() {});
                                     },
                                   ),
@@ -203,6 +227,10 @@ class _GestureHelpState extends State<GestureHelp> {
                                     onTap: () async {
                                       await _virtualMouseMode
                                           .toggleVirtualJoystick();
+                                      // Exit relative mouse mode when joystick is hidden
+                                      _exitRelativeMouseModeIf(
+                                          !_virtualMouseMode
+                                              .showVirtualJoystick);
                                       setState(() {});
                                     },
                                     child: Text(
@@ -211,6 +239,39 @@ class _GestureHelpState extends State<GestureHelp> {
                                 ],
                               )),
                         ),
+                      // Relative mouse mode option - only visible when joystick is shown
+                      if (!_touchMode &&
+                          _virtualMouseMode.showVirtualMouse &&
+                          _virtualMouseMode.showVirtualJoystick &&
+                          widget.inputModel != null)
+                        Obx(() => Transform.translate(
+                              offset: const Offset(-10.0, -24.0),
+                              child: Padding(
+                                  // Indent further for 'Relative mouse mode'
+                                  padding: const EdgeInsets.only(left: 48.0),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Checkbox(
+                                        value: widget.inputModel!
+                                            .relativeMouseMode.value,
+                                        onChanged: (value) {
+                                          if (value == null) return;
+                                          widget.inputModel!
+                                              .setRelativeMouseMode(value);
+                                        },
+                                      ),
+                                      InkWell(
+                                        onTap: () {
+                                          widget.inputModel!
+                                              .toggleRelativeMouseMode();
+                                        },
+                                        child: Text(
+                                            translate('Relative mouse mode')),
+                                      ),
+                                    ],
+                                  )),
+                            )),
                     ],
                   ),
                 ),

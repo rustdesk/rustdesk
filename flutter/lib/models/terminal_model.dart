@@ -24,6 +24,13 @@ class TerminalModel with ChangeNotifier {
   bool _disposed = false;
 
   final _inputBuffer = <String>[];
+  // Buffer for output data received before terminal view has valid dimensions.
+  // This prevents NaN errors when writing to terminal before layout is complete.
+  final _pendingOutputChunks = <String>[];
+  int _pendingOutputSize = 0;
+  static const int _kMaxOutputBufferChars = 8 * 1024;
+  // View ready state: true when terminal has valid dimensions, safe to write
+  bool _terminalViewReady = false;
 
   bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
 
@@ -73,6 +80,12 @@ class TerminalModel with ChangeNotifier {
 
         // This piece of code must be placed before the conditional check in order to initialize properly.
         onResizeExternal?.call(w, h, pw, ph);
+
+        // Mark terminal view as ready and flush any buffered output on first valid resize.
+        // Must be after onResizeExternal so the view layer has valid dimensions before flushing.
+        if (!_terminalViewReady) {
+          _markViewReady();
+        }
 
         if (_terminalOpened) {
           // Notify remote terminal of resize
@@ -141,9 +154,13 @@ class TerminalModel with ChangeNotifier {
       debugPrint('[TerminalModel] Error calling sessionOpenTerminal: $e');
       // Optionally show error to user
       if (e is TimeoutException) {
-        terminal.write('Failed to open terminal: Connection timeout\r\n');
+        _writeToTerminal('Failed to open terminal: Connection timeout\r\n');
       }
     }
+  }
+
+  Future<void> sendVirtualKey(String data) async {
+    return _handleInput(data);
   }
 
   Future<void> closeTerminal() async {
@@ -249,8 +266,8 @@ class TerminalModel with ChangeNotifier {
 
   void _handleTerminalOpened(Map<String, dynamic> evt) {
     final bool success = getSuccessFromEvt(evt);
-    final String message = evt['message'] ?? '';
-    final String? serviceId = evt['service_id'];
+    final String message = evt['message']?.toString() ?? '';
+    final String? serviceId = evt['service_id']?.toString();
 
     debugPrint(
         '[TerminalModel] Terminal opened response: success=$success, message=$message, service_id=$serviceId');
@@ -258,7 +275,18 @@ class TerminalModel with ChangeNotifier {
     if (success) {
       _terminalOpened = true;
 
-      // Service ID is now saved on the Rust side in handle_terminal_response
+      // On reconnect ("Reconnected to existing terminal"), server may replay recent output.
+      // If this TerminalView instance is reused (not rebuilt), duplicate lines can appear.
+      // We intentionally accept this tradeoff for now to keep logic simple.
+
+      // Fallback: if terminal view is not yet ready but already has valid
+      // dimensions (e.g. layout completed before open response arrived),
+      // mark view ready now to avoid output stuck in buffer indefinitely.
+      if (!_terminalViewReady &&
+          terminal.viewWidth > 0 &&
+          terminal.viewHeight > 0) {
+        _markViewReady();
+      }
 
       // Process any buffered input
       _processBufferedInputAsync().then((_) {
@@ -279,7 +307,7 @@ class TerminalModel with ChangeNotifier {
             }));
       }
     } else {
-      terminal.write('Failed to open terminal: $message\r\n');
+      _writeToTerminal('Failed to open terminal: $message\r\n');
     }
   }
 
@@ -323,29 +351,82 @@ class TerminalModel with ChangeNotifier {
           return;
         }
 
-        terminal.write(text);
+        _writeToTerminal(text);
       } catch (e) {
         debugPrint('[TerminalModel] Failed to process terminal data: $e');
       }
     }
   }
 
+  /// Write text to terminal, buffering if the view is not yet ready.
+  /// All terminal output should go through this method to avoid NaN errors
+  /// from writing before the terminal view has valid layout dimensions.
+  void _writeToTerminal(String text) {
+    if (!_terminalViewReady) {
+      // If a single chunk exceeds the cap, keep only its tail.
+      // Note: truncation may split a multi-byte ANSI escape sequence,
+      // which can cause a brief visual glitch on flush. This is acceptable
+      // because it only affects the pre-layout buffering window and the
+      // terminal will self-correct on subsequent output.
+      if (text.length >= _kMaxOutputBufferChars) {
+        final truncated = text.substring(text.length - _kMaxOutputBufferChars);
+        _pendingOutputChunks
+          ..clear()
+          ..add(truncated);
+        _pendingOutputSize = truncated.length;
+      } else {
+        _pendingOutputChunks.add(text);
+        _pendingOutputSize += text.length;
+        // Drop oldest chunks if exceeds limit (whole chunks to preserve ANSI sequences)
+        while (_pendingOutputSize > _kMaxOutputBufferChars &&
+            _pendingOutputChunks.length > 1) {
+          final removed = _pendingOutputChunks.removeAt(0);
+          _pendingOutputSize -= removed.length;
+        }
+      }
+      return;
+    }
+    terminal.write(text);
+  }
+
+  void _flushOutputBuffer() {
+    if (_pendingOutputChunks.isEmpty) return;
+    debugPrint(
+        '[TerminalModel] Flushing $_pendingOutputSize buffered chars (${_pendingOutputChunks.length} chunks)');
+    for (final chunk in _pendingOutputChunks) {
+      terminal.write(chunk);
+    }
+    _pendingOutputChunks.clear();
+    _pendingOutputSize = 0;
+  }
+
+  /// Mark terminal view as ready and flush buffered output.
+  void _markViewReady() {
+    if (_terminalViewReady) return;
+    _terminalViewReady = true;
+    _flushOutputBuffer();
+  }
+
   void _handleTerminalClosed(Map<String, dynamic> evt) {
     final int exitCode = evt['exit_code'] ?? 0;
-    terminal.write('\r\nTerminal closed with exit code: $exitCode\r\n');
+    _writeToTerminal('\r\nTerminal closed with exit code: $exitCode\r\n');
     _terminalOpened = false;
     notifyListeners();
   }
 
   void _handleTerminalError(Map<String, dynamic> evt) {
     final String message = evt['message'] ?? 'Unknown error';
-    terminal.write('\r\nTerminal error: $message\r\n');
+    _writeToTerminal('\r\nTerminal error: $message\r\n');
   }
 
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    // Clear buffers to free memory
+    _inputBuffer.clear();
+    _pendingOutputChunks.clear();
+    _pendingOutputSize = 0;
     // Terminal cleanup is handled server-side when service closes
     super.dispose();
   }
