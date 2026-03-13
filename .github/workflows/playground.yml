@@ -79,14 +79,14 @@ jobs:
             }
     steps:
       - name: Export GitHub Actions cache environment variables
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           ref: ${{ matrix.job.ref }}
           submodules: recursive
@@ -222,7 +222,7 @@ jobs:
           done
 
       - name: Publish DMG package
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
@@ -247,7 +247,7 @@ jobs:
             }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           ref: ${{ matrix.job.ref }}
           submodules: recursive
@@ -410,7 +410,7 @@ jobs:
           BUILD_TOOLS_VERSION: "30.0.2"
 
       - name: Publish signed apk package
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
