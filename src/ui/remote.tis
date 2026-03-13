@@ -546,6 +546,7 @@ class QualityMonitor: Reactor.Component
     }
 
     function render() {
+        var showBitrate = typeof qualityMonitorData[3] == "integer" && qualityMonitorData[3] >= 1;
         return <div >
             <div>
                 Speed: {qualityMonitorData[0]}
@@ -556,9 +557,9 @@ class QualityMonitor: Reactor.Component
             <div>
                 Delay: {qualityMonitorData[2]} ms
             </div>
-            <div>
+            {showBitrate ? <div>
                 Target Bitrate: {qualityMonitorData[3]}kb
-            </div>
+            </div> : undefined}
             <div>
                 Codec: {qualityMonitorData[4]}
             </div>
