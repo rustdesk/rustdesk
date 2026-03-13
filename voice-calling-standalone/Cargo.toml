@@ -1,0 +1,29 @@
+[package]
+name = "rustdesk-voice-calling"
+version = "1.4.5"
+edition = "2021"
+authors = ["RustDesk Team"]
+description = "Standalone voice calling module for RustDesk"
+
+[[bin]]
+name = "voice_test"
+path = "src/main.rs"
+
+[workspace]
+# Empty workspace to prevent being included in parent workspace
+
+[dependencies]
+log = "0.4"
+thiserror = "1.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
