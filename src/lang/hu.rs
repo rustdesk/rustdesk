@@ -738,5 +738,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Changelog", "Változáslista"),
         ("keep-awake-during-outgoing-sessions-label", "Képernyő aktív állapotban tartása a kimenő munkamenetek során"),
         ("keep-awake-during-incoming-sessions-label", "Képernyő aktív állapotban tartása a bejövő munkamenetek során"),
+        ("Continue with {}", "Folytatás ezzel: {}"),
+        ("Display Name", "Kijelző név"),
     ].iter().cloned().collect();
 }
