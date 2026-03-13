@@ -286,18 +286,21 @@ mod cpal_impl {
         if !audio_input.is_empty() {
             return get_audio_input(&audio_input);
         }
+        // FIX: Use default_input_device() for audio input capture on Windows
+        // Previously used default_output_device() which caused audio playback issues
+        // when the default device was an output-only device (like "Astro MixAmp Pro Game")
         let device = HOST
-            .default_output_device()
-            .with_context(|| "Failed to get default output device for loopback")?;
+            .default_input_device()
+            .with_context(|| "Failed to get default input device for loopback")?;
         log::info!(
-            "Default output device: {}",
+            "Default input device: {}",
             device.name().unwrap_or("".to_owned())
         );
         let format = device
-            .default_output_config()
+            .default_input_config()
             .map_err(|e| anyhow!(e))
-            .with_context(|| "Failed to get default output format")?;
-        log::info!("Default output format: {:?}", format);
+            .with_context(|| "Failed to get default input format")?;
+        log::info!("Default input format: {:?}", format);
         Ok((device, format))
     }
 
