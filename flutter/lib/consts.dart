@@ -204,6 +204,13 @@ const String kUrlActionClose = "close";
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
 
+const String kManagedAppKeyPassword = "password";
+const String kManagedAppKeyIdServer ="idServer";
+const String kManagedAppKeyRelayServer ="relayServer";
+const String kManagedAppKeyServerKey ="key";
+const String kManagedAppKeyId = "id";
+
+
 const String kWindowPrefix = "wm_";
 const int kWindowMainId = 0;
 

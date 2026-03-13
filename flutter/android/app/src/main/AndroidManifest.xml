@@ -100,7 +100,8 @@
         -->
         <meta-data
             android:name="flutterEmbedding"
-            android:value="2" />
+            android:value="2"
+            android:resource="@xml/restrictions"/>
     </application>
 
 </manifest>
