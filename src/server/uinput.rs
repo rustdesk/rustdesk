@@ -1062,6 +1062,7 @@ mod mouce {
     }
 
     #[derive(Debug, Copy, Clone)]
+    #[allow(unused)]
     pub enum MouseButton {
         Left,
         Middle,
@@ -1074,6 +1075,7 @@ mod mouce {
     }
 
     #[derive(Debug, Copy, Clone)]
+    #[allow(unused)]
     pub enum ScrollDirection {
         Up,
         Down,

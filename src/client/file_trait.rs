@@ -2,6 +2,8 @@ use hbb_common::{fs, log, message_proto::*};
 
 use super::{Data, Interface};
 
+// RustC doesn't recognize call sites in flutter_ffi.rs
+#[allow(dead_code)]
 pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
