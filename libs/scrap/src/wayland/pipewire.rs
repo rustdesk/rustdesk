@@ -95,6 +95,14 @@ pub fn try_close_session() {
     }
 }
 
+pub fn force_close_dead_session() {
+    if let Ok(mut rdp_info) = RDP_SESSION_INFO.lock() {
+        *rdp_info = None;
+        clear_wayland_displays_cache();
+        HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
+    }
+}
+
 pub struct RdpSessionInfo {
     pub conn: Arc<SyncConnection>,
     pub streams: Vec<PwStreamInfo>,
@@ -102,7 +110,17 @@ pub struct RdpSessionInfo {
     pub session: dbus::Path<'static>,
     pub is_support_restore_token: bool,
     pub resolution: Arc<Mutex<Option<(usize, usize)>>>,
+    inhibit_request_path: Option<dbus::Path<'static>>,
 }
+
+impl Drop for RdpSessionInfo {
+    fn drop(&mut self) {
+        if let Some(ref path) = self.inhibit_request_path {
+            release_inhibit(&self.conn, path);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
     pub path: u64,
@@ -144,6 +162,17 @@ impl std::fmt::Display for GStreamerError {
 }
 
 impl Error for GStreamerError {}
+
+#[derive(Debug)]
+pub struct SessionRevokedError;
+
+impl std::fmt::Display for SessionRevokedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SESSION_REVOKED")
+    }
+}
+
+impl Error for SessionRevokedError {}
 
 #[derive(Clone)]
 pub struct PipeWireCapturable {
@@ -306,7 +335,17 @@ impl PipeWireRecorder {
             "[gstreamer] Setting pipeline {} to PLAYING state...",
             capturable.fd.as_raw_fd()
         );
-        pipeline.set_state(gst::State::Playing)?;
+        if let Err(e) = pipeline.set_state(gst::State::Playing) {
+            let _ = pipeline.set_state(gst::State::Null);
+
+            if is_server_running() {
+                warn!("[gstreamer] Failed to set PLAYING state: {:?}", e);
+                return Err(hbb_common::anyhow::Error::msg(format!("GStreamer pipeline failed to start: {:?}", e)));
+            } else {
+                warn!("[gstreamer] Failed to set PLAYING state, session was likely revoked: {:?}", e);
+                return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
+            }
+        }
 
         // If `is_server_running()` is false, it means using remote_desktop_portal,
         // which does not use multiple streams, so no need to wait for state change.
@@ -323,9 +362,15 @@ impl PipeWireRecorder {
                 }
                 (result, state, pending) => {
                     warn!(
-                    "[gstreamer] Pipeline {} state change incomplete: result={:?}, state={:?}, pending={:?}",
-                    capturable.fd.as_raw_fd(), result, state, pending
-                );
+                        "[gstreamer] Pipeline {} state change incomplete: result={:?}, state={:?}, pending={:?}",
+                        capturable.fd.as_raw_fd(), result, state, pending
+                    );
+
+                    if let Err(_) = result {
+                        warn!("[gstreamer] Async pipeline error detected. Session was likely terminated.");
+                        let _ = pipeline.set_state(gst::State::Null);
+                        return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
+                    }
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(150));
@@ -925,6 +970,41 @@ fn on_start_response(
     }
 }
 
+fn request_inhibit(conn: &SyncConnection) -> Option<dbus::Path<'static>> {
+    let proxy = conn.with_proxy(
+        "org.freedesktop.portal.Desktop",
+        "/org/freedesktop/portal/desktop",
+        Duration::from_millis(1000),
+    );
+    let mut args: PropMap = HashMap::new();
+    args.insert("handle_token".to_string(), Variant(Box::new("inhibit1".to_string())),);
+    // flags: 8 = inhibit idle, 4 = inhibit suspend
+    // Based on current testing, Dim Screen will forcibly terminate the session.
+    // Solving this problem requires preventing entry into the idle state.
+    // However, for future considerations, entering the suspended state is also prevented here.
+    match proxy.method_call::<(dbus::Path<'static>,), _, _, _>("org.freedesktop.portal.Inhibit", "Inhibit", ("", 12u32, args)) {
+        Ok((path,)) => {
+            debug!("Inhibit requested, request path: {:?}", path);
+            Some(path)
+        }
+        Err(e) => {
+            warn!("Failed to request inhibit: {}", e);
+            None
+        }
+    }
+}
+
+fn release_inhibit(conn: &SyncConnection, path: &dbus::Path<'static>) {
+    let proxy = conn.with_proxy(
+        "org.freedesktop.portal.Desktop",
+        path,
+        Duration::from_millis(1000),
+    );
+    if let Err(e) = proxy.method_call::<(), _, _, _>("org.freedesktop.portal.Request", "Close", ()) {
+        warn!("Failed to release inhibit: {}", e);
+    }
+}
+
 pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     let mut rdp_connection = match RDP_SESSION_INFO.lock() {
         Ok(conn) => conn,
@@ -934,6 +1014,9 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     if rdp_connection.is_none() {
         let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop(false)?;
         let conn = Arc::new(conn);
+        // to-do: Add an option like "Keep awake while RustDesk is running" to avoid
+        // impacting users whose sessions are not automatically terminated upon entering the Dim Screen.
+        let inhibit_path = if !is_server_running() { request_inhibit(&conn) } else { None };
 
         let rdp_info = RdpSessionInfo {
             conn,
@@ -942,6 +1025,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
             session,
             is_support_restore_token,
             resolution: Arc::new(Mutex::new(None)),
+            inhibit_request_path: inhibit_path,
         };
         *rdp_connection = Some(rdp_info);
     }
