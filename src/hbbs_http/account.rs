@@ -17,6 +17,7 @@ lazy_static::lazy_static! {
 
 const QUERY_INTERVAL_SECS: f32 = 1.0;
 const QUERY_TIMEOUT_SECS: u64 = 60 * 3;
+
 const REQUESTING_ACCOUNT_AUTH: &str = "Requesting account auth";
 const WAITING_ACCOUNT_AUTH: &str = "Waiting account auth";
 const LOGIN_ACCOUNT_AUTH: &str = "Login account auth";
@@ -79,6 +80,10 @@ pub enum UserStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPayload {
     pub name: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<String>,
     #[serde(default)]
     pub email: Option<String>,
     #[serde(default)]
@@ -268,7 +273,13 @@ impl OidcSession {
                             );
                             LocalConfig::set_option(
                                 "user_info".to_owned(),
-                                serde_json::json!({ "name": auth_body.user.name, "status": auth_body.user.status }).to_string(),
+                                serde_json::json!({
+                                    "name": auth_body.user.name,
+                                    "display_name": auth_body.user.display_name,
+                                    "avatar": auth_body.user.avatar,
+                                    "status": auth_body.user.status
+                                })
+                                .to_string(),
                             );
                         }
                     }

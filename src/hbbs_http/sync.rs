@@ -278,7 +278,7 @@ fn heartbeat_url() -> String {
         Config::get_option("api-server"),
         Config::get_option("custom-rendezvous-server"),
     );
-    if url.is_empty() || url.contains("rustdesk.com") {
+    if url.is_empty() || crate::is_public(&url) {
         return "".to_owned();
     }
     format!("{}/api/heartbeat", url)
@@ -286,10 +286,14 @@ fn heartbeat_url() -> String {
 
 fn handle_config_options(config_options: HashMap<String, String>) {
     let mut options = Config::get_options();
+    let default_settings = config::DEFAULT_SETTINGS.read().unwrap().clone();
     config_options
         .iter()
         .map(|(k, v)| {
-            if v.is_empty() {
+            // Priority: user config > default advanced options.
+            // Only when default advanced options are also empty, remove user option (fallback to built-in default);
+            // otherwise insert an empty value so user config remains present.
+            if v.is_empty() && default_settings.get(k).map_or("", |v| v).is_empty() {
                 options.remove(k);
             } else {
                 options.insert(k.to_string(), v.to_string());

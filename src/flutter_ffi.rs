@@ -1101,6 +1101,10 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
+pub fn main_resolve_avatar_url(avatar: String) -> SyncReturn<String> {
+    SyncReturn(resolve_avatar_url(avatar))
+}
+
 pub fn main_http_request(url: String, method: String, body: Option<String>, header: String) {
     http_request(url, method, body, header)
 }
@@ -1212,6 +1216,66 @@ pub fn main_set_input_source(session_id: SessionID, value: String) {
         if let Some(session) = sessions::get_session_by_session_id(&session_id) {
             try_sync_peer_option(&session, &session_id, "input_source", None);
         }
+    }
+}
+
+/// Set cursor position (for pointer lock re-centering).
+///
+/// # Returns
+/// - `true`: cursor position was successfully set
+/// - `false`: operation failed or not supported
+///
+/// # Platform behavior
+/// - Windows/macOS/Linux: attempts to move the cursor to (x, y)
+/// - Android/iOS: no-op, always returns `false`
+pub fn main_set_cursor_position(x: i32, y: i32) -> SyncReturn<bool> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        SyncReturn(crate::set_cursor_pos(x, y))
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (x, y);
+        SyncReturn(false)
+    }
+}
+
+/// Clip cursor to a rectangle (for pointer lock).
+///
+/// When `enable` is true, the cursor is clipped to the rectangle defined by
+/// `left`, `top`, `right`, `bottom`. When `enable` is false, the rectangle
+/// values are ignored and the cursor is unclipped.
+///
+/// # Returns
+/// - `true`: operation succeeded or no-op completed
+/// - `false`: operation failed
+///
+/// # Platform behavior
+/// - Windows: uses ClipCursor API to confine cursor to the specified rectangle
+/// - macOS: uses CGAssociateMouseAndMouseCursorPosition for pointer lock effect;
+///   the rect coordinates are ignored (only Some/None matters)
+/// - Linux: no-op, always returns `true`; use pointer warping for similar effect
+/// - Android/iOS: no-op, always returns `false`
+pub fn main_clip_cursor(
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+    enable: bool,
+) -> SyncReturn<bool> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let rect = if enable {
+            Some((left, top, right, bottom))
+        } else {
+            None
+        };
+        SyncReturn(crate::clip_cursor(rect))
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (left, top, right, bottom, enable);
+        SyncReturn(false)
     }
 }
 
@@ -1748,8 +1812,99 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
     super::flutter::session_send_pointer(session_id, msg);
 }
 
+/// Send mouse event from Flutter to the remote peer.
+///
+/// # Relative Mouse Mode Message Contract
+///
+/// When the message contains a `relative_mouse_mode` field, this function validates
+/// and filters activation/deactivation markers.
+///
+/// **Mode Authority:**
+/// The Flutter InputModel is authoritative for relative mouse mode activation/deactivation.
+/// The server (via `input_service.rs`) only consumes forwarded delta movements and tracks
+/// relative movement processing state, but does NOT control mode activation/deactivation.
+///
+/// **Deactivation Markers are Local-Only:**
+/// Deactivation markers (`relative_mouse_mode: "0"`) are NEVER forwarded to the server.
+/// They are handled entirely on the client side to reset local UI state (cursor visibility,
+/// pointer lock, etc.). The server does not rely on deactivation markers and should not
+/// expect to receive them.
+///
+/// **Contract (Flutter side MUST adhere to):**
+/// 1. `relative_mouse_mode` field is ONLY present on activation/deactivation marker messages,
+///    NEVER on normal pointer events (move, button, scroll).
+/// 2. Deactivation marker: `{"relative_mouse_mode": "0"}` - local-only, never forwarded.
+/// 3. Activation marker: `{"relative_mouse_mode": "1", "type": "move_relative", "x": "0", "y": "0"}`
+///    - MUST use `type="move_relative"` with `x="0"` and `y="0"` (safe no-op).
+///    - Any other combination is dropped to prevent accidental cursor movement.
+///
+/// If these assumptions are violated (e.g., `relative_mouse_mode` is added to normal events),
+/// legitimate mouse events may be silently dropped by the early-return logic below.
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
+        // Relative mouse mode marker validation (Flutter-only).
+        // This only validates and filters markers; the server tracks per-connection
+        // relative-movement processing state but not mode activation/deactivation.
+        // See doc comment above for the message contract.
+        if let Some(v) = m.get("relative_mouse_mode") {
+            let active = matches!(v.as_str(), "1" | "Y" | "on");
+
+            // Disable marker: local-only, never forwarded to the server.
+            // The server does not track mode deactivation; it simply stops receiving
+            // relative move events when the client exits relative mouse mode.
+            if !active {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                crate::keyboard::set_relative_mouse_mode_state(false);
+                return;
+            }
+
+            // Enable marker: validate BEFORE setting state to avoid desync.
+            // This ensures we only mark as active if the marker will actually be forwarded.
+
+            // Enable marker is allowed to go through only if it's a safe no-op relative move.
+            // This avoids accidentally moving the remote cursor (e.g. if type/x/y are missing).
+            let msg_type = m.get("type").map(|t| t.as_str());
+            if msg_type != Some("move_relative") {
+                log::warn!(
+                    "relative_mouse_mode activation marker has invalid type: {:?}, expected 'move_relative'. Dropping.",
+                    msg_type
+                );
+                return;
+            }
+            let x_marker = m
+                .get("x")
+                .map(|x| x.parse::<i32>().unwrap_or(0))
+                .unwrap_or(0);
+            let y_marker = m
+                .get("y")
+                .map(|y| y.parse::<i32>().unwrap_or(0))
+                .unwrap_or(0);
+            if x_marker != 0 || y_marker != 0 {
+                log::warn!(
+                    "relative_mouse_mode activation marker has non-zero coordinates: x={}, y={}. Dropping.",
+                    x_marker, y_marker
+                );
+                return;
+            }
+
+            // Guard against unexpected fields that could turn this no-op into a real event.
+            if m.contains_key("buttons")
+                || m.contains_key("alt")
+                || m.contains_key("ctrl")
+                || m.contains_key("shift")
+                || m.contains_key("command")
+            {
+                log::warn!(
+                    "relative_mouse_mode activation marker contains unexpected fields (buttons/alt/ctrl/shift/command). Dropping."
+                );
+                return;
+            }
+
+            // All validation passed - marker will be forwarded as a no-op relative move.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            crate::keyboard::set_relative_mouse_mode_state(true);
+        }
+
         let alt = m.get("alt").is_some();
         let ctrl = m.get("ctrl").is_some();
         let shift = m.get("shift").is_some();
@@ -1769,6 +1924,7 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
                 "up" => MOUSE_TYPE_UP,
                 "wheel" => MOUSE_TYPE_WHEEL,
                 "trackpad" => MOUSE_TYPE_TRACKPAD,
+                "move_relative" => MOUSE_TYPE_MOVE_RELATIVE,
                 _ => 0,
             };
         }
@@ -2600,6 +2756,18 @@ pub fn main_get_common(key: String) -> String {
         return false.to_string();
     } else if key == "transfer-job-id" {
         return hbb_common::fs::get_next_job_id().to_string();
+    } else if key == "is-remote-modify-enabled-by-control-permissions" {
+        return match is_remote_modify_enabled_by_control_permissions() {
+            Some(true) => "true",
+            Some(false) => "false",
+            None => "",
+        }
+        .to_string();
+    } else if key == "has-gnome-shortcuts-inhibitor-permission" {
+        #[cfg(target_os = "linux")]
+        return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();
+        #[cfg(not(target_os = "linux"))]
+        return false.to_string();
     } else {
         if key.starts_with("download-data-") {
             let id = key.replace("download-data-", "");
@@ -2612,10 +2780,13 @@ pub fn main_get_common(key: String) -> String {
         } else if key.starts_with("download-file-") {
             let _version = key.replace("download-file-", "");
             #[cfg(target_os = "windows")]
-            return match crate::platform::windows::is_msi_installed() {
-                Ok(true) => format!("rustdesk-{_version}-x86_64.msi"),
-                Ok(false) => format!("rustdesk-{_version}-x86_64.exe"),
-                Err(e) => {
+            return match (
+                crate::platform::windows::is_msi_installed(),
+                crate::common::is_custom_client(),
+            ) {
+                (Ok(true), false) => format!("rustdesk-{_version}-x86_64.msi"),
+                (Ok(true), true) | (Ok(false), _) => format!("rustdesk-{_version}-x86_64.exe"),
+                (Err(e), _) => {
                     log::error!("Failed to check if is msi: {}", e);
                     format!("error:update-failed-check-msi-tip")
                 }
@@ -2712,30 +2883,17 @@ pub fn main_set_common(_key: String, _value: String) {
                 if let Some(f) = new_version_file.to_str() {
                     // 1.4.0 does not support "--update"
                     // But we can assume that the new version supports it.
-                    #[cfg(target_os = "windows")]
-                    if f.ends_with(".exe") {
-                        if let Err(e) =
-                            crate::platform::run_exe_in_cur_session(f, vec!["--update"], false)
-                        {
-                            log::error!("Failed to run the update exe: {}", e);
-                        }
-                    } else if f.ends_with(".msi") {
-                        if let Err(e) = crate::platform::update_me_msi(f, false) {
-                            log::error!("Failed to run the update msi: {}", e);
-                        }
-                    } else {
-                        // unreachable!()
-                    }
-                    #[cfg(target_os = "macos")]
+
+                    #[cfg(any(target_os = "windows", target_os = "macos"))]
                     match crate::platform::update_to(f) {
                         Ok(_) => {
-                            log::info!("Update successfully!");
+                            log::info!("Update process is launched successfully!");
                         }
                         Err(e) => {
                             log::error!("Failed to update to new version, {}", e);
+                            fs::remove_file(f).ok();
                         }
                     }
-                    fs::remove_file(f).ok();
                 }
             }
         } else if _key == "extract-update-dmg" {
@@ -2760,6 +2918,29 @@ pub fn main_set_common(_key: String, _value: String) {
         crate::hbbs_http::downloader::remove(&_value);
     } else if _key == "cancel-downloader" {
         crate::hbbs_http::downloader::cancel(&_value);
+    }
+
+    #[cfg(target_os = "linux")]
+    if _key == "clear-gnome-shortcuts-inhibitor-permission" {
+        std::thread::spawn(move || {
+            let (success, msg) =
+                match crate::platform::linux::clear_gnome_shortcuts_inhibitor_permission() {
+                    Ok(_) => (true, "".to_owned()),
+                    Err(e) => (false, e.to_string()),
+                };
+            let data = HashMap::from([
+                (
+                    "name",
+                    serde_json::json!("clear-gnome-shortcuts-inhibitor-permission-res"),
+                ),
+                ("success", serde_json::json!(success)),
+                ("msg", serde_json::json!(msg)),
+            ]);
+            let _res = flutter::push_global_event(
+                flutter::APP_TYPE_MAIN,
+                serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+            );
+        });
     }
 }
 

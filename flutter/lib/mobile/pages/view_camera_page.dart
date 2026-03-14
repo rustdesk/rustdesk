@@ -11,7 +11,6 @@ import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../common.dart';
 import '../../common/widgets/overlay.dart';
@@ -62,7 +61,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   bool _showGestureHelp = false;
   Orientation? _currentOrientation;
   double _viewInsetsBottom = 0;
-
+  final _uniqueKey = UniqueKey();
   Timer? _timerDidChangeMetrics;
 
   final _blockableOverlayState = BlockableOverlayState();
@@ -100,9 +99,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    if (!isWeb) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
     _physicalFocusNode.requestFocus();
     gFFI.inputModel.listenToMouse(true);
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
@@ -139,9 +136,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
-    if (!isWeb) {
-      await WakelockPlus.disable();
-    }
+    WakelockManager.disable(_uniqueKey);
     removeSharedStates(widget.id);
     // `on_voice_call_closed` should be called when the connection is ended.
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.

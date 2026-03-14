@@ -197,7 +197,7 @@ pub fn check_clipboard_cm() -> ResultType<MultiClipboards> {
 
 #[cfg(not(target_os = "android"))]
 fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
-    let to_update_data = proto::from_multi_clipbards(multi_clipboards);
+    let to_update_data = proto::from_multi_clipboards(multi_clipboards);
     if to_update_data.is_empty() {
         return;
     }
@@ -432,7 +432,7 @@ impl ClipboardContext {
                 #[cfg(target_os = "macos")]
                 let is_kde_x11 = false;
                 let clear_holder_text = if is_kde_x11 {
-                    "RustDesk placeholder to clear the file clipbard"
+                    "RustDesk placeholder to clear the file clipboard"
                 } else {
                     ""
                 }
@@ -672,7 +672,7 @@ mod proto {
     }
 
     #[cfg(not(target_os = "android"))]
-    pub fn from_multi_clipbards(multi_clipboards: Vec<Clipboard>) -> Vec<ClipboardData> {
+    pub fn from_multi_clipboards(multi_clipboards: Vec<Clipboard>) -> Vec<ClipboardData> {
         multi_clipboards
             .into_iter()
             .filter_map(from_clipboard)
@@ -814,7 +814,7 @@ pub mod clipboard_listener {
                 subscribers: listener_lock.subscribers.clone(),
             };
             let (tx_start_res, rx_start_res) = channel();
-            let h = start_clipbard_master_thread(handler, tx_start_res);
+            let h = start_clipboard_master_thread(handler, tx_start_res);
             let shutdown = match rx_start_res.recv() {
                 Ok((Some(s), _)) => s,
                 Ok((None, err)) => {
@@ -854,7 +854,7 @@ pub mod clipboard_listener {
         log::info!("Clipboard listener unsubscribed: {}", name);
     }
 
-    fn start_clipbard_master_thread(
+    fn start_clipboard_master_thread(
         handler: impl ClipboardHandler + Send + 'static,
         tx_start_res: Sender<(Option<Shutdown>, String)>,
     ) -> JoinHandle<()> {

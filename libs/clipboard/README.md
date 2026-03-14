@@ -10,7 +10,7 @@ TODO: Move this lib to a separate project.
 
 ## How it works
 
-Terminalogies:
+Terminologies:
 
 - cliprdr: this module
 - local: the endpoint which initiates a file copy events
@@ -50,7 +50,7 @@ sequenceDiagram
         r ->> l: Format List Response (notified)
         r ->> l: Format Data Request (requests file list)
         activate l
-            note left of l: Retrive file list from system clipboard
+            note left of l: Retrieve file list from system clipboard
             l ->> r: Format Data Response (containing file list)
         deactivate l
         note over r: Update system clipboard with received file list
@@ -84,10 +84,10 @@ and copy files to remote.
 The protocol was originally designed as an extension of the Windows RDP,
 so the specific message packages fits windows well.
 
-When starting cliprdr, a thread is spawn to create a invisible window
+When starting cliprdr, a thread is spawned to create an invisible window
 and to subscribe to OLE clipboard events.
 The window's callback (see `cliprdr_proc` in `src/windows/wf_cliprdr.c`) was
-set to handle a variaty of events.
+set to handle a variety of events.
 
 Detailed implementation is shown in pictures above.
 
@@ -108,18 +108,18 @@ after filtering out those pointing to our FUSE directory or duplicated,
 send format list directly to remote.
 
 The cliprdr server also uses clipboard client for setting clipboard,
-or retrive paths from system.
+or retrieve paths from system.
 
 #### Local File List
 
-The local file list is a temperary list of file metadata.
+The local file list is a temporary list of file metadata.
 When receiving file contents PDU from peer, the server picks
 out the file requested and open it for reading if necessary.
 
 Also when receiving Format Data Request PDU from remote asking for file list,
 the local file list should be rebuilt from file list retrieved from Clipboard Client.
 
-Some caching and preloading could done on it since applications are likely to read
+Some caching and preloading could be done on it since applications are likely to read
 on the list sequentially.
 
 #### FUSE server

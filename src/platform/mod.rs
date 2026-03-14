@@ -26,18 +26,13 @@ pub mod linux_desktop_manager;
 #[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::{
-    message_proto::CursorData,
-    sysinfo::Pid,
-    ResultType,
-};
 #[cfg(all(
     not(all(target_os = "windows", not(target_pointer_width = "64"))),
-    not(any(target_os = "android", target_os = "ios"))))]
-use hbb_common::{
-    sysinfo::System,
-};
+    not(any(target_os = "android", target_os = "ios"))
+))]
+use hbb_common::sysinfo::System;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::{message_proto::CursorData, sysinfo::Pid, ResultType};
 use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 pub const SERVICE_INTERVAL: u64 = 300;

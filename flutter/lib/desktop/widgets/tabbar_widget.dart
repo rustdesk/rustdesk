@@ -593,7 +593,6 @@ class _DesktopTabState extends State<DesktopTab>
 
   Widget _buildBar() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
             child: GestureDetector(

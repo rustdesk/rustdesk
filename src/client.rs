@@ -33,7 +33,7 @@ use crate::{
     create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
     secure_tcp,
-    ui_interface::{get_builtin_option, use_texture_render},
+    ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
 };
 #[cfg(feature = "unix-file-copy-paste")]
@@ -2625,15 +2625,32 @@ impl LoginConfigHandler {
         } else {
             (my_id, self.id.clone())
         };
+        let mut avatar = get_builtin_option(keys::OPTION_AVATAR);
+        if avatar.is_empty() {
+            avatar = serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option(
+                "user_info",
+            ))
+            .ok()
+            .and_then(|x| {
+                x.get("avatar")
+                    .and_then(|x| x.as_str())
+                    .map(|x| x.trim().to_owned())
+            })
+            .unwrap_or_default();
+        }
+        avatar = resolve_avatar_url(avatar);
         let mut display_name = get_builtin_option(keys::OPTION_DISPLAY_NAME);
         if display_name.is_empty() {
             display_name =
                 serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option("user_info"))
                     .map(|x| {
-                        x.get("name")
-                            .map(|x| x.as_str().unwrap_or_default())
+                        x.get("display_name")
+                            .and_then(|x| x.as_str())
+                            .map(|x| x.trim())
+                            .filter(|x| !x.is_empty())
+                            .or_else(|| x.get("name").and_then(|x| x.as_str()))
+                            .map(|x| x.to_owned())
                             .unwrap_or_default()
-                            .to_owned()
                     })
                     .unwrap_or_default();
         }
@@ -2681,6 +2698,7 @@ impl LoginConfigHandler {
             })
             .into(),
             hwid,
+            avatar,
             ..Default::default()
         };
         match self.conn_type {

@@ -25,6 +25,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragStartCallback? onOneFingerPanStart;
   GestureDragUpdateCallback? onOneFingerPanUpdate;
   GestureDragEndCallback? onOneFingerPanEnd;
+  GestureDragCancelCallback? onOneFingerPanCancel;
 
   // twoFingerScale : scale + pan event
   GestureScaleStartCallback? onTwoFingerScaleStart;
@@ -169,6 +170,27 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 
   DragEndDetails _getDragEndDetails(ScaleEndDetails d) =>
       DragEndDetails(velocity: d.velocity);
+
+  @override
+  void rejectGesture(int pointer) {
+    super.rejectGesture(pointer);
+    switch (_currentState) {
+      case GestureState.oneFingerPan:
+        if (onOneFingerPanCancel != null) {
+          onOneFingerPanCancel!();
+        }
+        break;
+      case GestureState.twoFingerScale:
+        // Reset scale state if needed, currently self-contained
+        break;
+      case GestureState.threeFingerVerticalDrag:
+        // Reset drag state if needed, currently self-contained
+        break;
+      default:
+        break;
+    }
+    _currentState = GestureState.none;
+  }
 }
 
 class HoldTapMoveGestureRecognizer extends GestureRecognizer {
@@ -717,6 +739,7 @@ RawGestureDetector getMixinGestureDetector({
   GestureDragStartCallback? onOneFingerPanStart,
   GestureDragUpdateCallback? onOneFingerPanUpdate,
   GestureDragEndCallback? onOneFingerPanEnd,
+  GestureDragCancelCallback? onOneFingerPanCancel,
   GestureScaleUpdateCallback? onTwoFingerScaleUpdate,
   GestureScaleEndCallback? onTwoFingerScaleEnd,
   GestureDragUpdateCallback? onThreeFingerVerticalDragUpdate,
@@ -765,6 +788,7 @@ RawGestureDetector getMixinGestureDetector({
             ..onOneFingerPanStart = onOneFingerPanStart
             ..onOneFingerPanUpdate = onOneFingerPanUpdate
             ..onOneFingerPanEnd = onOneFingerPanEnd
+            ..onOneFingerPanCancel = onOneFingerPanCancel
             ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
             ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
             ..onThreeFingerVerticalDragUpdate = onThreeFingerVerticalDragUpdate;

@@ -570,11 +570,14 @@ class MyGroupPeerView extends BasePeersView {
   static bool filter(Peer peer) {
     final model = gFFI.groupModel;
     if (model.searchAccessibleItemNameText.isNotEmpty) {
-      final text = model.searchAccessibleItemNameText.value;
-      final searchPeersOfUser = peer.loginName.contains(text) &&
-          model.users.any((user) => user.name == peer.loginName);
-      final searchPeersOfDeviceGroup = peer.device_group_name.contains(text) &&
-          model.deviceGroups.any((g) => g.name == peer.device_group_name);
+      final text = model.searchAccessibleItemNameText.value.toLowerCase();
+      final searchPeersOfUser = model.users.any((user) =>
+          user.name == peer.loginName &&
+          (user.name.toLowerCase().contains(text) ||
+              user.displayNameOrName.toLowerCase().contains(text)));
+      final searchPeersOfDeviceGroup =
+          peer.device_group_name.toLowerCase().contains(text) &&
+              model.deviceGroups.any((g) => g.name == peer.device_group_name);
       if (!searchPeersOfUser && !searchPeersOfDeviceGroup) {
         return false;
       }

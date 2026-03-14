@@ -61,12 +61,13 @@ class _DropDownAction extends StatelessWidget {
           final isAllowNumericOneTimePassword =
               gFFI.serverModel.allowNumericOneTimePassword;
           return [
-            PopupMenuItem(
-              enabled: gFFI.serverModel.connectStatus > 0,
-              value: "changeID",
-              child: Text(translate("Change ID")),
-            ),
-            const PopupMenuDivider(),
+            if (!isChangeIdDisabled())
+              PopupMenuItem(
+                enabled: gFFI.serverModel.connectStatus > 0,
+                value: "changeID",
+                child: Text(translate("Change ID")),
+              ),
+            if (!isChangeIdDisabled()) const PopupMenuDivider(),
             PopupMenuItem(
               value: 'AcceptSessionsViaPassword',
               child: listTile(
@@ -87,7 +88,8 @@ class _DropDownAction extends StatelessWidget {
             ),
             if (showPasswordOption) const PopupMenuDivider(),
             if (showPasswordOption &&
-                verificationMethod != kUseTemporaryPassword)
+                verificationMethod != kUseTemporaryPassword &&
+                !isChangePermanentPasswordDisabled())
               PopupMenuItem(
                 value: "setPermanentPassword",
                 child: Text(translate("Set permanent password")),
@@ -149,6 +151,10 @@ class _DropDownAction extends StatelessWidget {
 
             if (value == kUsePermanentPassword &&
                 (await bind.mainGetPermanentPassword()).isEmpty) {
+              if (isChangePermanentPasswordDisabled()) {
+                callback();
+                return;
+              }
               setPasswordDialog(notEmptyCallback: callback);
             } else {
               callback();
@@ -648,9 +654,8 @@ class ConnectionManager extends StatelessWidget {
     return Column(
         children: serverModel.clients
             .map((client) => PaddingCard(
-                title: translate(client.isFileTransfer
-                    ? "Transfer file"
-                    : "Share screen"),
+                title: translate(
+                    client.isFileTransfer ? "Transfer file" : "Share screen"),
                 titleIcon: client.isFileTransfer
                     ? Icon(Icons.folder_outlined)
                     : Icon(Icons.mobile_screen_share),
@@ -836,13 +841,7 @@ class ClientInfo extends StatelessWidget {
                   flex: -1,
                   child: Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: CircleAvatar(
-                          backgroundColor: str2color(
-                              client.name,
-                              Theme.of(context).brightness == Brightness.light
-                                  ? 255
-                                  : 150),
-                          child: Text(client.name[0])))),
+                      child: _buildAvatar(context))),
               Expanded(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -854,6 +853,20 @@ class ClientInfo extends StatelessWidget {
             ],
           ),
         ]));
+  }
+
+  Widget _buildAvatar(BuildContext context) {
+    final fallback = CircleAvatar(
+      backgroundColor: str2color(client.name,
+          Theme.of(context).brightness == Brightness.light ? 255 : 150),
+      child: Text(client.name.isNotEmpty ? client.name[0] : '?'),
+    );
+    return buildAvatarWidget(
+          avatar: client.avatar,
+          size: 40,
+          fallback: fallback,
+        ) ??
+        fallback;
   }
 }
 

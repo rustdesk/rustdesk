@@ -57,6 +57,11 @@ div.icon {
     font-weight: bold;
 }
 
+img.icon {
+    size: 96px;
+    border-radius: 8px;
+}
+
 div.id {
     @ELLIPSIS;
     color: color(green-blue);

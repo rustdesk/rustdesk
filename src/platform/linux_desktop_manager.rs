@@ -4,7 +4,12 @@ use crate::client::{
     LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LOGIN_MSG_DESKTOP_XORG_NOT_FOUND,
     LOGIN_MSG_DESKTOP_XSESSION_FAILED,
 };
-use hbb_common::{allow_err, bail, log, rand::prelude::*, tokio::time};
+use hbb_common::{
+    allow_err, bail, log,
+    rand::prelude::*,
+    tokio::time,
+    users::{get_user_by_name, os::unix::UserExt, User},
+};
 use pam;
 use std::{
     collections::HashMap,
@@ -18,7 +23,6 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use users::{get_user_by_name, os::unix::UserExt, User};
 
 lazy_static::lazy_static! {
     static ref DESKTOP_RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));

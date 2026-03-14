@@ -187,7 +187,10 @@ fn main() {
         i += 1;
     }
     let click_setup = args.is_empty() && arg_exe.to_lowercase().ends_with("install.exe");
-    let quick_support = args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
+    #[cfg(windows)]
+    let quick_support = args.is_empty() && win::is_quick_support_exe(&arg_exe);
+    #[cfg(not(windows))]
+    let quick_support = false;
 
     let mut ui = false;
     let reader = BinaryReader::default();
@@ -233,5 +236,13 @@ mod win {
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .output();
         let _allow_err = std::fs::copy(src, &format!("{}\\{}", dir.to_string_lossy(), tgt));
+    }
+
+    /// Check if the executable is a Quick Support version.
+    /// Note: This function must be kept in sync with `src/core_main.rs`.
+    #[inline]
+    pub(super) fn is_quick_support_exe(exe: &str) -> bool {
+        let exe = exe.to_lowercase();
+        exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
     }
 }
