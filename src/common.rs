@@ -135,7 +135,7 @@ pub fn global_clean() {}
 
 #[inline]
 pub fn set_server_running(b: bool) {
-    *SERVER_RUNNING.write().unwrap() = b;
+    *SERVER_RUNNING.write().expect("lock should be available for server state management") = b;
 }
 
 #[inline]
@@ -233,7 +233,7 @@ pub fn is_cm() -> bool {
 // Is server logic running.
 #[inline]
 pub fn is_server_running() -> bool {
-    *SERVER_RUNNING.read().unwrap()
+    *SERVER_RUNNING.read().expect("lock should be available for server status checking")
 }
 
 #[inline]
@@ -824,7 +824,7 @@ pub fn username() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return whoami::username().trim_end_matches('\0').to_owned();
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return DEVICE_NAME.lock().unwrap().clone();
+    return DEVICE_NAME.lock().expect("lock should be available for device name access").clone();
 }
 
 // Exactly the implementation of "whoami::hostname()".
@@ -851,7 +851,7 @@ pub fn hostname() -> String {
         name
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return DEVICE_NAME.lock().unwrap().clone();
+    return DEVICE_NAME.lock().expect("lock should be available for device name access").clone();
 }
 
 #[inline]
@@ -993,9 +993,9 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
                 let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
             }
         }
-        *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
+        *SOFTWARE_UPDATE_URL.lock().expect("lock should be available for software update URL management") = response_url;
     } else {
-        *SOFTWARE_UPDATE_URL.lock().unwrap() = "".to_string();
+        *SOFTWARE_UPDATE_URL.lock().expect("lock should be available for software update URL reset") = "".to_string();
     }
     Ok(())
 }
