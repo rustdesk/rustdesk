@@ -10,7 +10,8 @@ use std::io;
 
 use crate::{
     client::{
-        SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED, SCRAP_X11_REQUIRED,
+        SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED,
+        SCRAP_X11_REQUIRED, SCRAP_XDP_PORTAL_UNAVAILABLE,
     },
     platform::linux::is_x11,
 };
@@ -56,10 +57,11 @@ fn map_err_scrap(err: String) -> io::Error {
         }
     } else {
         try_log(&err);
-        if err.contains("org.freedesktop.portal")
-            || err.contains("pipewire")
-            || err.contains("dbus")
-        {
+        if err.contains("org.freedesktop.portal") || err.contains("dbus") {
+            // The portal D-Bus interface is unreachable. This typically means
+            // xdg-desktop-portal has crashed... for more info, see: Issue #12897
+            io::Error::new(io::ErrorKind::Other, SCRAP_XDP_PORTAL_UNAVAILABLE)
+        } else if err.contains("pipewire") {
             io::Error::new(io::ErrorKind::Other, SCRAP_OTHER_VERSION_OR_X11_REQUIRED)
         } else {
             io::Error::new(io::ErrorKind::Other, SCRAP_X11_REQUIRED)
