@@ -21,7 +21,7 @@ use std::{
     string::String,
     sync::atomic::{AtomicBool, Ordering},
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use terminfo::{capability as cap, Database};
 use wallpaper;
@@ -691,11 +691,8 @@ fn should_start_server(
     is_display_changed: bool,
     uid: &mut String,
     desktop: &Desktop,
-    cm0: &mut bool,
-    last_restart: &mut Instant,
     server: &mut Option<Child>,
 ) -> bool {
-    let cm = get_cm();
     let mut start_new = false;
     let mut should_kill = false;
 
@@ -713,29 +710,19 @@ fn should_start_server(
         should_kill = true;
     }
 
-    if !should_kill
-        && !cm
-        && ((*cm0 && last_restart.elapsed().as_secs() > 60)
-            || last_restart.elapsed().as_secs() > 3600)
-    {
-        let terminal_session_count = crate::ipc::get_terminal_session_count().unwrap_or(0);
-        if terminal_session_count > 0 {
-            // There are terminal sessions, so we don't restart the server.
-            // We also need to keep `cm0` unchanged, so that we can reach this branch the next time.
-            return false;
-        }
-        // restart server if new connections all closed, or every one hour,
-        // as a workaround to resolve "SpotUdp" (dns resolve)
-        // and x server get displays failure issue
-        should_kill = true;
-        log::info!("restart server");
-    }
+    // Note: a previous hourly restart workaround was removed here.
+    // It killed the --server subprocess every 3600s (or 60s after CM closed)
+    // to work around stale DNS and display detection issues. Both are already
+    // handled inline without a restart:
+    //   - DNS: rendezvous_mediator.rs rebinds UDP socket after consecutive failures
+    //   - Displays: display_service.rs polls for changes every 300ms
+    // The restart caused: IPC disconnection errors, tray icon churn, memory
+    // accumulation, and Cinnamon/Muffin instability over multi-day uptime.
 
     if should_kill {
         if let Some(ps) = server.as_mut() {
             allow_err!(ps.kill());
             sleep_millis(30);
-            *last_restart = Instant::now();
         }
     }
 
@@ -750,7 +737,6 @@ fn should_start_server(
     } else {
         start_new = true;
     }
-    *cm0 = cm;
     start_new
 }
 
@@ -785,8 +771,6 @@ pub fn start_os_service() {
         println!("Failed to set Ctrl-C handler: {}", err);
     }
 
-    let mut cm0 = false;
-    let mut last_restart = Instant::now();
     while running.load(Ordering::SeqCst) {
         desktop.refresh();
 
@@ -802,8 +786,6 @@ pub fn start_os_service() {
                 false,
                 &mut uid,
                 &desktop,
-                &mut cm0,
-                &mut last_restart,
                 &mut server,
             ) {
                 stop_subprocess();
@@ -824,8 +806,6 @@ pub fn start_os_service() {
                 is_display_changed,
                 &mut uid,
                 &desktop,
-                &mut cm0,
-                &mut last_restart,
                 &mut user_server,
             ) {
                 stop_subprocess();
@@ -869,23 +849,6 @@ pub fn get_active_user_id_name() -> (String, String) {
 #[inline]
 pub fn get_active_userid() -> String {
     get_values_of_seat0(&[1])[0].clone()
-}
-
-fn get_cm() -> bool {
-    // We use `CMD_PS` instead of `ps` to suppress some audit messages on some systems.
-    if let Ok(output) = Command::new(CMD_PS.as_str()).args(vec!["aux"]).output() {
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if line.contains(&format!(
-                "{} --cm",
-                std::env::current_exe()
-                    .unwrap_or("".into())
-                    .to_string_lossy()
-            )) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 pub fn is_login_wayland() -> bool {
