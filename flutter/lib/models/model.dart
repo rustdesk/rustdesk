@@ -2179,6 +2179,52 @@ class CanvasModel with ChangeNotifier {
   ScrollStyle get scrollStyle => _scrollStyle;
   ViewStyle get viewStyle => _lastViewStyle;
   RxBool get imageOverflow => _imageOverflow;
+  Rect? get realRect => parent.target?.ffiModel.rect;
+
+  double get remoteCanvasMargin {
+    if (!(isDesktop || isWebDesktop)) {
+      return 0;
+    }
+    final value =
+        double.tryParse(bind.mainGetUserDefaultOption(key: kOptionRemoteCanvasMargin)) ??
+            0;
+    return max(0, value);
+  }
+
+  Rect? get paddedRect {
+    final rect = realRect;
+    if (rect == null) {
+      return null;
+    }
+    final margin = remoteCanvasMargin;
+    if (margin <= 0) {
+      return rect;
+    }
+    return Rect.fromLTRB(
+      rect.left - margin,
+      rect.top - margin,
+      rect.right + margin,
+      rect.bottom + margin,
+    );
+  }
+
+  double get displayPaddingX {
+    final padded = paddedRect;
+    final rect = realRect;
+    if (padded == null || rect == null) {
+      return 0;
+    }
+    return rect.left - padded.left;
+  }
+
+  double get displayPaddingY {
+    final padded = paddedRect;
+    final rect = realRect;
+    if (padded == null || rect == null) {
+      return 0;
+    }
+    return rect.top - padded.top;
+  }
 
   _resetScroll() => setScrollPercent(0.0, 0.0);
 
@@ -2384,14 +2430,14 @@ class CanvasModel with ChangeNotifier {
     final defaultWidth = (isDesktop || isWebDesktop)
         ? kDesktopDefaultDisplayWidth
         : kMobileDefaultDisplayWidth;
-    return parent.target?.ffiModel.rect?.width.toInt() ?? defaultWidth;
+    return paddedRect?.width.toInt() ?? defaultWidth;
   }
 
   int getDisplayHeight() {
     final defaultHeight = (isDesktop || isWebDesktop)
         ? kDesktopDefaultDisplayHeight
         : kMobileDefaultDisplayHeight;
-    return parent.target?.ffiModel.rect?.height.toInt() ?? defaultHeight;
+    return paddedRect?.height.toInt() ?? defaultHeight;
   }
 
   static double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
@@ -2974,8 +3020,10 @@ class CursorModel with ChangeNotifier {
   ui.Image? get image => _image;
   CursorData? get cache => _cache;
 
-  double get x => _x - _displayOriginX;
-  double get y => _y - _displayOriginY;
+  double get x =>
+      _x - _displayOriginX + (parent.target?.canvasModel.displayPaddingX ?? 0);
+  double get y =>
+      _y - _displayOriginY + (parent.target?.canvasModel.displayPaddingY ?? 0);
 
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
 
@@ -3012,8 +3060,12 @@ class CursorModel with ChangeNotifier {
     final xoffset = parent.target?.canvasModel.x ?? 0;
     final yoffset = parent.target?.canvasModel.y ?? 0;
     final scale = parent.target?.canvasModel.scale ?? 1;
-    final x0 = _displayOriginX - xoffset / scale;
-    final y0 = _displayOriginY - yoffset / scale;
+    final x0 = _displayOriginX -
+        (parent.target?.canvasModel.displayPaddingX ?? 0) -
+        xoffset / scale;
+    final y0 = _displayOriginY -
+        (parent.target?.canvasModel.displayPaddingY ?? 0) -
+        yoffset / scale;
     return Rect.fromLTWH(x0, y0, size.width / scale, size.height / scale);
   }
 
@@ -3024,10 +3076,14 @@ class CursorModel with ChangeNotifier {
     // See `getVisibleRect()`
     // _x = _displayOriginX - xoffset / scale + size.width / scale * 0.5;
     // _y = _displayOriginY - yoffset / scale + size.height / scale * 0.5;
+    final displayOriginX =
+        _displayOriginX - (parent.target?.canvasModel.displayPaddingX ?? 0);
+    final displayOriginY =
+        _displayOriginY - (parent.target?.canvasModel.displayPaddingY ?? 0);
     final size = parent.target?.canvasModel.getSize() ??
         MediaQueryData.fromView(ui.window).size;
-    final xoffset = (_displayOriginX - _x) * scale + size.width * 0.5;
-    final yoffset = (_displayOriginY - _y) * scale + size.height * 0.5;
+    final xoffset = (displayOriginX - _x) * scale + size.width * 0.5;
+    final yoffset = (displayOriginY - _y) * scale + size.height * 0.5;
     return Offset(xoffset, yoffset);
   }
 
@@ -3143,11 +3199,10 @@ class CursorModel with ChangeNotifier {
     var cx = r.center.dx;
     var cy = r.center.dy;
     var tryMoveCanvasX = false;
-    final displayRect = parent.target?.ffiModel.rect;
+    final displayRect = parent.target?.canvasModel.paddedRect;
     if (dx > 0) {
-      final maxCanvasCanMove = _displayOriginX +
-          (displayRect?.width ?? 1280) -
-          r.right.roundToDouble();
+      final maxCanvasCanMove =
+          (displayRect?.right ?? 1280) - r.right.roundToDouble();
       tryMoveCanvasX = _x + dx > cx && maxCanvasCanMove > 0;
       if (tryMoveCanvasX) {
         dx = min(dx, maxCanvasCanMove);
@@ -3156,7 +3211,7 @@ class CursorModel with ChangeNotifier {
         dx = min(dx, maxCursorCanMove);
       }
     } else if (dx < 0) {
-      final maxCanvasCanMove = _displayOriginX - r.left.roundToDouble();
+      final maxCanvasCanMove = (displayRect?.left ?? 0) - r.left.roundToDouble();
       tryMoveCanvasX = _x + dx < cx && maxCanvasCanMove < 0;
       if (tryMoveCanvasX) {
         dx = max(dx, maxCanvasCanMove);
@@ -3167,9 +3222,8 @@ class CursorModel with ChangeNotifier {
     }
     var tryMoveCanvasY = false;
     if (dy > 0) {
-      final mayCanvasCanMove = _displayOriginY +
-          (displayRect?.height ?? 720) -
-          r.bottom.roundToDouble();
+      final mayCanvasCanMove =
+          (displayRect?.bottom ?? 720) - r.bottom.roundToDouble();
       tryMoveCanvasY = _y + dy > cy && mayCanvasCanMove > 0;
       if (tryMoveCanvasY) {
         dy = min(dy, mayCanvasCanMove);
@@ -3178,7 +3232,7 @@ class CursorModel with ChangeNotifier {
         dy = min(dy, mayCursorCanMove);
       }
     } else if (dy < 0) {
-      final mayCanvasCanMove = _displayOriginY - r.top.roundToDouble();
+      final mayCanvasCanMove = (displayRect?.top ?? 0) - r.top.roundToDouble();
       tryMoveCanvasY = _y + dy < cy && mayCanvasCanMove < 0;
       if (tryMoveCanvasY) {
         dy = max(dy, mayCanvasCanMove);

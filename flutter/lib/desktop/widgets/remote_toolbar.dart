@@ -1110,16 +1110,22 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           await bind.sessionGetScrollStyle(sessionId: ffi.sessionId) ?? '';
       final edgeScrollEdgeThickness = await bind
           .sessionGetEdgeScrollEdgeThickness(sessionId: ffi.sessionId);
+      final remoteCanvasMargin =
+          double.tryParse(bind.mainGetUserDefaultOption(
+                  key: kOptionRemoteCanvasMargin)) ??
+              0;
       return {
         'visible': visible,
         'scrollStyle': scrollStyle,
         'edgeScrollEdgeThickness': edgeScrollEdgeThickness,
+        'remoteCanvasMargin': remoteCanvasMargin,
       };
     }(), hasData: (data) {
       final visible = data['visible'] as bool;
       if (!visible) return Offstage();
       final groupValue = data['scrollStyle'] as String;
       final edgeScrollEdgeThickness = data['edgeScrollEdgeThickness'] as int;
+      final remoteCanvasMargin = data['remoteCanvasMargin'] as double;
 
       onChangeScrollStyle(String? value) async {
         if (value == null) return;
@@ -1135,6 +1141,14 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         await bind.sessionSetEdgeScrollEdgeThickness(
             sessionId: ffi.sessionId, value: newThickness);
         widget.ffi.canvasModel.updateEdgeScrollEdgeThickness(newThickness);
+        state.setState(() {});
+      }
+
+      onChangeRemoteCanvasMargin(double? value) async {
+        if (value == null) return;
+        await bind.mainSetUserDefaultOption(
+            key: kOptionRemoteCanvasMargin, value: value.round().toString());
+        await widget.ffi.canvasModel.updateViewStyle();
         state.setState(() {});
       }
 
@@ -1178,6 +1192,24 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                     colorScheme: colorScheme,
                   )),
             ],
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Expanded(child: Text('Canvas Margin')),
+                  SizedBox(
+                    width: 160,
+                    child: EdgeThicknessControl(
+                      value: remoteCanvasMargin,
+                      min: 0,
+                      max: 400,
+                      onChanged: onChangeRemoteCanvasMargin,
+                      colorScheme: colorScheme,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Divider(),
           ]));
     });
@@ -2751,12 +2783,18 @@ class EdgeThicknessControl extends StatelessWidget {
   final double value;
   final ValueChanged<double>? onChanged;
   final ColorScheme? colorScheme;
+  final double min;
+  final double max;
+  final String unit;
 
   const EdgeThicknessControl({
     Key? key,
     required this.value,
     this.onChanged,
     this.colorScheme,
+    this.min = kMin,
+    this.max = kMax,
+    this.unit = 'px',
   }) : super(key: key);
 
   static const double kMin = 20;
@@ -2773,24 +2811,23 @@ class EdgeThicknessControl extends StatelessWidget {
         overlayColor: colorScheme.primary.withOpacity(0.1),
         showValueIndicator: ShowValueIndicator.never,
         thumbShape: _RectValueThumbShape(
-          min: EdgeThicknessControl.kMin,
-          max: EdgeThicknessControl.kMax,
+          min: min,
+          max: max,
           width: 52,
           height: 24,
           radius: 4,
-          unit: 'px',
+          unit: unit,
         ),
       ),
       child: Semantics(
         value: value.toInt().toString(),
         child: Slider(
           value: value,
-          min: EdgeThicknessControl.kMin,
-          max: EdgeThicknessControl.kMax,
-          divisions:
-              (EdgeThicknessControl.kMax - EdgeThicknessControl.kMin).round(),
+          min: min,
+          max: max,
+          divisions: (max - min).round(),
           semanticFormatterCallback: (double newValue) =>
-              "${newValue.round()}px",
+              "${newValue.round()}$unit",
           onChanged: onChanged,
         ),
       ),
