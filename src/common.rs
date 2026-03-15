@@ -1002,12 +1002,12 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
 
 #[inline]
 pub fn get_app_name() -> String {
-    hbb_common::config::APP_NAME.read().unwrap().clone()
+    hbb_common::config::APP_NAME.read().expect("APP_NAME config should be accessible").clone()
 }
 
 #[inline]
 pub fn is_rustdesk() -> bool {
-    hbb_common::config::APP_NAME.read().unwrap().eq("RustDesk")
+    hbb_common::config::APP_NAME.read().expect("APP_NAME config should be accessible").eq("RustDesk")
 }
 
 #[inline]
@@ -1019,8 +1019,8 @@ pub fn get_uri_prefix() -> String {
 pub fn get_full_name() -> String {
     format!(
         "{}.{}",
-        hbb_common::config::ORG.read().unwrap(),
-        hbb_common::config::APP_NAME.read().unwrap(),
+        hbb_common::config::ORG.read().expect("ORG config should be accessible"),
+        hbb_common::config::APP_NAME.read().expect("APP_NAME config should be accessible"),
     )
 }
 
@@ -1038,8 +1038,8 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
     if !custom.is_empty() {
         return custom;
     }
-    if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
-        return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
+    if !config::PROD_RENDEZVOUS_SERVER.read().expect("PROD_RENDEZVOUS_SERVER config should be accessible").is_empty() {
+        return config::PROD_RENDEZVOUS_SERVER.read().expect("PROD_RENDEZVOUS_SERVER config should be accessible").clone();
     }
     "".to_owned()
 }
@@ -1813,21 +1813,21 @@ fn read_custom_client_advanced_settings(
     is_override: bool,
 ) {
     let mut display_settings = if is_override {
-        config::OVERWRITE_DISPLAY_SETTINGS.write().unwrap()
+        config::OVERWRITE_DISPLAY_SETTINGS.write().expect("OVERWRITE_DISPLAY_SETTINGS should be writable")
     } else {
-        config::DEFAULT_DISPLAY_SETTINGS.write().unwrap()
+        config::DEFAULT_DISPLAY_SETTINGS.write().expect("DEFAULT_DISPLAY_SETTINGS should be writable")
     };
     let mut local_settings = if is_override {
-        config::OVERWRITE_LOCAL_SETTINGS.write().unwrap()
+        config::OVERWRITE_LOCAL_SETTINGS.write().expect("OVERWRITE_LOCAL_SETTINGS should be writable")
     } else {
-        config::DEFAULT_LOCAL_SETTINGS.write().unwrap()
+        config::DEFAULT_LOCAL_SETTINGS.write().expect("DEFAULT_LOCAL_SETTINGS should be writable")
     };
     let mut server_settings = if is_override {
-        config::OVERWRITE_SETTINGS.write().unwrap()
+        config::OVERWRITE_SETTINGS.write().expect("OVERWRITE_SETTINGS should be writable")
     } else {
-        config::DEFAULT_SETTINGS.write().unwrap()
+        config::DEFAULT_SETTINGS.write().expect("DEFAULT_SETTINGS should be writable")
     };
-    let mut buildin_settings = config::BUILTIN_SETTINGS.write().unwrap();
+    let mut buildin_settings = config::BUILTIN_SETTINGS.write().expect("BUILTIN_SETTINGS should be writable");
 
     if let Some(settings) = settings.as_object() {
         for (k, v) in settings {
@@ -1903,7 +1903,7 @@ pub fn read_custom_client(config: &str) {
 
     if let Some(app_name) = data.remove("app-name") {
         if let Some(app_name) = app_name.as_str() {
-            *config::APP_NAME.write().unwrap() = app_name.to_owned();
+            *config::APP_NAME.write().expect("APP_NAME config should be writable") = app_name.to_owned();
         }
     }
 
@@ -1947,7 +1947,7 @@ pub fn read_custom_client(config: &str) {
         if let Some(v) = v.as_str() {
             config::HARD_SETTINGS
                 .write()
-                .unwrap()
+                .expect("HARD_SETTINGS config should be writable")
                 .insert(k, v.to_owned());
         };
     }
@@ -1975,7 +1975,7 @@ pub fn get_hwid() -> Bytes {
 pub fn get_builtin_option(key: &str) -> String {
     config::BUILTIN_SETTINGS
         .read()
-        .unwrap()
+        .expect("BUILTIN_SETTINGS config should be readable")
         .get(key)
         .cloned()
         .unwrap_or_default()
