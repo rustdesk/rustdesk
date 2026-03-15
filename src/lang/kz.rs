@@ -379,6 +379,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Screen Share", ""),
         ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland Ubuntu 21.04 немесе одан жоғары нұсқасын қажет етеді."),
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland linux дистрибутивінің жоғарырақ нұсқасын қажет етеді. X11 жұмыс үстелін қолданып көріңіз немесе операциялық жүйеңізді өзгертіңіз."),
+        ("Wayland screen capture failed. The XDG Desktop Portal may have crashed or is unavailable. Try restarting it with `systemctl --user restart xdg-desktop-portal`.", ""),
         ("JumpLink", "View"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Бөлісетін экранды таңдаңыз (бірдей жағынан жұмыс жасаңыз)."),
         ("Show RustDesk", ""),
