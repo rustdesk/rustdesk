@@ -25,7 +25,7 @@ impl Session {
     pub fn new(id: &str, sender: mpsc::UnboundedSender<Data>) -> Self {
         let mut password = "".to_owned();
         if PeerConfig::load(id).password.is_empty() {
-            password = rpassword::prompt_password("Enter password: ").unwrap();
+            password = rpassword::prompt_password("Enter password: ").expect("password prompt should succeed for CLI session initialization");
         }
         let session = Self {
             id: id.to_owned(),
@@ -33,7 +33,7 @@ impl Session {
             password,
             lc: Default::default(),
         };
-        session.lc.write().unwrap().initialize(
+        session.lc.write().expect("lock should be available for session initialization").initialize(
             id.to_owned(),
             ConnType::PORT_FORWARD,
             None,
@@ -84,7 +84,7 @@ impl Interface for Session {
     }
 
     fn handle_peer_info(&self, pi: PeerInfo) {
-        self.lc.write().unwrap().handle_peer_info(&pi);
+        self.lc.write().expect("lock should be available for peer info handling").handle_peer_info(&pi);
     }
 
     async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) {
