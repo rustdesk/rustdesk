@@ -633,9 +633,17 @@ pub fn request_remote_desktop(
     );
 
     let mut is_support_restore_token = false;
-    if let Ok(version) = screencast_portal::version(&portal) {
-        if version >= 4 {
-            is_support_restore_token = true;
+    if is_server_running() {
+        if let Ok(version) = screencast_portal::version(&portal) {
+            if version >= 4 {
+                is_support_restore_token = true;
+            }
+        }
+    } else {
+        if let Ok(version) = remote_desktop_portal::version(&portal) {
+            if version >= 2 {
+                is_support_restore_token = true;
+            }
         }
     }
 
@@ -774,8 +782,14 @@ fn on_create_session_response(
                 failure.clone(),
             )?;
         } else {
-            // TODO: support persist_mode for remote_desktop_portal
             // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html
+            if is_support_restore_token {
+                let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                if !restore_token.is_empty() {
+                    args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
+                }
+                args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+            }
 
             args.insert(
                 "handle_token".to_string(),
@@ -897,16 +911,13 @@ fn on_start_response(
 ) -> Result<(), Box<dyn Error>> {
     move |r: OrgFreedesktopPortalRequestResponse, c, _| {
         let portal = get_portal(c);
-        // See `is_server_running()` to understand the following code.
-        if is_server_running() {
-            if is_support_restore_token {
-                if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
-                    if let Some(restore_token) = restore_token.as_str() {
-                        config::LocalConfig::set_option(
-                            RESTORE_TOKEN_CONF_KEY.to_owned(),
-                            restore_token.to_owned(),
-                        );
-                    }
+        if is_support_restore_token {
+            if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
+                if let Some(restore_token) = restore_token.as_str() {
+                    config::LocalConfig::set_option(
+                        RESTORE_TOKEN_CONF_KEY.to_owned(),
+                        restore_token.to_owned(),
+                    );
                 }
             }
         }
@@ -975,7 +986,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
 // Otherwise, we have to use remote_desktop_portal's input method.
 //
 // `screencast_portal` supports restore_token and persist_mode if the version is greater than or equal to 4.
-// `remote_desktop_portal` does not support restore_token and persist_mode.
+// `remote_desktop_portal` supports restore_token and persist_mode if the version is greater than or equal to 2.
 pub(crate) fn is_server_running() -> bool {
     let v = IS_SERVER_RUNNING.load(Ordering::SeqCst);
     if v > 0 {
