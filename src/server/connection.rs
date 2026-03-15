@@ -4809,6 +4809,14 @@ async fn start_ipc(
             user = Some((uid, username));
             args = vec!["--cm-no-ui"];
         }
+        #[cfg(target_os = "linux")]
+        let cm_uid: Option<u32> = match &user {
+            Some((uid, _)) => Some(
+                uid.parse::<u32>()
+                    .map_err(|_| anyhow!("Invalid uid {}", uid))?,
+            ),
+            None => None,
+        };
         let run_done;
         if crate::platform::is_root() {
             let mut res = Ok(None);
@@ -4849,6 +4857,16 @@ async fn start_ipc(
         }
         for _ in 0..20 {
             sleep(0.3).await;
+            #[cfg(target_os = "linux")]
+            {
+                if let Some(uid) = cm_uid {
+                    if let Ok(s) = crate::ipc::connect_for_uid(1000, uid, "_cm").await {
+                        stream = Some(s);
+                        break;
+                    }
+                    continue;
+                }
+            }
             if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
                 stream = Some(s);
                 break;

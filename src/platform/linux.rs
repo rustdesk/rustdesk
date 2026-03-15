@@ -651,7 +651,13 @@ fn should_start_server(
         && ((*cm0 && last_restart.elapsed().as_secs() > 60)
             || last_restart.elapsed().as_secs() > 3600)
     {
-        let terminal_session_count = crate::ipc::get_terminal_session_count().unwrap_or(0);
+        let terminal_session_count = match crate::ipc::get_terminal_session_count() {
+            Ok(count) => count,
+            Err(err) => {
+                log::debug!("terminal_session_count unavailable; assuming 0: {}", err);
+                0
+            }
+        };
         if terminal_session_count > 0 {
             // There are terminal sessions, so we don't restart the server.
             // We also need to keep `cm0` unchanged, so that we can reach this branch the next time.
