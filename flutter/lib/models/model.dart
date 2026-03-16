@@ -1016,19 +1016,31 @@ class FfiModel with ChangeNotifier {
   showMsgBox(SessionID sessionId, String type, String title, String text,
       String link, bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) async {
-    final showNoteEdit = parent.target != null &&
+    final noteAllowed = parent.target != null &&
         allowAskForNoteAtEndOfConnection(parent.target, false) &&
-        (title == "Connection Error" || type == "restarting") &&
-        !hasRetry;
+        (title == "Connection Error" || type == "restarting");
+    final showNoteEdit = noteAllowed && !hasRetry;
     if (showNoteEdit) {
       await showConnEndAuditDialogCloseCanceled(
           ffi: parent.target!, type: type, title: title, text: text);
       closeConnection();
     } else {
+      VoidCallback? onSubmit;
+      if (noteAllowed && hasRetry) {
+        final ffi = parent.target!;
+        onSubmit = () async {
+          _timer?.cancel();
+          _timer = null;
+          await showConnEndAuditDialogCloseCanceled(
+              ffi: ffi, type: type, title: title, text: text);
+          closeConnection();
+        };
+      }
       msgBox(sessionId, type, title, text, link, dialogManager,
           hasCancel: hasCancel,
           reconnect: hasRetry ? reconnect : null,
-          reconnectTimeout: hasRetry ? _reconnects : null);
+          reconnectTimeout: hasRetry ? _reconnects : null,
+          onSubmit: onSubmit);
     }
     _timer?.cancel();
     if (hasRetry) {
