@@ -83,7 +83,7 @@ fn is_allowed_windows_service_peer(
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[inline]
-fn is_allowed_service_peer_uid(peer_uid: u32, active_uid: Option<u32>) -> bool {
+pub(crate) fn is_allowed_service_peer_uid(peer_uid: u32, active_uid: Option<u32>) -> bool {
     peer_uid == 0 || active_uid.is_some_and(|uid| uid == peer_uid)
 }
 
@@ -130,7 +130,7 @@ struct ActiveUidCacheEntry {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[inline]
-fn active_uid_cached() -> Option<u32> {
+pub(crate) fn active_uid_cached() -> Option<u32> {
     static ACTIVE_UID_CACHE: OnceLock<Mutex<Option<ActiveUidCacheEntry>>> = OnceLock::new();
     let cache = ACTIVE_UID_CACHE.get_or_init(|| Mutex::new(None));
     let now = std::time::Instant::now();
@@ -149,6 +149,39 @@ fn active_uid_cached() -> Option<u32> {
             uid
         }
         Err(_) => active_uid_strict(),
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[inline]
+pub(crate) fn peer_uid_from_fd(fd: std::os::unix::io::RawFd) -> Option<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut cred: hbb_common::libc::ucred = unsafe { std::mem::zeroed() };
+        let mut len = std::mem::size_of::<hbb_common::libc::ucred>() as hbb_common::libc::socklen_t;
+        let rc = unsafe {
+            hbb_common::libc::getsockopt(
+                fd,
+                hbb_common::libc::SOL_SOCKET,
+                hbb_common::libc::SO_PEERCRED,
+                &mut cred as *mut _ as *mut hbb_common::libc::c_void,
+                &mut len,
+            )
+        };
+        if rc == 0 {
+            return Some(cred.uid as u32);
+        }
+        return None;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut uid: hbb_common::libc::uid_t = 0;
+        let mut gid: hbb_common::libc::gid_t = 0;
+        if unsafe { hbb_common::libc::getpeereid(fd, &mut uid, &mut gid) } == 0 {
+            Some(uid as u32)
+        } else {
+            None
+        }
     }
 }
 
@@ -200,7 +233,7 @@ fn log_rejected_service_connection(postfix: &str, peer_uid: Option<u32>, active_
     throttled_unauthorized_ipc_log(&LOG_THROTTLE, |suppressed| {
         if suppressed > 0 {
             log::warn!(
-                "Rejected unauthorized connection on protected ipc_service channel: postfix={}, peer_uid={:?}, active_uid={:?} (suppressed {} similar events)",
+                "Rejected unauthorized connection on protected service-scoped IPC channel: postfix={}, peer_uid={:?}, active_uid={:?} (suppressed {} similar events)",
                 postfix,
                 peer_uid,
                 active_uid,
@@ -208,7 +241,7 @@ fn log_rejected_service_connection(postfix: &str, peer_uid: Option<u32>, active_
             );
         } else {
             log::warn!(
-                "Rejected unauthorized connection on protected ipc_service channel: postfix={}, peer_uid={:?}, active_uid={:?}",
+                "Rejected unauthorized connection on protected service-scoped IPC channel: postfix={}, peer_uid={:?}, active_uid={:?}",
                 postfix,
                 peer_uid,
                 active_uid
@@ -900,7 +933,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
-                                                "Rejected non-sync data on protected ipc_service channel: postfix={}, data_kind={:?}, peer_uid={:?}",
+                                                "Rejected non-sync data on protected _service IPC channel: postfix={}, data_kind={:?}, peer_uid={:?}",
                                                 postfix,
                                                 std::mem::discriminant(&data),
                                                 stream.peer_uid()
@@ -1705,39 +1738,10 @@ pub fn get_permanent_password() -> String {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 impl<T> ConnectionTmpl<T>
 where
-    T: AsyncRead + AsyncWrite + std::marker::Unpin + std::os::fd::AsRawFd,
+    T: AsyncRead + AsyncWrite + std::marker::Unpin + std::os::unix::io::AsRawFd,
 {
     fn peer_uid(&self) -> Option<u32> {
-        let fd = self.inner.get_ref().as_raw_fd();
-        #[cfg(target_os = "linux")]
-        {
-            let mut cred: hbb_common::libc::ucred = unsafe { std::mem::zeroed() };
-            let mut len =
-                std::mem::size_of::<hbb_common::libc::ucred>() as hbb_common::libc::socklen_t;
-            let rc = unsafe {
-                hbb_common::libc::getsockopt(
-                    fd,
-                    hbb_common::libc::SOL_SOCKET,
-                    hbb_common::libc::SO_PEERCRED,
-                    &mut cred as *mut _ as *mut hbb_common::libc::c_void,
-                    &mut len,
-                )
-            };
-            if rc == 0 {
-                return Some(cred.uid as u32);
-            }
-            return None;
-        }
-        #[cfg(target_os = "macos")]
-        {
-            let mut uid: hbb_common::libc::uid_t = 0;
-            let mut gid: hbb_common::libc::gid_t = 0;
-            if unsafe { hbb_common::libc::getpeereid(fd, &mut uid, &mut gid) } == 0 {
-                Some(uid as u32)
-            } else {
-                None
-            }
-        }
+        peer_uid_from_fd(self.inner.get_ref().as_raw_fd())
     }
 
     fn service_authorization_status(&self) -> (bool, Option<u32>, Option<u32>) {

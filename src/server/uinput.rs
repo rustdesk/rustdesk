@@ -190,9 +190,9 @@ pub mod service {
     use scrap::wayland::{
         pipewire::RDP_SESSION_INFO, remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop,
     };
-    use std::{collections::HashMap, sync::Mutex};
     #[cfg(target_os = "linux")]
-    use std::os::fd::AsRawFd;
+    use std::os::unix::io::AsRawFd;
+    use std::{collections::HashMap, sync::Mutex};
 
     lazy_static::lazy_static! {
     static ref KEY_MAP: HashMap<enigo::Key, evdev::Key> = HashMap::from(
@@ -606,7 +606,10 @@ pub mod service {
             }
             DataKeyboard::KeyDown(enigo::Key::Raw(code)) => {
                 if *code < 8 {
-                    log::error!("Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping", code);
+                    log::error!(
+                        "Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping",
+                        code
+                    );
                 } else {
                     let down_event = InputEvent::new(EventType::KEY, *code - 8, 1);
                     allow_err!(keyboard.emit(&[down_event]));
@@ -614,7 +617,10 @@ pub mod service {
             }
             DataKeyboard::KeyUp(enigo::Key::Raw(code)) => {
                 if *code < 8 {
-                    log::error!("Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping", code);
+                    log::error!(
+                        "Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping",
+                        code
+                    );
                 } else {
                     let up_event = InputEvent::new(EventType::KEY, *code - 8, 0);
                     allow_err!(keyboard.emit(&[up_event]));
@@ -914,47 +920,14 @@ pub mod service {
     }
 
     #[cfg(target_os = "linux")]
-    #[inline]
-    fn active_uid_for_uinput() -> Option<u32> {
-        crate::platform::linux::get_active_userid().trim().parse::<u32>().ok()
-    }
-
-    #[cfg(target_os = "linux")]
-    fn peer_uid_for_uinput(stream: &RawIpcConnection) -> Option<u32> {
-        let fd = stream.as_raw_fd();
-        let mut cred: hbb_common::libc::ucred = unsafe { std::mem::zeroed() };
-        let mut len =
-            std::mem::size_of::<hbb_common::libc::ucred>() as hbb_common::libc::socklen_t;
-        let rc = unsafe {
-            hbb_common::libc::getsockopt(
-                fd,
-                hbb_common::libc::SOL_SOCKET,
-                hbb_common::libc::SO_PEERCRED,
-                &mut cred as *mut _ as *mut hbb_common::libc::c_void,
-                &mut len,
-            )
-        };
-        if rc == 0 {
-            Some(cred.uid as u32)
-        } else {
-            None
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    #[inline]
-    fn is_allowed_uinput_peer_uid(peer_uid: u32, active_uid: Option<u32>) -> bool {
-        peer_uid == 0 || active_uid.is_some_and(|uid| uid == peer_uid)
-    }
-
-    #[cfg(target_os = "linux")]
     fn authorize_uinput_peer(postfix: &str, stream: &RawIpcConnection) -> bool {
         if !hbb_common::config::is_service_ipc_postfix(postfix) {
             return true;
         }
-        let peer_uid = peer_uid_for_uinput(stream);
-        let active_uid = active_uid_for_uinput();
-        let authorized = peer_uid.is_some_and(|uid| is_allowed_uinput_peer_uid(uid, active_uid));
+        let peer_uid = ipc::peer_uid_from_fd(stream.as_raw_fd());
+        let active_uid = ipc::active_uid_cached();
+        let authorized =
+            peer_uid.is_some_and(|uid| ipc::is_allowed_service_peer_uid(uid, active_uid));
         if !authorized {
             crate::ipc::log_rejected_uinput_connection(postfix, peer_uid, active_uid);
         }
