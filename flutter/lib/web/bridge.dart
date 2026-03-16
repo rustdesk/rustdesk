@@ -1163,6 +1163,10 @@ class RustdeskImpl {
     return Future.value('');
   }
 
+  Future<bool> mainIsPermanentPasswordSet({dynamic hint}) {
+    return Future.value(false);
+  }
+
   Future<String> mainGetFingerprint({dynamic hint}) {
     return Future.value('');
   }
@@ -1346,9 +1350,9 @@ class RustdeskImpl {
     throw UnimplementedError("mainUpdateTemporaryPassword");
   }
 
-  Future<void> mainSetPermanentPassword(
+  Future<bool> mainSetPermanentPasswordWithResult(
       {required String password, dynamic hint}) {
-    throw UnimplementedError("mainSetPermanentPassword");
+    throw UnimplementedError("mainSetPermanentPasswordWithResult");
   }
 
   Future<bool> mainCheckSuperUserPermission({dynamic hint}) {

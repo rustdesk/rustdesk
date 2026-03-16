@@ -150,7 +150,7 @@ class _DropDownAction extends StatelessWidget {
             }
 
             if (value == kUsePermanentPassword &&
-                (await bind.mainGetPermanentPassword()).isEmpty) {
+                !(await bind.mainIsPermanentPasswordSet())) {
               if (isChangePermanentPasswordDisabled()) {
                 callback();
                 return;

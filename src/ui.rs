@@ -212,10 +212,6 @@ impl UI {
         update_temporary_password()
     }
 
-    fn permanent_password(&self) -> String {
-        permanent_password()
-    }
-
     fn set_permanent_password(&self, password: String) {
         set_permanent_password(password);
     }
@@ -726,7 +722,6 @@ impl sciter::EventHandler for UI {
         fn get_id();
         fn temporary_password();
         fn update_temporary_password();
-        fn permanent_password();
         fn set_permanent_password(String);
         fn get_remote_id();
         fn set_remote_id(String);

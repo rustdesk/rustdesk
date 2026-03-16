@@ -632,8 +632,29 @@ async fn handle(data: Data, stream: &mut Connection) {
                     value = Some(Config::get_id());
                 } else if name == "temporary-password" {
                     value = Some(password::temporary_password());
-                } else if name == "permanent-password" {
-                    value = Some(Config::get_permanent_password());
+                } else if name == "permanent-password-storage-and-salt" {
+                    let (storage, salt) = Config::get_local_permanent_password_storage_and_salt();
+                    value = Some(storage + "\n" + &salt);
+                } else if name == "permanent-password-set" {
+                    value = Some(if Config::has_permanent_password() {
+                        "Y".to_owned()
+                    } else {
+                        "N".to_owned()
+                    });
+                } else if name == "permanent-password-is-preset" {
+                    let hard = config::HARD_SETTINGS
+                        .read()
+                        .unwrap()
+                        .get("password")
+                        .cloned()
+                        .unwrap_or_default();
+                    let is_preset =
+                        !hard.is_empty() && Config::matches_permanent_password_plain(&hard);
+                    value = Some(if is_preset {
+                        "Y".to_owned()
+                    } else {
+                        "N".to_owned()
+                    });
                 } else if name == "salt" {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
@@ -669,13 +690,24 @@ async fn handle(data: Data, stream: &mut Connection) {
                 allow_err!(stream.send(&Data::Config((name, value))).await);
             }
             Some(value) => {
+                let mut updated = true;
                 if name == "id" {
                     Config::set_key_confirmed(false);
                     Config::set_id(&value);
                 } else if name == "temporary-password" {
                     password::update_temporary_password();
                 } else if name == "permanent-password" {
-                    Config::set_permanent_password(&value);
+                    if Config::is_disable_change_permanent_password() {
+                        log::warn!("Changing permanent password is disabled");
+                        updated = false;
+                    } else {
+                        Config::set_permanent_password(&value);
+                    }
+                    // Explicitly ACK/NACK permanent-password writes. This allows UIs/FFI to
+                    // distinguish "accepted by daemon" vs "IPC send succeeded" without
+                    // reading back any secret.
+                    let ack = if updated { "Y" } else { "N" }.to_owned();
+                    allow_err!(stream.send(&Data::Config((name.clone(), Some(ack)))).await);
                 } else if name == "salt" {
                     Config::set_salt(&value);
                 } else if name == "voice-call-input" {
@@ -685,7 +717,9 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else {
                     return;
                 }
-                log::info!("{} updated", name);
+                if updated {
+                    log::info!("{} updated", name);
+                }
             }
         },
         Data::Options(value) => match value {
@@ -1143,13 +1177,57 @@ pub fn update_temporary_password() -> ResultType<()> {
     set_config("temporary-password", "".to_owned())
 }
 
-pub fn get_permanent_password() -> String {
-    if let Ok(Some(v)) = get_config("permanent-password") {
-        Config::set_permanent_password(&v);
-        v
-    } else {
-        Config::get_permanent_password()
+fn apply_permanent_password_storage_and_salt_payload(payload: Option<&str>) -> ResultType<()> {
+    let Some(payload) = payload else {
+        return Ok(());
+    };
+    let Some((storage, salt)) = payload.split_once('\n') else {
+        bail!("Invalid permanent-password-storage-and-salt payload");
+    };
+
+    if storage.is_empty() {
+        Config::set_permanent_password_storage_for_sync("", "")?;
+        return Ok(());
     }
+
+    Config::set_permanent_password_storage_for_sync(storage, salt)?;
+    Ok(())
+}
+
+pub fn sync_permanent_password_storage_from_daemon() -> ResultType<()> {
+    let v = get_config("permanent-password-storage-and-salt")?;
+    apply_permanent_password_storage_and_salt_payload(v.as_deref())
+}
+
+async fn sync_permanent_password_storage_from_daemon_async() -> ResultType<()> {
+    let ms_timeout = 1_000;
+    let v = get_config_async("permanent-password-storage-and-salt", ms_timeout).await?;
+    apply_permanent_password_storage_and_salt_payload(v.as_deref())
+}
+
+pub fn is_permanent_password_set() -> bool {
+    match get_config("permanent-password-set") {
+        Ok(Some(v)) => {
+            let v = v.trim();
+            return v == "Y";
+        }
+        Ok(None) => {
+            // No response/value (timeout).
+        }
+        Err(_) => {
+            // Connection error.
+        }
+    }
+    log::warn!("Failed to query permanent password state from daemon");
+    false
+}
+
+pub fn is_permanent_password_preset() -> bool {
+    if let Ok(Some(v)) = get_config("permanent-password-is-preset") {
+        let v = v.trim();
+        return v == "Y";
+    }
+    false
 }
 
 pub fn get_fingerprint() -> String {
@@ -1159,8 +1237,41 @@ pub fn get_fingerprint() -> String {
 }
 
 pub fn set_permanent_password(v: String) -> ResultType<()> {
-    Config::set_permanent_password(&v);
-    set_config("permanent-password", v)
+    if Config::is_disable_change_permanent_password() {
+        bail!("Changing permanent password is disabled");
+    }
+    if set_permanent_password_with_ack(v)? {
+        Ok(())
+    } else {
+        bail!("Changing permanent password was rejected by daemon");
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_permanent_password_with_ack(v: String) -> ResultType<bool> {
+    set_permanent_password_with_ack_async(v).await
+}
+
+async fn set_permanent_password_with_ack_async(v: String) -> ResultType<bool> {
+    // The daemon ACK/NACK is expected quickly since it applies the config in-process.
+    let ms_timeout = 1_000;
+    let mut c = connect(ms_timeout, "").await?;
+    c.send_config("permanent-password", v).await?;
+    if let Some(Data::Config((name2, Some(v)))) = c.next_timeout(ms_timeout).await? {
+        if name2 == "permanent-password" {
+            let v = v.trim();
+            let ok = v == "Y";
+            if ok {
+                // Ensure the hashed permanent password storage is written to the user config file.
+                // This sync must not affect the daemon ACK outcome.
+                if let Err(err) = sync_permanent_password_storage_from_daemon_async().await {
+                    log::warn!("Failed to sync permanent password storage from daemon: {err}");
+                }
+            }
+            return Ok(ok);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(feature = "flutter")]
