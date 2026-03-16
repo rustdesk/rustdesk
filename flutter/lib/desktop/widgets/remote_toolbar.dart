@@ -1111,9 +1111,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       final edgeScrollEdgeThickness = await bind
           .sessionGetEdgeScrollEdgeThickness(sessionId: ffi.sessionId);
       final remoteCanvasMargin =
-          double.tryParse(bind.mainGetUserDefaultOption(
-                  key: kOptionRemoteCanvasMargin)) ??
-              0;
+          (double.tryParse(bind.mainGetUserDefaultOption(
+                      key: kOptionRemoteCanvasMargin)) ??
+                  0)
+              .clamp(0, 400)
+              .toDouble();
       return {
         'visible': visible,
         'scrollStyle': scrollStyle,

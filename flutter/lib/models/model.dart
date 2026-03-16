@@ -2204,7 +2204,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   Future<void> setRemoteCanvasMargin(double value) async {
-    final normalizedValue = max(0, value.round());
+    final normalizedValue = value.clamp(0, 400).round();
     await bind.mainSetUserDefaultOption(
         key: kOptionRemoteCanvasMargin, value: normalizedValue.toString());
     await updateViewStyle();
