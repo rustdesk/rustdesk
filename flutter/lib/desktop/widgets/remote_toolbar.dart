@@ -1196,7 +1196,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  Expanded(child: Text('Canvas Margin')),
+                  Expanded(child: Text(translate('canvas_margin'))),
                   SizedBox(
                     width: 160,
                     child: EdgeThicknessControl(
