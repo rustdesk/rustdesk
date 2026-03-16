@@ -1126,6 +1126,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       final groupValue = data['scrollStyle'] as String;
       final edgeScrollEdgeThickness = data['edgeScrollEdgeThickness'] as int;
       final remoteCanvasMargin = data['remoteCanvasMargin'] as double;
+      final isRemoteCanvasMarginFixed =
+          isOptionFixed(kOptionRemoteCanvasMargin);
 
       onChangeScrollStyle(String? value) async {
         if (value == null) return;
@@ -1145,7 +1147,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       }
 
       onChangeRemoteCanvasMargin(double? value) async {
-        if (value == null) return;
+        if (value == null || isRemoteCanvasMarginFixed) return;
         await bind.mainSetUserDefaultOption(
             key: kOptionRemoteCanvasMargin, value: value.round().toString());
         await widget.ffi.canvasModel.updateViewStyle();
@@ -1203,7 +1205,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                       value: remoteCanvasMargin,
                       min: 0,
                       max: 400,
-                      onChanged: onChangeRemoteCanvasMargin,
+                      onChanged: isRemoteCanvasMarginFixed
+                          ? null
+                          : onChangeRemoteCanvasMargin,
                       colorScheme: colorScheme,
                     ),
                   ),
