@@ -1819,9 +1819,7 @@ class _DisplayState extends State<_Display> {
       setState(() {});
     }
 
-    final currentValue = double.tryParse(
-            bind.mainGetUserDefaultOption(key: kOptionRemoteCanvasMargin)) ??
-        0;
+    final currentValue = canvasModel.remoteCanvasMargin;
 
     return _Card(title: 'Remote canvas margin', children: [
       EdgeThicknessControl(
