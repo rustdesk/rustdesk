@@ -611,7 +611,11 @@ pub fn update_temporary_password() {
 #[inline]
 pub fn permanent_password() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return Config::get_permanent_password();
+    return if Config::has_permanent_password() {
+        "<set>".to_owned()
+    } else {
+        String::new()
+    };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return ipc::get_permanent_password();
 }

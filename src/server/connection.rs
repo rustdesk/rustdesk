@@ -35,6 +35,7 @@ use hbb_common::{
     password_security::{self as password, ApproveMode},
     sha2::{Digest, Sha256},
     sleep, timeout,
+    sodiumoxide::base64,
     tokio::{
         net::TcpStream,
         sync::mpsc,
@@ -1969,23 +1970,38 @@ impl Connection {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
-    fn validate_one_password(&self, password: String) -> bool {
-        if password.len() == 0 {
+    fn validate_one_password(&self, password: &str) -> bool {
+        if password.is_empty() {
             return false;
         }
-        let mut hasher = Sha256::new();
-        hasher.update(password);
-        hasher.update(&self.hash.salt);
+        let h1: Vec<u8> = if let Some(encoded) = password.strip_prefix("01$") {
+            match base64::decode(encoded.as_bytes(), base64::Variant::Original) {
+                Ok(v) if v.len() == 32 => v,
+                _ => {
+                    log::error!("Invalid hashed permanent password storage; treating as plaintext");
+                    let mut hasher = Sha256::new();
+                    hasher.update(password.as_bytes());
+                    hasher.update(self.hash.salt.as_bytes());
+                    hasher.finalize()[..].to_vec()
+                }
+            }
+        } else {
+            let mut hasher = Sha256::new();
+            hasher.update(password.as_bytes());
+            hasher.update(self.hash.salt.as_bytes());
+            hasher.finalize()[..].to_vec()
+        };
+
         let mut hasher2 = Sha256::new();
-        hasher2.update(&hasher.finalize()[..]);
-        hasher2.update(&self.hash.challenge);
+        hasher2.update(&h1[..]);
+        hasher2.update(self.hash.challenge.as_bytes());
         hasher2.finalize()[..] == self.lr.password[..]
     }
 
     fn validate_password(&mut self) -> bool {
         if password::temporary_enabled() {
             let password = password::temporary_password();
-            if self.validate_one_password(password.clone()) {
+            if self.validate_one_password(&password) {
                 raii::AuthedConnID::update_or_insert_session(
                     self.session_key(),
                     Some(password),
@@ -1995,7 +2011,8 @@ impl Connection {
             }
         }
         if password::permanent_enabled() {
-            if self.validate_one_password(Config::get_permanent_password()) {
+            let stored = Config::get_permanent_password();
+            if self.validate_one_password(&stored) {
                 return true;
             }
         }

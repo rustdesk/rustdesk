@@ -17,12 +17,19 @@ void _showError() {
 }
 
 void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
-  final pw = await bind.mainGetPermanentPassword();
-  final p0 = TextEditingController(text: pw);
-  final p1 = TextEditingController(text: pw);
-  var validateLength = false;
-  var validateSame = false;
+  final p0 = TextEditingController(text: "");
+  final p1 = TextEditingController(text: "");
   dialogManager.show((setState, close, context) {
+    bool canSubmit() {
+      final a = p0.text.trim();
+      final b = p1.text.trim();
+      if (a.isEmpty && b.isEmpty) {
+        // Allow clearing the permanent password.
+        return true;
+      }
+      return a.length > 5 && a == b;
+    }
+
     submit() async {
       close();
       dialogManager.showLoading(translate("Waiting"));
@@ -54,15 +61,15 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
                 labelText: translate('Password'),
               ),
               controller: p0,
+              onChanged: (_) => setState(() {}),
               validator: (v) {
                 if (v == null) return null;
-                final val = v.trim().length > 5;
-                if (validateLength != val) {
-                  // use delay to make setState success
-                  Future.delayed(Duration(microseconds: 1),
-                      () => setState(() => validateLength = val));
+                final trimmed = v.trim();
+                if (trimmed.isEmpty) {
+                  return null;
                 }
-                return val
+                final ok = trimmed.length > 5;
+                return ok
                     ? null
                     : translate('Too short, at least 6 characters.');
               },
@@ -74,21 +81,18 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
                 labelText: translate('Confirmation'),
               ),
               controller: p1,
+              onChanged: (_) => setState(() {}),
               validator: (v) {
                 if (v == null) return null;
-                final val = p0.text == v;
-                if (validateSame != val) {
-                  Future.delayed(Duration(microseconds: 1),
-                      () => setState(() => validateSame = val));
-                }
-                return val
+                final ok = p0.text.trim() == v.trim();
+                return ok
                     ? null
                     : translate('The confirmation is not identical.');
               },
             ).workaroundFreezeLinuxMint(),
           ])),
       onCancel: close,
-      onSubmit: (validateLength && validateSame) ? submit : null,
+      onSubmit: canSubmit() ? submit : null,
       actions: [
         dialogButton(
           'Cancel',
@@ -99,7 +103,7 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
         dialogButton(
           'OK',
           icon: Icon(Icons.done_rounded),
-          onPressed: (validateLength && validateSame) ? submit : null,
+          onPressed: canSubmit() ? submit : null,
         ),
       ],
     );

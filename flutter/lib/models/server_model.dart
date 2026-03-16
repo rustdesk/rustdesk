@@ -475,11 +475,8 @@ class ServerModel with ChangeNotifier {
     await bind.mainSetPermanentPassword(password: newPW);
     await Future.delayed(Duration(milliseconds: 500));
     final pw = await bind.mainGetPermanentPassword();
-    if (newPW == pw) {
-      return true;
-    } else {
-      return false;
-    }
+    final hasPw = pw.trim().isNotEmpty;
+    return newPW.trim().isEmpty ? !hasPw : hasPw;
   }
 
   fetchID() async {

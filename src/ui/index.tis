@@ -1128,11 +1128,9 @@ class PasswordArea: Reactor.Component {
 
     event click $(li#set-password) {
         var me = this;
-        var password = handler.permanent_password();
-        var value_field = password.length == 0 ? "" : "value=" + password;
         msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
-            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus " + value_field + " /></div> \
-            <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) " + value_field + " /></div> \
+            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
+            <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \
         </div> \
         ", "", function(res=null) {
             if (!res) return;

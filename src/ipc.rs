@@ -633,7 +633,11 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "temporary-password" {
                     value = Some(password::temporary_password());
                 } else if name == "permanent-password" {
-                    value = Some(Config::get_permanent_password());
+                    value = Some(if Config::has_permanent_password() {
+                        "<set>".to_owned()
+                    } else {
+                        String::new()
+                    });
                 } else if name == "salt" {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
@@ -1144,11 +1148,14 @@ pub fn update_temporary_password() -> ResultType<()> {
 }
 
 pub fn get_permanent_password() -> String {
+    // Desktop UI should query service side "is set" state without persisting any secret locally.
     if let Ok(Some(v)) = get_config("permanent-password") {
-        Config::set_permanent_password(&v);
-        v
+        return v;
+    }
+    if Config::has_permanent_password() {
+        "<set>".to_owned()
     } else {
-        Config::get_permanent_password()
+        String::new()
     }
 }
 
@@ -1159,7 +1166,6 @@ pub fn get_fingerprint() -> String {
 }
 
 pub fn set_permanent_password(v: String) -> ResultType<()> {
-    Config::set_permanent_password(&v);
     set_config("permanent-password", v)
 }
 

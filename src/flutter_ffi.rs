@@ -2423,16 +2423,37 @@ pub fn is_disable_installation() -> SyncReturn<bool> {
 }
 
 pub fn is_preset_password() -> bool {
-    config::HARD_SETTINGS
+    use hbb_common::{sha2::Digest, sha2::Sha256, sodiumoxide::base64};
+
+    let hard = config::HARD_SETTINGS
         .read()
         .unwrap()
         .get("password")
-        .map_or(false, |p| {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            return p == &crate::ipc::get_permanent_password();
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            return p == &config::Config::get_permanent_password();
-        })
+        .cloned()
+        .unwrap_or_default();
+    if hard.is_empty() {
+        return false;
+    }
+
+    let stored = config::Config::get_permanent_password();
+    if stored == hard {
+        return true;
+    }
+
+    if let Some(encoded) = stored.strip_prefix("01$") {
+        if let Ok(h1_stored) = base64::decode(encoded.as_bytes(), base64::Variant::Original) {
+            if h1_stored.len() == 32 {
+                let salt = config::Config::get_salt();
+                let mut hasher = Sha256::new();
+                hasher.update(hard.as_bytes());
+                hasher.update(salt.as_bytes());
+                let h1_expected = hasher.finalize();
+                return h1_expected[..] == h1_stored[..];
+            }
+        }
+    }
+
+    false
 }
 
 // Don't call this function for desktop version.
