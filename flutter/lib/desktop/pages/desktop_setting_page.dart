@@ -13,6 +13,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
@@ -1812,9 +1813,9 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget remoteCanvasMargin(BuildContext context) {
+    final canvasModel = Provider.of<CanvasModel>(context, listen: false);
     onChanged(double value) async {
-      await bind.mainSetUserDefaultOption(
-          key: kOptionRemoteCanvasMargin, value: value.round().toString());
+      await canvasModel.setRemoteCanvasMargin(value);
       setState(() {});
     }
 

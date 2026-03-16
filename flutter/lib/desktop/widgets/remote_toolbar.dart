@@ -1148,9 +1148,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
       onChangeRemoteCanvasMargin(double? value) async {
         if (value == null || isRemoteCanvasMarginFixed) return;
-        await bind.mainSetUserDefaultOption(
-            key: kOptionRemoteCanvasMargin, value: value.round().toString());
-        await widget.ffi.canvasModel.updateViewStyle();
+        await widget.ffi.canvasModel.setRemoteCanvasMargin(value);
         state.setState(() {});
       }
 

@@ -2203,6 +2203,13 @@ class CanvasModel with ChangeNotifier {
     return max(0, value);
   }
 
+  Future<void> setRemoteCanvasMargin(double value) async {
+    final normalizedValue = max(0, value.round());
+    await bind.mainSetUserDefaultOption(
+        key: kOptionRemoteCanvasMargin, value: normalizedValue.toString());
+    await updateViewStyle();
+  }
+
   Rect? get paddedRect {
     final rect = realRect;
     if (rect == null) {
