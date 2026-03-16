@@ -1289,8 +1289,7 @@ impl<T: InvokeUiSession> Session<T> {
         drop(connection_round_state_lock);
 
         let cloned = self.clone();
-        *cloned.audit_guid.lock().unwrap() = String::new();
-        *cloned.last_audit_note.lock().unwrap() = String::new();
+
         // override only if true
         if true == force_relay {
             self.lc.write().unwrap().force_relay = true;
@@ -1813,6 +1812,9 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             );
         }
         self.update_privacy_mode();
+        // Clear audit_guid when connection is established successfully
+        *self.audit_guid.lock().unwrap() = String::new();
+        *self.last_audit_note.lock().unwrap() = String::new();
         // Save recent peers, then push event to flutter. So flutter can refresh peer page.
         self.lc.write().unwrap().handle_peer_info(&pi);
         self.set_peer_info(&pi);
