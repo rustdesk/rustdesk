@@ -2200,7 +2200,7 @@ class CanvasModel with ChangeNotifier {
     final value =
         double.tryParse(bind.mainGetUserDefaultOption(key: kOptionRemoteCanvasMargin)) ??
             0;
-    return max(0, value);
+    return min(400, max(0, value));
   }
 
   Future<void> setRemoteCanvasMargin(double value) async {
