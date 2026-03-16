@@ -57,11 +57,15 @@ fn map_err_scrap(err: String) -> io::Error {
         }
     } else {
         try_log(&err);
-        if err.contains("org.freedesktop.portal") || err.contains("dbus") {
+        let err_lower = err.to_ascii_lowercase();
+        if err_lower.contains("org.freedesktop.portal")
+            || err_lower.contains("dbus")
+            || err_lower.contains("d-bus")
+        {
             // The portal D-Bus interface is unreachable. This typically means
             // xdg-desktop-portal has crashed... for more info, see: Issue #12897
             io::Error::new(io::ErrorKind::Other, SCRAP_XDP_PORTAL_UNAVAILABLE)
-        } else if err.contains("pipewire") {
+        } else if err_lower.contains("pipewire") {
             io::Error::new(io::ErrorKind::Other, SCRAP_OTHER_VERSION_OR_X11_REQUIRED)
         } else {
             io::Error::new(io::ErrorKind::Other, SCRAP_X11_REQUIRED)
