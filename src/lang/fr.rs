@@ -379,7 +379,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Screen Share", "Partage d’écran"),
         ("ubuntu-21-04-required", "Wayland nécessite Ubuntu 21.04 ou une version ultérieure."),
         ("wayland-requires-higher-linux-version", "Wayland nécessite une version ultérieure de votre distribution Linux. Veuillez essayer le bureau X11 ou changer de système d’exploitation."),
-        ("xdp-portal-unavailable", ""),
+        ("xdp-portal-unavailable", "Échec de la capture de l’écran Wayland. Le portail de bureau XDG a peut-être planté ou n’est pas disponible. Essayez de le redémarrer avec la commande `systemctl --user restart xdg-desktop-portal`."),
         ("JumpLink", "Afficher"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Veuillez sélectionner l’écran à partager (côté appareil distant)."),
         ("Show RustDesk", "Afficher RustDesk"),
