@@ -2029,6 +2029,9 @@ pub fn update_install_option(k: &str, v: &str) -> ResultType<()> {
     if !is_installed() || !crate::is_server() {
         return Ok(());
     }
+    if ![REG_NAME_INSTALL_PRINTER].contains(&k) || !["0", "1"].contains(&v) {
+        return Ok(());
+    }
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
     let cmds =
