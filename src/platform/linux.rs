@@ -6,7 +6,7 @@ use hbb_common::{
     anyhow::anyhow,
     bail,
     config::{keys::OPTION_ALLOW_LINUX_HEADLESS, Config},
-    libc::{c_char, c_int, c_long, c_uint, c_void},
+    libc::{c_char, c_int, c_long, c_uint, c_ulong, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
     regex::{Captures, Regex},
@@ -97,10 +97,53 @@ thread_local! {
     static DISPLAY: RefCell<*mut c_void> = RefCell::new(unsafe { XOpenDisplay(std::ptr::null())});
 }
 
+// X11 error event structure for the custom error handler.
+// See: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Using-the-Default-Error-Handlers
+#[repr(C)]
+#[allow(non_snake_case)]
+struct XErrorEvent {
+    type_: c_int,
+    display: *mut c_void,   // Display*
+    resourceid: c_ulong,    // XID
+    serial: c_ulong,
+    error_code: u8,
+    request_code: u8,
+    minor_code: u8,
+}
+
+type XErrorHandler = unsafe extern "C" fn(*mut c_void, *mut XErrorEvent) -> c_int;
+
+/// Atomic flag set by the custom X error handler when a BadWindow error occurs.
+static X_BAD_WINDOW_DETECTED: AtomicBool = AtomicBool::new(false);
+
+/// Custom X error handler that catches BadWindow errors (error_code == 3) instead of
+/// letting the default handler terminate the process.
+/// See issue: https://github.com/rustdesk/rustdesk/issues/9003
+unsafe extern "C" fn handle_x_error(_display: *mut c_void, event: *mut XErrorEvent) -> c_int {
+    const BAD_WINDOW: u8 = 3; // X11 BadWindow error code
+    if !event.is_null() && (*event).error_code == BAD_WINDOW {
+        X_BAD_WINDOW_DETECTED.store(true, Ordering::SeqCst);
+        log::debug!("Caught X11 BadWindow error (suppressed), window was likely destroyed");
+        return 0;
+    }
+    // For non-BadWindow errors, just log and return (don't crash).
+    if !event.is_null() {
+        log::warn!(
+            "X11 error: error_code={}, request_code={}, minor_code={}",
+            (*event).error_code,
+            (*event).request_code,
+            (*event).minor_code,
+        );
+    }
+    0
+}
+
 #[link(name = "X11")]
 extern "C" {
     fn XOpenDisplay(display_name: *const c_char) -> *mut c_void;
     // fn XCloseDisplay(d: *mut c_void) -> c_int;
+    fn XSetErrorHandler(handler: Option<XErrorHandler>) -> Option<XErrorHandler>;
+    fn XSync(display: *mut c_void, discard: c_int) -> c_int;
 }
 
 #[link(name = "Xfixes")]
@@ -231,25 +274,50 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
                 if libxdo_sys::xdo_get_active_window(*xdo as *const _, &mut window) != 0 {
                     return;
                 }
-                if libxdo_sys::xdo_get_window_location(
+
+                // Install a custom X error handler to catch BadWindow errors.
+                // Between xdo_get_active_window and the subsequent calls, the
+                // window can be destroyed (e.g. user closes it), causing a
+                // BadWindow X error that would crash the process with the
+                // default handler. See: https://github.com/rustdesk/rustdesk/issues/9003
+                X_BAD_WINDOW_DETECTED.store(false, Ordering::SeqCst);
+                let prev_handler = XSetErrorHandler(Some(handle_x_error));
+
+                let loc_ret = libxdo_sys::xdo_get_window_location(
                     *xdo as *const _,
                     window,
                     &mut x as _,
                     &mut y as _,
                     std::ptr::null_mut(),
-                ) != 0
-                {
+                );
+
+                let size_ret = if loc_ret == 0 {
+                    libxdo_sys::xdo_get_window_size(
+                        *xdo as *const _,
+                        window,
+                        &mut width,
+                        &mut height,
+                    )
+                } else {
+                    1 // skip if location failed
+                };
+
+                // Flush to ensure any deferred X errors are delivered to our handler.
+                DISPLAY.with(|disp| {
+                    let d = *disp.borrow();
+                    if !d.is_null() {
+                        XSync(d, 0);
+                    }
+                });
+
+                // Restore the previous error handler.
+                XSetErrorHandler(prev_handler);
+
+                // If a BadWindow error was caught, or either call failed, bail out.
+                if X_BAD_WINDOW_DETECTED.load(Ordering::SeqCst) || loc_ret != 0 || size_ret != 0 {
                     return;
                 }
-                if libxdo_sys::xdo_get_window_size(
-                    *xdo as *const _,
-                    window,
-                    &mut width,
-                    &mut height,
-                ) != 0
-                {
-                    return;
-                }
+
                 let center_x = x + (width / 2) as c_int;
                 let center_y = y + (height / 2) as c_int;
                 res = displays.iter().position(|d| {
