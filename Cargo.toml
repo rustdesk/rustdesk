@@ -98,7 +98,7 @@ clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
 # arboard = { version = "3.4", features = ["wayland-data-control"] }
 arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
-clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
+clipboard-master = { git = "https://github.com/night-hood/clipboard-master", branch = "fix/ext-data-control-v1" }
 portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rustdesk/pty_based_0.8.1", package = "portable-pty" }
 
 system_shutdown = "4.0"
