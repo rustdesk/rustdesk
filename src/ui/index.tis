@@ -768,7 +768,7 @@ class App: Reactor.Component
     }
 }
 
-class InstallMe: Reactor.Component {
+/*class InstallMe: Reactor.Component {
     function render() {
         return <div .install-me>
             <span />
@@ -780,7 +780,8 @@ class InstallMe: Reactor.Component {
     event click $(#install-me) {
         handler.goto_install();
     }
-}
+}*/
+
 
 function download(from, to, args..) {
     var rqp = { type:#get, url: from, toFile: to };
