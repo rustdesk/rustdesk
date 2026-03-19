@@ -582,10 +582,13 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     final hasAudioPermission = androidVersion >= 30;
+    final hideStopService =
+        isAndroid &&
+            bind.mainGetBuildinOption(key: kOptionHideStopService) == 'Y';
     return PaddingCard(
         title: translate("Permissions"),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          serverModel.mediaOk
+          serverModel.mediaOk && !hideStopService
               ? ElevatedButton.icon(
                       style: ButtonStyle(
                           backgroundColor:
@@ -595,14 +598,15 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                       label: Text(translate("Stop service")))
                   .marginOnly(bottom: 8)
               : SizedBox.shrink(),
-          PermissionRow(
-              translate("Screen Capture"),
-              serverModel.mediaOk,
-              !serverModel.mediaOk &&
-                      gFFI.userModel.userName.value.isEmpty &&
-                      bind.mainGetLocalOption(key: "show-scam-warning") != "N"
-                  ? () => showScamWarning(context, serverModel)
-                  : serverModel.toggleService),
+          if (!hideStopService || !serverModel.mediaOk)
+            PermissionRow(
+                translate("Screen Capture"),
+                serverModel.mediaOk,
+                !serverModel.mediaOk &&
+                        gFFI.userModel.userName.value.isEmpty &&
+                        bind.mainGetLocalOption(key: "show-scam-warning") != "N"
+                    ? () => showScamWarning(context, serverModel)
+                    : serverModel.toggleService),
           PermissionRow(translate("Input Control"), serverModel.inputOk,
               serverModel.toggleInput),
           PermissionRow(translate("Transfer file"), serverModel.fileOk,
