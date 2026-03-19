@@ -85,7 +85,6 @@ sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-
 
 ```sh
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
-```
 
 ### Install vcpkg
 
@@ -95,9 +94,6 @@ cd vcpkg
 git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
-export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus aom
-```
 
 ### Fix libvpx (For Fedora)
 
