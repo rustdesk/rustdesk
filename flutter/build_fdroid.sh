@@ -7,7 +7,7 @@
 #               2024, Vasyl Gello <vasek.gello@gmail.com>
 #
 
-# The script is invoked by F-Droid builder system ste-by-step.
+# The script is invoked by F-Droid builder system step-by-step.
 #
 # It accepts the following arguments:
 #
@@ -16,7 +16,6 @@
 # - Android architecture to build APK for: armeabi-v7a arm64-v8av x86 x86_64
 # - The build step to execute:
 #
-#   + sudo-deps: as root, install needed Debian packages into builder VM
 #   + prebuild: patch sources and do other stuff before the build
 #   + build: perform actual build of APK file
 #
@@ -184,9 +183,9 @@ prebuild)
 	fi
 
 	# Map NDK version to revision
-	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json \
-	  | jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" \
-	  | sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
+	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json |
+		jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" |
+		sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
 
 	if [ -z "${NDK_VERSION}" ]; then
 		echo "ERROR: Can not map Android NDK codename to revision!" >&2
@@ -372,7 +371,7 @@ prebuild)
 
 	prepare_flutter "${FLUTTER_VERSION}" "${HOME}/flutter"
 
-	# gms is not in thoes files now, but we still keep the following line for future reference(maybe).
+	# gms is not in these files now, but we still keep the following line for future reference(maybe).
 
 	sed \
 		-i \
@@ -425,9 +424,9 @@ build)
 		.github/workflows/flutter-build.yml)"
 
 	# Map NDK version to revision
-	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json \
-	  | jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" \
-	  | sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
+	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json |
+		jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" |
+		sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
 
 	if [ -z "${NDK_VERSION}" ]; then
 		echo "ERROR: Can not map Android NDK codename to revision!" >&2
