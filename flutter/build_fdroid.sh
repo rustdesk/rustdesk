@@ -312,6 +312,18 @@ prebuild)
 	# `FLUTTER_BRIDGE_VERSION` an restore the pubspec later
 
 	if [ "${FLUTTER_VERSION}" != "${FLUTTER_BRIDGE_VERSION}" ]; then
+		# Find first libclang.so and set BRIDGE_LLVM_PATH
+
+		BRIDGE_LLVM_PATH="$(find /usr/lib/ -name libclang.so | head -n1)"
+
+		if [ -z "${BRIDGE_LLVM_PATH}" ]; then
+			echo 'ERROR: Can not find libclang.so for bridge generator!' >&2
+			exit 1
+		fi
+
+		BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
+		BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
+
 		# Install Flutter bridge version
 
 		prepare_flutter "${FLUTTER_BRIDGE_VERSION}" "${HOME}/flutter"
@@ -340,7 +352,8 @@ prebuild)
 
 		flutter_rust_bridge_codegen \
 			--rust-input ./src/flutter_ffi.rs \
-			--dart-output ./flutter/lib/generated_bridge.dart
+			--dart-output ./flutter/lib/generated_bridge.dart \
+			--llvm-path "${BRIDGE_LLVM_PATH}"
 
 		# Add bridge files to save-list
 
@@ -351,6 +364,8 @@ prebuild)
 		git checkout '*'
 		git clean -dffx
 		git reset
+
+		unset BRIDGE_LLVM_PATH
 	fi
 
 	# Install Flutter version for RustDesk library build
