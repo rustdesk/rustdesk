@@ -912,6 +912,9 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
   final p1 = TextEditingController(text: "");
   var errMsg0 = "";
   var errMsg1 = "";
+  var localPasswordSet =
+      (await bind.mainGetCommon(key: "local-permanent-password-set")) == "true";
+  var canSubmit = false;
   final RxString rxPass = "".obs;
   final rules = [
     DigitValidationRule(),
@@ -976,6 +979,33 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                     obscureText: true,
                     decoration: InputDecoration(
                         labelText: translate('Password'),
+                        hintText: localPasswordSet
+                            ? translate('password-hidden-tip')
+                            : null,
+                        suffixIcon: (p0.text.isNotEmpty || localPasswordSet)
+                            ? Focus(
+                                skipTraversal: true,
+                                canRequestFocus: false,
+                                descendantsAreFocusable: false,
+                                child: IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  tooltip: translate("Clear"),
+                                  onPressed: () {
+                                    final hadText = p0.text.isNotEmpty;
+                                    final hadPlaceholder = localPasswordSet;
+                                    p0.clear();
+                                    rxPass.value = "";
+                                    setState(() {
+                                      errMsg0 = '';
+                                      localPasswordSet = false;
+                                      if (hadText || hadPlaceholder) {
+                                        canSubmit = true;
+                                      }
+                                    });
+                                  },
+                                ),
+                              )
+                            : null,
                         errorText: errMsg0.isNotEmpty ? errMsg0 : null),
                     controller: p0,
                     autofocus: true,
@@ -983,6 +1013,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                       rxPass.value = value.trim();
                       setState(() {
                         errMsg0 = '';
+                        canSubmit = true;
                       });
                     },
                     maxLength: maxLength,
@@ -1043,7 +1074,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
       ),
       actions: [
         dialogButton("Cancel", onPressed: close, isOutline: true),
-        dialogButton("OK", onPressed: submit),
+        dialogButton("OK", onPressed: canSubmit ? submit : null),
       ],
       onSubmit: submit,
       onCancel: close,

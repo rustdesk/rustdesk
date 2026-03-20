@@ -1159,14 +1159,6 @@ class RustdeskImpl {
     return Future.value('');
   }
 
-  Future<String> mainGetPermanentPassword({dynamic hint}) {
-    return Future.value('');
-  }
-
-  Future<bool> mainIsPermanentPasswordSet({dynamic hint}) {
-    return Future.value(false);
-  }
-
   Future<String> mainGetFingerprint({dynamic hint}) {
     return Future.value('');
   }

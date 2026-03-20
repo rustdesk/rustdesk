@@ -631,6 +631,17 @@ pub fn is_permanent_password_set() -> bool {
 }
 
 #[inline]
+pub fn is_local_permanent_password_set() -> bool {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Config::has_local_permanent_password();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        allow_err!(ipc::sync_permanent_password_storage_from_daemon());
+        Config::has_local_permanent_password()
+    }
+}
+
+#[inline]
 pub fn set_permanent_password(password: String) {
     if Config::is_disable_change_permanent_password() {
         log::warn!("Changing permanent password is disabled");

@@ -216,6 +216,10 @@ impl UI {
         set_permanent_password(password);
     }
 
+    fn is_local_permanent_password_set(&self) -> bool {
+        is_local_permanent_password_set()
+    }
+
     fn get_remote_id(&mut self) -> String {
         LocalConfig::get_remote_id()
     }
@@ -723,6 +727,7 @@ impl sciter::EventHandler for UI {
         fn temporary_password();
         fn update_temporary_password();
         fn set_permanent_password(String);
+        fn is_local_permanent_password_set();
         fn get_remote_id();
         fn set_remote_id(String);
         fn closing(i32, i32, i32, i32);
