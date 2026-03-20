@@ -274,5 +274,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "Keep screen awake during incoming sessions"),
         ("password-hidden-tip", "Permanent password is set (hidden)."),
         ("preset-password-in-use-tip", "Preset password is currently in use."),
+        ("wayland-keyboard-input-disabled-tip", "Keyboard input disabled"),
+        ("wayland-keyboard-input-consent-tip", "This remote session uses Wayland. For on-screen keyboard input, RustDesk may write text to the remote clipboard and paste it. This may expose what you type to clipboard history or other apps. If you continue, keyboard input will be enabled. See issue:"),
+        ("wayland-keyboard-input-reset-remembered-tip", "Reset remembered Wayland keyboard choice"),
+        ("dont-ask-again-for-this-connection-tip", "Don't ask again for this connection"),
+        ("remember-wayland-keyboard-choice-tip", "Remember this choice on this device"),
     ].iter().cloned().collect();
 }

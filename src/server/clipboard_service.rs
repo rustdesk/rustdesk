@@ -2,7 +2,7 @@ use super::*;
 #[cfg(not(target_os = "android"))]
 use crate::clipboard::clipboard_listener;
 #[cfg(not(target_os = "android"))]
-pub use crate::clipboard::{check_clipboard, ClipboardContext, ClipboardSide};
+pub use crate::clipboard::{ClipboardContext, ClipboardSide};
 pub use crate::clipboard::{CLIPBOARD_INTERVAL as INTERVAL, CLIPBOARD_NAME as NAME};
 #[cfg(windows)]
 use crate::ipc::{self, ClipboardFile, ClipboardNonFile, Data};
@@ -109,6 +109,63 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+const WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES: usize =
+    super::input_service::WAYLAND_CLIPBOARD_INPUT_MAX_TEXT_CHARS * 4;
+
+#[cfg(target_os = "linux")]
+fn decode_utf8_prefix(bytes: &[u8]) -> Option<String> {
+    let mut end = bytes.len().min(WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES);
+    loop {
+        match std::str::from_utf8(&bytes[..end]) {
+            Ok(text) => return Some(text.to_owned()),
+            Err(e) => {
+                if e.error_len().is_some() {
+                    return None;
+                }
+                if end == 0 {
+                    return Some(String::new());
+                }
+                end -= 1;
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn decode_text_clipboard(clipboard: &Clipboard) -> Option<String> {
+    if clipboard.format.enum_value() != Ok(ClipboardFormat::Text) {
+        return None;
+    }
+    if clipboard.compress {
+        let bytes = hbb_common::compress::decompress(&clipboard.content);
+        return decode_utf8_prefix(&bytes);
+    }
+    decode_utf8_prefix(&clipboard.content)
+}
+
+#[cfg(target_os = "linux")]
+fn should_skip_wayland_clipboard_sync(msg: &Message) -> bool {
+    if crate::platform::linux::is_x11() {
+        return false;
+    }
+    let is_recent_wayland_input = |clipboard: &Clipboard| -> bool {
+        let Some(text) = decode_text_clipboard(clipboard) else {
+            return false;
+        };
+        super::input_service::is_recent_wayland_clipboard_input(&text)
+    };
+
+    match &msg.union {
+        Some(message::Union::Clipboard(clipboard)) => is_recent_wayland_input(clipboard),
+        Some(message::Union::MultiClipboards(multi_clipboards)) => multi_clipboards
+            .clipboards
+            .iter()
+            .any(is_recent_wayland_input),
+        _ => false,
+    }
+}
+
 #[cfg(not(target_os = "android"))]
 impl Handler {
     #[cfg(feature = "unix-file-copy-paste")]
@@ -172,7 +229,20 @@ impl Handler {
             }
         }
 
-        check_clipboard(&mut self.ctx, ClipboardSide::Host, false)
+        #[cfg(target_os = "linux")]
+        {
+            let msg = crate::clipboard::peek_clipboard(&mut self.ctx, ClipboardSide::Host, false)?;
+            if should_skip_wayland_clipboard_sync(&msg) {
+                log::debug!("Skip clipboard sync for recent Wayland keyboard injection");
+                return None;
+            }
+            crate::clipboard::cache_clipboard_msg(&msg);
+            return Some(msg);
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            crate::clipboard::check_clipboard(&mut self.ctx, ClipboardSide::Host, false)
+        }
     }
 
     // Read clipboard data from cm using ipc.

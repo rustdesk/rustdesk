@@ -743,5 +743,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "显示名称"),
         ("password-hidden-tip", "永久密码已设置（已隐藏）"),
         ("preset-password-in-use-tip", "当前使用预设密码"),
+        ("wayland-keyboard-input-disabled-tip", "键盘输入已禁用"),
+        ("wayland-keyboard-input-consent-tip", "此远程会话使用 Wayland。使用软键盘输入时，RustDesk 在某些情况下会先写入被控端剪贴板再粘贴，输入内容可能被剪贴板历史或其他应用看到。继续后，将启用键盘输入。详见："),
+        ("wayland-keyboard-input-reset-remembered-tip", "重置已记住的 Wayland 键盘选择"),
+        ("dont-ask-again-for-this-connection-tip", "此连接期间不再询问"),
+        ("remember-wayland-keyboard-choice-tip", "为此设备记住此选择"),
     ].iter().cloned().collect();
 }

@@ -396,6 +396,10 @@ class InputModel {
 
   late final SessionID sessionId;
 
+  // Local gate for clipboard-assisted input flows on mobile Wayland dialogs.
+  // It should not block physical keyboard events.
+  bool keyboardInputAllowed = true;
+
   bool get keyboardPerm => parent.target!.ffiModel.keyboard;
   String get id => parent.target?.id ?? '';
   String? get peerPlatform => parent.target?.ffiModel.pi.platform;

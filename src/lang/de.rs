@@ -743,5 +743,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "Anzeigename"),
         ("password-hidden-tip", "Ein permanentes Passwort wurde festgelegt (ausgeblendet)."),
         ("preset-password-in-use-tip", "Das voreingestellte Passwort wird derzeit verwendet."),
+        ("wayland-keyboard-input-disabled-tip", ""),
+        ("wayland-keyboard-input-consent-tip", ""),
+        ("wayland-keyboard-input-reset-remembered-tip", ""),
+        ("dont-ask-again-for-this-connection-tip", ""),
+        ("remember-wayland-keyboard-choice-tip", ""),
     ].iter().cloned().collect();
 }

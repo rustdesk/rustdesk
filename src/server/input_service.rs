@@ -457,6 +457,12 @@ lazy_static::lazy_static! {
     static ref RELATIVE_MOUSE_CONNS: Arc<Mutex<std::collections::HashSet<i32>>> = Default::default();
 }
 
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    static ref WAYLAND_CLIPBOARD_INPUT_RECORDS: Arc<Mutex<Vec<(Instant, String)>>> =
+        Default::default();
+}
+
 #[inline]
 fn set_relative_mouse_active(conn: i32, active: bool) {
     let mut lock = RELATIVE_MOUSE_CONNS.lock().unwrap();
@@ -1668,40 +1674,103 @@ fn process_seq(en: &mut Enigo, sequence: &str) {
 /// this delay may be insufficient, but there is no reliable alternative mechanism.
 #[cfg(target_os = "linux")]
 const CLIPBOARD_SYNC_DELAY_MS: u64 = 50;
+#[cfg(target_os = "linux")]
+const WAYLAND_CLIPBOARD_INPUT_FILTER_WINDOW: Duration = Duration::from_secs(1);
+#[cfg(target_os = "linux")]
+const WAYLAND_CLIPBOARD_INPUT_MAX_RECORDS: usize = 256;
+#[cfg(target_os = "linux")]
+pub(super) const WAYLAND_CLIPBOARD_INPUT_MAX_TEXT_CHARS: usize = 1024;
+
+#[cfg(target_os = "linux")]
+fn cleanup_wayland_clipboard_input_records(records: &mut Vec<(Instant, String)>, now: Instant) {
+    records.retain(|(created_at, _)| {
+        now.saturating_duration_since(*created_at) <= WAYLAND_CLIPBOARD_INPUT_FILTER_WINDOW
+    });
+    let len = records.len();
+    if len > WAYLAND_CLIPBOARD_INPUT_MAX_RECORDS {
+        records.drain(0..(len - WAYLAND_CLIPBOARD_INPUT_MAX_RECORDS));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn normalize_wayland_clipboard_input_text(text: &str) -> String {
+    text.chars()
+        .take(WAYLAND_CLIPBOARD_INPUT_MAX_TEXT_CHARS)
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn get_wayland_clipboard_input_normalized_text(text: &str) -> Option<String> {
+    let normalized = normalize_wayland_clipboard_input_text(text);
+    if normalized.is_empty() {
+        return None;
+    }
+    Some(normalized)
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn record_wayland_clipboard_input_for_sync_filter(text: &str) -> Option<(Instant, String)> {
+    if text.is_empty() || crate::platform::linux::is_x11() {
+        return None;
+    }
+    let normalized = get_wayland_clipboard_input_normalized_text(text)?;
+    let now = Instant::now();
+    let mut records = WAYLAND_CLIPBOARD_INPUT_RECORDS.lock().unwrap();
+    cleanup_wayland_clipboard_input_records(&mut records, now);
+    records.push((now, normalized.clone()));
+    Some((now, normalized))
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn rollback_wayland_clipboard_input_record(record: (Instant, String)) {
+    let (created_at, normalized) = record;
+    let now = Instant::now();
+    let mut records = WAYLAND_CLIPBOARD_INPUT_RECORDS.lock().unwrap();
+    cleanup_wayland_clipboard_input_records(&mut records, now);
+    if let Some(pos) = records
+        .iter()
+        .rposition(|(record_created_at, record_normalized)| {
+            *record_created_at == created_at && *record_normalized == normalized
+        })
+    {
+        records.remove(pos);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn is_recent_wayland_clipboard_input(text: &str) -> bool {
+    if text.is_empty() || crate::platform::linux::is_x11() {
+        return false;
+    }
+    let Some(normalized) = get_wayland_clipboard_input_normalized_text(text) else {
+        return false;
+    };
+    let now = Instant::now();
+    let mut records = WAYLAND_CLIPBOARD_INPUT_RECORDS.lock().unwrap();
+    cleanup_wayland_clipboard_input_records(&mut records, now);
+    records
+        .iter()
+        .any(|(_, record_normalized)| record_normalized == &normalized)
+}
 
 /// Internal: Set clipboard content without delay.
 /// Returns true if clipboard was set successfully.
 #[cfg(target_os = "linux")]
 fn set_clipboard_content(text: &str) -> bool {
-    use arboard::{Clipboard, LinuxClipboardKind, SetExtLinux};
-
-    let mut clipboard = match Clipboard::new() {
-        Ok(cb) => cb,
-        Err(e) => {
-            log::error!("set_clipboard_content: failed to create clipboard: {:?}", e);
-            return false;
-        }
-    };
-
-    // Set both CLIPBOARD and PRIMARY selections
-    // Terminal uses PRIMARY for Shift+Insert, GUI apps use CLIPBOARD
-    if let Err(e) = clipboard
-        .set()
-        .clipboard(LinuxClipboardKind::Clipboard)
-        .text(text.to_owned())
-    {
-        log::error!("set_clipboard_content: failed to set CLIPBOARD: {:?}", e);
+    if let Err(e) = crate::clipboard::set_text_clipboard_with_owner_sync(
+        text,
+        crate::clipboard::ClipboardSide::Host,
+    ) {
+        log::error!(
+            "set_clipboard_content: failed to set clipboard with owner marker: {:?}",
+            e
+        );
         return false;
     }
-    if let Err(e) = clipboard
-        .set()
-        .clipboard(LinuxClipboardKind::Primary)
-        .text(text.to_owned())
-    {
-        log::warn!("set_clipboard_content: failed to set PRIMARY: {:?}", e);
-        // Continue anyway, CLIPBOARD might work
-    }
-
     true
 }
 
@@ -1714,7 +1783,11 @@ fn set_clipboard_content(text: &str) -> bool {
 #[cfg(target_os = "linux")]
 #[inline]
 pub(super) fn set_clipboard_for_paste_sync(text: &str) -> bool {
+    let record = record_wayland_clipboard_input_for_sync_filter(text);
     if !set_clipboard_content(text) {
+        if let Some(record) = record {
+            rollback_wayland_clipboard_input_record(record);
+        }
         return false;
     }
     std::thread::sleep(std::time::Duration::from_millis(CLIPBOARD_SYNC_DELAY_MS));
