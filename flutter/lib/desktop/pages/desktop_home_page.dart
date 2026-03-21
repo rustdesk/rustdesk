@@ -927,6 +927,9 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
 
   gFFI.dialogManager.show((setState, close, context) {
     submit() async {
+      if (!canSubmit) {
+        return;
+      }
       setState(() {
         errMsg0 = "";
         errMsg1 = "";
@@ -1076,7 +1079,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         dialogButton("Cancel", onPressed: close, isOutline: true),
         dialogButton("OK", onPressed: canSubmit ? submit : null),
       ],
-      onSubmit: submit,
+      onSubmit: canSubmit ? submit : null,
       onCancel: close,
     );
   });

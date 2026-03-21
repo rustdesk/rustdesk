@@ -1145,6 +1145,9 @@ class PasswordArea: Reactor.Component {
             if (!res) return;
             var p0 = (res.password || "").trim();
             var p1 = (res.confirmation || "").trim();
+            if (has_local_password && p0.length == 0 && p1.length == 0) {
+                return " ";
+            }
             if (p0.length < 6 && p0.length != 0) {
                 return translate("Too short, at least 6 characters.");
             }
