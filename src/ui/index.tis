@@ -1145,7 +1145,7 @@ class PasswordArea: Reactor.Component {
             if (!res) return;
             var p0 = (res.password || "").trim();
             var p1 = (res.confirmation || "").trim();
-            if (has_local_password && p0.length == 0 && p1.length == 0) {
+            if (p0.length == 0 && p1.length == 0) {
                 return " ";
             }
             if (p0.length < 6 && p0.length != 0) {
@@ -1157,6 +1157,9 @@ class PasswordArea: Reactor.Component {
             handler.set_permanent_password(p0);
             me.update();
         }, msgbox_default_height, get_msgbox_width());
+        self.timer(30ms, function() {
+            updateSetPasswordSubmitState();
+        });
     }
 
     event click $(li#clear-password) {
@@ -1242,6 +1245,18 @@ function updatePasswordArea() {
 }
 if (!outgoing_only) updatePasswordArea();
 
+function updateSetPasswordSubmitState() {
+    var dialog = $(#msgbox);
+    if (!dialog) return;
+    var password = dialog.$(input[name='password']);
+    var confirmation = dialog.$(input[name='confirmation']);
+    var submit = dialog.$(button#submit);
+    if (!password || !confirmation || !submit) return;
+    var can_submit = (password.value || "").trim().length > 0 ||
+        (confirmation.value || "").trim().length > 0;
+    submit.state.disabled = !can_submit;
+}
+
 class ID: Reactor.Component {
     function render() {
         return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")}
@@ -1297,6 +1312,22 @@ event keydown (evt) {
             });
         }
     }
+}
+
+event keyup $(#msgbox input[name='password']) {
+    updateSetPasswordSubmitState();
+}
+
+event keyup $(#msgbox input[name='confirmation']) {
+    updateSetPasswordSubmitState();
+}
+
+event change $(#msgbox input[name='password']) {
+    updateSetPasswordSubmitState();
+}
+
+event change $(#msgbox input[name='confirmation']) {
+    updateSetPasswordSubmitState();
 }
 
 $(body).content(<div style="size:*"><App /><div #msgbox /></div>);
