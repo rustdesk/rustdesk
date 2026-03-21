@@ -1134,12 +1134,17 @@ class PasswordArea: Reactor.Component {
     event click $(li#set-password) {
         var me = this;
         var has_local_password = handler.is_local_permanent_password_set();
-        var placeholder = has_local_password
-            ? " placeholder='" + translate('password-hidden-tip') + "'"
+        var password_hidden_tip = translate('password-hidden-tip');
+        if (!password_hidden_tip) {
+            password_hidden_tip = "Password is set (hidden)";
+        }
+        var password_tip = has_local_password
+            ? "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + password_hidden_tip + "</div>"
             : "";
         msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
-            <div><span>" + translate('Password') + ":</span><input|password(password)" + placeholder + " .outline-focus /></div> \
+            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
             <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \
+            " + password_tip + " \
         </div> \
         ", "", function(res=null) {
             if (!res) return;

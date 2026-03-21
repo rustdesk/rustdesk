@@ -924,8 +924,15 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     MinCharactersValidationRule(8),
   ];
   final maxLength = bind.mainMaxEncryptLen();
+  final hiddenTip = translate('password-hidden-tip').trim().isEmpty
+      ? 'Permanent password is already set (hidden).'
+      : translate('password-hidden-tip');
 
   gFFI.dialogManager.show((setState, close, context) {
+    updateCanSubmit() {
+      canSubmit = p0.text.trim().isNotEmpty || p1.text.trim().isNotEmpty;
+    }
+
     submit() async {
       if (!canSubmit) {
         return;
@@ -966,14 +973,20 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate("Set Password")),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.key, color: MyTheme.accent),
+          Text(translate("Set Password")).paddingOnly(left: 10),
+        ],
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(
-              height: 8.0,
+              height: 6.0,
             ),
             Row(
               children: [
@@ -982,33 +995,6 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                     obscureText: true,
                     decoration: InputDecoration(
                         labelText: translate('Password'),
-                        hintText: localPasswordSet
-                            ? translate('password-hidden-tip')
-                            : null,
-                        suffixIcon: (p0.text.isNotEmpty || localPasswordSet)
-                            ? Focus(
-                                skipTraversal: true,
-                                canRequestFocus: false,
-                                descendantsAreFocusable: false,
-                                child: IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  tooltip: translate("Clear"),
-                                  onPressed: () {
-                                    final hadText = p0.text.isNotEmpty;
-                                    final hadPlaceholder = localPasswordSet;
-                                    p0.clear();
-                                    rxPass.value = "";
-                                    setState(() {
-                                      errMsg0 = '';
-                                      localPasswordSet = false;
-                                      if (hadText || hadPlaceholder) {
-                                        canSubmit = true;
-                                      }
-                                    });
-                                  },
-                                ),
-                              )
-                            : null,
                         errorText: errMsg0.isNotEmpty ? errMsg0 : null),
                     controller: p0,
                     autofocus: true,
@@ -1016,7 +1002,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                       rxPass.value = value.trim();
                       setState(() {
                         errMsg0 = '';
-                        canSubmit = true;
+                        updateCanSubmit();
                       });
                     },
                     maxLength: maxLength,
@@ -1028,7 +1014,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
               children: [
                 Expanded(child: PasswordStrengthIndicator(password: rxPass)),
               ],
-            ).marginSymmetric(vertical: 8),
+            ).marginOnly(top: 2, bottom: 8),
             const SizedBox(
               height: 8.0,
             ),
@@ -1044,6 +1030,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                     onChanged: (value) {
                       setState(() {
                         errMsg1 = '';
+                        updateCanSubmit();
                       });
                     },
                     maxLength: maxLength,
@@ -1051,6 +1038,18 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                 ),
               ],
             ),
+            if (localPasswordSet)
+              Row(
+                children: [
+                  Icon(Icons.info, color: Colors.amber, size: 18)
+                      .marginOnly(right: 6),
+                  Expanded(
+                      child: Text(
+                    hiddenTip,
+                    style: const TextStyle(fontSize: 13, height: 1.1),
+                  ))
+                ],
+              ).marginOnly(top: 6, bottom: 2),
             const SizedBox(
               height: 8.0,
             ),
@@ -1076,8 +1075,39 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         ),
       ),
       actions: [
-        dialogButton("Cancel", onPressed: close, isOutline: true),
-        dialogButton("OK", onPressed: canSubmit ? submit : null),
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
+        ),
+        if (localPasswordSet)
+          dialogButton(
+            "Remove",
+            icon: Icon(Icons.delete_outline_rounded),
+            onPressed: () async {
+              setState(() {
+                errMsg0 = "";
+                errMsg1 = "";
+              });
+              final ok =
+                  await bind.mainSetPermanentPasswordWithResult(password: "");
+              if (!ok) {
+                setState(() {
+                  errMsg0 = '${translate('Prompt')}: ${translate("Failed")}';
+                });
+                return;
+              }
+              close();
+            },
+            buttonStyle: ButtonStyle(
+                backgroundColor: MaterialStatePropertyAll(Colors.red)),
+          ),
+        dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: canSubmit ? submit : null,
+        ),
       ],
       onSubmit: canSubmit ? submit : null,
       onCancel: close,
