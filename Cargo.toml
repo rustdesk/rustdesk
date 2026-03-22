@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "rustdesk_linux_fork"
 version = "1.4.6"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+default-run = "rustdesk_linux_fork"
 rust-version = "1.75"
 
 [lib]
@@ -214,7 +214,7 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
+ProductName = "rustdesk_linux_fork"
 FileDescription = "RustDesk Remote Desktop"
 OriginalFilename = "rustdesk.exe"
 
@@ -232,7 +232,7 @@ hound = "3.5"
 docopt = "1.1"
 
 [package.metadata.bundle]
-name = "RustDesk"
+name = "rustdesk_linux_fork"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
