@@ -912,8 +912,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
   final p1 = TextEditingController(text: "");
   var errMsg0 = "";
   var errMsg1 = "";
-  var localPasswordSet =
-      (await bind.mainGetCommon(key: "local-permanent-password-set")) == "true";
+  final permanentPasswordSet =
+      (await bind.mainGetCommon(key: "permanent-password-set")) == "true";
+  final presetPassword =
+      bind.isPresetPasswordMobileOnly() || await bind.isPresetPassword();
+  final showRemoveButton = permanentPasswordSet && !presetPassword;
   var canSubmit = false;
   final RxString rxPass = "".obs;
   final rules = [
@@ -927,6 +930,12 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
   final hiddenTip = translate('password-hidden-tip').trim().isEmpty
       ? 'Permanent password is already set (hidden).'
       : translate('password-hidden-tip');
+  final presetTip = translate('preset-password-in-use-tip').trim().isEmpty
+      ? 'Preset password is currently in use.'
+      : translate('preset-password-in-use-tip');
+  final statusTip = presetPassword
+      ? presetTip
+      : (showRemoveButton ? hiddenTip : '');
 
   gFFI.dialogManager.show((setState, close, context) {
     updateCanSubmit() {
@@ -1038,14 +1047,14 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                 ),
               ],
             ),
-            if (localPasswordSet)
+            if (statusTip.isNotEmpty)
               Row(
                 children: [
                   Icon(Icons.info, color: Colors.amber, size: 18)
                       .marginOnly(right: 6),
                   Expanded(
                       child: Text(
-                    hiddenTip,
+                    statusTip,
                     style: const TextStyle(fontSize: 13, height: 1.1),
                   ))
                 ],
@@ -1081,7 +1090,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
           onPressed: close,
           isOutline: true,
         ),
-        if (localPasswordSet)
+        if (showRemoveButton)
           dialogButton(
             "Remove",
             icon: Icon(Icons.delete_outline_rounded),

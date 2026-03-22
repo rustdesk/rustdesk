@@ -741,5 +741,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue with {}", "Folytatás ezzel: {}"),
         ("Display Name", "Kijelző név"),
         ("password-hidden-tip", ""),
+        ("preset-password-in-use-tip", ""),
     ].iter().cloned().collect();
 }

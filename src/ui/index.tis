@@ -1071,7 +1071,9 @@ class PasswordArea: Reactor.Component {
         var method = handler.get_option('verification-method');
         var approve_mode= handler.get_option('approve-mode');
         var show_password = approve_mode != 'click';
-        var has_local_password = handler.is_local_permanent_password_set();
+        var permanent_password_set = handler.is_permanent_password_set();
+        var preset_password = handler.is_preset_password();
+        var can_clear_password = permanent_password_set && !preset_password;
         return <popup><menu.context #edit-password-context>
             <li #approve-mode-password><span>{svg_checkmark}</span>{translate('Accept sessions via password')}</li>
             <li #approve-mode-click><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
@@ -1082,7 +1084,7 @@ class PasswordArea: Reactor.Component {
             { !show_password ? '' : <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li> }
             { !show_password ? '' : <div .separator /> }
             { !show_password || disable_change_permanent_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
-            { !show_password || disable_change_permanent_password ? '' : <li #clear-password disabled={ has_local_password ? "false" : "true" }>{translate('Clear permanent password')}</li> }
+            { !show_password || disable_change_permanent_password ? '' : <li #clear-password disabled={ can_clear_password ? "false" : "true" }>{translate('Clear permanent password')}</li> }
             { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
             <div .separator />
             <li #tfa><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
@@ -1116,7 +1118,8 @@ class PasswordArea: Reactor.Component {
                 }
             }
             if (el.id == "clear-password") {
-                el.state.disabled = !handler.is_local_permanent_password_set();
+                var can_clear_password = handler.is_permanent_password_set() && !handler.is_preset_password();
+                el.state.disabled = !can_clear_password;
             }
             if (el.id == "tfa")
                 el.attributes.toggleClass("selected", has_valid_2fa);
@@ -1133,14 +1136,23 @@ class PasswordArea: Reactor.Component {
 
     event click $(li#set-password) {
         var me = this;
-        var has_local_password = handler.is_local_permanent_password_set();
+        var permanent_password_set = handler.is_permanent_password_set();
+        var preset_password = handler.is_preset_password();
+        var can_clear_password = permanent_password_set && !preset_password;
         var password_hidden_tip = translate('password-hidden-tip');
         if (!password_hidden_tip) {
-            password_hidden_tip = "Password is set (hidden)";
+            password_hidden_tip = "Permanent password is already set (hidden).";
         }
-        var password_tip = has_local_password
-            ? "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + password_hidden_tip + "</div>"
-            : "";
+        var preset_password_tip = translate('preset-password-in-use-tip');
+        if (!preset_password_tip) {
+            preset_password_tip = "Preset password is currently in use.";
+        }
+        var password_tip = "";
+        if (preset_password) {
+            password_tip = "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + preset_password_tip + "</div>";
+        } else if (can_clear_password) {
+            password_tip = "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + password_hidden_tip + "</div>";
+        }
         msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
             <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
             <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \

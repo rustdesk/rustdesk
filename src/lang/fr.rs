@@ -741,5 +741,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue with {}", "Continuer avec {}"),
         ("Display Name", "Nom d’affichage"),
         ("password-hidden-tip", ""),
+        ("preset-password-in-use-tip", ""),
     ].iter().cloned().collect();
 }
