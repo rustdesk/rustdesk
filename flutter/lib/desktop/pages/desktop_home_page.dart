@@ -912,10 +912,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
   final p1 = TextEditingController(text: "");
   var errMsg0 = "";
   var errMsg1 = "";
+  final localPasswordSet =
+      (await bind.mainGetCommon(key: "local-permanent-password-set")) == "true";
   final permanentPasswordSet =
       (await bind.mainGetCommon(key: "permanent-password-set")) == "true";
-  final presetPassword = await bind.isPresetPassword();
-  final showRemoveButton = permanentPasswordSet && !presetPassword;
+  final presetPassword = permanentPasswordSet && !localPasswordSet;
   var canSubmit = false;
   final RxString rxPass = "".obs;
   final rules = [
@@ -926,10 +927,10 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     MinCharactersValidationRule(8),
   ];
   final maxLength = bind.mainMaxEncryptLen();
-  final hiddenTip = translate('password-hidden-tip');
-  final presetTip = translate('preset-password-in-use-tip');
-  final statusTip =
-      presetPassword ? presetTip : (showRemoveButton ? hiddenTip : '');
+  final statusTip = localPasswordSet
+      ? translate('password-hidden-tip')
+      : (presetPassword ? translate('preset-password-in-use-tip') : '');
+  final showStatusTipOnMobile = statusTip.isNotEmpty && !isDesktop && !isWebDesktop;
 
   gFFI.dialogManager.show((setState, close, context) {
     updateCanSubmit() {
@@ -984,12 +985,12 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         ],
       ),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 500),
+        constraints: BoxConstraints(minWidth: showStatusTipOnMobile ? 540: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(
-              height: 6.0,
+            SizedBox(
+              height: showStatusTipOnMobile ? 0.0 : 6.0,
             ),
             Row(
               children: [
@@ -1017,9 +1018,9 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
               children: [
                 Expanded(child: PasswordStrengthIndicator(password: rxPass)),
               ],
-            ).marginOnly(top: 2, bottom: 8),
-            const SizedBox(
-              height: 8.0,
+            ).marginOnly(top: 2, bottom: showStatusTipOnMobile ? 2 : 8),
+            SizedBox(
+              height: showStatusTipOnMobile ? 0.0 : 8.0,
             ),
             Row(
               children: [
@@ -1053,11 +1054,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                   ))
                 ],
               ).marginOnly(top: 6, bottom: 2),
-            const SizedBox(
-              height: 8.0,
+            SizedBox(
+              height: showStatusTipOnMobile ? 0.0 : 8.0,
             ),
             Obx(() => Wrap(
-                  runSpacing: 8,
+                  runSpacing: showStatusTipOnMobile ? 2.0 : 8.0,
                   spacing: 4,
                   children: rules.map((e) {
                     var checked = e.validate(rxPass.value.trim());
@@ -1077,41 +1078,65 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
           ],
         ),
       ),
-      actions: [
-        dialogButton(
+      actions: (() {
+        final cancelButton = dialogButton(
           "Cancel",
           icon: Icon(Icons.close_rounded),
           onPressed: close,
           isOutline: true,
-        ),
-        if (showRemoveButton)
-          dialogButton(
-            "Remove",
-            icon: Icon(Icons.delete_outline_rounded),
-            onPressed: () async {
+        );
+        final removeButton = dialogButton(
+          "Remove",
+          icon: Icon(Icons.delete_outline_rounded),
+          onPressed: () async {
+            setState(() {
+              errMsg0 = "";
+              errMsg1 = "";
+            });
+            final ok = await bind.mainSetPermanentPasswordWithResult(password: "");
+            if (!ok) {
               setState(() {
-                errMsg0 = "";
-                errMsg1 = "";
+                errMsg0 = '${translate('Prompt')}: ${translate("Failed")}';
               });
-              final ok =
-                  await bind.mainSetPermanentPasswordWithResult(password: "");
-              if (!ok) {
-                setState(() {
-                  errMsg0 = '${translate('Prompt')}: ${translate("Failed")}';
-                });
-                return;
-              }
-              close();
-            },
-            buttonStyle: ButtonStyle(
-                backgroundColor: MaterialStatePropertyAll(Colors.red)),
-          ),
-        dialogButton(
+              return;
+            }
+            close();
+          },
+          buttonStyle:
+              ButtonStyle(backgroundColor: MaterialStatePropertyAll(Colors.red)),
+        );
+        final okButton = dialogButton(
           "OK",
           icon: Icon(Icons.done_rounded),
           onPressed: canSubmit ? submit : null,
-        ),
-      ],
+        );
+        if (!isDesktop && !isWebDesktop && localPasswordSet) {
+          return [
+            Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    cancelButton,
+                    const SizedBox(width: 4),
+                    removeButton,
+                    const SizedBox(width: 4),
+                    okButton,
+                  ],
+                ),
+              ),
+            ),
+          ];
+        }
+        return [
+          cancelButton,
+          if (localPasswordSet) removeButton,
+          okButton,
+        ];
+      })(),
       onSubmit: canSubmit ? submit : null,
       onCancel: close,
     );

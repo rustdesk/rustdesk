@@ -631,15 +631,35 @@ pub fn is_permanent_password_set() -> bool {
 }
 
 #[inline]
-pub fn set_permanent_password(password: String) {
-    if Config::is_disable_change_permanent_password() {
-        log::warn!("Changing permanent password is disabled");
-        return;
+pub fn is_local_permanent_password_set() -> bool {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Config::has_local_permanent_password();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        allow_err!(ipc::sync_permanent_password_storage_from_daemon());
+        Config::has_local_permanent_password()
+    }
+}
+
+pub fn set_permanent_password_with_result(password: String) -> bool {
+    if config::Config::is_disable_change_permanent_password() {
+        return false;
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    Config::set_permanent_password(&password);
+    {
+        config::Config::set_permanent_password(&password);
+        return true;
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    allow_err!(ipc::set_permanent_password(password));
+    {
+        match crate::ipc::set_permanent_password_with_ack(password) {
+            Ok(ok) => ok,
+            Err(err) => {
+                log::warn!("Failed to set permanent password via IPC: {err}");
+                false
+            }
+        }
+    }
 }
 
 #[inline]
