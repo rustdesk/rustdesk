@@ -1140,13 +1140,7 @@ class PasswordArea: Reactor.Component {
         var preset_password = handler.is_preset_password();
         var can_clear_password = permanent_password_set && !preset_password;
         var password_hidden_tip = translate('password-hidden-tip');
-        if (!password_hidden_tip) {
-            password_hidden_tip = "Permanent password is already set (hidden).";
-        }
         var preset_password_tip = translate('preset-password-in-use-tip');
-        if (!preset_password_tip) {
-            preset_password_tip = "Preset password is currently in use.";
-        }
         var password_tip = "";
         if (preset_password) {
             password_tip = "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + preset_password_tip + "</div>";

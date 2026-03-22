@@ -926,12 +926,8 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     MinCharactersValidationRule(8),
   ];
   final maxLength = bind.mainMaxEncryptLen();
-  final hiddenTip = translate('password-hidden-tip').trim().isEmpty
-      ? 'Permanent password is already set (hidden).'
-      : translate('password-hidden-tip');
-  final presetTip = translate('preset-password-in-use-tip').trim().isEmpty
-      ? 'Preset password is currently in use.'
-      : translate('preset-password-in-use-tip');
+  final hiddenTip = translate('password-hidden-tip');
+  final presetTip = translate('preset-password-in-use-tip');
   final statusTip =
       presetPassword ? presetTip : (showRemoveButton ? hiddenTip : '');
 
