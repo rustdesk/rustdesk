@@ -1694,24 +1694,7 @@ pub fn main_get_temporary_password() -> String {
 }
 
 pub fn main_set_permanent_password_with_result(password: String) -> bool {
-    if config::Config::is_disable_change_permanent_password() {
-        return false;
-    }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        config::Config::set_permanent_password(&password);
-        return true;
-    }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        match crate::ipc::set_permanent_password_with_ack(password) {
-            Ok(ok) => ok,
-            Err(err) => {
-                log::warn!("Failed to set permanent password via IPC: {err}");
-                false
-            }
-        }
-    }
+    ui_interface::set_permanent_password_with_result(password)
 }
 
 pub fn main_get_fingerprint() -> String {
