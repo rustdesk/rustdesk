@@ -914,8 +914,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
   var errMsg1 = "";
   final permanentPasswordSet =
       (await bind.mainGetCommon(key: "permanent-password-set")) == "true";
-  final presetPassword =
-      bind.isPresetPasswordMobileOnly() || await bind.isPresetPassword();
+  final presetPassword = await bind.isPresetPassword();
   final showRemoveButton = permanentPasswordSet && !presetPassword;
   var canSubmit = false;
   final RxString rxPass = "".obs;
@@ -933,9 +932,8 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
   final presetTip = translate('preset-password-in-use-tip').trim().isEmpty
       ? 'Preset password is currently in use.'
       : translate('preset-password-in-use-tip');
-  final statusTip = presetPassword
-      ? presetTip
-      : (showRemoveButton ? hiddenTip : '');
+  final statusTip =
+      presetPassword ? presetTip : (showRemoveButton ? hiddenTip : '');
 
   gFFI.dialogManager.show((setState, close, context) {
     updateCanSubmit() {
