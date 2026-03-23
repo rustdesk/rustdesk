@@ -587,8 +587,13 @@ impl RendezvousMediator {
         let mut socket_addr_v6 = Default::default();
         let conn_config = ph.conn_config.into_option();
         if peer_addr_v6.port() > 0 && !relay {
-            socket_addr_v6 =
-                start_ipv6(peer_addr_v6, peer_addr, server.clone(), conn_config.clone()).await;
+            socket_addr_v6 = start_ipv6(
+                peer_addr_v6,
+                peer_addr,
+                server.clone(),
+                conn_config.clone(),
+            )
+            .await;
         }
         let relay_server = self.get_relay_server(ph.relay_server.clone());
         let request_id = ph.request_id.clone();
@@ -644,7 +649,8 @@ impl RendezvousMediator {
         msg_out.set_punch_hole_sent(msg_punch);
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, true, conn_config).await;
+        crate::accept_connection(server.clone(), socket, peer_addr, true, conn_config)
+            .await;
         Ok(())
     }
 
@@ -889,8 +895,14 @@ async fn udp_nat_listen(
             res,
         )
         .await?;
-        crate::server::create_tcp_connection(server, stream.1, peer_addr_v4, true, conn_config)
-            .await?;
+        crate::server::create_tcp_connection(
+            server,
+            stream.1,
+            peer_addr_v4,
+            true,
+            conn_config,
+        )
+        .await?;
         Ok(())
     };
     func.await.map_err(|e: anyhow::Error| {
