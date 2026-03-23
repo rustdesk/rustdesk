@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "rustdesk_linux_fork"
 version = "1.4.6"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+default-run = "rustdesk_linux_fork"
 rust-version = "1.75"
 
 [lib]
@@ -84,12 +84,7 @@ stunclient = "0.4"
 kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
 reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
 
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-# https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
-cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit" }
-ringbuf = "0.3"
 
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/rustdesk-org/rust-sciter", branch = "dyn" }
 sys-locale = "0.3"
@@ -104,70 +99,15 @@ portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rust
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
-[target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = [
-    "winuser",
-    "wincrypt",
-    "shellscalingapi",
-    "pdh",
-    "synchapi",
-    "memoryapi",
-    "shellapi",
-    "devguid",
-    "setupapi",
-    "cguid",
-    "cfgmgr32",
-    "ioapiset",
-    "winspool",
-] }
-windows = { version = "0.61", features = [
-    "Win32",
-    "Win32_Foundation",
-    "Win32_Security",
-    "Win32_Security_Authorization",
-    "Win32_Storage_FileSystem",
-    "Win32_System",
-    "Win32_System_Diagnostics",
-    "Win32_System_Diagnostics_ToolHelp",
-    "Win32_System_Environment",
-    "Win32_System_IO",
-    "Win32_System_Memory",
-    "Win32_System_Pipes",
-    "Win32_System_Threading",
-    "Win32_UI_Shell",
-] }
-winreg = "0.11"
-windows-service = "0.6"
-virtual_display = { path = "libs/virtual_display" }
-remote_printer = { path = "libs/remote_printer" }
-impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system" }
-shared_memory = "0.12"
-tauri-winrt-notification = "0.1"
-runas = "1.2"
 
-[target.'cfg(target_os = "macos")'.dependencies]
-objc = "0.2"
-cocoa = "0.24"
-dispatch = "0.2"
-core-foundation = "0.9"
-core-graphics = "0.22"
-include_dir = "0.7"
-fruitbasket = "0.10"
-objc_id = "0.1"
-# If we use piet "0.7" here, we must also update core-graphics to "0.24".
-piet = "0.6"
-piet-coregraphics = "0.6"
-foreign-types = "0.3"
-
-[target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 tray-icon = { git = "https://github.com/tauri-apps/tray-icon", version = "0.21.3" }
 tao = { git = "https://github.com/rustdesk-org/tao", branch = "dev" }
 image = "0.24"
 
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+
 keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
 
-[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+
 wallpaper = { git = "https://github.com/rustdesk-org/wallpaper.rs" }
 tiny-skia = "0.11"
 softbuffer = "0.4"
@@ -195,13 +135,7 @@ termios = "0.3"
 terminfo = "0.8"
 winit = "0.30"
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
 
-[target.'cfg(target_os = "android")'.dependencies]
-android_logger = "0.13"
-jni = "0.21"
-android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
@@ -214,13 +148,10 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
+ProductName = "rustdesk_linux_fork"
 FileDescription = "RustDesk Remote Desktop"
 OriginalFilename = "rustdesk.exe"
 
-[target.'cfg(target_os="windows")'.build-dependencies]
-winres = "0.1"
-winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
 
 [build-dependencies]
 cc = "1.0"
@@ -232,7 +163,7 @@ hound = "3.5"
 docopt = "1.1"
 
 [package.metadata.bundle]
-name = "RustDesk"
+name = "rustdesk_linux_fork"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"

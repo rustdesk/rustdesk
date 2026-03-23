@@ -1,29 +1,7 @@
-#[cfg(target_os = "linux")]
 pub use linux::*;
-#[cfg(target_os = "macos")]
-pub use macos::*;
-#[cfg(windows)]
-pub use windows::*;
 
-#[cfg(windows)]
-pub mod windows;
-
-#[cfg(windows)]
-pub mod win_device;
-
-#[cfg(target_os = "macos")]
-pub mod macos;
-
-#[cfg(target_os = "macos")]
-pub mod delegate;
-
-#[cfg(target_os = "linux")]
 pub mod linux;
-
-#[cfg(target_os = "linux")]
 pub mod linux_desktop_manager;
-
-#[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 
 #[cfg(all(

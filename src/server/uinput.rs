@@ -1117,7 +1117,7 @@ mod mouce {
                             maximum: rng_x.1,
                             fuzz: 0,
                             flat: 0,
-                            resolution: 0,
+                            resolution: 1,
                         },
                     },
                 );
@@ -1133,7 +1133,7 @@ mod mouce {
                             maximum: rng_y.1,
                             fuzz: 0,
                             flat: 0,
-                            resolution: 0,
+                            resolution: 1,
                         },
                     },
                 );
