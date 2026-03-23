@@ -1,0 +1,6 @@
+error: feature `screencapturekit` includes `cpal/screencapturekit`, but `cpal` is not a dependency
+  --> Cargo.toml:43:20
+   |
+43 | screencapturekit = ["cpal/screencapturekit"]
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+error: failed to parse manifest at `/home/dw/apps/fork_rust_desk/rustdesk_linux_fork/Cargo.toml`
