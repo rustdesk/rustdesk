@@ -514,9 +514,7 @@ impl Client {
                             relay_server = ph.relay_server;
                             peer_addr = AddrMangle::decode(&ph.socket_addr);
                             feedback = ph.feedback;
-                            if let Some(config) = ph.controller_config.clone().into_option() {
-                                controller_config = Some(config);
-                            }
+                            controller_config = ph.controller_config.into_option();
                             let s = udp.0.take();
                             if ph.is_udp && s.is_some() {
                                 if let Some(s) = s {
@@ -544,9 +542,6 @@ impl Client {
                             start.elapsed(),
                             rr.relay_server
                         );
-                        if let Some(config) = rr.controller_config.clone().into_option() {
-                            controller_config = Some(config);
-                        }
                         start = Instant::now();
                         let mut connect_futures = Vec::new();
                         if let Some(s) = ipv6.0 {
@@ -559,6 +554,7 @@ impl Client {
                             }
                         }
                         signed_id_pk = rr.pk().into();
+                        controller_config = rr.controller_config.into_option();
                         let fut = Self::create_relay(
                             &peer,
                             rr.uuid,

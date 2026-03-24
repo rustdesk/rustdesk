@@ -73,7 +73,7 @@ lazy_static::lazy_static! {
     static ref SESSIONS: Arc::<Mutex<HashMap<SessionKey, Session>>> = Default::default();
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
     pub static ref AUTHED_CONNS: Arc::<Mutex<Vec<AuthedConn>>> = Default::default();
-    pub static ref CONNECTION_CONFIG_ARRAY: Arc::<Mutex<Vec<(i32, ControlledConfig)>>> = Default::default();
+    pub static ref CONTROLLED_CONFIG_ARRAY: Arc::<Mutex<Vec<(i32, ControlledConfig)>>> = Default::default();
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
     static ref WAKELOCK_KEEP_AWAKE_OPTION: Arc::<Mutex<Option<bool>>> = Default::default();
@@ -274,7 +274,7 @@ pub struct Connection {
     restart: bool,
     recording: bool,
     block_input: bool,
-    conn_config: Option<ControlledConfig>,
+    controlled_config: Option<ControlledConfig>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
     lock_after_session_end: bool,
@@ -398,16 +398,16 @@ impl Connection {
         stream: super::Stream,
         id: i32,
         server: super::ServerPtrWeak,
-        conn_config: Option<ControlledConfig>,
+        controlled_config: Option<ControlledConfig>,
     ) {
         // Android does not support control_permissions yet.
         #[cfg(target_os = "android")]
-        let conn_config = conn_config.map(|mut c| {
+        let controlled_config = controlled_config.map(|mut c| {
             c.control_permissions = 0;
             c
         });
         let _raii_id = raii::ConnectionID::new(id);
-        let _raii_conn_config_id = raii::ConnectionConfigID::new(id, &conn_config);
+        let _raii_controlled_config_id = raii::ControlledConfigID::new(id, &controlled_config);
         let hash = Hash {
             salt: Config::get_salt(),
             challenge: Config::get_auto_password(6),
@@ -458,15 +458,15 @@ impl Connection {
             port_forward_address: "".to_owned(),
             tx_to_cm,
             authorized: false,
-            keyboard: Self::permission(keys::OPTION_ENABLE_KEYBOARD, &conn_config),
-            clipboard: Self::permission(keys::OPTION_ENABLE_CLIPBOARD, &conn_config),
-            audio: Self::permission(keys::OPTION_ENABLE_AUDIO, &conn_config),
+            keyboard: Self::permission(keys::OPTION_ENABLE_KEYBOARD, &controlled_config),
+            clipboard: Self::permission(keys::OPTION_ENABLE_CLIPBOARD, &controlled_config),
+            audio: Self::permission(keys::OPTION_ENABLE_AUDIO, &controlled_config),
             // to-do: make sure is the option correct here
-            file: Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &conn_config),
-            restart: Self::permission(keys::OPTION_ENABLE_REMOTE_RESTART, &conn_config),
-            recording: Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &conn_config),
-            block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &conn_config),
-            conn_config,
+            file: Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &controlled_config),
+            restart: Self::permission(keys::OPTION_ENABLE_REMOTE_RESTART, &controlled_config),
+            recording: Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &controlled_config),
+            block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &controlled_config),
+            controlled_config,
             last_test_delay: None,
             network_delay: 0,
             lock_after_session_end: false,
@@ -945,7 +945,7 @@ impl Connection {
                     match data {
                         #[cfg(all(target_os = "windows", feature = "flutter"))]
                         ipc::Data::PrinterData(data) => {
-                            if Self::permission(keys::OPTION_ENABLE_REMOTE_PRINTER, &conn.control_permissions) {
+                            if Self::permission(keys::OPTION_ENABLE_REMOTE_PRINTER, &conn.controlled_config) {
                                 conn.send_printer_request(data).await;
                             } else {
                                 conn.send_remote_printing_disallowed().await;
@@ -2091,9 +2091,12 @@ impl Connection {
         )
     }
 
-    fn permission(enable_prefix_option: &str, conn_config: &Option<ControlledConfig>) -> bool {
+    fn permission(
+        enable_prefix_option: &str,
+        controlled_config: &Option<ControlledConfig>,
+    ) -> bool {
         use hbb_common::rendezvous_proto::controlled_config::Permission;
-        if let Some(conn_config) = conn_config {
+        if let Some(controlled_config) = controlled_config {
             let permission = match enable_prefix_option {
                 keys::OPTION_ENABLE_KEYBOARD => Some(Permission::keyboard),
                 keys::OPTION_ENABLE_REMOTE_PRINTER => Some(Permission::remote_printer),
@@ -2110,7 +2113,7 @@ impl Connection {
             };
             if let Some(permission) = permission {
                 if let Some(enabled) =
-                    crate::get_control_permission(conn_config.control_permissions, permission)
+                    crate::get_control_permission(controlled_config.control_permissions, permission)
                 {
                     return enabled;
                 }
@@ -2121,7 +2124,7 @@ impl Connection {
 
     async fn verify_easy_access(&self) -> bool {
         let lr_challenge_bytes = self.lr.easy_access_challenge.clone();
-        let (manager_id, easy_access_signature) = match self.conn_config.as_ref() {
+        let (manager_id, easy_access_signature) = match self.controlled_config.as_ref() {
             Some(c) if !c.easy_access_signature.is_empty() => {
                 (c.manager_id.clone(), c.easy_access_signature.clone())
             }
@@ -2262,7 +2265,8 @@ impl Connection {
             }
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
-                    if !Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &self.conn_config) {
+                    if !Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &self.controlled_config)
+                    {
                         self.send_login_error("No permission of file transfer")
                             .await;
                         sleep(1.).await;
@@ -2271,7 +2275,7 @@ impl Connection {
                     self.file_transfer = Some((ft.dir, ft.show_hidden));
                 }
                 Some(login_request::Union::ViewCamera(_vc)) => {
-                    if !Self::permission(keys::OPTION_ENABLE_CAMERA, &self.conn_config) {
+                    if !Self::permission(keys::OPTION_ENABLE_CAMERA, &self.controlled_config) {
                         self.send_login_error("No permission of viewing camera")
                             .await;
                         sleep(1.).await;
@@ -2280,7 +2284,7 @@ impl Connection {
                     self.view_camera = true;
                 }
                 Some(login_request::Union::Terminal(terminal)) => {
-                    if !Self::permission(keys::OPTION_ENABLE_TERMINAL, &self.conn_config) {
+                    if !Self::permission(keys::OPTION_ENABLE_TERMINAL, &self.controlled_config) {
                         self.send_login_error("No permission of terminal").await;
                         sleep(1.).await;
                         return false;
@@ -2328,7 +2332,7 @@ impl Connection {
                     }
                 }
                 Some(login_request::Union::PortForward(mut pf)) => {
-                    if !Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.conn_config) {
+                    if !Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.controlled_config) {
                         self.send_login_error("No permission of IP tunneling").await;
                         sleep(1.).await;
                         return false;
@@ -2390,7 +2394,7 @@ impl Connection {
             } else if hbb_common::config::is_allow_easy_access() && self.verify_easy_access().await
             {
                 // Consume the token so it cannot be reused
-                if let Some(c) = self.conn_config.as_mut() {
+                if let Some(c) = self.controlled_config.as_mut() {
                     c.easy_access_signature = Default::default();
                     c.manager_id = Default::default();
                 }
@@ -5390,10 +5394,10 @@ pub fn get_control_permission_state(
     permission: hbb_common::rendezvous_proto::controlled_config::Permission,
     disable_if_has_disabled: bool,
 ) -> Option<bool> {
-    let conn_configs = CONNECTION_CONFIG_ARRAY.lock().unwrap();
+    let controlled_configs = CONTROLLED_CONFIG_ARRAY.lock().unwrap();
     let mut has_enable = false;
     let mut has_disable = false;
-    for (_, cc) in conn_configs.iter() {
+    for (_, cc) in controlled_configs.iter() {
         match crate::get_control_permission(cc.control_permissions, permission) {
             Some(false) => has_disable = true,
             Some(true) => has_enable = true,
@@ -5634,30 +5638,30 @@ mod raii {
         }
     }
 
-    pub struct ConnectionConfigID {
+    pub struct ControlledConfigID {
         id: i32,
-        conn_config: Option<ControlledConfig>,
+        controlled_config: Option<ControlledConfig>,
     }
 
-    impl Drop for ConnectionConfigID {
+    impl Drop for ControlledConfigID {
         fn drop(&mut self) {
-            if self.conn_config.is_some() {
-                let mut lock = CONNECTION_CONFIG_ARRAY.lock().unwrap();
+            if self.controlled_config.is_some() {
+                let mut lock = CONTROLLED_CONFIG_ARRAY.lock().unwrap();
                 lock.retain(|(conn_id, _)| *conn_id != self.id);
             }
         }
     }
-    impl ConnectionConfigID {
-        pub fn new(id: i32, conn_config: &Option<ControlledConfig>) -> Self {
-            if let Some(s) = conn_config {
-                CONNECTION_CONFIG_ARRAY
+    impl ControlledConfigID {
+        pub fn new(id: i32, controlled_config: &Option<ControlledConfig>) -> Self {
+            if let Some(s) = controlled_config {
+                CONTROLLED_CONFIG_ARRAY
                     .lock()
                     .unwrap()
                     .push((id, s.clone()));
             }
             Self {
                 id,
-                conn_config: conn_config.clone(),
+                controlled_config: controlled_config.clone(),
             }
         }
     }
