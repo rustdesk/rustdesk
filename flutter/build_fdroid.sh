@@ -7,7 +7,7 @@
 #               2024, Vasyl Gello <vasek.gello@gmail.com>
 #
 
-# The script is invoked by F-Droid builder system ste-by-step.
+# The script is invoked by F-Droid builder system step-by-step.
 #
 # It accepts the following arguments:
 #
@@ -16,7 +16,6 @@
 # - Android architecture to build APK for: armeabi-v7a arm64-v8av x86 x86_64
 # - The build step to execute:
 #
-#   + sudo-deps: as root, install needed Debian packages into builder VM
 #   + prebuild: patch sources and do other stuff before the build
 #   + build: perform actual build of APK file
 #
@@ -184,13 +183,9 @@ prebuild)
 	fi
 
 	# Map NDK version to revision
-
-	NDK_VERSION="$(wget \
-		-qO- \
-		-H "Accept: application/vnd.github+json" \
-		-H "X-GitHub-Api-Version: 2022-11-28" \
-		'https://api.github.com/repos/android/ndk/releases' |
-		jq -r ".[] | select(.tag_name == \"${NDK_VERSION}\") | .body | match(\"ndkVersion \\\"(.*)\\\"\").captures[0].string")"
+	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json |
+		jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" |
+		sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
 
 	if [ -z "${NDK_VERSION}" ]; then
 		echo "ERROR: Can not map Android NDK codename to revision!" >&2
@@ -316,6 +311,18 @@ prebuild)
 	# `FLUTTER_BRIDGE_VERSION` an restore the pubspec later
 
 	if [ "${FLUTTER_VERSION}" != "${FLUTTER_BRIDGE_VERSION}" ]; then
+		# Find first libclang.so and set BRIDGE_LLVM_PATH
+
+		BRIDGE_LLVM_PATH="$(find /usr/lib/ -name libclang.so | head -n1)"
+
+		if [ -z "${BRIDGE_LLVM_PATH}" ]; then
+			echo 'ERROR: Can not find libclang.so for bridge generator!' >&2
+			exit 1
+		fi
+
+		BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
+		BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
+
 		# Install Flutter bridge version
 
 		prepare_flutter "${FLUTTER_BRIDGE_VERSION}" "${HOME}/flutter"
@@ -344,7 +351,8 @@ prebuild)
 
 		flutter_rust_bridge_codegen \
 			--rust-input ./src/flutter_ffi.rs \
-			--dart-output ./flutter/lib/generated_bridge.dart
+			--dart-output ./flutter/lib/generated_bridge.dart \
+			--llvm-path "${BRIDGE_LLVM_PATH}"
 
 		# Add bridge files to save-list
 
@@ -355,13 +363,15 @@ prebuild)
 		git checkout '*'
 		git clean -dffx
 		git reset
+
+		unset BRIDGE_LLVM_PATH
 	fi
 
 	# Install Flutter version for RustDesk library build
 
 	prepare_flutter "${FLUTTER_VERSION}" "${HOME}/flutter"
 
-	# gms is not in thoes files now, but we still keep the following line for future reference(maybe).
+	# gms is not in these files now, but we still keep the following line for future reference(maybe).
 
 	sed \
 		-i \
@@ -414,13 +424,9 @@ build)
 		.github/workflows/flutter-build.yml)"
 
 	# Map NDK version to revision
-
-	NDK_VERSION="$(wget \
-		-qO- \
-		-H "Accept: application/vnd.github+json" \
-		-H "X-GitHub-Api-Version: 2022-11-28" \
-		'https://api.github.com/repos/android/ndk/releases' |
-		jq -r ".[] | select(.tag_name == \"${NDK_VERSION}\") | .body | match(\"ndkVersion \\\"(.*)\\\"\").captures[0].string")"
+	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json |
+		jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" |
+		sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
 
 	if [ -z "${NDK_VERSION}" ]; then
 		echo "ERROR: Can not map Android NDK codename to revision!" >&2
