@@ -1693,8 +1693,8 @@ pub fn main_get_temporary_password() -> String {
     ui_interface::temporary_password()
 }
 
-pub fn main_get_permanent_password() -> String {
-    ui_interface::permanent_password()
+pub fn main_set_permanent_password_with_result(password: String) -> bool {
+    ui_interface::set_permanent_password_with_result(password)
 }
 
 pub fn main_get_fingerprint() -> String {
@@ -2072,10 +2072,6 @@ pub fn main_update_temporary_password() {
     update_temporary_password();
 }
 
-pub fn main_set_permanent_password(password: String) {
-    set_permanent_password(password);
-}
-
 pub fn main_check_super_user_permission() -> bool {
     check_super_user_permission()
 }
@@ -2423,16 +2419,23 @@ pub fn is_disable_installation() -> SyncReturn<bool> {
 }
 
 pub fn is_preset_password() -> bool {
-    config::HARD_SETTINGS
+    let hard = config::HARD_SETTINGS
         .read()
         .unwrap()
         .get("password")
-        .map_or(false, |p| {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            return p == &crate::ipc::get_permanent_password();
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            return p == &config::Config::get_permanent_password();
-        })
+        .cloned()
+        .unwrap_or_default();
+    if hard.is_empty() {
+        return false;
+    }
+
+    // On desktop, service owns the authoritative config; query it via IPC and return only a boolean.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::ipc::is_permanent_password_preset();
+
+    // On mobile, we have no service IPC; verify against local storage.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return config::Config::matches_permanent_password_plain(&hard);
 }
 
 // Don't call this function for desktop version.
@@ -2768,6 +2771,10 @@ pub fn main_get_common(key: String) -> String {
         return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();
         #[cfg(not(target_os = "linux"))]
         return false.to_string();
+    } else if key == "permanent-password-set" {
+        return ui_interface::is_permanent_password_set().to_string();
+    } else if key == "local-permanent-password-set" {
+        return ui_interface::is_local_permanent_password_set().to_string();
     } else {
         if key.starts_with("download-data-") {
             let id = key.replace("download-data-", "");

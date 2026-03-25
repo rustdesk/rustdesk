@@ -471,17 +471,6 @@ class ServerModel with ChangeNotifier {
     WakelockManager.disable(_wakelockKey);
   }
 
-  Future<bool> setPermanentPassword(String newPW) async {
-    await bind.mainSetPermanentPassword(password: newPW);
-    await Future.delayed(Duration(milliseconds: 500));
-    final pw = await bind.mainGetPermanentPassword();
-    if (newPW == pw) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
   fetchID() async {
     final id = await bind.mainGetMyId();
     if (id != _serverId.id) {
