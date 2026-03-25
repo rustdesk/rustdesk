@@ -523,7 +523,7 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
     fn get_current_session(rdp: BOOL) -> DWORD;
-    fn is_session_locked(include_rdp: BOOL) -> BOOL;
+    fn is_session_locked(session_id: DWORD) -> BOOL;
     fn LaunchProcessWin(
         cmd: *const u16,
         session_id: DWORD,
@@ -1149,20 +1149,21 @@ pub fn is_prelogin() -> bool {
 }
 
 pub fn is_locked() -> bool {
-    unsafe { is_session_locked(share_rdp()) == TRUE }
+    let Some(session_id) = get_current_process_session_id() else {
+        return false;
+    };
+    unsafe { is_session_locked(session_id) == TRUE }
 }
 
-// `is_logon_ui()` is regardless of multiple sessions now.
-// It only check if "LogonUI.exe" exists.
-//
-// If there're mulitple sessions (logged in users),
-// some are in the login screen, while the others are not.
-// Then this function may not work fine if the session we want to handle(connect) is not in the login screen.
-// But it's a rare case and cannot be simply handled, so it will not be dealt with for the time being.
 #[inline]
 pub fn is_logon_ui() -> ResultType<bool> {
+    let Some(current_sid) = get_current_process_session_id() else {
+        return Ok(false);
+    };
     let pids = get_pids("LogonUI.exe")?;
-    Ok(!pids.is_empty())
+    Ok(pids
+        .into_iter()
+        .any(|pid| get_session_id_of_process(pid) == Some(current_sid)))
 }
 
 pub fn is_root() -> bool {
