@@ -986,8 +986,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         ],
       ),
       content: ConstrainedBox(
-        constraints:
-            BoxConstraints(minWidth: showStatusTipOnMobile ? 540 : 500),
+        constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
