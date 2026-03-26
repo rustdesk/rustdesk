@@ -2377,8 +2377,9 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
       final password = uri.path.substring("/".length);
       if (password.isNotEmpty) {
         Timer(Duration(seconds: 1), () async {
-          await bind.mainSetPermanentPassword(password: password);
-          showToast(translate('Successful'));
+          final ok =
+              await bind.mainSetPermanentPasswordWithResult(password: password);
+          showToast(translate(ok ? 'Successful' : 'Failed'));
         });
       }
     }

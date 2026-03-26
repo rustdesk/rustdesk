@@ -1072,6 +1072,7 @@ class PasswordArea: Reactor.Component {
         var method = handler.get_option('verification-method');
         var approve_mode= handler.get_option('approve-mode');
         var show_password = approve_mode != 'click';
+        var has_local_password = handler.is_local_permanent_password_set();
         return <popup><menu.context #edit-password-context>
             <li #approve-mode-password><span>{svg_checkmark}</span>{translate('Accept sessions via password')}</li>
             <li #approve-mode-click><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
@@ -1082,6 +1083,7 @@ class PasswordArea: Reactor.Component {
             { !show_password ? '' : <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li> }
             { !show_password ? '' : <div .separator /> }
             { !show_password || disable_change_permanent_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
+            { !show_password || disable_change_permanent_password ? '' : <li #clear-password disabled={ has_local_password ? "false" : "true" }>{translate('Clear permanent password')}</li> }
             { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
             <div .separator />
             <li #tfa><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
@@ -1114,6 +1116,10 @@ class PasswordArea: Reactor.Component {
                     el.state.disabled = true;
                 }
             }
+            if (el.id == "clear-password") {
+                var has_local_password = handler.is_local_permanent_password_set();
+                el.state.disabled = !has_local_password;
+            }
             if (el.id == "tfa")
                 el.attributes.toggleClass("selected", has_valid_2fa);
         }
@@ -1129,16 +1135,28 @@ class PasswordArea: Reactor.Component {
 
     event click $(li#set-password) {
         var me = this;
-        var password = handler.permanent_password();
-        var value_field = password.length == 0 ? "" : "value=" + password;
+        var has_local_password = handler.is_local_permanent_password_set();
+        var permanent_password_set = handler.is_permanent_password_set();
+        var password_hidden_tip = translate('password-hidden-tip');
+        var preset_password_tip = translate('preset-password-in-use-tip');
+        var password_tip = "";
+        if (has_local_password) {
+            password_tip = "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + password_hidden_tip + "</div>";
+        } else if (permanent_password_set) {
+            password_tip = "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + preset_password_tip + "</div>";
+        }
         msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
-            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus " + value_field + " /></div> \
-            <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) " + value_field + " /></div> \
+            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
+            <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \
+            " + password_tip + " \
         </div> \
         ", "", function(res=null) {
             if (!res) return;
             var p0 = (res.password || "").trim();
             var p1 = (res.confirmation || "").trim();
+            if (p0.length == 0 && p1.length == 0) {
+                return " ";
+            }
             if (p0.length < 6 && p0.length != 0) {
                 return translate("Too short, at least 6 characters.");
             }
@@ -1148,6 +1166,15 @@ class PasswordArea: Reactor.Component {
             handler.set_permanent_password(p0);
             me.update();
         }, msgbox_default_height, get_msgbox_width());
+        self.timer(30ms, function() {
+            updateSetPasswordSubmitState();
+        });
+    }
+
+    event click $(li#clear-password) {
+        if (this.$(li#clear-password).state.disabled) return;
+        handler.set_permanent_password("");
+        this.update();
     }
 
     event click $(menu#edit-password-context>li) (_, me) {
@@ -1227,6 +1254,18 @@ function updatePasswordArea() {
 }
 if (!outgoing_only) updatePasswordArea();
 
+function updateSetPasswordSubmitState() {
+    var dialog = $(#msgbox);
+    if (!dialog) return;
+    var password = dialog.$(input[name='password']);
+    var confirmation = dialog.$(input[name='confirmation']);
+    var submit = dialog.$(button#submit);
+    if (!password || !confirmation || !submit) return;
+    var can_submit = (password.value || "").trim().length > 0 ||
+        (confirmation.value || "").trim().length > 0;
+    submit.state.disabled = !can_submit;
+}
+
 class ID: Reactor.Component {
     function render() {
         return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")}
@@ -1282,6 +1321,22 @@ event keydown (evt) {
             });
         }
     }
+}
+
+event keyup $(#msgbox input[name='password']) {
+    updateSetPasswordSubmitState();
+}
+
+event keyup $(#msgbox input[name='confirmation']) {
+    updateSetPasswordSubmitState();
+}
+
+event change $(#msgbox input[name='password']) {
+    updateSetPasswordSubmitState();
+}
+
+event change $(#msgbox input[name='confirmation']) {
+    updateSetPasswordSubmitState();
 }
 
 $(body).content(<div style="size:*"><App /><div #msgbox /></div>);
