@@ -56,7 +56,7 @@ cfg-if = "1.0"
 lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
-parity-tokio-ipc = { git = "https://github.com/rustdesk-org/parity-tokio-ipc" }
+parity-tokio-ipc = { git = "https://github.com/fufesou/parity-tokio-ipc", "branch" = "feat/conn_as_raw_fd" }
 magnum-opus = { git = "https://github.com/rustdesk-org/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }

@@ -594,25 +594,18 @@ pub mod client {
                     }
                 }
                 #[cfg(not(feature = "flutter"))]
-                match hbb_common::directories_next::UserDirs::new() {
-                    Some(user_dir) => {
-                        let dir = user_dir
-                            .home_dir()
-                            .join("AppData")
-                            .join("Local")
-                            .join("rustdesk-sciter");
-                        if std::fs::create_dir_all(&dir).is_ok() {
-                            let dst = dir.join("rustdesk.exe");
-                            if std::fs::copy(&exe, &dst).is_ok() {
-                                if dst.exists() {
-                                    if set_path_permission(&dir, "RX").is_ok() {
-                                        exe = dst.to_string_lossy().to_string();
-                                    }
+                if let Some((dir, dst)) =
+                    crate::platform::windows::portable_service_logon_helper_paths()
+                {
+                    if std::fs::create_dir_all(&dir).is_ok() {
+                        if std::fs::copy(&exe, &dst).is_ok() {
+                            if dst.exists() {
+                                if set_path_permission(&dir, "RX").is_ok() {
+                                    exe = dst.to_string_lossy().to_string();
                                 }
                             }
                         }
                     }
-                    None => {}
                 }
                 if let Err(e) = crate::platform::windows::create_process_with_logon(
                     username.as_str(),
@@ -764,6 +757,37 @@ pub mod client {
         tx
     }
 
+    #[inline]
+    fn authorize_portable_service_ipc_connection(stream: &Connection, postfix: &str) -> bool {
+        // Portable service IPC policy: allow same-session non-SYSTEM helpers,
+        // reject SYSTEM or cross-session peers, and require the peer executable
+        // path to match the current binary.
+        let expected_session_id = crate::platform::windows::get_current_process_session_id();
+        let (authorized, peer_pid, peer_session_id, peer_is_system) =
+            stream.portable_service_authorization_status_for_session(expected_session_id);
+        if !authorized {
+            log::warn!(
+                "Rejected unauthorized connection on portable service ipc channel: postfix={}, peer_pid={:?}, peer_session_id={:?}, expected_session_id={:?}, peer_is_system={:?}",
+                postfix,
+                peer_pid,
+                peer_session_id,
+                expected_session_id,
+                peer_is_system
+            );
+            return false;
+        }
+        if let Err(err) = stream.ensure_peer_executable_path_matches_current(postfix) {
+            log::warn!(
+                "Rejected unauthorized connection on portable service ipc channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
+                postfix,
+                peer_pid,
+                err
+            );
+            return false;
+        }
+        true
+    }
+
     #[tokio::main(flavor = "current_thread")]
     async fn start_ipc_server_async(rx: mpsc::UnboundedReceiver<Data>) {
         use DataPortableService::*;
@@ -778,10 +802,15 @@ pub mod client {
                         Some(result) = incoming.next() => {
                             match result {
                                 Ok(stream) => {
+                                    let stream = Connection::new(stream);
+                                    if !authorize_portable_service_ipc_connection(&stream, postfix)
+                                    {
+                                        continue;
+                                    }
                                     log::info!("Got portable service ipc connection");
                                     let rx_clone = rx.clone();
                                     tokio::spawn(async move {
-                                        let mut stream = Connection::new(stream);
+                                        let mut stream = stream;
                                         let postfix = postfix.to_owned();
                                         let mut timer = crate::rustdesk_interval(tokio::time::interval(Duration::from_secs(1)));
                                         let mut nack = 0;
