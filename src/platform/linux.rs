@@ -29,6 +29,12 @@ use wallpaper;
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
+#[derive(Clone, Debug)]
+struct ActiveUserLookupCache {
+    uid: String,
+    username: String,
+}
+
 const INVALID_TERM_VALUES: [&str; 3] = ["", "unknown", "dumb"];
 const SHELL_PROCESSES: [&str; 4] = ["bash", "zsh", "fish", "sh"];
 
@@ -50,6 +56,8 @@ lazy_static::lazy_static! {
             }
         }
     };
+    static ref ACTIVE_USER_LOOKUP_CACHE: std::sync::Mutex<Option<ActiveUserLookupCache>> =
+        std::sync::Mutex::new(None);
     // https://github.com/rustdesk/rustdesk/issues/13705
     // Check if `sudo -E` actually preserves environment.
     //
@@ -80,6 +88,27 @@ lazy_static::lazy_static! {
                 .unwrap_or(false)
         }
     };
+}
+
+#[inline]
+fn update_active_user_lookup_cache(desktop: &Desktop) {
+    if let Ok(mut cache) = ACTIVE_USER_LOOKUP_CACHE.lock() {
+        if desktop.uid.is_empty() || desktop.username.is_empty() {
+            *cache = None;
+        } else {
+            *cache = Some(ActiveUserLookupCache {
+                uid: desktop.uid.clone(),
+                username: desktop.username.clone(),
+            });
+        }
+    }
+}
+
+#[inline]
+fn get_active_user_id_name_from_cache() -> Option<(String, String)> {
+    let cache = ACTIVE_USER_LOOKUP_CACHE.lock().ok()?;
+    let entry = cache.as_ref()?;
+    Some((entry.uid.clone(), entry.username.clone()))
 }
 
 thread_local! {
@@ -722,6 +751,7 @@ pub fn start_os_service() {
     let mut last_restart = Instant::now();
     while running.load(Ordering::SeqCst) {
         desktop.refresh();
+        update_active_user_lookup_cache(&desktop);
 
         // Duplicate logic here with should_start_server
         // Login wayland will try to start a headless --server.
@@ -794,13 +824,23 @@ pub fn start_os_service() {
 }
 
 #[inline]
+/// Returns the cached active `(uid, username)` snapshot when available.
+/// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
 pub fn get_active_user_id_name() -> (String, String) {
+    if let Some(id_name) = get_active_user_id_name_from_cache() {
+        return id_name;
+    }
     let vec_id_name = get_values_of_seat0(&[1, 2]);
     (vec_id_name[0].clone(), vec_id_name[1].clone())
 }
 
 #[inline]
+/// Returns the cached active uid when available.
+/// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
 pub fn get_active_userid() -> String {
+    if let Some((uid, _)) = get_active_user_id_name_from_cache() {
+        return uid;
+    }
     get_values_of_seat0(&[1])[0].clone()
 }
 
@@ -855,7 +895,12 @@ fn _get_display_manager() -> String {
 }
 
 #[inline]
+/// Returns the cached active username when available.
+/// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
 pub fn get_active_username() -> String {
+    if let Some((_, username)) = get_active_user_id_name_from_cache() {
+        return username;
+    }
     get_values_of_seat0(&[2])[0].clone()
 }
 

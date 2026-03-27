@@ -1,33 +1,28 @@
-use crate::{
-    common::CheckTestNatType,
-    privacy_mode::PrivacyModeState,
-    ui_interface::{get_local_option, set_local_option},
-};
-use bytes::Bytes;
-use parity_tokio_ipc::{
-    Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
-};
-use serde_derive::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicBool, Ordering},
-};
-#[cfg(not(windows))]
-use std::{fs::File, io::prelude::*};
+#[path = "ipc/auth.rs"]
+mod ipc_auth;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "ipc/fs.rs"]
+mod ipc_fs;
 
 #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::plugin::ipc::Plugin;
+use crate::{
+    common::{is_server, CheckTestNatType},
+    privacy_mode,
+    privacy_mode::PrivacyModeState,
+    rendezvous_mediator::RendezvousMediator,
+    ui_interface::{get_local_option, set_local_option},
+};
+use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use clipboard::ClipboardFile;
+#[cfg(target_os = "linux")]
+use hbb_common::anyhow;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
-    config::{
-        self,
-        keys::{self, OPTION_ALLOW_WEBSOCKET},
-        Config, Config2,
-    },
+    config::{self, keys::OPTION_ALLOW_WEBSOCKET, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
     log, password_security as password, timeout,
@@ -38,12 +33,49 @@ use hbb_common::{
     tokio_util::codec::Framed,
     ResultType,
 };
-
-use crate::{common::is_server, privacy_mode, rendezvous_mediator::RendezvousMediator};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use ipc_auth::authorize_service_scoped_ipc_connection;
+#[cfg(windows)]
+pub(crate) use ipc_auth::authorize_windows_portable_service_ipc_connection;
+#[cfg(windows)]
+pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
+#[cfg(target_os = "linux")]
+pub(crate) use ipc_auth::{
+    active_uid, ensure_peer_executable_matches_current_by_fd, is_allowed_service_peer_uid,
+    log_rejected_uinput_connection, peer_uid_from_fd,
+};
+#[cfg(windows)]
+use ipc_auth::{
+    authorize_windows_main_ipc_connection, portable_service_listener_security_attributes,
+    should_allow_everyone_create_on_windows,
+};
+#[cfg(target_os = "linux")]
+use ipc_fs::terminal_count_candidate_uids;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use ipc_fs::{
+    check_pid, ensure_secure_ipc_parent_dir, scrub_secure_ipc_parent_dir,
+    should_scrub_parent_entries_after_check_pid, write_pid,
+};
+use parity_tokio_ipc::{
+    Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
+};
+use serde_derive::{Deserialize, Serialize};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::os::unix::fs::PermissionsExt;
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 // IPC actions here.
 pub const IPC_ACTION_CLOSE: &str = "close";
+const PORTABLE_SERVICE_IPC_HANDSHAKE_TIMEOUT_MS: u64 = 3_000;
 pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
+
+#[inline]
+pub async fn connect_service(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnClient>> {
+    connect(ms_timeout, crate::POSTFIX_SERVICE).await
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -207,6 +239,8 @@ pub enum DataControl {
 pub enum DataPortableService {
     Ping,
     Pong,
+    AuthToken(String),
+    AuthResult(bool),
     ConnCount(Option<usize>),
     Mouse((Vec<u8>, i32, String, u32, bool, bool)),
     Pointer((Vec<u8>, i32)),
@@ -403,6 +437,22 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                 Ok(stream) => {
                     let mut stream = Connection::new(stream);
                     let postfix = postfix.to_owned();
+                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    if config::is_service_ipc_postfix(&postfix) {
+                        if !authorize_service_scoped_ipc_connection(&stream, &postfix) {
+                            continue;
+                        }
+                    }
+                    #[cfg(windows)]
+                    if postfix.is_empty() {
+                        // Windows main IPC (`postfix == ""`) is authorized here.
+                        // Other security-sensitive channels use dedicated authorization paths:
+                        // - `_portable_service`: portable-service listener + handshake policy
+                        // - service-scoped postfixes: service-specific listener/authorization
+                        if !authorize_windows_main_ipc_connection(&stream, &postfix) {
+                            continue;
+                        }
+                    }
                     tokio::spawn(async move {
                         loop {
                             match stream.next().await {
@@ -411,9 +461,50 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     break;
                                 }
                                 Ok(Some(data)) => {
+                                    // On Linux/macOS, the protected `_service` channel is used only for
+                                    // syncing config between root service and the active user process.
+                                    //
+                                    // NOTE: `is_service_ipc_postfix()` also includes `_uinput_*`, but those
+                                    // channels are handled by the dedicated uinput listener/protocol in
+                                    // `src/server/uinput.rs` and therefore do not share this Data enum
+                                    // allowlist. The SyncConfig allowlist here is intentionally scoped to the
+                                    // `_service` channel only.
+                                    //
+                                    // Keep this explicit branch to avoid policy drift between `_service` and
+                                    // uinput IPC paths while still minimizing exposed message surface here.
+                                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                                    if postfix == crate::POSTFIX_SERVICE {
+                                        if matches!(&data, Data::SyncConfig(_)) {
+                                            handle(data, &mut stream).await;
+                                        } else {
+                                            log::warn!(
+                                                "Rejected non-sync data on protected _service IPC channel: postfix={}, data_kind={:?}, peer_uid={:?}",
+                                                postfix,
+                                                std::mem::discriminant(&data),
+                                                stream.peer_uid()
+                                            );
+                                            // Close the connection to avoid keeping a protected channel
+                                            // alive while repeatedly receiving invalid traffic.
+                                            break;
+                                        }
+                                        continue;
+                                    }
                                     handle(data, &mut stream).await;
                                 }
-                                _ => {}
+                                Ok(None) => {
+                                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                                    {
+                                        if postfix == crate::POSTFIX_SERVICE {
+                                            log::warn!(
+                                                "======================= Rejected malformed data on protected _service IPC channel: postfix={}, peer_uid={:?}, peer_pid={:?}",
+                                                postfix,
+                                                stream.peer_uid(),
+                                                stream.peer_pid()
+                                            );
+                                            break;
+                                        }
+                                    }
+                                }
                             }
                         }
                     });
@@ -428,20 +519,77 @@ pub async fn start(postfix: &str) -> ResultType<()> {
 
 pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
     let path = Config::ipc_path(postfix);
-    #[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
-    check_pid(postfix).await;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let should_scrub_parent_entries = ensure_secure_ipc_parent_dir(&path, postfix)?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let existing_listener_alive = check_pid(postfix).await;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if should_scrub_parent_entries_after_check_pid(
+        should_scrub_parent_entries,
+        existing_listener_alive,
+    ) {
+        scrub_secure_ipc_parent_dir(&path, postfix)?;
+    }
     let mut endpoint = Endpoint::new(path.clone());
-    match SecurityAttributes::allow_everyone_create() {
+    let security_attrs = {
+        #[cfg(windows)]
+        {
+            if postfix == "_portable_service" {
+                portable_service_listener_security_attributes()
+            } else if should_allow_everyone_create_on_windows(postfix) {
+                SecurityAttributes::allow_everyone_create()
+            } else {
+                Ok(SecurityAttributes::empty())
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            SecurityAttributes::allow_everyone_create()
+        }
+    };
+    match security_attrs {
         Ok(attr) => endpoint.set_security_attributes(attr),
-        Err(err) => log::error!("Failed to set ipc{} security: {}", postfix, err),
+        Err(err) => {
+            log::error!("Failed to set ipc{} security: {}", postfix, err);
+            #[cfg(windows)]
+            if postfix == "_portable_service" {
+                // Fail closed for `_portable_service` when SDDL construction fails.
+                // This endpoint is security-critical and must not start with default ACLs.
+                return Err(err.into());
+            }
+        }
     };
     match endpoint.incoming() {
         Ok(incoming) => {
-            log::info!("Started ipc{} server at path: {}", postfix, &path);
-            #[cfg(not(windows))]
+            if postfix == crate::POSTFIX_SERVICE {
+                log::info!("Started protected ipc service server: postfix={}", postfix);
+            } else {
+                log::info!("Started ipc{} server at path: {}", postfix, &path);
+            }
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o0777)).ok();
+                // NOTE: On Linux/macOS, some IPC sockets are intentionally world-connectable
+                // (0666) so the active (non-root) user process can connect. Authorization is
+                // enforced at accept-time for these channels, and the protected `_service`
+                // channel is further restricted by an explicit message allowlist (SyncConfig
+                // only).
+                let socket_mode = if config::is_service_ipc_postfix(postfix) {
+                    0o0666
+                } else {
+                    0o0600
+                };
+                if let Err(err) =
+                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(socket_mode))
+                {
+                    log::error!(
+                        "Failed to set permissions on ipc{} socket at path {}: {}",
+                        postfix,
+                        &path,
+                        err
+                    );
+                    std::fs::remove_file(&path).ok();
+                    return Err(err.into());
+                }
                 write_pid(postfix);
             }
             Ok(incoming)
@@ -930,13 +1078,91 @@ async fn handle(data: Data, stream: &mut Connection) {
             );
         }
         _ => {}
-    }
+    };
 }
 
 pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmpl<ConnClient>> {
     let path = Config::ipc_path(postfix);
-    let client = timeout(ms_timeout, Endpoint::connect(&path)).await??;
+    connect_with_path(ms_timeout, &path).await
+}
+
+#[inline]
+pub(crate) fn generate_one_time_ipc_token() -> String {
+    use std::fmt::Write as _;
+
+    let mut token = String::with_capacity(64);
+    for _ in 0..4 {
+        let _ = write!(token, "{:016x}", hbb_common::rand::random::<u64>());
+    }
+    token
+}
+
+pub(crate) async fn portable_service_ipc_handshake_as_client<T>(
+    stream: &mut ConnectionTmpl<T>,
+    token: &str,
+) -> ResultType<()>
+where
+    T: AsyncRead + AsyncWrite + std::marker::Unpin,
+{
+    stream
+        .send(&Data::DataPortableService(DataPortableService::AuthToken(
+            token.to_owned(),
+        )))
+        .await?;
+    match stream
+        .next_timeout(PORTABLE_SERVICE_IPC_HANDSHAKE_TIMEOUT_MS)
+        .await?
+    {
+        Some(Data::DataPortableService(DataPortableService::AuthResult(true))) => Ok(()),
+        Some(Data::DataPortableService(DataPortableService::AuthResult(false))) => {
+            bail!("portable service ipc handshake was rejected by server")
+        }
+        Some(_) | None => bail!("portable service ipc handshake returned an unexpected response"),
+    }
+}
+
+pub(crate) async fn portable_service_ipc_handshake_as_server<T, F>(
+    stream: &mut ConnectionTmpl<T>,
+    mut validate_token: F,
+) -> ResultType<()>
+where
+    T: AsyncRead + AsyncWrite + std::marker::Unpin,
+    F: FnMut(&str) -> bool,
+{
+    let authorized = match stream
+        .next_timeout(PORTABLE_SERVICE_IPC_HANDSHAKE_TIMEOUT_MS)
+        .await?
+    {
+        Some(Data::DataPortableService(DataPortableService::AuthToken(token))) => {
+            validate_token(&token)
+        }
+        Some(_) | None => false,
+    };
+    stream
+        .send(&Data::DataPortableService(DataPortableService::AuthResult(
+            authorized,
+        )))
+        .await?;
+    if !authorized {
+        bail!("portable service ipc handshake failed")
+    }
+    Ok(())
+}
+
+#[inline]
+async fn connect_with_path(ms_timeout: u64, path: &str) -> ResultType<ConnectionTmpl<ConnClient>> {
+    let client = timeout(ms_timeout, Endpoint::connect(path)).await??;
     Ok(ConnectionTmpl::new(client))
+}
+
+#[cfg(target_os = "linux")]
+pub async fn connect_for_uid(
+    ms_timeout: u64,
+    uid: u32,
+    postfix: &str,
+) -> ResultType<ConnectionTmpl<ConnClient>> {
+    let path = Config::ipc_path_for_uid(uid, postfix);
+    connect_with_path(ms_timeout, &path).await
 }
 
 #[cfg(target_os = "linux")]
@@ -1013,54 +1239,6 @@ pub async fn start_pa() {
         Err(err) => {
             log::error!("Failed to start pa ipc server: {}", err);
         }
-    }
-}
-
-#[inline]
-#[cfg(not(windows))]
-fn get_pid_file(postfix: &str) -> String {
-    let path = Config::ipc_path(postfix);
-    format!("{}.pid", path)
-}
-
-#[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
-async fn check_pid(postfix: &str) {
-    let pid_file = get_pid_file(postfix);
-    if let Ok(mut file) = File::open(&pid_file) {
-        let mut content = String::new();
-        file.read_to_string(&mut content).ok();
-        let pid = content.parse::<usize>().unwrap_or(0);
-        if pid > 0 {
-            use hbb_common::sysinfo::System;
-            let mut sys = System::new();
-            sys.refresh_processes();
-            if let Some(p) = sys.process(pid.into()) {
-                if let Some(current) = sys.process((std::process::id() as usize).into()) {
-                    if current.name() == p.name() {
-                        // double check with connect
-                        if connect(1000, postfix).await.is_ok() {
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // if not remove old ipc file, the new ipc creation will fail
-    // if we remove a ipc file, but the old ipc process is still running,
-    // new connection to the ipc will connect to new ipc, old connection to old ipc still keep alive
-    std::fs::remove_file(&Config::ipc_path(postfix)).ok();
-}
-
-#[inline]
-#[cfg(not(windows))]
-fn write_pid(postfix: &str) {
-    let path = get_pid_file(postfix);
-    if let Ok(mut file) = File::create(&path) {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o0777)).ok();
-        file.write_all(&std::process::id().to_string().into_bytes())
-            .ok();
     }
 }
 
@@ -1527,9 +1705,10 @@ pub fn close_all_instances() -> ResultType<bool> {
     }
 }
 
+#[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
 pub async fn connect_to_user_session(usid: Option<u32>) -> ResultType<()> {
-    let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
+    let mut stream = crate::ipc::connect_service(1000).await?;
     timeout(1000, stream.send(&crate::ipc::Data::UserSid(usid))).await??;
     Ok(())
 }
@@ -1655,13 +1834,76 @@ pub async fn update_controlling_session_count(count: usize) -> ResultType<()> {
 #[cfg(target_os = "linux")]
 #[tokio::main(flavor = "current_thread")]
 pub async fn get_terminal_session_count() -> ResultType<usize> {
-    let ms_timeout = 1_000;
-    let mut c = connect(ms_timeout, "").await?;
-    c.send(&Data::TerminalSessionCount(0)).await?;
-    if let Some(Data::TerminalSessionCount(c)) = c.next_timeout(ms_timeout).await? {
-        return Ok(c);
+    let timeout_ms = 1_000;
+    let effective_uid = unsafe { hbb_common::libc::geteuid() as u32 };
+    let candidate_uids = terminal_count_candidate_uids(effective_uid);
+    let mut last_err: Option<anyhow::Error> = None;
+    for candidate_uid in candidate_uids {
+        let socket_path = Config::ipc_path_for_uid(candidate_uid, "");
+        let connect_result = timeout(timeout_ms, Endpoint::connect(&socket_path))
+            .await
+            .map_err(|err| {
+                anyhow::anyhow!(
+                    "Timeout connecting to terminal ipc at {}: {}",
+                    socket_path,
+                    err
+                )
+            });
+        let connection = match connect_result {
+            Ok(Ok(connection)) => connection,
+            Ok(Err(err)) => {
+                last_err = Some(anyhow::anyhow!(
+                    "Failed to connect to terminal ipc at {}: {}",
+                    socket_path,
+                    err
+                ));
+                continue;
+            }
+            Err(err) => {
+                last_err = Some(err);
+                continue;
+            }
+        };
+        let mut ipc_conn = ConnectionTmpl::new(connection);
+        if let Err(err) = ipc_conn.send(&Data::TerminalSessionCount(0)).await {
+            last_err = Some(anyhow::anyhow!(
+                "Failed to request terminal session count via ipc at {}: {}",
+                socket_path,
+                err
+            ));
+            continue;
+        }
+        match ipc_conn.next_timeout(timeout_ms).await {
+            Ok(Some(Data::TerminalSessionCount(session_count))) => {
+                return Ok(session_count);
+            }
+            Ok(None) => {
+                last_err = Some(anyhow::anyhow!(
+                    "Invalid response when requesting terminal session count via ipc at {}",
+                    socket_path
+                ));
+            }
+            Ok(other) => {
+                last_err = Some(anyhow::anyhow!(
+                    "Unexpected response when requesting terminal session count via ipc at {}: {:?}",
+                    socket_path,
+                    other.map(|v| std::mem::discriminant(&v))
+                ));
+            }
+            Err(err) => {
+                last_err = Some(anyhow::anyhow!(
+                    "Failed to read terminal session count via ipc at {}: {}",
+                    socket_path,
+                    err
+                ));
+            }
+        }
     }
-    Ok(0)
+    if let Some(err) = last_err {
+        Err(err.into())
+    } else {
+        Ok(0)
+    }
 }
 
 async fn handle_wayland_screencast_restore_token(
@@ -1692,9 +1934,30 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 #[cfg(test)]
 mod test {
     use super::*;
+
     #[test]
     fn verify_ffi_enum_data_size() {
         println!("{}", std::mem::size_of::<Data>());
         assert!(std::mem::size_of::<Data>() <= 120);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_ipc_path_differs_by_uid_for_cm() {
+        let effective_uid = unsafe { hbb_common::libc::geteuid() as u32 };
+        let other_uid = effective_uid.saturating_add(1);
+        let postfix = "_cm";
+
+        // Default connect path targets the current effective uid.
+        assert_eq!(
+            Config::ipc_path(postfix),
+            Config::ipc_path_for_uid(effective_uid, postfix)
+        );
+        // A different uid yields a different socket path - this is the root cause of the
+        // cross-user regression when root spawns a user process but still connects as uid 0.
+        assert_ne!(
+            Config::ipc_path(postfix),
+            Config::ipc_path_for_uid(other_uid, postfix)
+        );
     }
 }

@@ -73,9 +73,19 @@ use winapi::{
 };
 use windows::Win32::{
     Foundation::{CloseHandle as WinCloseHandle, HANDLE as WinHANDLE},
+    Security::{
+        GetLengthSid as WinGetLengthSid, GetTokenInformation as WinGetTokenInformation,
+        IsWellKnownSid, TokenUser, WinLocalSystemSid, TOKEN_QUERY as WIN_TOKEN_QUERY, TOKEN_USER,
+    },
     System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
         TH32CS_SNAPPROCESS,
+    },
+    System::Threading::{
+        GetCurrentProcess as WinGetCurrentProcess, OpenProcess as WinOpenProcess,
+        OpenProcessToken as WinOpenProcessToken,
+        QueryFullProcessImageNameW as WinQueryFullProcessImageNameW,
+        PROCESS_QUERY_LIMITED_INFORMATION as WIN_PROCESS_QUERY_LIMITED_INFORMATION,
     },
 };
 use windows_service::{
@@ -565,6 +575,53 @@ pub fn get_current_session_id(share_rdp: bool) -> DWORD {
     unsafe { get_current_session(if share_rdp { TRUE } else { FALSE }) }
 }
 
+#[inline]
+fn resolve_expected_active_session_id_for_service(session_id: u32) -> Option<u32> {
+    let share_rdp_enabled = is_share_rdp();
+    if get_available_sessions(false)
+        .iter()
+        .any(|e| e.sid == session_id)
+    {
+        return Some(session_id);
+    }
+    let current_active_session =
+        unsafe { get_current_session(if share_rdp_enabled { TRUE } else { FALSE }) };
+    if current_active_session == u32::MAX {
+        None
+    } else {
+        Some(current_active_session)
+    }
+}
+
+#[inline]
+fn authorize_service_scoped_ipc_connection(
+    stream: &ipc::Connection,
+    expected_active_session_id: Option<u32>,
+) -> bool {
+    let (authorized, peer_pid, peer_session_id, peer_is_system) =
+        stream.service_authorization_status_for_session(expected_active_session_id);
+    if !authorized {
+        ipc::log_rejected_windows_ipc_connection(
+            crate::POSTFIX_SERVICE,
+            peer_pid,
+            peer_session_id,
+            expected_active_session_id,
+            peer_is_system,
+        );
+        return false;
+    }
+    if let Err(err) = stream.ensure_peer_executable_path_matches_current(crate::POSTFIX_SERVICE) {
+        log::warn!(
+                "Rejected unauthorized connection on protected service-scoped IPC channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
+                crate::POSTFIX_SERVICE,
+                peer_pid,
+                err
+            );
+        return false;
+    }
+    true
+}
+
 extern "system" {
     fn BlockInput(v: BOOL) -> BOOL;
 }
@@ -631,6 +688,15 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
             Ok(res) => match res {
                 Some(Ok(stream)) => {
                     let mut stream = ipc::Connection::new(stream);
+                    // Keep IPC authorization consistent with the session we are currently serving.
+                    // Recompute expected session right before authorization to avoid using a stale
+                    // session_id after awaiting incoming.next().
+                    let expected_active_session_id =
+                        resolve_expected_active_session_id_for_service(session_id);
+                    if !authorize_service_scoped_ipc_connection(&stream, expected_active_session_id)
+                    {
+                        continue;
+                    }
                     if let Ok(Some(data)) = stream.next_timeout(1000).await {
                         match data {
                             ipc::Data::Close => {
@@ -1139,6 +1205,19 @@ pub fn get_active_user_home() -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(not(feature = "flutter"))]
+#[inline]
+pub fn portable_service_logon_helper_paths() -> Option<(PathBuf, PathBuf)> {
+    let user_dir = hbb_common::directories_next::UserDirs::new()?;
+    let dir = user_dir
+        .home_dir()
+        .join("AppData")
+        .join("Local")
+        .join("rustdesk-sciter");
+    let dst = dir.join("rustdesk.exe");
+    Some((dir, dst))
 }
 
 pub fn is_prelogin() -> bool {
@@ -2319,16 +2398,32 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
         is_run_as_system,
         crate::username(),
     );
-    let arg_elevate = if is_setup {
+    let mut arg_elevate = if is_setup {
         "--noinstall --elevate"
     } else {
         "--elevate"
-    };
-    let arg_run_as_system = if is_setup {
+    }
+    .to_owned();
+    let mut arg_run_as_system = if is_setup {
         "--noinstall --run-as-system"
     } else {
         "--run-as-system"
-    };
+    }
+    .to_owned();
+    let shmem_name_from_args = crate::portable_service::portable_service_shmem_name_from_args();
+    if shmem_name_from_args.is_none() && crate::portable_service::has_portable_service_shmem_arg() {
+        log::error!("Invalid portable service shared memory argument, aborting elevation flow");
+        // Bubble this up as a Result or status flag so the callers can stop the shutdown path
+        // and surface the failure instead of exiting silently.
+        std::process::exit(1);
+    }
+    if let Some(shmem_name) = shmem_name_from_args {
+        let shmem_arg = crate::portable_service::portable_service_shmem_arg(&shmem_name);
+        arg_elevate.push(' ');
+        arg_elevate.push_str(&shmem_arg);
+        arg_run_as_system.push(' ');
+        arg_run_as_system.push_str(&shmem_arg);
+    }
     if is_root() {
         if is_run_as_system {
             log::info!("run portable service");
@@ -2339,7 +2434,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
             Ok(elevated) => {
                 if elevated {
                     if !is_run_as_system {
-                        if run_as_system(arg_run_as_system).is_ok() {
+                        if run_as_system(arg_run_as_system.as_str()).is_ok() {
                             std::process::exit(0);
                         } else {
                             log::error!(
@@ -2350,7 +2445,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                     }
                 } else {
                     if !is_elevate {
-                        if let Ok(true) = elevate(arg_elevate) {
+                        if let Ok(true) = elevate(arg_elevate.as_str()) {
                             std::process::exit(0);
                         } else {
                             log::error!("Failed to elevate, error {}", io::Error::last_os_error());
@@ -2405,6 +2500,116 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
         }
 
         Ok(token_elevation.TokenIsElevated != 0)
+    }
+}
+
+/// Similar to `is_root()` / `is_local_system()` but for an arbitrary process.
+///
+/// Returns `true` if the target process is running as LocalSystem (SID: S-1-5-18).
+///
+/// TODO: After a few releases of real-world validation, consider replacing
+/// the legacy `is_local_system()` with this implementation.
+pub fn is_process_running_as_system(process_id: DWORD) -> ResultType<bool> {
+    unsafe {
+        let process = WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, process_id)
+            .map_err(|e| anyhow!("Failed to open process {}: {}", process_id, e))?;
+
+        let mut token = WinHANDLE::default();
+        let result = (|| -> ResultType<bool> {
+            WinOpenProcessToken(process, WIN_TOKEN_QUERY, &mut token)
+                .map_err(|e| anyhow!("Failed to open process {} token: {}", process_id, e))?;
+
+            let mut token_user_size = 0u32;
+            let get_info_result =
+                WinGetTokenInformation(token, TokenUser, None, 0, &mut token_user_size);
+            match get_info_result {
+                Ok(()) => {
+                    if token_user_size == 0 {
+                        bail!(
+                            "Failed to get process {} token user size: unexpected zero buffer size",
+                            process_id
+                        );
+                    }
+                }
+                Err(e) => {
+                    // Allow the expected ERROR_INSUFFICIENT_BUFFER path where token_user_size
+                    // is set to the required size.
+                    let is_insufficient_buffer = e.code()
+                        == windows::core::HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER as u32);
+                    // Some Windows versions may return ERROR_BAD_LENGTH for size-probe calls while
+                    // still setting the required size.
+                    let is_bad_length =
+                        e.code() == windows::core::HRESULT::from_win32(ERROR_BAD_LENGTH as u32);
+                    if (!is_insufficient_buffer && !is_bad_length) || token_user_size == 0 {
+                        bail!(
+                            "Failed to get process {} token user size: {}",
+                            process_id,
+                            e
+                        );
+                    }
+                }
+            }
+
+            let mut buffer = vec![0u8; token_user_size as usize];
+            WinGetTokenInformation(
+                token,
+                TokenUser,
+                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+                token_user_size,
+                &mut token_user_size,
+            )
+            .map_err(|e| anyhow!("Failed to get process {} token user: {}", process_id, e))?;
+
+            let min_size = std::mem::size_of::<TOKEN_USER>();
+            if buffer.len() < min_size {
+                bail!(
+                    "Failed to parse process {} token user: buffer too small (got {}, need >= {})",
+                    process_id,
+                    buffer.len(),
+                    min_size
+                );
+            }
+            let token_user: TOKEN_USER =
+                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
+            Ok(IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool())
+        })();
+
+        if !token.is_invalid() {
+            let _ = WinCloseHandle(token);
+        }
+        let _ = WinCloseHandle(process);
+        result
+    }
+}
+
+pub fn get_process_executable_path(process_id: DWORD) -> ResultType<PathBuf> {
+    const PROCESS_IMAGE_PATH_BUFFER_LEN: usize = 32 * 1024;
+    unsafe {
+        let process = WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, process_id)
+            .map_err(|e| anyhow!("Failed to open process {}: {}", process_id, e))?;
+
+        let result = (|| -> ResultType<PathBuf> {
+            let mut buffer = vec![0u16; PROCESS_IMAGE_PATH_BUFFER_LEN];
+            let mut length = PROCESS_IMAGE_PATH_BUFFER_LEN as u32;
+            WinQueryFullProcessImageNameW(
+                process,
+                windows::Win32::System::Threading::PROCESS_NAME_FORMAT(0),
+                windows::core::PWSTR(buffer.as_mut_ptr()),
+                &mut length,
+            )
+            .map_err(|e| anyhow!("Failed to query process {} image path: {}", process_id, e))?;
+            if length == 0 {
+                bail!(
+                    "Failed to query process {} image path: empty result",
+                    process_id
+                );
+            }
+            buffer.truncate(length as usize);
+            Ok(PathBuf::from(OsString::from_wide(&buffer)))
+        })();
+
+        let _ = WinCloseHandle(process);
+        result
     }
 }
 
@@ -2700,14 +2905,286 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
     return Ok(());
 }
 
+/// Grants `Everyone` on `dir` recursively for helper/runtime files that must be readable/executable
+/// across user contexts.
+///
+/// `permission` is an icacls permission token (for example `RX`).
+/// `(OI)(CI)` means inherit to files/containers under `dir`.
+///
+/// Reference:
+/// - icacls command and ACE flags: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls
 pub fn set_path_permission(dir: &Path, permission: &str) -> ResultType<()> {
-    std::process::Command::new("icacls")
+    let output = hidden_icacls_command()
         .arg(dir.as_os_str())
         .arg("/grant")
         .arg(format!("*S-1-1-0:(OI)(CI){}", permission))
+        .arg("/Q")
         .arg("/T")
-        .spawn()?;
+        .output()?;
+    if !output.status.success() {
+        bail!(
+            "Failed to set ACL for '{}': exit={:?}, stdout='{}', stderr='{}'",
+            dir.display(),
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     Ok(())
+}
+
+/// Returns the current process user SID as a standard SID string
+/// (for example: `S-1-5-18`).
+///
+/// Source:
+/// - SID components and string notation (`S-R-I-S...`):
+///   https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-components
+/// - Official SID-to-string API (`ConvertSidToStringSidW`):
+///   https://learn.microsoft.com/en-us/windows/win32/api/sddl/nf-sddl-convertsidtostringsidw
+pub(crate) fn current_process_user_sid_string() -> ResultType<String> {
+    unsafe {
+        let mut token = WinHANDLE::default();
+        let result = (|| -> ResultType<String> {
+            WinOpenProcessToken(WinGetCurrentProcess(), WIN_TOKEN_QUERY, &mut token)
+                .map_err(|e| anyhow!("Failed to open current process token: {}", e))?;
+
+            let mut token_user_size = 0u32;
+            let get_info_result =
+                WinGetTokenInformation(token, TokenUser, None, 0, &mut token_user_size);
+            match get_info_result {
+                Ok(()) => {
+                    if token_user_size == 0 {
+                        bail!(
+                            "Failed to get current process token user size: unexpected zero buffer size"
+                        );
+                    }
+                }
+                Err(e) => {
+                    let is_insufficient_buffer = e.code()
+                        == windows::core::HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER as u32);
+                    let is_bad_length =
+                        e.code() == windows::core::HRESULT::from_win32(ERROR_BAD_LENGTH as u32);
+                    if (!is_insufficient_buffer && !is_bad_length) || token_user_size == 0 {
+                        bail!("Failed to get current process token user size: {}", e);
+                    }
+                }
+            }
+
+            let mut buffer = vec![0u8; token_user_size as usize];
+            WinGetTokenInformation(
+                token,
+                TokenUser,
+                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+                token_user_size,
+                &mut token_user_size,
+            )
+            .map_err(|e| anyhow!("Failed to get current process token user: {}", e))?;
+
+            let min_size = std::mem::size_of::<TOKEN_USER>();
+            if buffer.len() < min_size {
+                bail!(
+                    "Failed to parse current process token user: buffer too small (got {}, need >= {})",
+                    buffer.len(),
+                    min_size
+                );
+            }
+            let token_user: TOKEN_USER =
+                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
+            if token_user.User.Sid.0.is_null() {
+                bail!("Token SID is null");
+            }
+
+            let sid_len = WinGetLengthSid(token_user.User.Sid) as usize;
+            if sid_len < 8 {
+                bail!("Invalid token SID length: {}", sid_len);
+            }
+            // SID binary layout is:
+            // [0]=Revision, [1]=SubAuthorityCount, [2..8)=IdentifierAuthority (big-endian),
+            // followed by SubAuthorityCount x u32 little-endian sub-authorities.
+            // Docs:
+            // - SID components and notation: https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-components
+            // - SID structure: https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-sid
+            let sid_ptr = token_user.User.Sid.0 as *const u8;
+            let revision = *sid_ptr;
+            let sub_authority_count = *sid_ptr.add(1) as usize;
+            let required_len = 8usize.saturating_add(sub_authority_count.saturating_mul(4));
+            if sid_len < required_len {
+                bail!(
+                    "Invalid token SID length: got {}, need at least {}",
+                    sid_len,
+                    required_len
+                );
+            }
+
+            let mut identifier_authority = 0u64;
+            for index in 0..6 {
+                identifier_authority =
+                    (identifier_authority << 8) | (*sid_ptr.add(2 + index) as u64);
+            }
+            let mut sid_string = format!("S-{}-{}", revision, identifier_authority);
+            let sub_authority_ptr = sid_ptr.add(8) as *const u32;
+            for index in 0..sub_authority_count {
+                let value = std::ptr::read_unaligned(sub_authority_ptr.add(index));
+                sid_string.push_str(format!("-{}", value).as_str());
+            }
+            Ok(sid_string)
+        })();
+
+        if !token.is_invalid() {
+            let _ = WinCloseHandle(token);
+        }
+        result
+    }
+}
+
+/// Hardens ACLs for portable-service shared-memory path (directory or file).
+///
+/// Why:
+/// - Shared memory used by portable service carries runtime control/data and must not inherit
+///   broad/default ACLs.
+/// - We explicitly grant only trusted principals and remove broad groups to reduce local
+///   privilege-boundary bypass risk.
+///
+/// ACL policy applied via `icacls`:
+/// - common (directory + file):
+///   - `S-1-5-18` (LocalSystem): full control
+///   - `S-1-5-32-544` (Built-in Administrators): full control
+///   - `current_process_user_sid_string()` result: full control
+/// - directory (`portable_service_shmem` parent):
+///   - keep `Authenticated Users` directory-level write so other local accounts can
+///     create their own runtime shmem files after account switching
+///   - remove `Everyone` and `Users` grants
+/// - file (`shared_memory*` flink):
+///   - remove broad grants:
+///     - `S-1-1-0` (Everyone)
+///     - `S-1-5-11` (Authenticated Users)
+///     - `S-1-5-32-545` (Users)
+///
+/// https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+pub fn set_path_permission_for_portable_service_shmem_dir(path: &Path) -> ResultType<()> {
+    set_path_permission_for_portable_service_shmem_impl(path, true)
+}
+
+#[inline]
+pub fn set_path_permission_for_portable_service_shmem_file(path: &Path) -> ResultType<()> {
+    set_path_permission_for_portable_service_shmem_impl(path, false)
+}
+
+fn set_path_permission_for_portable_service_shmem_impl(
+    path: &Path,
+    expect_dir: bool,
+) -> ResultType<()> {
+    let metadata_result = fs::symlink_metadata(path);
+    if expect_dir {
+        let metadata = metadata_result.map_err(|e| {
+            anyhow!(
+                "Failed to inspect portable service shared-memory ACL directory '{}': {}",
+                path.display(),
+                e
+            )
+        })?;
+        if !metadata.file_type().is_dir() {
+            bail!(
+                "Portable service shared-memory ACL target is not a directory: '{}'",
+                path.display()
+            );
+        }
+    } else {
+        match metadata_result {
+            Ok(metadata) => {
+                if metadata.file_type().is_dir() {
+                    bail!(
+                        "Portable service shared-memory ACL target is a directory, expected file-like path: '{}'",
+                        path.display()
+                    );
+                }
+            }
+            Err(e)
+                if e.kind() == io::ErrorKind::NotFound
+                    || e.kind() == io::ErrorKind::PermissionDenied =>
+            {
+                // Keep going and let `icacls` return the final OS error.
+                // `Path::exists()/is_file()` and metadata can collapse ACL-denied paths into
+                // a false "not found" signal under restricted directory ACLs.
+            }
+            Err(e) => {
+                bail!(
+                    "Failed to inspect portable service shared-memory ACL target '{}': {}",
+                    path.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    let user_sid = current_process_user_sid_string()?;
+    // `ace` is the Access Control Entry rights segment used by icacls:
+    // - `(OI)(CI)F`: Full control, inheritable to child objects/containers (for directories)
+    // - `(F)`: Full control on a single object (for files)
+    // Reference: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls
+    let is_dir = expect_dir;
+    let ace = if is_dir { "(OI)(CI)F" } else { "(F)" };
+
+    let mut command = hidden_icacls_command();
+    // https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+    command
+        .arg(path.as_os_str())
+        // Remove inherited ACEs so effective access is determined only by explicit rules below.
+        .arg("/inheritance:r")
+        // Replace grants (`/grant:r`) instead of appending, to keep ACL deterministic.
+        .arg("/grant:r")
+        // LocalSystem
+        .arg(format!("*S-1-5-18:{ace}"))
+        .arg("/grant:r")
+        // Built-in Administrators
+        .arg(format!("*S-1-5-32-544:{ace}"))
+        .arg("/grant:r")
+        // Current process user SID
+        .arg(format!("*{}:{ace}", user_sid));
+
+    if is_dir {
+        // Keep the shared parent directory multi-user writable at directory level so
+        // switching to another local account can still create its own shmem flink.
+        // Child files are hardened separately with strict per-file ACLs.
+        command
+            .arg("/grant:r")
+            .arg("*S-1-5-11:(W)")
+            .arg("/remove:g")
+            .arg("*S-1-1-0")
+            .arg("/remove:g")
+            .arg("*S-1-5-32-545");
+    } else {
+        command
+            .arg("/remove:g")
+            // Everyone
+            .arg("*S-1-1-0")
+            .arg("/remove:g")
+            // Authenticated Users
+            .arg("*S-1-5-11")
+            .arg("/remove:g")
+            // Built-in Users
+            .arg("*S-1-5-32-545");
+    }
+    command.arg("/Q").arg("/C");
+
+    let output = command.output()?;
+    if !output.status.success() {
+        bail!(
+            "Failed to set portable service shared-memory ACL on '{}': exit={:?}, stdout='{}', stderr='{}'",
+            path.display(),
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
+#[inline]
+fn hidden_icacls_command() -> std::process::Command {
+    let mut command = std::process::Command::new("icacls");
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
 }
 
 #[inline]
@@ -4267,6 +4744,82 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct HandleGuard(WinHANDLE);
+
+    impl HandleGuard {
+        #[inline]
+        fn new(handle: WinHANDLE) -> Self {
+            Self(handle)
+        }
+
+        #[inline]
+        fn get(&self) -> WinHANDLE {
+            self.0
+        }
+    }
+
+    impl Drop for HandleGuard {
+        fn drop(&mut self) {
+            unsafe {
+                if !self.0.is_invalid() {
+                    let _ = WinCloseHandle(self.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_process_running_as_system_invalid_pid_errors() {
+        assert!(is_process_running_as_system(u32::MAX).is_err());
+    }
+
+    #[test]
+    fn test_is_process_running_as_system_matches_current_process_token_user() {
+        let pid = unsafe { windows::Win32::System::Threading::GetCurrentProcessId() };
+        let actual = is_process_running_as_system(pid).unwrap();
+
+        let expected = unsafe {
+            // Keep this test consistent: use only the `windows` crate APIs/types.
+            let process = HandleGuard::new(
+                WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+                    .expect("WinOpenProcess should succeed for current process"),
+            );
+            let mut token = WinHANDLE::default();
+            WinOpenProcessToken(process.get(), WIN_TOKEN_QUERY, &mut token)
+                .expect("WinOpenProcessToken should succeed for current process");
+            let token = HandleGuard::new(token);
+
+            let mut token_user_size = 0u32;
+            let _ = WinGetTokenInformation(token.get(), TokenUser, None, 0, &mut token_user_size);
+            assert_ne!(token_user_size, 0, "TokenUser size should be non-zero");
+
+            let mut buffer = vec![0u8; token_user_size as usize];
+            WinGetTokenInformation(
+                token.get(),
+                TokenUser,
+                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+                token_user_size,
+                &mut token_user_size,
+            )
+            .expect("WinGetTokenInformation(TokenUser) should succeed for current process");
+
+            let min_size = std::mem::size_of::<TOKEN_USER>();
+            assert!(
+                buffer.len() >= min_size,
+                "TokenUser buffer too small (got {}, need >= {})",
+                buffer.len(),
+                min_size
+            );
+            let token_user: TOKEN_USER =
+                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
+            let expected = IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool();
+            expected
+        };
+
+        assert_eq!(actual, expected);
+    }
+
     #[test]
     fn test_uninstall_cert() {
         println!("uninstall driver certs: {:?}", cert::uninstall_cert());
