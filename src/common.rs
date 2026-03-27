@@ -1646,14 +1646,8 @@ async fn http_request_via_tcp_proxy(
     body: Option<&str>,
     header: &str,
 ) -> ResultType<String> {
-    let mut headers = parse_json_header_entries(header)?;
+    let headers = parse_json_header_entries(header)?;
     let body_bytes = body.unwrap_or("").as_bytes();
-    // Always include Content-Type for consistency with parse_simple_header
-    headers.push(HeaderEntry {
-        name: "Content-Type".into(),
-        value: "application/json".into(),
-        ..Default::default()
-    });
 
     let resp = tcp_proxy_request(method, url, body_bytes, headers).await?;
     http_proxy_response_to_json(resp)
@@ -2824,6 +2818,38 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("HTTP header information parsing failed!"));
+    }
+
+    #[test]
+    fn test_parse_json_header_entries_preserves_single_content_type() {
+        let headers = parse_json_header_entries(
+            r#"{"Content-Type":"text/plain","Authorization":"Bearer token"}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            headers
+                .iter()
+                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            headers
+                .iter()
+                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .map(|entry| entry.value.as_str()),
+            Some("text/plain")
+        );
+    }
+
+    #[test]
+    fn test_parse_json_header_entries_does_not_add_default_content_type() {
+        let headers = parse_json_header_entries(r#"{"Authorization":"Bearer token"}"#).unwrap();
+
+        assert!(!headers
+            .iter()
+            .any(|entry| entry.name.eq_ignore_ascii_case("Content-Type")));
     }
 
     #[test]
