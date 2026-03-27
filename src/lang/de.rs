@@ -741,7 +741,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "Bildschirm während eingehender Sitzungen aktiv halten"),
         ("Continue with {}", "Fortfahren mit {}"),
         ("Display Name", "Anzeigename"),
-        ("password-hidden-tip", ""),
-        ("preset-password-in-use-tip", ""),
+        ("password-hidden-tip", "Ein permanentes Passwort wurde festgelegt (ausgeblendet)."),
+        ("preset-password-in-use-tip", "Das voreingestellte Passwort wird derzeit verwendet."),
     ].iter().cloned().collect();
 }
