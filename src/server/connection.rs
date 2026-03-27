@@ -2025,7 +2025,7 @@ impl Connection {
         self.validate_password_plain(storage)
     }
 
-    fn validate_password(&mut self) -> bool {
+    fn validate_password(&mut self, allow_permanent_password: bool) -> bool {
         if password::temporary_enabled() {
             let password = password::temporary_password();
             if self.validate_one_password(&password) {
@@ -2037,13 +2037,19 @@ impl Connection {
                 return true;
             }
         }
-        if password::permanent_enabled() {
+        if password::permanent_enabled() || allow_permanent_password {
+            let print_fallback = || {
+                if allow_permanent_password && !password::permanent_enabled() {
+                    log::info!("Permanent password accepted via logon-screen fallback");
+                }
+            };
             // Since hashed storage uses a prefix-based encoding, a hard plaintext that
             // happens to look like hashed storage could be mis-detected. Validate local storage
             // and hard/preset plaintext via separate paths to avoid that ambiguity.
             let (local_storage, _) = Config::get_local_permanent_password_storage_and_salt();
             if !local_storage.is_empty() {
                 if self.validate_password_storage(&local_storage) {
+                    print_fallback();
                     return true;
                 }
             } else {
@@ -2054,6 +2060,7 @@ impl Connection {
                     .cloned()
                     .unwrap_or_default();
                 if !hard.is_empty() && self.validate_password_plain(&hard) {
+                    print_fallback();
                     return true;
                 }
             }
@@ -2349,6 +2356,10 @@ impl Connection {
             #[cfg(any(target_os = "android", target_os = "ios"))]
             let is_logon = || crate::platform::is_prelogin();
 
+            let allow_logon_screen_password =
+                crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
+                    && is_logon();
+
             if !hbb_common::is_ip_str(&lr.username)
                 && !hbb_common::is_domain_port_str(&lr.username)
                 && lr.username != Config::get_id()
@@ -2357,8 +2368,7 @@ impl Connection {
                     .await;
                 return false;
             } else if (password::approve_mode() == ApproveMode::Click
-                && !(crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
-                    && is_logon()))
+                && !allow_logon_screen_password)
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
@@ -2394,7 +2404,7 @@ impl Connection {
                 if !res {
                     return true;
                 }
-                if !self.validate_password() {
+                if !self.validate_password(allow_logon_screen_password) {
                     self.update_failure(failure, false, 0);
                     if err_msg.is_empty() {
                         self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
