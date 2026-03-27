@@ -39,7 +39,7 @@ use hbb_common::{
 
 use crate::{
     hbbs_http::{create_http_client_async, get_url_for_tls},
-    ui_interface::{get_option, is_installed, set_option},
+    ui_interface::{get_api_server as ui_get_api_server, get_option, is_installed, set_option},
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -1123,7 +1123,162 @@ pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
     format!("{}/api/audit/{}", url, typ)
 }
 
-pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
+/// Check if we should use raw TCP proxy for API calls.
+/// Returns true if USE_RAW_TCP_FOR_API builtin option is "Y", WebSocket is off,
+/// and the target URL belongs to the configured non-public API host.
+#[inline]
+fn should_use_raw_tcp_for_api(url: &str) -> bool {
+    get_builtin_option(keys::OPTION_USE_RAW_TCP_FOR_API) == "Y"
+        && !use_ws()
+        && is_tcp_proxy_api_target(url)
+}
+
+/// Check if we can attempt raw TCP proxy fallback for this target URL.
+#[inline]
+fn can_fallback_to_raw_tcp(url: &str) -> bool {
+    !use_ws() && is_tcp_proxy_api_target(url)
+}
+
+#[inline]
+fn should_use_tcp_proxy_for_api_url(url: &str, api_url: &str) -> bool {
+    if api_url.is_empty() || is_public(api_url) {
+        return false;
+    }
+
+    let target_host = url::Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(|host| host.to_ascii_lowercase()));
+    let api_host = url::Url::parse(api_url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(|host| host.to_ascii_lowercase()));
+
+    matches!((target_host, api_host), (Some(target), Some(api)) if target == api)
+}
+
+#[inline]
+fn is_tcp_proxy_api_target(url: &str) -> bool {
+    should_use_tcp_proxy_for_api_url(url, &ui_get_api_server())
+}
+
+#[inline]
+fn get_tcp_proxy_addr() -> String {
+    Config::get_rendezvous_server()
+}
+
+/// Send an HTTP request via the rendezvous server's TCP proxy using protobuf.
+/// Connects with `connect_tcp` + `secure_tcp`, sends `HttpProxyRequest`,
+/// receives `HttpProxyResponse`.
+async fn tcp_proxy_request(
+    method: &str,
+    url: &str,
+    body: &[u8],
+    headers: Vec<HeaderEntry>,
+) -> ResultType<HttpProxyResponse> {
+    let tcp_addr = get_tcp_proxy_addr();
+    if tcp_addr.is_empty() {
+        bail!("No rendezvous server configured for TCP proxy");
+    }
+
+    let parsed = url::Url::parse(url)?;
+    let path = if let Some(query) = parsed.query() {
+        format!("{}?{}", parsed.path(), query)
+    } else {
+        parsed.path().to_string()
+    };
+
+    log::debug!("Sending {} {} via TCP proxy to {}", method, path, tcp_addr);
+
+    let mut conn = socket_client::connect_tcp(&*tcp_addr, CONNECT_TIMEOUT).await?;
+    let key = crate::get_key(true).await;
+    secure_tcp(&mut conn, &key).await?;
+
+    let mut req = HttpProxyRequest::new();
+    req.method = method.to_uppercase();
+    req.path = path;
+    req.headers = headers.into();
+    req.body = Bytes::from(body.to_vec());
+
+    let mut msg_out = RendezvousMessage::new();
+    msg_out.set_http_proxy_request(req);
+    conn.send(&msg_out).await?;
+
+    match timeout(READ_TIMEOUT, conn.next()).await? {
+        Some(Ok(bytes)) => {
+            let msg_in = RendezvousMessage::parse_from_bytes(&bytes)?;
+            match msg_in.union {
+                Some(rendezvous_message::Union::HttpProxyResponse(resp)) => Ok(resp),
+                _ => bail!("Unexpected response from TCP proxy"),
+            }
+        }
+        Some(Err(e)) => bail!("TCP proxy read error: {}", e),
+        None => bail!("TCP proxy connection closed without response"),
+    }
+}
+
+/// Build HeaderEntry list from "Key: Value" style header string (used by post_request).
+fn parse_simple_header(header: &str) -> Vec<HeaderEntry> {
+    let mut entries = vec![HeaderEntry {
+        name: "Content-Type".into(),
+        value: "application/json".into(),
+        ..Default::default()
+    }];
+    if !header.is_empty() {
+        let tmp: Vec<&str> = header.splitn(2, ": ").collect();
+        if tmp.len() == 2 {
+            entries.push(HeaderEntry {
+                name: tmp[0].into(),
+                value: tmp[1].into(),
+                ..Default::default()
+            });
+        }
+    }
+    entries
+}
+
+/// POST request via TCP proxy.
+async fn post_request_via_tcp_proxy(
+    url: &str,
+    body: &str,
+    header: &str,
+) -> ResultType<String> {
+    let headers = parse_simple_header(header);
+    let resp = tcp_proxy_request("POST", url, body.as_bytes(), headers).await?;
+    if !resp.error.is_empty() {
+        bail!("TCP proxy error: {}", resp.error);
+    }
+    Ok(String::from_utf8_lossy(&resp.body).to_string())
+}
+
+fn http_proxy_response_to_json(resp: HttpProxyResponse) -> ResultType<String> {
+    if !resp.error.is_empty() {
+        bail!("TCP proxy error: {}", resp.error);
+    }
+
+    let mut response_headers = Map::new();
+    for entry in resp.headers.iter() {
+        response_headers.insert(
+            entry.name.to_lowercase(),
+            json!(entry.value),
+        );
+    }
+
+    let mut result = Map::new();
+    result.insert("status_code".to_string(), json!(resp.status));
+    result.insert("headers".to_string(), Value::Object(response_headers));
+    result.insert(
+        "body".to_string(),
+        json!(String::from_utf8_lossy(&resp.body)),
+    );
+
+    serde_json::to_string(&result).map_err(|e| anyhow!("Failed to serialize response: {}", e))
+}
+
+/// Returns (status_code, body_text). Separating status so the wrapper can decide on fallback.
+async fn post_request_http(
+    url: String,
+    body: String,
+    header: &str,
+) -> ResultType<(u16, String)> {
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(&url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
@@ -1138,7 +1293,48 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
         danger_accept_invalid_cert,
     )
     .await?;
-    Ok(response.text().await?)
+    let status = response.status().as_u16();
+    let text = response.text().await?;
+    Ok((status, text))
+}
+
+/// POST request with raw TCP proxy support.
+/// - If `USE_RAW_TCP_FOR_API` is "Y" and WS is off, goes directly through TCP proxy.
+/// - Otherwise tries HTTP first; on connection failure or 5xx status,
+///   falls back to TCP proxy if WS is off.
+/// - 4xx responses are returned as-is (server is reachable, business logic error).
+/// - If fallback also fails, returns the original HTTP result (text or error).
+pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
+    if should_use_raw_tcp_for_api(&url) {
+        return post_request_via_tcp_proxy(&url, &body, header).await;
+    }
+
+    let http_result = post_request_http(url.clone(), body.clone(), header).await;
+    let should_fallback = match &http_result {
+        Err(_) => true,
+        Ok((status, _)) => *status >= 500,
+    };
+
+    if should_fallback && can_fallback_to_raw_tcp(&url) {
+        log::warn!(
+            "HTTP POST to {} failed or non-2xx (result: {:?}), trying TCP proxy fallback",
+            url,
+            http_result.as_ref().map(|(s, _)| *s).map_err(|e| e.to_string()),
+        );
+        match post_request_via_tcp_proxy(&url, &body, header).await {
+            Ok(resp) => return Ok(resp),
+            Err(tcp_err) => {
+                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+                // Fall through to return original HTTP result
+            }
+        }
+    }
+
+    // Return original HTTP result
+    match http_result {
+        Ok((_status, text)) => Ok(text),
+        Err(e) => Err(e),
+    }
 }
 
 #[async_recursion]
@@ -1340,34 +1536,35 @@ async fn get_http_response_async(
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn http_request_sync(
-    url: String,
-    method: String,
+/// Returns (status_code, json_string) so the caller can inspect the status
+/// without re-parsing the serialized JSON.
+async fn http_request_http(
+    url: &str,
+    method: &str,
     body: Option<String>,
-    header: String,
-) -> ResultType<String> {
+    header: &str,
+) -> ResultType<(u16, String)> {
     let proxy_conf = Config::get_socks();
-    let tls_url = get_url_for_tls(&url, &proxy_conf);
+    let tls_url = get_url_for_tls(url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
     let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
     let response = get_http_response_async(
-        &url,
+        url,
         tls_url,
-        &method,
+        method,
         body.clone(),
-        &header,
+        header,
         tls_type,
         danger_accept_invalid_cert,
         danger_accept_invalid_cert,
     )
     .await?;
     // Serialize response headers
-    let mut response_headers = serde_json::map::Map::new();
+    let mut response_headers = Map::new();
     for (key, value) in response.headers() {
         response_headers.insert(
             key.to_string(),
-            serde_json::json!(value.to_str().unwrap_or("")),
+            json!(value.to_str().unwrap_or("")),
         );
     }
 
@@ -1375,16 +1572,82 @@ pub async fn http_request_sync(
     let response_body = response.text().await?;
 
     // Construct the JSON object
-    let mut result = serde_json::map::Map::new();
-    result.insert("status_code".to_string(), serde_json::json!(status_code));
+    let mut result = Map::new();
+    result.insert("status_code".to_string(), json!(status_code));
     result.insert(
         "headers".to_string(),
-        serde_json::Value::Object(response_headers),
+        Value::Object(response_headers),
     );
-    result.insert("body".to_string(), serde_json::json!(response_body));
+    result.insert("body".to_string(), json!(response_body));
 
     // Convert map to JSON string
-    serde_json::to_string(&result).map_err(|e| anyhow!("Failed to serialize response: {}", e))
+    let json_str =
+        serde_json::to_string(&result).map_err(|e| anyhow!("Failed to serialize response: {}", e))?;
+    Ok((status_code, json_str))
+}
+
+/// HTTP request with raw TCP proxy support.
+#[tokio::main(flavor = "current_thread")]
+pub async fn http_request_sync(
+    url: String,
+    method: String,
+    body: Option<String>,
+    header: String,
+) -> ResultType<String> {
+    if should_use_raw_tcp_for_api(&url) {
+        return http_request_via_tcp_proxy(&url, &method, body.as_deref(), &header).await;
+    }
+
+    let http_result = http_request_http(&url, &method, body.clone(), &header).await;
+    let should_fallback = match &http_result {
+        Err(_) => true,
+        Ok((status, _)) => *status >= 500,
+    };
+
+    if should_fallback && can_fallback_to_raw_tcp(&url) {
+        log::warn!("HTTP {} to {} failed or 5xx, trying TCP proxy fallback", method, url);
+        match http_request_via_tcp_proxy(&url, &method, body.as_deref(), &header).await {
+            Ok(resp) => return Ok(resp),
+            Err(tcp_err) => {
+                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+            }
+        }
+    }
+
+    http_result.map(|(_status, json_str)| json_str)
+}
+
+/// General HTTP request via TCP proxy. Header is a JSON string (used by http_request_sync).
+/// Returns a JSON string with status_code, headers, body (same format as http_request_sync).
+async fn http_request_via_tcp_proxy(
+    url: &str,
+    method: &str,
+    body: Option<&str>,
+    header: &str,
+) -> ResultType<String> {
+    let mut headers = Vec::new();
+    // Parse JSON header
+    if !header.is_empty() {
+        if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(header) {
+            for (key, value) in obj.iter() {
+                headers.push(HeaderEntry {
+                    name: key.clone(),
+                    value: value.as_str().unwrap_or_default().into(),
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    let body_bytes = body.unwrap_or("").as_bytes();
+    // Always include Content-Type for consistency with parse_simple_header
+    headers.push(HeaderEntry {
+        name: "Content-Type".into(),
+        value: "application/json".into(),
+        ..Default::default()
+    });
+
+    let resp = tcp_proxy_request(method, url, body_bytes, headers).await?;
+    http_proxy_response_to_json(resp)
 }
 
 #[inline]
@@ -2483,6 +2746,62 @@ mod tests {
         assert!(!is_public("localhost"));
         assert!(!is_public("https://rustdesk.computer.com"));
         assert!(!is_public("rustdesk.comhello.com"));
+    }
+
+    #[test]
+    fn test_should_use_tcp_proxy_for_api_url() {
+        assert!(should_use_tcp_proxy_for_api_url(
+            "https://admin.example.com/api/login",
+            "https://admin.example.com"
+        ));
+        assert!(should_use_tcp_proxy_for_api_url(
+            "https://admin.example.com:21114/api/login",
+            "https://admin.example.com"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "https://api.telegram.org/bot123/sendMessage",
+            "https://admin.example.com"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "https://admin.rustdesk.com/api/login",
+            "https://admin.rustdesk.com"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "https://admin.example.com/api/login",
+            "not a url"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "not a url",
+            "https://admin.example.com"
+        ));
+    }
+
+    #[test]
+    fn test_http_proxy_response_to_json() {
+        let mut resp = HttpProxyResponse {
+            status: 200,
+            body: br#"{"ok":true}"#.to_vec().into(),
+            ..Default::default()
+        };
+        resp.headers.push(HeaderEntry {
+            name: "Content-Type".into(),
+            value: "application/json".into(),
+            ..Default::default()
+        });
+
+        let json = http_proxy_response_to_json(resp).unwrap();
+        let value: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["status_code"], 200);
+        assert_eq!(value["headers"]["content-type"], "application/json");
+        assert_eq!(value["body"], r#"{"ok":true}"#);
+
+        let err = http_proxy_response_to_json(HttpProxyResponse {
+            error: "dial failed".into(),
+            ..Default::default()
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("TCP proxy error: dial failed"));
     }
 
     #[test]
