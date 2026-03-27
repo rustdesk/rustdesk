@@ -1162,7 +1162,7 @@ fn is_tcp_proxy_api_target(url: &str) -> bool {
 
 #[inline]
 fn get_tcp_proxy_addr() -> String {
-    Config::get_rendezvous_server()
+    check_port(Config::get_rendezvous_server(), RENDEZVOUS_PORT)
 }
 
 /// Send an HTTP request via the rendezvous server's TCP proxy using protobuf.
@@ -1273,6 +1273,27 @@ fn http_proxy_response_to_json(resp: HttpProxyResponse) -> ResultType<String> {
     serde_json::to_string(&result).map_err(|e| anyhow!("Failed to serialize response: {}", e))
 }
 
+fn parse_json_header_entries(header: &str) -> ResultType<Vec<HeaderEntry>> {
+    let v: Value = serde_json::from_str(header)?;
+    if let Value::Object(obj) = v {
+        Ok(obj
+            .iter()
+            .map(|(key, value)| HeaderEntry {
+                name: key.clone(),
+                value: value.as_str().unwrap_or_default().into(),
+                ..Default::default()
+            })
+            .collect())
+    } else {
+        Err(anyhow!("HTTP header information parsing failed!"))
+    }
+}
+
+#[inline]
+fn tcp_proxy_fallback_log_condition() -> &'static str {
+    "failed or 5xx"
+}
+
 /// Returns (status_code, body_text). Separating status so the wrapper can decide on fallback.
 async fn post_request_http(
     url: String,
@@ -1317,8 +1338,9 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
 
     if should_fallback && can_fallback_to_raw_tcp(&url) {
         log::warn!(
-            "HTTP POST to {} failed or non-2xx (result: {:?}), trying TCP proxy fallback",
+            "HTTP POST to {} {} (result: {:?}), trying TCP proxy fallback",
             url,
+            tcp_proxy_fallback_log_condition(),
             http_result.as_ref().map(|(s, _)| *s).map_err(|e| e.to_string()),
         );
         match post_request_via_tcp_proxy(&url, &body, header).await {
@@ -1449,14 +1471,8 @@ async fn get_http_response_async(
         "delete" => http_client.delete(url),
         _ => return Err(anyhow!("The HTTP request method is not supported!")),
     };
-    let v = serde_json::from_str(header)?;
-
-    if let Value::Object(obj) = v {
-        for (key, value) in obj.iter() {
-            http_client = http_client.header(key, value.as_str().unwrap_or_default());
-        }
-    } else {
-        return Err(anyhow!("HTTP header information parsing failed!"));
+    for entry in parse_json_header_entries(header)? {
+        http_client = http_client.header(entry.name, entry.value);
     }
 
     if tls_type.is_some() && danger_accept_invalid_cert.is_some() {
@@ -1605,7 +1621,12 @@ pub async fn http_request_sync(
     };
 
     if should_fallback && can_fallback_to_raw_tcp(&url) {
-        log::warn!("HTTP {} to {} failed or 5xx, trying TCP proxy fallback", method, url);
+        log::warn!(
+            "HTTP {} to {} {}, trying TCP proxy fallback",
+            method,
+            url,
+            tcp_proxy_fallback_log_condition()
+        );
         match http_request_via_tcp_proxy(&url, &method, body.as_deref(), &header).await {
             Ok(resp) => return Ok(resp),
             Err(tcp_err) => {
@@ -1625,19 +1646,7 @@ async fn http_request_via_tcp_proxy(
     body: Option<&str>,
     header: &str,
 ) -> ResultType<String> {
-    let mut headers = Vec::new();
-    // Parse JSON header
-    if !header.is_empty() {
-        if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(header) {
-            for (key, value) in obj.iter() {
-                headers.push(HeaderEntry {
-                    name: key.clone(),
-                    value: value.as_str().unwrap_or_default().into(),
-                    ..Default::default()
-                });
-            }
-        }
-    }
+    let mut headers = parse_json_header_entries(header)?;
     let body_bytes = body.unwrap_or("").as_bytes();
     // Always include Content-Type for consistency with parse_simple_header
     headers.push(HeaderEntry {
@@ -2774,6 +2783,52 @@ mod tests {
             "not a url",
             "https://admin.example.com"
         ));
+    }
+
+    #[test]
+    fn test_get_tcp_proxy_addr_normalizes_bare_ipv6_host() {
+        struct RestoreCustomRendezvousServer(String);
+
+        impl Drop for RestoreCustomRendezvousServer {
+            fn drop(&mut self) {
+                Config::set_option(
+                    keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
+                    self.0.clone(),
+                );
+            }
+        }
+
+        let _restore =
+            RestoreCustomRendezvousServer(Config::get_option(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER));
+        Config::set_option(
+            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
+            "1:2".to_string(),
+        );
+
+        assert_eq!(get_tcp_proxy_addr(), format!("[1:2]:{RENDEZVOUS_PORT}"));
+    }
+
+    #[tokio::test]
+    async fn test_http_request_via_tcp_proxy_rejects_invalid_header_json() {
+        let err = http_request_via_tcp_proxy("not a url", "get", None, "{")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("EOF while parsing an object"));
+    }
+
+    #[tokio::test]
+    async fn test_http_request_via_tcp_proxy_rejects_non_object_header_json() {
+        let err = http_request_via_tcp_proxy("not a url", "get", None, "[]")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("HTTP header information parsing failed!"));
+    }
+
+    #[test]
+    fn test_tcp_proxy_fallback_log_condition() {
+        assert_eq!(tcp_proxy_fallback_log_condition(), "failed or 5xx");
     }
 
     #[test]
