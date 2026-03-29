@@ -1165,11 +1165,10 @@ fn tcp_proxy_log_target(url: &str) -> String {
         .ok()
         .map(|parsed| {
             let mut redacted = format!("{}://", parsed.scheme());
-            if let Some(host) = parsed.host_str() {
-                redacted.push_str(host);
-            } else {
+            let Some(host) = parsed.host() else {
                 return "<invalid-url>".to_owned();
-            }
+            };
+            redacted.push_str(&host.to_string());
             if let Some(port) = parsed.port() {
                 redacted.push(':');
                 redacted.push_str(&port.to_string());
@@ -2927,6 +2926,14 @@ mod tests {
         assert_eq!(
             tcp_proxy_log_target("https://example.com/api/heartbeat?token=secret"),
             "https://example.com/api/heartbeat"
+        );
+    }
+
+    #[test]
+    fn test_tcp_proxy_log_target_brackets_ipv6_host_with_port() {
+        assert_eq!(
+            tcp_proxy_log_target("https://[2001:db8::1]:21114/api/heartbeat?token=secret"),
+            "https://[2001:db8::1]:21114/api/heartbeat"
         );
     }
 
