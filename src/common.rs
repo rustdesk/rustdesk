@@ -1263,11 +1263,7 @@ fn parse_simple_header(header: &str) -> Vec<HeaderEntry> {
 }
 
 /// POST request via TCP proxy.
-async fn post_request_via_tcp_proxy(
-    url: &str,
-    body: &str,
-    header: &str,
-) -> ResultType<String> {
+async fn post_request_via_tcp_proxy(url: &str, body: &str, header: &str) -> ResultType<String> {
     let headers = parse_simple_header(header);
     let resp = tcp_proxy_request("POST", url, body.as_bytes(), headers).await?;
     if !resp.error.is_empty() {
@@ -1283,10 +1279,7 @@ fn http_proxy_response_to_json(resp: HttpProxyResponse) -> ResultType<String> {
 
     let mut response_headers = Map::new();
     for entry in resp.headers.iter() {
-        response_headers.insert(
-            entry.name.to_lowercase(),
-            json!(entry.value),
-        );
+        response_headers.insert(entry.name.to_lowercase(), json!(entry.value));
     }
 
     let mut result = Map::new();
@@ -1322,11 +1315,7 @@ fn tcp_proxy_fallback_log_condition() -> &'static str {
 }
 
 /// Returns (status_code, body_text). Separating status so the wrapper can decide on fallback.
-async fn post_request_http(
-    url: String,
-    body: String,
-    header: &str,
-) -> ResultType<(u16, String)> {
+async fn post_request_http(url: String, body: String, header: &str) -> ResultType<(u16, String)> {
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(&url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
@@ -1368,7 +1357,10 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
             "HTTP POST to {} {} (result: {:?}), trying TCP proxy fallback",
             tcp_proxy_log_target(&url),
             tcp_proxy_fallback_log_condition(),
-            http_result.as_ref().map(|(s, _)| *s).map_err(|e| e.to_string()),
+            http_result
+                .as_ref()
+                .map(|(s, _)| *s)
+                .map_err(|e| e.to_string()),
         );
         match post_request_via_tcp_proxy(&url, &body, header).await {
             Ok(resp) => return Ok(resp),
@@ -1605,10 +1597,7 @@ async fn http_request_http(
     // Serialize response headers
     let mut response_headers = Map::new();
     for (key, value) in response.headers() {
-        response_headers.insert(
-            key.to_string(),
-            json!(value.to_str().unwrap_or("")),
-        );
+        response_headers.insert(key.to_string(), json!(value.to_str().unwrap_or("")));
     }
 
     let status_code = response.status().as_u16();
@@ -1617,15 +1606,12 @@ async fn http_request_http(
     // Construct the JSON object
     let mut result = Map::new();
     result.insert("status_code".to_string(), json!(status_code));
-    result.insert(
-        "headers".to_string(),
-        Value::Object(response_headers),
-    );
+    result.insert("headers".to_string(), Value::Object(response_headers));
     result.insert("body".to_string(), json!(response_body));
 
     // Convert map to JSON string
-    let json_str =
-        serde_json::to_string(&result).map_err(|e| anyhow!("Failed to serialize response: {}", e))?;
+    let json_str = serde_json::to_string(&result)
+        .map_err(|e| anyhow!("Failed to serialize response: {}", e))?;
     Ok((status_code, json_str))
 }
 
@@ -2829,8 +2815,9 @@ mod tests {
             }
         }
 
-        let _restore =
-            RestoreCustomRendezvousServer(Config::get_option(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER));
+        let _restore = RestoreCustomRendezvousServer(Config::get_option(
+            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER,
+        ));
         Config::set_option(
             keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
             "1:2".to_string(),
