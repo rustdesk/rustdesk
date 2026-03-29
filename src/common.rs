@@ -2874,7 +2874,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_simple_header_overrides_content_type_with_json() {
+    fn test_parse_simple_header_ignores_custom_content_type() {
         let headers = parse_simple_header("Content-Type: text/plain");
 
         assert_eq!(
@@ -2923,7 +2923,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tcp_proxy_log_target_redacts_path_and_query() {
+    fn test_tcp_proxy_log_target_redacts_query_only() {
         assert_eq!(
             tcp_proxy_log_target("https://example.com/api/heartbeat?token=secret"),
             "https://example.com/api/heartbeat"
