@@ -1482,7 +1482,8 @@ async fn get_http_response_async(
         tls_type.unwrap_or(TlsType::Rustls),
         danger_accept_invalid_cert.unwrap_or(false),
     );
-    let mut http_client = match method {
+    let normalized_method = method.to_ascii_lowercase();
+    let mut http_client = match normalized_method.as_str() {
         "get" => http_client.get(url),
         "post" => http_client.post(url),
         "put" => http_client.put(url),
