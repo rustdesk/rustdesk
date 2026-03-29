@@ -1190,7 +1190,7 @@ async fn tcp_proxy_request(
 
     let mut conn = socket_client::connect_tcp(&*tcp_addr, CONNECT_TIMEOUT).await?;
     let key = crate::get_key(true).await;
-    secure_tcp(&mut conn, &key).await?;
+    secure_tcp_silent(&mut conn, &key).await?;
 
     let mut req = HttpProxyRequest::new();
     req.method = method.to_uppercase();
@@ -1913,7 +1913,7 @@ pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     false
 }
 
-pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
+async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> ResultType<()> {
     // Skip additional encryption when using WebSocket connections (wss://)
     // as WebSocket Secure (wss://) already provides transport layer encryption.
     // This doesn't affect the end-to-end encryption between clients,
@@ -1946,7 +1946,9 @@ pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
                         });
                         timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
                         conn.set_key(key);
-                        log::info!("Connection secured");
+                        if log_on_success {
+                            log::info!("Connection secured");
+                        }
                     }
                     _ => {}
                 }
@@ -1955,6 +1957,14 @@ pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
         _ => {}
     }
     Ok(())
+}
+
+pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
+    secure_tcp_impl(conn, key, true).await
+}
+
+async fn secure_tcp_silent(conn: &mut Stream, key: &str) -> ResultType<()> {
+    secure_tcp_impl(conn, key, false).await
 }
 
 #[inline]
