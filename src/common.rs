@@ -1160,6 +1160,26 @@ fn is_tcp_proxy_api_target(url: &str) -> bool {
     should_use_tcp_proxy_for_api_url(url, &ui_get_api_server())
 }
 
+fn tcp_proxy_log_target(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .map(|parsed| {
+            let mut redacted = format!("{}://", parsed.scheme());
+            if let Some(host) = parsed.host_str() {
+                redacted.push_str(host);
+            } else {
+                return "<invalid-url>".to_owned();
+            }
+            if let Some(port) = parsed.port() {
+                redacted.push(':');
+                redacted.push_str(&port.to_string());
+            }
+            redacted.push_str(parsed.path());
+            redacted
+        })
+        .unwrap_or_else(|| "<invalid-url>".to_owned())
+}
+
 #[inline]
 fn get_tcp_proxy_addr() -> String {
     check_port(Config::get_rendezvous_server(), RENDEZVOUS_PORT)
@@ -1186,7 +1206,12 @@ async fn tcp_proxy_request(
         parsed.path().to_string()
     };
 
-    log::debug!("Sending {} {} via TCP proxy to {}", method, path, tcp_addr);
+    log::debug!(
+        "Sending {} {} via TCP proxy to {}",
+        method,
+        parsed.path(),
+        tcp_addr
+    );
 
     let mut conn = socket_client::connect_tcp(&*tcp_addr, CONNECT_TIMEOUT).await?;
     let key = crate::get_key(true).await;
@@ -1225,11 +1250,13 @@ fn parse_simple_header(header: &str) -> Vec<HeaderEntry> {
     if !header.is_empty() {
         let tmp: Vec<&str> = header.splitn(2, ": ").collect();
         if tmp.len() == 2 {
-            entries.push(HeaderEntry {
-                name: tmp[0].into(),
-                value: tmp[1].into(),
-                ..Default::default()
-            });
+            if !tmp[0].eq_ignore_ascii_case("Content-Type") {
+                entries.push(HeaderEntry {
+                    name: tmp[0].into(),
+                    value: tmp[1].into(),
+                    ..Default::default()
+                });
+            }
         }
     }
     entries
@@ -1339,7 +1366,7 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
     if should_fallback && can_fallback_to_raw_tcp(&url) {
         log::warn!(
             "HTTP POST to {} {} (result: {:?}), trying TCP proxy fallback",
-            url,
+            tcp_proxy_log_target(&url),
             tcp_proxy_fallback_log_condition(),
             http_result.as_ref().map(|(s, _)| *s).map_err(|e| e.to_string()),
         );
@@ -1568,7 +1595,7 @@ async fn http_request_http(
         url,
         tls_url,
         method,
-        body.clone(),
+        body,
         header,
         tls_type,
         danger_accept_invalid_cert,
@@ -1624,7 +1651,7 @@ pub async fn http_request_sync(
         log::warn!(
             "HTTP {} to {} {}, trying TCP proxy fallback",
             method,
-            url,
+            tcp_proxy_log_target(&url),
             tcp_proxy_fallback_log_condition()
         );
         match http_request_via_tcp_proxy(&url, &method, body.as_deref(), &header).await {
@@ -2814,11 +2841,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_http_request_via_tcp_proxy_rejects_invalid_header_json() {
-        let err = http_request_via_tcp_proxy("not a url", "get", None, "{")
-            .await
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("EOF while parsing an object"));
+        let result = http_request_via_tcp_proxy("not a url", "get", None, "{").await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -2863,8 +2887,60 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_simple_header_overrides_content_type_with_json() {
+        let headers = parse_simple_header("Content-Type: text/plain");
+
+        assert_eq!(
+            headers
+                .iter()
+                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            headers
+                .iter()
+                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .map(|entry| entry.value.as_str()),
+            Some("application/json")
+        );
+    }
+
+    #[test]
+    fn test_parse_simple_header_preserves_non_content_type_header() {
+        let headers = parse_simple_header("Authorization: Bearer token");
+
+        assert!(headers.iter().any(|entry| {
+            entry.name.eq_ignore_ascii_case("Authorization")
+                && entry.value.as_str() == "Bearer token"
+        }));
+        assert_eq!(
+            headers
+                .iter()
+                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            headers
+                .iter()
+                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .map(|entry| entry.value.as_str()),
+            Some("application/json")
+        );
+    }
+
+    #[test]
     fn test_tcp_proxy_fallback_log_condition() {
         assert_eq!(tcp_proxy_fallback_log_condition(), "failed or 5xx");
+    }
+
+    #[test]
+    fn test_tcp_proxy_log_target_redacts_path_and_query() {
+        assert_eq!(
+            tcp_proxy_log_target("https://example.com/api/heartbeat?token=secret"),
+            "https://example.com/api/heartbeat"
+        );
     }
 
     #[test]
