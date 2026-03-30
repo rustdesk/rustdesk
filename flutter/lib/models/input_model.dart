@@ -335,6 +335,7 @@ class InputModel {
   var ctrl = false;
   var alt = false;
   var command = false;
+  bool _iosCapsLock = false;
 
   final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
@@ -441,16 +442,45 @@ class InputModel {
   // incorrect CapsLock state on iOS.
   bool _getIosCapsFromCharacter(KeyEvent e) {
     if (!isIOS) return false;
-    final ch = e.character;
-    return _getIosCapsFromCharacterImpl(
-        ch, HardwareKeyboard.instance.isShiftPressed);
+    return _getIosCapsLockState(
+      character: e.character,
+      shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+      logicalKey: e.logicalKey,
+      isKeyDown: e is KeyDownEvent || e is KeyRepeatEvent,
+    );
   }
 
   // RawKeyEvent version of _getIosCapsFromCharacter.
   bool _getIosCapsFromRawCharacter(RawKeyEvent e) {
     if (!isIOS) return false;
-    final ch = e.character;
-    return _getIosCapsFromCharacterImpl(ch, e.isShiftPressed);
+    return _getIosCapsLockState(
+      character: e.character,
+      shiftPressed: e.isShiftPressed,
+      logicalKey: e.logicalKey,
+      isKeyDown: e is RawKeyDownEvent,
+    );
+  }
+
+  bool _getIosCapsLockState({
+    required String? character,
+    required bool shiftPressed,
+    required LogicalKeyboardKey logicalKey,
+    required bool isKeyDown,
+  }) {
+    if (!isIOS) return false;
+    // Flutter's reported lock state is unreliable on iOS. Keep a cached
+    // value and update it from explicit CapsLock presses or inferable
+    // character output, then reuse that cached state for key-up and
+    // non-character events.
+    if (isKeyDown && logicalKey == LogicalKeyboardKey.capsLock) {
+      _iosCapsLock = !_iosCapsLock;
+      return _iosCapsLock;
+    }
+    final inferred = _getIosCapsFromCharacterImpl(character, shiftPressed);
+    if (inferred != null) {
+      _iosCapsLock = inferred;
+    }
+    return _iosCapsLock;
   }
 
   // Shared implementation for inferring CapsLock state from character.
@@ -464,15 +494,15 @@ class InputModel {
   //    character alone.
   // 2. On iOS, CapsLock+Shift produces uppercase letters (unlike desktop where it
   //    produces lowercase). This method cannot handle that case correctly.
-  bool _getIosCapsFromCharacterImpl(String? ch, bool shiftPressed) {
-    if (ch == null || ch.length != 1) return false;
+  bool? _getIosCapsFromCharacterImpl(String? ch, bool shiftPressed) {
+    if (ch == null || ch.length != 1) return null;
     // Use Dart's built-in Unicode-aware case detection
     final upper = ch.toUpperCase();
     final lower = ch.toLowerCase();
     final isUpper = upper == ch && lower != ch;
     final isLower = lower == ch && upper != ch;
     // Skip non-letter characters (e.g., numbers, symbols, CJK characters without case)
-    if (!isUpper && !isLower) return false;
+    if (!isUpper && !isLower) return null;
     return isUpper != shiftPressed;
   }
 
@@ -636,7 +666,7 @@ class InputModel {
     }
 
     bool iosCapsLock = false;
-    if (isIOS && e is RawKeyDownEvent) {
+    if (isIOS) {
       iosCapsLock = _getIosCapsFromRawCharacter(e);
     }
 
@@ -713,7 +743,7 @@ class InputModel {
     }
 
     bool iosCapsLock = false;
-    if (isIOS && (e is KeyDownEvent || e is KeyRepeatEvent)) {
+    if (isIOS) {
       iosCapsLock = _getIosCapsFromCharacter(e);
     }
 
