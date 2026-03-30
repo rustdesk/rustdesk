@@ -154,7 +154,27 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       trySyncClipboard();
+      _restoreInputOnResume();
     }
+  }
+
+  // Fix: restore keyboard/mouse input after returning from background on iPadOS.
+  // Bug: switching apps on iPadOS loses all input (keyboard, trackpad, touch).
+  // Root cause: iOS drops the focus node when app goes to background; nobody re-requests it.
+  // Fix: on resume, restart mouse listener and re-request physical focus with a small
+  // delay (same pattern already used in onSoftKeyboardChanged for iOS keyboard workaround).
+  void _restoreInputOnResume() {
+    if (!isIOS) return;
+    gFFI.inputModel.listenToMouse(true);
+    _iosKeyboardWorkaroundTimer?.cancel();
+    _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 100), () {
+      if (!mounted) return;
+      _physicalFocusNode.unfocus();
+      _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 50), () {
+        if (!mounted) return;
+        _physicalFocusNode.requestFocus();
+      });
+    });
   }
 
   // For client side
