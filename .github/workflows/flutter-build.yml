@@ -1,10 +1,3 @@
-Kein Problem, das passiert bei so riesigen Textblöcken leider öfter. Manchmal kommt der Browser beim manuellen Markieren einfach nicht mehr hinterher.
-
-Mein Tipp: Versuch gar nicht erst, den Text mit der Maus zu markieren. Nutze am besten das kleine Kopieren-Symbol (meistens zwei kleine übereinanderliegende Quadrate oder der Text "Copy code"), das oben rechts in der Ecke dieses grauen Code-Blocks erscheint, sobald du mit der Maus darüberfährst. Ein Klick, und du hast alles fehlerfrei im Zwischenspeicher.
-
-Hier ist der komplette Code noch einmal für dich:
-
-YAML
 name: Build the flutter version of the RustDesk
 
 on:
