@@ -15,6 +15,7 @@ import 'package:get/get.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
+import 'ios_caps_lock_state_tracker.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
@@ -335,7 +336,7 @@ class InputModel {
   var ctrl = false;
   var alt = false;
   var command = false;
-  bool _iosCapsLock = false;
+  final _iosCapsLockTracker = IosCapsLockStateTracker();
 
   final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
@@ -472,38 +473,12 @@ class InputModel {
     // value and update it from explicit CapsLock presses or inferable
     // character output, then reuse that cached state for key-up and
     // non-character events.
-    if (isKeyDown && logicalKey == LogicalKeyboardKey.capsLock) {
-      _iosCapsLock = !_iosCapsLock;
-      return _iosCapsLock;
-    }
-    final inferred = _getIosCapsFromCharacterImpl(character, shiftPressed);
-    if (inferred != null) {
-      _iosCapsLock = inferred;
-    }
-    return _iosCapsLock;
-  }
-
-  // Shared implementation for inferring CapsLock state from character.
-  // Uses Unicode-aware case detection to support non-ASCII letters (e.g., ü/Ü, é/É).
-  //
-  // Limitations:
-  // 1. This inference assumes the client and server use the same keyboard layout.
-  //    If layouts differ (e.g., client uses EN, server uses DE), the character output
-  //    may not match expectations. For example, ';' on EN layout maps to 'ö' on DE
-  //    layout, making it impossible to correctly infer CapsLock state from the
-  //    character alone.
-  // 2. On iOS, CapsLock+Shift produces uppercase letters (unlike desktop where it
-  //    produces lowercase). This method cannot handle that case correctly.
-  bool? _getIosCapsFromCharacterImpl(String? ch, bool shiftPressed) {
-    if (ch == null || ch.length != 1) return null;
-    // Use Dart's built-in Unicode-aware case detection
-    final upper = ch.toUpperCase();
-    final lower = ch.toLowerCase();
-    final isUpper = upper == ch && lower != ch;
-    final isLower = lower == ch && upper != ch;
-    // Skip non-letter characters (e.g., numbers, symbols, CJK characters without case)
-    if (!isUpper && !isLower) return null;
-    return isUpper != shiftPressed;
+    return _iosCapsLockTracker.update(
+      character: character,
+      shiftPressed: shiftPressed,
+      logicalKey: logicalKey,
+      isKeyDown: isKeyDown,
+    );
   }
 
   int _buildLockModes(bool iosCapsLock) {
