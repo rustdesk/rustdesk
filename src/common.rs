@@ -1086,6 +1086,7 @@ fn get_api_server_(api: String, custom: String) -> String {
 
 #[inline]
 pub fn is_public(url: &str) -> bool {
+    let url = url.to_ascii_lowercase();
     url.contains("rustdesk.com/") || url.ends_with("rustdesk.com")
 }
 
@@ -2766,11 +2767,13 @@ mod tests {
         assert!(is_public("https://rustdesk.com/"));
         assert!(is_public("https://www.rustdesk.com/"));
         assert!(is_public("https://api.rustdesk.com/v1"));
+        assert!(is_public("https://API.RUSTDESK.COM/v1"));
         assert!(is_public("https://rustdesk.com/path"));
 
         // Test URLs ending with "rustdesk.com"
         assert!(is_public("rustdesk.com"));
         assert!(is_public("https://rustdesk.com"));
+        assert!(is_public("https://RustDesk.com"));
         assert!(is_public("http://www.rustdesk.com"));
         assert!(is_public("https://api.rustdesk.com"));
 
