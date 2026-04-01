@@ -2,6 +2,8 @@
 
 import os
 import optparse
+import re
+import subprocess
 from hashlib import md5
 import brotli
 import datetime
@@ -64,12 +66,21 @@ def write_app_metadata(output_folder: str):
         f.write(f"timestamp = {int(datetime.datetime.now().timestamp() * 1000)}\n")
     print(f"App metadata has been written to {output_path}")
 
+# Allowlist pattern for valid cargo target triples (e.g. x86_64-unknown-linux-gnu)
+_VALID_TARGET_RE = re.compile(r'^[A-Za-z0-9_\-]+$')
+
+
 def build_portable(output_folder: str, target: str):
     os.chdir(output_folder)
     if target:
-        os.system("cargo build --release --target " + target)
+        if not _VALID_TARGET_RE.match(target):
+            raise ValueError(
+                f"Invalid --target value {target!r}. "
+                "Only alphanumeric characters, hyphens, and underscores are allowed."
+            )
+        subprocess.run(["cargo", "build", "--release", "--target", target], check=True)
     else:
-        os.system("cargo build --release")
+        subprocess.run(["cargo", "build", "--release"], check=True)
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe

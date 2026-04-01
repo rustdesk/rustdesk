@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import os
+import shlex
+import subprocess
 import pathlib
 import platform
 import zipfile
@@ -39,7 +41,8 @@ def get_deb_extra_depends() -> str:
     return ""
 
 def system2(cmd):
-    exit_code = os.system(cmd)
+    args = cmd if isinstance(cmd, list) else shlex.split(cmd)
+    exit_code = subprocess.call(args)
     if exit_code != 0:
         sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
