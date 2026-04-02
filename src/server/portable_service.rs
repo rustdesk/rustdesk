@@ -1,3 +1,10 @@
+use crate::{
+    ipc::{self, new_listener, Connection, Data, DataPortableService},
+    platform::{
+        set_path_permission, set_path_permission_for_portable_service_shmem_dir,
+        set_path_permission_for_portable_service_shmem_file,
+    },
+};
 use core::slice;
 use hbb_common::{
     allow_err,
@@ -26,14 +33,7 @@ use winapi::{
     shared::minwindef::{BOOL, FALSE, TRUE},
     um::winuser::{self, CURSORINFO, PCURSORINFO},
 };
-
-use crate::{
-    ipc::{self, new_listener, Connection, Data, DataPortableService},
-    platform::{
-        set_path_permission, set_path_permission_for_portable_service_shmem_dir,
-        set_path_permission_for_portable_service_shmem_file,
-    },
-};
+use windows::Win32::Storage::FileSystem::{FILE_GENERIC_EXECUTE, FILE_GENERIC_READ};
 
 use super::video_qos;
 
@@ -1041,7 +1041,10 @@ pub mod client {
                     #[cfg(feature = "flutter")]
                     {
                         if let Some(dir) = Path::new(&exe).parent() {
-                            if let Err(err) = set_path_permission(Path::new(dir), "RX") {
+                            if let Err(err) = set_path_permission(
+                                Path::new(dir),
+                                FILE_GENERIC_READ.0 | FILE_GENERIC_EXECUTE.0,
+                            ) {
                                 clear_runtime_shmem_state();
                                 bail!("Failed to set permission of {:?}: {}", dir, err);
                             }
@@ -1078,7 +1081,9 @@ pub mod client {
                                 dst
                             );
                             cleanup_helper_artifacts();
-                        } else if let Err(err) = set_path_permission(&dir, "RX") {
+                        } else if let Err(err) =
+                            set_path_permission(&dir, FILE_GENERIC_READ.0 | FILE_GENERIC_EXECUTE.0)
+                        {
                             log::warn!(
                                 "Failed to set portable service logon helper path permission for {:?}: {}",
                                 dir,

@@ -74,16 +74,15 @@ use winapi::{
 use windows::Win32::{
     Foundation::{CloseHandle as WinCloseHandle, HANDLE as WinHANDLE},
     Security::{
-        GetLengthSid as WinGetLengthSid, GetTokenInformation as WinGetTokenInformation,
-        IsWellKnownSid, TokenUser, WinLocalSystemSid, TOKEN_QUERY as WIN_TOKEN_QUERY, TOKEN_USER,
+        GetTokenInformation as WinGetTokenInformation, IsWellKnownSid, TokenUser,
+        WinLocalSystemSid, TOKEN_QUERY as WIN_TOKEN_QUERY, TOKEN_USER,
     },
     System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
         TH32CS_SNAPPROCESS,
     },
     System::Threading::{
-        GetCurrentProcess as WinGetCurrentProcess, OpenProcess as WinOpenProcess,
-        OpenProcessToken as WinOpenProcessToken,
+        OpenProcess as WinOpenProcess, OpenProcessToken as WinOpenProcessToken,
         QueryFullProcessImageNameW as WinQueryFullProcessImageNameW,
         PROCESS_QUERY_LIMITED_INFORMATION as WIN_PROCESS_QUERY_LIMITED_INFORMATION,
     },
@@ -97,6 +96,13 @@ use windows_service::{
     service_control_handler::{self, ServiceControlHandlerResult},
 };
 use winreg::{enums::*, RegKey};
+
+mod acl;
+pub use acl::{
+    set_path_permission, set_path_permission_for_portable_service_shmem_dir,
+    set_path_permission_for_portable_service_shmem_file,
+};
+pub(crate) use acl::current_process_user_sid_string;
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
 pub const EXPLORER_EXE: &'static str = "explorer.exe";
@@ -2903,253 +2909,6 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
         }
     }
     return Ok(());
-}
-
-/// Grants `Everyone` on `dir` recursively for helper/runtime files that must be readable/executable
-/// across user contexts.
-///
-/// `permission` is an icacls permission token (for example `RX`).
-/// `(OI)(CI)` means inherit to files/containers under `dir`.
-///
-/// Reference:
-/// - icacls command and ACE flags: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls
-pub fn set_path_permission(dir: &Path, permission: &str) -> ResultType<()> {
-    let output = hidden_icacls_command()
-        .arg(dir.as_os_str())
-        .arg("/grant")
-        .arg(format!("*S-1-1-0:(OI)(CI){}", permission))
-        .arg("/Q")
-        .arg("/T")
-        .output()?;
-    if !output.status.success() {
-        bail!(
-            "Failed to set ACL for '{}': exit={:?}, stdout='{}', stderr='{}'",
-            dir.display(),
-            output.status.code(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    Ok(())
-}
-
-/// Returns the current process user SID as a standard SID string
-/// (for example: `S-1-5-18`).
-///
-/// Source:
-/// - SID components and string notation (`S-R-I-S...`):
-///   https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-components
-/// - Official SID-to-string API (`ConvertSidToStringSidW`):
-///   https://learn.microsoft.com/en-us/windows/win32/api/sddl/nf-sddl-convertsidtostringsidw
-pub(crate) fn current_process_user_sid_string() -> ResultType<String> {
-    unsafe {
-        let mut token = WinHANDLE::default();
-        let result = (|| -> ResultType<String> {
-            WinOpenProcessToken(WinGetCurrentProcess(), WIN_TOKEN_QUERY, &mut token)
-                .map_err(|e| anyhow!("Failed to open current process token: {}", e))?;
-
-            let buffer = read_token_user_buffer(token, "current process")?;
-            let token_user: TOKEN_USER =
-                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
-            if token_user.User.Sid.0.is_null() {
-                bail!("Token SID is null");
-            }
-
-            let sid_len = WinGetLengthSid(token_user.User.Sid) as usize;
-            if sid_len < 8 {
-                bail!("Invalid token SID length: {}", sid_len);
-            }
-            // SID binary layout is:
-            // [0]=Revision, [1]=SubAuthorityCount, [2..8)=IdentifierAuthority (big-endian),
-            // followed by SubAuthorityCount x u32 little-endian sub-authorities.
-            // Docs:
-            // - SID components and notation: https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-components
-            // - SID structure: https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-sid
-            let sid_ptr = token_user.User.Sid.0 as *const u8;
-            let revision = *sid_ptr;
-            let sub_authority_count = *sid_ptr.add(1) as usize;
-            let required_len = 8usize.saturating_add(sub_authority_count.saturating_mul(4));
-            if sid_len < required_len {
-                bail!(
-                    "Invalid token SID length: got {}, need at least {}",
-                    sid_len,
-                    required_len
-                );
-            }
-
-            let mut identifier_authority = 0u64;
-            for index in 0..6 {
-                identifier_authority =
-                    (identifier_authority << 8) | (*sid_ptr.add(2 + index) as u64);
-            }
-            let mut sid_string = format!("S-{}-{}", revision, identifier_authority);
-            let sub_authority_ptr = sid_ptr.add(8) as *const u32;
-            for index in 0..sub_authority_count {
-                let value = std::ptr::read_unaligned(sub_authority_ptr.add(index));
-                sid_string.push_str(format!("-{}", value).as_str());
-            }
-            Ok(sid_string)
-        })();
-
-        if !token.is_invalid() {
-            let _ = WinCloseHandle(token);
-        }
-        result
-    }
-}
-
-/// Hardens ACLs for portable-service shared-memory path (directory or file).
-///
-/// Why:
-/// - Shared memory used by portable service carries runtime control/data and must not inherit
-///   broad/default ACLs.
-/// - We explicitly grant only trusted principals and remove broad groups to reduce local
-///   privilege-boundary bypass risk.
-///
-/// ACL policy applied via `icacls`:
-/// - common (directory + file):
-///   - `S-1-5-18` (LocalSystem): full control
-///   - `S-1-5-32-544` (Built-in Administrators): full control
-///   - `current_process_user_sid_string()` result: full control
-/// - directory (`portable_service_shmem` parent):
-///   - keep `Authenticated Users` directory-level write so other local accounts can
-///     create their own runtime shmem files after account switching
-///   - remove `Everyone` and `Users` grants
-/// - file (`shared_memory*` flink):
-///   - remove broad grants:
-///     - `S-1-1-0` (Everyone)
-///     - `S-1-5-11` (Authenticated Users)
-///     - `S-1-5-32-545` (Users)
-///
-/// https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
-pub fn set_path_permission_for_portable_service_shmem_dir(path: &Path) -> ResultType<()> {
-    set_path_permission_for_portable_service_shmem_impl(path, true)
-}
-
-#[inline]
-pub fn set_path_permission_for_portable_service_shmem_file(path: &Path) -> ResultType<()> {
-    set_path_permission_for_portable_service_shmem_impl(path, false)
-}
-
-fn set_path_permission_for_portable_service_shmem_impl(
-    path: &Path,
-    expect_dir: bool,
-) -> ResultType<()> {
-    let metadata_result = fs::symlink_metadata(path);
-    if expect_dir {
-        let metadata = metadata_result.map_err(|e| {
-            anyhow!(
-                "Failed to inspect portable service shared-memory ACL directory '{}': {}",
-                path.display(),
-                e
-            )
-        })?;
-        if !metadata.file_type().is_dir() {
-            bail!(
-                "Portable service shared-memory ACL target is not a directory: '{}'",
-                path.display()
-            );
-        }
-    } else {
-        match metadata_result {
-            Ok(metadata) => {
-                if metadata.file_type().is_dir() {
-                    bail!(
-                        "Portable service shared-memory ACL target is a directory, expected file-like path: '{}'",
-                        path.display()
-                    );
-                }
-            }
-            Err(e)
-                if e.kind() == io::ErrorKind::NotFound
-                    || e.kind() == io::ErrorKind::PermissionDenied =>
-            {
-                // Keep going and let `icacls` return the final OS error.
-                // `Path::exists()/is_file()` and metadata can collapse ACL-denied paths into
-                // a false "not found" signal under restricted directory ACLs.
-            }
-            Err(e) => {
-                bail!(
-                    "Failed to inspect portable service shared-memory ACL target '{}': {}",
-                    path.display(),
-                    e
-                );
-            }
-        }
-    }
-
-    let user_sid = current_process_user_sid_string()?;
-    // `ace` is the Access Control Entry rights segment used by icacls:
-    // - `(OI)(CI)F`: Full control, inheritable to child objects/containers (for directories)
-    // - `(F)`: Full control on a single object (for files)
-    // Reference: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls
-    let is_dir = expect_dir;
-    let ace = if is_dir { "(OI)(CI)F" } else { "(F)" };
-
-    let mut command = hidden_icacls_command();
-    // https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
-    command
-        .arg(path.as_os_str())
-        // Remove inherited ACEs so effective access is determined only by explicit rules below.
-        .arg("/inheritance:r")
-        // Replace grants (`/grant:r`) instead of appending, to keep ACL deterministic.
-        .arg("/grant:r")
-        // LocalSystem
-        .arg(format!("*S-1-5-18:{ace}"))
-        .arg("/grant:r")
-        // Built-in Administrators
-        .arg(format!("*S-1-5-32-544:{ace}"))
-        .arg("/grant:r")
-        // Current process user SID
-        .arg(format!("*{}:{ace}", user_sid));
-
-    if is_dir {
-        // Keep the shared parent directory multi-user writable at directory level so
-        // switching to another local account can still create its own shmem flink.
-        // Child files are hardened separately with strict per-file ACLs.
-        command
-            .arg("/grant:r")
-            .arg("*S-1-5-11:(W)")
-            .arg("/remove:g")
-            .arg("*S-1-1-0")
-            .arg("/remove:g")
-            .arg("*S-1-5-32-545");
-    } else {
-        command
-            .arg("/remove:g")
-            // Everyone
-            .arg("*S-1-1-0")
-            .arg("/remove:g")
-            // Authenticated Users
-            .arg("*S-1-5-11")
-            .arg("/remove:g")
-            // Built-in Users
-            .arg("*S-1-5-32-545");
-    }
-    command.arg("/Q").arg("/C");
-
-    let output = command.output()?;
-    if !output.status.success() {
-        bail!(
-            "Failed to set portable service shared-memory ACL on '{}': exit={:?}, stdout='{}', stderr='{}'",
-            path.display(),
-            output.status.code(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    Ok(())
-}
-
-#[inline]
-fn hidden_icacls_command() -> std::process::Command {
-    let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
-    let icacls_path = PathBuf::from(system_root)
-        .join("System32")
-        .join("icacls.exe");
-    let mut command = std::process::Command::new(icacls_path);
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
 }
 
 #[inline]
