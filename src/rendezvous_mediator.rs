@@ -54,6 +54,7 @@ impl RendezvousMediator {
     pub fn restart() {
         SHOULD_EXIT.store(true, Ordering::SeqCst);
         MANUAL_RESTARTED.store(true, Ordering::SeqCst);
+        crate::test_nat_type();
         log::info!("server restart");
     }
 
@@ -64,7 +65,13 @@ impl RendezvousMediator {
                 sleep(1.).await;
             }
         }
-        crate::hbbs_http::sync::start();
+        std::thread::spawn(|| loop {
+            if !crate::get_effective_api_server().is_empty() && !crate::using_public_server() {
+                crate::hbbs_http::sync::start();
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        });
         #[cfg(target_os = "windows")]
         if crate::platform::is_installed() && crate::is_server() {
             crate::updater::start_auto_update();
@@ -79,12 +86,20 @@ impl RendezvousMediator {
             direct_server(server_cloned).await;
         });
         #[cfg(target_os = "android")]
-        let start_lan_listening = true;
+        std::thread::spawn(move || {
+            allow_err!(super::lan::start_listening());
+        });
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let start_lan_listening = crate::platform::is_installed();
-        if start_lan_listening {
-            std::thread::spawn(move || {
-                allow_err!(super::lan::start_listening());
+        if crate::platform::is_installed() {
+            std::thread::spawn(move || loop {
+                if config::option2bool(
+                    hbb_common::config::keys::OPTION_ENABLE_LAN_DISCOVERY,
+                    &Config::get_option(hbb_common::config::keys::OPTION_ENABLE_LAN_DISCOVERY),
+                ) {
+                    allow_err!(super::lan::start_listening());
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_secs(1));
             });
         }
         // It is ok to run xdesktop manager when the headless function is not allowed.
@@ -102,6 +117,11 @@ impl RendezvousMediator {
             {
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
+                if servers.is_empty() {
+                    Config::reset_online();
+                    sleep(1.).await;
+                    continue;
+                }
                 SHOULD_EXIT.store(false, Ordering::SeqCst);
                 MANUAL_RESTARTED.store(false, Ordering::SeqCst);
                 for host in servers.clone() {
@@ -324,15 +344,10 @@ impl RendezvousMediator {
                 });
             }
             Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
-                let v0 = Config::get_rendezvous_servers();
-                Config::set_option(
-                    "rendezvous-servers".to_owned(),
-                    cu.rendezvous_servers.join(","),
+                log::warn!(
+                    "Ignoring server-supplied rendezvous update: {:?}",
+                    cu.rendezvous_servers
                 );
-                Config::set_serial(cu.serial);
-                if v0 != Config::get_rendezvous_servers() {
-                    Self::restart();
-                }
             }
             _ => {}
         }
@@ -810,11 +825,10 @@ async fn direct_server(server: ServerPtr) {
                 let server = server.clone();
                 tokio::spawn(async move {
                     allow_err!(
-                        crate::server::create_tcp_connection(
+                        crate::server::create_direct_tcp_connection(
                             server,
                             hbb_common::Stream::from(stream, local_addr),
                             addr,
-                            false,
                             None, // Direct connections don't have control_permissions
                         )
                         .await

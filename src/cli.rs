@@ -1,6 +1,7 @@
 use crate::client::*;
 use async_trait::async_trait;
 use hbb_common::{
+    anyhow::bail,
     config::PeerConfig,
     config::READ_TIMEOUT,
     futures::{SinkExt, StreamExt},
@@ -11,7 +12,11 @@ use hbb_common::{
     tokio::{self, sync::mpsc},
     Stream,
 };
-use std::sync::{Arc, RwLock};
+use std::{
+    io,
+    io::Write,
+    sync::{Arc, RwLock},
+};
 
 #[derive(Clone)]
 pub struct Session {
@@ -116,6 +121,65 @@ impl Interface for Session {
 
     async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream) {
         handle_test_delay(t, peer).await;
+    }
+
+    async fn confirm_peer_trust(
+        &self,
+        peer: &str,
+        peer_id: &str,
+        fingerprint: &str,
+        trust_phrase: &str,
+        direct: bool,
+    ) -> hbb_common::ResultType<()> {
+        let mut stdout = io::stdout();
+        writeln!(
+            stdout,
+            "{} first-contact trust confirmation",
+            if direct { "Direct" } else { "Secure" }
+        )
+        .ok();
+        writeln!(stdout, "Peer: {}", peer).ok();
+        writeln!(stdout, "Peer ID: {}", peer_id).ok();
+        writeln!(stdout, "Trust phrase: {}", trust_phrase).ok();
+        writeln!(stdout, "Fingerprint: {}", fingerprint).ok();
+        write!(
+            stdout,
+            "Type the trust phrase exactly to approve this device: "
+        )
+        .ok();
+        stdout.flush().ok();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).ok();
+        let normalize = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
+        if normalize(&input).eq_ignore_ascii_case(&normalize(trust_phrase)) {
+            Ok(())
+        } else {
+            bail!("Handshake failed: peer trust was not approved");
+        }
+    }
+
+    async fn request_pairing_passphrase(
+        &self,
+        peer: &str,
+        peer_id: &str,
+        direct: bool,
+    ) -> hbb_common::ResultType<String> {
+        let mut stdout = io::stdout();
+        writeln!(
+            stdout,
+            "{} pairing passphrase required",
+            if direct { "Direct" } else { "Secure" }
+        )
+        .ok();
+        writeln!(stdout, "Peer: {}", peer).ok();
+        writeln!(stdout, "Peer ID: {}", peer_id).ok();
+        write!(stdout, "Enter pairing passphrase: ").ok();
+        stdout.flush().ok();
+        let passphrase = rpassword::prompt_password("").unwrap_or_default();
+        if passphrase.is_empty() {
+            bail!("Handshake failed: pairing passphrase was not provided");
+        }
+        Ok(passphrase)
     }
 
     fn send(&self, data: Data) {

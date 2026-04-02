@@ -75,9 +75,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _floatingWindowDisabled = false;
   var _keepScreenOn = KeepScreenOn.duringControlled; // relay on floating window
   var _enableAbr = false;
-  var _denyLANDiscovery = false;
+  var _lanDiscoveryMode = kLanDiscoveryModeStandard;
   var _onlyWhiteList = false;
   var _enableDirectIPAccess = false;
+  var _directAccessPairingPassphraseSet = false;
+  var _peerPairingPassphraseSet = false;
   var _enableRecordSession = false;
   var _enableHardwareCodec = false;
   var _allowWebSocket = false;
@@ -96,6 +98,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _enableTrustedDevices = false;
   var _enableUdpPunch = false;
   var _allowInsecureTlsFallback = false;
+  var _allowUnverifiedPeerTrust = false;
   var _disableUdp = false;
   var _enableIpv6Punch = false;
   var _isUsingPublicServer = false;
@@ -105,11 +108,18 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   _SettingsState() {
     _enableAbr = option2bool(
         kOptionEnableAbr, bind.mainGetOptionSync(key: kOptionEnableAbr));
-    _denyLANDiscovery = !option2bool(kOptionEnableLanDiscovery,
-        bind.mainGetOptionSync(key: kOptionEnableLanDiscovery));
+    _lanDiscoveryMode = normalizeLanDiscoveryMode(
+      bind.mainGetOptionSync(key: kOptionLanDiscoveryMode),
+      legacyOptionValue: bind.mainGetOptionSync(key: kOptionEnableLanDiscovery),
+    );
     _onlyWhiteList = whitelistNotEmpty();
     _enableDirectIPAccess = option2bool(
         kOptionDirectServer, bind.mainGetOptionSync(key: kOptionDirectServer));
+    _directAccessPairingPassphraseSet = bind
+        .mainGetOptionSync(key: kOptionDirectAccessPairingPassphrase)
+        .isNotEmpty;
+    _peerPairingPassphraseSet =
+        bind.mainGetOptionSync(key: kOptionPeerPairingPassphrase).isNotEmpty;
     _enableRecordSession = option2bool(kOptionEnableRecordSession,
         bind.mainGetOptionSync(key: kOptionEnableRecordSession));
     _enableHardwareCodec = option2bool(kOptionEnableHwcodec,
@@ -117,6 +127,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _allowWebSocket = mainGetBoolOptionSync(kOptionAllowWebSocket);
     _allowInsecureTlsFallback =
         mainGetBoolOptionSync(kOptionAllowInsecureTLSFallback);
+    _allowUnverifiedPeerTrust =
+        mainGetBoolOptionSync(kOptionAllowUnverifiedPeerTrust);
     _disableUdp = bind.mainGetOptionSync(key: kOptionDisableUdp) == 'Y';
     _autoRecordIncomingSession = option2bool(kOptionAllowAutoRecordIncoming,
         bind.mainGetOptionSync(key: kOptionAllowAutoRecordIncoming));
@@ -360,19 +372,21 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             })
     ];
     final List<AbstractSettingsTile> shareScreenTiles = [
-      SettingsTile.switchTile(
-        title: Text(translate('Deny LAN discovery')),
-        initialValue: _denyLANDiscovery,
-        onToggle: isOptionFixed(kOptionEnableLanDiscovery)
+      _getPopupDialogRadioEntry(
+        title: 'LAN discovery',
+        list: [
+          _RadioEntry('Off', kLanDiscoveryModeOff),
+          _RadioEntry(
+              'Trusted Peers Only', kLanDiscoveryModeTrustedPeersOnly),
+          _RadioEntry('Standard', kLanDiscoveryModeStandard),
+        ],
+        getter: () => _lanDiscoveryMode,
+        asyncSetter: isLanDiscoveryModeFixed()
             ? null
-            : (v) async {
-                await bind.mainSetOption(
-                    key: kOptionEnableLanDiscovery,
-                    value: bool2option(kOptionEnableLanDiscovery, !v));
-                final newValue = !option2bool(kOptionEnableLanDiscovery,
-                    await bind.mainGetOption(key: kOptionEnableLanDiscovery));
+            : (value) async {
+                await setLanDiscoveryMode(value);
                 setState(() {
-                  _denyLANDiscovery = newValue;
+                  _lanDiscoveryMode = value;
                 });
               },
       ),
@@ -439,27 +453,49 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                     Offstage(
                         offstage: !_enableDirectIPAccess,
                         child: Text(
-                          '${translate("Local Address")}: $_localIP${_directAccessPort.isEmpty ? "" : ":$_directAccessPort"}',
+                          '${translate("Local Address")}: $_localIP${_directAccessPort.isEmpty ? "" : ":$_directAccessPort"}${_directAccessPairingPassphraseSet ? "\nPairing passphrase: Required" : ""}',
                           style: Theme.of(context).textTheme.bodySmall,
                         )),
                   ])),
               Offstage(
                   offstage: !_enableDirectIPAccess,
-                  child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: Icon(
-                        Icons.edit,
-                        size: 20,
-                      ),
-                      onPressed: isOptionFixed(kOptionDirectAccessPort)
-                          ? null
-                          : () async {
-                              final port = await changeDirectAccessPort(
-                                  _localIP, _directAccessPort);
-                              setState(() {
-                                _directAccessPort = port;
-                              });
-                            }))
+                  child: Row(children: [
+                    IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: Icon(
+                          Icons.lock_outline,
+                          size: 20,
+                        ),
+                        onPressed:
+                            isOptionFixed(kOptionDirectAccessPairingPassphrase)
+                                ? null
+                                : () async {
+                                    final passphrase =
+                                        await changeDirectAccessPairingPassphrase(
+                                            bind.mainGetOptionSync(
+                                                key:
+                                                    kOptionDirectAccessPairingPassphrase));
+                                    setState(() {
+                                      _directAccessPairingPassphraseSet =
+                                          passphrase.isNotEmpty;
+                                    });
+                                  }),
+                    IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: Icon(
+                          Icons.edit,
+                          size: 20,
+                        ),
+                        onPressed: isOptionFixed(kOptionDirectAccessPort)
+                            ? null
+                            : () async {
+                                final port = await changeDirectAccessPort(
+                                    _localIP, _directAccessPort);
+                                setState(() {
+                                  _directAccessPort = port;
+                                });
+                              })
+                  ]))
             ]),
         initialValue: _enableDirectIPAccess,
         onToggle: isOptionFixed(kOptionDirectServer)
@@ -471,6 +507,40 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 await bind.mainSetOption(
                     key: kOptionDirectServer, value: value);
                 setState(() {});
+              },
+      ),
+      SettingsTile(
+        title: Text(translate("Peer pairing passphrase")),
+        value: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            _peerPairingPassphraseSet ? 'Configured' : 'Disabled',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        leading: Icon(Icons.verified_user_outlined),
+        onPressed: isOptionFixed(kOptionPeerPairingPassphrase)
+            ? null
+            : (context) async {
+                final passphrase = await changePeerPairingPassphrase(
+                    bind.mainGetOptionSync(key: kOptionPeerPairingPassphrase));
+                setState(() {
+                  _peerPairingPassphraseSet = passphrase.isNotEmpty;
+                });
+              },
+      ),
+      SettingsTile.switchTile(
+        title: Text(translate('Allow unverified peer trust')),
+        initialValue: _allowUnverifiedPeerTrust,
+        onToggle: isOptionFixed(kOptionAllowUnverifiedPeerTrust)
+            ? null
+            : (v) async {
+                await mainSetBoolOption(kOptionAllowUnverifiedPeerTrust, v);
+                final newValue =
+                    mainGetBoolOptionSync(kOptionAllowUnverifiedPeerTrust);
+                setState(() {
+                  _allowUnverifiedPeerTrust = newValue;
+                });
               },
       ),
       SettingsTile.switchTile(

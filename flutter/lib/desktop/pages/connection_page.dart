@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
@@ -20,6 +21,249 @@ import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
+
+class NetworkModeInfo {
+  final String mode;
+  final String label;
+  final String detail;
+  final String trustPhrase;
+  final List<String> directEndpoints;
+  final bool pairingRequired;
+
+  const NetworkModeInfo({
+    required this.mode,
+    required this.label,
+    required this.detail,
+    required this.trustPhrase,
+    required this.directEndpoints,
+    required this.pairingRequired,
+  });
+
+  const NetworkModeInfo.fallback()
+      : mode = 'not_configured',
+        label = 'Offline',
+        detail = '',
+        trustPhrase = '',
+        directEndpoints = const [],
+        pairingRequired = false;
+
+  factory NetworkModeInfo.fromJson(Map<String, dynamic> json) {
+    return NetworkModeInfo(
+      mode: json['mode'] as String? ?? 'not_configured',
+      label: json['label'] as String? ?? 'Offline',
+      detail: json['detail'] as String? ?? '',
+      trustPhrase: json['trust_phrase'] as String? ?? '',
+      directEndpoints: (json['direct_endpoints'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .where((e) => e.isNotEmpty)
+          .toList(),
+      pairingRequired: json['pairing_required'] as bool? ?? false,
+    );
+  }
+}
+
+Future<NetworkModeInfo> loadNetworkModeInfo() async {
+  Future<NetworkModeInfo> fallbackFromOptions({String trustPhrase = ''}) async {
+    final usingPublicServer = await bind.mainIsUsingPublicServer();
+    final apiServer = await bind.mainGetApiServer();
+    final rendezvousServer =
+        await bind.mainGetOption(key: 'custom-rendezvous-server');
+    final relayServer = await bind.mainGetOption(key: 'relay-server');
+    final directAccessEnabled = option2bool(kOptionDirectServer,
+        await bind.mainGetOption(key: kOptionDirectServer));
+    final pairingRequired =
+        (await bind.mainGetOption(key: kOptionDirectAccessPairingPassphrase))
+            .isNotEmpty;
+    final detail = rendezvousServer.isNotEmpty
+        ? rendezvousServer
+        : relayServer.isNotEmpty
+            ? relayServer
+            : apiServer;
+    if (usingPublicServer) {
+      return NetworkModeInfo(
+        mode: 'public_server',
+        label: 'Public Server',
+        detail: detail,
+        trustPhrase: trustPhrase,
+        directEndpoints: const [],
+        pairingRequired: pairingRequired,
+      );
+    }
+    if (detail.isNotEmpty) {
+      return NetworkModeInfo(
+        mode: 'private_server',
+        label: 'Private Server',
+        detail: detail,
+        trustPhrase: trustPhrase,
+        directEndpoints: const [],
+        pairingRequired: pairingRequired,
+      );
+    }
+    if (directAccessEnabled) {
+      return NetworkModeInfo(
+        mode: 'local_only',
+        label: 'Local Only',
+        detail: '',
+        trustPhrase: trustPhrase,
+        directEndpoints: const [],
+        pairingRequired: pairingRequired,
+      );
+    }
+    return NetworkModeInfo(
+      mode: 'not_configured',
+      label: 'Offline',
+      detail: '',
+      trustPhrase: trustPhrase,
+      directEndpoints: const [],
+      pairingRequired: pairingRequired,
+    );
+  }
+
+  try {
+    final raw = await bind.mainGetCommon(key: 'network-mode-info');
+    if (raw.isEmpty) {
+      return fallbackFromOptions();
+    }
+    final info =
+        NetworkModeInfo.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    if (info.mode == 'not_configured') {
+      return fallbackFromOptions(trustPhrase: info.trustPhrase);
+    }
+    return info;
+  } catch (_) {
+    return fallbackFromOptions();
+  }
+}
+
+Future<void> copyNetworkStatusValue(String value) async {
+  if (value.isEmpty) {
+    return;
+  }
+  await Clipboard.setData(ClipboardData(text: value));
+  showToast('$value\n${translate("Copied")}');
+}
+
+Color colorForNetworkMode(String mode) {
+  switch (mode) {
+    case 'local_only':
+      return const Color(0xFF2E8B57);
+    case 'private_server':
+      return const Color(0xFF2F65BA);
+    case 'public_server':
+      return const Color(0xFFF39C12);
+    case 'not_configured':
+    default:
+      return Colors.grey;
+  }
+}
+
+class NetworkStatusPanel extends StatelessWidget {
+  const NetworkStatusPanel({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final mode = stateGlobal.networkMode.value;
+      final label = stateGlobal.networkModeLabel.value;
+      final detail = stateGlobal.networkModeDetail.value;
+      final trustPhrase = stateGlobal.networkModeTrustPhrase.value;
+      final directEndpoints =
+          stateGlobal.networkModeDirectEndpoints.toList(growable: false);
+      final pairingRequired = stateGlobal.networkModePairingRequired.value;
+      final directAccessValue = directEndpoints.join(', ');
+      final color = colorForNetworkMode(mode);
+      final secondaryTextColor =
+          Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.75);
+      Widget buildStatusLine(
+        String label,
+        String value, {
+        bool copyable = false,
+        bool ellipsize = false,
+      }) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                '$label: $value',
+                maxLines: ellipsize ? 1 : null,
+                overflow:
+                    ellipsize ? TextOverflow.ellipsis : TextOverflow.visible,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: secondaryTextColor,
+                    ),
+              ),
+            ),
+            if (copyable)
+              IconButton(
+                onPressed: () => copyNetworkStatusValue(value),
+                icon: const Icon(Icons.copy_rounded, size: 15),
+                visualDensity: VisualDensity.compact,
+                splashRadius: 16,
+                constraints: const BoxConstraints(
+                  minWidth: 24,
+                  minHeight: 24,
+                ),
+                tooltip: 'Copy',
+                padding: EdgeInsets.zero,
+              ),
+          ],
+        );
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withOpacity(0.4)),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          buildStatusLine(
+            'LAN discovery',
+            translate(stateGlobal.lanDiscoveryModeLabel.value),
+          ),
+          if (trustPhrase.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            buildStatusLine('Trust phrase', trustPhrase, copyable: true),
+          ],
+          if (mode == 'local_only' || pairingRequired) ...[
+            const SizedBox(height: 4),
+            buildStatusLine(
+              'Pairing passphrase',
+              pairingRequired ? 'Required' : 'Disabled',
+            ),
+          ],
+          if (directAccessValue.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            buildStatusLine(
+              'Direct access',
+              directAccessValue,
+              copyable: true,
+            ),
+          ],
+          if (detail.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            buildStatusLine('Endpoint', detail, ellipsize: true),
+          ],
+          const SizedBox(height: 14),
+          Divider(height: 1),
+        ],
+      );
+    });
+  }
+}
 
 class OnlineStatusWidget extends StatefulWidget {
   const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
@@ -66,6 +310,19 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   @override
   Widget build(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
+    Color statusColor() {
+      if (_svcStopped.value) {
+        return kColorWarn;
+      }
+      if (stateGlobal.svcStatus.value == SvcStatus.ready) {
+        return const Color.fromARGB(255, 50, 190, 166);
+      }
+      if (stateGlobal.svcStatus.value == SvcStatus.connecting) {
+        return colorForNetworkMode(stateGlobal.networkMode.value);
+      }
+      return const Color.fromARGB(255, 224, 79, 95);
+    }
+
     startServiceWidget() => Offstage(
           offstage: !_svcStopped.value,
           child: InkWell(
@@ -117,12 +374,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
               width: 8,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                color: _svcStopped.value ||
-                        stateGlobal.svcStatus.value == SvcStatus.connecting
-                    ? kColorWarn
-                    : (stateGlobal.svcStatus.value == SvcStatus.ready
-                        ? Color.fromARGB(255, 50, 190, 166)
-                        : Color.fromARGB(255, 224, 79, 95)),
+                color: statusColor(),
               ),
             ).marginSymmetric(horizontal: em),
             Container(
@@ -155,19 +407,35 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
 
   _buildConnStatusMsg() {
     widget.onSvcStatusChanged?.call();
+    final statusText = _svcStopped.value
+        ? translate("Service is not running")
+        : stateGlobal.svcStatus.value == SvcStatus.connecting
+            ? (stateGlobal.networkMode.value == 'local_only' ||
+                    stateGlobal.networkMode.value == 'not_configured'
+                ? stateGlobal.networkModeLabel.value
+                : translate("connecting_status"))
+            : stateGlobal.svcStatus.value == SvcStatus.notReady
+                ? translate("not_ready_status")
+                : translate('Ready');
     return Text(
-      _svcStopped.value
-          ? translate("Service is not running")
-          : stateGlobal.svcStatus.value == SvcStatus.connecting
-              ? translate("connecting_status")
-              : stateGlobal.svcStatus.value == SvcStatus.notReady
-                  ? translate("not_ready_status")
-                  : translate('Ready'),
+      statusText,
       style: TextStyle(fontSize: em),
     );
   }
 
   updateStatus() async {
+    final networkMode = await loadNetworkModeInfo();
+    stateGlobal.networkMode.value = networkMode.mode;
+    stateGlobal.networkModeLabel.value = networkMode.label;
+    stateGlobal.networkModeDetail.value = networkMode.detail;
+    stateGlobal.networkModeTrustPhrase.value = networkMode.trustPhrase;
+    stateGlobal.networkModeDirectEndpoints
+        .assignAll(networkMode.directEndpoints);
+    stateGlobal.networkModePairingRequired.value = networkMode.pairingRequired;
+    final lanDiscoveryMode = await loadLanDiscoveryMode();
+    stateGlobal.lanDiscoveryMode.value = lanDiscoveryMode;
+    stateGlobal.lanDiscoveryModeLabel.value =
+        lanDiscoveryModeLabel(lanDiscoveryMode);
     final status =
         jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
     final statusNum = status['status_num'] as int;
@@ -394,6 +662,12 @@ class _ConnectionPageState extends State<ConnectionPage>
                                   .toLowerCase()
                                   .contains(textToFind) ||
                               peer.hostname
+                                  .toLowerCase()
+                                  .contains(textToFind) ||
+                              peer.discoveryEndpoint
+                                  .toLowerCase()
+                                  .contains(textToFind) ||
+                              peer.discoveryTrustPhrase
                                   .toLowerCase()
                                   .contains(textToFind) ||
                               peer.alias.toLowerCase().contains(textToFind))

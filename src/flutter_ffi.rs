@@ -247,6 +247,32 @@ pub fn session_send2fa(session_id: SessionID, code: String, trust_this_device: b
     }
 }
 
+pub fn session_confirm_direct_trust(session_id: SessionID, approved: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.confirm_direct_trust_response(approved);
+    }
+}
+
+pub fn session_submit_direct_pairing_passphrase(
+    session_id: SessionID,
+    passphrase: String,
+    approved: bool,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let passphrase = if approved { Some(passphrase) } else { None };
+        session.submit_direct_pairing_passphrase_response(passphrase);
+    }
+}
+
+pub fn session_reset_peer_trust(session_id: SessionID) -> SyncReturn<bool> {
+    let reset = if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.reset_peer_trust()
+    } else {
+        false
+    };
+    SyncReturn(reset)
+}
+
 pub fn session_get_enable_trusted_devices(session_id: SessionID) -> SyncReturn<bool> {
     let v = if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.get_enable_trusted_devices()
@@ -2775,6 +2801,17 @@ pub fn main_get_common(key: String) -> String {
         return ui_interface::is_permanent_password_set().to_string();
     } else if key == "local-permanent-password-set" {
         return ui_interface::is_local_permanent_password_set().to_string();
+    } else if key == "network-mode-info" {
+        let info = crate::common::get_network_mode_info();
+        return serde_json::json!({
+            "mode": info.mode,
+            "label": info.label,
+            "detail": info.detail,
+            "trust_phrase": info.trust_phrase,
+            "direct_endpoints": info.direct_endpoints,
+            "pairing_required": info.pairing_required,
+        })
+        .to_string();
     } else {
         if key.starts_with("download-data-") {
             let id = key.replace("download-data-", "");
