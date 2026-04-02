@@ -692,6 +692,15 @@ pub mod server {
                     crate::rustdesk_interval(tokio::time::interval(Duration::from_secs(1)));
                 let mut nack = 0;
                 loop {
+                    if *EXIT.lock().unwrap() {
+                        log::info!("Portable service EXIT signaled, closing ipc client loop");
+                        stream
+                            .send(&Data::DataPortableService(WillClose))
+                            .await
+                            .ok();
+                        break;
+                    }
+
                     tokio::select! {
                         res = stream.next() => {
                             match res {
