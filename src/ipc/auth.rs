@@ -630,8 +630,10 @@ pub(crate) fn authorize_windows_portable_service_ipc_connection(
     // Portable service IPC policy:
     // - only SYSTEM peers are authorized by is_allowed_windows_portable_service_peer()
     // - expected_session_id is still collected for diagnostics and identity checks
-    // - if a non-SYSTEM peer reaches executable validation in future policy changes,
-    //   it must still match the current executable path
+    // - final privilege boundary is enforced by named-pipe ACL + one-time token handshake
+    // - when peer identity is unavailable on some hosts, executable verification remains
+    //   best-effort telemetry (not fail-closed) to avoid breaking valid SYSTEM bootstrap
+    //   flows that cannot be fully introspected
     let expected_session_id = crate::platform::windows::get_current_process_session_id();
     let (authorized, peer_pid, peer_session_id, peer_is_system) =
         stream.portable_service_authorization_status_for_session(expected_session_id);
@@ -641,17 +643,18 @@ pub(crate) fn authorize_windows_portable_service_ipc_connection(
         if identity_unavailable {
             // In portable-service startup, resolving SYSTEM peer identity may fail on some hosts
             // (for example, access denied while opening the peer process). Keep executable
-            // verification as best-effort telemetry and defer final authorization to token handshake.
+            // verification as best-effort telemetry and defer final authorization to pipe ACL
+            // + token handshake.
             if let Err(err) = stream.ensure_peer_executable_path_matches_current(postfix) {
                 log::warn!(
-                    "Portable service ipc peer identity unavailable and executable verification failed; continue to token handshake: postfix={}, peer_pid={:?}, err={}",
+                    "Portable service ipc peer identity unavailable and executable verification failed; continue with ACL+token-gated flow: postfix={}, peer_pid={:?}, err={}",
                     postfix,
                     peer_pid,
                     err
                 );
             } else {
                 log::warn!(
-                    "Portable service ipc peer identity unavailable; executable verification matched, continue to token handshake: postfix={}, peer_pid={:?}, expected_session_id={:?}",
+                    "Portable service ipc peer identity unavailable; executable verification matched, continue with ACL+token-gated flow: postfix={}, peer_pid={:?}, expected_session_id={:?}",
                     postfix,
                     peer_pid,
                     expected_session_id
@@ -935,7 +938,6 @@ mod tests {
             !super::portable_service_helper_is_trusted(&helper_exe, &helper_exe, &current_exe),
             "helper trust check must reject path-match-only binaries with mismatched content"
         );
-
     }
 
     #[test]
@@ -963,7 +965,6 @@ mod tests {
             &helper_exe,
             &current_exe
         ));
-
     }
 
     #[cfg(target_os = "macos")]

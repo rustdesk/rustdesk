@@ -870,9 +870,6 @@ pub mod client {
                 log::debug!(
                     "Skip restoring portable service ipc token after handshake failure: runtime token has changed to a newer value"
                 );
-                log::trace!(
-                    "Skip restoring stale portable service ipc token due to token rotation"
-                );
                 return;
             }
         }

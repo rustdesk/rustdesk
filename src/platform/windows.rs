@@ -2413,8 +2413,9 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
     let shmem_name_from_args = crate::portable_service::portable_service_shmem_name_from_args();
     if shmem_name_from_args.is_none() && crate::portable_service::has_portable_service_shmem_arg() {
         log::error!("Invalid portable service shared memory argument, aborting elevation flow");
-        // Bubble this up as a Result or status flag so the callers can stop the shutdown path
-        // and surface the failure instead of exiting silently.
+        // This is a malformed bootstrap argument in a privilege-sensitive path.
+        // Keep fail-closed process termination here to avoid continuing elevation
+        // with inconsistent shared-memory contract.
         std::process::exit(1);
     }
     if let Some(shmem_name) = shmem_name_from_args {
@@ -2503,6 +2504,53 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
     }
 }
 
+#[inline]
+unsafe fn read_token_user_buffer(token: WinHANDLE, subject: &str) -> ResultType<Vec<u8>> {
+    let mut token_user_size = 0u32;
+    let get_info_result = WinGetTokenInformation(token, TokenUser, None, 0, &mut token_user_size);
+    match get_info_result {
+        Ok(()) => {
+            if token_user_size == 0 {
+                bail!(
+                    "Failed to get {} token user size: unexpected zero buffer size",
+                    subject
+                );
+            }
+        }
+        Err(e) => {
+            // Allow expected size-probe failures if Windows still returns required size.
+            let is_insufficient_buffer =
+                e.code() == windows::core::HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER as u32);
+            let is_bad_length =
+                e.code() == windows::core::HRESULT::from_win32(ERROR_BAD_LENGTH as u32);
+            if (!is_insufficient_buffer && !is_bad_length) || token_user_size == 0 {
+                bail!("Failed to get {} token user size: {}", subject, e);
+            }
+        }
+    }
+
+    let mut buffer = vec![0u8; token_user_size as usize];
+    WinGetTokenInformation(
+        token,
+        TokenUser,
+        Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+        token_user_size,
+        &mut token_user_size,
+    )
+    .map_err(|e| anyhow!("Failed to get {} token user: {}", subject, e))?;
+
+    let min_size = std::mem::size_of::<TOKEN_USER>();
+    if buffer.len() < min_size {
+        bail!(
+            "Failed to parse {} token user: buffer too small (got {}, need >= {})",
+            subject,
+            buffer.len(),
+            min_size
+        );
+    }
+    Ok(buffer)
+}
+
 /// Similar to `is_root()` / `is_local_system()` but for an arbitrary process.
 ///
 /// Returns `true` if the target process is running as LocalSystem (SID: S-1-5-18).
@@ -2519,56 +2567,8 @@ pub fn is_process_running_as_system(process_id: DWORD) -> ResultType<bool> {
             WinOpenProcessToken(process, WIN_TOKEN_QUERY, &mut token)
                 .map_err(|e| anyhow!("Failed to open process {} token: {}", process_id, e))?;
 
-            let mut token_user_size = 0u32;
-            let get_info_result =
-                WinGetTokenInformation(token, TokenUser, None, 0, &mut token_user_size);
-            match get_info_result {
-                Ok(()) => {
-                    if token_user_size == 0 {
-                        bail!(
-                            "Failed to get process {} token user size: unexpected zero buffer size",
-                            process_id
-                        );
-                    }
-                }
-                Err(e) => {
-                    // Allow the expected ERROR_INSUFFICIENT_BUFFER path where token_user_size
-                    // is set to the required size.
-                    let is_insufficient_buffer = e.code()
-                        == windows::core::HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER as u32);
-                    // Some Windows versions may return ERROR_BAD_LENGTH for size-probe calls while
-                    // still setting the required size.
-                    let is_bad_length =
-                        e.code() == windows::core::HRESULT::from_win32(ERROR_BAD_LENGTH as u32);
-                    if (!is_insufficient_buffer && !is_bad_length) || token_user_size == 0 {
-                        bail!(
-                            "Failed to get process {} token user size: {}",
-                            process_id,
-                            e
-                        );
-                    }
-                }
-            }
-
-            let mut buffer = vec![0u8; token_user_size as usize];
-            WinGetTokenInformation(
-                token,
-                TokenUser,
-                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
-                token_user_size,
-                &mut token_user_size,
-            )
-            .map_err(|e| anyhow!("Failed to get process {} token user: {}", process_id, e))?;
-
-            let min_size = std::mem::size_of::<TOKEN_USER>();
-            if buffer.len() < min_size {
-                bail!(
-                    "Failed to parse process {} token user: buffer too small (got {}, need >= {})",
-                    process_id,
-                    buffer.len(),
-                    min_size
-                );
-            }
+            let token_subject = format!("process {}", process_id);
+            let buffer = read_token_user_buffer(token, token_subject.as_str())?;
             let token_user: TOKEN_USER =
                 std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
             Ok(IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool())
@@ -2948,46 +2948,7 @@ pub(crate) fn current_process_user_sid_string() -> ResultType<String> {
             WinOpenProcessToken(WinGetCurrentProcess(), WIN_TOKEN_QUERY, &mut token)
                 .map_err(|e| anyhow!("Failed to open current process token: {}", e))?;
 
-            let mut token_user_size = 0u32;
-            let get_info_result =
-                WinGetTokenInformation(token, TokenUser, None, 0, &mut token_user_size);
-            match get_info_result {
-                Ok(()) => {
-                    if token_user_size == 0 {
-                        bail!(
-                            "Failed to get current process token user size: unexpected zero buffer size"
-                        );
-                    }
-                }
-                Err(e) => {
-                    let is_insufficient_buffer = e.code()
-                        == windows::core::HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER as u32);
-                    let is_bad_length =
-                        e.code() == windows::core::HRESULT::from_win32(ERROR_BAD_LENGTH as u32);
-                    if (!is_insufficient_buffer && !is_bad_length) || token_user_size == 0 {
-                        bail!("Failed to get current process token user size: {}", e);
-                    }
-                }
-            }
-
-            let mut buffer = vec![0u8; token_user_size as usize];
-            WinGetTokenInformation(
-                token,
-                TokenUser,
-                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
-                token_user_size,
-                &mut token_user_size,
-            )
-            .map_err(|e| anyhow!("Failed to get current process token user: {}", e))?;
-
-            let min_size = std::mem::size_of::<TOKEN_USER>();
-            if buffer.len() < min_size {
-                bail!(
-                    "Failed to parse current process token user: buffer too small (got {}, need >= {})",
-                    buffer.len(),
-                    min_size
-                );
-            }
+            let buffer = read_token_user_buffer(token, "current process")?;
             let token_user: TOKEN_USER =
                 std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
             if token_user.User.Sid.0.is_null() {
@@ -3182,7 +3143,11 @@ fn set_path_permission_for_portable_service_shmem_impl(
 
 #[inline]
 fn hidden_icacls_command() -> std::process::Command {
-    let mut command = std::process::Command::new("icacls");
+    let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let icacls_path = PathBuf::from(system_root)
+        .join("System32")
+        .join("icacls.exe");
+    let mut command = std::process::Command::new(icacls_path);
     command.creation_flags(CREATE_NO_WINDOW);
     command
 }
