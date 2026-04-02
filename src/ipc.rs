@@ -495,12 +495,6 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     {
                                         if postfix == crate::POSTFIX_SERVICE {
-                                            log::warn!(
-                                                "======================= Rejected malformed data on protected _service IPC channel: postfix={}, peer_uid={:?}, peer_pid={:?}",
-                                                postfix,
-                                                stream.peer_uid(),
-                                                stream.peer_pid()
-                                            );
                                             break;
                                         }
                                     }
