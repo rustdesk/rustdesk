@@ -1628,6 +1628,52 @@ bool mainGetPeerBoolOptionSync(String id, String key) {
   return option2bool(key, bind.mainGetPeerOptionSync(id: id, key: key));
 }
 
+String normalizeLanDiscoveryMode(String mode, {String? legacyOptionValue}) {
+  switch (mode) {
+    case kLanDiscoveryModeOff:
+    case kLanDiscoveryModeTrustedPeersOnly:
+    case kLanDiscoveryModeStandard:
+      return mode;
+  }
+  if (legacyOptionValue != null) {
+    return option2bool(kOptionEnableLanDiscovery, legacyOptionValue)
+        ? kLanDiscoveryModeStandard
+        : kLanDiscoveryModeOff;
+  }
+  return kLanDiscoveryModeStandard;
+}
+
+String lanDiscoveryModeLabel(String mode) {
+  switch (normalizeLanDiscoveryMode(mode)) {
+    case kLanDiscoveryModeOff:
+      return 'Off';
+    case kLanDiscoveryModeTrustedPeersOnly:
+      return 'Trusted Peers Only';
+    default:
+      return 'Standard';
+  }
+}
+
+Future<String> loadLanDiscoveryMode() async {
+  final mode = await bind.mainGetOption(key: kOptionLanDiscoveryMode);
+  final legacy = await bind.mainGetOption(key: kOptionEnableLanDiscovery);
+  return normalizeLanDiscoveryMode(mode, legacyOptionValue: legacy);
+}
+
+Future<void> setLanDiscoveryMode(String mode) async {
+  final normalized = normalizeLanDiscoveryMode(mode);
+  await bind.mainSetOption(key: kOptionLanDiscoveryMode, value: normalized);
+  await bind.mainSetOption(
+      key: kOptionEnableLanDiscovery,
+      value: bool2option(
+          kOptionEnableLanDiscovery, normalized != kLanDiscoveryModeOff));
+}
+
+bool isLanDiscoveryModeFixed() {
+  return isOptionFixed(kOptionLanDiscoveryMode) ||
+      isOptionFixed(kOptionEnableLanDiscovery);
+}
+
 // Don't use `option2bool()` and `bool2option()` to convert the session option.
 // Use `sessionGetToggleOption()` and `sessionToggleOption()` instead.
 // Because all session options use `Y` and `<Empty>` as values.
@@ -1642,6 +1688,10 @@ Future<bool> matchPeer(
   }
   if (peer.hostname.toLowerCase().contains(searchText) ||
       peer.username.toLowerCase().contains(searchText)) {
+    return true;
+  }
+  if (peer.discoveryEndpoint.toLowerCase().contains(searchText) ||
+      peer.discoveryTrustPhrase.toLowerCase().contains(searchText)) {
     return true;
   }
   if (peer.alias.toLowerCase().contains(searchText)) {

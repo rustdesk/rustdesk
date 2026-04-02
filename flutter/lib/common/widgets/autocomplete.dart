@@ -131,8 +131,22 @@ class AutocompletePeerTileState extends State<AutocompletePeerTile> {
   @override
   Widget build(BuildContext context) {
     final double tileRadius = 5;
-    final name =
-        '${widget.peer.username}${widget.peer.username.isNotEmpty && widget.peer.hostname.isNotEmpty ? '@' : ''}${widget.peer.hostname}';
+    final isUntrustedDiscovered = widget.peer.isUntrustedDiscoveredPeer;
+    final title = isUntrustedDiscovered
+        ? translate('Untrusted device')
+        : widget.peer.alias.isEmpty
+            ? formatID(widget.peer.id)
+            : widget.peer.alias;
+    final detail = isUntrustedDiscovered
+        ? widget.peer.discoveryEndpoint
+        : (() {
+            final label =
+                '${widget.peer.username}${widget.peer.username.isNotEmpty && widget.peer.hostname.isNotEmpty ? '@' : ''}${widget.peer.hostname}';
+            if (label.isEmpty && widget.peer.discoveryEndpoint.isNotEmpty) {
+              return widget.peer.discoveryEndpoint;
+            }
+            return label;
+          })();
     final greyStyle = TextStyle(
         fontSize: 11,
         color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
@@ -160,8 +174,11 @@ class AutocompletePeerTileState extends State<AutocompletePeerTile> {
                         height: null,
                         child: Padding(
                             padding: EdgeInsets.all(6),
-                            child: getPlatformImage(widget.peer.platform,
-                                size: 30))),
+                            child: isUntrustedDiscovered
+                                ? Icon(Icons.lan_outlined,
+                                    size: 22, color: Colors.white)
+                                : getPlatformImage(widget.peer.platform,
+                                    size: 30))),
                     Expanded(
                       child: Container(
                           padding: EdgeInsets.only(left: 10),
@@ -189,17 +206,15 @@ class AutocompletePeerTileState extends State<AutocompletePeerTile> {
                                                         8, widget.peer.online),
                                                     Expanded(
                                                         child: Text(
-                                                      widget.peer.alias.isEmpty
-                                                          ? formatID(
-                                                              widget.peer.id)
-                                                          : widget.peer.alias,
+                                                      title,
                                                       overflow:
                                                           TextOverflow.ellipsis,
                                                       style: Theme.of(context)
                                                           .textTheme
                                                           .titleSmall,
                                                     )),
-                                                    widget.peer.alias.isNotEmpty
+                                                    widget.peer.alias.isNotEmpty &&
+                                                            !isUntrustedDiscovered
                                                         ? Padding(
                                                             padding:
                                                                 const EdgeInsets
@@ -218,7 +233,7 @@ class AutocompletePeerTileState extends State<AutocompletePeerTile> {
                                               Align(
                                                 alignment: Alignment.centerLeft,
                                                 child: Text(
-                                                  name,
+                                                  detail,
                                                   style: greyStyle,
                                                   textAlign: TextAlign.start,
                                                   overflow:

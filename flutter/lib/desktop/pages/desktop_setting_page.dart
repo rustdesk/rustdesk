@@ -1234,8 +1234,11 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
       shareRdp(context, enabled),
-      _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
-          reverse: true, enabled: enabled),
+      peerPairingPassphrase(context, enabled),
+      _OptionCheckBox(context, 'Allow unverified peer trust',
+          kOptionAllowUnverifiedPeerTrust,
+          enabled: enabled),
+      lanDiscoveryMode(context, enabled),
       ...directIp(context),
       whitelist(),
       ...autoDisconnect(context),
@@ -1248,6 +1251,34 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             reverse: false, enabled: enabled),
       if (bind.mainIsInstalled() && !isUnlockPinDisabled()) unlockPin()
     ]);
+  }
+
+  Widget lanDiscoveryMode(BuildContext context, bool enabled) {
+    final keys = <String>[
+      kLanDiscoveryModeOff,
+      kLanDiscoveryModeTrustedPeersOnly,
+      kLanDiscoveryModeStandard,
+    ];
+    final values = keys.map(lanDiscoveryModeLabel).map(translate).toList();
+    final currentMode = normalizeLanDiscoveryMode(
+      bind.mainGetOptionSync(key: kOptionLanDiscoveryMode),
+      legacyOptionValue: bind.mainGetOptionSync(key: kOptionEnableLanDiscovery),
+    );
+    return _SubLabeledWidget(
+      context,
+      'LAN discovery',
+      ComboBox(
+        enabled: enabled && !isLanDiscoveryModeFixed(),
+        keys: keys,
+        values: values,
+        initialKey: currentMode,
+        onChanged: (key) async {
+          await setLanDiscoveryMode(key);
+          setState(() {});
+        },
+      ),
+      enabled: enabled && !isLanDiscoveryModeFixed(),
+    );
   }
 
   shareRdp(BuildContext context, bool enabled) {
@@ -1277,6 +1308,52 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     );
   }
 
+  Widget peerPairingPassphrase(BuildContext context, bool enabled) {
+    final pairingPassphrase =
+        bind.mainGetOptionSync(key: kOptionPeerPairingPassphrase);
+    final isOptFixed = isOptionFixed(kOptionPeerPairingPassphrase);
+    return _SubLabeledWidget(
+      context,
+      'Peer pairing passphrase',
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              pairingPassphrase.isEmpty ? 'Disabled' : 'Configured',
+              style: TextStyle(
+                color: disabledTextColor(
+                    context, enabled && !locked && !isOptFixed),
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: enabled && !locked && !isOptFixed
+                ? () async {
+                    await changePeerPairingPassphrase(pairingPassphrase);
+                    setState(() {});
+                  }
+                : null,
+            child: Text(pairingPassphrase.isEmpty ? 'Set' : 'Change'),
+          ).marginOnly(right: 8),
+          OutlinedButton(
+            onPressed: enabled &&
+                    !locked &&
+                    !isOptFixed &&
+                    pairingPassphrase.isNotEmpty
+                ? () async {
+                    await bind.mainSetOption(
+                        key: kOptionPeerPairingPassphrase, value: '');
+                    setState(() {});
+                  }
+                : null,
+            child: Text(translate('Clear')),
+          ),
+        ],
+      ),
+      enabled: enabled && !locked && !isOptFixed,
+    );
+  }
+
   List<Widget> directIp(BuildContext context) {
     TextEditingController controller = TextEditingController();
     update(bool v) => setState(() {});
@@ -1293,47 +1370,100 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           controller.text =
               bind.mainGetOptionSync(key: kOptionDirectAccessPort);
           final isOptFixed = isOptionFixed(kOptionDirectAccessPort);
+          final pairingPassphrase =
+              bind.mainGetOptionSync(key: kOptionDirectAccessPairingPassphrase);
+          final isPairingOptFixed =
+              isOptionFixed(kOptionDirectAccessPairingPassphrase);
           return Offstage(
             offstage: !enabled,
-            child: _SubLabeledWidget(
-              context,
-              'Port',
-              Row(children: [
-                SizedBox(
-                  width: 95,
-                  child: TextField(
-                    controller: controller,
-                    enabled: enabled && !locked && !isOptFixed,
-                    onChanged: (_) => applyEnabled.value = true,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(
-                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
-                    ],
-                    decoration: const InputDecoration(
-                      hintText: '21118',
-                      contentPadding:
-                          EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+            child: Column(
+              children: [
+                _SubLabeledWidget(
+                  context,
+                  'Port',
+                  Row(children: [
+                    SizedBox(
+                      width: 95,
+                      child: TextField(
+                        controller: controller,
+                        enabled: enabled && !locked && !isOptFixed,
+                        onChanged: (_) => applyEnabled.value = true,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(
+                              r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                        ],
+                        decoration: const InputDecoration(
+                          hintText: '21118',
+                          contentPadding: EdgeInsets.symmetric(
+                              vertical: 12, horizontal: 12),
+                        ),
+                      ).workaroundFreezeLinuxMint().marginOnly(right: 15),
                     ),
-                  ).workaroundFreezeLinuxMint().marginOnly(right: 15),
+                    Obx(() => ElevatedButton(
+                          onPressed: applyEnabled.value &&
+                                  enabled &&
+                                  !locked &&
+                                  !isOptFixed
+                              ? () async {
+                                  applyEnabled.value = false;
+                                  await bind.mainSetOption(
+                                      key: kOptionDirectAccessPort,
+                                      value: controller.text);
+                                }
+                              : null,
+                          child: Text(
+                            translate('Apply'),
+                          ),
+                        ))
+                  ]),
+                  enabled: enabled && !locked && !isOptFixed,
                 ),
-                Obx(() => ElevatedButton(
-                      onPressed: applyEnabled.value &&
-                              enabled &&
-                              !locked &&
-                              !isOptFixed
-                          ? () async {
-                              applyEnabled.value = false;
-                              await bind.mainSetOption(
-                                  key: kOptionDirectAccessPort,
-                                  value: controller.text);
-                            }
-                          : null,
-                      child: Text(
-                        translate('Apply'),
+                _SubLabeledWidget(
+                  context,
+                  'Pairing passphrase',
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          pairingPassphrase.isEmpty ? 'Disabled' : 'Configured',
+                          style: TextStyle(
+                            color: disabledTextColor(
+                              context,
+                              enabled && !locked && !isPairingOptFixed,
+                            ),
+                          ),
+                        ),
                       ),
-                    ))
-              ]),
-              enabled: enabled && !locked && !isOptFixed,
+                      ElevatedButton(
+                        onPressed: enabled && !locked && !isPairingOptFixed
+                            ? () async {
+                                await changeDirectAccessPairingPassphrase(
+                                    pairingPassphrase);
+                                setState(() {});
+                              }
+                            : null,
+                        child:
+                            Text(pairingPassphrase.isEmpty ? 'Set' : 'Change'),
+                      ).marginOnly(right: 8),
+                      OutlinedButton(
+                        onPressed: enabled &&
+                                !locked &&
+                                !isPairingOptFixed &&
+                                pairingPassphrase.isNotEmpty
+                            ? () async {
+                                await bind.mainSetOption(
+                                    key: kOptionDirectAccessPairingPassphrase,
+                                    value: '');
+                                setState(() {});
+                              }
+                            : null,
+                        child: Text(translate('Clear')),
+                      ),
+                    ],
+                  ),
+                  enabled: enabled && !locked && !isPairingOptFixed,
+                ),
+              ],
             ),
           );
         }

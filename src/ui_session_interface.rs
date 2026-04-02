@@ -8,6 +8,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use bytes::Bytes;
+use hbb_common::bail;
 #[cfg(all(target_os = "windows", not(feature = "flutter")))]
 use hbb_common::config::keys;
 #[cfg(not(feature = "flutter"))]
@@ -20,12 +21,14 @@ use hbb_common::{
     rendezvous_proto::ConnType,
     tokio::{
         self,
-        sync::mpsc,
+        sync::{mpsc, oneshot},
         time::{Duration as TokioDuration, Instant},
     },
-    whoami, Stream,
+    whoami, ResultType, Stream,
 };
 use rdev::{Event, EventType::*, KeyCode};
+#[cfg(feature = "flutter")]
+use serde_json::json;
 #[cfg(all(feature = "vram", feature = "flutter"))]
 use std::ffi::c_void;
 use std::{
@@ -72,6 +75,8 @@ pub struct Session<T: InvokeUiSession> {
     pub reconnect_count: Arc<AtomicUsize>,
     pub last_audit_note: Arc<Mutex<String>>,
     pub audit_guid: Arc<Mutex<String>>,
+    pub direct_trust_response: Arc<Mutex<Option<oneshot::Sender<bool>>>>,
+    pub direct_pairing_passphrase_response: Arc<Mutex<Option<oneshot::Sender<Option<String>>>>>,
 }
 
 #[derive(Clone)]
@@ -1393,7 +1398,31 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn close(&self) {
+        self.confirm_direct_trust_response(false);
+        self.submit_direct_pairing_passphrase_response(None);
         self.send(Data::Close);
+    }
+
+    pub fn confirm_direct_trust_response(&self, approved: bool) {
+        if let Some(tx) = self.direct_trust_response.lock().unwrap().take() {
+            let _ = tx.send(approved);
+        }
+    }
+
+    pub fn submit_direct_pairing_passphrase_response(&self, passphrase: Option<String>) {
+        if let Some(tx) = self
+            .direct_pairing_passphrase_response
+            .lock()
+            .unwrap()
+            .take()
+        {
+            let _ = tx.send(passphrase);
+        }
+    }
+
+    pub fn reset_peer_trust(&self) -> bool {
+        let peer_id = self.lc.read().unwrap().get_id().to_owned();
+        crate::common::clear_pinned_peer_signing_key(&peer_id)
     }
 
     fn try_auto_start_job_str(is_reconnected: bool, job_str: &str) -> Option<String> {
@@ -1760,6 +1789,92 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         let retry_for_relay = direct == Some(true) && !received;
         let retry = check_if_retry(msgtype, title, text, retry_for_relay);
         self.ui_handler.msgbox(msgtype, title, text, link, retry);
+    }
+
+    async fn confirm_peer_trust(
+        &self,
+        peer: &str,
+        peer_id: &str,
+        fingerprint: &str,
+        trust_phrase: &str,
+        direct: bool,
+    ) -> ResultType<()> {
+        #[cfg(feature = "flutter")]
+        {
+            let (tx, rx) = oneshot::channel();
+            {
+                let mut pending = self.direct_trust_response.lock().unwrap();
+                if let Some(prev) = pending.replace(tx) {
+                    let _ = prev.send(false);
+                }
+            }
+            let payload = json!({
+                "peer": peer,
+                "peer_id": peer_id,
+                "fingerprint": fingerprint,
+                "trust_phrase": trust_phrase,
+                "direct": direct,
+            })
+            .to_string();
+            self.ui_handler.msgbox(
+                "confirm-peer-trust",
+                "Trust this device",
+                &payload,
+                "",
+                false,
+            );
+            let approved = rx.await.unwrap_or(false);
+            if !approved {
+                bail!("Handshake failed: peer trust was not approved");
+            }
+            return Ok(());
+        }
+        #[cfg(not(feature = "flutter"))]
+        {
+            let _ = (peer, peer_id, fingerprint, trust_phrase, direct);
+            bail!("Handshake failed: peer trust approval is not supported by this client UI")
+        }
+    }
+
+    async fn request_pairing_passphrase(
+        &self,
+        peer: &str,
+        peer_id: &str,
+        direct: bool,
+    ) -> ResultType<String> {
+        #[cfg(feature = "flutter")]
+        {
+            let (tx, rx) = oneshot::channel();
+            {
+                let mut pending = self.direct_pairing_passphrase_response.lock().unwrap();
+                if let Some(prev) = pending.replace(tx) {
+                    let _ = prev.send(None);
+                }
+            }
+            let payload = json!({
+                "peer": peer,
+                "peer_id": peer_id,
+                "direct": direct,
+            })
+            .to_string();
+            self.ui_handler.msgbox(
+                "input-pairing-passphrase",
+                "Pairing passphrase required",
+                &payload,
+                "",
+                false,
+            );
+            let passphrase = rx.await.unwrap_or(None).unwrap_or_default();
+            if passphrase.is_empty() {
+                bail!("Handshake failed: pairing passphrase was not provided");
+            }
+            return Ok(passphrase);
+        }
+        #[cfg(not(feature = "flutter"))]
+        {
+            let _ = (peer, peer_id, direct);
+            bail!("Handshake failed: pairing passphrase input is not supported by this client UI")
+        }
     }
 
     fn handle_login_error(&self, err: &str) -> bool {

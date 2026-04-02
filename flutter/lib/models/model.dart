@@ -904,7 +904,17 @@ class FfiModel with ChangeNotifier {
       parent.target?.inputModel.setRelativeMouseMode(false);
     }
 
-    if (type == 're-input-password') {
+    if (type == 'input-pairing-passphrase' ||
+        type == 'input-direct-pairing-passphrase') {
+      showPairingPassphraseDialog(sessionId, dialogManager, text);
+    } else if (type == 'confirm-peer-trust' || type == 'confirm-direct-trust') {
+      showPeerTrustDialog(sessionId, dialogManager, text);
+    } else if (type == 'error' &&
+        title == 'Connection Error' &&
+        text is String &&
+        text.startsWith('Handshake failed: peer identity changed')) {
+      showPeerIdentityChangedDialog(sessionId, dialogManager, text);
+    } else if (type == 're-input-password') {
       wrongPasswordDialog(sessionId, dialogManager, type, title, text);
     } else if (type == 'input-2fa') {
       enter2FaDialog(sessionId, dialogManager);
@@ -947,6 +957,260 @@ class FfiModel with ChangeNotifier {
       }
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
     }
+  }
+
+  void showPeerTrustDialog(
+      SessionID sessionId, OverlayDialogManager dialogManager, String text) {
+    Map<String, dynamic> details = const {};
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        details = decoded;
+      }
+    } catch (_) {}
+    final peer = (details['peer'] ?? '').toString();
+    final peerId = (details['peer_id'] ?? '').toString();
+    final fingerprint = (details['fingerprint'] ?? '').toString();
+    final trustPhrase = (details['trust_phrase'] ?? '').toString();
+    final direct = details['direct'] == true;
+    final controller = TextEditingController();
+    String normalizePhrase(String value) =>
+        value.trim().toLowerCase().split(RegExp(r'\s+')).join(' ');
+    dialogManager.show(
+      tag: '$sessionId-confirm-peer-trust',
+      (setState, close, context) {
+        final phraseConfirmed =
+            normalizePhrase(controller.text) == normalizePhrase(trustPhrase);
+
+        void reject() {
+          () async {
+            await bind.sessionConfirmDirectTrust(
+                sessionId: sessionId, approved: false);
+            closeConnection();
+            close();
+          }();
+        }
+
+        void approve() {
+          () async {
+            await bind.sessionConfirmDirectTrust(
+                sessionId: sessionId, approved: true);
+            close();
+          }();
+        }
+
+        Widget buildLine(String label, String value) {
+          if (value.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SelectionArea(
+              child: RichText(
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: [
+                    TextSpan(
+                      text: '$label: ',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(text: value),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return CustomAlertDialog(
+          title: Text(translate('Trust this device')),
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                direct
+                    ? 'First direct local connection. Approve and remember this device key?'
+                    : 'First secure connection for this peer. Approve and remember this device key?',
+              ).marginOnly(bottom: 12),
+              Text(
+                'Compare the trust phrase with the remote device, then type it below to continue.',
+              ).marginOnly(bottom: 12),
+              buildLine(direct ? 'Endpoint' : 'Peer', peer),
+              buildLine('Peer ID', peerId),
+              buildLine('Trust phrase', trustPhrase),
+              buildLine('Fingerprint', fingerprint),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: translate('Type trust phrase'),
+                  hintText: trustPhrase,
+                ),
+              ).marginOnly(top: 8),
+            ],
+          ),
+          actions: [
+            dialogButton('Reject', onPressed: reject, isOutline: true),
+            dialogButton('Trust', onPressed: phraseConfirmed ? approve : null),
+          ],
+          onCancel: reject,
+        );
+      },
+    );
+  }
+
+  void showPairingPassphraseDialog(
+      SessionID sessionId, OverlayDialogManager dialogManager, String text) {
+    Map<String, dynamic> details = const {};
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        details = decoded;
+      }
+    } catch (_) {}
+    final peer = (details['peer'] ?? '').toString();
+    final peerId = (details['peer_id'] ?? '').toString();
+    final direct = details['direct'] == true;
+    final controller = TextEditingController();
+    bool obscure = true;
+    dialogManager.show(
+      tag: '$sessionId-input-pairing-passphrase',
+      (setState, close, context) {
+        void cancel() {
+          () async {
+            await bind.sessionSubmitDirectPairingPassphrase(
+              sessionId: sessionId,
+              passphrase: '',
+              approved: false,
+            );
+            closeConnection();
+            close();
+          }();
+        }
+
+        void submit() {
+          () async {
+            await bind.sessionSubmitDirectPairingPassphrase(
+              sessionId: sessionId,
+              passphrase: controller.text,
+              approved: true,
+            );
+            close();
+          }();
+        }
+
+        Widget buildLine(String label, String value) {
+          if (value.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SelectionArea(
+              child: RichText(
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: [
+                    TextSpan(
+                      text: '$label: ',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(text: value),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return CustomAlertDialog(
+          title: Text(translate('Pairing passphrase required')),
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                direct
+                    ? 'Enter the local pairing passphrase to continue this direct connection.'
+                    : 'Enter the secure pairing passphrase to continue this connection.',
+              ).marginOnly(bottom: 12),
+              buildLine(direct ? 'Endpoint' : 'Peer', peer),
+              buildLine('Peer ID', peerId),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                obscureText: obscure,
+                autocorrect: false,
+                maxLength: bind.mainMaxEncryptLen(),
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Pairing passphrase',
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() {
+                      obscure = !obscure;
+                    }),
+                    icon: Icon(
+                      obscure ? Icons.visibility_off : Icons.visibility,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            dialogButton('Cancel', onPressed: cancel, isOutline: true),
+            dialogButton(
+              'Continue',
+              onPressed: controller.text.isEmpty ? null : submit,
+            ),
+          ],
+          onCancel: cancel,
+        );
+      },
+    );
+  }
+
+  void showPeerIdentityChangedDialog(
+      SessionID sessionId, OverlayDialogManager dialogManager, String text) {
+    dialogManager.show(
+      tag: '$sessionId-peer-identity-changed',
+      (setState, close, context) {
+        void onClose() {
+          closeConnection();
+          close();
+        }
+
+        void onReset() {
+          () async {
+            await bind.sessionResetPeerTrust(sessionId: sessionId);
+            close();
+            reconnect(dialogManager, sessionId, false);
+          }();
+        }
+
+        return CustomAlertDialog(
+          title: Text(translate('Peer identity changed')),
+          content: SelectionArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'The stored device identity no longer matches the remote peer.',
+                ).marginOnly(bottom: 12),
+                Text(text),
+              ],
+            ),
+          ),
+          actions: [
+            dialogButton('Close', onPressed: onClose, isOutline: true),
+            dialogButton('Reset trust', onPressed: onReset),
+          ],
+          onCancel: onClose,
+        );
+      },
+    );
   }
 
   /// Auto-retry check for "Remote desktop is offline" error.

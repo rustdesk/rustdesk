@@ -8,6 +8,7 @@ use hbb_common::{
     log,
     protobuf::Message as _,
     rendezvous_proto::*,
+    sodiumoxide::base64,
     tokio::{
         self,
         sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -35,35 +36,76 @@ pub(super) fn start_listening() -> ResultType<()> {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
                     Some(rendezvous_message::Union::PeerDiscovery(p)) => {
-                        if p.cmd == "ping"
-                            && config::option2bool(
-                                "enable-lan-discovery",
-                                &Config::get_option("enable-lan-discovery"),
-                            )
-                        {
+                        if p.cmd == "ping" && crate::common::lan_discovery_is_enabled() {
                             let id = Config::get_id();
                             if p.id == id {
                                 continue;
                             }
-                            if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
-                                let mut msg_out = Message::new();
+                            let request = match crate::common::verify_lan_discovery_ping(&p.misc) {
+                                Ok(request) => request,
+                                Err(err) => {
+                                    log::debug!(
+                                        "Ignoring legacy or malformed LAN discovery ping from {addr}: {err}"
+                                    );
+                                    continue;
+                                }
+                            };
+                            if request.id == id {
+                                continue;
+                            }
+                            if crate::common::is_local_signing_public_key(&request.sign_pk)
+                                .unwrap_or(false)
+                            {
+                                continue;
+                            }
+                            let trusted_requester =
+                                match crate::common::has_trusted_peer_signing_key(
+                                    &request.id,
+                                    &request.sign_pk,
+                                ) {
+                                    Ok(trusted) => trusted,
+                                    Err(err) => {
+                                        log::debug!(
+                                            "Ignoring LAN discovery ping from {addr}: {err}"
+                                        );
+                                        continue;
+                                    }
+                                };
+                            let Some(self_addr) = get_ipaddr_by_peer(&addr) else {
+                                continue;
+                            };
+                            if !trusted_requester
+                                && !crate::common::lan_discovery_replies_to_unknown_peers()
+                            {
+                                continue;
+                            }
+                            let mut msg_out = Message::new();
+                            let mut peer = PeerDiscovery {
+                                cmd: "pong".to_owned(),
+                                id,
+                                ..Default::default()
+                            };
+                            if trusted_requester {
                                 let mut hostname = crate::whoami_hostname();
                                 // The default hostname is "localhost" which is a bit confusing
                                 if hostname == "localhost" {
                                     hostname = "unknown".to_owned();
                                 }
-                                let peer = PeerDiscovery {
-                                    cmd: "pong".to_owned(),
-                                    mac: get_mac(&self_addr),
-                                    id,
-                                    hostname,
-                                    username: crate::platform::get_active_username(),
-                                    platform: whoami::platform().to_string(),
-                                    ..Default::default()
-                                };
-                                msg_out.set_peer_discovery(peer);
-                                socket.send_to(&msg_out.write_to_bytes()?, addr).ok();
+                                peer.mac = get_mac(&self_addr);
+                                peer.hostname = hostname;
+                                peer.username = crate::platform::get_active_username();
+                                peer.platform = whoami::platform().to_string();
                             }
+                            let Ok(misc) = crate::common::create_lan_discovery_response_misc(
+                                &peer,
+                                &request.nonce,
+                            ) else {
+                                log::error!("Failed to sign LAN discovery response for {addr}");
+                                continue;
+                            };
+                            peer.misc = misc;
+                            msg_out.set_peer_discovery(peer);
+                            socket.send_to(&msg_out.write_to_bytes()?, addr).ok();
                         }
                     }
                     _ => {}
@@ -75,8 +117,12 @@ pub(super) fn start_listening() -> ResultType<()> {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn discover() -> ResultType<()> {
-    let sockets = send_query()?;
-    let rx = spawn_wait_responses(sockets);
+    if !crate::common::lan_discovery_is_enabled() {
+        log::info!("LAN discovery is off");
+        return Ok(());
+    }
+    let (sockets, nonce) = send_query()?;
+    let rx = spawn_wait_responses(sockets, nonce);
     handle_received_peers(rx).await?;
 
     log::info!("discover ping done");
@@ -185,13 +231,14 @@ fn create_broadcast_sockets() -> Vec<UdpSocket> {
     sockets
 }
 
-fn send_query() -> ResultType<Vec<UdpSocket>> {
+fn send_query() -> ResultType<(Vec<UdpSocket>, String)> {
     let sockets = create_broadcast_sockets();
     if sockets.is_empty() {
         bail!("Found no bindable ipv4 addresses");
     }
 
     let mut msg_out = Message::new();
+    let nonce = crate::common::create_lan_discovery_ping_nonce();
     // We may not be able to get the mac address on mobile platforms.
     // So we need to use the id to avoid discovering ourselves.
     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -206,6 +253,7 @@ fn send_query() -> ResultType<Vec<UdpSocket>> {
     let peer = PeerDiscovery {
         cmd: "ping".to_owned(),
         id,
+        misc: crate::common::create_lan_discovery_ping_misc(&nonce),
         ..Default::default()
     };
     msg_out.set_peer_discovery(peer);
@@ -215,22 +263,16 @@ fn send_query() -> ResultType<Vec<UdpSocket>> {
         allow_err!(socket.send_to(&out, maddr));
     }
     log::info!("discover ping sent");
-    Ok(sockets)
+    Ok((sockets, nonce))
 }
 
 fn wait_response(
     socket: UdpSocket,
     timeout: Option<std::time::Duration>,
+    nonce: String,
     tx: UnboundedSender<config::DiscoveryPeer>,
 ) -> ResultType<()> {
     let mut last_recv_time = Instant::now();
-
-    let local_addr = socket.local_addr();
-    let try_get_ip_by_peer = match local_addr.as_ref() {
-        Err(..) => true,
-        Ok(addr) => addr.ip().is_unspecified(),
-    };
-    let mut mac: Option<String> = None;
 
     socket.set_read_timeout(timeout)?;
     loop {
@@ -241,39 +283,30 @@ fn wait_response(
                     Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         last_recv_time = Instant::now();
                         if p.cmd == "pong" {
-                            let local_mac = if try_get_ip_by_peer {
-                                if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
-                                    get_mac(&self_addr)
-                                } else {
-                                    "".to_owned()
-                                }
-                            } else {
-                                match mac.as_ref() {
-                                    Some(m) => m.clone(),
-                                    None => {
-                                        let m = if let Ok(local_addr) = local_addr {
-                                            get_mac(&local_addr.ip())
-                                        } else {
-                                            "".to_owned()
-                                        };
-                                        mac = Some(m.clone());
-                                        m
-                                    }
+                            let sign_pk = match crate::common::verify_lan_discovery_response(
+                                &p, &nonce,
+                            ) {
+                                Ok(sign_pk) => sign_pk,
+                                Err(err) => {
+                                    log::debug!(
+                                            "Ignoring unauthenticated LAN discovery response from {addr}: {err}"
+                                        );
+                                    continue;
                                 }
                             };
-
-                            if local_mac.is_empty() && p.mac.is_empty() || local_mac != p.mac {
-                                allow_err!(tx.send(config::DiscoveryPeer {
-                                    id: p.id.clone(),
-                                    ip_mac: HashMap::from([
-                                        (addr.ip().to_string(), p.mac.clone(),)
-                                    ]),
-                                    username: p.username.clone(),
-                                    hostname: p.hostname.clone(),
-                                    platform: p.platform.clone(),
-                                    online: true,
-                                }));
+                            if crate::common::is_local_signing_public_key(&sign_pk).unwrap_or(false)
+                            {
+                                continue;
                             }
+                            allow_err!(tx.send(config::DiscoveryPeer {
+                                id: p.id.clone(),
+                                sign_pk: base64::encode(&sign_pk, base64::Variant::Original),
+                                ip_mac: HashMap::from([(addr.ip().to_string(), p.mac.clone())]),
+                                username: p.username.clone(),
+                                hostname: p.hostname.clone(),
+                                platform: p.platform.clone(),
+                                online: true,
+                            }));
                         }
                     }
                     _ => {}
@@ -287,14 +320,19 @@ fn wait_response(
     Ok(())
 }
 
-fn spawn_wait_responses(sockets: Vec<UdpSocket>) -> UnboundedReceiver<config::DiscoveryPeer> {
+fn spawn_wait_responses(
+    sockets: Vec<UdpSocket>,
+    nonce: String,
+) -> UnboundedReceiver<config::DiscoveryPeer> {
     let (tx, rx) = unbounded_channel::<_>();
     for socket in sockets {
         let tx_clone = tx.clone();
+        let nonce = nonce.clone();
         std::thread::spawn(move || {
             allow_err!(wait_response(
                 socket,
                 Some(std::time::Duration::from_millis(10)),
+                nonce,
                 tx_clone
             ));
         });
@@ -315,10 +353,32 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
             data = rx.recv() => match data {
                 Some(mut peer) => {
                     let in_response_set = !response_set.insert(peer.id.clone());
-                    if let Some(pos) = peers.iter().position(|x| x.is_same_peer(&peer) ) {
+                    if let Some(pos) = peers.iter().position(|x| x.id == peer.id) {
                         let peer1 = peers.remove(pos);
+                        if peer.sign_pk.is_empty() {
+                            peer.sign_pk = peer1.sign_pk;
+                        }
+                        if peer.username.is_empty() {
+                            peer.username = peer1.username;
+                        }
+                        if peer.hostname.is_empty() {
+                            peer.hostname = peer1.hostname;
+                        }
+                        if peer.platform.is_empty() {
+                            peer.platform = peer1.platform;
+                        }
+                        for (ip, mac) in peer1.ip_mac {
+                            match peer.ip_mac.get_mut(&ip) {
+                                Some(current) if current.is_empty() && !mac.is_empty() => {
+                                    *current = mac;
+                                }
+                                None => {
+                                    peer.ip_mac.insert(ip, mac);
+                                }
+                                _ => {}
+                            }
+                        }
                         if in_response_set {
-                            peer.ip_mac.extend(peer1.ip_mac);
                             peer.online = true;
                         }
                     }

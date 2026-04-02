@@ -131,14 +131,59 @@ class _PeerCardState extends State<_PeerCard>
     return peerTabShowNote(widget.tab) && peer.note.isNotEmpty;
   }
 
-  makeChild(bool isPortrait, Peer peer) {
-    final name = hideUsernameOnCard == true
+  bool _isDiscoveredPeer(Peer peer) {
+    return widget.tab == PeerTabIndex.lan && peer.isDiscoveredPeer;
+  }
+
+  bool _isUntrustedDiscoveredPeer(Peer peer) {
+    return widget.tab == PeerTabIndex.lan && peer.isUntrustedDiscoveredPeer;
+  }
+
+  String _peerPrimaryLabel(Peer peer) {
+    if (_isUntrustedDiscoveredPeer(peer)) {
+      return translate('Untrusted device');
+    }
+    return peer.alias.isEmpty ? formatID(peer.id) : peer.alias;
+  }
+
+  String _peerSecondaryLabel(Peer peer) {
+    if (_isUntrustedDiscoveredPeer(peer)) {
+      return peer.discoveryEndpoint;
+    }
+    final label = hideUsernameOnCard == true
         ? peer.hostname
         : '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
+    if (label.isEmpty && _isDiscoveredPeer(peer)) {
+      return peer.discoveryEndpoint;
+    }
+    return label;
+  }
+
+  String? _peerFooterLabel(Peer peer) {
+    if (_isUntrustedDiscoveredPeer(peer) &&
+        peer.discoveryTrustPhrase.isNotEmpty) {
+      return '${translate('Trust phrase')}: ${peer.discoveryTrustPhrase}';
+    }
+    if (_showNote(peer)) {
+      return peer.note;
+    }
+    return null;
+  }
+
+  Widget _buildPeerAvatar(Peer peer, double size) {
+    if (_isDiscoveredPeer(peer) && peer.platform.isEmpty) {
+      return Icon(Icons.lan_outlined, size: size * 0.72, color: Colors.white);
+    }
+    return getPlatformImage(peer.platform, size: size);
+  }
+
+  makeChild(bool isPortrait, Peer peer) {
+    final title = _peerPrimaryLabel(peer);
+    final name = _peerSecondaryLabel(peer);
+    final footer = _peerFooterLabel(peer);
     final greyStyle = TextStyle(
         fontSize: 11,
         color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
-    final showNote = _showNote(peer);
 
     return Row(
       mainAxisSize: MainAxisSize.max,
@@ -158,8 +203,7 @@ class _PeerCardState extends State<_PeerCard>
             height: isPortrait ? 50 : null,
             child: Stack(
               children: [
-                getPlatformImage(peer.platform, size: isPortrait ? 38 : 30)
-                    .paddingAll(6),
+                _buildPeerAvatar(peer, isPortrait ? 38 : 30).paddingAll(6),
                 if (_shouldBuildPasswordIcon(peer))
                   Positioned(
                     top: 1,
@@ -186,7 +230,7 @@ class _PeerCardState extends State<_PeerCard>
                         getOnline(isPortrait ? 4 : 8, peer.online),
                         Expanded(
                             child: Text(
-                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
+                          title,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
@@ -208,15 +252,15 @@ class _PeerCardState extends State<_PeerCard>
                               ),
                             ),
                           ),
-                          if (showNote)
+                          if (footer != null)
                             Expanded(
                               child: Tooltip(
-                                message: peer.note,
+                                message: footer,
                                 waitDuration: const Duration(seconds: 1),
                                 child: Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    peer.note,
+                                    footer,
                                     style: isPortrait ? null : greyStyle,
                                     textAlign: TextAlign.start,
                                     overflow: TextOverflow.ellipsis,
@@ -282,9 +326,9 @@ class _PeerCardState extends State<_PeerCard>
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
     hideUsernameOnCard ??=
         bind.mainGetBuildinOption(key: kHideUsernameOnCard) == 'Y';
-    final name = hideUsernameOnCard == true
-        ? peer.hostname
-        : '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
+    final title = _peerPrimaryLabel(peer);
+    final name = _peerSecondaryLabel(peer);
+    final footer = _peerFooterLabel(peer);
     final child = Card(
       color: Colors.transparent,
       elevation: 0,
@@ -312,8 +356,7 @@ class _PeerCardState extends State<_PeerCard>
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(6),
-                                child:
-                                    getPlatformImage(peer.platform, size: 60),
+                                child: _buildPeerAvatar(peer, 60),
                               ),
                               Row(
                                 children: [
@@ -333,15 +376,15 @@ class _PeerCardState extends State<_PeerCard>
                                   ),
                                 ],
                               ),
-                              if (_showNote(peer))
+                              if (footer != null)
                                 Row(
                                   children: [
                                     Expanded(
                                         child: Tooltip(
-                                      message: peer.note,
+                                      message: footer,
                                       waitDuration: const Duration(seconds: 1),
                                       child: Text(
-                                        peer.note,
+                                        footer,
                                         style: const TextStyle(
                                             color: Colors.white38,
                                             fontSize: 10),
@@ -368,7 +411,7 @@ class _PeerCardState extends State<_PeerCard>
                         getOnline(8, peer.online),
                         Expanded(
                             child: Text(
-                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
+                          title,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall,
                         )),

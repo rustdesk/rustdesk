@@ -1,7 +1,7 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::Future,
-    net::{SocketAddr, ToSocketAddrs},
+    net::{IpAddr, SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
     task::Poll,
 };
@@ -17,7 +17,7 @@ use hbb_common::{
     bail, base64,
     bytes::Bytes,
     config::{
-        self, keys, use_ws, Config, LocalConfig, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT,
+        self, keys, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT,
     },
     futures::future::join_all,
     futures_util::future::poll_fn,
@@ -25,8 +25,12 @@ use hbb_common::{
     message_proto::*,
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
+    sha2::{Digest, Sha256},
     socket_client,
-    sodiumoxide::crypto::{box_, secretbox, sign},
+    sodiumoxide::{
+        crypto::{box_, pwhash::argon2id13, secretbox, sign},
+        randombytes::randombytes,
+    },
     timeout,
     tls::{get_cached_tls_accept_invalid_cert, get_cached_tls_type, upsert_tls_cache, TlsType},
     tokio::{
@@ -64,6 +68,11 @@ pub const TIMER_OUT: Duration = Duration::from_secs(1);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
+const PEER_OPTION_PINNED_SIGNING_KEY: &str = "pinned-signing-key";
+const LAN_DISCOVERY_AUTH_MAGIC: &[u8] = b"rustdesk-lan-discovery-v1";
+const LAN_DISCOVERY_PING_AUTH_MAGIC: &[u8] = b"rustdesk-lan-ping-v1";
+const LAN_DISCOVERY_AUTH_VERSION: u64 = 1;
+const LAN_DISCOVERY_NONCE_LEN: usize = 16;
 
 pub mod input {
     pub const MOUSE_TYPE_MOVE: i32 = 0;
@@ -590,6 +599,13 @@ pub fn test_nat_type() {
         }
         IS_RUNNING.store(true, Ordering::SeqCst);
 
+        if !has_configured_rendezvous_server() {
+            log::info!("Skipping NAT test because no rendezvous server is configured");
+            Config::set_nat_type(0);
+            IS_RUNNING.store(false, Ordering::SeqCst);
+            return;
+        }
+
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         crate::ipc::get_socks_ws();
         let is_direct = Config::get_socks().is_none() && !config::use_ws();
@@ -601,6 +617,11 @@ pub fn test_nat_type() {
 
         let mut i = 0;
         loop {
+            if !has_configured_rendezvous_server() {
+                log::info!("Stopping NAT test because rendezvous server is no longer configured");
+                Config::set_nat_type(0);
+                break;
+            }
             match test_nat_type_() {
                 Ok(true) => break,
                 Err(err) => {
@@ -627,6 +648,9 @@ async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
     let start = std::time::Instant::now();
     let server1 = Config::get_rendezvous_server();
+    if server1.is_empty() {
+        return Ok(true);
+    }
     let server2 = crate::increase_port(&server1, -1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
@@ -659,11 +683,10 @@ async fn test_nat_type_() -> ResultType<bool> {
                     port2 = tnr.port;
                 }
                 if let Some(cu) = tnr.cu.as_ref() {
-                    Config::set_option(
-                        "rendezvous-servers".to_owned(),
-                        cu.rendezvous_servers.join(","),
+                    log::warn!(
+                        "Ignoring server-supplied rendezvous update during NAT test: {:?}",
+                        cu.rendezvous_servers
                     );
-                    Config::set_serial(cu.serial);
                 }
             }
         } else {
@@ -949,12 +972,13 @@ pub fn check_software_update() {
     }
 }
 
-// No need to check `danger_accept_invalid_cert` for now.
-// Because the url is always `https://api.rustdesk.com/version/latest`.
 #[tokio::main(flavor = "current_thread")]
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
     let (request, url) =
         hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    if url.is_empty() {
+        return Ok(());
+    }
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(&url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
@@ -1035,11 +1059,15 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
             return lic.host.clone();
         }
     }
+    let bootstrap = Config::get_bootstrap_rendezvous_servers()
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    if !bootstrap.is_empty() {
+        return bootstrap;
+    }
     if !custom.is_empty() {
         return custom;
-    }
-    if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
-        return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
     }
     "".to_owned()
 }
@@ -1062,12 +1090,271 @@ pub fn get_api_server(api: String, custom: String) -> String {
     res
 }
 
+#[inline]
+pub fn get_effective_api_server() -> String {
+    get_api_server(
+        get_option(keys::OPTION_API_SERVER),
+        get_option(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER),
+    )
+}
+
+#[inline]
+pub fn has_configured_rendezvous_server() -> bool {
+    !Config::get_rendezvous_servers().is_empty()
+}
+
+#[inline]
+pub fn is_local_network_mode_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_DIRECT_SERVER,
+        &get_option(keys::OPTION_DIRECT_SERVER),
+    )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetworkModeInfo {
+    pub mode: &'static str,
+    pub label: &'static str,
+    pub detail: String,
+    pub trust_phrase: String,
+    pub direct_endpoints: Vec<String>,
+    pub pairing_required: bool,
+}
+
+const TRUST_PHRASE_WORDS: [&str; 64] = [
+    "able", "anchor", "apple", "arch", "ash", "badge", "bamboo", "beacon", "birch", "blade",
+    "blue", "bridge", "cabin", "cactus", "candle", "canyon", "cedar", "circle", "cloud", "cobalt",
+    "coral", "crown", "delta", "drift", "echo", "ember", "falcon", "field", "flame", "forest",
+    "frost", "garden", "globe", "harbor", "hazel", "island", "ivory", "jade", "lagoon", "lantern",
+    "maple", "meadow", "meteor", "mint", "mountain", "nova", "oasis", "olive", "orbit", "petal",
+    "pine", "planet", "prairie", "quartz", "raven", "river", "saffron", "shadow", "silver",
+    "solar", "spruce", "stone", "summit", "thunder",
+];
+const SECURE_SIGNED_ID_V2_MAGIC: &[u8; 8] = b"RDSECV2\0";
+const DIRECT_SIGNED_ID_V2_MAGIC: &[u8; 8] = b"RDDIRV2\0";
+const DIRECT_PUBLIC_KEY_V2_MAGIC: &[u8; 8] = b"RDPUBV2\0";
+const DIRECT_HANDSHAKE_ACK_OK: &[u8] = b"direct-ok";
+const DIRECT_HANDSHAKE_FLAG_PAIRING_REQUIRED: u8 = 0x01;
+const DIRECT_PAIRING_PROOF_LEN: usize = 32;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectSignedId {
+    pub id: String,
+    pub sign_pk: [u8; 32],
+    pub box_pk: [u8; 32],
+    pub pairing_required: bool,
+    pub pairing_salt: Option<[u8; argon2id13::SALTBYTES]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SecureSignedId {
+    pub id: String,
+    pub box_pk: [u8; 32],
+    pub pairing_required: bool,
+    pub pairing_salt: Option<[u8; argon2id13::SALTBYTES]>,
+}
+
+pub fn get_network_mode_info() -> NetworkModeInfo {
+    let rendezvous_server = Config::get_rendezvous_server();
+    let relay_server = get_option(keys::OPTION_RELAY_SERVER);
+    let api_server = get_effective_api_server();
+    let trust_phrase = fingerprint_to_trust_phrase(&crate::ui_interface::get_fingerprint());
+    let direct_endpoints = get_direct_access_endpoints();
+    let pairing_required = has_direct_access_pairing_passphrase();
+    let detail = if !rendezvous_server.is_empty() {
+        rendezvous_server
+    } else if !relay_server.is_empty() {
+        relay_server
+    } else {
+        api_server.clone()
+    };
+    let has_remote = !detail.is_empty();
+    if using_public_server() {
+        NetworkModeInfo {
+            mode: "public_server",
+            label: "Public Server",
+            detail,
+            trust_phrase,
+            direct_endpoints,
+            pairing_required,
+        }
+    } else if has_remote {
+        NetworkModeInfo {
+            mode: "private_server",
+            label: "Private Server",
+            detail,
+            trust_phrase,
+            direct_endpoints,
+            pairing_required,
+        }
+    } else if is_local_network_mode_enabled() {
+        NetworkModeInfo {
+            mode: "local_only",
+            label: "Local Only",
+            detail: "".to_owned(),
+            trust_phrase,
+            direct_endpoints,
+            pairing_required,
+        }
+    } else {
+        NetworkModeInfo {
+            mode: "not_configured",
+            label: "Offline",
+            detail: "".to_owned(),
+            trust_phrase,
+            direct_endpoints,
+            pairing_required,
+        }
+    }
+}
+
+#[inline]
+pub fn get_direct_access_pairing_passphrase() -> String {
+    Config::get_option(keys::OPTION_DIRECT_ACCESS_PAIRING_PASSPHRASE)
+}
+
+#[inline]
+pub fn has_direct_access_pairing_passphrase() -> bool {
+    !get_direct_access_pairing_passphrase().is_empty()
+}
+
+#[inline]
+pub fn get_peer_pairing_passphrase() -> String {
+    Config::get_option(keys::OPTION_PEER_PAIRING_PASSPHRASE)
+}
+
+#[inline]
+pub fn has_peer_pairing_passphrase() -> bool {
+    !get_peer_pairing_passphrase().is_empty()
+}
+
+#[inline]
+pub fn allow_unverified_peer_trust() -> bool {
+    config::option2bool(
+        keys::OPTION_ALLOW_UNVERIFIED_PEER_TRUST,
+        &Config::get_option(keys::OPTION_ALLOW_UNVERIFIED_PEER_TRUST),
+    )
+}
+
+pub const LAN_DISCOVERY_MODE_OFF: &str = "off";
+pub const LAN_DISCOVERY_MODE_TRUSTED_ONLY: &str = "trusted-only";
+pub const LAN_DISCOVERY_MODE_STANDARD: &str = "standard";
+
+fn normalize_lan_discovery_mode(value: &str) -> &'static str {
+    match value {
+        LAN_DISCOVERY_MODE_OFF => LAN_DISCOVERY_MODE_OFF,
+        LAN_DISCOVERY_MODE_TRUSTED_ONLY => LAN_DISCOVERY_MODE_TRUSTED_ONLY,
+        LAN_DISCOVERY_MODE_STANDARD => LAN_DISCOVERY_MODE_STANDARD,
+        _ => LAN_DISCOVERY_MODE_STANDARD,
+    }
+}
+
+pub fn get_lan_discovery_mode() -> &'static str {
+    let value = Config::get_option(keys::OPTION_LAN_DISCOVERY_MODE);
+    if !value.is_empty() {
+        return normalize_lan_discovery_mode(&value);
+    }
+    if config::option2bool(
+        keys::OPTION_ENABLE_LAN_DISCOVERY,
+        &Config::get_option(keys::OPTION_ENABLE_LAN_DISCOVERY),
+    ) {
+        LAN_DISCOVERY_MODE_STANDARD
+    } else {
+        LAN_DISCOVERY_MODE_OFF
+    }
+}
+
+#[inline]
+pub fn lan_discovery_is_enabled() -> bool {
+    get_lan_discovery_mode() != LAN_DISCOVERY_MODE_OFF
+}
+
+#[inline]
+pub fn lan_discovery_replies_to_unknown_peers() -> bool {
+    get_lan_discovery_mode() == LAN_DISCOVERY_MODE_STANDARD
+}
+
+#[inline]
+pub fn get_direct_access_port() -> i32 {
+    let mut port = get_option(keys::OPTION_DIRECT_ACCESS_PORT)
+        .parse::<i32>()
+        .unwrap_or(0);
+    if port <= 0 {
+        port = RENDEZVOUS_PORT + 2;
+    }
+    port
+}
+
+#[inline]
+fn is_usable_direct_access_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            !ip.is_loopback() && !ip.is_unspecified() && !ip.is_multicast() && !ip.is_link_local()
+        }
+        IpAddr::V6(ip) => {
+            !ip.is_loopback()
+                && !ip.is_unspecified()
+                && !ip.is_multicast()
+                && !ip.is_unicast_link_local()
+        }
+    }
+}
+
+#[inline]
+fn format_direct_access_endpoint(ip: IpAddr, port: i32) -> String {
+    match ip {
+        IpAddr::V4(ip) => format!("{ip}:{port}"),
+        IpAddr::V6(ip) => format!("[{ip}]:{port}"),
+    }
+}
+
+pub fn get_direct_access_endpoints() -> Vec<String> {
+    if !is_local_network_mode_enabled() {
+        return Vec::new();
+    }
+    let port = get_direct_access_port();
+    let default_name = default_net::interface::get_default_interface_name();
+    let mut interfaces = default_net::get_interfaces();
+    if let Some(default_name) = default_name {
+        interfaces.sort_by_key(|iface| iface.name != default_name);
+    }
+    let mut seen = HashSet::new();
+    let mut endpoints = Vec::new();
+    for iface in interfaces {
+        if iface.if_type == default_net::interface::InterfaceType::Loopback {
+            continue;
+        }
+        for ip in iface
+            .ipv4
+            .iter()
+            .map(|net| IpAddr::V4(net.addr))
+            .chain(iface.ipv6.iter().map(|net| IpAddr::V6(net.addr)))
+        {
+            if !is_usable_direct_access_ip(ip) {
+                continue;
+            }
+            let endpoint = format_direct_access_endpoint(ip, port);
+            if seen.insert(endpoint.clone()) {
+                endpoints.push(endpoint);
+            }
+        }
+    }
+    if endpoints.is_empty() {
+        endpoints.push(format!("{}:{}", hostname(), port));
+    }
+    endpoints
+}
+
 fn get_api_server_(api: String, custom: String) -> String {
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.api.is_empty() {
             return lic.api.clone();
         }
+    }
+    let bootstrap_api = Config::get_bootstrap_api_server();
+    if !bootstrap_api.is_empty() {
+        return bootstrap_api;
     }
     if !api.is_empty() {
         return api.to_owned();
@@ -1081,7 +1368,7 @@ fn get_api_server_(api: String, custom: String) -> String {
             return format!("http://{}", s);
         }
     }
-    "https://admin.rustdesk.com".to_owned()
+    "".to_owned()
 }
 
 #[inline]
@@ -1520,18 +1807,19 @@ pub async fn get_key(sync: bool) -> String {
             return lic.key;
         }
     }
+    let bootstrap_key = Config::get_bootstrap_key();
+    if !bootstrap_key.is_empty() {
+        return bootstrap_key;
+    }
     #[cfg(target_os = "ios")]
-    let mut key = Config::get_option("key");
+    let key = Config::get_option("key");
     #[cfg(not(target_os = "ios"))]
-    let mut key = if sync {
+    let key = if sync {
         Config::get_option("key")
     } else {
         let mut options = crate::ipc::get_options_async().await;
         options.remove("key").unwrap_or_default()
     };
-    if key.is_empty() {
-        key = config::RS_PUB_KEY.to_owned();
-    }
     key
 }
 
@@ -1547,6 +1835,202 @@ pub fn pk_to_fingerprint(pk: Vec<u8>) -> String {
             }
         })
         .collect()
+}
+
+fn encode_pinned_peer_signing_key(pk: &[u8]) -> String {
+    base64::encode(pk)
+}
+
+fn decode_hex_char(ch: u8) -> Option<u8> {
+    match ch {
+        b'0'..=b'9' => Some(ch - b'0'),
+        b'a'..=b'f' => Some(ch - b'a' + 10),
+        b'A'..=b'F' => Some(ch - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn decode_fingerprint_bytes(fingerprint: &str) -> Option<Vec<u8>> {
+    let hex: Vec<u8> = fingerprint
+        .bytes()
+        .filter(|ch| ch.is_ascii_hexdigit())
+        .collect();
+    if hex.len() < 2 || hex.len() % 2 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(hex.len() / 2);
+    for pair in hex.chunks_exact(2) {
+        let hi = decode_hex_char(pair[0])?;
+        let lo = decode_hex_char(pair[1])?;
+        out.push((hi << 4) | lo);
+    }
+    Some(out)
+}
+
+fn bytes_to_trust_phrase(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return "".to_owned();
+    }
+    let digest = Sha256::digest(bytes);
+    let mut bit_buffer = 0u64;
+    let mut bit_count = 0usize;
+    let mut words = Vec::with_capacity(6);
+    for byte in digest {
+        bit_buffer = (bit_buffer << 8) | byte as u64;
+        bit_count += 8;
+        while bit_count >= 6 && words.len() < 6 {
+            let shift = bit_count - 6;
+            let idx = ((bit_buffer >> shift) & 0x3f) as usize;
+            words.push(TRUST_PHRASE_WORDS[idx]);
+            bit_buffer &= (1u64 << shift).saturating_sub(1);
+            bit_count -= 6;
+        }
+        if words.len() == 6 {
+            break;
+        }
+    }
+    words.join(" ")
+}
+
+pub fn fingerprint_to_trust_phrase(fingerprint: &str) -> String {
+    decode_fingerprint_bytes(fingerprint)
+        .map(|bytes| bytes_to_trust_phrase(&bytes))
+        .unwrap_or_default()
+}
+
+fn decode_pinned_peer_signing_key(value: &str) -> ResultType<Vec<u8>> {
+    base64::decode(value)
+        .map_err(|e| anyhow!("Handshake failed: invalid pinned peer signing key: {e}"))
+}
+
+fn validate_pinned_peer_signing_key(pinned_key: Option<&String>, pk: &[u8]) -> ResultType<bool> {
+    let Some(pinned_key) = pinned_key.filter(|v| !v.is_empty()) else {
+        return Ok(true);
+    };
+    let expected = decode_pinned_peer_signing_key(pinned_key)?;
+    if expected != pk {
+        bail!(
+            "Handshake failed: peer identity changed (expected {}, got {})",
+            pk_to_fingerprint(expected),
+            pk_to_fingerprint(pk.to_vec())
+        );
+    }
+    Ok(false)
+}
+
+fn validate_bootstrap_trusted_peer_signing_key(trusted_key: &str, pk: &[u8]) -> ResultType<()> {
+    if trusted_key.is_empty() {
+        return Ok(());
+    }
+    let expected = decode_pinned_peer_signing_key(trusted_key).map_err(|e| {
+        anyhow!("Handshake failed: invalid bootstrap trusted peer signing key: {e}")
+    })?;
+    if expected != pk {
+        bail!(
+            "Handshake failed: bootstrap trusted peer identity mismatch (expected {}, got {})",
+            pk_to_fingerprint(expected),
+            pk_to_fingerprint(pk.to_vec())
+        );
+    }
+    Ok(())
+}
+
+pub fn needs_trusted_peer_signing_key(
+    peer_id: &str,
+    peer_config_id: &str,
+    pk: &[u8],
+) -> ResultType<bool> {
+    if pk.is_empty() {
+        bail!("Handshake failed: empty peer signing key");
+    }
+    let bootstrap_key = Config::get_bootstrap_trusted_peer_key(peer_id);
+    if !bootstrap_key.is_empty() {
+        validate_bootstrap_trusted_peer_signing_key(&bootstrap_key, pk)?;
+        return Ok(false);
+    }
+    let config = PeerConfig::load(peer_config_id);
+    validate_pinned_peer_signing_key(config.options.get(PEER_OPTION_PINNED_SIGNING_KEY), pk)
+}
+
+pub fn pin_trusted_peer_signing_key(
+    peer_id: &str,
+    peer_config_id: &str,
+    pk: &[u8],
+) -> ResultType<()> {
+    if pk.is_empty() {
+        bail!("Handshake failed: empty peer signing key");
+    }
+    let bootstrap_key = Config::get_bootstrap_trusted_peer_key(peer_id);
+    if !bootstrap_key.is_empty() {
+        validate_bootstrap_trusted_peer_signing_key(&bootstrap_key, pk)?;
+        return Ok(());
+    }
+    pin_peer_signing_key(peer_config_id, pk)
+}
+
+pub fn has_trusted_peer_signing_key(peer_id: &str, pk: &[u8]) -> ResultType<bool> {
+    if pk.is_empty() {
+        bail!("Handshake failed: empty peer signing key");
+    }
+    let bootstrap_key = Config::get_bootstrap_trusted_peer_key(peer_id);
+    if !bootstrap_key.is_empty() {
+        validate_bootstrap_trusted_peer_signing_key(&bootstrap_key, pk)?;
+        return Ok(true);
+    }
+    let config = PeerConfig::load(peer_id);
+    let Some(pinned_key) = config.options.get(PEER_OPTION_PINNED_SIGNING_KEY) else {
+        return Ok(false);
+    };
+    if pinned_key.is_empty() {
+        return Ok(false);
+    }
+    validate_pinned_peer_signing_key(Some(pinned_key), pk)?;
+    Ok(true)
+}
+
+pub fn needs_pinned_peer_signing_key(peer_config_id: &str, pk: &[u8]) -> ResultType<bool> {
+    if pk.is_empty() {
+        bail!("Handshake failed: empty peer signing key");
+    }
+    let config = PeerConfig::load(peer_config_id);
+    validate_pinned_peer_signing_key(config.options.get(PEER_OPTION_PINNED_SIGNING_KEY), pk)
+}
+
+pub fn pin_peer_signing_key(peer_config_id: &str, pk: &[u8]) -> ResultType<()> {
+    if pk.is_empty() {
+        bail!("Handshake failed: empty peer signing key");
+    }
+    let mut config = PeerConfig::load(peer_config_id);
+    let needs_pin =
+        validate_pinned_peer_signing_key(config.options.get(PEER_OPTION_PINNED_SIGNING_KEY), pk)?;
+    if needs_pin {
+        config.options.insert(
+            PEER_OPTION_PINNED_SIGNING_KEY.to_owned(),
+            encode_pinned_peer_signing_key(pk),
+        );
+        config.store(peer_config_id);
+        log::info!("Pinned peer signing key for {}", peer_config_id);
+    }
+    Ok(())
+}
+
+pub fn clear_pinned_peer_signing_key(peer_config_id: &str) -> bool {
+    let mut config = PeerConfig::load(peer_config_id);
+    if config
+        .options
+        .remove(PEER_OPTION_PINNED_SIGNING_KEY)
+        .is_some()
+    {
+        config.store(peer_config_id);
+        log::info!("Cleared pinned peer signing key for {}", peer_config_id);
+        true
+    } else {
+        false
+    }
+}
+
+pub fn ensure_pinned_peer_signing_key(peer_config_id: &str, pk: &[u8]) -> ResultType<()> {
+    pin_peer_signing_key(peer_config_id, pk)
 }
 
 #[inline]
@@ -1648,11 +2132,9 @@ pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
 }
 
 pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
-    // Skip additional encryption when using WebSocket connections (wss://)
-    // as WebSocket Secure (wss://) already provides transport layer encryption.
-    // This doesn't affect the end-to-end encryption between clients,
-    // it only avoids redundant encryption between client and server.
-    if use_ws() {
+    // WSS and WebRTC already provide an authenticated transport layer, so avoid
+    // stacking the rendezvous key exchange on top of them.
+    if conn.has_secure_transport() {
         return Ok(());
     }
     let rs_pk = get_rs_pk(key);
@@ -1661,32 +2143,34 @@ pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
     };
     match timeout(READ_TIMEOUT, conn.next()).await? {
         Some(Ok(bytes)) => {
-            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                match msg_in.union {
-                    Some(rendezvous_message::Union::KeyExchange(ex)) => {
-                        if ex.keys.len() != 1 {
-                            bail!("Handshake failed: invalid key exchange message");
-                        }
-                        let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
-                            .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
-                        let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
-                            get_pk(&their_pk_b)
-                                .context("Wrong their public length in key exchange")?,
-                        );
-                        let mut msg_out = RendezvousMessage::new();
-                        msg_out.set_key_exchange(KeyExchange {
-                            keys: vec![asymmetric_value, symmetric_value],
-                            ..Default::default()
-                        });
-                        timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                        conn.set_key(key);
-                        log::info!("Connection secured");
-                    }
-                    _ => {}
-                }
+            let msg_in = RendezvousMessage::parse_from_bytes(&bytes)
+                .map_err(|e| anyhow!("Handshake failed: invalid rendezvous message format: {e}"))?;
+            let Some(rendezvous_message::Union::KeyExchange(ex)) = msg_in.union else {
+                bail!("Handshake failed: invalid key exchange message type");
+            };
+            if ex.keys.len() != 1 {
+                bail!("Handshake failed: invalid key exchange message");
             }
+            let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
+                .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
+            let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
+                get_pk(&their_pk_b).context("Wrong their public length in key exchange")?,
+            );
+            let mut msg_out = RendezvousMessage::new();
+            msg_out.set_key_exchange(KeyExchange {
+                keys: vec![asymmetric_value, symmetric_value],
+                ..Default::default()
+            });
+            timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
+            conn.set_key(key);
+            log::info!("Connection secured");
         }
-        _ => {}
+        Some(Err(err)) => {
+            return Err(err.into());
+        }
+        None => {
+            bail!("Handshake failed: rendezvous server closed the connection");
+        }
     }
     Ok(())
 }
@@ -1722,6 +2206,195 @@ pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String,
     }
 }
 
+pub fn create_secure_signed_id_with_pairing(
+    id: &str,
+    pk: [u8; 32],
+    sign_sk: &sign::SecretKey,
+    pairing_salt: [u8; argon2id13::SALTBYTES],
+) -> Bytes {
+    let id_pk = IdPk {
+        id: id.to_owned(),
+        pk: Bytes::from(pk.to_vec()),
+        ..Default::default()
+    }
+    .write_to_bytes()
+    .unwrap_or_default();
+    let mut signed_payload =
+        Vec::with_capacity(SECURE_SIGNED_ID_V2_MAGIC.len() + 2 + pairing_salt.len() + id_pk.len());
+    signed_payload.extend_from_slice(SECURE_SIGNED_ID_V2_MAGIC);
+    signed_payload.push(DIRECT_HANDSHAKE_FLAG_PAIRING_REQUIRED);
+    signed_payload.push(pairing_salt.len() as u8);
+    signed_payload.extend_from_slice(&pairing_salt);
+    signed_payload.extend_from_slice(&id_pk);
+    sign::sign(&signed_payload, sign_sk).into()
+}
+
+pub fn decode_secure_signed_id(signed: &[u8], key: &sign::PublicKey) -> ResultType<SecureSignedId> {
+    let verified = sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?;
+    if verified.starts_with(SECURE_SIGNED_ID_V2_MAGIC) {
+        let meta_offset = SECURE_SIGNED_ID_V2_MAGIC.len();
+        if verified.len() < meta_offset + 2 {
+            bail!("Handshake failed: missing secure handshake metadata");
+        }
+        let flags = verified[meta_offset];
+        let salt_len = verified[meta_offset + 1] as usize;
+        if verified.len() < meta_offset + 2 + salt_len {
+            bail!("Handshake failed: truncated secure handshake metadata");
+        }
+        let pairing_required = flags & DIRECT_HANDSHAKE_FLAG_PAIRING_REQUIRED != 0;
+        let pairing_salt = if pairing_required {
+            if salt_len != argon2id13::SALTBYTES {
+                bail!("Handshake failed: invalid secure pairing salt length");
+            }
+            let mut salt = [0u8; argon2id13::SALTBYTES];
+            salt.copy_from_slice(&verified[meta_offset + 2..meta_offset + 2 + salt_len]);
+            Some(salt)
+        } else {
+            None
+        };
+        let res = IdPk::parse_from_bytes(&verified[meta_offset + 2 + salt_len..])?;
+        let Some(pk) = get_pk(&res.pk) else {
+            bail!("Wrong their public length");
+        };
+        return Ok(SecureSignedId {
+            id: res.id,
+            box_pk: pk,
+            pairing_required,
+            pairing_salt,
+        });
+    }
+    let res = IdPk::parse_from_bytes(&verified)?;
+    let Some(pk) = get_pk(&res.pk) else {
+        bail!("Wrong their public length");
+    };
+    Ok(SecureSignedId {
+        id: res.id,
+        box_pk: pk,
+        pairing_required: false,
+        pairing_salt: None,
+    })
+}
+
+pub fn create_direct_signed_id(
+    id: &str,
+    pk: [u8; 32],
+    sign_pk: &[u8],
+    sign_sk: &sign::SecretKey,
+) -> Bytes {
+    let mut out = Vec::new();
+    out.extend_from_slice(sign_pk);
+    out.extend_from_slice(&sign::sign(
+        &IdPk {
+            id: id.to_owned(),
+            pk: Bytes::from(pk.to_vec()),
+            ..Default::default()
+        }
+        .write_to_bytes()
+        .unwrap_or_default(),
+        sign_sk,
+    ));
+    out.into()
+}
+
+pub fn create_direct_signed_id_with_pairing(
+    id: &str,
+    pk: [u8; 32],
+    sign_pk: &[u8],
+    sign_sk: &sign::SecretKey,
+    pairing_salt: [u8; argon2id13::SALTBYTES],
+) -> Bytes {
+    let id_pk = IdPk {
+        id: id.to_owned(),
+        pk: Bytes::from(pk.to_vec()),
+        ..Default::default()
+    }
+    .write_to_bytes()
+    .unwrap_or_default();
+    let mut signed_payload = Vec::with_capacity(2 + pairing_salt.len() + id_pk.len());
+    signed_payload.push(DIRECT_HANDSHAKE_FLAG_PAIRING_REQUIRED);
+    signed_payload.push(pairing_salt.len() as u8);
+    signed_payload.extend_from_slice(&pairing_salt);
+    signed_payload.extend_from_slice(&id_pk);
+
+    let mut out = Vec::with_capacity(
+        DIRECT_SIGNED_ID_V2_MAGIC.len()
+            + sign_pk.len()
+            + signed_payload.len()
+            + sign::SIGNATUREBYTES,
+    );
+    out.extend_from_slice(DIRECT_SIGNED_ID_V2_MAGIC);
+    out.extend_from_slice(sign_pk);
+    out.extend_from_slice(&sign::sign(&signed_payload, sign_sk));
+    out.into()
+}
+
+pub fn decode_direct_id_pk(payload: &[u8]) -> ResultType<DirectSignedId> {
+    if payload.starts_with(DIRECT_SIGNED_ID_V2_MAGIC) {
+        let header_len = DIRECT_SIGNED_ID_V2_MAGIC.len() + sign::PUBLICKEYBYTES;
+        if payload.len() <= header_len {
+            bail!("Handshake failed: missing peer signing key");
+        }
+        let sign_pk = get_pk(
+            &payload[DIRECT_SIGNED_ID_V2_MAGIC.len()
+                ..DIRECT_SIGNED_ID_V2_MAGIC.len() + sign::PUBLICKEYBYTES],
+        )
+        .ok_or_else(|| anyhow!("Handshake failed: invalid peer signing key length"))?;
+        let sign_pk_verified = sign::PublicKey(sign_pk);
+        let verified = sign::verify(&payload[header_len..], &sign_pk_verified)
+            .map_err(|_| anyhow!("Signature mismatch"))?;
+        if verified.len() < 2 {
+            bail!("Handshake failed: missing direct handshake metadata");
+        }
+        let flags = verified[0];
+        let salt_len = verified[1] as usize;
+        if verified.len() < 2 + salt_len {
+            bail!("Handshake failed: truncated direct handshake metadata");
+        }
+        let pairing_required = flags & DIRECT_HANDSHAKE_FLAG_PAIRING_REQUIRED != 0;
+        let pairing_salt = if pairing_required {
+            if salt_len != argon2id13::SALTBYTES {
+                bail!("Handshake failed: invalid direct pairing salt length");
+            }
+            let mut salt = [0u8; argon2id13::SALTBYTES];
+            salt.copy_from_slice(&verified[2..2 + salt_len]);
+            Some(salt)
+        } else {
+            None
+        };
+        let res = IdPk::parse_from_bytes(&verified[2 + salt_len..])?;
+        let Some(pk) = get_pk(&res.pk) else {
+            bail!("Wrong their public length");
+        };
+        return Ok(DirectSignedId {
+            id: res.id,
+            sign_pk,
+            box_pk: pk,
+            pairing_required,
+            pairing_salt,
+        });
+    }
+    if payload.len() <= sign::PUBLICKEYBYTES {
+        bail!("Handshake failed: missing peer signing key");
+    }
+    let sign_pk = get_pk(&payload[..sign::PUBLICKEYBYTES])
+        .ok_or_else(|| anyhow!("Handshake failed: invalid peer signing key length"))?;
+    let sign_pk_verified = sign::PublicKey(sign_pk);
+    let res = IdPk::parse_from_bytes(
+        &sign::verify(&payload[sign::PUBLICKEYBYTES..], &sign_pk_verified)
+            .map_err(|_| anyhow!("Signature mismatch"))?,
+    )?;
+    let Some(pk) = get_pk(&res.pk) else {
+        bail!("Wrong their public length");
+    };
+    Ok(DirectSignedId {
+        id: res.id,
+        sign_pk,
+        box_pk: pk,
+        pairing_required: false,
+        pairing_salt: None,
+    })
+}
+
 pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbox::Key) {
     let their_pk_b = box_::PublicKey(their_pk_b);
     let (our_pk_b, out_sk_b) = box_::gen_keypair();
@@ -1731,9 +2404,357 @@ pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbo
     (Vec::from(our_pk_b.0).into(), sealed_key.into(), key)
 }
 
+pub fn wrap_direct_public_key_symmetric_value(
+    sealed_key: &[u8],
+    pairing_proof: Option<[u8; DIRECT_PAIRING_PROOF_LEN]>,
+) -> Bytes {
+    let Some(pairing_proof) = pairing_proof else {
+        return Bytes::from(sealed_key.to_vec());
+    };
+    let mut out = Vec::with_capacity(
+        DIRECT_PUBLIC_KEY_V2_MAGIC.len() + DIRECT_PAIRING_PROOF_LEN + sealed_key.len(),
+    );
+    out.extend_from_slice(DIRECT_PUBLIC_KEY_V2_MAGIC);
+    out.extend_from_slice(&pairing_proof);
+    out.extend_from_slice(sealed_key);
+    out.into()
+}
+
+pub fn unwrap_direct_public_key_symmetric_value(
+    payload: &[u8],
+    pairing_required: bool,
+) -> ResultType<(Option<[u8; DIRECT_PAIRING_PROOF_LEN]>, Vec<u8>)> {
+    if !pairing_required {
+        return Ok((None, payload.to_vec()));
+    }
+    let header_len = DIRECT_PUBLIC_KEY_V2_MAGIC.len() + DIRECT_PAIRING_PROOF_LEN;
+    if payload.len() <= header_len || !payload.starts_with(DIRECT_PUBLIC_KEY_V2_MAGIC) {
+        bail!("Handshake failed: missing direct pairing proof");
+    }
+    let mut proof = [0u8; DIRECT_PAIRING_PROOF_LEN];
+    proof.copy_from_slice(
+        &payload[DIRECT_PUBLIC_KEY_V2_MAGIC.len()
+            ..DIRECT_PUBLIC_KEY_V2_MAGIC.len() + DIRECT_PAIRING_PROOF_LEN],
+    );
+    Ok((Some(proof), payload[header_len..].to_vec()))
+}
+
+pub fn create_direct_pairing_salt() -> [u8; argon2id13::SALTBYTES] {
+    let mut salt = [0u8; argon2id13::SALTBYTES];
+    salt.copy_from_slice(&randombytes(argon2id13::SALTBYTES));
+    salt
+}
+
+fn derive_direct_pairing_key(
+    passphrase: &str,
+    salt: &[u8; argon2id13::SALTBYTES],
+) -> ResultType<[u8; DIRECT_PAIRING_PROOF_LEN]> {
+    let mut derived = [0u8; DIRECT_PAIRING_PROOF_LEN];
+    argon2id13::derive_key(
+        &mut derived,
+        passphrase.as_bytes(),
+        &argon2id13::Salt(*salt),
+        argon2id13::OPSLIMIT_INTERACTIVE,
+        argon2id13::MEMLIMIT_INTERACTIVE,
+    )
+    .map_err(|_| anyhow!("Handshake failed: could not derive direct pairing key"))?;
+    Ok(derived)
+}
+
+pub fn compute_direct_pairing_proof(
+    passphrase: &str,
+    salt: &[u8; argon2id13::SALTBYTES],
+    peer_id: &str,
+    responder_sign_pk: &[u8; 32],
+    responder_box_pk: &[u8; 32],
+    initiator_box_pk: &[u8; 32],
+) -> ResultType<[u8; DIRECT_PAIRING_PROOF_LEN]> {
+    let derived = derive_direct_pairing_key(passphrase, salt)?;
+    let mut hasher = Sha256::new();
+    hasher.update(b"rustdesk-direct-pairing-v1");
+    hasher.update(derived);
+    hasher.update(peer_id.as_bytes());
+    hasher.update(responder_sign_pk);
+    hasher.update(responder_box_pk);
+    hasher.update(initiator_box_pk);
+    let digest = hasher.finalize();
+    let mut proof = [0u8; DIRECT_PAIRING_PROOF_LEN];
+    proof.copy_from_slice(&digest[..DIRECT_PAIRING_PROOF_LEN]);
+    Ok(proof)
+}
+
+fn append_len_prefixed_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
+    out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(bytes);
+}
+
+fn append_len_prefixed_str(out: &mut Vec<u8>, value: &str) {
+    append_len_prefixed_bytes(out, value.as_bytes());
+}
+
+fn build_lan_discovery_signed_payload(peer: &PeerDiscovery, nonce: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(
+        LAN_DISCOVERY_AUTH_MAGIC.len()
+            + 8
+            + nonce.len()
+            + peer.id.len()
+            + peer.username.len()
+            + peer.hostname.len()
+            + peer.platform.len()
+            + peer.mac.len()
+            + 6 * std::mem::size_of::<u32>(),
+    );
+    out.extend_from_slice(LAN_DISCOVERY_AUTH_MAGIC);
+    out.extend_from_slice(&LAN_DISCOVERY_AUTH_VERSION.to_le_bytes());
+    append_len_prefixed_str(&mut out, nonce);
+    append_len_prefixed_str(&mut out, &peer.id);
+    append_len_prefixed_str(&mut out, &peer.username);
+    append_len_prefixed_str(&mut out, &peer.hostname);
+    append_len_prefixed_str(&mut out, &peer.platform);
+    append_len_prefixed_str(&mut out, &peer.mac);
+    out
+}
+
+fn build_lan_discovery_ping_signed_payload(
+    peer_id: &str,
+    sign_pk: &[u8; sign::PUBLICKEYBYTES],
+    nonce: &str,
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(
+        LAN_DISCOVERY_PING_AUTH_MAGIC.len()
+            + 8
+            + nonce.len()
+            + peer_id.len()
+            + sign_pk.len()
+            + 3 * std::mem::size_of::<u32>(),
+    );
+    out.extend_from_slice(LAN_DISCOVERY_PING_AUTH_MAGIC);
+    out.extend_from_slice(&LAN_DISCOVERY_AUTH_VERSION.to_le_bytes());
+    append_len_prefixed_str(&mut out, nonce);
+    append_len_prefixed_str(&mut out, peer_id);
+    append_len_prefixed_bytes(&mut out, sign_pk);
+    out
+}
+
+fn get_local_signing_keypair() -> ResultType<([u8; sign::PUBLICKEYBYTES], sign::SecretKey)> {
+    let (secret_key, public_key) = Config::get_key_pair();
+    if public_key.len() != sign::PUBLICKEYBYTES || secret_key.len() != sign::SECRETKEYBYTES {
+        bail!("Handshake failed: invalid local signing key length");
+    }
+    let mut sign_pk = [0u8; sign::PUBLICKEYBYTES];
+    sign_pk.copy_from_slice(&public_key);
+    let mut secret = [0u8; sign::SECRETKEYBYTES];
+    secret.copy_from_slice(&secret_key);
+    Ok((sign_pk, sign::SecretKey(secret)))
+}
+
+pub fn is_local_signing_public_key(pk: &[u8]) -> ResultType<bool> {
+    let (local_sign_pk, _) = get_local_signing_keypair()?;
+    Ok(local_sign_pk.as_slice() == pk)
+}
+
+fn create_lan_discovery_ping_misc_with_keys(
+    peer_id: &str,
+    nonce: &str,
+    sign_pk: &[u8; sign::PUBLICKEYBYTES],
+    sign_sk: &sign::SecretKey,
+) -> String {
+    let signed = sign::sign(
+        &build_lan_discovery_ping_signed_payload(peer_id, sign_pk, nonce),
+        sign_sk,
+    );
+    json!({
+        "v": LAN_DISCOVERY_AUTH_VERSION,
+        "nonce": nonce,
+        "id": peer_id,
+        "pk": encode64(sign_pk),
+        "proof": encode64(&signed),
+    })
+    .to_string()
+}
+
+fn create_lan_discovery_response_misc_with_keys(
+    peer: &PeerDiscovery,
+    nonce: &str,
+    sign_pk: &[u8; sign::PUBLICKEYBYTES],
+    sign_sk: &sign::SecretKey,
+) -> String {
+    let signed = sign::sign(&build_lan_discovery_signed_payload(peer, nonce), sign_sk);
+    json!({
+        "v": LAN_DISCOVERY_AUTH_VERSION,
+        "nonce": nonce,
+        "pk": encode64(sign_pk),
+        "proof": encode64(&signed),
+    })
+    .to_string()
+}
+
+pub fn create_lan_discovery_ping_nonce() -> String {
+    encode64(randombytes(LAN_DISCOVERY_NONCE_LEN))
+}
+
+pub fn create_lan_discovery_ping_misc(nonce: &str) -> String {
+    let peer_id = Config::get_id();
+    match get_local_signing_keypair() {
+        Ok((sign_pk, sign_sk)) => {
+            create_lan_discovery_ping_misc_with_keys(&peer_id, nonce, &sign_pk, &sign_sk)
+        }
+        Err(err) => {
+            log::error!("Failed to sign LAN discovery ping: {err}");
+            json!({
+                "v": LAN_DISCOVERY_AUTH_VERSION,
+                "nonce": nonce,
+                "id": peer_id,
+            })
+            .to_string()
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanDiscoveryPingRequest {
+    pub nonce: String,
+    pub id: String,
+    pub sign_pk: [u8; sign::PUBLICKEYBYTES],
+}
+
+pub fn decode_lan_discovery_ping_nonce(misc: &str) -> Option<String> {
+    verify_lan_discovery_ping(misc)
+        .ok()
+        .map(|request| request.nonce)
+}
+
+pub fn verify_lan_discovery_ping(misc: &str) -> ResultType<LanDiscoveryPingRequest> {
+    let value = serde_json::from_str::<Value>(misc)
+        .map_err(|_| anyhow!("LAN discovery failed: invalid ping metadata"))?;
+    let version = value
+        .get("v")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("LAN discovery failed: missing ping version"))?;
+    if version != LAN_DISCOVERY_AUTH_VERSION {
+        bail!("LAN discovery failed: unsupported ping version");
+    }
+    let nonce = value
+        .get("nonce")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("LAN discovery failed: missing ping nonce"))?;
+    if nonce.is_empty() {
+        bail!("LAN discovery failed: empty ping nonce");
+    }
+    let peer_id = value
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("LAN discovery failed: missing ping peer id"))?;
+    if peer_id.is_empty() {
+        bail!("LAN discovery failed: empty ping peer id");
+    }
+    let pk = decode64(
+        value
+            .get("pk")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("LAN discovery failed: missing ping signing key"))?,
+    )
+    .map_err(|_| anyhow!("LAN discovery failed: invalid ping signing key"))?;
+    let sign_pk = get_pk(&pk)
+        .ok_or_else(|| anyhow!("LAN discovery failed: invalid ping signing key length"))?;
+    let proof = decode64(
+        value
+            .get("proof")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("LAN discovery failed: missing ping proof"))?,
+    )
+    .map_err(|_| anyhow!("LAN discovery failed: invalid ping proof"))?;
+    let verified = sign::verify(&proof, &sign::PublicKey(sign_pk))
+        .map_err(|_| anyhow!("LAN discovery failed: ping signature mismatch"))?;
+    let expected = build_lan_discovery_ping_signed_payload(peer_id, &sign_pk, nonce);
+    if verified != expected {
+        bail!("LAN discovery failed: ping signed payload mismatch");
+    }
+    Ok(LanDiscoveryPingRequest {
+        nonce: nonce.to_owned(),
+        id: peer_id.to_owned(),
+        sign_pk,
+    })
+}
+
+pub fn create_lan_discovery_response_misc(peer: &PeerDiscovery, nonce: &str) -> ResultType<String> {
+    let (sign_pk, sign_sk) = get_local_signing_keypair()?;
+    Ok(create_lan_discovery_response_misc_with_keys(
+        peer, nonce, &sign_pk, &sign_sk,
+    ))
+}
+
+pub fn verify_discovered_peer_signing_key(peer_id: &str, pk: &[u8]) -> ResultType<()> {
+    if peer_id.is_empty() {
+        bail!("LAN discovery failed: missing peer id");
+    }
+    needs_trusted_peer_signing_key(peer_id, peer_id, pk)?;
+    Ok(())
+}
+
+pub fn verify_lan_discovery_response(
+    peer: &PeerDiscovery,
+    expected_nonce: &str,
+) -> ResultType<[u8; sign::PUBLICKEYBYTES]> {
+    let value = serde_json::from_str::<Value>(&peer.misc)
+        .map_err(|_| anyhow!("LAN discovery failed: invalid response metadata"))?;
+    let version = value
+        .get("v")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("LAN discovery failed: missing response version"))?;
+    if version != LAN_DISCOVERY_AUTH_VERSION {
+        bail!("LAN discovery failed: unsupported response version");
+    }
+    let nonce = value
+        .get("nonce")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("LAN discovery failed: missing response nonce"))?;
+    if nonce != expected_nonce {
+        bail!("LAN discovery failed: nonce mismatch");
+    }
+    let pk = decode64(
+        value
+            .get("pk")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("LAN discovery failed: missing response signing key"))?,
+    )
+    .map_err(|_| anyhow!("LAN discovery failed: invalid response signing key"))?;
+    let sign_pk = get_pk(&pk)
+        .ok_or_else(|| anyhow!("LAN discovery failed: invalid response signing key length"))?;
+    let proof = decode64(
+        value
+            .get("proof")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("LAN discovery failed: missing response proof"))?,
+    )
+    .map_err(|_| anyhow!("LAN discovery failed: invalid response proof"))?;
+    let verified = sign::verify(&proof, &sign::PublicKey(sign_pk))
+        .map_err(|_| anyhow!("LAN discovery failed: signature mismatch"))?;
+    if verified != build_lan_discovery_signed_payload(peer, expected_nonce) {
+        bail!("LAN discovery failed: signed payload mismatch");
+    }
+    verify_discovered_peer_signing_key(&peer.id, &sign_pk)?;
+    Ok(sign_pk)
+}
+
+#[inline]
+pub fn direct_handshake_ack_ok() -> Bytes {
+    Bytes::from_static(DIRECT_HANDSHAKE_ACK_OK)
+}
+
+#[inline]
+pub fn is_direct_handshake_ack_ok(payload: &[u8]) -> bool {
+    payload == DIRECT_HANDSHAKE_ACK_OK
+}
+
 #[inline]
 pub fn using_public_server() -> bool {
-    crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
+    let rendezvous_server = Config::get_rendezvous_server();
+    if !rendezvous_server.is_empty() && is_public(&rendezvous_server) {
+        return true;
+    }
+    let api_server = get_effective_api_server();
+    !api_server.is_empty() && is_public(&api_server)
 }
 
 pub struct ThrottledInterval {
@@ -2329,6 +3350,7 @@ mod tests {
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
     use std::collections::HashSet;
+    use uuid::Uuid;
 
     #[inline]
     fn get_timestamp_secs() -> u128 {
@@ -2515,5 +3537,241 @@ mod tests {
         let combined_mask = MOUSE_TYPE_DOWN | ((MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT) << 3);
         assert_eq!(combined_mask & MOUSE_TYPE_MASK, MOUSE_TYPE_DOWN);
         assert_eq!(combined_mask >> 3, MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT);
+    }
+
+    #[test]
+    fn test_validate_pinned_peer_signing_key() {
+        let pk = vec![1u8, 2, 3, 4];
+        assert!(validate_pinned_peer_signing_key(None, &pk).unwrap());
+
+        let encoded = encode_pinned_peer_signing_key(&pk);
+        assert!(!validate_pinned_peer_signing_key(Some(&encoded), &pk).unwrap());
+
+        let err = validate_pinned_peer_signing_key(Some(&encoded), &[4u8, 3, 2, 1])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("peer identity changed"));
+        assert!(err.contains(&pk_to_fingerprint(pk.clone())));
+        assert!(err.contains(&pk_to_fingerprint(vec![4u8, 3, 2, 1])));
+    }
+
+    #[test]
+    fn test_validate_pinned_peer_signing_key_rejects_invalid_value() {
+        let err = validate_pinned_peer_signing_key(Some(&"not-base64".to_owned()), &[1u8, 2, 3])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("invalid pinned peer signing key"));
+    }
+
+    #[test]
+    fn test_validate_bootstrap_trusted_peer_signing_key() {
+        let pk = vec![1u8, 2, 3, 4];
+        let encoded = encode_pinned_peer_signing_key(&pk);
+        validate_bootstrap_trusted_peer_signing_key(&encoded, &pk).unwrap();
+
+        let err = validate_bootstrap_trusted_peer_signing_key(&encoded, &[4u8, 3, 2, 1])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("bootstrap trusted peer identity mismatch"));
+    }
+
+    #[test]
+    fn test_direct_signed_id_roundtrip() {
+        let (sign_pk, sign_sk) = sign::gen_keypair();
+        let (box_pk, _) = box_::gen_keypair();
+        let payload = create_direct_signed_id("peer-id", box_pk.0, &sign_pk.0, &sign_sk);
+        let decoded = decode_direct_id_pk(&payload).unwrap();
+        assert_eq!(decoded.id, "peer-id");
+        assert_eq!(decoded.sign_pk, sign_pk.0);
+        assert_eq!(decoded.box_pk, box_pk.0);
+        assert!(!decoded.pairing_required);
+        assert!(decoded.pairing_salt.is_none());
+    }
+
+    #[test]
+    fn test_direct_signed_id_with_pairing_roundtrip() {
+        let (sign_pk, sign_sk) = sign::gen_keypair();
+        let (box_pk, _) = box_::gen_keypair();
+        let salt = create_direct_pairing_salt();
+        let payload =
+            create_direct_signed_id_with_pairing("peer-id", box_pk.0, &sign_pk.0, &sign_sk, salt);
+        let decoded = decode_direct_id_pk(&payload).unwrap();
+        assert_eq!(decoded.id, "peer-id");
+        assert_eq!(decoded.sign_pk, sign_pk.0);
+        assert_eq!(decoded.box_pk, box_pk.0);
+        assert!(decoded.pairing_required);
+        assert_eq!(decoded.pairing_salt, Some(salt));
+    }
+
+    #[test]
+    fn test_secure_signed_id_with_pairing_roundtrip() {
+        let (sign_pk, sign_sk) = sign::gen_keypair();
+        let (box_pk, _) = box_::gen_keypair();
+        let salt = create_direct_pairing_salt();
+        let payload = create_secure_signed_id_with_pairing("peer-id", box_pk.0, &sign_sk, salt);
+        let decoded = decode_secure_signed_id(&payload, &sign_pk).unwrap();
+        assert_eq!(decoded.id, "peer-id");
+        assert_eq!(decoded.box_pk, box_pk.0);
+        assert!(decoded.pairing_required);
+        assert_eq!(decoded.pairing_salt, Some(salt));
+    }
+
+    #[test]
+    fn test_decode_direct_id_pk_rejects_short_payload() {
+        let err = decode_direct_id_pk(&[1u8, 2, 3]).unwrap_err().to_string();
+        assert!(err.contains("missing peer signing key"));
+    }
+
+    #[test]
+    fn test_direct_pairing_proof_changes_with_salt() {
+        let proof_a = compute_direct_pairing_proof(
+            "secret",
+            &[1u8; argon2id13::SALTBYTES],
+            "peer-id",
+            &[2u8; 32],
+            &[3u8; 32],
+            &[4u8; 32],
+        )
+        .unwrap();
+        let proof_b = compute_direct_pairing_proof(
+            "secret",
+            &[5u8; argon2id13::SALTBYTES],
+            "peer-id",
+            &[2u8; 32],
+            &[3u8; 32],
+            &[4u8; 32],
+        )
+        .unwrap();
+        assert_ne!(proof_a, proof_b);
+    }
+
+    #[test]
+    fn test_wrap_direct_public_key_symmetric_value_roundtrip() {
+        let proof = [7u8; DIRECT_PAIRING_PROOF_LEN];
+        let sealed_key = vec![9u8, 8, 7, 6];
+        let wrapped = wrap_direct_public_key_symmetric_value(&sealed_key, Some(proof));
+        let (decoded_proof, decoded_key) =
+            unwrap_direct_public_key_symmetric_value(&wrapped, true).unwrap();
+        assert_eq!(decoded_proof, Some(proof));
+        assert_eq!(decoded_key, sealed_key);
+    }
+
+    #[test]
+    fn test_lan_discovery_ping_roundtrip() {
+        let (sign_pk, sign_sk) = sign::gen_keypair();
+        let peer_id = format!("lan-requester-{}", Uuid::new_v4());
+        let nonce = create_lan_discovery_ping_nonce();
+        let misc = create_lan_discovery_ping_misc_with_keys(&peer_id, &nonce, &sign_pk.0, &sign_sk);
+        let request = verify_lan_discovery_ping(&misc).unwrap();
+        assert_eq!(request.nonce, nonce);
+        assert_eq!(request.id, peer_id);
+        assert_eq!(request.sign_pk, sign_pk.0);
+        assert_eq!(
+            decode_lan_discovery_ping_nonce(&misc),
+            Some(request.nonce.clone())
+        );
+    }
+
+    #[test]
+    fn test_lan_discovery_ping_rejects_signature_mismatch() {
+        let (sign_pk, sign_sk) = sign::gen_keypair();
+        let nonce = create_lan_discovery_ping_nonce();
+        let misc = create_lan_discovery_ping_misc_with_keys(
+            &format!("lan-requester-{}", Uuid::new_v4()),
+            &nonce,
+            &sign_pk.0,
+            &sign_sk,
+        );
+        let misc = misc.replace(&nonce, "tampered");
+        let err = verify_lan_discovery_ping(&misc).unwrap_err().to_string();
+        assert!(err.contains("ping signature mismatch") || err.contains("signed payload mismatch"));
+    }
+
+    #[test]
+    fn test_lan_discovery_response_roundtrip() {
+        let (sign_pk, sign_sk) = sign::gen_keypair();
+        let peer_id = format!("lan-peer-{}", Uuid::new_v4());
+        let mut peer = PeerDiscovery {
+            cmd: "pong".to_owned(),
+            id: peer_id,
+            username: "alice".to_owned(),
+            hostname: "workstation".to_owned(),
+            platform: "Linux".to_owned(),
+            mac: "aa:bb:cc:dd:ee:ff".to_owned(),
+            ..Default::default()
+        };
+        let nonce = create_lan_discovery_ping_nonce();
+        peer.misc =
+            create_lan_discovery_response_misc_with_keys(&peer, &nonce, &sign_pk.0, &sign_sk);
+        let verified_pk = verify_lan_discovery_response(&peer, &nonce).unwrap();
+        assert_eq!(verified_pk, sign_pk.0);
+    }
+
+    #[test]
+    fn test_lan_discovery_response_rejects_nonce_mismatch() {
+        let (sign_pk, sign_sk) = sign::gen_keypair();
+        let mut peer = PeerDiscovery {
+            cmd: "pong".to_owned(),
+            id: format!("lan-peer-{}", Uuid::new_v4()),
+            username: "alice".to_owned(),
+            hostname: "workstation".to_owned(),
+            platform: "Linux".to_owned(),
+            mac: "aa:bb:cc:dd:ee:ff".to_owned(),
+            ..Default::default()
+        };
+        peer.misc =
+            create_lan_discovery_response_misc_with_keys(&peer, "nonce-a", &sign_pk.0, &sign_sk);
+        let err = verify_lan_discovery_response(&peer, "nonce-b")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("nonce mismatch"));
+    }
+
+    #[test]
+    fn test_fingerprint_to_trust_phrase_is_stable() {
+        let phrase_a = fingerprint_to_trust_phrase(
+            "0011 2233 4455 6677 8899 aabb ccdd eeff 0011 2233 4455 6677 8899 aabb ccdd eeff",
+        );
+        let phrase_b = fingerprint_to_trust_phrase(
+            "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+        );
+        assert_eq!(phrase_a, phrase_b);
+        assert_eq!(phrase_a.split(' ').count(), 6);
+    }
+
+    #[test]
+    fn test_fingerprint_to_trust_phrase_rejects_invalid_input() {
+        assert!(fingerprint_to_trust_phrase("xyz").is_empty());
+    }
+
+    #[test]
+    fn test_is_usable_direct_access_ip_filters_local_only_noise() {
+        assert!(is_usable_direct_access_ip(IpAddr::V4(
+            "192.168.1.10".parse().unwrap()
+        )));
+        assert!(!is_usable_direct_access_ip(IpAddr::V4(
+            "127.0.0.1".parse().unwrap()
+        )));
+        assert!(!is_usable_direct_access_ip(IpAddr::V4(
+            "169.254.2.1".parse().unwrap()
+        )));
+        assert!(is_usable_direct_access_ip(IpAddr::V6(
+            "fd00::10".parse().unwrap()
+        )));
+        assert!(!is_usable_direct_access_ip(IpAddr::V6(
+            "fe80::10".parse().unwrap()
+        )));
+    }
+
+    #[test]
+    fn test_format_direct_access_endpoint_formats_ipv6_with_brackets() {
+        assert_eq!(
+            format_direct_access_endpoint(IpAddr::V4("10.0.0.5".parse().unwrap()), 21118),
+            "10.0.0.5:21118"
+        );
+        assert_eq!(
+            format_direct_access_endpoint(IpAddr::V6("fd00::5".parse().unwrap()), 21118),
+            "[fd00::5]:21118"
+        );
     }
 }

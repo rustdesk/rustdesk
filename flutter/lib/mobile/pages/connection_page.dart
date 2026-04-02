@@ -205,6 +205,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
                                 peer.hostname
                                     .toLowerCase()
                                     .contains(textToFind) ||
+                                peer.discoveryEndpoint
+                                    .toLowerCase()
+                                    .contains(textToFind) ||
+                                peer.discoveryTrustPhrase
+                                    .toLowerCase()
+                                    .contains(textToFind) ||
                                 peer.alias.toLowerCase().contains(textToFind))
                             .toList();
                       }

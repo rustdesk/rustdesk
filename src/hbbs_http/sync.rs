@@ -18,6 +18,21 @@ const TIME_HEARTBEAT: Duration = Duration::from_secs(15);
 const UPLOAD_SYSINFO_TIMEOUT: Duration = Duration::from_secs(120);
 const TIME_CONN: Duration = Duration::from_secs(3);
 
+fn is_protected_remote_option(key: &str) -> bool {
+    matches!(
+        key,
+        keys::OPTION_CUSTOM_RENDEZVOUS_SERVER
+            | keys::OPTION_API_SERVER
+            | keys::OPTION_RELAY_SERVER
+            | keys::OPTION_DIRECT_ACCESS_PAIRING_PASSPHRASE
+            | keys::OPTION_PEER_PAIRING_PASSPHRASE
+            | keys::OPTION_ALLOW_UNVERIFIED_PEER_TRUST
+            | keys::OPTION_LAN_DISCOVERY_MODE
+            | keys::OPTION_KEY
+            | "rendezvous-servers"
+    )
+}
+
 #[cfg(not(any(target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref SENDER : Mutex<broadcast::Sender<Vec<i32>>> = Mutex::new(start_hbbs_sync());
@@ -290,6 +305,10 @@ fn handle_config_options(config_options: HashMap<String, String>) {
     config_options
         .iter()
         .map(|(k, v)| {
+            if is_protected_remote_option(k) {
+                log::warn!("Ignoring server-managed protected option: {}", k);
+                return;
+            }
             // Priority: user config > default advanced options.
             // Only when default advanced options are also empty, remove user option (fallback to built-in default);
             // otherwise insert an empty value so user config remains present.

@@ -193,52 +193,181 @@ pub async fn create_tcp_connection(
     secure: bool,
     control_permissions: Option<ControlPermissions>,
 ) -> ResultType<()> {
+    let handshake_mode = if secure {
+        HandshakeMode::Rendezvous
+    } else {
+        HandshakeMode::Disabled
+    };
+    create_tcp_connection_with_mode(server, stream, addr, handshake_mode, control_permissions).await
+}
+
+pub async fn create_direct_tcp_connection(
+    server: ServerPtr,
+    stream: Stream,
+    addr: SocketAddr,
+    control_permissions: Option<ControlPermissions>,
+) -> ResultType<()> {
+    create_tcp_connection_with_mode(
+        server,
+        stream,
+        addr,
+        HandshakeMode::Direct,
+        control_permissions,
+    )
+    .await
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum HandshakeMode {
+    Disabled,
+    Rendezvous,
+    Direct,
+}
+
+async fn create_tcp_connection_with_mode(
+    server: ServerPtr,
+    stream: Stream,
+    addr: SocketAddr,
+    handshake_mode: HandshakeMode,
+    control_permissions: Option<ControlPermissions>,
+) -> ResultType<()> {
     let mut stream = stream;
     let id = server.write().unwrap().get_new_id();
     let (sk, pk) = Config::get_key_pair();
-    if secure && pk.len() == sign::PUBLICKEYBYTES && sk.len() == sign::SECRETKEYBYTES {
+    if handshake_mode != HandshakeMode::Disabled {
+        if pk.len() != sign::PUBLICKEYBYTES || sk.len() != sign::SECRETKEYBYTES {
+            bail!("Handshake failed: invalid local signing key length");
+        }
+        let mut local_sign_pk = [0u8; sign::PUBLICKEYBYTES];
+        local_sign_pk.copy_from_slice(&pk);
         let mut sk_ = [0u8; sign::SECRETKEYBYTES];
         sk_[..].copy_from_slice(&sk);
         let sk = sign::SecretKey(sk_);
         let mut msg_out = Message::new();
         let (our_pk_b, our_sk_b) = box_::gen_keypair();
+        let pairing_passphrase = match handshake_mode {
+            HandshakeMode::Direct => crate::common::get_direct_access_pairing_passphrase(),
+            HandshakeMode::Rendezvous => crate::common::get_peer_pairing_passphrase(),
+            HandshakeMode::Disabled => String::new(),
+        };
+        let pairing_salt =
+            if handshake_mode != HandshakeMode::Disabled && !pairing_passphrase.is_empty() {
+                Some(crate::common::create_direct_pairing_salt())
+            } else {
+                None
+            };
+        let signed_id = match handshake_mode {
+            HandshakeMode::Disabled => Bytes::new(),
+            HandshakeMode::Rendezvous => pairing_salt.map_or_else(
+                || {
+                    sign::sign(
+                        &IdPk {
+                            id: Config::get_id(),
+                            pk: Bytes::from(our_pk_b.0.to_vec()),
+                            ..Default::default()
+                        }
+                        .write_to_bytes()
+                        .unwrap_or_default(),
+                        &sk,
+                    )
+                    .into()
+                },
+                |salt| {
+                    crate::common::create_secure_signed_id_with_pairing(
+                        &Config::get_id(),
+                        our_pk_b.0,
+                        &sk,
+                        salt,
+                    )
+                },
+            ),
+            HandshakeMode::Direct => pairing_salt.map_or_else(
+                || crate::common::create_direct_signed_id(&Config::get_id(), our_pk_b.0, &pk, &sk),
+                |salt| {
+                    crate::common::create_direct_signed_id_with_pairing(
+                        &Config::get_id(),
+                        our_pk_b.0,
+                        &pk,
+                        &sk,
+                        salt,
+                    )
+                },
+            ),
+        };
         msg_out.set_signed_id(SignedId {
-            id: sign::sign(
-                &IdPk {
-                    id: Config::get_id(),
-                    pk: Bytes::from(our_pk_b.0.to_vec()),
-                    ..Default::default()
-                }
-                .write_to_bytes()
-                .unwrap_or_default(),
-                &sk,
-            )
-            .into(),
+            id: signed_id,
             ..Default::default()
         });
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
         match timeout(CONNECT_TIMEOUT, stream.next()).await? {
             Some(res) => {
                 let bytes = res?;
-                if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    if let Some(message::Union::PublicKey(pk)) = msg_in.union {
-                        if pk.asymmetric_value.len() == box_::PUBLICKEYBYTES {
-                            stream.set_key(tcp::Encrypt::decode(
-                                &pk.symmetric_value,
-                                &pk.asymmetric_value,
-                                &our_sk_b,
-                            )?);
-                        } else if pk.asymmetric_value.is_empty() {
-                            Config::set_key_confirmed(false);
-                            log::info!("Force to update pk");
+                let msg_in = Message::parse_from_bytes(&bytes)
+                    .context("Handshake failed: invalid message format")?;
+                let Some(message::Union::PublicKey(public_key)) = msg_in.union else {
+                    bail!("Handshake failed: invalid message type");
+                };
+                if public_key.asymmetric_value.len() == box_::PUBLICKEYBYTES {
+                    if handshake_mode == HandshakeMode::Direct || pairing_salt.is_some() {
+                        let (pairing_proof, symmetric_value) =
+                            crate::common::unwrap_direct_public_key_symmetric_value(
+                                &public_key.symmetric_value,
+                                pairing_salt.is_some(),
+                            )?;
+                        let key = tcp::Encrypt::decode(
+                            &symmetric_value,
+                            &public_key.asymmetric_value,
+                            &our_sk_b,
+                        )?;
+                        if let Some(pairing_salt) = pairing_salt {
+                            let Some(pairing_proof) = pairing_proof else {
+                                bail!("Handshake failed: missing pairing proof");
+                            };
+                            let mut their_pk_b = [0u8; box_::PUBLICKEYBYTES];
+                            their_pk_b.copy_from_slice(&public_key.asymmetric_value);
+                            let expected_proof = crate::common::compute_direct_pairing_proof(
+                                &pairing_passphrase,
+                                &pairing_salt,
+                                &Config::get_id(),
+                                &local_sign_pk,
+                                &our_pk_b.0,
+                                &their_pk_b,
+                            )?;
+                            stream.set_key(key);
+                            let mut ack = Message::new();
+                            if pairing_proof != expected_proof {
+                                ack.set_message_box(MessageBox {
+                                    msgtype: "error".to_owned(),
+                                    title: "Connection Error".to_owned(),
+                                    text: "Handshake failed: pairing passphrase rejected"
+                                        .to_owned(),
+                                    ..Default::default()
+                                });
+                                timeout(CONNECT_TIMEOUT, stream.send(&ack)).await??;
+                                bail!("Handshake failed: pairing passphrase rejected");
+                            }
+                            ack.set_signed_id(SignedId {
+                                id: crate::common::direct_handshake_ack_ok(),
+                                ..Default::default()
+                            });
+                            timeout(CONNECT_TIMEOUT, stream.send(&ack)).await??;
                         } else {
-                            bail!("Handshake failed: invalid public sign key length from peer");
+                            stream.set_key(key);
                         }
                     } else {
-                        log::error!("Handshake failed: invalid message type");
+                        stream.set_key(tcp::Encrypt::decode(
+                            &public_key.symmetric_value,
+                            &public_key.asymmetric_value,
+                            &our_sk_b,
+                        )?);
                     }
+                } else if public_key.asymmetric_value.is_empty() {
+                    Config::set_key_confirmed(false);
+                    bail!(
+                        "Handshake failed: peer rejected secure session due to missing or stale key binding"
+                    );
                 } else {
-                    bail!("Handshake failed: invalid message format");
+                    bail!("Handshake failed: invalid public key length from peer");
                 }
             }
             None => {
@@ -777,8 +906,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                 loop {
                     sleep(CONFIG_SYNC_INTERVAL_SECS).await;
                     let cfg = (Config::get(), Config2::get());
-                    let should_sync =
-                        cfg != cfg0 || (is_root_config_empty && !cfg.0.is_empty());
+                    let should_sync = cfg != cfg0 || (is_root_config_empty && !cfg.0.is_empty());
                     if should_sync {
                         if is_root_config_empty {
                             log::info!("root config is empty, sync our config to root");

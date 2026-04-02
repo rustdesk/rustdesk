@@ -17,6 +17,14 @@ class StateGlobal {
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final svcStatus = SvcStatus.notReady.obs;
+  final networkMode = 'not_configured'.obs;
+  final networkModeLabel = 'Offline'.obs;
+  final networkModeDetail = ''.obs;
+  final networkModeTrustPhrase = ''.obs;
+  final RxList<String> networkModeDirectEndpoints = <String>[].obs;
+  final networkModePairingRequired = false.obs;
+  final lanDiscoveryMode = kLanDiscoveryModeStandard.obs;
+  final lanDiscoveryModeLabel = 'Standard'.obs;
   final RxInt videoConnCount = 0.obs;
   final RxBool isFocused = false.obs;
   // for mobile and web
