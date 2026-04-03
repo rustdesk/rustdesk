@@ -121,11 +121,9 @@ pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen is not supported";
 #[cfg(target_os = "linux")]
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "ubuntu-21-04-required";
 #[cfg(target_os = "linux")]
-pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
-    "wayland-requires-higher-linux-version";
+pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str = "wayland-requires-higher-linux-version";
 #[cfg(target_os = "linux")]
-pub const SCRAP_XDP_PORTAL_UNAVAILABLE: &str =
-    "xdp-portal-unavailable";
+pub const SCRAP_XDP_PORTAL_UNAVAILABLE: &str = "xdp-portal-unavailable";
 pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
 pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
@@ -1760,6 +1758,43 @@ pub struct LoginConfigHandler {
     pub record_permission: bool,
 }
 
+const OPTION_SWAP_OPTION_COMMAND_KEY: &str = "allow_swap_option_command_key";
+
+fn get_option_command_swap_enabled(config: &PeerConfig) -> bool {
+    config::option2bool(
+        OPTION_SWAP_OPTION_COMMAND_KEY,
+        config
+            .options
+            .get(OPTION_SWAP_OPTION_COMMAND_KEY)
+            .map(String::as_str)
+            .unwrap_or(""),
+    )
+}
+
+fn set_option_command_swap_toggle(config: &mut PeerConfig, enabled: bool) {
+    if enabled {
+        config
+            .options
+            .insert(OPTION_SWAP_OPTION_COMMAND_KEY.to_owned(), "Y".to_owned());
+    } else {
+        config.options.remove(OPTION_SWAP_OPTION_COMMAND_KEY);
+    }
+}
+
+fn set_control_command_swap_enabled(config: &mut PeerConfig, enabled: bool) {
+    config.allow_swap_key.v = enabled;
+    if enabled {
+        set_option_command_swap_toggle(config, false);
+    }
+}
+
+fn set_option_command_swap_enabled(config: &mut PeerConfig, enabled: bool) {
+    set_option_command_swap_toggle(config, enabled);
+    if enabled {
+        config.allow_swap_key.v = false;
+    }
+}
+
 impl Deref for LoginConfigHandler {
     type Target = PeerConfig;
 
@@ -2124,7 +2159,11 @@ impl LoginConfigHandler {
         } else if name == "show-quality-monitor" {
             config.show_quality_monitor.v = !config.show_quality_monitor.v;
         } else if name == "allow_swap_key" {
-            config.allow_swap_key.v = !config.allow_swap_key.v;
+            let enabled = !config.allow_swap_key.v;
+            set_control_command_swap_enabled(&mut config, enabled);
+        } else if name == "allow_swap_option_command_key" {
+            let enabled = !get_option_command_swap_enabled(&config);
+            set_option_command_swap_enabled(&mut config, enabled);
         } else if name == "view-only" {
             config.view_only.v = !config.view_only.v;
             let f = |b: bool| {
@@ -2336,6 +2375,8 @@ impl LoginConfigHandler {
             self.config.show_quality_monitor.v
         } else if name == "allow_swap_key" {
             self.config.allow_swap_key.v
+        } else if name == "allow_swap_option_command_key" {
+            get_option_command_swap_enabled(&self.config)
         } else if name == "view-only" {
             self.config.view_only.v
         } else if name == "show-my-cursor" {
@@ -2630,16 +2671,15 @@ impl LoginConfigHandler {
         };
         let mut avatar = get_builtin_option(keys::OPTION_AVATAR);
         if avatar.is_empty() {
-            avatar = serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option(
-                "user_info",
-            ))
-            .ok()
-            .and_then(|x| {
-                x.get("avatar")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.trim().to_owned())
-            })
-            .unwrap_or_default();
+            avatar =
+                serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option("user_info"))
+                    .ok()
+                    .and_then(|x| {
+                        x.get("avatar")
+                            .and_then(|x| x.as_str())
+                            .map(|x| x.trim().to_owned())
+                    })
+                    .unwrap_or_default();
         }
         avatar = resolve_avatar_url(avatar);
         let mut display_name = get_builtin_option(keys::OPTION_DISPLAY_NAME);
@@ -4054,7 +4094,41 @@ pub mod peer_online {
 
     #[cfg(test)]
     mod tests {
+        use crate::client::{set_control_command_swap_enabled, set_option_command_swap_enabled};
+        use hbb_common::config::PeerConfig;
         use hbb_common::tokio;
+
+        #[test]
+        fn enable_option_command_swap_stores_option_and_disables_control_command_swap() {
+            let mut config = PeerConfig {
+                allow_swap_key: hbb_common::config::AllowSwapKey { v: true },
+                ..Default::default()
+            };
+
+            set_option_command_swap_enabled(&mut config, true);
+
+            assert_eq!(
+                config
+                    .options
+                    .get("allow_swap_option_command_key")
+                    .map(String::as_str),
+                Some("Y")
+            );
+            assert!(!config.allow_swap_key.v);
+        }
+
+        #[test]
+        fn enable_control_command_swap_disables_option_command_swap() {
+            let mut config = PeerConfig::default();
+            config
+                .options
+                .insert("allow_swap_option_command_key".to_owned(), "Y".to_owned());
+
+            set_control_command_swap_enabled(&mut config, true);
+
+            assert!(config.allow_swap_key.v);
+            assert!(!config.options.contains_key("allow_swap_option_command_key"));
+        }
 
         #[tokio::test]
         async fn test_query_onlines() {
