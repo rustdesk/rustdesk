@@ -1629,6 +1629,11 @@ bool mainGetPeerBoolOptionSync(String id, String key) {
 }
 
 String normalizeLanDiscoveryMode(String mode, {String? legacyOptionValue}) {
+  if (legacyOptionValue != null && isOptionFixed(kOptionEnableLanDiscovery)) {
+    return option2bool(kOptionEnableLanDiscovery, legacyOptionValue)
+        ? kLanDiscoveryModeStandard
+        : kLanDiscoveryModeOff;
+  }
   switch (mode) {
     case kLanDiscoveryModeOff:
     case kLanDiscoveryModeTrustedPeersOnly:
