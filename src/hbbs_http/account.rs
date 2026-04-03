@@ -1,10 +1,8 @@
 use super::HbbHttpResponse;
 use crate::hbbs_http::create_http_client_with_url;
 use hbb_common::{config::LocalConfig, log, ResultType};
-use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use serde_json::{Map, Value};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -159,22 +157,6 @@ impl OidcSession {
         write_guard.warmed_api_server = Some(api_server.to_owned());
     }
 
-    fn parse_hbb_http_response<T: DeserializeOwned>(body: &str) -> ResultType<HbbHttpResponse<T>> {
-        let map = serde_json::from_str::<Map<String, Value>>(body)?;
-        if let Some(error) = map.get("error") {
-            if let Some(err) = error.as_str() {
-                Ok(HbbHttpResponse::Error(err.to_owned()))
-            } else {
-                Ok(HbbHttpResponse::ErrorFormat)
-            }
-        } else {
-            match serde_json::from_value(Value::Object(map)) {
-                Ok(v) => Ok(HbbHttpResponse::Data(v)),
-                Err(_) => Ok(HbbHttpResponse::DataTypeFormat),
-            }
-        }
-    }
-
     fn auth(
         api_server: &str,
         op: &str,
@@ -190,7 +172,7 @@ impl OidcSession {
         })
         .to_string();
         let resp = crate::post_request_sync(format!("{}/api/oidc/auth", api_server), body, "")?;
-        Self::parse_hbb_http_response(&resp)
+        HbbHttpResponse::parse(&resp)
     }
 
     fn query(
@@ -216,7 +198,7 @@ impl OidcSession {
             "{}".to_owned(),
         )?;
         let resp = serde_json::from_str::<HttpResponseBody>(&resp)?;
-        Self::parse_hbb_http_response(&resp.body)
+        HbbHttpResponse::parse(&resp.body)
     }
 
     fn reset(&mut self) {
