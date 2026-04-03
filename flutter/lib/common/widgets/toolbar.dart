@@ -853,6 +853,22 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
         child: Text(translate('Swap control-command key'))));
   }
 
+  if (ffiModel.keyboard && isMacOS && pi.platform != kPeerPlatformMacOS) {
+    final option = 'allow_swap_option_command_key';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    onChanged(bool? value) {
+      if (value == null) return;
+      bind.sessionToggleOption(sessionId: sessionId, value: option);
+    }
+
+    final enabled = !ffi.ffiModel.viewOnly;
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: enabled ? onChanged : null,
+        child: Text(translate('Swap option-command key'))));
+  }
+
   // Relative mouse mode (gaming mode).
   // Only show when server supports MOUSE_TYPE_MOVE_RELATIVE (version >= 1.4.5)
   // Note: This feature is only available in Flutter client. Sciter client does not support this.
