@@ -845,19 +845,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
             }
             Data::CancelJob(id) => {
-                let mut msg_out = Message::new();
-                let mut file_action = FileAction::new();
-                file_action.set_cancel(FileTransferCancel {
-                    id: id,
-                    ..Default::default()
-                });
-                msg_out.set_file_action(file_action);
-                allow_err!(peer.send(&msg_out).await);
-                if let Some(job) = fs::remove_job(id, &mut self.write_jobs) {
-                    job.remove_download_file();
-                }
-                let _ = fs::remove_job(id, &mut self.read_jobs);
-                self.remove_jobs.remove(&id);
+                self.cancel_transfer_job(id, peer).await;
             }
             Data::RemoveDir((id, path)) => {
                 let mut msg_out = Message::new();
@@ -1051,6 +1039,22 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             self.last_update_jobs_status.0 = Instant::now();
         }
+    }
+
+    async fn cancel_transfer_job(&mut self, id: i32, peer: &mut Stream) {
+        let mut msg_out = Message::new();
+        let mut file_action = FileAction::new();
+        file_action.set_cancel(FileTransferCancel {
+            id,
+            ..Default::default()
+        });
+        msg_out.set_file_action(file_action);
+        allow_err!(peer.send(&msg_out).await);
+        if let Some(job) = fs::remove_job(id, &mut self.write_jobs) {
+            job.remove_download_file();
+        }
+        let _ = fs::remove_job(id, &mut self.read_jobs);
+        self.remove_jobs.remove(&id);
     }
 
     pub async fn sync_jobs_status_to_local(&mut self) -> bool {
@@ -1470,18 +1474,22 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
-                            self.handler
-                                .update_folder_files(fd.id, &entries, fd.path, false, false);
                             let mut set_files_err = None;
+                            let mut should_update_folder_files = true;
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);
-                                if let Err(err) = job.set_files(entries) {
+                                if let Err(err) = job.set_files(entries.clone()) {
                                     set_files_err = Some(err.to_string());
+                                    should_update_folder_files = false;
                                 } else {
                                     job.set_finished_size_on_resume();
                                 }
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
-                                job.files = entries;
+                                job.files = entries.clone();
+                            }
+                            if should_update_folder_files {
+                                self.handler
+                                    .update_folder_files(fd.id, &entries, fd.path, false, false);
                             }
                             if let Some(err) = set_files_err {
                                 log::warn!(
@@ -1489,17 +1497,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fd.id,
                                     err
                                 );
-                                if let Some(job) = fs::remove_job(fd.id, &mut self.write_jobs) {
-                                    job.remove_download_file();
-                                }
-                                let mut msg_out = Message::new();
-                                let mut file_action = FileAction::new();
-                                file_action.set_cancel(FileTransferCancel {
-                                    id: fd.id,
-                                    ..Default::default()
-                                });
-                                msg_out.set_file_action(file_action);
-                                allow_err!(peer.send(&msg_out).await);
+                                self.cancel_transfer_job(fd.id, peer).await;
                                 self.handle_job_status(fd.id, -1, Some(err));
                             }
                         }
