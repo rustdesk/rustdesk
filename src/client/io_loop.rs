@@ -1475,19 +1475,25 @@ impl<T: InvokeUiSession> Remote<T> {
                                 }
                             }
                             let mut set_files_err = None;
-                            let mut should_update_folder_files = true;
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);
-                                if let Err(err) = job.set_files(entries.clone()) {
+                                if let Err(err) = job.set_files(entries) {
                                     set_files_err = Some(err.to_string());
-                                    should_update_folder_files = false;
                                 } else {
                                     job.set_finished_size_on_resume();
+                                    self.handler.update_folder_files(
+                                        fd.id,
+                                        job.files(),
+                                        fd.path,
+                                        false,
+                                        false,
+                                    );
                                 }
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
-                                job.files = entries.clone();
-                            }
-                            if should_update_folder_files {
+                                job.files = entries;
+                                self.handler
+                                    .update_folder_files(fd.id, &job.files, fd.path, false, false);
+                            } else {
                                 self.handler
                                     .update_folder_files(fd.id, &entries, fd.path, false, false);
                             }
