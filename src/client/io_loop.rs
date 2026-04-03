@@ -1489,7 +1489,9 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fd.id,
                                     err
                                 );
-                                fs::remove_job(fd.id, &mut self.write_jobs);
+                                if let Some(job) = fs::remove_job(fd.id, &mut self.write_jobs) {
+                                    job.remove_download_file();
+                                }
                                 let mut msg_out = Message::new();
                                 let mut file_action = FileAction::new();
                                 file_action.set_cancel(FileTransferCancel {
@@ -1661,7 +1663,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 };
                             }
                             if !has_job {
-                                log::warn!("Ignore file transfer done for unknown job {}", d.id);
+                                log::debug!("Ignore file transfer done for unknown job {}", d.id);
                             } else {
                                 match job_type {
                                     fs::JobType::Generic => {
