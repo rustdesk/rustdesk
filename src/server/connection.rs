@@ -1993,11 +1993,6 @@ impl Connection {
         constant_time_eq(&hasher2.finalize()[..], &self.lr.password[..])
     }
 
-    #[inline]
-    fn validate_one_password(&self, password: &str) -> bool {
-        self.validate_password_plain(password)
-    }
-
     fn validate_password_plain(&self, password: &str) -> bool {
         if password.is_empty() {
             return false;
@@ -2025,10 +2020,71 @@ impl Connection {
         self.validate_password_plain(storage)
     }
 
+    // This is coarse brute-force protection for the temporary password.
+    // We intentionally clear the failure window after any successful password authentication,
+    // including permanent-password success in mixed/fallback modes. The goal is to break up
+    // sustained wrong-attempt bursts, not to precisely attribute which password type was tried.
+    fn check_update_temporary_password(&self, validate_password_success: bool) {
+        const MAX_FAILURES_PER_MINUTE: i32 = 8;
+        #[derive(Default)]
+        struct State {
+            password: String,
+            minute: i32,
+            failures: i32,
+        }
+        static TEMPORARY_PASSWORD_FAILURES: std::sync::LazyLock<Mutex<State>> =
+            std::sync::LazyLock::new(|| Mutex::new(State::default()));
+
+        if !password::temporary_enabled() {
+            return;
+        }
+
+        let current_password = password::temporary_password();
+        if current_password.is_empty() {
+            return;
+        }
+
+        let minute = (get_time() / 60_000) as i32;
+        let mut state = TEMPORARY_PASSWORD_FAILURES.lock().unwrap();
+        if state.password != current_password {
+            state.password = current_password;
+            state.minute = minute;
+            state.failures = 0;
+        }
+
+        if validate_password_success {
+            state.minute = minute;
+            state.failures = 0;
+            return;
+        }
+
+        if state.minute == minute {
+            state.failures += 1;
+        } else {
+            state.minute = minute;
+            state.failures = 1;
+        }
+
+        if state.failures < MAX_FAILURES_PER_MINUTE {
+            return;
+        }
+
+        password::update_temporary_password();
+        let new_password = password::temporary_password();
+        log::warn!(
+            "Temporary password rotated after too many wrong attempts in one minute: failures={}, ip={}",
+            state.failures,
+            self.ip,
+        );
+        state.password = new_password;
+        state.minute = minute;
+        state.failures = 0;
+    }
+
     fn validate_password(&mut self, allow_permanent_password: bool) -> bool {
         if password::temporary_enabled() {
             let password = password::temporary_password();
-            if self.validate_one_password(&password) {
+            if self.validate_password_plain(&password) {
                 raii::AuthedConnID::update_or_insert_session(
                     self.session_key(),
                     Some(password),
@@ -2406,6 +2462,7 @@ impl Connection {
                 }
                 if !self.validate_password(allow_logon_screen_password) {
                     self.update_failure(failure, false, 0);
+                    self.check_update_temporary_password(false);
                     if err_msg.is_empty() {
                         self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
                             .await;
@@ -2418,6 +2475,7 @@ impl Connection {
                     }
                 } else {
                     self.update_failure(failure, true, 0);
+                    self.check_update_temporary_password(true);
                     if err_msg.is_empty() {
                         #[cfg(target_os = "linux")]
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
@@ -5668,4 +5726,5 @@ mod test {
         assert!(Ipv6Addr::from_str("127.0.0.1").is_err());
         assert!(Ipv6Addr::from_str("0").is_err());
     }
+
 }
