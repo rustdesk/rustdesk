@@ -976,11 +976,14 @@ class FfiModel with ChangeNotifier {
     final controller = TextEditingController();
     String normalizePhrase(String value) =>
         value.trim().toLowerCase().split(RegExp(r'\s+')).join(' ');
+    final normalizedTrustPhrase = normalizePhrase(trustPhrase);
+    final invalidTrustPayload = normalizedTrustPhrase.isEmpty;
     dialogManager.show(
       tag: '$sessionId-confirm-peer-trust',
       (setState, close, context) {
         final phraseConfirmed =
-            normalizePhrase(controller.text) == normalizePhrase(trustPhrase);
+            !invalidTrustPayload &&
+            normalizePhrase(controller.text) == normalizedTrustPhrase;
 
         void reject() {
           () async {
@@ -1040,6 +1043,11 @@ class FfiModel with ChangeNotifier {
               buildLine('Peer ID', peerId),
               buildLine('Trust phrase', trustPhrase),
               buildLine('Fingerprint', fingerprint),
+              if (invalidTrustPayload)
+                Text(
+                  'The trust information from the remote side is missing or invalid. Reject this connection.',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ).marginOnly(bottom: 12),
               TextField(
                 controller: controller,
                 autofocus: true,
@@ -1183,9 +1191,17 @@ class FfiModel with ChangeNotifier {
 
         void onReset() {
           () async {
-            await bind.sessionResetPeerTrust(sessionId: sessionId);
-            close();
-            reconnect(dialogManager, sessionId, false);
+            try {
+              final ok = await bind.sessionResetPeerTrust(sessionId: sessionId);
+              if (!ok) {
+                showToast('Failed to reset peer trust');
+                return;
+              }
+              close();
+              reconnect(dialogManager, sessionId, false);
+            } catch (_) {
+              showToast('Failed to reset peer trust');
+            }
           }();
         }
 

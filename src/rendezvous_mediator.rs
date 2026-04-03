@@ -92,10 +92,7 @@ impl RendezvousMediator {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if crate::platform::is_installed() {
             std::thread::spawn(move || loop {
-                if config::option2bool(
-                    hbb_common::config::keys::OPTION_ENABLE_LAN_DISCOVERY,
-                    &Config::get_option(hbb_common::config::keys::OPTION_ENABLE_LAN_DISCOVERY),
-                ) {
+                if crate::common::lan_discovery_is_enabled() {
                     allow_err!(super::lan::start_listening());
                     break;
                 }

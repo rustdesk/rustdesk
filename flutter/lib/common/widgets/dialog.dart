@@ -338,7 +338,7 @@ Future<String> changePairingPassphrase(
   required String description,
   required String optionKey,
 }) async {
-  final controller = TextEditingController(text: currentValue);
+  final controller = TextEditingController(text: "");
   final obscure = true.obs;
   await gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
@@ -348,7 +348,7 @@ Future<String> changePairingPassphrase(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            description,
+            translate(description),
           ).marginOnly(bottom: 12),
           Obx(
             () => TextField(
@@ -358,7 +358,7 @@ Future<String> changePairingPassphrase(
               autocorrect: false,
               maxLength: bind.mainMaxEncryptLen(),
               decoration: InputDecoration(
-                hintText: 'Optional',
+                hintText: translate('Optional'),
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -384,14 +384,16 @@ Future<String> changePairingPassphrase(
       actions: [
         dialogButton('Cancel', onPressed: close, isOutline: true),
         dialogButton('OK', onPressed: () async {
-          await bind.mainSetOption(key: optionKey, value: controller.text);
+          if (controller.text.isNotEmpty) {
+            await bind.mainSetOption(key: optionKey, value: controller.text);
+          }
           close();
         }),
       ],
       onCancel: close,
     );
   });
-  return controller.text;
+  return controller.text.isNotEmpty ? controller.text : currentValue;
 }
 
 Future<String> changeDirectAccessPairingPassphrase(String currentValue) async {
