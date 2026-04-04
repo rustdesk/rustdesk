@@ -1652,9 +1652,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             let mut err: Option<String> = None;
                             let mut job_type = fs::JobType::Generic;
                             let mut printer_data = None;
-                            let mut has_job = false;
                             if let Some(job) = fs::remove_job(d.id, &mut self.write_jobs) {
-                                has_job = true;
                                 job.modify_time();
                                 err = job.job_error();
                                 job_type = job.r#type;
@@ -1666,42 +1664,38 @@ impl<T: InvokeUiSession> Remote<T> {
                                     }
                                 };
                             }
-                            if !has_job {
-                                log::debug!("Ignore file transfer done for unknown job {}", d.id);
-                            } else {
-                                match job_type {
-                                    fs::JobType::Generic => {
-                                        self.handle_job_status(d.id, d.file_num, err);
-                                    }
-                                    fs::JobType::Printer => {
-                                        if let Some(err) = err {
-                                            log::error!("Receive print job failed, error {err}");
-                                        } else {
-                                            log::info!(
-                                                "Receive print job done, data len: {:?}",
-                                                printer_data.as_ref().map(|d| d.len()).unwrap_or(0)
-                                            );
-                                            #[cfg(target_os = "windows")]
-                                            if let Some(data) = printer_data {
-                                                let printer_name = self
-                                                    .handler
-                                                    .printer_names
-                                                    .write()
-                                                    .unwrap()
-                                                    .remove(&d.id);
-                                                // Spawn a new thread to handle the print job.
-                                                // Or print job will block the ui thread.
-                                                std::thread::spawn(move || {
-                                                    if let Err(e) =
-                                                        crate::platform::send_raw_data_to_printer(
-                                                            printer_name,
-                                                            data,
-                                                        )
-                                                    {
-                                                        log::error!("Print job error: {}", e);
-                                                    }
-                                                });
-                                            }
+                            match job_type {
+                                fs::JobType::Generic => {
+                                    self.handle_job_status(d.id, d.file_num, err);
+                                }
+                                fs::JobType::Printer => {
+                                    if let Some(err) = err {
+                                        log::error!("Receive print job failed, error {err}");
+                                    } else {
+                                        log::info!(
+                                            "Receive print job done, data len: {:?}",
+                                            printer_data.as_ref().map(|d| d.len()).unwrap_or(0)
+                                        );
+                                        #[cfg(target_os = "windows")]
+                                        if let Some(data) = printer_data {
+                                            let printer_name = self
+                                                .handler
+                                                .printer_names
+                                                .write()
+                                                .unwrap()
+                                                .remove(&d.id);
+                                            // Spawn a new thread to handle the print job.
+                                            // Or print job will block the ui thread.
+                                            std::thread::spawn(move || {
+                                                if let Err(e) =
+                                                    crate::platform::send_raw_data_to_printer(
+                                                        printer_name,
+                                                        data,
+                                                    )
+                                                {
+                                                    log::error!("Print job error: {}", e);
+                                                }
+                                            });
                                         }
                                     }
                                 }
