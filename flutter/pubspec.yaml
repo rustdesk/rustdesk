@@ -110,6 +110,7 @@ dependencies:
   sqflite: 2.2.0
   google_fonts: ^6.2.1
   vector_math: ^2.1.4
+  dynamic_color: ^1.7.0
 
 dev_dependencies:
   icons_launcher: ^2.0.4
