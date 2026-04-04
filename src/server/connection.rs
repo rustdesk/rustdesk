@@ -2032,8 +2032,10 @@ impl Connection {
             minute: i32,
             failures: i32,
         }
-        static TEMPORARY_PASSWORD_FAILURES: std::sync::LazyLock<Mutex<State>> =
-            std::sync::LazyLock::new(|| Mutex::new(State::default()));
+        lazy_static::lazy_static! {
+            static ref TEMPORARY_PASSWORD_FAILURES: Mutex<State> =
+                Mutex::new(State::default());
+        }
 
         if !password::temporary_enabled() {
             return;
