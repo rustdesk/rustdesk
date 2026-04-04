@@ -1510,7 +1510,7 @@ oLink.Save
     .to_str()
     .unwrap_or("")
     .to_owned();
-    let tray_shortcut = get_tray_shortcut(&path, &exe, &tmp_path)?;
+    let tray_shortcut = get_tray_shortcut(&path, &exe, &cur_exe, &tmp_path)?;
     let mut reg_value_desktop_shortcuts = "0".to_owned();
     let mut reg_value_start_menu_shortcuts = "0".to_owned();
     let mut reg_value_printer = "0".to_owned();
@@ -2131,7 +2131,10 @@ fn get_custom_icon(install_dir: &str, exe: &str) -> Option<String> {
         if let Some(p) = PathBuf::from(exe).parent() {
             let alter_icon_path = p.join(RELATIVE_ICON_PATH);
             if alter_icon_path.exists() {
-                // Verify that the icon is not a symlink for security
+                // During installation, files under `install_dir` may not exist yet.
+                // So we validate the icon from the current executable directory first.
+                // But for shortcut/registry icon location, we should point to the final
+                // installed path so the icon works across different Windows users.
                 if let Ok(metadata) = std::fs::symlink_metadata(&alter_icon_path) {
                     if metadata.is_symlink() {
                         log::warn!(
@@ -2960,7 +2963,7 @@ pub fn install_service() -> bool {
     let _installing = crate::platform::InstallingService::new();
     let (_, path, _, exe) = get_install_info();
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
-    let tray_shortcut = get_tray_shortcut(&path, &exe, &tmp_path).unwrap_or_default();
+    let tray_shortcut = get_tray_shortcut(&path, &exe, &exe, &tmp_path).unwrap_or_default();
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "".into());
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
@@ -3427,11 +3430,13 @@ pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
     Ok(())
 }
 
-pub fn get_tray_shortcut(install_dir: &str, exe: &str, tmp_path: &str) -> ResultType<String> {
-    let current_exe = std::env::current_exe()
-        .map(|exe| exe.to_str().unwrap_or("").to_owned())
-        .unwrap_or_default();
-    let shortcut_icon_location = get_shortcut_icon_location(install_dir, &current_exe);
+pub fn get_tray_shortcut(
+    install_dir: &str,
+    exe: &str,
+    icon_source_exe: &str,
+    tmp_path: &str,
+) -> ResultType<String> {
+    let shortcut_icon_location = get_shortcut_icon_location(install_dir, icon_source_exe);
     Ok(write_cmds(
         format!(
             "
