@@ -2041,13 +2041,12 @@ impl Connection {
             return;
         }
 
+        let minute = (get_time() / 60_000) as i32;
+        let mut state = TEMPORARY_PASSWORD_FAILURES.lock().unwrap();
         let current_password = password::temporary_password();
         if current_password.is_empty() {
             return;
         }
-
-        let minute = (get_time() / 60_000) as i32;
-        let mut state = TEMPORARY_PASSWORD_FAILURES.lock().unwrap();
         if state.password != current_password {
             state.password = current_password;
             state.minute = minute;
