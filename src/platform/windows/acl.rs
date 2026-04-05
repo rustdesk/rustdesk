@@ -2,7 +2,11 @@
 
 use super::{read_token_user_buffer, wide_string, ResultType};
 use hbb_common::{anyhow::anyhow, bail};
-use std::{fs, io, os::windows::ffi::OsStrExt, path::Path};
+use std::{
+    fs, io,
+    os::windows::{ffi::OsStrExt, fs::MetadataExt},
+    path::Path,
+};
 use windows::{
     core::{PCWSTR, PWSTR},
     Win32::{
@@ -21,6 +25,13 @@ use windows::{
         System::Threading::{GetCurrentProcess, OpenProcessToken},
     },
 };
+
+const FILE_ATTRIBUTE_REPARSE_POINT_U32: u32 = 0x400;
+
+#[inline]
+fn is_reparse_point(metadata: &fs::Metadata) -> bool {
+    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT_U32) != 0
+}
 
 fn apply_grant_sid_allow_ace_to_path(
     path: &Path,
@@ -131,6 +142,12 @@ pub fn set_path_permission(dir: &Path, access_mask: u32) -> ResultType<()> {
             e
         )
     })?;
+    if is_reparse_point(&metadata) {
+        bail!(
+            "ACL target directory is a reparse point and is rejected: '{}'",
+            dir.display()
+        );
+    }
     if !metadata.file_type().is_dir() {
         bail!("ACL target is not a directory: '{}'", dir.display());
     }
@@ -140,6 +157,9 @@ pub fn set_path_permission(dir: &Path, access_mask: u32) -> ResultType<()> {
     while let Some(path) = stack.pop() {
         let metadata = fs::symlink_metadata(&path)
             .map_err(|e| anyhow!("Failed to inspect ACL target '{}': {}", path.display(), e))?;
+        if is_reparse_point(&metadata) {
+            continue;
+        }
         let is_dir = metadata.file_type().is_dir();
         apply_grant_sid_allow_ace_to_path(
             &path,
@@ -334,6 +354,12 @@ fn set_path_permission_for_portable_service_shmem_impl(
                 e
             )
         })?;
+        if is_reparse_point(&metadata) {
+            bail!(
+                "Portable service shared-memory ACL directory target is a reparse point and is rejected: '{}'",
+                path.display()
+            );
+        }
         if !metadata.file_type().is_dir() {
             bail!(
                 "Portable service shared-memory ACL target is not a directory: '{}'",
@@ -346,6 +372,12 @@ fn set_path_permission_for_portable_service_shmem_impl(
                 if metadata.file_type().is_dir() {
                     bail!(
                         "Portable service shared-memory ACL target is a directory, expected file-like path: '{}'",
+                        path.display()
+                    );
+                }
+                if is_reparse_point(&metadata) {
+                    bail!(
+                        "Portable service shared-memory ACL file target is a reparse point and is rejected: '{}'",
                         path.display()
                     );
                 }
@@ -476,7 +508,7 @@ mod tests {
     use hbb_common::bail;
     use std::{
         fs,
-        os::windows::ffi::OsStrExt,
+        os::windows::{ffi::OsStrExt, fs::symlink_dir, fs::symlink_file},
         path::{Path, PathBuf},
     };
     use windows::{
@@ -504,6 +536,32 @@ mod tests {
             std::process::id(),
             hbb_common::rand::random::<u32>()
         ))
+    }
+
+    fn try_create_dir_reparse_point(target: &Path, link: &Path, test_name: &str) -> bool {
+        match symlink_dir(target, link) {
+            Ok(()) => true,
+            Err(err) => {
+                eprintln!(
+                    "skip {}: failed to create directory reparse point (symlink): {}",
+                    test_name, err
+                );
+                false
+            }
+        }
+    }
+
+    fn try_create_file_reparse_point(target: &Path, link: &Path, test_name: &str) -> bool {
+        match symlink_file(target, link) {
+            Ok(()) => true,
+            Err(err) => {
+                eprintln!(
+                    "skip {}: failed to create file reparse point (symlink): {}",
+                    test_name, err
+                );
+                false
+            }
+        }
     }
 
     fn get_file_dacl(path: &Path) -> ResultType<(*mut ACL, LocalAllocGuard)> {
@@ -743,5 +801,93 @@ mod tests {
         let path = unique_acl_test_path("missing").join("shared_memory_missing");
         let result = set_path_permission_for_portable_service_shmem_file(&path);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_set_path_permission_rejects_reparse_entrypoint() {
+        let root = unique_acl_test_path("reparse_entry");
+        let real_dir = root.join("real");
+        let link_dir = root.join("link");
+        fs::create_dir_all(&real_dir).unwrap();
+        if !try_create_dir_reparse_point(
+            &real_dir,
+            &link_dir,
+            "test_set_path_permission_rejects_reparse_entrypoint",
+        ) {
+            let _ = fs::remove_dir_all(&real_dir);
+            let _ = fs::remove_dir_all(&root);
+            return;
+        }
+
+        let result = set_path_permission(&link_dir, FILE_GENERIC_READ.0 | FILE_GENERIC_EXECUTE.0);
+        let text = result.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(
+            text.contains("reparse point"),
+            "expected reparse-point rejection, got '{}'",
+            text
+        );
+
+        let _ = fs::remove_dir(&link_dir);
+        let _ = fs::remove_dir_all(&real_dir);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_portable_service_shmem_dir_acl_rejects_reparse_target() {
+        let root = unique_acl_test_path("reparse_shmem_dir");
+        let real_dir = root.join("real");
+        let link_dir = root.join("link");
+        fs::create_dir_all(&real_dir).unwrap();
+        if !try_create_dir_reparse_point(
+            &real_dir,
+            &link_dir,
+            "test_portable_service_shmem_dir_acl_rejects_reparse_target",
+        ) {
+            let _ = fs::remove_dir_all(&real_dir);
+            let _ = fs::remove_dir_all(&root);
+            return;
+        }
+
+        let result = set_path_permission_for_portable_service_shmem_dir(&link_dir);
+        let text = result.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(
+            text.contains("reparse point"),
+            "expected reparse-point rejection, got '{}'",
+            text
+        );
+
+        let _ = fs::remove_dir(&link_dir);
+        let _ = fs::remove_dir_all(&real_dir);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_portable_service_shmem_file_acl_rejects_reparse_target() {
+        let root = unique_acl_test_path("reparse_shmem_file");
+        let real_file = root.join("real.txt");
+        let link_file = root.join("link.txt");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&real_file, b"x").unwrap();
+        if !try_create_file_reparse_point(
+            &real_file,
+            &link_file,
+            "test_portable_service_shmem_file_acl_rejects_reparse_target",
+        ) {
+            let _ = fs::remove_file(&real_file);
+            let _ = fs::remove_dir_all(&root);
+            return;
+        }
+
+        let result = set_path_permission_for_portable_service_shmem_file(&link_file);
+        let text = result.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(
+            text.contains("reparse point"),
+            "expected reparse-point rejection, got '{}'",
+            text
+        );
+
+        let _ = fs::remove_file(&link_file);
+        let _ = fs::remove_file(&real_file);
+        let _ = fs::remove_dir_all(&root);
     }
 }
