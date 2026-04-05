@@ -1261,7 +1261,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         content: SizedBox(
           width: 430,
           child: FutureBuilder<List<Map<String, dynamic>>>(
-            future: _fetchEasyAccessUsers(),
+            future: _fetchEasyAccessManagers(),
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const Center(
@@ -1273,7 +1273,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                   .map((user) => Map<String, dynamic>.from(user))
                   .toList();
               if (entries.isEmpty) {
-                return Text('No easy access users').marginAll(20);
+                return Text('No easy access managers').marginAll(20);
               }
 
               final users = _mergeEasyAccessEntriesByName(
@@ -1400,19 +1400,18 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   bool _isEasyAccessUserType(dynamic type) => type == 2 || type == 4;
 
-  Future<List<Map<String, dynamic>>> _fetchEasyAccessUsers() async {
+  Future<List<Map<String, dynamic>>> _fetchEasyAccessManagers() async {
     try {
-      final id = await bind.mainGetMyId();
-      final uuid = await bind.mainGetUuid();
-      if (id.isEmpty || uuid.isEmpty) return [];
+      final authBody = await bind.mainGetEasyAccessDeviceAuth();
+      if (authBody.isEmpty) return [];
 
       final url = await bind.mainGetApiServer();
       if (url.isEmpty) return [];
 
-      final response = await http.get(
-        Uri.parse(
-          '$url/api/devices/easy-access-users?id=${Uri.encodeQueryComponent(id)}&uuid=${Uri.encodeQueryComponent(uuid)}',
-        ),
+      final response = await http.post(
+        Uri.parse('$url/api/devices/easy-access-managers'),
+        headers: {'Content-Type': 'application/json'},
+        body: authBody,
       );
 
       if (response.statusCode == 200) {
@@ -1420,7 +1419,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         return data.cast<Map<String, dynamic>>();
       }
     } catch (e) {
-      debugPrint('Failed to fetch easy access users: $e');
+      debugPrint('Failed to fetch easy access managers: $e');
     }
     return [];
   }
