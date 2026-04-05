@@ -98,11 +98,11 @@ use windows_service::{
 use winreg::{enums::*, RegKey};
 
 mod acl;
+pub(crate) use acl::current_process_user_sid_string;
 pub use acl::{
     set_path_permission, set_path_permission_for_portable_service_shmem_dir,
     set_path_permission_for_portable_service_shmem_file,
 };
-pub(crate) use acl::current_process_user_sid_string;
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
 pub const EXPLORER_EXE: &'static str = "explorer.exe";
@@ -4469,6 +4469,11 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 mod tests {
     use super::*;
 
+    // Test-only reusable Win32 HANDLE RAII helper.
+    // If a future non-test path needs the same pattern, move it out of this test module.
+    //
+    // This struct is similar to `hbb_common::platform::windows::RAIIHandle`,
+    // but `RAIIHandle` depends on `WinApi` crate, while this `HandleGuard` only depends on `windows` crate.
     struct HandleGuard(WinHANDLE);
 
     impl HandleGuard {

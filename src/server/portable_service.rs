@@ -921,8 +921,10 @@ pub mod client {
                 // Guard against stale watchdogs from previous launches:
                 // only the watchdog that matches the latest STARTING_TOKEN may reset STARTING.
                 let current_token = STARTING_TOKEN.load(Ordering::SeqCst);
-                let starting = *STARTING.lock().unwrap();
-                let running = *RUNNING.lock().unwrap();
+                // Keep lock guards in explicit short scopes to make it obvious
+                // there is no nested lock ordering (and to avoid Copilot false positives).
+                let starting = { *STARTING.lock().unwrap() };
+                let running = { *RUNNING.lock().unwrap() };
                 current_token == launch_token && starting && !running
             };
             if should_reset {
@@ -941,7 +943,9 @@ pub mod client {
     pub(crate) fn start_portable_service(para: StartPara) -> ResultType<()> {
         log::info!("start portable service");
         let launch_token = {
-            let running = *RUNNING.lock().unwrap();
+            // Keep lock guards in explicit short scopes to make it obvious
+            // there is no nested lock ordering (and to avoid Copilot false positives).
+            let running = { *RUNNING.lock().unwrap() };
             let mut starting = STARTING.lock().unwrap();
             if *starting && !running && !has_running_portable_service_process() {
                 log::warn!(
