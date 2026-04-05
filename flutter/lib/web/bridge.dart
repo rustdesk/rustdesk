@@ -956,6 +956,10 @@ class RustdeskImpl {
     return Future(() => js.context.callMethod('getByName', ['uuid']));
   }
 
+  Future<String> mainGetEasyAccessDeviceAuth({dynamic hint}) {
+    return Future.value('');
+  }
+
   Future<String> mainGetPeerOption(
       {required String id, required String key, dynamic hint}) {
     return Future(() => mainGetPeerOptionSync(id: id, key: key, hint: hint));
@@ -2035,7 +2039,9 @@ class RustdeskImpl {
   }
 
   String mainResolveAvatarUrl({required String avatar, dynamic hint}) {
-    return js.context.callMethod('getByName', ['resolve_avatar_url', avatar])?.toString() ?? avatar;
+    return js.context.callMethod(
+            'getByName', ['resolve_avatar_url', avatar])?.toString() ??
+        avatar;
   }
 
   void dispose() {}

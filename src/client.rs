@@ -204,6 +204,7 @@ impl Client {
         debug_assert!(peer == interface.get_id());
         interface.update_direct(None);
         interface.update_received(false);
+        interface.clear_easy_access_challenge();
         match Self::_start(peer, key, token, conn_type, interface.clone()).await {
             Err(err) => {
                 let err_str = err.to_string();
@@ -2701,8 +2702,8 @@ impl LoginConfigHandler {
         };
         let easy_access_challenge: Bytes = self
             .controller_config
-            .as_mut()
-            .map(|config| std::mem::take(&mut config.easy_access_challenge))
+            .as_ref()
+            .map(|config| config.easy_access_challenge.clone())
             .unwrap_or_default();
         let mut lr = LoginRequest {
             username: pure_id,
@@ -3668,6 +3669,12 @@ pub trait Interface: Send + Clone + 'static + Sized {
 
     fn update_received(&self, received: bool) {
         self.get_lch().write().unwrap().received = received;
+    }
+
+    fn clear_easy_access_challenge(&self) {
+        if let Some(config) = self.get_lch().write().unwrap().controller_config.as_mut() {
+            config.easy_access_challenge = Default::default();
+        }
     }
 
     fn on_establish_connection_error(&self, err: String) {

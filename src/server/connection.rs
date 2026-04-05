@@ -33,9 +33,13 @@ use hbb_common::{
     get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
     password_security::{self as password, ApproveMode},
+    rendezvous_proto::EasyAccessManagerApproval,
     sha2::{Digest, Sha256},
     sleep,
-    sodiumoxide::crypto::sign,
+    sodiumoxide::crypto::{
+        box_,
+        sign::{self, ed25519},
+    },
     timeout,
     tokio::{
         net::TcpStream,
@@ -77,50 +81,6 @@ lazy_static::lazy_static! {
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
     static ref WAKELOCK_KEEP_AWAKE_OPTION: Arc::<Mutex<Option<bool>>> = Default::default();
-}
-
-fn get_easy_access_manager_pk(manager_id: &[u8]) -> Option<Vec<u8>> {
-    if manager_id.is_empty() {
-        return None;
-    }
-    let manager_id = uuid::Uuid::from_slice(manager_id).ok()?.to_string();
-    let json = Config::get_option("easy-access-managers");
-    if json.is_empty() {
-        return None;
-    }
-    let managers: Vec<crate::hbbs_http::sync::EasyAccessManager> =
-        serde_json::from_str(&json).ok()?;
-    let pk_b64 = managers
-        .iter()
-        .find(|m| m.manager_id == manager_id)
-        .map(|m| m.pk.clone())?;
-    hbb_common::base64::decode(pk_b64).ok()
-}
-
-async fn sync_easy_access_manager_pk(manager_id: &[u8]) -> Option<Vec<u8>> {
-    let manager_id_str = match uuid::Uuid::from_slice(manager_id) {
-        Ok(id) => id.to_string(),
-        Err(_) => {
-            log::warn!("Easy access manager_id invalid");
-            return None;
-        }
-    };
-    log::warn!("Easy access manager_id not found in local cache, forcing full refresh from hbbs",);
-    if let Err(err) = crate::hbbs_http::sync::sync_easy_access_managers(true).await {
-        log::warn!(
-            "Failed to force refresh easy access managers from hbbs: {}",
-            err
-        );
-        return None;
-    }
-    let pk = get_easy_access_manager_pk(manager_id);
-    if pk.is_none() {
-        log::warn!(
-            "Easy access manager_id {} not found after sync",
-            manager_id_str
-        );
-    }
-    pk
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -1485,6 +1445,9 @@ impl Connection {
             return false;
         }
         self.authorized = true;
+        if let Some(c) = self.controlled_config.as_mut() {
+            c.easy_access_grant = Default::default();
+        }
         let (conn_type, auth_conn_type) = if self.file_transfer.is_some() {
             (1, AuthConnType::FileTransfer)
         } else if self.port_forward_socket.is_some() {
@@ -2123,50 +2086,174 @@ impl Connection {
     }
 
     async fn verify_easy_access(&self) -> bool {
-        let lr_challenge_bytes = self.lr.easy_access_challenge.clone();
-        let (manager_id, easy_access_signature) = match self.controlled_config.as_ref() {
-            Some(c) if !c.easy_access_signature.is_empty() => {
-                (c.manager_id.clone(), c.easy_access_signature.clone())
+        const EASY_ACCESS_GRANT_VERSION: u32 = 1;
+
+        fn open_easy_access_device_bound_proof(
+            proof: &[u8],
+            server_approval_signature: &[u8],
+            server_pk: &sign::PublicKey,
+            target_sk: &[u8],
+        ) -> Option<Vec<u8>> {
+            const EASY_ACCESS_DEVICE_PROOF_NONCE_DOMAIN: &[u8] =
+                b"easy-access-device-proof-nonce/v1";
+
+            fn derive_easy_access_device_bound_nonce(
+                server_approval_signature: &[u8],
+            ) -> Option<box_::Nonce> {
+                let mut hasher = Sha256::new();
+                hasher.update(EASY_ACCESS_DEVICE_PROOF_NONCE_DOMAIN);
+                hasher.update(server_approval_signature);
+                let digest = hasher.finalize();
+                box_::Nonce::from_slice(&digest[..box_::NONCEBYTES])
             }
-            _ => return false,
+
+            let target_sign_sk = sign::SecretKey::from_slice(target_sk)?;
+            let target_box_sk = ed25519::to_curve25519_sk(&target_sign_sk).ok()?;
+            let server_box_pk = ed25519::to_curve25519_pk(server_pk).ok()?;
+            let nonce = derive_easy_access_device_bound_nonce(server_approval_signature)?;
+            box_::open(proof, &nonce, &server_box_pk, &target_box_sk).ok()
+        }
+
+        if !hbb_common::config::is_allow_easy_access() {
+            return false;
+        }
+        let Some(ticket) = self
+            .controlled_config
+            .as_ref()
+            .and_then(|c| c.easy_access_grant.as_ref().cloned())
+        else {
+            return false;
         };
+        if ticket.version != EASY_ACCESS_GRANT_VERSION {
+            log::warn!("Easy access grant version invalid: {}", ticket.version);
+            return false;
+        }
+        if ticket.server_approval_signature.is_empty() {
+            log::warn!("Easy access server approval signature missing");
+            return false;
+        }
+        if ticket.device_bound_proof.is_empty() {
+            log::warn!("Easy access device-bound proof missing");
+            return false;
+        }
+        let lr_challenge_bytes = self.lr.easy_access_challenge.clone();
         if lr_challenge_bytes.is_empty() {
             return false;
         }
-        if manager_id.is_empty() {
-            log::warn!("Easy access manager_id missing");
+        let target_uuid = hbb_common::get_uuid();
+        if target_uuid.is_empty() {
+            log::warn!("Easy access target uuid missing");
             return false;
         }
-        let pk = match get_easy_access_manager_pk(&manager_id) {
-            Some(pk) => pk,
-            None => match sync_easy_access_manager_pk(&manager_id).await {
-                Some(pk) => pk,
-                None => return false,
-            },
-        };
-        if easy_access_signature.is_empty() {
-            log::warn!("Easy access signature missing");
+        let (target_sk, target_pk) = Config::get_key_pair();
+        if target_sk.is_empty() {
+            log::warn!("Easy access target private key missing");
             return false;
         }
-        let sig = match sign::Signature::from_bytes(&easy_access_signature) {
-            Ok(sig) => sig,
-            Err(_) => {
-                log::warn!("Easy access signature invalid");
-                return false;
-            }
-        };
-        let pk = match sign::PublicKey::from_slice(&pk) {
+        if target_pk.is_empty() {
+            log::warn!("Easy access target public key missing");
+            return false;
+        }
+        let server_key = crate::common::get_key(true).await;
+        let server_pk = match crate::common::get_rs_pk(&server_key) {
             Some(pk) => pk,
             None => {
-                log::warn!("Easy access public key invalid");
+                log::warn!("Easy access server public key invalid");
                 return false;
             }
         };
-        if !sign::verify_detached(&sig, &lr_challenge_bytes, &pk) {
-            log::warn!("Easy access signature verify failed");
+        let manager_approval_bytes = match open_easy_access_device_bound_proof(
+            &ticket.device_bound_proof,
+            &ticket.server_approval_signature,
+            &server_pk,
+            &target_sk,
+        ) {
+            Some(proof) => proof,
+            None => {
+                log::warn!("Easy access device-bound proof open failed");
+                return false;
+            }
+        };
+        let server_approval_signature =
+            match sign::Signature::from_bytes(&ticket.server_approval_signature) {
+                Ok(sig) => sig,
+                Err(_) => {
+                    log::warn!("Easy access server approval signature invalid");
+                    return false;
+                }
+            };
+        if !sign::verify_detached(
+            &server_approval_signature,
+            &manager_approval_bytes,
+            &server_pk,
+        ) {
+            log::warn!("Easy access server approval signature verify failed");
             return false;
         }
-        log::info!("Easy access challenge and signature verified");
+        let manager_approval =
+            match EasyAccessManagerApproval::parse_from_bytes(&manager_approval_bytes) {
+                Ok(approval) => approval,
+                Err(_) => {
+                    log::warn!("Easy access manager approval parse failed");
+                    return false;
+                }
+            };
+        let Some(target_binding) = manager_approval.target_binding.as_ref() else {
+            log::warn!("Easy access target binding missing");
+            return false;
+        };
+        if manager_approval.manager_signing_pk.is_empty() {
+            log::warn!("Easy access manager signing public key missing");
+            return false;
+        }
+        if manager_approval.manager_approval_signature.is_empty() {
+            log::warn!("Easy access manager approval signature missing");
+            return false;
+        }
+        if target_binding.challenge.as_ref() != lr_challenge_bytes.as_ref() {
+            log::warn!("Easy access challenge mismatch");
+            return false;
+        }
+        if target_binding.target_uuid.as_ref() != target_uuid.as_slice() {
+            log::warn!("Easy access target uuid mismatch");
+            return false;
+        }
+        if target_binding.target_pk.as_ref() != target_pk.as_slice() {
+            log::warn!("Easy access target public key mismatch");
+            return false;
+        }
+        let manager_signing_pk =
+            match sign::PublicKey::from_slice(&manager_approval.manager_signing_pk) {
+                Some(pk) => pk,
+                None => {
+                    log::warn!("Easy access manager signing public key invalid");
+                    return false;
+                }
+            };
+        let manager_approval_signature =
+            match sign::Signature::from_bytes(&manager_approval.manager_approval_signature) {
+                Ok(sig) => sig,
+                Err(_) => {
+                    log::warn!("Easy access manager approval signature invalid");
+                    return false;
+                }
+            };
+        let target_binding_bytes = match target_binding.write_to_bytes().ok() {
+            Some(bytes) => bytes,
+            None => {
+                log::warn!("Easy access target binding serialization failed");
+                return false;
+            }
+        };
+        if !sign::verify_detached(
+            &manager_approval_signature,
+            &target_binding_bytes,
+            &manager_signing_pk,
+        ) {
+            log::warn!("Easy access manager approval signature verify failed");
+            return false;
+        }
+        log::info!("Easy access grant verified");
         true
     }
 
@@ -2391,18 +2478,14 @@ impl Connection {
                 self.send_login_error(crate::client::LOGIN_MSG_OFFLINE)
                     .await;
                 return false;
-            } else if hbb_common::config::is_allow_easy_access() && self.verify_easy_access().await
-            {
-                // Consume the token so it cannot be reused
-                if let Some(c) = self.controlled_config.as_mut() {
-                    c.easy_access_signature = Default::default();
-                    c.manager_id = Default::default();
-                }
+            } else if self.verify_easy_access().await {
                 // Easy access: token verified, skip password validation and click accept
                 if err_msg.is_empty() {
                     #[cfg(target_os = "linux")]
                     self.linux_headless_handle.wait_desktop_cm_ready().await;
-                    self.send_logon_response_and_keep_alive().await;
+                    if !self.send_logon_response_and_keep_alive().await {
+                        return false;
+                    }
                     self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
                 } else {
                     self.send_login_error(err_msg).await;

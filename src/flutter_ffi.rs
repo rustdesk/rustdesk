@@ -16,9 +16,14 @@ use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::allow_err;
 use hbb_common::{
+    base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _},
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
     fs, lazy_static, log,
     rendezvous_proto::ConnType,
+    sodiumoxide::crypto::{
+        box_,
+        sign::{self, ed25519},
+    },
     ResultType,
 };
 use std::{
@@ -1285,6 +1290,42 @@ pub fn main_get_my_id() -> String {
 
 pub fn main_get_uuid() -> String {
     get_uuid()
+}
+
+pub fn main_get_easy_access_device_auth() -> String {
+    let id = get_id();
+    let uuid = hbb_common::get_uuid();
+    if id.is_empty() || uuid.is_empty() {
+        return String::new();
+    }
+
+    let mut key = config::Config::get_option("key");
+    if key.is_empty() {
+        key = config::RS_PUB_KEY.to_owned();
+    }
+    let Some(server_sign_pk) = crate::common::get_rs_pk(&key) else {
+        return String::new();
+    };
+    let Ok(server_box_pk) = ed25519::to_curve25519_pk(&server_sign_pk) else {
+        return String::new();
+    };
+    let (sk_bytes, _) = config::Config::get_key_pair();
+    let Some(device_sign_sk) = sign::SecretKey::from_slice(&sk_bytes) else {
+        return String::new();
+    };
+    let Ok(device_box_sk) = ed25519::to_curve25519_sk(&device_sign_sk) else {
+        return String::new();
+    };
+    let nonce = box_::gen_nonce();
+    let ciphertext = box_::seal(&uuid, &nonce, &server_box_pk, &device_box_sk);
+    let mut proof = Vec::with_capacity(box_::NONCEBYTES + ciphertext.len());
+    proof.extend_from_slice(nonce.as_ref());
+    proof.extend_from_slice(&ciphertext);
+    serde_json::json!({
+        "id": id,
+        "ciphertext": BASE64_STANDARD.encode(proof),
+    })
+    .to_string()
 }
 
 pub fn main_get_peer_option(id: String, key: String) -> String {
