@@ -9,7 +9,7 @@ use std::{
 use winapi::{
     ctypes::c_int,
     shared::{
-        minwindef::{DWORD, FALSE, HMODULE, LOBYTE, LPARAM, LRESULT, UINT, WPARAM},
+        minwindef::{DWORD, FALSE, HMODULE, LPARAM, LRESULT, UINT, WPARAM},
         ntdef::NULL,
         windef::{HHOOK, POINT},
     },

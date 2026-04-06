@@ -17,10 +17,10 @@ use winapi::{
         libloaderapi::{GetModuleHandleA, GetProcAddress},
         memoryapi::{VirtualAllocEx, WriteProcessMemory},
         processthreadsapi::{
-            CreateProcessAsUserW, QueueUserAPC, ResumeThread, TerminateProcess,
+            CreateProcessAsUserW, QueueUserAPC, TerminateProcess,
             PROCESS_INFORMATION, STARTUPINFOW,
         },
-        winbase::{WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS},
+        winbase::{WTSGetActiveConsoleSessionId, DETACHED_PROCESS},
         winnt::{MEM_COMMIT, PAGE_READWRITE},
         winuser::*,
     },
@@ -31,7 +31,7 @@ pub(super) const PRIVACY_MODE_IMPL: &str = "privacy_mode_impl_mag";
 pub const ORIGIN_PROCESS_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
 pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
 pub const INJECTED_PROCESS_EXE: &'static str = WIN_TOPMOST_INJECTED_PROCESS_EXE;
-pub(super) const PRIVACY_WINDOW_NAME: &'static str = "RustDeskPrivacyWindow";
+pub(crate) const PRIVACY_WINDOW_NAME: &'static str = "RustDeskPrivacyWindow";
 
 struct WindowHandlers {
     hthread: u64,
