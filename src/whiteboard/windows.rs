@@ -5,7 +5,7 @@ use super::{
 };
 use hbb_common::{anyhow::anyhow, log, ResultType};
 use softbuffer::{Context, Surface};
-use std::{collections::HashMap, num::NonZeroU32, sync::Arc, time::Instant};
+use std::{collections::HashMap, ffi::CString, num::NonZeroU32, sync::Arc, time::Instant};
 use tao::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{Event, WindowEvent},
@@ -14,6 +14,12 @@ use tao::{
     window::WindowBuilder,
 };
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Stroke, Transform};
+use winapi::{
+    shared::ntdef::NULL,
+    um::winuser::{
+        FindWindowA, SetWindowDisplayAffinity, ShowWindow, SW_HIDE, WDA_EXCLUDEFROMCAPTURE,
+    },
+};
 
 pub(super) fn create_event_loop() -> ResultType<()> {
     let privacy_window = std::env::args().any(|arg| arg == "--privacy-window");
@@ -56,6 +62,17 @@ pub(super) fn create_event_loop() -> ResultType<()> {
 
     let window = Arc::new(window_builder.build::<(String, CustomEvent)>(&event_loop)?);
     window.set_ignore_cursor_events(true)?;
+
+    if privacy_window {
+        unsafe {
+            let wndname = CString::new(window_title)?;
+            let hwnd = FindWindowA(NULL as _, wndname.as_ptr() as _);
+            if !hwnd.is_null() {
+                let _ = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+                ShowWindow(hwnd, SW_HIDE);
+            }
+        }
+    }
 
     let context = Context::new(window.clone()).map_err(|e| {
         log::error!("Failed to create context: {}", e);
@@ -238,3 +255,4 @@ pub(super) fn create_event_loop() -> ResultType<()> {
         }
     });
 }
+
