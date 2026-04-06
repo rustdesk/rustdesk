@@ -2021,15 +2021,13 @@ impl Connection {
     }
 
     // This is coarse brute-force protection for the temporary password.
-    // We intentionally clear the failure window after any successful password authentication,
-    // including permanent-password success in mixed/fallback modes. The goal is to break up
-    // sustained wrong-attempt bursts, not to precisely attribute which password type was tried.
-    fn check_update_temporary_password(&self, validate_password_success: bool) {
-        const MAX_FAILURES_PER_MINUTE: i32 = 8;
+    // We track consecutive full login failures against the current temporary password budget
+    // across all sources. Only a temporary-password success clears this state.
+    fn check_update_temporary_password(&self, temporary_password_success: bool) {
+        const MAX_CONSECUTIVE_FAILURES: i32 = 10;
         #[derive(Default)]
         struct State {
             password: String,
-            minute: i32,
             failures: i32,
         }
         lazy_static::lazy_static! {
@@ -2041,7 +2039,6 @@ impl Connection {
             return;
         }
 
-        let minute = (get_time() / 60_000) as i32;
         let mut state = TEMPORARY_PASSWORD_FAILURES.lock().unwrap();
         let current_password = password::temporary_password();
         if current_password.is_empty() {
@@ -2049,36 +2046,27 @@ impl Connection {
         }
         if state.password != current_password {
             state.password = current_password;
-            state.minute = minute;
             state.failures = 0;
         }
 
-        if validate_password_success {
-            state.minute = minute;
+        if temporary_password_success {
             state.failures = 0;
             return;
         }
+        state.failures += 1;
 
-        if state.minute == minute {
-            state.failures += 1;
-        } else {
-            state.minute = minute;
-            state.failures = 1;
-        }
-
-        if state.failures < MAX_FAILURES_PER_MINUTE {
+        if state.failures < MAX_CONSECUTIVE_FAILURES {
             return;
         }
 
         password::update_temporary_password();
         let new_password = password::temporary_password();
         log::warn!(
-            "Temporary password rotated after too many wrong attempts in one minute: failures={}, ip={}",
+            "Temporary password rotated after too many consecutive wrong attempts: failures={}, ip={}",
             state.failures,
             self.ip,
         );
         state.password = new_password;
-        state.minute = minute;
         state.failures = 0;
     }
 
@@ -2091,6 +2079,7 @@ impl Connection {
                     Some(password),
                     Some(false),
                 );
+                self.check_update_temporary_password(true);
                 return true;
             }
         }
@@ -2476,7 +2465,6 @@ impl Connection {
                     }
                 } else {
                     self.update_failure(failure, true, 0);
-                    self.check_update_temporary_password(true);
                     if err_msg.is_empty() {
                         #[cfg(target_os = "linux")]
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
@@ -5727,5 +5715,4 @@ mod test {
         assert!(Ipv6Addr::from_str("127.0.0.1").is_err());
         assert!(Ipv6Addr::from_str("0").is_err());
     }
-
 }
