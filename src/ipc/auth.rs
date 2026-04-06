@@ -434,6 +434,18 @@ fn ensure_peer_executable_matches_current_by_pid(peer_pid: u32, postfix: &str) -
     );
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[inline]
+pub(crate) fn ensure_peer_executable_matches_current_by_pid_opt(
+    peer_pid: Option<u32>,
+    postfix: &str,
+) -> ResultType<()> {
+    let peer_pid = peer_pid.ok_or_else(|| {
+        anyhow::anyhow!("Failed to resolve peer pid on ipc channel '{}'", postfix)
+    })?;
+    ensure_peer_executable_matches_current_by_pid(peer_pid, postfix)
+}
+
 #[cfg(target_os = "linux")]
 #[inline]
 pub(crate) fn ensure_peer_executable_matches_current_by_fd(
@@ -582,11 +594,11 @@ pub(crate) fn authorize_service_scoped_ipc_connection(stream: &Connection, postf
         log_rejected_service_connection(postfix, peer_uid, active_uid);
         return false;
     }
-    if let Err(err) = stream.ensure_peer_executable_path_matches_current(postfix) {
+    if let Err(err) = ensure_peer_executable_matches_current_by_pid_opt(peer_pid, postfix) {
         log::warn!(
             "Rejected unauthorized connection on protected service-scoped IPC channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
             postfix,
-            stream.peer_pid(),
+            peer_pid,
             err
         );
         return false;
@@ -609,7 +621,7 @@ pub(crate) fn authorize_windows_main_ipc_connection(stream: &Connection, postfix
         );
         return false;
     }
-    if let Err(err) = stream.ensure_peer_executable_path_matches_current(postfix) {
+    if let Err(err) = ensure_peer_executable_matches_current_by_pid_opt(peer_pid, postfix) {
         log::warn!(
             "Rejected unauthorized connection on ipc channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
             postfix,
@@ -645,7 +657,7 @@ pub(crate) fn authorize_windows_portable_service_ipc_connection(
             // (for example, access denied while opening the peer process). Keep executable
             // verification as best-effort telemetry and defer final authorization to pipe ACL
             // + token handshake.
-            if let Err(err) = stream.ensure_peer_executable_path_matches_current(postfix) {
+            if let Err(err) = ensure_peer_executable_matches_current_by_pid_opt(peer_pid, postfix) {
                 log::warn!(
                     "Portable service ipc peer identity unavailable and executable verification failed; continue with ACL+token-gated flow: postfix={}, peer_pid={:?}, err={}",
                     postfix,
@@ -693,16 +705,6 @@ where
 
     pub(super) fn peer_pid(&self) -> Option<u32> {
         peer_pid_from_fd(self.inner.get_ref().as_raw_fd())
-    }
-
-    pub(crate) fn ensure_peer_executable_path_matches_current(
-        &self,
-        postfix: &str,
-    ) -> ResultType<()> {
-        let peer_pid = self.peer_pid().ok_or_else(|| {
-            anyhow::anyhow!("Failed to resolve peer pid on ipc channel '{}'", postfix)
-        })?;
-        ensure_peer_executable_matches_current_by_pid(peer_pid, postfix)
     }
 }
 
@@ -814,16 +816,6 @@ impl ConnectionTmpl<parity_tokio_ipc::Connection> {
             peer_session_id,
             peer_is_system,
         )
-    }
-
-    pub(crate) fn ensure_peer_executable_path_matches_current(
-        &self,
-        postfix: &str,
-    ) -> ResultType<()> {
-        let peer_pid = self.peer_pid().ok_or_else(|| {
-            anyhow::anyhow!("Failed to resolve peer pid on ipc channel '{}'", postfix)
-        })?;
-        ensure_peer_executable_matches_current_by_pid(peer_pid, postfix)
     }
 }
 

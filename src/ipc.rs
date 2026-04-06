@@ -38,6 +38,8 @@ use ipc_auth::authorize_service_scoped_ipc_connection;
 #[cfg(windows)]
 pub(crate) use ipc_auth::authorize_windows_portable_service_ipc_connection;
 #[cfg(windows)]
+pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
+#[cfg(windows)]
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
 #[cfg(target_os = "linux")]
 pub(crate) use ipc_auth::{

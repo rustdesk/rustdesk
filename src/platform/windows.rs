@@ -616,7 +616,9 @@ fn authorize_service_scoped_ipc_connection(
         );
         return false;
     }
-    if let Err(err) = stream.ensure_peer_executable_path_matches_current(crate::POSTFIX_SERVICE) {
+    if let Err(err) =
+        ipc::ensure_peer_executable_matches_current_by_pid_opt(peer_pid, crate::POSTFIX_SERVICE)
+    {
         log::warn!(
                 "Rejected unauthorized connection on protected service-scoped IPC channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
                 crate::POSTFIX_SERVICE,
