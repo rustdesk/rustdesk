@@ -15,6 +15,7 @@ import 'package:get/get.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
+import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
@@ -620,6 +621,34 @@ class InputModel {
     }
   }
 
+  void _releaseTrackedShiftKeyEventIfNeeded() {
+    final leftShift = toReleaseKeys.lastLShiftKeyEvent;
+    final rightShift = toReleaseKeys.lastRShiftKeyEvent;
+    if (leftShift != null) {
+      handleKeyEvent(leftShift);
+    }
+    if (rightShift != null) {
+      handleKeyEvent(rightShift);
+    }
+  }
+
+  void _releaseTrackedRawShiftKeyEventIfNeeded() {
+    final leftShift = toReleaseRawKeys.lastLShiftKeyEvent;
+    final rightShift = toReleaseRawKeys.lastRShiftKeyEvent;
+    if (leftShift != null) {
+      handleRawKeyEvent(RawKeyUpEvent(
+        data: leftShift.data,
+        character: leftShift.character,
+      ));
+    }
+    if (rightShift != null) {
+      handleRawKeyEvent(RawKeyUpEvent(
+        data: rightShift.data,
+        character: rightShift.character,
+      ));
+    }
+  }
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
@@ -679,6 +708,19 @@ class InputModel {
       mapKeyboardModeRaw(e, iosCapsLock);
     } else {
       legacyKeyboardModeRaw(e);
+    }
+
+    if (e is RawKeyDownEvent &&
+        shouldReleaseStaleMobileShift(
+          isMobile: isMobile,
+          cachedShiftPressed: shift,
+          actualShiftPressed: e.isShiftPressed,
+          logicalKey: e.logicalKey,
+          character: e.character,
+          hasTrackedShiftKeyDown: toReleaseRawKeys.lastLShiftKeyEvent != null ||
+              toReleaseRawKeys.lastRShiftKeyEvent != null,
+        )) {
+      _releaseTrackedRawShiftKeyEventIfNeeded();
     }
 
     return KeyEventResult.handled;
@@ -754,6 +796,20 @@ class InputModel {
         }
       }
     }
+    if (e is KeyDownEvent &&
+        shouldReleaseStaleMobileShift(
+          isMobile: isMobile,
+          cachedShiftPressed: shift,
+          actualShiftPressed: HardwareKeyboard.instance.isShiftPressed,
+          logicalKey: e.logicalKey,
+          character: e.character,
+          hasTrackedShiftKeyDown:
+              toReleaseKeys.lastLShiftKeyEvent != null ||
+                  toReleaseKeys.lastRShiftKeyEvent != null,
+        )) {
+      _releaseTrackedShiftKeyEventIfNeeded();
+    }
+
     final isDesktopAndMapMode =
         isDesktop || (isWebDesktop && keyboardMode == kKeyMapMode);
     if (isMobileAndMapMode || isDesktopAndMapMode) {
