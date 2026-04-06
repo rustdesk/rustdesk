@@ -424,11 +424,18 @@ pub mod server {
     pub fn run_portable_service() {
         let shmem_name = match portable_service_shmem_name_from_args() {
             Some(name) => name,
-            None if has_portable_service_shmem_arg() => {
-                log::error!("Invalid portable service shared memory argument, aborting startup");
+            None => {
+                if has_portable_service_shmem_arg() {
+                    log::error!(
+                        "Invalid portable service shared memory argument, aborting startup"
+                    );
+                } else {
+                    log::error!(
+                        "Missing portable service shared memory argument, aborting startup"
+                    );
+                }
                 return;
             }
-            None => SHMEM_NAME.to_owned(),
         };
         let shmem = match SharedMemory::open_existing(&shmem_name) {
             Ok(shmem) => Arc::new(shmem),
@@ -794,7 +801,6 @@ pub mod client {
         Logon(String, String),
     }
 
-    #[inline]
     fn has_running_portable_service_process() -> bool {
         let app_exe = format!("{}.exe", crate::get_app_name().to_lowercase());
         !crate::platform::get_pids_of_process_with_first_arg(&app_exe, "--portable-service")
