@@ -148,6 +148,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
+          git config --global url."https://github.com/webmproject/libwebm".insteadOf https://chromium.googlesource.com/webm/libwebm
           sed -i '' 's/3.1.0/2.17.0/g' flutter/pubspec.yaml;
           cargo install flutter_rust_bridge_codegen --version ${{ matrix.job.bridge }} --features "uuid" --locked
           # below works for mac to make buildable on 3.13.9
@@ -304,6 +305,7 @@ jobs:
       - name: Install flutter rust bridge deps
         run: |
           git config --global core.longpaths true
+          git config --global url."https://github.com/webmproject/libwebm".insteadOf https://chromium.googlesource.com/webm/libwebm
           cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
           sed -i 's/uni_links_desktop/#uni_links_desktop/g' flutter/pubspec.yaml
           pushd flutter/lib;  find . | grep dart | xargs sed -i 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g'; popd;

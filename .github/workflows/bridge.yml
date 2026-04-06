@@ -76,6 +76,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
+          git config --global url."https://github.com/webmproject/libwebm".insteadOf https://chromium.googlesource.com/webm/libwebm
           cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
           cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
           pushd flutter && sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml && flutter pub get && popd
