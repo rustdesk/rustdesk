@@ -4882,6 +4882,11 @@ async fn start_ipc(
             let uid = {
                 let username_for_cmd = username.clone();
                 let mut uid_cmd = hbb_common::tokio::process::Command::new("id");
+                // TODO:
+                // Keep current behavior for now to minimize change risk.
+                // If usernames starting with '-' are observed in the field, prefer:
+                // `id -u -- <username>` to avoid option-parsing ambiguity.
+                // Already verified that `id -u -- <username>` works as expected on macOS and Ubuntu 24.04.
                 uid_cmd.arg("-u").arg(&username_for_cmd).kill_on_drop(true);
                 let output = timeout(10_000, uid_cmd.output())
                     .await
