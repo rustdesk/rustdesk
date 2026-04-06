@@ -24,7 +24,7 @@ use std::{
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
     time::Duration,
@@ -277,7 +277,22 @@ impl SharedMemory {
         if let Err(err) = set_path_permission_for_portable_service_shmem_file(Path::new(&flink)) {
             // Release shmem handle first so best-effort flink cleanup has a chance to succeed.
             drop(shmem);
-            let _ = remove_shared_memory_flink_once(name, true, "Create cleanup");
+            match std::fs::remove_file(&flink) {
+                Ok(()) => {
+                    log::info!(
+                        "Create cleanup removed portable service shared-memory flink artifact: {}",
+                        flink
+                    );
+                }
+                Err(remove_err) if remove_err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(remove_err) => {
+                    log::warn!(
+                        "Create cleanup failed to remove portable service shared-memory flink artifact {}: {}",
+                        flink,
+                        remove_err
+                    );
+                }
+            }
             return Err(err);
         }
         Ok(SharedMemory { inner: shmem })
@@ -424,6 +439,7 @@ pub mod server {
 
     lazy_static::lazy_static! {
         static ref EXIT: Arc<Mutex<bool>> = Default::default();
+        static ref FORCE_EXIT_ARMED: AtomicBool = AtomicBool::new(false);
     }
 
     pub fn run_portable_service() {
@@ -481,10 +497,14 @@ pub mod server {
             run_exit_check();
         });
         let record_pos_handle = crate::input_service::try_start_record_cursor_pos();
+        // Arm forced-exit watchdog only for worker join phase.
+        // Once join phase completes, cleanup should not be interrupted by forced exit.
+        FORCE_EXIT_ARMED.store(true, Ordering::SeqCst);
         for th in threads.drain(..) {
             th.join().ok();
             log::info!("thread joined");
         }
+        FORCE_EXIT_ARMED.store(false, Ordering::SeqCst);
 
         crate::input_service::try_stop_record_cursor_pos();
         if let Some(handle) = record_pos_handle {
@@ -509,7 +529,7 @@ pub mod server {
         // This forced exit is a last resort when worker threads are stuck and graceful teardown
         // does not finish in time.
         std::thread::sleep(FORCED_EXIT_DELAY);
-        if EXIT.lock().unwrap().clone() {
+        if FORCE_EXIT_ARMED.load(Ordering::SeqCst) {
             log::warn!(
                 "Portable service shutdown watchdog fallback triggered: forcing process exit after {:?}",
                 FORCED_EXIT_DELAY
