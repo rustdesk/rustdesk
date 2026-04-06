@@ -5,7 +5,7 @@ use super::{
 };
 use hbb_common::{anyhow::anyhow, log, ResultType};
 use softbuffer::{Context, Surface};
-use std::{collections::HashMap, ffi::CString, num::NonZeroU32, sync::Arc, time::Instant};
+use std::{collections::HashMap, num::NonZeroU32, sync::Arc, time::Instant};
 use tao::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{Event, WindowEvent},
@@ -14,17 +14,8 @@ use tao::{
     window::WindowBuilder,
 };
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Stroke, Transform};
-use winapi::{
-    shared::ntdef::NULL,
-    um::winuser::{
-        FindWindowA, SetWindowDisplayAffinity, ShowWindow, SW_HIDE,
-    },
-};
-
-const WDA_EXCLUDEFROMCAPTURE: u32 = 0x00000011;
 
 pub(super) fn create_event_loop() -> ResultType<()> {
-    let privacy_window = std::env::args().any(|arg| arg == "--privacy-window");
     let face = match create_font_face() {
         Ok(face) => Some(face),
         Err(err) => {
@@ -34,14 +25,9 @@ pub(super) fn create_event_loop() -> ResultType<()> {
     };
 
     let event_loop = EventLoopBuilder::<(String, CustomEvent)>::with_user_event().build();
-    let window_title = if privacy_window {
-        crate::privacy_mode::win_topmost_window::PRIVACY_WINDOW_NAME
-    } else {
-        "RustDesk whiteboard"
-    };
     let mut window_builder = WindowBuilder::new()
-        .with_title(window_title)
-        .with_transparent(!privacy_window)
+        .with_title("RustDesk whiteboard")
+        .with_transparent(true)
         .with_always_on_top(true)
         .with_skip_taskbar(true)
         .with_decorations(false);
@@ -64,17 +50,6 @@ pub(super) fn create_event_loop() -> ResultType<()> {
 
     let window = Arc::new(window_builder.build::<(String, CustomEvent)>(&event_loop)?);
     window.set_ignore_cursor_events(true)?;
-
-    if privacy_window {
-        unsafe {
-            let wndname = CString::new(window_title)?;
-            let hwnd = FindWindowA(NULL as _, wndname.as_ptr() as _);
-            if !hwnd.is_null() {
-                let _ = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
-                ShowWindow(hwnd, SW_HIDE);
-            }
-        }
-    }
 
     let context = Context::new(window.clone()).map_err(|e| {
         log::error!("Failed to create context: {}", e);
@@ -146,11 +121,7 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                     log::error!("Failed to create pixmap from buffer");
                     return;
                 };
-                if privacy_window {
-                    pixmap.fill(Color::from_rgba8(255, 255, 255, 255));
-                } else {
-                    pixmap.fill(Color::TRANSPARENT);
-                }
+                pixmap.fill(Color::TRANSPARENT);
 
                 Ripple::retain_active(&mut ripples);
                 for ripple in &ripples {
@@ -257,4 +228,3 @@ pub(super) fn create_event_loop() -> ResultType<()> {
         }
     });
 }
-

@@ -17,10 +17,10 @@ use winapi::{
         libloaderapi::{GetModuleHandleA, GetProcAddress},
         memoryapi::{VirtualAllocEx, WriteProcessMemory},
         processthreadsapi::{
-            CreateProcessAsUserW, QueueUserAPC, TerminateProcess,
+            CreateProcessAsUserW, QueueUserAPC, ResumeThread, TerminateProcess,
             PROCESS_INFORMATION, STARTUPINFOW,
         },
-        winbase::{WTSGetActiveConsoleSessionId, DETACHED_PROCESS},
+        winbase::{WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS},
         winnt::{MEM_COMMIT, PAGE_READWRITE},
         winuser::*,
     },
@@ -31,7 +31,7 @@ pub(super) const PRIVACY_MODE_IMPL: &str = "privacy_mode_impl_mag";
 pub const ORIGIN_PROCESS_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
 pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
 pub const INJECTED_PROCESS_EXE: &'static str = WIN_TOPMOST_INJECTED_PROCESS_EXE;
-pub(crate) const PRIVACY_WINDOW_NAME: &'static str = "RustDeskPrivacyWindow";
+pub(super) const PRIVACY_WINDOW_NAME: &'static str = "RustDeskPrivacyWindow";
 
 struct WindowHandlers {
     hthread: u64,
@@ -90,11 +90,24 @@ impl PrivacyMode for PrivacyModeImpl {
             return Ok(true);
         }
 
+        let exe_file = std::env::current_exe()?;
+        if let Some(cur_dir) = exe_file.parent() {
+            if !cur_dir.join("WindowInjection.dll").exists() {
+                return Ok(false);
+            }
+        } else {
+            bail!(
+                "Invalid exe parent for {}",
+                exe_file.to_string_lossy().as_ref()
+            );
+        }
+
         if self.handlers.is_default() {
-            log::info!("turn_on_privacy, privacy whiteboard not started, try start");
+            log::info!("turn_on_privacy, dll not found when started, try start");
             self.start()?;
             std::thread::sleep(std::time::Duration::from_millis(1_000));
         }
+
         let hwnd = wait_find_privacy_hwnd(0)?;
         if hwnd.is_null() {
             bail!("No privacy window created");
@@ -172,17 +185,38 @@ impl PrivacyModeImpl {
             return Ok(());
         }
 
+        log::info!("Start privacy mode window broker, check_update_broker_process");
+        if let Err(e) = crate::platform::windows::check_update_broker_process() {
+            log::warn!(
+                "Failed to check update broker process. Privacy mode may not work properly. {}",
+                e
+            );
+        }
+
+        let exe_file = std::env::current_exe()?;
+        let Some(cur_dir) = exe_file.parent() else {
+            bail!("Cannot get parent of current exe file");
+        };
+
+        let dll_file = cur_dir.join("WindowInjection.dll");
+        if !dll_file.exists() {
+            bail!(
+                "Failed to find required file {}",
+                dll_file.to_string_lossy().as_ref()
+            );
+        }
+
         let hwnd = wait_find_privacy_hwnd(1_000)?;
         if !hwnd.is_null() {
             log::info!("Privacy window is ready");
             return Ok(());
         }
 
-        let exe_file = std::env::current_exe()?;
-        let cmdline = format!(
-            "\"{}\" --whiteboard --privacy-window",
-            exe_file.to_string_lossy()
-        );
+        // let cmdline = cur_dir.join("MiniBroker.exe").to_string_lossy().to_string();
+        let cmdline = cur_dir
+            .join(INJECTED_PROCESS_EXE)
+            .to_string_lossy()
+            .to_string();
 
         unsafe {
             let cmd_utf16: Vec<u16> = cmdline.encode_utf16().chain(Some(0).into_iter()).collect();
@@ -227,7 +261,7 @@ impl PrivacyModeImpl {
                 NULL as _,
                 NULL as _,
                 FALSE,
-                DETACHED_PROCESS,
+                CREATE_SUSPENDED | DETACHED_PROCESS,
                 NULL,
                 NULL as _,
                 &mut start_info,
@@ -242,10 +276,27 @@ impl PrivacyModeImpl {
                 );
             };
 
+            inject_dll(
+                proc_info.hProcess,
+                proc_info.hThread,
+                dll_file.to_string_lossy().as_ref(),
+            )?;
+
+            if 0xffffffff == ResumeThread(proc_info.hThread) {
+                // CloseHandle
+                CloseHandle(proc_info.hThread);
+                CloseHandle(proc_info.hProcess);
+
+                bail!(
+                    "Failed to create privacy window process, error {}",
+                    Error::last_os_error()
+                );
+            }
+
             self.handlers.hthread = proc_info.hThread as _;
             self.handlers.hprocess = proc_info.hProcess as _;
 
-            let hwnd = wait_find_privacy_hwnd(3_000)?;
+            let hwnd = wait_find_privacy_hwnd(1_000)?;
             if hwnd.is_null() {
                 bail!("Failed to get hwnd after started");
             }
