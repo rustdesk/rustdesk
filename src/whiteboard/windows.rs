@@ -16,6 +16,7 @@ use tao::{
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
 pub(super) fn create_event_loop() -> ResultType<()> {
+    let privacy_window = std::env::args().any(|arg| arg == "--privacy-window");
     let face = match create_font_face() {
         Ok(face) => Some(face),
         Err(err) => {
@@ -25,9 +26,14 @@ pub(super) fn create_event_loop() -> ResultType<()> {
     };
 
     let event_loop = EventLoopBuilder::<(String, CustomEvent)>::with_user_event().build();
+    let window_title = if privacy_window {
+        crate::privacy_mode::win_topmost_window::PRIVACY_WINDOW_NAME
+    } else {
+        "RustDesk whiteboard"
+    };
     let mut window_builder = WindowBuilder::new()
-        .with_title("RustDesk whiteboard")
-        .with_transparent(true)
+        .with_title(window_title)
+        .with_transparent(!privacy_window)
         .with_always_on_top(true)
         .with_skip_taskbar(true)
         .with_decorations(false);
@@ -121,7 +127,11 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                     log::error!("Failed to create pixmap from buffer");
                     return;
                 };
-                pixmap.fill(Color::TRANSPARENT);
+                if privacy_window {
+                    pixmap.fill(Color::from_rgba8(255, 255, 255, 255));
+                } else {
+                    pixmap.fill(Color::TRANSPARENT);
+                }
 
                 Ripple::retain_active(&mut ripples);
                 for ripple in &ripples {

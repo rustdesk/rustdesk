@@ -33,13 +33,21 @@ pub use super::linux::run;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 pub fn run() {
-    let (tx_exit, rx_exit) = unbounded_channel();
-    std::thread::spawn(move || {
-        start_ipc(rx_exit);
-    });
+    let privacy_window = std::env::args().any(|arg| arg == "--privacy-window");
+    let tx_exit = if privacy_window {
+        None
+    } else {
+        let (tx_exit, rx_exit) = unbounded_channel();
+        std::thread::spawn(move || {
+            start_ipc(rx_exit);
+        });
+        Some(tx_exit)
+    };
     if let Err(e) = super::create_event_loop() {
         log::error!("Failed to create event loop: {}", e);
-        tx_exit.send(()).ok();
+        if let Some(tx_exit) = tx_exit {
+            tx_exit.send(()).ok();
+        }
         return;
     }
 }

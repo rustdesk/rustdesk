@@ -211,18 +211,19 @@ pub extern "system" fn privacy_mode_hook_keyboard(
 
             match w_param2 {
                 WM_KEYDOWN => {
-                    // Disable all keys other than P and Ctrl.
-                    if ![80, 162, 163].contains(&(*ks).vkCode) {
+                    // Disable all keys other than F12 and Ctrl.
+                    if ![VK_F12 as u32, VK_LCONTROL as u32, VK_RCONTROL as u32]
+                        .contains(&(*ks).vkCode)
+                    {
                         return 1;
                     }
 
                     // NOTE: GetKeyboardState may not work well...
 
-                    // Check if Ctrl + P is pressed
-                    let cltr_down = (GetKeyState(VK_CONTROL) as u16) & (0x8000 as u16) > 0;
-                    let key = LOBYTE((*ks).vkCode as _);
-                    if cltr_down && (key == 'p' as u8 || key == 'P' as u8) {
-                        // Ctrl + P is pressed, turn off privacy mode
+                    // Check if Ctrl + F12 is pressed
+                    let ctrl_down = (GetKeyState(VK_CONTROL) as u16) & (0x8000 as u16) > 0;
+                    if ctrl_down && (*ks).vkCode == VK_F12 as u32 {
+                        // Ctrl + F12 is pressed, turn off privacy mode
                         if let Some(Err(e)) = super::turn_off_privacy(
                             super::INVALID_PRIVACY_MODE_CONN_ID,
                             Some(super::PrivacyModeState::OffByPeer),
