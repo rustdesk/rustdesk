@@ -312,6 +312,31 @@ fn correct_app_name(s: &str) -> String {
     s
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{correct_app_name, PRIVILEGES_SCRIPTS_DIR};
+
+    #[test]
+    fn install_script_bootstraps_agent_into_user_domain() {
+        let install = PRIVILEGES_SCRIPTS_DIR
+            .get_file("install.scpt")
+            .and_then(|file| file.contents_utf8())
+            .map(correct_app_name)
+            .expect("install.scpt should be embedded");
+
+        assert!(
+            install.contains("launchctl bootstrap gui/$uid")
+                || install.contains("launchctl bootstrap user/$uid"),
+            "install script must bootstrap the agent into a user launchd domain",
+        );
+        assert!(
+            install.contains("launchctl kickstart -k gui/$uid/$agent_label")
+                || install.contains("launchctl kickstart -k user/$uid/$agent_label"),
+            "install script must kickstart the agent after bootstrapping it",
+        );
+    }
+}
+
 pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
     // to-do: do together with win/linux about refactory start/stop service
     if !is_installed_daemon(false) {
