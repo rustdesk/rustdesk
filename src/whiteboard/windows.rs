@@ -17,9 +17,11 @@ use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Stroke, Transfor
 use winapi::{
     shared::ntdef::NULL,
     um::winuser::{
-        FindWindowA, SetWindowDisplayAffinity, ShowWindow, SW_HIDE, WDA_EXCLUDEFROMCAPTURE,
+        FindWindowA, SetWindowDisplayAffinity, ShowWindow, SW_HIDE,
     },
 };
+
+const WDA_EXCLUDEFROMCAPTURE: u32 = 0x00000011;
 
 pub(super) fn create_event_loop() -> ResultType<()> {
     let privacy_window = std::env::args().any(|arg| arg == "--privacy-window");
