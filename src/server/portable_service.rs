@@ -274,7 +274,12 @@ impl SharedMemory {
             }
         };
         log::info!("Create shared memory, size: {}, flink: {}", size, flink);
-        set_path_permission_for_portable_service_shmem_file(Path::new(&flink))?;
+        if let Err(err) = set_path_permission_for_portable_service_shmem_file(Path::new(&flink)) {
+            // Release shmem handle first so best-effort flink cleanup has a chance to succeed.
+            drop(shmem);
+            let _ = remove_shared_memory_flink_once(name, true, "Create cleanup");
+            return Err(err);
+        }
         Ok(SharedMemory { inner: shmem })
     }
 
@@ -469,9 +474,12 @@ pub mod server {
         threads.push(std::thread::spawn(move || {
             run_ipc_client(ipc_token);
         }));
-        threads.push(std::thread::spawn(|| {
+        // Detached shutdown watchdog:
+        // - gives graceful shutdown/cleanup a short window
+        // - force-exits the process if workers are still stuck
+        std::thread::spawn(|| {
             run_exit_check();
-        }));
+        });
         let record_pos_handle = crate::input_service::try_start_record_cursor_pos();
         for th in threads.drain(..) {
             th.join().ok();
@@ -490,11 +498,23 @@ pub mod server {
     }
 
     fn run_exit_check() {
+        const FORCED_EXIT_DELAY: Duration = Duration::from_secs(3);
         loop {
             if EXIT.lock().unwrap().clone() {
                 break;
             }
             std::thread::sleep(Duration::from_millis(50));
+        }
+        // Fallback only: normal shutdown path should complete and process should exit naturally.
+        // This forced exit is a last resort when worker threads are stuck and graceful teardown
+        // does not finish in time.
+        std::thread::sleep(FORCED_EXIT_DELAY);
+        if EXIT.lock().unwrap().clone() {
+            log::warn!(
+                "Portable service shutdown watchdog fallback triggered: forcing process exit after {:?}",
+                FORCED_EXIT_DELAY
+            );
+            std::process::exit(0);
         }
     }
 
