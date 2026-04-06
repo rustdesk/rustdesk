@@ -1,5 +1,5 @@
 use crate::{
-    ipc::{self, new_listener, Connection, Data, DataPortableService},
+    ipc::{self, new_listener, Connection, Data, DataPortableService, IPC_TOKEN_LEN},
     platform::{
         set_path_permission, set_path_permission_for_portable_service_shmem_dir,
         set_path_permission_for_portable_service_shmem_file,
@@ -39,7 +39,6 @@ use super::video_qos;
 
 const SIZE_COUNTER: usize = size_of::<i32>() * 2;
 const FRAME_ALIGN: usize = 64;
-const IPC_TOKEN_LEN: usize = 64;
 
 const ADDR_IPC_TOKEN: usize = 0;
 const ADDR_CURSOR_PARA: usize = ADDR_IPC_TOKEN + IPC_TOKEN_LEN;

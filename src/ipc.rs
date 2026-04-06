@@ -72,6 +72,8 @@ use std::{
 // IPC actions here.
 pub const IPC_ACTION_CLOSE: &str = "close";
 const PORTABLE_SERVICE_IPC_HANDSHAKE_TIMEOUT_MS: u64 = 3_000;
+pub(crate) const IPC_TOKEN_LEN: usize = 64;
+const IPC_TOKEN_U64_HEX_LEN: usize = 16;
 pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 
 #[inline]
@@ -1086,8 +1088,10 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
 pub(crate) fn generate_one_time_ipc_token() -> String {
     use std::fmt::Write as _;
 
-    let mut token = String::with_capacity(64);
-    for _ in 0..4 {
+    debug_assert_eq!(IPC_TOKEN_LEN % IPC_TOKEN_U64_HEX_LEN, 0);
+
+    let mut token = String::with_capacity(IPC_TOKEN_LEN);
+    for _ in 0..(IPC_TOKEN_LEN / IPC_TOKEN_U64_HEX_LEN) {
         let _ = write!(token, "{:016x}", hbb_common::rand::random::<u64>());
     }
     token
