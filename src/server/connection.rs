@@ -4876,6 +4876,11 @@ async fn start_ipc(
                 }
                 // `_rx_desktop_ready` is used as a wake-up signal from desktop/session state changes
                 // (for example wait_desktop_cm_ready paths). It is not itself a proof of CM readiness.
+                // TODO:
+                // When `_rx_desktop_ready` is closed, `recv()` returns
+                // `None` immediately and this loop may spin if `username` remains empty.
+                // Keep behavior unchanged for now; if field reports appear, handle `Ok(None)` by
+                // breaking/returning to avoid hot-looping.
                 let _res = timeout(1_000, _rx_desktop_ready.recv()).await;
                 username = linux_desktop_manager::get_username();
             }
