@@ -147,10 +147,27 @@ jobs:
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
-          if ! $VCPKG_ROOT/vcpkg \
-            install \
-            --triplet ${{ matrix.job.vcpkg-triplet }} \
-            --x-install-root="$VCPKG_ROOT/installed"; then
+          git config --global url."https://github.com/webmproject/libwebm".insteadOf https://chromium.googlesource.com/webm/libwebm
+          git config --global url."https://github.com/lemenkov/libyuv".insteadOf https://chromium.googlesource.com/libyuv/libyuv
+          git config --global url."https://github.com/libsdl-org/aom".insteadOf https://aomedia.googlesource.com/aom
+
+          success=0
+          for attempt in 1 2 3; do
+            echo "vcpkg install attempt $attempt"
+            if $VCPKG_ROOT/vcpkg \
+              install \
+              --triplet ${{ matrix.job.vcpkg-triplet }} \
+              --x-install-root="$VCPKG_ROOT/installed"; then
+              success=1
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "vcpkg install failed, retrying after 15s"
+              sleep 15
+            fi
+          done
+
+          if [ "$success" -ne 1 ]; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
               echo "======"
@@ -162,7 +179,6 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
-
       - name: Build rustdesk
         run: |
           # Windows: build RustDesk
