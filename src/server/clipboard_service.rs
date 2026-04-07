@@ -236,7 +236,6 @@ impl Handler {
                 log::debug!("Skip clipboard sync for recent Wayland keyboard injection");
                 return None;
             }
-            crate::clipboard::cache_clipboard_msg(&msg);
             return Some(msg);
         }
         #[cfg(not(target_os = "linux"))]

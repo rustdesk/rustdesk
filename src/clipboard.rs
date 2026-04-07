@@ -71,22 +71,6 @@ pub fn peek_clipboard(
     Some(msg)
 }
 
-#[cfg(target_os = "linux")]
-pub fn cache_clipboard_msg(msg: &Message) {
-    match &msg.union {
-        Some(message::Union::MultiClipboards(multi_clipboards)) => {
-            *LAST_MULTI_CLIPBOARDS.lock().unwrap() = multi_clipboards.clone();
-        }
-        Some(message::Union::Clipboard(clipboard)) => {
-            *LAST_MULTI_CLIPBOARDS.lock().unwrap() = MultiClipboards {
-                clipboards: vec![clipboard.clone()],
-                ..Default::default()
-            };
-        }
-        _ => {}
-    }
-}
-
 #[cfg(not(target_os = "android"))]
 fn read_clipboard_message(
     ctx: &mut Option<ClipboardContext>,

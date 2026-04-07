@@ -156,7 +156,6 @@ void showWaylandKeyboardInputWarningDialog(
       consentInProgress = true;
       safeSetState(() {});
       try {
-        closeDialog();
         await onEnable();
         ffi.inputModel.keyboardInputAllowed = true;
         if (remember) {
@@ -168,13 +167,12 @@ void showWaylandKeyboardInputWarningDialog(
         if (dontAskAgainForConnection) {
           setWaylandKeyboardPromptSuppressedForConnection(connectionId, true);
         }
+        closeDialog();
       } catch (e, st) {
         debugPrint('Failed to enable Wayland keyboard input consent: $e');
         debugPrintStack(stackTrace: st);
-        if (!dialogClosed) {
-          consentInProgress = false;
-          safeSetState(() {});
-        }
+        consentInProgress = false;
+        safeSetState(() {});
         return;
       }
     }
