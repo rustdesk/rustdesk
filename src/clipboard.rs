@@ -61,7 +61,7 @@ pub fn check_clipboard(
     Some(msg)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(target_os = "linux")]
 pub fn peek_clipboard(
     ctx: &mut Option<ClipboardContext>,
     side: ClipboardSide,
@@ -71,7 +71,7 @@ pub fn peek_clipboard(
     Some(msg)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(target_os = "linux")]
 pub fn cache_clipboard_msg(msg: &Message) {
     match &msg.union {
         Some(message::Union::MultiClipboards(multi_clipboards)) => {
