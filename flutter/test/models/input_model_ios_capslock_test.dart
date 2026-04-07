@@ -38,6 +38,30 @@ void main() {
       );
     });
 
+    test('does not change cached caps lock state on key up', () {
+      final tracker = IosCapsLockStateTracker();
+
+      expect(
+        tracker.update(
+          character: null,
+          shiftPressed: false,
+          logicalKey: LogicalKeyboardKey.capsLock,
+          isKeyDown: true,
+        ),
+        isTrue,
+      );
+
+      expect(
+        tracker.update(
+          character: 'a',
+          shiftPressed: false,
+          logicalKey: LogicalKeyboardKey.keyA,
+          isKeyDown: false,
+        ),
+        isTrue,
+      );
+    });
+
     test('does not clear cached caps lock state when shift is pressed', () {
       final tracker = IosCapsLockStateTracker();
 

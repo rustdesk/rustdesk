@@ -15,6 +15,9 @@ class IosCapsLockStateTracker {
       _capsLock = !_capsLock;
       return _capsLock;
     }
+    if (!isKeyDown) {
+      return _capsLock;
+    }
     final inferred = inferFromCharacter(character, shiftPressed);
     if (inferred != null) {
       _capsLock = inferred;
