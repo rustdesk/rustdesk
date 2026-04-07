@@ -203,9 +203,11 @@ void showWaylandKeyboardInputWarningDialog(
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
             title: Text(translate('dont-ask-again-for-this-connection-tip')),
-            onChanged: (v) {
-              setState(() => dontAskAgainForConnection = v == true);
-            },
+            onChanged: consentInProgress
+                ? null
+                : (v) {
+                    safeSetState(() => dontAskAgainForConnection = v == true);
+                  },
           ),
           CheckboxListTile(
             value: remember,
@@ -213,9 +215,11 @@ void showWaylandKeyboardInputWarningDialog(
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
             title: Text(translate('remember-wayland-keyboard-choice-tip')),
-            onChanged: (v) {
-              setState(() => remember = v == true);
-            },
+            onChanged: consentInProgress
+                ? null
+                : (v) {
+                    safeSetState(() => remember = v == true);
+                  },
           ),
         ],
       ),
