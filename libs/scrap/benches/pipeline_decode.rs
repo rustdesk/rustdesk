@@ -83,13 +83,13 @@ fn bench_pipeline_decode_1080p(c: &mut Criterion) {
             // Step 1: Protobuf deserialize
             // Step 2+3: Decode + YUV→RGB via real Decoder::handle_video_frame
             if let Some(union) = extract_union(black_box(msg_bytes)) {
-                let _ = decoder.handle_video_frame(
+                decoder.handle_video_frame(
                     &union,
                     &mut rgb,
                     &mut texture,
                     &mut pixelbuffer,
                     &mut chroma,
-                );
+                ).expect("decode failed");
             }
 
             idx += 1;
@@ -121,13 +121,13 @@ fn bench_pipeline_decode_4k(c: &mut Criterion) {
         b.iter(|| {
             let msg_bytes = &messages[idx % messages.len()];
             if let Some(union) = extract_union(black_box(msg_bytes)) {
-                let _ = decoder.handle_video_frame(
+                decoder.handle_video_frame(
                     &union,
                     &mut rgb,
                     &mut texture,
                     &mut pixelbuffer,
                     &mut chroma,
-                );
+                ).expect("decode failed");
             }
             idx += 1;
             black_box(rgb.raw.len())
@@ -160,7 +160,7 @@ fn bench_pipeline_decode_sequence(c: &mut Criterion) {
             b.iter(|| {
                 for msg_bytes in &messages {
                     if let Some(union) = extract_union(msg_bytes) {
-                        let _ = decoder.handle_video_frame(
+                        decoder.handle_video_frame(
                             &union,
                             &mut rgb,
                             &mut texture,

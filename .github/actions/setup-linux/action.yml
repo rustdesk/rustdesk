@@ -30,11 +30,6 @@ runs:
           core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
           core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-    - name: Checkout source code
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
     - name: Install prerequisites
       shell: bash
       run: |

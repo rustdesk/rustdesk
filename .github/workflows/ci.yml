@@ -31,6 +31,10 @@ jobs:
         job:
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-24.04 }
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - uses: ./.github/actions/setup-linux
 
       - name: Show version information (Rust, cargo, GCC)
@@ -75,10 +79,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - id: check
         run: |
-          CHANGED=$(git diff --name-only HEAD~1 HEAD -- libs/scrap/ libs/hbb_common/ 2>/dev/null || echo "")
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="HEAD~1"
+          fi
+          CHANGED=$(git diff --name-only "$BASE" HEAD -- libs/scrap/ libs/hbb_common/ 2>/dev/null || echo "")
           echo "run=$( [ -n "$CHANGED" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
 
   benchmarks:

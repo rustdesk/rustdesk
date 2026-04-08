@@ -91,13 +91,13 @@ fn bench_decode_single(c: &mut Criterion) {
             let mut idx = 0;
             b.iter(|| {
                 let union = &unions[idx % unions.len()];
-                let _ = decoder.handle_video_frame(
+                decoder.handle_video_frame(
                     black_box(union),
                     &mut rgb,
                     &mut texture,
                     &mut pixelbuffer,
                     &mut chroma,
-                );
+                ).expect("decode failed");
                 idx += 1;
             });
         });
@@ -118,13 +118,13 @@ fn bench_decode_single(c: &mut Criterion) {
             let mut idx = 0;
             b.iter(|| {
                 let union = &unions[idx % unions.len()];
-                let _ = decoder.handle_video_frame(
+                decoder.handle_video_frame(
                     black_box(union),
                     &mut rgb,
                     &mut texture,
                     &mut pixelbuffer,
                     &mut chroma,
-                );
+                ).expect("decode failed");
                 idx += 1;
             });
         });
@@ -145,13 +145,13 @@ fn bench_decode_single(c: &mut Criterion) {
             let mut idx = 0;
             b.iter(|| {
                 let union = &unions[idx % unions.len()];
-                let _ = decoder.handle_video_frame(
+                decoder.handle_video_frame(
                     black_box(union),
                     &mut rgb,
                     &mut texture,
                     &mut pixelbuffer,
                     &mut chroma,
-                );
+                ).expect("decode failed");
                 idx += 1;
             });
         });
@@ -181,13 +181,13 @@ fn bench_vp9_decode_sequence(c: &mut Criterion) {
     group.bench_function(BenchmarkId::from_parameter("100frames_1080p"), |b| {
         b.iter(|| {
             for union in &unions {
-                let _ = decoder.handle_video_frame(
+                decoder.handle_video_frame(
                     black_box(union),
                     &mut rgb,
                     &mut texture,
                     &mut pixelbuffer,
                     &mut chroma,
-                );
+                ).expect("decode failed");
             }
         });
     });
@@ -216,7 +216,7 @@ fn bench_vp9_decode_4k(c: &mut Criterion) {
         let mut idx = 0;
         b.iter(|| {
             let union = &unions[idx % unions.len()];
-            let _ = decoder.handle_video_frame(
+            decoder.handle_video_frame(
                 black_box(union),
                 &mut rgb,
                 &mut texture,

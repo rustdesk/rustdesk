@@ -16,6 +16,10 @@ jobs:
     name: Performance benchmarks
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - uses: ./.github/actions/setup-linux
 
       - name: Install cargo-codspeed

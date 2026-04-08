@@ -49,7 +49,8 @@ fn bench_vpx_encode_single(c: &mut Criterion) {
             let mut pts = 0i64;
             b.iter(|| {
                 let input = EncodeInput::YUV(&yuv);
-                let _ = encoder.encode_to_message(input, pts);
+                // encode_to_message may return Err("no valid frame") when the codec drops a frame — this is normal
+drop(encoder.encode_to_message(input, pts));
                 pts += 1;
             });
         });
@@ -71,7 +72,8 @@ fn bench_vpx_encode_single(c: &mut Criterion) {
             let mut pts = 0i64;
             b.iter(|| {
                 let input = EncodeInput::YUV(&yuv);
-                let _ = encoder.encode_to_message(input, pts);
+                // encode_to_message may return Err("no valid frame") when the codec drops a frame — this is normal
+drop(encoder.encode_to_message(input, pts));
                 pts += 1;
             });
         });
@@ -109,7 +111,8 @@ fn bench_encode_4k(c: &mut Criterion) {
             let mut pts = 0i64;
             b.iter(|| {
                 let input = EncodeInput::YUV(black_box(&yuv));
-                let _ = encoder.encode_to_message(input, pts);
+                // encode_to_message may return Err("no valid frame") when the codec drops a frame — this is normal
+drop(encoder.encode_to_message(input, pts));
                 pts += 1;
             });
         });
@@ -141,7 +144,7 @@ fn bench_vp9_encode_sequence_static(c: &mut Criterion) {
         b.iter(|| {
             for i in 0..100 {
                 let input = EncodeInput::YUV(black_box(&yuv));
-                let _ = encoder.encode_to_message(input, i);
+                drop(encoder.encode_to_message(input, i));
             }
         });
     });
@@ -174,7 +177,7 @@ fn bench_vp9_encode_sequence_movement(c: &mut Criterion) {
         b.iter(|| {
             for (i, yuv) in frames.iter().enumerate() {
                 let input = EncodeInput::YUV(black_box(yuv));
-                let _ = encoder.encode_to_message(input, i as i64);
+                drop(encoder.encode_to_message(input, i as i64));
             }
         });
     });
@@ -211,7 +214,8 @@ fn bench_vp9_encode_quality(c: &mut Criterion) {
             let mut pts = 0i64;
             b.iter(|| {
                 let input = EncodeInput::YUV(black_box(&yuv));
-                let _ = encoder.encode_to_message(input, pts);
+                // encode_to_message may return Err("no valid frame") when the codec drops a frame — this is normal
+drop(encoder.encode_to_message(input, pts));
                 pts += 1;
             });
         });
