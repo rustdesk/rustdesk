@@ -1608,7 +1608,28 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
         }
     }
 
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(target_os = "windows")]
+    if !_hotkey {
+        let key = char_value_to_key(chr);
+
+        if down {
+                if en.key_down(key).is_ok() {
+                } else {
+                    if let Ok(chr) = char::try_from(chr) {
+                    let mut s = chr.to_string();
+                    if need_to_uppercase(en) {
+                        s = s.to_uppercase();
+                    }
+                    en.key_sequence(&s);
+                };
+            }
+        } else {
+            en.key_up(key);
+        }
+        return;
+    }
+
+    #[cfg(target_os = "macos")]
     if !_hotkey {
         if down {
             if let Ok(chr) = char::try_from(chr) {
