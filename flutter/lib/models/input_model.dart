@@ -335,6 +335,10 @@ class InputModel {
   var ctrl = false;
   var alt = false;
   var command = false;
+  var shiftLocked = false;
+  var ctrlLocked = false;
+  var altLocked = false;
+  var commandLocked = false;
 
   final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
@@ -626,6 +630,15 @@ class InputModel {
     }
   }
 
+  bool _isAndroidSoftKeyboardEvent(KeyEvent e) {
+    final usbHidUsage = e.physicalKey.usbHidUsage;
+    final isNormalUsbHidUsage = (usbHidUsage >> 20) == 0;
+    // Real hardware keyboard events generally have a normal keyboard HID usage.
+    // IME/soft-keyboard events on Android often do not, especially for modifier
+    // and special keys when the on-screen keyboard is visible.
+    return !isNormalUsbHidUsage;
+  }
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
@@ -705,7 +718,9 @@ class InputModel {
     // For Backspace and Enter, send them directly using the reliable logical
     // key data. This is required because for some IMEs (ko/zh/ja) returning
     // `handled` prevents the IME from processing the key through onChanged.
-    if (isAndroid && androidSoftKeyboardActive) {
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        _isAndroidSoftKeyboardEvent(e)) {
       if (e is KeyDownEvent || e is KeyRepeatEvent) {
         if (e.logicalKey == LogicalKeyboardKey.backspace) {
           inputKey('VK_BACK', press: true);
@@ -902,7 +917,13 @@ class InputModel {
   /// Send key stroke event.
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).
-  void inputKey(String name, {bool? down, bool? press}) {
+  void inputKey(String name,
+      {bool? down,
+        bool? press,
+        bool? altOverride,
+        bool? ctrlOverride,
+        bool? shiftOverride,
+        bool? commandOverride}) {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
     bind.sessionInputKey(
@@ -910,10 +931,10 @@ class InputModel {
         name: name,
         down: down ?? false,
         press: press ?? true,
-        alt: alt,
-        ctrl: ctrl,
-        shift: shift,
-        command: command);
+        alt: altOverride ?? (alt || altLocked),
+        ctrl: ctrlOverride ?? (ctrl || ctrlLocked),
+        shift: shiftOverride ?? (shift || shiftLocked),
+        command: commandOverride ?? (command || commandLocked));
   }
 
   static Map<String, dynamic> getMouseEventMove() => {
@@ -984,14 +1005,15 @@ class InputModel {
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   void resetModifiers() {
     shift = ctrl = alt = command = false;
+    shiftLocked = ctrlLocked = altLocked = commandLocked = false;
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.
   Map<String, dynamic> modify(Map<String, dynamic> evt) {
-    if (ctrl) evt['ctrl'] = 'true';
-    if (shift) evt['shift'] = 'true';
-    if (alt) evt['alt'] = 'true';
-    if (command) evt['command'] = 'true';
+    if (ctrl || ctrlLocked) evt['ctrl'] = 'true';
+    if (shift || shiftLocked) evt['shift'] = 'true';
+    if (alt || altLocked) evt['alt'] = 'true';
+    if (command || commandLocked) evt['command'] = 'true';
     return evt;
   }
 
