@@ -1593,7 +1593,15 @@ fn need_to_uppercase(en: &mut Enigo) -> bool {
     get_modifier_state(Key::Shift, en) || get_modifier_state(Key::CapsLock, en)
 }
 
-fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
+#[inline]
+fn has_shift_modifier(key_event: &KeyEvent) -> bool {
+    key_event.modifiers.iter().any(|ck| {
+        let v = ck.value();
+        v == ControlKey::Shift.value() || v == ControlKey::RShift.value()
+    })
+}
+
+fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool, uppercase_hint: bool) {
     // On Wayland with uinput mode, use clipboard for character input
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
@@ -1613,11 +1621,11 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
         let key = char_value_to_key(chr);
 
         if down {
-                if en.key_down(key).is_ok() {
-                } else {
-                    if let Ok(chr) = char::try_from(chr) {
+            if en.key_down(key).is_ok() {
+            } else {
+                if let Ok(chr) = char::try_from(chr) {
                     let mut s = chr.to_string();
-                    if need_to_uppercase(en) {
+                    if uppercase_hint {
                         s = s.to_uppercase();
                     }
                     en.key_sequence(&s);
@@ -1908,7 +1916,8 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
             let record_key = chr as u64 + KEY_CHAR_START;
             record_pressed_key(KeysDown::EnigoKey(record_key), down);
-            process_chr(&mut en, chr, down, has_hotkey_modifiers(evt))
+            let uppercase_hint = has_shift_modifier(evt) || get_modifier_state(Key::CapsLock, &mut en);
+            process_chr(&mut en, chr, down, has_hotkey_modifiers(evt), uppercase_hint)
         }
         Some(key_event::Union::Unicode(chr)) => {
             // Same as Chr: release Shift for Unicode input
