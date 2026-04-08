@@ -41,11 +41,14 @@ fn bench_push(c: &mut Criterion) {
 
     group.throughput(Throughput::Elements(QUEUE_CAP as u64));
     group.bench_function(BenchmarkId::from_parameter("120_frames"), |b| {
+        // Pre-allocate queue once, drain+refill each iteration
+        let q = ArrayQueue::new(QUEUE_CAP);
         b.iter(|| {
-            let q = ArrayQueue::new(QUEUE_CAP);
             for f in &frames {
                 let _ = q.push(black_box(f.clone()));
             }
+            // Drain for next iteration
+            while q.pop().is_some() {}
         });
     });
     group.finish();
@@ -85,6 +88,9 @@ fn bench_pop(c: &mut Criterion) {
 fn bench_force_push(c: &mut Criterion) {
     let mut group = c.benchmark_group("video_queue_force_push");
 
+    // Pre-allocate the frame outside the hot loop to isolate queue cost
+    let frame = make_video_frame(999);
+
     group.throughput(Throughput::Elements(1));
     group.bench_function(BenchmarkId::from_parameter("full_queue"), |b| {
         let q = ArrayQueue::new(QUEUE_CAP);
@@ -93,7 +99,7 @@ fn bench_force_push(c: &mut Criterion) {
         }
         b.iter(|| {
             // Real code: io_loop.rs:1310 uses video_queue.force_push(vf)
-            black_box(q.force_push(black_box(make_video_frame(999))))
+            black_box(q.force_push(black_box(frame.clone())))
         });
     });
     group.finish();

@@ -52,11 +52,11 @@ fn make_serialized_messages(
         .collect()
 }
 
-/// Extract the video_frame::Union from a serialized Message.
+/// Extract the video_frame::Union from a serialized Message by move (no clone).
+/// Matches the real code path in io_loop.rs where the VideoFrame is consumed.
 fn extract_union(msg_bytes: &[u8]) -> Option<video_frame::Union> {
-    let msg = Message::parse_from_bytes(msg_bytes).ok()?;
-    let vf = msg.video_frame();
-    vf.union.clone()
+    let mut msg = Message::parse_from_bytes(msg_bytes).ok()?;
+    msg.take_video_frame().union.take()
 }
 
 // ---------------------------------------------------------------------------

@@ -14,16 +14,23 @@ use std::time::Duration;
 /// B. Video encode benchmarks.
 ///
 /// Calls the real `EncoderApi::encode_to_message()` — the same function used
-/// by video_service.rs handle_one_frame(). This ensures any change to the
-/// encode path (flush behavior, frame creation, etc.) is reflected here.
+/// by video_service.rs handle_one_frame().
 ///
-/// Includes single-frame, sequence (static + movement), and quality variations.
+/// Single-frame benchmarks alternate between multiple distinct frames to avoid
+/// the encoder's rate controller dropping frames on identical input
+/// (rc_dropframe_thresh=25 causes Err("no valid frame") on static content).
 
 const W: usize = 1920;
 const H: usize = 1080;
+const NUM_FRAMES: usize = 8;
+
+/// Pre-generate a pool of distinct YUV frames for realistic encode benchmarks.
+fn make_frame_pool(w: usize, h: usize, n: usize) -> Vec<Vec<u8>> {
+    (0..n).map(|i| make_i420(w, h, i * 37).0).collect()
+}
 
 // ---------------------------------------------------------------------------
-// Single-frame encode (VP8, VP9, AV1)
+// Single-frame encode with varied input (VP8, VP9, AV1)
 // ---------------------------------------------------------------------------
 
 fn bench_vpx_encode_single(c: &mut Criterion) {
@@ -42,15 +49,15 @@ fn bench_vpx_encode_single(c: &mut Criterion) {
             keyframe_interval: None,
         });
         let mut encoder = VpxEncoder::new(cfg, false).unwrap();
-        let (yuv, _) = make_i420(W, H, 0);
+        let pool = make_frame_pool(W, H, NUM_FRAMES);
 
         group.throughput(Throughput::Elements(1));
         group.bench_with_input(BenchmarkId::from_parameter(label), &(), |b, _| {
             let mut pts = 0i64;
             b.iter(|| {
-                let input = EncodeInput::YUV(&yuv);
-                // encode_to_message may return Err("no valid frame") when the codec drops a frame — this is normal
-drop(encoder.encode_to_message(input, pts));
+                let yuv = &pool[pts as usize % pool.len()];
+                let input = EncodeInput::YUV(black_box(yuv));
+                drop(encoder.encode_to_message(input, pts));
                 pts += 1;
             });
         });
@@ -65,15 +72,15 @@ drop(encoder.encode_to_message(input, pts));
             keyframe_interval: None,
         });
         let mut encoder = AomEncoder::new(cfg, false).unwrap();
-        let (yuv, _) = make_i420(W, H, 0);
+        let pool = make_frame_pool(W, H, NUM_FRAMES);
 
         group.throughput(Throughput::Elements(1));
         group.bench_with_input(BenchmarkId::from_parameter("av1_1080p"), &(), |b, _| {
             let mut pts = 0i64;
             b.iter(|| {
-                let input = EncodeInput::YUV(&yuv);
-                // encode_to_message may return Err("no valid frame") when the codec drops a frame — this is normal
-drop(encoder.encode_to_message(input, pts));
+                let yuv = &pool[pts as usize % pool.len()];
+                let input = EncodeInput::YUV(black_box(yuv));
+                drop(encoder.encode_to_message(input, pts));
                 pts += 1;
             });
         });
@@ -83,7 +90,43 @@ drop(encoder.encode_to_message(input, pts));
 }
 
 // ---------------------------------------------------------------------------
-// 4K encode
+// Keyframe-only encode (worst case — every frame is a keyframe)
+// ---------------------------------------------------------------------------
+
+fn bench_vpx_encode_keyframe(c: &mut Criterion) {
+    let mut group = c.benchmark_group("encode_keyframe");
+
+    for codec in [VpxVideoCodecId::VP8, VpxVideoCodecId::VP9] {
+        let label = match codec {
+            VpxVideoCodecId::VP8 => "vp8_1080p",
+            VpxVideoCodecId::VP9 => "vp9_1080p",
+        };
+        let cfg = EncoderCfg::VPX(VpxEncoderConfig {
+            width: W as _,
+            height: H as _,
+            quality: 1.0,
+            codec,
+            keyframe_interval: Some(1), // force keyframe every frame
+        });
+        let mut encoder = VpxEncoder::new(cfg, false).unwrap();
+        let pool = make_frame_pool(W, H, NUM_FRAMES);
+
+        group.throughput(Throughput::Elements(1));
+        group.bench_with_input(BenchmarkId::from_parameter(label), &(), |b, _| {
+            let mut pts = 0i64;
+            b.iter(|| {
+                let yuv = &pool[pts as usize % pool.len()];
+                let input = EncodeInput::YUV(black_box(yuv));
+                drop(encoder.encode_to_message(input, pts));
+                pts += 1;
+            });
+        });
+    }
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// 4K encode with varied input
 // ---------------------------------------------------------------------------
 
 fn bench_encode_4k(c: &mut Criterion) {
@@ -104,15 +147,15 @@ fn bench_encode_4k(c: &mut Criterion) {
             keyframe_interval: None,
         });
         let mut encoder = VpxEncoder::new(cfg, false).unwrap();
-        let (yuv, _) = make_i420(w4k, h4k, 0);
+        let pool = make_frame_pool(w4k, h4k, 4); // fewer frames for 4K (memory)
 
         group.throughput(Throughput::Elements(1));
         group.bench_with_input(BenchmarkId::from_parameter(label), &(), |b, _| {
             let mut pts = 0i64;
             b.iter(|| {
-                let input = EncodeInput::YUV(black_box(&yuv));
-                // encode_to_message may return Err("no valid frame") when the codec drops a frame — this is normal
-drop(encoder.encode_to_message(input, pts));
+                let yuv = &pool[pts as usize % pool.len()];
+                let input = EncodeInput::YUV(black_box(yuv));
+                drop(encoder.encode_to_message(input, pts));
                 pts += 1;
             });
         });
@@ -168,8 +211,6 @@ fn bench_vp9_encode_sequence_movement(c: &mut Criterion) {
         keyframe_interval: None,
     });
     let mut encoder = VpxEncoder::new(cfg, false).unwrap();
-
-    // Pre-generate 100 frames with progressive shift
     let frames: Vec<Vec<u8>> = (0..100).map(|i| make_i420(W, H, i * 5).0).collect();
 
     group.throughput(Throughput::Elements(100));
@@ -185,7 +226,7 @@ fn bench_vp9_encode_sequence_movement(c: &mut Criterion) {
 }
 
 // ---------------------------------------------------------------------------
-// Quality ratio impact (VP9 1080p)
+// Quality ratio impact (VP9 1080p, varied input)
 // ---------------------------------------------------------------------------
 
 fn bench_vp9_encode_quality(c: &mut Criterion) {
@@ -197,7 +238,7 @@ fn bench_vp9_encode_quality(c: &mut Criterion) {
         ("q1.0_balanced", 1.0),
         ("q2.0_best", 2.0),
     ];
-    let (yuv, _) = make_i420(W, H, 0);
+    let pool = make_frame_pool(W, H, NUM_FRAMES);
 
     for (label, quality) in qualities {
         let cfg = EncoderCfg::VPX(VpxEncoderConfig {
@@ -213,10 +254,53 @@ fn bench_vp9_encode_quality(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(*label), &(), |b, _| {
             let mut pts = 0i64;
             b.iter(|| {
-                let input = EncodeInput::YUV(black_box(&yuv));
-                // encode_to_message may return Err("no valid frame") when the codec drops a frame — this is normal
-drop(encoder.encode_to_message(input, pts));
+                let yuv = &pool[pts as usize % pool.len()];
+                let input = EncodeInput::YUV(black_box(yuv));
+                drop(encoder.encode_to_message(input, pts));
                 pts += 1;
+            });
+        });
+    }
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// Cold-start: encoder creation cost (reconnection / codec switch)
+// ---------------------------------------------------------------------------
+
+fn bench_encoder_cold_start(c: &mut Criterion) {
+    let mut group = c.benchmark_group("encoder_cold_start");
+
+    for codec in [VpxVideoCodecId::VP8, VpxVideoCodecId::VP9] {
+        let label = match codec {
+            VpxVideoCodecId::VP8 => "vp8_1080p",
+            VpxVideoCodecId::VP9 => "vp9_1080p",
+        };
+        group.throughput(Throughput::Elements(1));
+        group.bench_function(BenchmarkId::from_parameter(label), |b| {
+            b.iter(|| {
+                let cfg = EncoderCfg::VPX(VpxEncoderConfig {
+                    width: W as _,
+                    height: H as _,
+                    quality: 1.0,
+                    codec,
+                    keyframe_interval: None,
+                });
+                black_box(VpxEncoder::new(cfg, false).unwrap());
+            });
+        });
+    }
+
+    {
+        group.bench_function(BenchmarkId::from_parameter("av1_1080p"), |b| {
+            b.iter(|| {
+                let cfg = EncoderCfg::AOM(AomEncoderConfig {
+                    width: W as _,
+                    height: H as _,
+                    quality: 1.0,
+                    keyframe_interval: None,
+                });
+                black_box(AomEncoder::new(cfg, false).unwrap());
             });
         });
     }
@@ -226,7 +310,9 @@ drop(encoder.encode_to_message(input, pts));
 criterion_group!(
     benches,
     bench_vpx_encode_single,
+    bench_vpx_encode_keyframe,
     bench_encode_4k,
+    bench_encoder_cold_start,
     bench_vp9_encode_sequence_static,
     bench_vp9_encode_sequence_movement,
     bench_vp9_encode_quality,

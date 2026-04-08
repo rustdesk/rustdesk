@@ -72,10 +72,8 @@ fn bench_pipeline_encode_1080p(c: &mut Criterion) {
             if let Ok(vf) = vf {
                 let mut msg = Message::new();
                 msg.set_video_frame(vf);
-                msg.write_to_bytes().unwrap()
-            } else {
-                Vec::new()
-            };
+                black_box(msg.write_to_bytes().unwrap());
+            }
             pts += 1;
         });
     });
@@ -128,14 +126,11 @@ fn bench_pipeline_encode_4k(c: &mut Criterion) {
             }
 
             let input = EncodeInput::YUV(&yuv);
-            let vf = encoder.encode_to_message(input, pts);
-            if let Ok(vf) = vf {
+            if let Ok(vf) = encoder.encode_to_message(input, pts) {
                 let mut msg = Message::new();
                 msg.set_video_frame(vf);
-                msg.write_to_bytes().unwrap()
-            } else {
-                Vec::new()
-            };
+                black_box(msg.write_to_bytes().unwrap());
+            }
             pts += 1;
         });
     });
@@ -196,7 +191,9 @@ fn bench_pipeline_encode_sequence(c: &mut Criterion) {
 
                     let input = EncodeInput::YUV(&yuv);
                     if let Ok(vf) = encoder.encode_to_message(input, pts as i64) {
-                        total_output_bytes += vf.compute_size() as usize;
+                        let mut msg = Message::new();
+                        msg.set_video_frame(vf);
+                        total_output_bytes += black_box(msg.write_to_bytes().unwrap()).len();
                     }
                 }
                 black_box(total_output_bytes)
