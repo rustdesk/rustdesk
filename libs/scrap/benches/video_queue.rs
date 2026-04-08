@@ -45,7 +45,8 @@ fn bench_push(c: &mut Criterion) {
         let q = ArrayQueue::new(QUEUE_CAP);
         b.iter(|| {
             for f in &frames {
-                let _ = q.push(black_box(f.clone()));
+                // Real code uses force_push (io_loop.rs:1310)
+                q.force_push(black_box(f.clone()));
             }
             // Drain for next iteration
             while q.pop().is_some() {}
