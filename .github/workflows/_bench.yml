@@ -1,0 +1,30 @@
+name: Benchmarks
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # CodSpeed OIDC authentication
+
+env:
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  benchmarks:
+    name: Performance benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/setup-linux
+
+      - name: Install cargo-codspeed
+        run: cargo install cargo-codspeed
+
+      - name: Build benchmarks
+        run: cargo codspeed build --package scrap
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: cargo codspeed run --package scrap
