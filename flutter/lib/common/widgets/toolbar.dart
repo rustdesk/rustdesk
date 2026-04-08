@@ -157,17 +157,6 @@ void showWaylandKeyboardInputWarningDialog(
       safeSetState(() {});
       try {
         await onEnable();
-        ffi.inputModel.keyboardInputAllowed = true;
-        if (remember) {
-          await bind.mainSetPeerOption(
-              id: id,
-              key: kPeerOptionAllowWaylandKeyboard,
-              value: bool2option(kPeerOptionAllowWaylandKeyboard, true));
-        }
-        if (dontAskAgainForConnection) {
-          setWaylandKeyboardPromptSuppressedForConnection(connectionId, true);
-        }
-        closeDialog();
       } catch (e, st) {
         debugPrint('Failed to enable Wayland keyboard input consent: $e');
         debugPrintStack(stackTrace: st);
@@ -175,6 +164,23 @@ void showWaylandKeyboardInputWarningDialog(
         safeSetState(() {});
         return;
       }
+
+      ffi.inputModel.keyboardInputAllowed = true;
+      if (remember) {
+        try {
+          await bind.mainSetPeerOption(
+              id: id,
+              key: kPeerOptionAllowWaylandKeyboard,
+              value: bool2option(kPeerOptionAllowWaylandKeyboard, true));
+        } catch (e, st) {
+          debugPrint('Failed to persist Wayland keyboard input consent: $e');
+          debugPrintStack(stackTrace: st);
+        }
+      }
+      if (dontAskAgainForConnection) {
+        setWaylandKeyboardPromptSuppressedForConnection(connectionId, true);
+      }
+      closeDialog();
     }
 
     void cancel() {
