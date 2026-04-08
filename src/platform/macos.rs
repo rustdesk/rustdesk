@@ -319,6 +319,7 @@ mod tests {
             .and_then(|file| file.contents_utf8())
             .map(correct_app_name)
             .expect("install.scpt should be embedded");
+        let app_name = crate::get_app_name();
 
         assert!(
             install.contains("launchctl bootstrap gui/$uid")
@@ -335,9 +336,13 @@ mod tests {
             "install script must quote username-derived paths",
         );
         assert!(
-            install.contains("test ! -f \"$user_preferences_dir/RustDesk.toml\" || cp -rf")
-                && install
-                    .contains("test ! -f \"$user_preferences_dir/RustDesk2.toml\" || cp -rf"),
+            install.contains(&format!(
+                "test ! -f \"$user_preferences_dir/{}.toml\" || cp -rf",
+                app_name
+            )) && install.contains(&format!(
+                "test ! -f \"$user_preferences_dir/{}2.toml\" || cp -rf",
+                app_name
+            )),
             "install script must treat missing preference files as optional",
         );
     }
