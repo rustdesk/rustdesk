@@ -67,7 +67,8 @@ def write_app_metadata(output_folder: str):
     print(f"App metadata has been written to {output_path}")
 
 # Allowlist pattern for valid cargo target triples (e.g. x86_64-unknown-linux-gnu)
-_VALID_TARGET_RE = re.compile(r'^[A-Za-z0-9_\-]+$')
+# and JSON target spec paths (e.g. ./targets/my-target.json)
+_VALID_TARGET_RE = re.compile(r'^[A-Za-z0-9_.\-/\\]+$')
 
 
 def build_portable(output_folder: str, target: str):
@@ -76,7 +77,8 @@ def build_portable(output_folder: str, target: str):
         if not _VALID_TARGET_RE.match(target):
             raise ValueError(
                 f"Invalid --target value {target!r}. "
-                "Only alphanumeric characters, hyphens, and underscores are allowed."
+                "Only alphanumeric characters, hyphens, underscores, dots, "
+                "and path separators (/ or \\) are allowed."
             )
         subprocess.run(["cargo", "build", "--release", "--target", target], check=True)
     else:
