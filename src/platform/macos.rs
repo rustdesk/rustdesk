@@ -234,16 +234,12 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
             }
-            _ => {
+            Ok(status) if !status.success() => {
+                log::warn!("run osascript failed with status: {}", status);
+            }
+            Ok(_) => {
                 let installed = std::path::Path::new(&agent_plist_file).exists();
                 log::info!("Agent file {} installed: {}", agent_plist_file, installed);
-                if installed {
-                    log::info!("launch server");
-                    std::process::Command::new("launchctl")
-                        .args(&["load", "-w", &agent_plist_file])
-                        .status()
-                        .ok();
-                }
             }
         }
     });
@@ -333,6 +329,16 @@ mod tests {
             install.contains("launchctl kickstart -k gui/$uid/$agent_label")
                 || install.contains("launchctl kickstart -k user/$uid/$agent_label"),
             "install script must kickstart the agent after bootstrapping it",
+        );
+        assert!(
+            install.contains("quoted form of user"),
+            "install script must quote username-derived paths",
+        );
+        assert!(
+            install.contains("test ! -f \"$user_preferences_dir/RustDesk.toml\" || cp -rf")
+                && install
+                    .contains("test ! -f \"$user_preferences_dir/RustDesk2.toml\" || cp -rf"),
+            "install script must treat missing preference files as optional",
         );
     }
 }
