@@ -1237,7 +1237,32 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       peerPairingPassphrase(context, enabled),
       _OptionCheckBox(context, 'Allow unverified peer trust',
           kOptionAllowUnverifiedPeerTrust,
-          enabled: enabled),
+          enabled: enabled,
+          labelSuffix: Tooltip(
+            waitDuration: const Duration(milliseconds: 0),
+            message: translate(
+                'Allows first-contact trust without pairing or pretrusted peer keys. Only enable this if you accept TOFU risk.'),
+            child: Icon(
+              Icons.warning_amber_rounded,
+              size: 16,
+              color: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.color
+                  ?.withOpacity(0.6),
+            ),
+          ),
+          optSetter: (key, value) async {
+            if (!value) {
+              await mainSetBoolOption(key, value);
+              return;
+            }
+            final approved =
+                await _confirmEnableUnverifiedPeerTrust(context) ?? false;
+            if (approved) {
+              await mainSetBoolOption(key, value);
+            }
+          }),
       lanDiscoveryMode(context, enabled),
       ...directIp(context),
       whitelist(),
@@ -2626,6 +2651,7 @@ Widget _OptionCheckBox(
   bool isServer = true,
   bool Function()? optGetter,
   Future<void> Function(String, bool)? optSetter,
+  Widget? labelSuffix,
 }) {
   getOpt() => optGetter != null
       ? optGetter()
@@ -2670,9 +2696,15 @@ Widget _OptionCheckBox(
             child: checkedIcon?.marginOnly(right: 5),
           ),
           Expanded(
-              child: Text(
-            translate(label),
-            style: TextStyle(color: disabledTextColor(context, enabled)),
+              child: Row(
+            children: [
+              Expanded(
+                  child: Text(
+                translate(label),
+                style: TextStyle(color: disabledTextColor(context, enabled)),
+              )),
+              if (labelSuffix != null) labelSuffix.marginOnly(left: 6),
+            ],
           ))
         ],
       ),
@@ -2683,6 +2715,47 @@ Widget _OptionCheckBox(
           }
         : null,
   );
+}
+
+Future<bool?> _confirmEnableUnverifiedPeerTrust(BuildContext context) {
+  return gFFI.dialogManager.show<bool>((setState, close, context) {
+    void accept() {
+      close(true);
+    }
+
+    void cancel() {
+      close(false);
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('Enable unverified peer trust?')),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(translate(
+                'This allows first-contact trust without pairing or pretrusted peer keys.')),
+            const SizedBox(height: 12),
+            Text(
+              translate(
+                  'A compromised or malicious server could present the wrong peer identity on first connection.'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 12),
+            Text(translate(
+                'Only enable this if you explicitly accept the trust-on-first-use risk.')),
+          ],
+        ),
+      ),
+      actions: [
+        dialogButton('Cancel', onPressed: cancel, isOutline: true),
+        dialogButton('Accept', onPressed: accept),
+      ],
+      onCancel: cancel,
+    );
+  });
 }
 
 // ignore: non_constant_identifier_names
