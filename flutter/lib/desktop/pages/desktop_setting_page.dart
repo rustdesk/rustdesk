@@ -2920,10 +2920,10 @@ Widget _SubLabeledWidget(BuildContext context, String label, Widget child,
         '${translate(label)}: ',
         style: TextStyle(color: disabledTextColor(context, enabled)),
       ),
-      SizedBox(
+      const SizedBox(
         width: 10,
       ),
-      child,
+      Flexible(child: child),
     ],
   ).marginOnly(left: _kContentHSubMargin);
 }
