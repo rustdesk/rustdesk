@@ -5,6 +5,10 @@ class IosCapsLockStateTracker {
 
   bool get value => _capsLock;
 
+  void reset() {
+    _capsLock = false;
+  }
+
   bool update({
     required String? character,
     required bool shiftPressed,

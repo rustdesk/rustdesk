@@ -92,5 +92,32 @@ void main() {
         isTrue,
       );
     });
+
+    test('reset clears cached caps lock state', () {
+      final tracker = IosCapsLockStateTracker();
+
+      expect(
+        tracker.update(
+          character: null,
+          shiftPressed: false,
+          logicalKey: LogicalKeyboardKey.capsLock,
+          isKeyDown: true,
+        ),
+        isTrue,
+      );
+
+      tracker.reset();
+
+      expect(tracker.value, isFalse);
+      expect(
+        tracker.update(
+          character: null,
+          shiftPressed: false,
+          logicalKey: LogicalKeyboardKey.keyA,
+          isKeyDown: false,
+        ),
+        isFalse,
+      );
+    });
   });
 }

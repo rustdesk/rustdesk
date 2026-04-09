@@ -957,9 +957,12 @@ class InputModel {
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
 
-  /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
+  /// Reset local key state, including modifiers and cached iOS lock state.
   void resetModifiers() {
     shift = ctrl = alt = command = false;
+    if (isIOS) {
+      _iosCapsLockTracker.reset();
+    }
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.
