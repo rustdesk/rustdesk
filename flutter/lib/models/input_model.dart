@@ -694,8 +694,7 @@ class InputModel {
     final isAndroidSoftRaw = isAndroid &&
         androidSoftKeyboardActive &&
         _isAndroidSoftKeyboardRawEvent(e);
-    if (isAndroid &&
-        androidSoftKeyboardActive &&
+    if (isAndroidSoftRaw &&
         !_hasHardwareModifierPressed &&
         _isModifierLogicalKey(e.logicalKey)) {
       alt = false;
