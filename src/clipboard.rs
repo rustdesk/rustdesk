@@ -466,6 +466,7 @@ pub fn is_support_multi_clipboard(peer_version: &str, peer_platform: &str) -> bo
     true
 }
 
+/// Returns the first plain-text clipboard entry from a multi-clipboard payload.
 pub fn get_first_text_clipboard(multi_clipboards: &MultiClipboards) -> Option<Clipboard> {
     multi_clipboards
         .clipboards
@@ -474,6 +475,7 @@ pub fn get_first_text_clipboard(multi_clipboards: &MultiClipboards) -> Option<Cl
         .cloned()
 }
 
+/// Decodes a plain-text clipboard entry, including RustDesk's compressed payloads.
 pub fn decode_text_clipboard(clipboard: &Clipboard) -> Option<String> {
     if clipboard.format.enum_value() != Ok(hbb_common::message_proto::ClipboardFormat::Text) {
         return None;
@@ -486,6 +488,7 @@ pub fn decode_text_clipboard(clipboard: &Clipboard) -> Option<String> {
     String::from_utf8(content).ok()
 }
 
+/// Extracts and decodes the first plain-text entry from a multi-clipboard payload.
 pub fn decode_multi_clipboards_text(multi_clipboards: &MultiClipboards) -> Option<String> {
     get_first_text_clipboard(multi_clipboards)
         .as_ref()
