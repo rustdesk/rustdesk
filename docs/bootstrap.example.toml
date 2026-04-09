@@ -14,8 +14,8 @@ rendezvous-servers = [
 ]
 
 key = "BASE64_SERVER_PUBLIC_KEY"
-api-server = "http://hbbs.example.com:21114"
-update-server = "http://updates.example.com/version/latest"
+api-server = "https://hbbs.example.com:21114"
+update-server = "https://updates.example.com/version/latest"
 
 [trusted-peers]
 "peer-1" = "BASE64_PEER_1_SIGNING_KEY"

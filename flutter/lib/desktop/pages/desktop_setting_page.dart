@@ -1319,7 +1319,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         children: [
           Expanded(
             child: Text(
-              pairingPassphrase.isEmpty ? 'Disabled' : 'Configured',
+              translate(
+                  pairingPassphrase.isEmpty ? 'Disabled' : 'Configured'),
               style: TextStyle(
                 color: disabledTextColor(
                     context, enabled && !locked && !isOptFixed),
@@ -1333,7 +1334,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     setState(() {});
                   }
                 : null,
-            child: Text(pairingPassphrase.isEmpty ? 'Set' : 'Change'),
+            child: Text(
+                translate(pairingPassphrase.isEmpty ? 'Set' : 'Change')),
           ).marginOnly(right: 8),
           OutlinedButton(
             onPressed: enabled &&
@@ -1425,7 +1427,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     children: [
                       Expanded(
                         child: Text(
-                          pairingPassphrase.isEmpty ? 'Disabled' : 'Configured',
+                          translate(pairingPassphrase.isEmpty
+                              ? 'Disabled'
+                              : 'Configured'),
                           style: TextStyle(
                             color: disabledTextColor(
                               context,
@@ -1442,8 +1446,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                                 setState(() {});
                               }
                             : null,
-                        child:
-                            Text(pairingPassphrase.isEmpty ? 'Set' : 'Change'),
+                        child: Text(translate(
+                            pairingPassphrase.isEmpty ? 'Set' : 'Change')),
                       ).marginOnly(right: 8),
                       OutlinedButton(
                         onPressed: enabled &&

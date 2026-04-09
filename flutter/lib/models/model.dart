@@ -894,6 +894,24 @@ class FfiModel with ChangeNotifier {
     final text = evt['text'];
     final link = evt['link'];
 
+    void rejectSecurityPrompt({required bool pairing}) {
+      () async {
+        if (pairing) {
+          await bind.sessionSubmitDirectPairingPassphrase(
+            sessionId: sessionId,
+            passphrase: '',
+            approved: false,
+          );
+        } else {
+          await bind.sessionConfirmDirectTrust(
+            sessionId: sessionId,
+            approved: false,
+          );
+        }
+        closeConnection();
+      }();
+    }
+
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
     // This includes connection errors, session-ending messages, elevation errors, etc.
     // Safety: releasing pointer lock on errors prevents the user from being stuck.
@@ -906,9 +924,17 @@ class FfiModel with ChangeNotifier {
 
     if (type == 'input-pairing-passphrase' ||
         type == 'input-direct-pairing-passphrase') {
-      showPairingPassphraseDialog(sessionId, dialogManager, text);
+      if (text is String) {
+        showPairingPassphraseDialog(sessionId, dialogManager, text);
+      } else {
+        rejectSecurityPrompt(pairing: true);
+      }
     } else if (type == 'confirm-peer-trust' || type == 'confirm-direct-trust') {
-      showPeerTrustDialog(sessionId, dialogManager, text);
+      if (text is String) {
+        showPeerTrustDialog(sessionId, dialogManager, text);
+      } else {
+        rejectSecurityPrompt(pairing: false);
+      }
     } else if (type == 'error' &&
         title == 'Connection Error' &&
         text is String &&
