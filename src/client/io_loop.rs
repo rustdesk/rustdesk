@@ -586,7 +586,6 @@ impl<T: InvokeUiSession> Remote<T> {
                         file_num,
                         include_hidden,
                         is_remote,
-                        Vec::new(),
                         od,
                     ));
                     allow_err!(
@@ -659,7 +658,6 @@ impl<T: InvokeUiSession> Remote<T> {
                         file_num,
                         include_hidden,
                         is_remote,
-                        Vec::new(),
                         od,
                     );
                     job.is_last_job = true;
