@@ -1091,6 +1091,13 @@ class InputModel {
   }
 
   void releaseTransientModifiersToHost() {
+    if (!keyboardPerm || isViewCamera) {
+      shift = false;
+      ctrl = false;
+      alt = false;
+      command = false;
+      return;
+    }
     if (shift && !shiftLocked) {
       bind.sessionInputKey(
           sessionId: sessionId,
