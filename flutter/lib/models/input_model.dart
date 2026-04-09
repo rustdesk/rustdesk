@@ -339,6 +339,10 @@ class InputModel {
   var ctrlLocked = false;
   var altLocked = false;
   var commandLocked = false;
+  var hardwareShift = false;
+  var hardwareCtrl = false;
+  var hardwareAlt = false;
+  var hardwareCommand = false;
 
   final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
@@ -551,6 +555,11 @@ class InputModel {
           logicalKey: e.logicalKey,
           timeStamp: e.timeStamp,
         );
+    if (!(isAndroid &&
+        androidSoftKeyboardActive &&
+        _isAndroidSoftKeyboardEvent(e))) {
+      _setHardwareModifierState(e.logicalKey, true);
+    }
     if (e.logicalKey == LogicalKeyboardKey.altLeft) {
       if (!alt) {
         alt = true;
@@ -600,6 +609,11 @@ class InputModel {
   }
 
   void handleKeyUpEventModifiers(KeyEvent e) {
+    if (!(isAndroid &&
+        androidSoftKeyboardActive &&
+        _isAndroidSoftKeyboardEvent(e))) {
+      _setHardwareModifierState(e.logicalKey, false);
+    }
     if (e.logicalKey == LogicalKeyboardKey.altLeft) {
       alt = false;
       toReleaseKeys.lastLAltKeyEvent = null;
@@ -639,9 +653,57 @@ class InputModel {
     return !isNormalUsbHidUsage;
   }
 
+  bool _isModifierLogicalKey(LogicalKeyboardKey key) {
+    return key == LogicalKeyboardKey.shiftLeft ||
+        key == LogicalKeyboardKey.shiftRight ||
+        key == LogicalKeyboardKey.controlLeft ||
+        key == LogicalKeyboardKey.controlRight ||
+        key == LogicalKeyboardKey.altLeft ||
+        key == LogicalKeyboardKey.altRight ||
+        key == LogicalKeyboardKey.metaLeft ||
+        key == LogicalKeyboardKey.metaRight ||
+        key == LogicalKeyboardKey.superKey;
+  }
+
+  bool _isAndroidSoftKeyboardRawEvent(RawKeyEvent e) {
+    final usbHidUsage = e.physicalKey.usbHidUsage;
+    final isNormalUsbHidUsage = (usbHidUsage >> 20) == 0;
+    return !isNormalUsbHidUsage;
+  }
+
+  void _setHardwareModifierState(LogicalKeyboardKey key, bool down) {
+    if (key == LogicalKeyboardKey.shiftLeft ||
+        key == LogicalKeyboardKey.shiftRight) {
+      hardwareShift = down;
+    } else if (key == LogicalKeyboardKey.controlLeft ||
+        key == LogicalKeyboardKey.controlRight) {
+      hardwareCtrl = down;
+    } else if (key == LogicalKeyboardKey.altLeft ||
+        key == LogicalKeyboardKey.altRight) {
+      hardwareAlt = down;
+    } else if (key == LogicalKeyboardKey.metaLeft ||
+        key == LogicalKeyboardKey.metaRight ||
+        key == LogicalKeyboardKey.superKey) {
+      hardwareCommand = down;
+    }
+  }
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
+    final isAndroidSoftRaw = isAndroid &&
+        androidSoftKeyboardActive &&
+        _isAndroidSoftKeyboardRawEvent(e);
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        !_hasHardwareModifierPressed &&
+        _isModifierLogicalKey(e.logicalKey)) {
+      alt = false;
+      ctrl = false;
+      shift = false;
+      command = false;
+      return KeyEventResult.handled;
+    }
     if (!isInputSourceFlutter) {
       if (isDesktop) {
         return KeyEventResult.handled;
@@ -661,6 +723,9 @@ class InputModel {
 
     final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
+      if (!isAndroidSoftRaw) {
+        _setHardwareModifierState(key, true);
+      }
       if (!e.repeat) {
         if (e.isAltPressed && !alt) {
           alt = true;
@@ -675,6 +740,9 @@ class InputModel {
       toReleaseRawKeys.updateKeyDown(key, e);
     }
     if (e is RawKeyUpEvent) {
+      if (!isAndroidSoftRaw) {
+        _setHardwareModifierState(key, false);
+      }
       if (key == LogicalKeyboardKey.altLeft ||
           key == LogicalKeyboardKey.altRight) {
         alt = false;
@@ -718,6 +786,14 @@ class InputModel {
     // For Backspace and Enter, send them directly using the reliable logical
     // key data. This is required because for some IMEs (ko/zh/ja) returning
     // `handled` prevents the IME from processing the key through onChanged.
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        !_hasHardwareModifierPressed &&
+        _isModifierLogicalKey(e.logicalKey)) {
+      releaseTransientModifiersToHost();
+      return KeyEventResult.handled;
+    }
+
     if (isAndroid &&
         androidSoftKeyboardActive &&
         _isAndroidSoftKeyboardEvent(e)) {
@@ -938,9 +1014,9 @@ class InputModel {
   }
 
   static Map<String, dynamic> getMouseEventMove() => {
-        'type': _kMouseEventMove,
-        'buttons': 0,
-      };
+    'type': _kMouseEventMove,
+    'buttons': 0,
+  };
 
   Map<String, dynamic> _getMouseEvent(PointerEvent evt, String type) {
     final Map<String, dynamic> out = {};
@@ -996,6 +1072,11 @@ class InputModel {
   /// Send scroll event with scroll distance [y].
   Future<void> scroll(int y) async {
     if (isViewCamera) return;
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        !_hasHardwareModifierPressed) {
+      releaseTransientModifiersToHost();
+    }
     await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json
@@ -1008,8 +1089,86 @@ class InputModel {
     shiftLocked = ctrlLocked = altLocked = commandLocked = false;
   }
 
+  void releaseTransientModifiersToHost() {
+    if (shift && !shiftLocked) {
+      bind.sessionInputKey(
+          sessionId: sessionId,
+          name: 'VK_SHIFT',
+          down: false,
+          press: false,
+          alt: false,
+          ctrl: false,
+          shift: false,
+          command: false);
+    }
+    if (ctrl && !ctrlLocked) {
+      bind.sessionInputKey(
+          sessionId: sessionId,
+          name: 'VK_CONTROL',
+          down: false,
+          press: false,
+          alt: false,
+          ctrl: false,
+          shift: false,
+          command: false);
+    }
+    if (alt && !altLocked) {
+      bind.sessionInputKey(
+          sessionId: sessionId,
+          name: 'VK_MENU',
+          down: false,
+          press: false,
+          alt: false,
+          ctrl: false,
+          shift: false,
+          command: false);
+    }
+    if (command && !commandLocked) {
+      bind.sessionInputKey(
+          sessionId: sessionId,
+          name: 'Meta',
+          down: false,
+          press: false,
+          alt: false,
+          ctrl: false,
+          shift: false,
+          command: false);
+    }
+    shift = false;
+    ctrl = false;
+    alt = false;
+    command = false;
+  }
+
+  bool get _hasHardwareModifierPressed {
+    return hardwareShift || hardwareCtrl || hardwareAlt || hardwareCommand;
+  }
+
+  bool get _hardwareShiftPressed {
+    return hardwareShift;
+  }
+
+  bool get _hardwareCtrlPressed {
+    return hardwareCtrl;
+  }
+
+  bool get _hardwareAltPressed {
+    return hardwareAlt;
+  }
+
+  bool get _hardwareCommandPressed {
+    return hardwareCommand;
+  }
+
   /// Modify the given modifier map [evt] based on current modifier key status.
   Map<String, dynamic> modify(Map<String, dynamic> evt) {
+    if (isAndroid) {
+      if (_hardwareCtrlPressed || ctrlLocked) evt['ctrl'] = 'true';
+      if (_hardwareShiftPressed || shiftLocked) evt['shift'] = 'true';
+      if (_hardwareAltPressed || altLocked) evt['alt'] = 'true';
+      if (_hardwareCommandPressed || commandLocked) evt['command'] = 'true';
+      return evt;
+    }
     if (ctrl || ctrlLocked) evt['ctrl'] = 'true';
     if (shift || shiftLocked) evt['shift'] = 'true';
     if (alt || altLocked) evt['alt'] = 'true';
@@ -1021,6 +1180,11 @@ class InputModel {
   Future<void> sendMouse(String type, MouseButtons button) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        !_hasHardwareModifierPressed) {
+      releaseTransientModifiersToHost();
+    }
     await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));

@@ -312,10 +312,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // logically active even though the inserted text is already composed.
       // Clear modifiers before forwarding soft-keyboard text so host-side
       // legacy character input does not apply Shift twice.
-      inputModel.alt = false;
-      inputModel.ctrl = false;
-      inputModel.shift = false;
-      inputModel.command = false;
+      inputModel.releaseTransientModifiersToHost();
       if (content.length > 1) {
         if (oldValue != '' &&
             content.length == 2 &&
@@ -350,10 +347,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void inputChar(String char) {
-    inputModel.alt = false;
-    inputModel.ctrl = false;
-    inputModel.shift = false;
-    inputModel.command = false;
+    inputModel.releaseTransientModifiersToHost();
     if (char == '\n') {
       char = 'VK_RETURN';
     } else if (char == ' ') {
