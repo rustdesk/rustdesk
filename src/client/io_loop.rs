@@ -1472,6 +1472,9 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
+                            // We cannot call cancel_transfer_job/handle_job_status while holding
+                            // a mutable borrow from fs::get_job(&mut self.write_jobs), so defer
+                            // the error handling until after the borrow scope ends.
                             let mut set_files_err = None;
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);
@@ -1488,6 +1491,9 @@ impl<T: InvokeUiSession> Remote<T> {
                                     );
                                 }
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
+                                // Intentionally keep raw entries here:
+                                // - remote remove flow executes deletions on peer side;
+                                // - local remove flow is populated from local get_recursive_files().
                                 job.files = entries;
                                 self.handler
                                     .update_folder_files(fd.id, &job.files, fd.path, false, false);
