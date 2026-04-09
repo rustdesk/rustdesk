@@ -161,6 +161,7 @@ class Peer {
         device_group_name == other.device_group_name &&
         loginName == other.loginName &&
         note == other.note &&
+        sameServer == other.sameServer &&
         discoveryEndpoint == other.discoveryEndpoint &&
         discoveryTrustPhrase == other.discoveryTrustPhrase &&
         discoveryTrusted == other.discoveryTrusted;
