@@ -339,10 +339,15 @@ class InputModel {
   var ctrlLocked = false;
   var altLocked = false;
   var commandLocked = false;
-  var hardwareShift = false;
-  var hardwareCtrl = false;
-  var hardwareAlt = false;
-  var hardwareCommand = false;
+  var hardwareShiftLeft = false;
+  var hardwareShiftRight = false;
+  var hardwareCtrlLeft = false;
+  var hardwareCtrlRight = false;
+  var hardwareAltLeft = false;
+  var hardwareAltRight = false;
+  var hardwareCommandLeft = false;
+  var hardwareCommandRight = false;
+  var hardwareCommandSuper = false;
 
   final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
@@ -672,19 +677,24 @@ class InputModel {
   }
 
   void _setHardwareModifierState(LogicalKeyboardKey key, bool down) {
-    if (key == LogicalKeyboardKey.shiftLeft ||
-        key == LogicalKeyboardKey.shiftRight) {
-      hardwareShift = down;
-    } else if (key == LogicalKeyboardKey.controlLeft ||
-        key == LogicalKeyboardKey.controlRight) {
-      hardwareCtrl = down;
-    } else if (key == LogicalKeyboardKey.altLeft ||
-        key == LogicalKeyboardKey.altRight) {
-      hardwareAlt = down;
-    } else if (key == LogicalKeyboardKey.metaLeft ||
-        key == LogicalKeyboardKey.metaRight ||
-        key == LogicalKeyboardKey.superKey) {
-      hardwareCommand = down;
+    if (key == LogicalKeyboardKey.shiftLeft) {
+      hardwareShiftLeft = down;
+    } else if (key == LogicalKeyboardKey.shiftRight) {
+      hardwareShiftRight = down;
+    } else if (key == LogicalKeyboardKey.controlLeft) {
+      hardwareCtrlLeft = down;
+    } else if (key == LogicalKeyboardKey.controlRight) {
+      hardwareCtrlRight = down;
+    } else if (key == LogicalKeyboardKey.altLeft) {
+      hardwareAltLeft = down;
+    } else if (key == LogicalKeyboardKey.altRight) {
+      hardwareAltRight = down;
+    } else if (key == LogicalKeyboardKey.metaLeft) {
+      hardwareCommandLeft = down;
+    } else if (key == LogicalKeyboardKey.metaRight) {
+      hardwareCommandRight = down;
+    } else if (key == LogicalKeyboardKey.superKey) {
+      hardwareCommandSuper = down;
     }
   }
 
@@ -1086,7 +1096,10 @@ class InputModel {
   void resetModifiers() {
     shift = ctrl = alt = command = false;
     shiftLocked = ctrlLocked = altLocked = commandLocked = false;
-    hardwareShift = hardwareCtrl = hardwareAlt = hardwareCommand = false;
+    hardwareShiftLeft = hardwareShiftRight = false;
+    hardwareCtrlLeft = hardwareCtrlRight = false;
+    hardwareAltLeft = hardwareAltRight = false;
+    hardwareCommandLeft = hardwareCommandRight = hardwareCommandSuper = false;
   }
 
   void releaseTransientModifiersToHost() {
@@ -1148,23 +1161,26 @@ class InputModel {
   }
 
   bool get _hasHardwareModifierPressed {
-    return hardwareShift || hardwareCtrl || hardwareAlt || hardwareCommand;
+    return _hardwareShiftPressed ||
+        _hardwareCtrlPressed ||
+        _hardwareAltPressed ||
+        _hardwareCommandPressed;
   }
 
   bool get _hardwareShiftPressed {
-    return hardwareShift;
+    return hardwareShiftLeft || hardwareShiftRight;
   }
 
   bool get _hardwareCtrlPressed {
-    return hardwareCtrl;
+    return hardwareCtrlLeft || hardwareCtrlRight;
   }
 
   bool get _hardwareAltPressed {
-    return hardwareAlt;
+    return hardwareAltLeft || hardwareAltRight;
   }
 
   bool get _hardwareCommandPressed {
-    return hardwareCommand;
+    return hardwareCommandLeft || hardwareCommandRight || hardwareCommandSuper;
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.
