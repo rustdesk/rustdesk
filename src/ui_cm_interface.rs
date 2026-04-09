@@ -1529,16 +1529,7 @@ async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
 #[cfg(not(any(target_os = "ios")))]
 async fn rename_file(path: String, new_name: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
-        spawn_blocking(move || {
-            // Rename target must not be empty
-            if new_name.is_empty() {
-                bail!("new file name cannot be empty");
-            }
-            // Validate that new_name doesn't contain path traversal
-            fs::validate_file_name_no_traversal(&new_name)?;
-            fs::rename_file(&path, &new_name)
-        })
-        .await,
+        spawn_blocking(move || fs::rename_file(&path, &new_name)).await,
         id,
         0,
         tx,
