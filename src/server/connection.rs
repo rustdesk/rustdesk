@@ -2020,9 +2020,11 @@ impl Connection {
         self.validate_password_plain(storage)
     }
 
-    // This is coarse brute-force protection for the temporary password.
-    // We track consecutive full login failures against the current temporary password budget
-    // across all sources. Only a temporary-password success clears this state.
+    // This is coarse brute-force protection for the current temporary password value.
+    // We only care whether the active temporary password itself was presented correctly,
+    // not whether later authorization steps succeed. A successful temporary-password
+    // match clears this state immediately, and the counter also resets whenever the
+    // temporary password changes or is rotated.
     fn check_update_temporary_password(&self, temporary_password_success: bool) {
         const MAX_CONSECUTIVE_FAILURES: i32 = 10;
         #[derive(Default)]
