@@ -1087,6 +1087,7 @@ class InputModel {
   void resetModifiers() {
     shift = ctrl = alt = command = false;
     shiftLocked = ctrlLocked = altLocked = commandLocked = false;
+    hardwareShift = hardwareCtrl = hardwareAlt = hardwareCommand = false;
   }
 
   void releaseTransientModifiersToHost() {
