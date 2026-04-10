@@ -3686,7 +3686,7 @@ pub mod peer_online {
             (url, port)
         });
         match tmp {
-            Some((url, port)) if port > 0 => {
+            Some((url, port)) if port > 1 => {
                 let online_server = format!("{}:{}", url, port - 1);
                 connect_tcp(online_server, CONNECT_TIMEOUT).await
             }
