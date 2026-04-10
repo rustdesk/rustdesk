@@ -1,4 +1,0 @@
-libyuv provides CMake targets:
-
-    find_package(libyuv CONFIG REQUIRED)
-    target_link_libraries(main PRIVATE yuv)
