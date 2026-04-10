@@ -1,0 +1,26 @@
+version: '3'
+services:
+  hbbs:
+    image: rustdesk/rustdesk-server:latest
+    container_name: bvaidesk-hbbs
+    command: hbbs -r bvaidesk-hbbr:21117
+    volumes:
+      - ./data:/root
+    ports:
+      - "21115:21115"
+      - "21116:21116"
+      - "21116:21116/udp"
+      - "21118:21118"
+    depends_on:
+      - hbbr
+    restart: unless-stopped
+  hbbr:
+    image: rustdesk/rustdesk-server:latest
+    container_name: bvaidesk-hbbr
+    command: hbbr
+    volumes:
+      - ./data:/root
+    ports:
+      - "21117:21117"
+      - "21119:21119"
+    restart: unless-stopped
