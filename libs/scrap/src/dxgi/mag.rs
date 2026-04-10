@@ -1,4 +1,6 @@
 // logic from webrtc -- https://github.com/shiguredo/libwebrtc/blob/main/modules/desktop_capture/win/screen_capturer_win_magnifier.cc
+#![allow(non_snake_case)]
+
 use lazy_static;
 use std::{
     ffi::CString,

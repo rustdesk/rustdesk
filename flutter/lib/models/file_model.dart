@@ -30,15 +30,17 @@ enum SortBy {
 class JobID {
   int _count = 0;
   int next() {
-    String v = bind.mainGetCommonSync(key: 'transfer-job-id');
     try {
-      return int.parse(v);
+      if (!isWeb) {
+        String v = bind.mainGetCommonSync(key: 'transfer-job-id');
+        return int.parse(v);
+      }
     } catch (e) {
-      // unreachable. But we still handle it to make it safe.
-      // If we return -1, we have to check it in the caller.
-      _count++;
-      return _count;
+      debugPrint("Failed to get transfer job id: $e");
     }
+    // Finally increase the count if on the web or if failed to get the id.
+    _count++;
+    return _count;
   }
 }
 
@@ -109,6 +111,34 @@ class FileModel {
 
   void receiveEmptyDirs(Map<String, dynamic> evt) {
     fileFetcher.tryCompleteEmptyDirsTask(evt['value'], evt['is_local']);
+  }
+
+  // This method fixes a deadlock that occurred when the previous code directly
+  // called jobController.jobError(evt) in the job_error event handler.
+  //
+  // The problem with directly calling jobController.jobError():
+  //   1. fetchDirectoryRecursiveToRemove(jobID) registers readRecursiveTasks[jobID]
+  //      and waits for completion
+  //   2. If the remote has no permission (or some other errors), it returns a FileTransferError
+  //   3. The error triggers job_error event, which called jobController.jobError()
+  //   4. jobController.jobError() calls getJob(jobID) to find the job in jobTable
+  //   5. But addDeleteDirJob() is called AFTER fetchDirectoryRecursiveToRemove(),
+  //      so the job doesn't exist yet in jobTable
+  //   6. Result: jobController.jobError() does nothing useful, and
+  //      readRecursiveTasks[jobID] never completes, causing a 2s timeout
+  //
+  // Solution: Before calling jobController.jobError(), we first check if there's
+  // a pending readRecursiveTasks with this ID and complete it with the error.
+  void handleJobError(Map<String, dynamic> evt) {
+    final id = int.tryParse(evt['id']?.toString() ?? '');
+    if (id != null) {
+      final err = evt['err']?.toString() ?? 'Unknown error';
+      fileFetcher.tryCompleteRecursiveTaskWithError(id, err);
+    }
+    // Always call jobController.jobError(evt) to ensure all error events are processed,
+    // even if the event does not have a valid job ID. This allows for generic error handling
+    // or logging of unexpected errors.
+    jobController.jobError(evt);
   }
 
   Future<void> postOverrideFileConfirm(Map<String, dynamic> evt) async {
@@ -589,8 +619,21 @@ class FileController {
       } else if (item.isDirectory) {
         title = translate("Not an empty directory");
         dialogManager?.showLoading(translate("Waiting"));
-        final fd = await fileFetcher.fetchDirectoryRecursiveToRemove(
-            jobID, item.path, items.isLocal, true);
+        final FileDirectory fd;
+        try {
+          fd = await fileFetcher.fetchDirectoryRecursiveToRemove(
+              jobID, item.path, items.isLocal, true);
+        } catch (e) {
+          dialogManager?.dismissAll();
+          final dm = dialogManager;
+          if (dm != null) {
+            msgBox(sessionId, 'custom-error-nook-nocancel-hasclose',
+                translate("Error"), e.toString(), '', dm);
+          } else {
+            debugPrint("removeAction error msgbox failed: $e");
+          }
+          return;
+        }
         if (fd.path.isEmpty) {
           fd.path = item.path;
         }
@@ -604,7 +647,7 @@ class FileController {
               item.name,
               false);
           if (confirm == true) {
-            sendRemoveEmptyDir(
+            await sendRemoveEmptyDir(
               item.path,
               0,
               deleteJobId,
@@ -645,7 +688,7 @@ class FileController {
             // handle remove res;
             if (item.isDirectory &&
                 res['file_num'] == (entries.length - 1).toString()) {
-              sendRemoveEmptyDir(item.path, i, deleteJobId);
+              await sendRemoveEmptyDir(item.path, i, deleteJobId);
             }
           } else {
             jobController.updateJobStatus(deleteJobId,
@@ -658,7 +701,7 @@ class FileController {
                 final res = await jobController.jobResultListener.start();
                 if (item.isDirectory &&
                     res['file_num'] == (entries.length - 1).toString()) {
-                  sendRemoveEmptyDir(item.path, i, deleteJobId);
+                  await sendRemoveEmptyDir(item.path, i, deleteJobId);
                 }
               }
             } else {
@@ -753,9 +796,9 @@ class FileController {
         fileNum: fileNum);
   }
 
-  void sendRemoveEmptyDir(String path, int fileNum, int actId) {
+  Future<void> sendRemoveEmptyDir(String path, int fileNum, int actId) async {
     history.removeWhere((element) => element.contains(path));
-    bind.sessionRemoveAllEmptyDirs(
+    await bind.sessionRemoveAllEmptyDirs(
         sessionId: sessionId, actId: actId, path: path, isRemote: !isLocal);
   }
 
@@ -1031,30 +1074,54 @@ class JobController {
     await bind.sessionCancelJob(sessionId: sessionId, actId: id);
   }
 
-  void loadLastJob(Map<String, dynamic> evt) {
+  Future<void> loadLastJob(Map<String, dynamic> evt) async {
     debugPrint("load last job: $evt");
     Map<String, dynamic> jobDetail = json.decode(evt['value']);
-    // int id = int.parse(jobDetail['id']);
     String remote = jobDetail['remote'];
     String to = jobDetail['to'];
     bool showHidden = jobDetail['show_hidden'];
     int fileNum = jobDetail['file_num'];
     bool isRemote = jobDetail['is_remote'];
-    final currJobId = JobController.jobID.next();
-    String fileName = path.basename(isRemote ? remote : to);
-    var jobProgress = JobProgress()
-      ..type = JobType.transfer
-      ..fileName = fileName
-      ..jobName = isRemote ? remote : to
-      ..id = currJobId
-      ..isRemoteToLocal = isRemote
-      ..fileNum = fileNum
-      ..remote = remote
-      ..to = to
-      ..showHidden = showHidden
-      ..state = JobState.paused;
-    jobTable.add(jobProgress);
-    bind.sessionAddJob(
+    bool isAutoStart = jobDetail['auto_start'] == true;
+    int currJobId = -1;
+    if (isAutoStart) {
+      // Ensure jobDetail['id'] exists and is an int
+      if (jobDetail.containsKey('id') &&
+          jobDetail['id'] != null &&
+          jobDetail['id'] is int) {
+        currJobId = jobDetail['id'];
+      }
+    }
+    if (currJobId < 0) {
+      // If id is missing or invalid, disable auto-start and assign a new job id
+      isAutoStart = false;
+      currJobId = JobController.jobID.next();
+    }
+
+    if (!isAutoStart) {
+      if (!(isDesktop || isWebDesktop)) {
+        // Don't add to job table if not auto start on mobile.
+        // Because mobile does not support job list view now.
+        return;
+      }
+
+      // Add to job table if not auto start on desktop.
+      String fileName = path.basename(isRemote ? remote : to);
+      final jobProgress = JobProgress()
+        ..type = JobType.transfer
+        ..fileName = fileName
+        ..jobName = isRemote ? remote : to
+        ..id = currJobId
+        ..isRemoteToLocal = isRemote
+        ..fileNum = fileNum
+        ..remote = remote
+        ..to = to
+        ..showHidden = showHidden
+        ..state = JobState.paused;
+      jobTable.add(jobProgress);
+    }
+
+    await bind.sessionAddJob(
       sessionId: sessionId,
       isRemote: isRemote,
       includeHidden: showHidden,
@@ -1063,6 +1130,11 @@ class JobController {
       to: isRemote ? to : remote,
       fileNum: fileNum,
     );
+
+    if (isAutoStart) {
+      await bind.sessionResumeJob(
+          sessionId: sessionId, actId: currJobId, isRemote: isRemote);
+    }
   }
 
   void resumeJob(int jobId) {
@@ -1092,6 +1164,11 @@ class JobController {
       jobTable.refresh();
     }
     debugPrint("update folder files: $info");
+  }
+
+  void clear() {
+    jobTable.clear();
+    jobResultListener.clear();
   }
 }
 
@@ -1236,6 +1313,15 @@ class FileFetcher {
       }
     } catch (e) {
       debugPrint("tryCompleteJob err: $e");
+    }
+  }
+
+  // Complete a pending recursive read task with an error.
+  // See FileModel.handleJobError() for why this is necessary.
+  void tryCompleteRecursiveTaskWithError(int id, String error) {
+    final completer = readRecursiveTasks.remove(id);
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(error);
     }
   }
 
@@ -1401,6 +1487,10 @@ class JobProgress {
   var showHidden = false;
   var err = "";
   int lastTransferredSize = 0;
+
+  double get percent =>
+      totalSize > 0 ? (finishedSize.toDouble() / totalSize) : 0.0;
+  String get percentText => '${(percent * 100).toStringAsFixed(0)}%';
 
   clear() {
     type = JobType.none;

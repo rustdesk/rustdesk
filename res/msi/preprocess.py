@@ -49,7 +49,7 @@ def make_parser():
         "--dist-dir",
         type=str,
         default="../../rustdesk",
-        help="The dist direcotry to install.",
+        help="The dist directory to install.",
     )
     parser.add_argument(
         "--arp",
@@ -336,7 +336,9 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             f'{indent}<RegistryValue Type="integer" Name="Language" Value="[ProductLanguage]" />\n'
         )
 
-        estimated_size = get_folder_size(dist_dir)
+        # EstimatedSize in uninstall registry must be in KB.
+        estimated_size_bytes = get_folder_size(dist_dir)
+        estimated_size = max(1, (estimated_size_bytes + 1023) // 1024)
         lines_new.append(
             f'{indent}<RegistryValue Type="integer" Name="EstimatedSize" Value="{estimated_size}" />\n'
         )

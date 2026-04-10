@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
-    sync::{Arc, Mutex, RwLock},
+    sync::{atomic::AtomicUsize, Arc, Mutex, RwLock},
 };
 
 use sciter::{
@@ -125,8 +125,9 @@ impl InvokeUiSession for SciterHandler {
         }
     }
 
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool) {
-        self.call("setDisplay", &make_args!(x, y, w, h, cursor_embedded));
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool, scale: f64) {
+        let scale = if scale <= 0.0 { 1.0 } else { scale };
+        self.call("setDisplay", &make_args!(x, y, w, h, cursor_embedded, scale));
         // https://sciter.com/forums/topic/color_spaceiyuv-crash
         // Nothing spectacular in decoder – done on CPU side.
         // So if you can do BGRA translation on your side – the better.
@@ -178,8 +179,11 @@ impl InvokeUiSession for SciterHandler {
         self.call("setCursorPosition", &make_args!(cp.x, cp.y));
     }
 
-    fn set_connection_type(&self, is_secured: bool, direct: bool) {
-        self.call("setConnectionType", &make_args!(is_secured, direct));
+    fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str) {
+        self.call(
+            "setConnectionType",
+            &make_args!(is_secured, direct, stream_type.to_string()),
+        );
     }
 
     fn set_fingerprint(&self, _fingerprint: String) {}
@@ -196,7 +200,7 @@ impl InvokeUiSession for SciterHandler {
         self.call("clearAllJobs", &make_args!());
     }
 
-    fn load_last_job(&self, cnt: i32, job_json: &str) {
+    fn load_last_job(&self, cnt: i32, job_json: &str, auto_start: bool) {
         let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(job_json);
         if let Ok(job) = job {
             let path;
@@ -210,7 +214,15 @@ impl InvokeUiSession for SciterHandler {
             }
             self.call(
                 "addJob",
-                &make_args!(cnt, path, to, job.file_num, job.show_hidden, job.is_remote),
+                &make_args!(
+                    cnt,
+                    path,
+                    to,
+                    job.file_num,
+                    job.show_hidden,
+                    job.is_remote,
+                    auto_start
+                ),
             );
         }
     }
@@ -313,16 +325,10 @@ impl InvokeUiSession for SciterHandler {
 
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
-            ConnType::RDP => {}
-            ConnType::PORT_FORWARD => {}
-            ConnType::FILE_TRANSFER => {}
-            ConnType::VIEW_CAMERA => {}
             ConnType::DEFAULT_CONN => {
                 crate::keyboard::client::start_grab_loop();
             }
-            // Left empty code from compilation.
-            // Please replace the code in the PR.
-            ConnType::VIEW_CAMERA => {}
+            _ => {}
         }
     }
 
@@ -386,6 +392,11 @@ impl InvokeUiSession for SciterHandler {
 
     fn handle_screenshot_resp(&self, _sid: String, msg: String) {
         self.call("screenshot", &make_args!(msg));
+    }
+
+    fn handle_terminal_response(&self, _response: TerminalResponse) {
+        // Terminal support is not implemented for Sciter UI
+        // This is a stub implementation to satisfy the trait requirements
     }
 }
 
@@ -568,6 +579,7 @@ impl SciterSession {
             server_keyboard_enabled: Arc::new(RwLock::new(true)),
             server_file_transfer_enabled: Arc::new(RwLock::new(true)),
             server_clipboard_enabled: Arc::new(RwLock::new(true)),
+            reconnect_count: Arc::new(AtomicUsize::new(0)),
             ..Default::default()
         };
 

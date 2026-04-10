@@ -43,9 +43,10 @@ mod th;
 mod tr;
 mod tw;
 mod uk;
-mod vn;
+mod vi;
 mod ta;
 mod ge;
+mod fi;
 
 pub const LANGS: &[(&str, &str)] = &[
     ("en", "English"),
@@ -70,7 +71,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("da", "Dansk"),
     ("eo", "Esperanto"),
     ("tr", "Türkçe"),
-    ("vn", "Tiếng Việt"),
+    ("vi", "Tiếng Việt"),
     ("pl", "Polski"),
     ("ja", "日本語"),
     ("ko", "한국어"),
@@ -93,6 +94,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("sc", "Sardu"),
     ("ta", "தமிழ்"),
     ("ge", "ქართული"),
+    ("fi", "Suomi"),
 ];
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -145,13 +147,14 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "cs" => cs::T.deref(),
         "da" => da::T.deref(),
         "sk" => sk::T.deref(),
-        "vn" => vn::T.deref(),
+        "vi" => vi::T.deref(),
         "pl" => pl::T.deref(),
         "ja" => ja::T.deref(),
         "ko" => ko::T.deref(),
         "kz" => kz::T.deref(),
         "uk" => uk::T.deref(),
         "fa" => fa::T.deref(),
+        "fi" => fi::T.deref(),
         "ca" => ca::T.deref(),
         "el" => el::T.deref(),
         "sv" => sv::T.deref(),
@@ -183,7 +186,26 @@ pub fn translate_locale(name: String, locale: &str) -> String {
                 && !name.starts_with("upgrade_rustdesk_server_pro")
                 && name != "powered_by_me"
             {
-                s = s.replace("RustDesk", &crate::get_app_name());
+                let app_name = crate::get_app_name();
+                if !app_name.contains("RustDesk") {
+                    s = s.replace("RustDesk", &app_name);
+                } else {
+                    // https://github.com/rustdesk/rustdesk-server-pro/issues/845
+                    // If app_name contains "RustDesk" (e.g., "RustDesk-Admin"), we need to avoid
+                    // replacing "RustDesk" within the already-substituted app_name, which would
+                    // cause duplication like "RustDesk-Admin" -> "RustDesk-Admin-Admin".
+                    //
+                    // app_name only contains alphanumeric and hyphen.
+                    const PLACEHOLDER: &str = "#A-P-P-N-A-M-E#";
+                    if !s.contains(PLACEHOLDER) {
+                        s = s.replace(&app_name, PLACEHOLDER);
+                        s = s.replace("RustDesk", &app_name);
+                        s = s.replace(PLACEHOLDER, &app_name);
+                    } else {
+                        // It's very unlikely to reach here.
+                        // Skip replacement to avoid incorrect result.
+                    }
+                }
             }
         }
         s

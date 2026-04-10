@@ -1,20 +1,24 @@
 use std::{
     collections::HashMap,
     future::Future,
+    net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
     task::Poll,
 };
 
 use serde_json::{json, Map, Value};
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 use hbb_common::whoami;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
+    async_recursion::async_recursion,
     bail, base64,
     bytes::Bytes,
-    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT},
+    config::{
+        self, keys, use_ws, Config, LocalConfig, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT,
+    },
     futures::future::join_all,
     futures_util::future::poll_fn,
     get_version_number, log,
@@ -23,18 +27,19 @@ use hbb_common::{
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    tcp::FramedStream,
     timeout,
+    tls::{get_cached_tls_accept_invalid_cert, get_cached_tls_type, upsert_tls_cache, TlsType},
     tokio::{
         self,
+        net::UdpSocket,
         time::{Duration, Instant, Interval},
     },
     ResultType, Stream,
 };
 
 use crate::{
-    hbbs_http::create_http_client_async,
-    ui_interface::{get_option, set_option},
+    hbbs_http::{create_http_client_async, get_url_for_tls},
+    ui_interface::{get_api_server as ui_get_api_server, get_option, is_installed, set_option},
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -66,6 +71,19 @@ pub mod input {
     pub const MOUSE_TYPE_UP: i32 = 2;
     pub const MOUSE_TYPE_WHEEL: i32 = 3;
     pub const MOUSE_TYPE_TRACKPAD: i32 = 4;
+    /// Relative mouse movement type for gaming/3D applications.
+    /// This type sends delta (dx, dy) values instead of absolute coordinates.
+    /// NOTE: This is only supported by the Flutter client. The Sciter client (deprecated)
+    /// does not support relative mouse mode due to:
+    /// 1. Fixed send_mouse() function signature that doesn't allow type differentiation
+    /// 2. Lack of pointer lock API in Sciter/TIS
+    /// 3. No OS cursor control (hide/show/clip) FFI bindings in Sciter UI
+    pub const MOUSE_TYPE_MOVE_RELATIVE: i32 = 5;
+
+    /// Mask to extract the mouse event type from the mask field.
+    /// The lower 3 bits contain the event type (MOUSE_TYPE_*), giving a valid range of 0-7.
+    /// Currently defined types use values 0-5; values 6 and 7 are reserved for future use.
+    pub const MOUSE_TYPE_MASK: i32 = 0x7;
 
     pub const MOUSE_BUTTON_LEFT: i32 = 0x01;
     pub const MOUSE_BUTTON_RIGHT: i32 = 0x02;
@@ -78,6 +96,7 @@ lazy_static::lazy_static! {
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
+    static ref PUBLIC_IPV6_ADDR: Arc<Mutex<(Option<SocketAddr>, Option<Instant>)>> = Default::default();
 }
 
 lazy_static::lazy_static! {
@@ -159,10 +178,46 @@ pub fn is_support_screenshot_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number("1.4.0")
 }
 
+#[inline]
+pub fn is_support_file_transfer_resume(ver: &str) -> bool {
+    is_support_file_transfer_resume_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+pub fn is_support_file_transfer_resume_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.4.2")
+}
+
+/// Minimum server version required for relative mouse mode support.
+/// This constant must mirror Flutter's `kMinVersionForRelativeMouseMode` in `consts.dart`.
+const MIN_VERSION_RELATIVE_MOUSE_MODE: &str = "1.4.5";
+
+#[inline]
+pub fn is_support_relative_mouse_mode(ver: &str) -> bool {
+    is_support_relative_mouse_mode_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+pub fn is_support_relative_mouse_mode_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number(MIN_VERSION_RELATIVE_MOUSE_MODE)
+}
+
 // is server process, with "--server" args
 #[inline]
 pub fn is_server() -> bool {
     *IS_SERVER
+}
+
+#[inline]
+pub fn need_fs_cm_send_files() -> bool {
+    #[cfg(windows)]
+    {
+        is_server()
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
 }
 
 #[inline]
@@ -504,41 +559,74 @@ audio_rechannel!(audio_rechannel_8_5, 8, 5);
 audio_rechannel!(audio_rechannel_8_6, 8, 6);
 audio_rechannel!(audio_rechannel_8_7, 8, 7);
 
+pub struct CheckTestNatType {
+    is_direct: bool,
+}
+
+impl CheckTestNatType {
+    pub fn new() -> Self {
+        Self {
+            is_direct: Config::get_socks().is_none() && !config::use_ws(),
+        }
+    }
+}
+
+impl Drop for CheckTestNatType {
+    fn drop(&mut self) {
+        let is_direct = Config::get_socks().is_none() && !config::use_ws();
+        if self.is_direct != is_direct {
+            test_nat_type();
+        }
+    }
+}
+
 pub fn test_nat_type() {
-    let mut i = 0;
-    std::thread::spawn(move || loop {
-        match test_nat_type_() {
-            Ok(true) => break,
-            Err(err) => {
-                log::error!("test nat: {}", err);
+    test_ipv6_sync();
+    use std::sync::atomic::{AtomicBool, Ordering};
+    std::thread::spawn(move || {
+        static IS_RUNNING: AtomicBool = AtomicBool::new(false);
+        if IS_RUNNING.load(Ordering::SeqCst) {
+            return;
+        }
+        IS_RUNNING.store(true, Ordering::SeqCst);
+
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        crate::ipc::get_socks_ws();
+        let is_direct = Config::get_socks().is_none() && !config::use_ws();
+        if !is_direct {
+            Config::set_nat_type(NatType::SYMMETRIC as _);
+            IS_RUNNING.store(false, Ordering::SeqCst);
+            return;
+        }
+
+        let mut i = 0;
+        loop {
+            match test_nat_type_() {
+                Ok(true) => break,
+                Err(err) => {
+                    log::error!("test nat: {}", err);
+                }
+                _ => {}
             }
-            _ => {}
+            if Config::get_nat_type() != 0 {
+                break;
+            }
+            i = i * 2 + 1;
+            if i > 300 {
+                i = 300;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(i));
         }
-        if Config::get_nat_type() != 0 {
-            break;
-        }
-        i = i * 2 + 1;
-        if i > 300 {
-            i = 300;
-        }
-        std::thread::sleep(std::time::Duration::from_secs(i));
+
+        IS_RUNNING.store(false, Ordering::SeqCst);
     });
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    let is_direct = Config::get_socks().is_none(); // sync socks BTW
-    if !is_direct {
-        Config::set_nat_type(NatType::SYMMETRIC as _);
-        return Ok(true);
-    }
     let start = std::time::Instant::now();
-    let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
-    let server1 = rendezvous_server;
+    let server1 = Config::get_rendezvous_server();
     let server2 = crate::increase_port(&server1, -1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
@@ -739,12 +827,22 @@ pub fn username() -> String {
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
+// Exactly the implementation of "whoami::hostname()".
+// This wrapper is to suppress warnings.
+#[inline(always)]
+#[cfg(not(target_os = "ios"))]
+pub fn whoami_hostname() -> String {
+    let mut hostname = whoami::fallible::hostname().unwrap_or_else(|_| "localhost".to_string());
+    hostname.make_ascii_lowercase();
+    hostname
+}
+
 #[inline]
 pub fn hostname() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         #[allow(unused_mut)]
-        let mut name = whoami::hostname();
+        let mut name = whoami_hostname();
         // some time, there is .local, some time not, so remove it for osx
         #[cfg(target_os = "macos")]
         if name.ends_with(".local") {
@@ -845,21 +943,41 @@ pub fn check_software_update() {
     if is_custom_client() {
         return;
     }
-    let opt = config::LocalConfig::get_option(config::keys::OPTION_ENABLE_CHECK_UPDATE);
-    if config::option2bool(config::keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
-        std::thread::spawn(move || allow_err!(check_software_update_()));
+    let opt = LocalConfig::get_option(keys::OPTION_ENABLE_CHECK_UPDATE);
+    if config::option2bool(keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
+        std::thread::spawn(move || allow_err!(do_check_software_update()));
     }
 }
 
+// No need to check `danger_accept_invalid_cert` for now.
+// Because the url is always `https://api.rustdesk.com/version/latest`.
 #[tokio::main(flavor = "current_thread")]
-async fn check_software_update_() -> hbb_common::ResultType<()> {
+pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
     let (request, url) =
         hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
-    let latest_release_response = create_http_client_async()
-        .post(url)
-        .json(&request)
-        .send()
-        .await?;
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(&url, &proxy_conf);
+    let tls_type = get_cached_tls_type(tls_url);
+    let is_tls_not_cached = tls_type.is_none();
+    let tls_type = tls_type.unwrap_or(TlsType::Rustls);
+    let client = create_http_client_async(tls_type, false);
+    let latest_release_response = match client.post(&url).json(&request).send().await {
+        Ok(resp) => {
+            upsert_tls_cache(tls_url, tls_type, false);
+            resp
+        }
+        Err(err) => {
+            if is_tls_not_cached && err.is_request() {
+                let tls_type = TlsType::NativeTls;
+                let client = create_http_client_async(tls_type, false);
+                let resp = client.post(&url).json(&request).send().await?;
+                upsert_tls_cache(tls_url, tls_type, false);
+                resp
+            } else {
+                return Err(err.into());
+            }
+        }
+    };
     let bytes = latest_release_response.bytes().await?;
     let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
     let response_url = resp.url;
@@ -876,6 +994,8 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
             }
         }
         *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
+    } else {
+        *SOFTWARE_UPDATE_URL.lock().unwrap() = "".to_string();
     }
     Ok(())
 }
@@ -926,8 +1046,17 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
 
 #[inline]
 pub fn get_api_server(api: String, custom: String) -> String {
-    let res = get_api_server_(api, custom);
-    if res.starts_with("https") && res.ends_with(":21114") {
+    if Config::no_register_device() {
+        return "".to_owned();
+    }
+    let mut res = get_api_server_(api, custom);
+    if res.ends_with('/') {
+        res.pop();
+    }
+    if res.starts_with("https")
+        && res.ends_with(":21114")
+        && get_builtin_option(keys::OPTION_ALLOW_HTTPS_21114) != "Y"
+    {
         return res.replace(":21114", "");
     }
     res
@@ -943,10 +1072,6 @@ fn get_api_server_(api: String, custom: String) -> String {
     if !api.is_empty() {
         return api.to_owned();
     }
-    let api = option_env!("API_SERVER").unwrap_or_default();
-    if !api.is_empty() {
-        return api.into();
-    }
     let s0 = get_custom_rendezvous_server(custom);
     if !s0.is_empty() {
         let s = crate::increase_port(&s0, -2);
@@ -959,16 +1084,343 @@ fn get_api_server_(api: String, custom: String) -> String {
     "https://admin.rustdesk.com".to_owned()
 }
 
+#[inline]
+pub fn is_public(url: &str) -> bool {
+    let url = url.to_ascii_lowercase();
+    url.contains("rustdesk.com/") || url.ends_with("rustdesk.com")
+}
+
+pub fn get_udp_punch_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_UDP_PUNCH,
+        &get_local_option(keys::OPTION_ENABLE_UDP_PUNCH),
+    )
+}
+
+pub fn get_ipv6_punch_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_IPV6_PUNCH,
+        &get_local_option(keys::OPTION_ENABLE_IPV6_PUNCH),
+    )
+}
+
+pub fn get_local_option(key: &str) -> String {
+    let v = LocalConfig::get_option(key);
+    if key == keys::OPTION_ENABLE_UDP_PUNCH || key == keys::OPTION_ENABLE_IPV6_PUNCH {
+        if v.is_empty() {
+            if !is_public(&Config::get_rendezvous_server()) {
+                return "N".to_owned();
+            }
+        }
+    }
+    v
+}
+
 pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
     let url = get_api_server(api, custom);
-    if url.is_empty() || url.contains("rustdesk.com") {
+    if url.is_empty() || is_public(&url) {
         return "".to_owned();
     }
     format!("{}/api/audit/{}", url, typ)
 }
 
+/// Check if we should use raw TCP proxy for API calls.
+/// Returns true if USE_RAW_TCP_FOR_API builtin option is "Y", WebSocket is off,
+/// and the target URL belongs to the configured non-public API host.
+#[inline]
+fn should_use_raw_tcp_for_api(url: &str) -> bool {
+    get_builtin_option(keys::OPTION_USE_RAW_TCP_FOR_API) == "Y"
+        && !use_ws()
+        && is_tcp_proxy_api_target(url)
+}
+
+/// Check if we can attempt raw TCP proxy fallback for this target URL.
+#[inline]
+fn can_fallback_to_raw_tcp(url: &str) -> bool {
+    !use_ws() && is_tcp_proxy_api_target(url)
+}
+
+#[inline]
+fn should_use_tcp_proxy_for_api_url(url: &str, api_url: &str) -> bool {
+    if api_url.is_empty() || is_public(api_url) {
+        return false;
+    }
+
+    let target_host = url::Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(|host| host.to_ascii_lowercase()));
+    let api_host = url::Url::parse(api_url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(|host| host.to_ascii_lowercase()));
+
+    matches!((target_host, api_host), (Some(target), Some(api)) if target == api)
+}
+
+#[inline]
+fn is_tcp_proxy_api_target(url: &str) -> bool {
+    should_use_tcp_proxy_for_api_url(url, &ui_get_api_server())
+}
+
+fn tcp_proxy_log_target(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .map(|parsed| {
+            let mut redacted = format!("{}://", parsed.scheme());
+            let Some(host) = parsed.host() else {
+                return "<invalid-url>".to_owned();
+            };
+            redacted.push_str(&host.to_string());
+            if let Some(port) = parsed.port() {
+                redacted.push(':');
+                redacted.push_str(&port.to_string());
+            }
+            redacted.push_str(parsed.path());
+            redacted
+        })
+        .unwrap_or_else(|| "<invalid-url>".to_owned())
+}
+
+#[inline]
+fn get_tcp_proxy_addr() -> String {
+    check_port(Config::get_rendezvous_server(), RENDEZVOUS_PORT)
+}
+
+/// Send an HTTP request via the rendezvous server's TCP proxy using protobuf.
+/// Connects with `connect_tcp` + `secure_tcp`, sends `HttpProxyRequest`,
+/// receives `HttpProxyResponse`.
+///
+/// The entire operation (connect + handshake + send + receive) is wrapped in
+/// an overall timeout of `CONNECT_TIMEOUT + READ_TIMEOUT` so that a stall at
+/// any stage cannot block the caller indefinitely.
+async fn tcp_proxy_request(
+    method: &str,
+    url: &str,
+    body: &[u8],
+    headers: Vec<HeaderEntry>,
+) -> ResultType<HttpProxyResponse> {
+    let tcp_addr = get_tcp_proxy_addr();
+    if tcp_addr.is_empty() {
+        bail!("No rendezvous server configured for TCP proxy");
+    }
+
+    let parsed = url::Url::parse(url)?;
+    let path = if let Some(query) = parsed.query() {
+        format!("{}?{}", parsed.path(), query)
+    } else {
+        parsed.path().to_string()
+    };
+
+    log::debug!(
+        "Sending {} {} via TCP proxy to {}",
+        method,
+        parsed.path(),
+        tcp_addr
+    );
+
+    let overall_timeout = CONNECT_TIMEOUT + READ_TIMEOUT;
+    timeout(overall_timeout, async {
+        let mut conn = socket_client::connect_tcp(&*tcp_addr, CONNECT_TIMEOUT).await?;
+        let key = crate::get_key(true).await;
+        secure_tcp_silent(&mut conn, &key).await?;
+
+        let mut req = HttpProxyRequest::new();
+        req.method = method.to_uppercase();
+        req.path = path;
+        req.headers = headers.into();
+        req.body = Bytes::from(body.to_vec());
+
+        let mut msg_out = RendezvousMessage::new();
+        msg_out.set_http_proxy_request(req);
+        conn.send(&msg_out).await?;
+
+        match conn.next().await {
+            Some(Ok(bytes)) => {
+                let msg_in = RendezvousMessage::parse_from_bytes(&bytes)?;
+                match msg_in.union {
+                    Some(rendezvous_message::Union::HttpProxyResponse(resp)) => Ok(resp),
+                    _ => bail!("Unexpected response from TCP proxy"),
+                }
+            }
+            Some(Err(e)) => bail!("TCP proxy read error: {}", e),
+            None => bail!("TCP proxy connection closed without response"),
+        }
+    })
+    .await?
+}
+
+/// Build HeaderEntry list from "Key: Value" style header string (used by post_request).
+/// If the caller supplies a Content-Type header it overrides the default `application/json`.
+fn parse_simple_header(header: &str) -> Vec<HeaderEntry> {
+    let mut entries = Vec::new();
+    let mut has_content_type = false;
+    if !header.is_empty() {
+        let tmp: Vec<&str> = header.splitn(2, ": ").collect();
+        if tmp.len() == 2 {
+            if tmp[0].eq_ignore_ascii_case("Content-Type") {
+                has_content_type = true;
+            }
+            entries.push(HeaderEntry {
+                name: tmp[0].into(),
+                value: tmp[1].into(),
+                ..Default::default()
+            });
+        }
+    }
+    if !has_content_type {
+        entries.insert(
+            0,
+            HeaderEntry {
+                name: "Content-Type".into(),
+                value: "application/json".into(),
+                ..Default::default()
+            },
+        );
+    }
+    entries
+}
+
+/// POST request via TCP proxy.
+async fn post_request_via_tcp_proxy(url: &str, body: &str, header: &str) -> ResultType<String> {
+    let headers = parse_simple_header(header);
+    let resp = tcp_proxy_request("POST", url, body.as_bytes(), headers).await?;
+    if !resp.error.is_empty() {
+        bail!("TCP proxy error: {}", resp.error);
+    }
+    Ok(String::from_utf8_lossy(&resp.body).to_string())
+}
+
+fn http_proxy_response_to_json(resp: HttpProxyResponse) -> ResultType<String> {
+    if !resp.error.is_empty() {
+        bail!("TCP proxy error: {}", resp.error);
+    }
+
+    let mut response_headers = Map::new();
+    for entry in resp.headers.iter() {
+        response_headers.insert(entry.name.to_lowercase(), json!(entry.value));
+    }
+
+    let mut result = Map::new();
+    result.insert("status_code".to_string(), json!(resp.status));
+    result.insert("headers".to_string(), Value::Object(response_headers));
+    result.insert(
+        "body".to_string(),
+        json!(String::from_utf8_lossy(&resp.body)),
+    );
+
+    serde_json::to_string(&result).map_err(|e| anyhow!("Failed to serialize response: {}", e))
+}
+
+fn parse_json_header_entries(header: &str) -> ResultType<Vec<HeaderEntry>> {
+    let v: Value = serde_json::from_str(header)?;
+    if let Value::Object(obj) = v {
+        Ok(obj
+            .iter()
+            .map(|(key, value)| HeaderEntry {
+                name: key.clone(),
+                value: value.as_str().unwrap_or_default().into(),
+                ..Default::default()
+            })
+            .collect())
+    } else {
+        Err(anyhow!("HTTP header information parsing failed!"))
+    }
+}
+
+/// Returns (status_code, body_text). Separating status so the wrapper can decide on fallback.
+async fn post_request_http(url: &str, body: &str, header: &str) -> ResultType<(u16, String)> {
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(url, &proxy_conf);
+    let tls_type = get_cached_tls_type(tls_url);
+    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let response = post_request_(
+        url,
+        tls_url,
+        body.to_owned(),
+        header,
+        tls_type,
+        danger_accept_invalid_cert,
+        danger_accept_invalid_cert,
+    )
+    .await?;
+    let status = response.status().as_u16();
+    let text = response.text().await?;
+    Ok((status, text))
+}
+
+/// Try `http_fn` first; on connection failure or 5xx, fall back to `tcp_fn`
+/// if the URL is eligible. 4xx responses are returned as-is.
+async fn with_tcp_proxy_fallback<HttpFut, TcpFut>(
+    url: &str,
+    method: &str,
+    http_fn: HttpFut,
+    tcp_fn: TcpFut,
+) -> ResultType<String>
+where
+    HttpFut: Future<Output = ResultType<(u16, String)>>,
+    TcpFut: Future<Output = ResultType<String>>,
+{
+    if should_use_raw_tcp_for_api(url) {
+        return tcp_fn.await;
+    }
+
+    let http_result = http_fn.await;
+    let should_fallback = match &http_result {
+        Err(_) => true,
+        Ok((status, _)) => *status >= 500,
+    };
+
+    if should_fallback && can_fallback_to_raw_tcp(url) {
+        log::warn!(
+            "HTTP {} to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
+            method,
+            tcp_proxy_log_target(url),
+            http_result
+                .as_ref()
+                .map(|(s, _)| *s)
+                .map_err(|e| e.to_string()),
+        );
+        match tcp_fn.await {
+            Ok(resp) => return Ok(resp),
+            Err(tcp_err) => {
+                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+            }
+        }
+    }
+
+    http_result.map(|(_status, text)| text)
+}
+
+/// POST request with raw TCP proxy support.
+/// - If `USE_RAW_TCP_FOR_API` is "Y" and WS is off, goes directly through TCP proxy.
+/// - Otherwise tries HTTP first; on connection failure or 5xx status,
+///   falls back to TCP proxy if WS is off.
+/// - 4xx responses are returned as-is (server is reachable, business logic error).
+/// - If fallback also fails, returns the original HTTP result (text or error).
 pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
-    let mut req = create_http_client_async().post(url);
+    with_tcp_proxy_fallback(
+        &url,
+        "POST",
+        post_request_http(&url, &body, header),
+        post_request_via_tcp_proxy(&url, &body, header),
+    )
+    .await
+}
+
+#[async_recursion]
+async fn post_request_(
+    url: &str,
+    tls_url: &str,
+    body: String,
+    header: &str,
+    tls_type: Option<TlsType>,
+    danger_accept_invalid_cert: Option<bool>,
+    original_danger_accept_invalid_cert: Option<bool>,
+) -> ResultType<reqwest::Response> {
+    let mut req = create_http_client_async(
+        tls_type.unwrap_or(TlsType::Rustls),
+        danger_accept_invalid_cert.unwrap_or(false),
+    )
+    .post(url);
     if !header.is_empty() {
         let tmp: Vec<&str> = header.split(": ").collect();
         if tmp.len() == 2 {
@@ -977,7 +1429,66 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
     }
     req = req.header("Content-Type", "application/json");
     let to = std::time::Duration::from_secs(12);
-    Ok(req.body(body).timeout(to).send().await?.text().await?)
+    if tls_type.is_some() && danger_accept_invalid_cert.is_some() {
+        // This branch is used to reduce a `clone()` when both `tls_type` and
+        // `danger_accept_invalid_cert` are cached.
+        match req.body(body.clone()).timeout(to).send().await {
+            Ok(resp) => {
+                upsert_tls_cache(
+                    tls_url,
+                    tls_type.unwrap_or(TlsType::Rustls),
+                    danger_accept_invalid_cert.unwrap_or(false),
+                );
+                Ok(resp)
+            }
+            Err(e) => Err(anyhow!("{:?}", e)),
+        }
+    } else {
+        match req.body(body.clone()).timeout(to).send().await {
+            Ok(resp) => {
+                upsert_tls_cache(
+                    tls_url,
+                    tls_type.unwrap_or(TlsType::Rustls),
+                    danger_accept_invalid_cert.unwrap_or(false),
+                );
+                Ok(resp)
+            }
+            Err(e) => {
+                if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
+                    if danger_accept_invalid_cert.is_none() {
+                        log::warn!(
+                            "HTTP request failed: {:?}, try again, danger accept invalid cert",
+                            e
+                        );
+                        post_request_(
+                            url,
+                            tls_url,
+                            body,
+                            header,
+                            tls_type,
+                            Some(true),
+                            original_danger_accept_invalid_cert,
+                        )
+                        .await
+                    } else {
+                        log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                        post_request_(
+                            url,
+                            tls_url,
+                            body,
+                            header,
+                            Some(TlsType::NativeTls),
+                            original_danger_accept_invalid_cert,
+                            original_danger_accept_invalid_cert,
+                        )
+                        .await
+                    }
+                } else {
+                    Err(anyhow!("{:?}", e))
+                }
+            }
+        }
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -985,6 +1496,155 @@ pub async fn post_request_sync(url: String, body: String, header: &str) -> Resul
     post_request(url, body, header).await
 }
 
+#[async_recursion]
+async fn get_http_response_async(
+    url: &str,
+    tls_url: &str,
+    method: &str,
+    body: Option<String>,
+    header: &str,
+    tls_type: Option<TlsType>,
+    danger_accept_invalid_cert: Option<bool>,
+    original_danger_accept_invalid_cert: Option<bool>,
+) -> ResultType<reqwest::Response> {
+    let http_client = create_http_client_async(
+        tls_type.unwrap_or(TlsType::Rustls),
+        danger_accept_invalid_cert.unwrap_or(false),
+    );
+    let normalized_method = method.to_ascii_lowercase();
+    let mut http_client = match normalized_method.as_str() {
+        "get" => http_client.get(url),
+        "post" => http_client.post(url),
+        "put" => http_client.put(url),
+        "delete" => http_client.delete(url),
+        _ => return Err(anyhow!("The HTTP request method is not supported!")),
+    };
+    for entry in parse_json_header_entries(header)? {
+        http_client = http_client.header(entry.name, entry.value);
+    }
+
+    if tls_type.is_some() && danger_accept_invalid_cert.is_some() {
+        if let Some(b) = body {
+            http_client = http_client.body(b);
+        }
+        match http_client
+            .timeout(std::time::Duration::from_secs(12))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                upsert_tls_cache(
+                    tls_url,
+                    tls_type.unwrap_or(TlsType::Rustls),
+                    danger_accept_invalid_cert.unwrap_or(false),
+                );
+                Ok(resp)
+            }
+            Err(e) => Err(anyhow!("{:?}", e)),
+        }
+    } else {
+        if let Some(b) = body.clone() {
+            http_client = http_client.body(b);
+        }
+
+        match http_client
+            .timeout(std::time::Duration::from_secs(12))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                upsert_tls_cache(
+                    tls_url,
+                    tls_type.unwrap_or(TlsType::Rustls),
+                    danger_accept_invalid_cert.unwrap_or(false),
+                );
+                Ok(resp)
+            }
+            Err(e) => {
+                if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
+                    if danger_accept_invalid_cert.is_none() {
+                        log::warn!(
+                            "HTTP request failed: {:?}, try again, danger accept invalid cert",
+                            e
+                        );
+                        get_http_response_async(
+                            url,
+                            tls_url,
+                            method,
+                            body,
+                            header,
+                            tls_type,
+                            Some(true),
+                            original_danger_accept_invalid_cert,
+                        )
+                        .await
+                    } else {
+                        log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                        get_http_response_async(
+                            url,
+                            tls_url,
+                            method,
+                            body,
+                            header,
+                            Some(TlsType::NativeTls),
+                            original_danger_accept_invalid_cert,
+                            original_danger_accept_invalid_cert,
+                        )
+                        .await
+                    }
+                } else {
+                    Err(anyhow!("{:?}", e))
+                }
+            }
+        }
+    }
+}
+
+/// Returns (status_code, json_string) so the caller can inspect the status
+/// without re-parsing the serialized JSON.
+async fn http_request_http(
+    url: &str,
+    method: &str,
+    body: Option<String>,
+    header: &str,
+) -> ResultType<(u16, String)> {
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(url, &proxy_conf);
+    let tls_type = get_cached_tls_type(tls_url);
+    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let response = get_http_response_async(
+        url,
+        tls_url,
+        method,
+        body,
+        header,
+        tls_type,
+        danger_accept_invalid_cert,
+        danger_accept_invalid_cert,
+    )
+    .await?;
+    // Serialize response headers
+    let mut response_headers = Map::new();
+    for (key, value) in response.headers() {
+        response_headers.insert(key.to_string(), json!(value.to_str().unwrap_or("")));
+    }
+
+    let status_code = response.status().as_u16();
+    let response_body = response.text().await?;
+
+    // Construct the JSON object
+    let mut result = Map::new();
+    result.insert("status_code".to_string(), json!(status_code));
+    result.insert("headers".to_string(), Value::Object(response_headers));
+    result.insert("body".to_string(), json!(response_body));
+
+    // Convert map to JSON string
+    let json_str = serde_json::to_string(&result)
+        .map_err(|e| anyhow!("Failed to serialize response: {}", e))?;
+    Ok((status_code, json_str))
+}
+
+/// HTTP request with raw TCP proxy support.
 #[tokio::main(flavor = "current_thread")]
 pub async fn http_request_sync(
     url: String,
@@ -992,56 +1652,28 @@ pub async fn http_request_sync(
     body: Option<String>,
     header: String,
 ) -> ResultType<String> {
-    let http_client = create_http_client_async();
-    let mut http_client = match method.as_str() {
-        "get" => http_client.get(url),
-        "post" => http_client.post(url),
-        "put" => http_client.put(url),
-        "delete" => http_client.delete(url),
-        _ => return Err(anyhow!("The HTTP request method is not supported!")),
-    };
-    let v = serde_json::from_str(header.as_str())?;
+    with_tcp_proxy_fallback(
+        &url,
+        &method,
+        http_request_http(&url, &method, body.clone(), &header),
+        http_request_via_tcp_proxy(&url, &method, body.as_deref(), &header),
+    )
+    .await
+}
 
-    if let Value::Object(obj) = v {
-        for (key, value) in obj.iter() {
-            http_client = http_client.header(key, value.as_str().unwrap_or_default());
-        }
-    } else {
-        return Err(anyhow!("HTTP header information parsing failed!"));
-    }
+/// General HTTP request via TCP proxy. Header is a JSON string (used by http_request_sync).
+/// Returns a JSON string with status_code, headers, body (same format as http_request_sync).
+async fn http_request_via_tcp_proxy(
+    url: &str,
+    method: &str,
+    body: Option<&str>,
+    header: &str,
+) -> ResultType<String> {
+    let headers = parse_json_header_entries(header)?;
+    let body_bytes = body.unwrap_or("").as_bytes();
 
-    if let Some(b) = body {
-        http_client = http_client.body(b);
-    }
-
-    let response = http_client
-        .timeout(std::time::Duration::from_secs(12))
-        .send()
-        .await?;
-
-    // Serialize response headers
-    let mut response_headers = serde_json::map::Map::new();
-    for (key, value) in response.headers() {
-        response_headers.insert(
-            key.to_string(),
-            serde_json::json!(value.to_str().unwrap_or("")),
-        );
-    }
-
-    let status_code = response.status().as_u16();
-    let response_body = response.text().await?;
-
-    // Construct the JSON object
-    let mut result = serde_json::map::Map::new();
-    result.insert("status_code".to_string(), serde_json::json!(status_code));
-    result.insert(
-        "headers".to_string(),
-        serde_json::Value::Object(response_headers),
-    );
-    result.insert("body".to_string(), serde_json::json!(response_body));
-
-    // Convert map to JSON string
-    serde_json::to_string(&result).map_err(|e| anyhow!("Failed to serialize response: {}", e))
+    let resp = tcp_proxy_request(method, url, body_bytes, headers).await?;
+    http_proxy_response_to_json(resp)
 }
 
 #[inline]
@@ -1230,7 +1862,34 @@ pub async fn get_next_nonkeyexchange_msg(
     None
 }
 
+#[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
+pub fn check_process(arg: &str, same_session_id: bool) -> bool {
+    let mut path = std::env::current_exe().unwrap_or_default();
+    if let Ok(linked) = path.read_link() {
+        path = linked;
+    }
+    let Some(filename) = path.file_name() else {
+        return false;
+    };
+    let filename = filename.to_string_lossy().to_string();
+    match crate::platform::windows::get_pids_with_first_arg_check_session(
+        &filename,
+        arg,
+        same_session_id,
+    ) {
+        Ok(pids) => {
+            let self_pid = hbb_common::sysinfo::Pid::from_u32(std::process::id());
+            pids.into_iter().filter(|pid| *pid != self_pid).count() > 0
+        }
+        Err(e) => {
+            log::error!("Failed to check process with arg: \"{}\", {}", arg, e);
+            false
+        }
+    }
+}
+
 #[allow(unused_mut)]
+#[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     #[cfg(target_os = "macos")]
@@ -1277,7 +1936,14 @@ pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     false
 }
 
-pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
+async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> ResultType<()> {
+    // Skip additional encryption when using WebSocket connections (wss://)
+    // as WebSocket Secure (wss://) already provides transport layer encryption.
+    // This doesn't affect the end-to-end encryption between clients,
+    // it only avoids redundant encryption between client and server.
+    if use_ws() {
+        return Ok(());
+    }
     let rs_pk = get_rs_pk(key);
     let Some(rs_pk) = rs_pk else {
         bail!("Handshake failed: invalid public key from rendezvous server");
@@ -1303,7 +1969,9 @@ pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
                         });
                         timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
                         conn.set_key(key);
-                        log::info!("Connection secured");
+                        if log_on_success {
+                            log::info!("Connection secured");
+                        }
                     }
                     _ => {}
                 }
@@ -1312,6 +1980,14 @@ pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
         _ => {}
     }
     Ok(())
+}
+
+pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
+    secure_tcp_impl(conn, key, true).await
+}
+
+async fn secure_tcp_silent(conn: &mut Stream, key: &str) -> ResultType<()> {
+    secure_tcp_impl(conn, key, false).await
 }
 
 #[inline]
@@ -1356,8 +2032,7 @@ pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbo
 
 #[inline]
 pub fn using_public_server() -> bool {
-    option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty()
-        && crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
+    crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
 }
 
 pub struct ThrottledInterval {
@@ -1532,19 +2207,19 @@ pub fn read_custom_client(config: &str) {
     }
 
     let mut map_display_settings = HashMap::new();
-    for s in config::keys::KEYS_DISPLAY_SETTINGS {
+    for s in keys::KEYS_DISPLAY_SETTINGS {
         map_display_settings.insert(s.replace("_", "-"), s);
     }
     let mut map_local_settings = HashMap::new();
-    for s in config::keys::KEYS_LOCAL_SETTINGS {
+    for s in keys::KEYS_LOCAL_SETTINGS {
         map_local_settings.insert(s.replace("_", "-"), s);
     }
     let mut map_settings = HashMap::new();
-    for s in config::keys::KEYS_SETTINGS {
+    for s in keys::KEYS_SETTINGS {
         map_settings.insert(s.replace("_", "-"), s);
     }
     let mut buildin_settings = HashMap::new();
-    for s in config::keys::KEYS_BUILDIN_SETTINGS {
+    for s in keys::KEYS_BUILDIN_SETTINGS {
         buildin_settings.insert(s.replace("_", "-"), s);
     }
     if let Some(default_settings) = data.remove("default-settings") {
@@ -1593,6 +2268,356 @@ pub fn get_hwid() -> Bytes {
     let mut hasher = Sha256::new();
     hasher.update(&uuid);
     Bytes::from(hasher.finalize().to_vec())
+}
+
+#[inline]
+pub fn get_builtin_option(key: &str) -> String {
+    config::BUILTIN_SETTINGS
+        .read()
+        .unwrap()
+        .get(key)
+        .cloned()
+        .unwrap_or_default()
+}
+
+#[inline]
+pub fn is_custom_client() -> bool {
+    get_app_name() != "RustDesk"
+}
+
+pub fn verify_login(_raw: &str, _id: &str) -> bool {
+    true
+    /*
+    if is_custom_client() {
+        return true;
+    }
+    #[cfg(debug_assertions)]
+    return true;
+    let Ok(pk) = crate::decode64("IycjQd4TmWvjjLnYd796Rd+XkK+KG+7GU1Ia7u4+vSw=") else {
+        return false;
+    };
+    let Some(key) = get_pk(&pk).map(|x| sign::PublicKey(x)) else {
+        return false;
+    };
+    let Ok(v) = crate::decode64(raw) else {
+        return false;
+    };
+    let raw = sign::verify(&v, &key).unwrap_or_default();
+    let v_str = std::str::from_utf8(&raw)
+        .unwrap_or_default()
+        .split(":")
+        .next()
+        .unwrap_or_default();
+    v_str == id
+    */
+}
+
+#[inline]
+pub fn is_udp_disabled() -> bool {
+    Config::get_option(keys::OPTION_DISABLE_UDP) == "Y"
+}
+
+// this crate https://github.com/yoshd/stun-client supports nat type
+async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
+    use std::net::ToSocketAddrs;
+    use stunclient::StunClient;
+    let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
+    let socket = UdpSocket::bind(&local_addr).await?;
+    let Some(stun_addr) = stun_server
+        .to_socket_addrs()?
+        .filter(|x| x.is_ipv6())
+        .next()
+    else {
+        bail!(
+            "Failed to resolve STUN ipv6 server address: {}",
+            stun_server
+        );
+    };
+    let client = StunClient::new(stun_addr);
+    let addr = client.query_external_address_async(&socket).await?;
+    Ok(if addr.ip().is_ipv6() {
+        (addr, stun_server.to_owned())
+    } else {
+        bail!("STUN server returned non-IPv6 address: {}", addr)
+    })
+}
+
+async fn stun_ipv4_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
+    use std::net::ToSocketAddrs;
+    use stunclient::StunClient;
+    let local_addr = SocketAddr::from(([0u8; 4], 0));
+    let socket = UdpSocket::bind(&local_addr).await?;
+    let Some(stun_addr) = stun_server
+        .to_socket_addrs()?
+        .filter(|x| x.is_ipv4())
+        .next()
+    else {
+        bail!(
+            "Failed to resolve STUN ipv4 server address: {}",
+            stun_server
+        );
+    };
+    let client = StunClient::new(stun_addr);
+    let addr = client.query_external_address_async(&socket).await?;
+    Ok(if addr.ip().is_ipv4() {
+        (addr, stun_server.to_owned())
+    } else {
+        bail!("STUN server returned non-IPv6 address: {}", addr)
+    })
+}
+
+static STUNS_V4: [&str; 3] = [
+    "stun.l.google.com:19302",
+    "stun.cloudflare.com:3478",
+    "stun.nextcloud.com:3478",
+];
+
+static STUNS_V6: [&str; 3] = [
+    "stun.l.google.com:19302",
+    "stun.cloudflare.com:3478",
+    "stun.nextcloud.com:3478",
+];
+
+pub async fn test_nat_ipv4() -> ResultType<(SocketAddr, String)> {
+    use hbb_common::futures::future::{select_ok, FutureExt};
+    let tests = STUNS_V4
+        .iter()
+        .map(|&stun| stun_ipv4_test(stun).boxed())
+        .collect::<Vec<_>>();
+
+    match select_ok(tests).await {
+        Ok(res) => {
+            return Ok(res.0);
+        }
+        Err(e) => {
+            bail!(
+                "Failed to get public IPv4 address via public STUN servers: {}",
+                e
+            );
+        }
+    };
+}
+
+async fn test_bind_ipv6() -> ResultType<SocketAddr> {
+    let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
+    let socket = UdpSocket::bind(local_addr).await?;
+    let addr = STUNS_V6[0]
+        .to_socket_addrs()?
+        .filter(|x| x.is_ipv6())
+        .next()
+        .ok_or_else(|| {
+            anyhow!(
+                "Failed to resolve STUN ipv6 server address: {}",
+                STUNS_V6[0]
+            )
+        })?;
+    socket.connect(addr).await?;
+    Ok(socket.local_addr()?)
+}
+
+pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
+    if PUBLIC_IPV6_ADDR
+        .lock()
+        .unwrap()
+        .1
+        .map(|x| x.elapsed().as_secs() < 60)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    PUBLIC_IPV6_ADDR.lock().unwrap().1 = Some(Instant::now());
+
+    match test_bind_ipv6().await {
+        Ok(mut addr) => {
+            if let std::net::IpAddr::V6(ip) = addr.ip() {
+                if !ip.is_loopback()
+                    && !ip.is_unspecified()
+                    && !ip.is_multicast()
+                    && (ip.segments()[0] & 0xe000) == 0x2000
+                {
+                    addr.set_port(0);
+                    PUBLIC_IPV6_ADDR.lock().unwrap().0 = Some(addr);
+                    log::debug!("Found public IPv6 address locally: {}", addr);
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to bind IPv6 socket: {}", e);
+        }
+    }
+    // Interestingly, on my macOS, sometimes my ipv6 works, sometimes not (test with ping6 or https://test-ipv6.com/).
+    // I checked ifconfig, could not see any difference. Both secure ipv6 and temporary ipv6 are there.
+    // So we can not rely on the local ipv6 address queries with if_addrs.
+    // above test_bind_ipv6 is safer, because it can fail in this case.
+    /*
+    std::thread::spawn(|| {
+        if let Ok(ifaces) = if_addrs::get_if_addrs() {
+            for iface in ifaces {
+                if let if_addrs::IfAddr::V6(v6) = iface.addr {
+                    let ip = v6.ip;
+                    if !ip.is_loopback()
+                        && !ip.is_unspecified()
+                        && !ip.is_multicast()
+                        && !ip.is_unique_local()
+                        && !ip.is_unicast_link_local()
+                        && (ip.segments()[0] & 0xe000) == 0x2000
+                    {
+                        // only use the first one, on mac, the first one is the stable
+                        // one, the last one is the temporary one. The middle ones are deperecated.
+                        *PUBLIC_IPV6_ADDR.lock().unwrap() =
+                            Some((SocketAddr::from((ip, 0)), Instant::now()));
+                        log::debug!("Found public IPv6 address locally: {}", ip);
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    */
+
+    Some(tokio::spawn(async {
+        use hbb_common::futures::future::{select_ok, FutureExt};
+        let tests = STUNS_V6
+            .iter()
+            .map(|&stun| stun_ipv6_test(stun).boxed())
+            .collect::<Vec<_>>();
+
+        match select_ok(tests).await {
+            Ok(res) => {
+                let mut addr = res.0 .0;
+                addr.set_port(0); // Set port to 0 to avoid conflicts
+                PUBLIC_IPV6_ADDR.lock().unwrap().0 = Some(addr);
+                log::debug!(
+                    "Found public IPv6 address via STUN server {}: {}",
+                    res.0 .1,
+                    addr
+                );
+            }
+            Err(e) => {
+                log::error!("Failed to get public IPv6 address: {}", e);
+            }
+        };
+    }))
+}
+
+pub async fn punch_udp(
+    socket: Arc<UdpSocket>,
+    listen: bool,
+) -> ResultType<Option<bytes::BytesMut>> {
+    let mut retry_interval = Duration::from_millis(20);
+    const MAX_INTERVAL: Duration = Duration::from_millis(200);
+    const MAX_TIME: Duration = Duration::from_secs(20);
+    let mut packets_sent = 0;
+    socket.send(&[]).await.ok();
+    packets_sent += 1;
+    let mut last_send_time = Instant::now();
+    let tm = Instant::now();
+    let mut data = [0u8; 1500];
+
+    loop {
+        tokio::select! {
+            _ = hbb_common::sleep(retry_interval.as_secs_f32()) => {
+                if tm.elapsed() > MAX_TIME {
+                    bail!("UDP punch is timed out, stop sending packets after {:?} packets", packets_sent);
+                }
+                let elapsed = last_send_time.elapsed();
+
+                if elapsed >= retry_interval {
+                    socket.send(&[]).await.ok();
+                    packets_sent += 1;
+
+                    // Exponentially increase interval to reduce network pressure
+                    retry_interval = std::cmp::min(
+                        Duration::from_millis((retry_interval.as_millis() as f64 * 1.5) as u64),
+                        MAX_INTERVAL
+                    );
+                    last_send_time = Instant::now();
+                }
+            }
+            res = socket.recv(&mut data) => match res {
+                Err(e) => bail!("UDP punch failed, {packets_sent} packets sent: {e}"),
+                Ok(n) => {
+                    // log::debug!("UDP punch succeeded after sending {} packets after {:?}", packets_sent, tm.elapsed());
+                    if listen {
+                        if n == 0 {
+                            continue;
+                        }
+                        return Ok(Some(bytes::BytesMut::from(&data[..n])));
+                    }
+                    return Ok(None);
+                }
+            }
+        }
+    }
+}
+
+fn test_ipv6_sync() {
+    #[tokio::main(flavor = "current_thread")]
+    async fn func() {
+        if let Some(job) = test_ipv6().await {
+            job.await.ok();
+        }
+    }
+    std::thread::spawn(func);
+}
+
+pub async fn get_ipv6_socket() -> Option<(Arc<UdpSocket>, bytes::Bytes)> {
+    let Some(addr) = PUBLIC_IPV6_ADDR.lock().unwrap().0 else {
+        return None;
+    };
+
+    match UdpSocket::bind(addr).await {
+        Err(err) => {
+            log::warn!("Failed to create UDP socket for IPv6: {err}");
+        }
+        Ok(socket) => {
+            if let Ok(local_addr_v6) = socket.local_addr() {
+                return Some((
+                    Arc::new(socket),
+                    hbb_common::AddrMangle::encode(local_addr_v6).into(),
+                ));
+            }
+        }
+    }
+    None
+}
+
+// The color is the same to `str2color()` in flutter.
+pub fn str2color(s: &str, alpha: u8) -> u32 {
+    let bytes = s.as_bytes();
+    // dart code `160 << 16 + 114 << 8 + 91` results `0`.
+    let mut hash: u32 = 0;
+    for &byte in bytes {
+        let code = byte as u32;
+        hash = code.wrapping_add((hash << 5).wrapping_sub(hash));
+    }
+
+    hash = hash % 16777216;
+    let rgb = hash & 0xFF7FFF;
+
+    (alpha as u32) << 24 | rgb
+}
+
+/// Check control permission state from a u64 bitmap.
+/// Each permission uses 2 bits: 0 = not set, 1 = disable, 2 = enable, 3 = invalid (treated as not set)
+/// Returns: Some(true) = enabled, Some(false) = disabled, None = not set or invalid
+pub fn get_control_permission(
+    permissions: u64,
+    permission: hbb_common::rendezvous_proto::control_permissions::Permission,
+) -> Option<bool> {
+    use hbb_common::protobuf::Enum;
+    let index = permission.value();
+    if index >= 0 && index < 32 {
+        let shift = index * 2;
+        let value = (permissions >> shift) & 0b11;
+        match value {
+            1 => Some(false), // disable
+            2 => Some(true),  // enable
+            _ => None,        // 0 = not set, 3 = invalid
+        }
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -1735,46 +2760,248 @@ mod tests {
             Duration::from_nanos(0)
         );
     }
-}
 
-#[inline]
-pub fn get_builtin_option(key: &str) -> String {
-    config::BUILTIN_SETTINGS
-        .read()
-        .unwrap()
-        .get(key)
-        .cloned()
-        .unwrap_or_default()
-}
+    #[test]
+    fn test_is_public() {
+        // Test URLs containing "rustdesk.com/"
+        assert!(is_public("https://rustdesk.com/"));
+        assert!(is_public("https://www.rustdesk.com/"));
+        assert!(is_public("https://api.rustdesk.com/v1"));
+        assert!(is_public("https://API.RUSTDESK.COM/v1"));
+        assert!(is_public("https://rustdesk.com/path"));
 
-#[inline]
-pub fn is_custom_client() -> bool {
-    get_app_name() != "RustDesk"
-}
+        // Test URLs ending with "rustdesk.com"
+        assert!(is_public("rustdesk.com"));
+        assert!(is_public("https://rustdesk.com"));
+        assert!(is_public("https://RustDesk.com"));
+        assert!(is_public("http://www.rustdesk.com"));
+        assert!(is_public("https://api.rustdesk.com"));
 
-pub fn verify_login(raw: &str, id: &str) -> bool {
-    true
-    /*
-    if is_custom_client() {
-        return true;
+        // Test non-public URLs
+        assert!(!is_public("https://example.com"));
+        assert!(!is_public("https://custom-server.com"));
+        assert!(!is_public("http://192.168.1.1"));
+        assert!(!is_public("localhost"));
+        assert!(!is_public("https://rustdesk.computer.com"));
+        assert!(!is_public("rustdesk.comhello.com"));
     }
-    #[cfg(debug_assertions)]
-    return true;
-    let Ok(pk) = crate::decode64("IycjQd4TmWvjjLnYd796Rd+XkK+KG+7GU1Ia7u4+vSw=") else {
-        return false;
-    };
-    let Some(key) = get_pk(&pk).map(|x| sign::PublicKey(x)) else {
-        return false;
-    };
-    let Ok(v) = crate::decode64(raw) else {
-        return false;
-    };
-    let raw = sign::verify(&v, &key).unwrap_or_default();
-    let v_str = std::str::from_utf8(&raw)
-        .unwrap_or_default()
-        .split(":")
-        .next()
-        .unwrap_or_default();
-    v_str == id
-    */
+
+    #[test]
+    fn test_should_use_tcp_proxy_for_api_url() {
+        assert!(should_use_tcp_proxy_for_api_url(
+            "https://admin.example.com/api/login",
+            "https://admin.example.com"
+        ));
+        assert!(should_use_tcp_proxy_for_api_url(
+            "https://admin.example.com:21114/api/login",
+            "https://admin.example.com"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "https://api.telegram.org/bot123/sendMessage",
+            "https://admin.example.com"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "https://admin.rustdesk.com/api/login",
+            "https://admin.rustdesk.com"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "https://admin.example.com/api/login",
+            "not a url"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "not a url",
+            "https://admin.example.com"
+        ));
+    }
+
+    #[test]
+    fn test_get_tcp_proxy_addr_normalizes_bare_ipv6_host() {
+        struct RestoreCustomRendezvousServer(String);
+
+        impl Drop for RestoreCustomRendezvousServer {
+            fn drop(&mut self) {
+                Config::set_option(
+                    keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
+                    self.0.clone(),
+                );
+            }
+        }
+
+        let _restore = RestoreCustomRendezvousServer(Config::get_option(
+            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER,
+        ));
+        Config::set_option(
+            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
+            "1:2".to_string(),
+        );
+
+        assert_eq!(get_tcp_proxy_addr(), format!("[1:2]:{RENDEZVOUS_PORT}"));
+    }
+
+    #[tokio::test]
+    async fn test_http_request_via_tcp_proxy_rejects_invalid_header_json() {
+        let result = http_request_via_tcp_proxy("not a url", "get", None, "{").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_http_request_via_tcp_proxy_rejects_non_object_header_json() {
+        let err = http_request_via_tcp_proxy("not a url", "get", None, "[]")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("HTTP header information parsing failed!"));
+    }
+
+    #[test]
+    fn test_parse_json_header_entries_preserves_single_content_type() {
+        let headers = parse_json_header_entries(
+            r#"{"Content-Type":"text/plain","Authorization":"Bearer token"}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            headers
+                .iter()
+                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            headers
+                .iter()
+                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .map(|entry| entry.value.as_str()),
+            Some("text/plain")
+        );
+    }
+
+    #[test]
+    fn test_parse_json_header_entries_does_not_add_default_content_type() {
+        let headers = parse_json_header_entries(r#"{"Authorization":"Bearer token"}"#).unwrap();
+
+        assert!(!headers
+            .iter()
+            .any(|entry| entry.name.eq_ignore_ascii_case("Content-Type")));
+    }
+
+    #[test]
+    fn test_parse_simple_header_respects_custom_content_type() {
+        let headers = parse_simple_header("Content-Type: text/plain");
+
+        assert_eq!(
+            headers
+                .iter()
+                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            headers
+                .iter()
+                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .map(|entry| entry.value.as_str()),
+            Some("text/plain")
+        );
+    }
+
+    #[test]
+    fn test_parse_simple_header_preserves_non_content_type_header() {
+        let headers = parse_simple_header("Authorization: Bearer token");
+
+        assert!(headers.iter().any(|entry| {
+            entry.name.eq_ignore_ascii_case("Authorization")
+                && entry.value.as_str() == "Bearer token"
+        }));
+        assert_eq!(
+            headers
+                .iter()
+                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            headers
+                .iter()
+                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
+                .map(|entry| entry.value.as_str()),
+            Some("application/json")
+        );
+    }
+
+    #[test]
+    fn test_tcp_proxy_log_target_redacts_query_only() {
+        assert_eq!(
+            tcp_proxy_log_target("https://example.com/api/heartbeat?token=secret"),
+            "https://example.com/api/heartbeat"
+        );
+    }
+
+    #[test]
+    fn test_tcp_proxy_log_target_brackets_ipv6_host_with_port() {
+        assert_eq!(
+            tcp_proxy_log_target("https://[2001:db8::1]:21114/api/heartbeat?token=secret"),
+            "https://[2001:db8::1]:21114/api/heartbeat"
+        );
+    }
+
+    #[test]
+    fn test_http_proxy_response_to_json() {
+        let mut resp = HttpProxyResponse {
+            status: 200,
+            body: br#"{"ok":true}"#.to_vec().into(),
+            ..Default::default()
+        };
+        resp.headers.push(HeaderEntry {
+            name: "Content-Type".into(),
+            value: "application/json".into(),
+            ..Default::default()
+        });
+
+        let json = http_proxy_response_to_json(resp).unwrap();
+        let value: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["status_code"], 200);
+        assert_eq!(value["headers"]["content-type"], "application/json");
+        assert_eq!(value["body"], r#"{"ok":true}"#);
+
+        let err = http_proxy_response_to_json(HttpProxyResponse {
+            error: "dial failed".into(),
+            ..Default::default()
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("TCP proxy error: dial failed"));
+    }
+
+    #[test]
+    fn test_mouse_event_constants_and_mask_layout() {
+        use super::input::*;
+
+        // Verify MOUSE_TYPE constants are unique and within the mask range.
+        let types = [
+            MOUSE_TYPE_MOVE,
+            MOUSE_TYPE_DOWN,
+            MOUSE_TYPE_UP,
+            MOUSE_TYPE_WHEEL,
+            MOUSE_TYPE_TRACKPAD,
+            MOUSE_TYPE_MOVE_RELATIVE,
+        ];
+
+        let mut seen = std::collections::HashSet::new();
+        for t in types.iter() {
+            assert!(seen.insert(*t), "Duplicate mouse type: {}", t);
+            assert_eq!(
+                *t & MOUSE_TYPE_MASK,
+                *t,
+                "Mouse type {} exceeds mask {}",
+                t,
+                MOUSE_TYPE_MASK
+            );
+        }
+
+        // The mask layout is: lower 3 bits for type, upper bits for buttons (shifted by 3).
+        let combined_mask = MOUSE_TYPE_DOWN | ((MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT) << 3);
+        assert_eq!(combined_mask & MOUSE_TYPE_MASK, MOUSE_TYPE_DOWN);
+        assert_eq!(combined_mask >> 3, MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT);
+    }
 }

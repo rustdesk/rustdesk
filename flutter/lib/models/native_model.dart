@@ -156,7 +156,10 @@ class PlatformFFI {
           // only support for android
           _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
         } else if (isIOS) {
-          _homeDir = _ffiBind.mainGetDataDirIos();
+          // The previous code was `_homeDir = (await getDownloadsDirectory())?.path ?? '';`,
+          // which provided the `downloads` path in the sandbox.
+          // It is unclear why we now use the `data` directory in the sandbox instead.
+          _homeDir = _ffiBind.mainGetDataDirIos(appDir: _dir);
         } else {
           // no need to set home dir
         }

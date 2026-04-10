@@ -12,100 +12,6 @@ void _showSuccess() {
   showToast(translate("Successful"));
 }
 
-void _showError() {
-  showToast(translate("Error"));
-}
-
-void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
-  final pw = await bind.mainGetPermanentPassword();
-  final p0 = TextEditingController(text: pw);
-  final p1 = TextEditingController(text: pw);
-  var validateLength = false;
-  var validateSame = false;
-  dialogManager.show((setState, close, context) {
-    submit() async {
-      close();
-      dialogManager.showLoading(translate("Waiting"));
-      if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
-        dialogManager.dismissAll();
-        _showSuccess();
-      } else {
-        dialogManager.dismissAll();
-        _showError();
-      }
-    }
-
-    return CustomAlertDialog(
-      title: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.password_rounded, color: MyTheme.accent),
-          Text(translate('Set your own password')).paddingOnly(left: 10),
-        ],
-      ),
-      content: Form(
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextFormField(
-              autofocus: true,
-              obscureText: true,
-              keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                labelText: translate('Password'),
-              ),
-              controller: p0,
-              validator: (v) {
-                if (v == null) return null;
-                final val = v.trim().length > 5;
-                if (validateLength != val) {
-                  // use delay to make setState success
-                  Future.delayed(Duration(microseconds: 1),
-                      () => setState(() => validateLength = val));
-                }
-                return val
-                    ? null
-                    : translate('Too short, at least 6 characters.');
-              },
-            ).workaroundFreezeLinuxMint(),
-            TextFormField(
-              obscureText: true,
-              keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                labelText: translate('Confirmation'),
-              ),
-              controller: p1,
-              validator: (v) {
-                if (v == null) return null;
-                final val = p0.text == v;
-                if (validateSame != val) {
-                  Future.delayed(Duration(microseconds: 1),
-                      () => setState(() => validateSame = val));
-                }
-                return val
-                    ? null
-                    : translate('The confirmation is not identical.');
-              },
-            ).workaroundFreezeLinuxMint(),
-          ])),
-      onCancel: close,
-      onSubmit: (validateLength && validateSame) ? submit : null,
-      actions: [
-        dialogButton(
-          'Cancel',
-          icon: Icon(Icons.close_rounded),
-          onPressed: close,
-          isOutline: true,
-        ),
-        dialogButton(
-          'OK',
-          icon: Icon(Icons.done_rounded),
-          onPressed: (validateLength && validateSame) ? submit : null,
-        ),
-      ],
-    );
-  });
-}
-
 void setTemporaryPasswordLengthDialog(
     OverlayDialogManager dialogManager) async {
   List<String> lengths = ['6', '8', '10'];
@@ -147,18 +53,22 @@ void setTemporaryPasswordLengthDialog(
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
-void showServerSettings(OverlayDialogManager dialogManager) async {
+void showServerSettings(OverlayDialogManager dialogManager,
+    void Function(VoidCallback) setState) async {
   Map<String, dynamic> options = {};
   try {
     options = jsonDecode(await bind.mainGetOptions());
   } catch (e) {
     print("Invalid server config: $e");
   }
-  showServerSettingsWithValue(ServerConfig.fromOptions(options), dialogManager);
+  showServerSettingsWithValue(
+      ServerConfig.fromOptions(options), dialogManager, setState);
 }
 
 void showServerSettingsWithValue(
-    ServerConfig serverConfig, OverlayDialogManager dialogManager) async {
+    ServerConfig serverConfig,
+    OverlayDialogManager dialogManager,
+    void Function(VoidCallback)? upSetState) async {
   var isInProgress = false;
   final idCtrl = TextEditingController(text: serverConfig.idServer);
   final relayCtrl = TextEditingController(text: serverConfig.relayServer);
@@ -288,6 +198,7 @@ void showServerSettingsWithValue(
             if (await submit()) {
               close();
               showToast(translate('Successful'));
+              upSetState?.call(() {});
             } else {
               showToast(translate('Failed'));
             }

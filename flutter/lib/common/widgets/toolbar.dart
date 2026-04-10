@@ -6,10 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/common/widgets/login.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 bool isEditOsPassword = false;
@@ -154,36 +156,38 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         onPressed: () => ffi.cursorModel.reset()));
   }
 
+  // https://github.com/rustdesk/rustdesk/pull/9731
+  // Does not work for connection established by "accept".
   connectWithToken(
       {bool isFileTransfer = false,
       bool isViewCamera = false,
-      bool isTcpTunneling = false}) {
+      bool isTcpTunneling = false,
+      bool isTerminal = false}) {
     final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
     connect(context, id,
         isFileTransfer: isFileTransfer,
         isViewCamera: isViewCamera,
+        isTerminal: isTerminal,
         isTcpTunneling: isTcpTunneling,
         connToken: connToken);
   }
 
-  // transferFile
   if (isDefaultConn && isDesktop) {
     v.add(
       TTextMenu(
           child: Text(translate('Transfer file')),
           onPressed: () => connectWithToken(isFileTransfer: true)),
     );
-  }
-  // viewCamera
-  if (isDefaultConn && isDesktop) {
     v.add(
       TTextMenu(
           child: Text(translate('View camera')),
           onPressed: () => connectWithToken(isViewCamera: true)),
     );
-  }
-  // tcpTunneling
-  if (isDefaultConn && isDesktop) {
+    v.add(
+      TTextMenu(
+          child: Text('${translate('Terminal')} (beta)'),
+          onPressed: () => connectWithToken(isTerminal: true)),
+    );
     v.add(
       TTextMenu(
           child: Text(translate('TCP tunneling')),
@@ -191,14 +195,26 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
   }
   // note
-  if (isDefaultConn &&
-      bind
-          .sessionGetAuditServerSync(sessionId: sessionId, typ: "conn")
-          .isNotEmpty) {
+  if (isDefaultConn && !bind.isDisableAccount()) {
     v.add(
       TTextMenu(
           child: Text(translate('Note')),
-          onPressed: () => showAuditDialog(ffi)),
+          onPressed: () async {
+            bool isLogin =
+                bind.mainGetLocalOption(key: 'access_token').isNotEmpty;
+            if (!isLogin) {
+              final res = await loginDialog();
+              if (res != true) return;
+              // Desktop: send message to main window to refresh login status
+              // Web: login is required before connection, so no need to refresh
+              // Mobile: same isolate, no need to send message
+              if (isDesktop) {
+                rustDeskWinManager.call(
+                    WindowType.Main, kWindowRefreshCurrentUser, "");
+              }
+            }
+            showAuditDialog(ffi);
+          }),
     );
   }
   // divider
@@ -259,7 +275,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       isDesktop &&
       ffiModel.keyboard &&
       pi.platform != kPeerPlatformAndroid &&
-      pi.platform != kPeerPlatformMacOS &&
       versionCmp(pi.version, '1.2.0') >= 0 &&
       bind.peerGetSessionsCount(id: id, connType: ffi.connType.index) == 1) {
     v.add(TTextMenu(
@@ -360,6 +375,11 @@ Future<List<TRadioMenu<String>>> toolbarViewStyle(
     TRadioMenu<String>(
         child: Text(translate('Scale adaptive')),
         value: kRemoteViewStyleAdaptive,
+        groupValue: groupValue,
+        onChanged: onChanged),
+    TRadioMenu<String>(
+        child: Text(translate('Scale custom')),
+        value: kRemoteViewStyleCustom,
         groupValue: groupValue,
         onChanged: onChanged)
   ];
@@ -810,6 +830,7 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
   final sessionId = ffi.sessionId;
+  final isDefaultConn = ffi.connType == ConnType.defaultConn;
   List<TToggleMenu> v = [];
 
   // swap key
@@ -829,6 +850,34 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
         value: value,
         onChanged: enabled ? onChanged : null,
         child: Text(translate('Swap control-command key'))));
+  }
+
+  // Relative mouse mode (gaming mode).
+  // Only show when server supports MOUSE_TYPE_MOVE_RELATIVE (version >= 1.4.5)
+  // Note: This feature is only available in Flutter client. Sciter client does not support this.
+  // Web client is not supported yet due to Pointer Lock API integration complexity with Flutter's input system.
+  // Wayland is not supported due to cursor warping limitations.
+  // Mobile: This option is now in GestureHelp widget, shown only when joystick is visible.
+  final isWayland = isDesktop && isLinux && bind.mainCurrentIsWayland();
+  if (isDesktop &&
+      isDefaultConn &&
+      !isWeb &&
+      !isWayland &&
+      ffiModel.keyboard &&
+      !ffiModel.viewOnly &&
+      ffi.inputModel.isRelativeMouseModeSupported) {
+    v.add(TToggleMenu(
+        value: ffi.inputModel.relativeMouseMode.value,
+        onChanged: (value) {
+          if (value == null) return;
+          final previousValue = ffi.inputModel.relativeMouseMode.value;
+          final success = ffi.inputModel.setRelativeMouseMode(value);
+          if (!success) {
+            // Revert the observable toggle to reflect the actual state
+            ffi.inputModel.relativeMouseMode.value = previousValue;
+          }
+        },
+        child: Text(translate('Relative mouse mode'))));
   }
 
   // reverse mouse wheel

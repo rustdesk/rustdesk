@@ -364,7 +364,7 @@ impl HwRamDecoder {
             }
         }
     }
-    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage>> {
+    pub fn decode<'a>(&'a mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage<'a>>> {
         match self.decoder.decode(data) {
             Ok(v) => Ok(v.iter().map(|f| HwRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),
@@ -678,6 +678,8 @@ impl HwCodecConfig {
 }
 
 pub fn check_available_hwcodec() -> String {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    hwcodec::common::setup_parent_death_signal();
     let ctx = EncodeContext {
         name: String::from(""),
         mc_name: None,
@@ -685,7 +687,7 @@ pub fn check_available_hwcodec() -> String {
         height: 720,
         pixfmt: DEFAULT_PIXFMT,
         align: HW_STRIDE_ALIGN as _,
-        kbs: 0,
+        kbs: 1000,
         fps: DEFAULT_FPS,
         gop: DEFAULT_GOP,
         quality: DEFAULT_HW_QUALITY,
@@ -724,6 +726,8 @@ pub fn start_check_process() {
             if let Some(_) = exe.file_name().to_owned() {
                 let arg = "--check-hwcodec-config";
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
+                    #[cfg(windows)]
+                    hwcodec::common::child_exit_when_parent_exit(child.id());
                     // wait up to 30 seconds, it maybe slow on windows startup for poorly performing machines
                     for _ in 0..30 {
                         std::thread::sleep(std::time::Duration::from_secs(1));

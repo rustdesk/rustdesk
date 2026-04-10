@@ -71,10 +71,12 @@ class _PeersView extends StatefulWidget {
   final Peers peers;
   final PeerFilter? peerFilter;
   final PeerCardBuilder peerCardBuilder;
+  final PeerTabIndex peerTabIndex;
 
   const _PeersView(
       {required this.peers,
       required this.peerCardBuilder,
+      required this.peerTabIndex,
       this.peerFilter,
       Key? key})
       : super(key: key);
@@ -395,8 +397,8 @@ class _PeersViewState extends State<_PeersView>
       return peers;
     }
     searchText = searchText.toLowerCase();
-    final matches =
-        await Future.wait(peers.map((peer) => matchPeer(searchText, peer)));
+    final matches = await Future.wait(
+        peers.map((peer) => matchPeer(searchText, peer, widget.peerTabIndex)));
     final filteredList = List<Peer>.empty(growable: true);
     for (var i = 0; i < peers.length; i++) {
       if (matches[i]) {
@@ -441,7 +443,10 @@ abstract class BasePeersView extends StatelessWidget {
         break;
     }
     return _PeersView(
-        peers: peers, peerFilter: peerFilter, peerCardBuilder: peerCardBuilder);
+        peers: peers,
+        peerFilter: peerFilter,
+        peerCardBuilder: peerCardBuilder,
+        peerTabIndex: peerTabIndex);
   }
 }
 
@@ -565,11 +570,14 @@ class MyGroupPeerView extends BasePeersView {
   static bool filter(Peer peer) {
     final model = gFFI.groupModel;
     if (model.searchAccessibleItemNameText.isNotEmpty) {
-      final text = model.searchAccessibleItemNameText.value;
-      final searchPeersOfUser = peer.loginName.contains(text) &&
-          model.users.any((user) => user.name == peer.loginName);
-      final searchPeersOfDeviceGroup = peer.device_group_name.contains(text) &&
-          model.deviceGroups.any((g) => g.name == peer.device_group_name);
+      final text = model.searchAccessibleItemNameText.value.toLowerCase();
+      final searchPeersOfUser = model.users.any((user) =>
+          user.name == peer.loginName &&
+          (user.name.toLowerCase().contains(text) ||
+              user.displayNameOrName.toLowerCase().contains(text)));
+      final searchPeersOfDeviceGroup =
+          peer.device_group_name.toLowerCase().contains(text) &&
+              model.deviceGroups.any((g) => g.name == peer.device_group_name);
       if (!searchPeersOfUser && !searchPeersOfDeviceGroup) {
         return false;
       }

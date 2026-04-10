@@ -103,7 +103,7 @@ class ButtonOP extends StatelessWidget {
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Center(
-                        child: Text('${translate("Continue with")} $opLabel')),
+                        child: Text(translate("Continue with {$opLabel}"))),
                   ),
                 ),
               ],
@@ -166,10 +166,13 @@ class _WidgetOPState extends State<WidgetOP> {
       final String stateMsg = resultMap['state_msg'];
       String failedMsg = resultMap['failed_msg'];
       final String? url = resultMap['url'];
+      final bool urlLaunched = (resultMap['url_launched'] as bool?) ?? false;
       final authBody = resultMap['auth_body'];
       if (_stateMsg != stateMsg || _failedMsg != failedMsg) {
         if (_url.isEmpty && url != null && url.isNotEmpty) {
-          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          if (!urlLaunched) {
+            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          }
           _url = url;
         }
         if (authBody != null) {
@@ -397,6 +400,8 @@ Future<bool?> loginDialog() async {
   String? passwordMsg;
   var isInProgress = false;
   final RxString curOP = ''.obs;
+  // Track hover state for the close icon
+  bool isCloseHovered = false;
 
   final loginOptions = [].obs;
   Future.delayed(Duration.zero, () async {
@@ -455,10 +460,14 @@ Future<bool?> loginDialog() async {
                   resp.user, resp.secret, isEmailVerification);
             } else {
               setState(() => isInProgress = false);
+              // Workaround for web, close the dialog first, then show the verification code dialog.
+              // Otherwise, the text field will keep selecting the text and we can't input the code.
+              // Not sure why this happens.
+              if (isWeb && close != null) close(null);
               final res = await verificationCodeDialog(
                   resp.user, resp.secret, isEmailVerification);
               if (res == true) {
-                if (close != null) close(false);
+                if (!isWeb && close != null) close(false);
                 return;
               }
             }
@@ -550,21 +559,27 @@ Future<bool?> loginDialog() async {
         Text(
           translate('Login'),
         ).marginOnly(top: MyTheme.dialogPadding),
-        InkWell(
-          child: Icon(
-            Icons.close,
-            size: 25,
-            // No need to handle the branch of null.
-            // Because we can ensure the color is not null when debug.
-            color: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.color
-                ?.withOpacity(0.55),
+        MouseRegion(
+          onEnter: (_) => setState(() => isCloseHovered = true),
+          onExit: (_) => setState(() => isCloseHovered = false),
+          child: InkWell(
+            child: Icon(
+              Icons.close,
+              size: 25,
+              // No need to handle the branch of null.
+              // Because we can ensure the color is not null when debug.
+              color: isCloseHovered
+                  ? Colors.white
+                  : Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.color
+                      ?.withOpacity(0.55),
+            ),
+            onTap: onDialogCancel,
+            hoverColor: Colors.red,
+            borderRadius: BorderRadius.circular(5),
           ),
-          onTap: onDialogCancel,
-          hoverColor: Colors.red,
-          borderRadius: BorderRadius.circular(5),
         ).marginOnly(top: 10, right: 15),
       ],
     );

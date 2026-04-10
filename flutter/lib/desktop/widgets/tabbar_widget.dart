@@ -54,6 +54,7 @@ enum DesktopTabType {
   fileTransfer,
   viewCamera,
   portForward,
+  terminal,
   install,
 }
 
@@ -291,7 +292,6 @@ class DesktopTab extends StatefulWidget {
 // ignore: must_be_immutable
 class _DesktopTabState extends State<DesktopTab>
     with MultiWindowListener, WindowListener {
-  final _saveFrameDebounce = Debouncer(delay: Duration(seconds: 1));
   Timer? _macOSCheckRestoreTimer;
   int _macOSCheckRestoreCounter = 0;
 
@@ -369,7 +369,7 @@ class _DesktopTabState extends State<DesktopTab>
 
   void _setMaximized(bool maximize) {
     stateGlobal.setMaximized(maximize);
-    _saveFrameDebounce.call(_saveFrame);
+    _saveFrame();
     setState(() {});
   }
 
@@ -404,24 +404,29 @@ class _DesktopTabState extends State<DesktopTab>
     super.onWindowUnmaximize();
   }
 
-  _saveFrame() async {
-    if (tabType == DesktopTabType.main) {
-      await saveWindowPosition(WindowType.Main);
-    } else if (kWindowType != null && kWindowId != null) {
-      await saveWindowPosition(kWindowType!, windowId: kWindowId);
+  _saveFrame({bool? flush}) async {
+    try {
+      if (tabType == DesktopTabType.main) {
+        await saveWindowPosition(WindowType.Main, flush: flush);
+      } else if (kWindowType != null && kWindowId != null) {
+        await saveWindowPosition(kWindowType!,
+            windowId: kWindowId, flush: flush);
+      }
+    } catch (e) {
+      debugPrint('Error saving window position: $e');
     }
   }
 
   @override
   void onWindowMoved() {
-    _saveFrameDebounce.call(_saveFrame);
+    _saveFrame();
     super.onWindowMoved();
   }
 
   @override
   void onWindowResized() {
-    _saveFrameDebounce.call(_saveFrame);
-    super.onWindowMoved();
+    _saveFrame();
+    super.onWindowResized();
   }
 
   @override
@@ -458,6 +463,8 @@ class _DesktopTabState extends State<DesktopTab>
         }
       });
     }
+
+    await _saveFrame(flush: true);
 
     // hide window on close
     if (isMainWindow) {
@@ -586,7 +593,6 @@ class _DesktopTabState extends State<DesktopTab>
 
   Widget _buildBar() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
             child: GestureDetector(
@@ -651,7 +657,9 @@ class _DesktopTabState extends State<DesktopTab>
                                     controller.state.value.scrollController;
                                 if (!sc.canScroll) return;
                                 _scrollDebounce.call(() {
-                                  sc.animateTo(sc.offset + e.scrollDelta.dy,
+                                  double adjust = 2.5;
+                                  sc.animateTo(
+                                      sc.offset + e.scrollDelta.dy * adjust,
                                       duration: Duration(milliseconds: 200),
                                       curve: Curves.ease);
                                 });
@@ -1076,11 +1084,12 @@ class _TabState extends State<_Tab> with RestorationMixin {
       return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.maxLabelWidth ?? 200),
           child: Tooltip(
-            message: widget.tabType == DesktopTabType.main
-                ? ''
-                : translate(widget.label.value),
+            message:
+                widget.tabType == DesktopTabType.main ? '' : widget.label.value,
             child: Text(
-              translate(widget.label.value),
+              widget.tabType == DesktopTabType.main
+                  ? translate(widget.label.value)
+                  : widget.label.value,
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: isSelected

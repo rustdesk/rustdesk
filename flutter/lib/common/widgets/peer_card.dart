@@ -127,6 +127,10 @@ class _PeerCardState extends State<_PeerCard>
     );
   }
 
+  bool _showNote(Peer peer) {
+    return peerTabShowNote(widget.tab) && peer.note.isNotEmpty;
+  }
+
   makeChild(bool isPortrait, Peer peer) {
     final name = hideUsernameOnCard == true
         ? peer.hostname
@@ -134,6 +138,8 @@ class _PeerCardState extends State<_PeerCard>
     final greyStyle = TextStyle(
         fontSize: 11,
         color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
+    final showNote = _showNote(peer);
+
     return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
@@ -185,14 +191,44 @@ class _PeerCardState extends State<_PeerCard>
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
                       ]).marginOnly(top: isPortrait ? 0 : 2),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          name,
-                          style: isPortrait ? null : greyStyle,
-                          textAlign: TextAlign.start,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Tooltip(
+                              message: name,
+                              waitDuration: const Duration(seconds: 1),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  name,
+                                  style: isPortrait ? null : greyStyle,
+                                  textAlign: TextAlign.start,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (showNote)
+                            Expanded(
+                              child: Tooltip(
+                                message: peer.note,
+                                waitDuration: const Duration(seconds: 1),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    peer.note,
+                                    style: isPortrait ? null : greyStyle,
+                                    textAlign: TextAlign.start,
+                                    overflow: TextOverflow.ellipsis,
+                                  ).marginOnly(
+                                      left: peerCardUiType.value ==
+                                              PeerUiType.list
+                                          ? 32
+                                          : 4),
+                                ),
+                              ),
+                            )
+                        ],
                       ),
                     ],
                   ).marginOnly(top: 2),
@@ -278,7 +314,7 @@ class _PeerCardState extends State<_PeerCard>
                                 padding: const EdgeInsets.all(6),
                                 child:
                                     getPlatformImage(peer.platform, size: 60),
-                              ).marginOnly(top: 4),
+                              ),
                               Row(
                                 children: [
                                   Expanded(
@@ -297,8 +333,26 @@ class _PeerCardState extends State<_PeerCard>
                                   ),
                                 ],
                               ),
+                              if (_showNote(peer))
+                                Row(
+                                  children: [
+                                    Expanded(
+                                        child: Tooltip(
+                                      message: peer.note,
+                                      waitDuration: const Duration(seconds: 1),
+                                      child: Text(
+                                        peer.note,
+                                        style: const TextStyle(
+                                            color: Colors.white38,
+                                            fontSize: 10),
+                                        textAlign: TextAlign.center,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ))
+                                  ],
+                                ),
                             ],
-                          ).paddingAll(4.0),
+                          ).paddingOnly(top: 4.0, left: 4.0, right: 4.0),
                         ),
                       ],
                     ),
@@ -491,6 +545,8 @@ abstract class BasePeerCard extends StatelessWidget {
     bool isViewCamera = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
+    bool isTerminal = false,
+    bool isTerminalRunAsAdmin = false,
   }) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
@@ -498,6 +554,9 @@ abstract class BasePeerCard extends StatelessWidget {
         style: style,
       ),
       proc: () {
+        if (isTerminalRunAsAdmin) {
+          setEnvTerminalAdmin();
+        }
         connectInPeerTab(
           context,
           peer,
@@ -506,6 +565,7 @@ abstract class BasePeerCard extends StatelessWidget {
           isViewCamera: isViewCamera,
           isTcpTunneling: isTcpTunneling,
           isRDP: isRDP,
+          isTerminal: isTerminal || isTerminalRunAsAdmin,
         );
       },
       padding: menuPadding,
@@ -538,6 +598,24 @@ abstract class BasePeerCard extends StatelessWidget {
       context,
       translate('View camera'),
       isViewCamera: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _terminalAction(BuildContext context) {
+    return _connectCommonAction(
+      context,
+      '${translate('Terminal')} (beta)',
+      isTerminal: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _terminalRunAsAdminAction(BuildContext context) {
+    return _connectCommonAction(
+      context,
+      '${translate('Terminal (Run as administrator)')} (beta)',
+      isTerminalRunAsAdmin: true,
     );
   }
 
@@ -892,7 +970,12 @@ class RecentPeerCard extends BasePeerCard {
       _connectAction(context),
       _transferFileAction(context),
       _viewCameraAction(context),
+      _terminalAction(context),
     ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
 
     final List favs = (await bind.mainGetFav()).toList();
 
@@ -952,7 +1035,13 @@ class FavoritePeerCard extends BasePeerCard {
       _connectAction(context),
       _transferFileAction(context),
       _viewCameraAction(context),
+      _terminalAction(context),
     ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
@@ -1006,7 +1095,12 @@ class DiscoveredPeerCard extends BasePeerCard {
       _connectAction(context),
       _transferFileAction(context),
       _viewCameraAction(context),
+      _terminalAction(context),
     ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
 
     final List favs = (await bind.mainGetFav()).toList();
 
@@ -1060,12 +1154,20 @@ class AddressBookPeerCard extends BasePeerCard {
       _connectAction(context),
       _transferFileAction(context),
       _viewCameraAction(context),
+      _terminalAction(context),
     ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    // menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -1086,6 +1188,7 @@ class AddressBookPeerCard extends BasePeerCard {
       if (gFFI.abModel.currentAbTags.isNotEmpty) {
         menuItems.add(_editTagAction(peer.id));
       }
+      menuItems.add(_editNoteAction(peer.id));
     }
     final addressbooks = gFFI.abModel.addressBooksCanWrite();
     if (gFFI.peerTabModel.currentTab == PeerTabIndex.ab.index) {
@@ -1119,6 +1222,21 @@ class AddressBookPeerCard extends BasePeerCard {
         editAbTagDialog(gFFI.abModel.getPeerTags(id), (selectedTag) async {
           await gFFI.abModel.changeTagForPeers([id], selectedTag);
         });
+      },
+      padding: super.menuPadding,
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _editNoteAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Edit note'),
+        style: style,
+      ),
+      proc: () {
+        editAbPeerNoteDialog(id);
       },
       padding: super.menuPadding,
       dismissOnClicked: true,
@@ -1193,12 +1311,20 @@ class MyGroupPeerCard extends BasePeerCard {
       _connectAction(context),
       _transferFileAction(context),
       _viewCameraAction(context),
+      _terminalAction(context),
     ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    // menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -1416,7 +1542,8 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
     {bool isFileTransfer = false,
     bool isViewCamera = false,
     bool isTcpTunneling = false,
-    bool isRDP = false}) async {
+    bool isRDP = false,
+    bool isTerminal = false}) async {
   var password = '';
   bool isSharedPassword = false;
   if (tab == PeerTabIndex.ab) {
@@ -1434,12 +1561,20 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
         password = peer.password;
         isSharedPassword = true;
       }
+      if (password.isEmpty) {
+        final abPassword = gFFI.abModel.getdefaultSharedPassword();
+        if (abPassword != null) {
+          password = abPassword;
+          isSharedPassword = true;
+        }
+      }
     }
   }
   connect(context, peer.id,
       password: password,
       isSharedPassword: isSharedPassword,
       isFileTransfer: isFileTransfer,
+      isTerminal: isTerminal,
       isViewCamera: isViewCamera,
       isTcpTunneling: isTcpTunneling,
       isRDP: isRDP);

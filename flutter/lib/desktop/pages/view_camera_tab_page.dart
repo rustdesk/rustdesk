@@ -6,6 +6,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -79,7 +80,15 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         label: peerId!,
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
-        onTabCloseButton: () => tabController.closeBy(peerId),
+        onTabCloseButton: () async {
+          if (await desktopTryShowTabAuditDialogCloseCancelled(
+            id: peerId!,
+            tabController: tabController,
+          )) {
+            return;
+          }
+          tabController.closeBy(peerId!);
+        },
         page: ViewCameraPage(
           key: ValueKey(peerId),
           id: peerId!,
@@ -145,16 +154,8 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
                 connectionType.secure.value == ConnectionType.strSecure;
             bool direct =
                 connectionType.direct.value == ConnectionType.strDirect;
-            String msgConn;
-            if (secure && direct) {
-              msgConn = translate("Direct and encrypted connection");
-            } else if (secure && !direct) {
-              msgConn = translate("Relayed and encrypted connection");
-            } else if (!secure && direct) {
-              msgConn = translate("Direct and unencrypted connection");
-            } else {
-              msgConn = translate("Relayed and unencrypted connection");
-            }
+            String msgConn = getConnectionText(
+                secure, direct, connectionType.stream_type.value);
             var msgFingerprint = '${translate('Fingerprint')}:\n';
             var fingerprint = FingerprintState.find(key).value;
             if (fingerprint.isEmpty) {
@@ -249,11 +250,11 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Obx(() => Text(
               translate(
-                  toolbarState.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
+                  toolbarState.hide.isTrue ? 'Show Toolbar' : 'Hide Toolbar'),
               style: style,
             )),
         proc: () {
-          toolbarState.switchShow(sessionId);
+          toolbarState.switchHide(sessionId);
           cancelFunc();
         },
         padding: padding,
@@ -295,7 +296,13 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           translate('Close'),
           style: style,
         ),
-        proc: () {
+        proc: () async {
+          if (await desktopTryShowTabAuditDialogCloseCancelled(
+            id: key,
+            tabController: tabController,
+          )) {
+            return;
+          }
           tabController.closeBy(key);
           cancelFunc();
         },
@@ -348,6 +355,14 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
 
   Future<bool> handleWindowCloseButton() async {
     final connLength = tabController.length;
+    if (connLength == 1) {
+      if (await desktopTryShowTabAuditDialogCloseCancelled(
+        id: tabController.state.value.tabs[0].key,
+        tabController: tabController,
+      )) {
+        return false;
+      }
+    }
     if (connLength <= 1) {
       tabController.clear();
       return true;
@@ -401,7 +416,15 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         label: id,
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
-        onTabCloseButton: () => tabController.closeBy(id),
+        onTabCloseButton: () async {
+          if (await desktopTryShowTabAuditDialogCloseCancelled(
+            id: id,
+            tabController: tabController,
+          )) {
+            return;
+          }
+          tabController.closeBy(id);
+        },
         page: ViewCameraPage(
           key: ValueKey(id),
           id: id,

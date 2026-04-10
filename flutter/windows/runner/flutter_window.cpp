@@ -1,12 +1,23 @@
 #include "flutter_window.h"
 
-#include <optional>
-
 #include <desktop_multi_window/desktop_multi_window_plugin.h>
 #include <texture_rgba_renderer/texture_rgba_renderer_plugin_c_api.h>
 #include <flutter_gpu_texture_renderer/flutter_gpu_texture_renderer_plugin_c_api.h>
 
 #include "flutter/generated_plugin_registrant.h"
+
+#include <flutter/event_channel.h>
+#include <flutter/event_sink.h>
+#include <flutter/event_stream_handler_functions.h>
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
+
+#include <windows.h>
+
+#include <optional>
+#include <memory>
+
+#include "win32_desktop.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -29,6 +40,48 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  flutter::MethodChannel<> channel(
+    flutter_controller_->engine()->messenger(),
+    "org.rustdesk.rustdesk/host",
+    &flutter::StandardMethodCodec::GetInstance());
+
+  channel.SetMethodCallHandler(
+    [](const flutter::MethodCall<>& call, std::unique_ptr<flutter::MethodResult<>> result) {
+      if (call.method_name() == "bumpMouse") {
+        auto arguments = call.arguments();
+
+        int dx = 0, dy = 0;
+
+        if (std::holds_alternative<flutter::EncodableMap>(*arguments)) {
+          auto argsMap = std::get<flutter::EncodableMap>(*arguments);
+
+          auto dxIt = argsMap.find(flutter::EncodableValue("dx"));
+          auto dyIt = argsMap.find(flutter::EncodableValue("dy"));
+
+          if ((dxIt != argsMap.end()) && std::holds_alternative<int>(dxIt->second)) {
+            dx = std::get<int>(dxIt->second);
+          }
+          if ((dyIt != argsMap.end()) && std::holds_alternative<int>(dyIt->second)) {
+            dy = std::get<int>(dyIt->second);
+          }
+        } else if (std::holds_alternative<flutter::EncodableList>(*arguments)) {
+          auto argsList = std::get<flutter::EncodableList>(*arguments);
+
+          if ((argsList.size() >= 1) && std::holds_alternative<int>(argsList[0])) {
+            dx = std::get<int>(argsList[0]);
+          }
+          if ((argsList.size() >= 2) && std::holds_alternative<int>(argsList[1])) {
+            dy = std::get<int>(argsList[1]);
+          }
+        }
+
+        bool succeeded = Win32Desktop::BumpMouse(dx, dy);
+
+        result->Success(succeeded);
+      }
+    });
+
   DesktopMultiWindowSetWindowCreatedCallback([](void *controller) {
     auto *flutter_view_controller =
         reinterpret_cast<flutter::FlutterViewController *>(controller);

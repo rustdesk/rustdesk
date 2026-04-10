@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -24,12 +25,18 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
+import 'package:flutter_hbb/utils/scale.dart';
+import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
 class ToolbarState {
   late RxBool _pin;
 
-  bool isShowInited = false;
-  RxBool show = false.obs;
+  RxBool collapse = false.obs;
+  RxBool hide = false.obs;
+
+  // Track initialization state to prevent flickering
+  final RxBool initialized = false.obs;
+  bool _isInitializing = false;
 
   ToolbarState() {
     _pin = RxBool(false);
@@ -50,19 +57,39 @@ class ToolbarState {
 
   bool get pin => _pin.value;
 
-  switchShow(SessionID sessionId) async {
-    bind.sessionToggleOption(
-        sessionId: sessionId, value: kOptionCollapseToolbar);
-    show.value = !show.value;
+  /// Initialize all toolbar states from session options.
+  /// This should be called once when the toolbar is first created.
+  Future<void> init(SessionID sessionId) async {
+    if (initialized.value || _isInitializing) return;
+    _isInitializing = true;
+
+    try {
+      // Load both states in parallel for better performance
+      final results = await Future.wait([
+        bind.sessionGetToggleOption(
+            sessionId: sessionId, arg: kOptionCollapseToolbar),
+        bind.sessionGetToggleOption(
+            sessionId: sessionId, arg: kOptionHideToolbar),
+      ]);
+
+      collapse.value = results[0] ?? false;
+      hide.value = results[1] ?? false;
+    } finally {
+      _isInitializing = false;
+      initialized.value = true;
+    }
   }
 
-  initShow(SessionID sessionId) async {
-    if (!isShowInited) {
-      show.value = !(await bind.sessionGetToggleOption(
-              sessionId: sessionId, arg: kOptionCollapseToolbar) ??
-          false);
-      isShowInited = true;
-    }
+  switchCollapse(SessionID sessionId) async {
+    bind.sessionToggleOption(
+        sessionId: sessionId, value: kOptionCollapseToolbar);
+    collapse.value = !collapse.value;
+  }
+
+  // Switch hide state for entire toolbar visibility
+  switchHide(SessionID sessionId) async {
+    bind.sessionToggleOption(sessionId: sessionId, value: kOptionHideToolbar);
+    hide.value = !hide.value;
   }
 
   switchPin() async {
@@ -151,129 +178,6 @@ class _ToolbarTheme {
 typedef DismissFunc = void Function();
 
 class RemoteMenuEntry {
-  static MenuEntryRadios<String> viewStyle(
-    String remoteId,
-    FFI ffi,
-    EdgeInsets padding, {
-    DismissFunc? dismissFunc,
-    DismissCallback? dismissCallback,
-    RxString? rxViewStyle,
-  }) {
-    return MenuEntryRadios<String>(
-      text: translate('Ratio'),
-      optionsGetter: () => [
-        MenuEntryRadioOption(
-          text: translate('Scale original'),
-          value: kRemoteViewStyleOriginal,
-          dismissOnClicked: true,
-          dismissCallback: dismissCallback,
-        ),
-        MenuEntryRadioOption(
-          text: translate('Scale adaptive'),
-          value: kRemoteViewStyleAdaptive,
-          dismissOnClicked: true,
-          dismissCallback: dismissCallback,
-        ),
-      ],
-      curOptionGetter: () async {
-        // null means peer id is not found, which there's no need to care about
-        final viewStyle =
-            await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
-        if (rxViewStyle != null) {
-          rxViewStyle.value = viewStyle;
-        }
-        return viewStyle;
-      },
-      optionSetter: (String oldValue, String newValue) async {
-        await bind.sessionSetViewStyle(
-            sessionId: ffi.sessionId, value: newValue);
-        if (rxViewStyle != null) {
-          rxViewStyle.value = newValue;
-        }
-        ffi.canvasModel.updateViewStyle();
-        if (dismissFunc != null) {
-          dismissFunc();
-        }
-      },
-      padding: padding,
-      dismissOnClicked: true,
-      dismissCallback: dismissCallback,
-    );
-  }
-
-  static MenuEntrySwitch2<String> showRemoteCursor(
-    String remoteId,
-    SessionID sessionId,
-    EdgeInsets padding, {
-    DismissFunc? dismissFunc,
-    DismissCallback? dismissCallback,
-  }) {
-    final state = ShowRemoteCursorState.find(remoteId);
-    final optKey = 'show-remote-cursor';
-    return MenuEntrySwitch2<String>(
-      switchType: SwitchType.scheckbox,
-      text: translate('Show remote cursor'),
-      getter: () {
-        return state;
-      },
-      setter: (bool v) async {
-        await bind.sessionToggleOption(sessionId: sessionId, value: optKey);
-        state.value =
-            bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: optKey);
-        if (dismissFunc != null) {
-          dismissFunc();
-        }
-      },
-      padding: padding,
-      dismissOnClicked: true,
-      dismissCallback: dismissCallback,
-    );
-  }
-
-  static MenuEntrySwitch<String> disableClipboard(
-    SessionID sessionId,
-    EdgeInsets? padding, {
-    DismissFunc? dismissFunc,
-    DismissCallback? dismissCallback,
-  }) {
-    return createSwitchMenuEntry(
-      sessionId,
-      'Disable clipboard',
-      'disable-clipboard',
-      padding,
-      true,
-      dismissCallback: dismissCallback,
-    );
-  }
-
-  static MenuEntrySwitch<String> createSwitchMenuEntry(
-    SessionID sessionId,
-    String text,
-    String option,
-    EdgeInsets? padding,
-    bool dismissOnClicked, {
-    DismissFunc? dismissFunc,
-    DismissCallback? dismissCallback,
-  }) {
-    return MenuEntrySwitch<String>(
-      switchType: SwitchType.scheckbox,
-      text: translate(text),
-      getter: () async {
-        return bind.sessionGetToggleOptionSync(
-            sessionId: sessionId, arg: option);
-      },
-      setter: (bool v) async {
-        await bind.sessionToggleOption(sessionId: sessionId, value: option);
-        if (dismissFunc != null) {
-          dismissFunc();
-        }
-      },
-      padding: padding,
-      dismissOnClicked: dismissOnClicked,
-      dismissCallback: dismissCallback,
-    );
-  }
-
   static MenuEntryButton<String> insertLock(
     SessionID sessionId,
     EdgeInsets? padding, {
@@ -357,7 +261,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     // setState(() {});
   }
 
-  RxBool get show => widget.state.show;
+  RxBool get collapse => widget.state.collapse;
+  RxBool get hide => widget.state.hide;
   bool get pin => widget.state.pin;
 
   PeerInfo get pi => widget.ffi.ffiModel.pi;
@@ -378,6 +283,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
                   arg: 'remote-menubar-drag-x') ??
               '0.5') ??
           0.5;
+      // Initialize toolbar states (collapse, hide) from session options
+      widget.state.init(widget.ffi.sessionId);
     });
 
     _debouncerHide = Debouncer<int>(
@@ -397,8 +304,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   }
 
   _debouncerHideProc(int v) {
-    if (!pin && show.isTrue && _isCursorOverImage && _dragging.isFalse) {
-      show.value = false;
+    if (!pin && collapse.isFalse && _isCursorOverImage && _dragging.isFalse) {
+      collapse.value = true;
     }
   }
 
@@ -411,17 +318,27 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: Obx(() => show.value
-          ? _buildToolbar(context)
-          : _buildDraggableShowHide(context)),
-    );
+    return Obx(() {
+      // Wait for initialization to complete to prevent flickering
+      if (!widget.state.initialized.value) {
+        return const SizedBox.shrink();
+      }
+      // If toolbar is hidden, return empty widget
+      if (hide.value) {
+        return const SizedBox.shrink();
+      }
+      return Align(
+        alignment: Alignment.topCenter,
+        child: collapse.isFalse
+            ? _buildToolbar(context)
+            : _buildDraggableCollapse(context),
+      );
+    });
   }
 
-  Widget _buildDraggableShowHide(BuildContext context) {
+  Widget _buildDraggableCollapse(BuildContext context) {
     return Obx(() {
-      if (show.isTrue && _dragging.isFalse) {
+      if (collapse.isFalse && _dragging.isFalse) {
         triggerAutoHide();
       }
       final borderRadius = BorderRadius.vertical(
@@ -518,7 +435,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             ),
           ),
         ),
-        _buildDraggableShowHide(context),
+        _buildDraggableCollapse(context),
       ],
     );
   }
@@ -631,7 +548,7 @@ class _MonitorMenu extends StatelessWidget {
         menuStyle: MenuStyle(
             padding:
                 MaterialStatePropertyAll(EdgeInsets.symmetric(horizontal: 6))),
-        menuChildrenGetter: () => [buildMonitorSubmenuWidget(context)]);
+        menuChildrenGetter: (_) => [buildMonitorSubmenuWidget(context)]);
   }
 
   Widget buildMultiMonitorMenu(BuildContext context) {
@@ -842,7 +759,7 @@ class _ControlMenu extends StatelessWidget {
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         ffi: ffi,
-        menuChildrenGetter: () => toolbarControls(context, id, ffi).map((e) {
+        menuChildrenGetter: (_) => toolbarControls(context, id, ffi).map((e) {
               if (e.divider) {
                 return Divider();
               } else {
@@ -1023,6 +940,7 @@ class _DisplayMenu extends StatefulWidget {
 }
 
 class _DisplayMenuState extends State<_DisplayMenu> {
+  final RxInt _customPercent = 100.obs;
   late final ScreenAdjustor _screenAdjustor = ScreenAdjustor(
     id: widget.id,
     ffi: widget.ffi,
@@ -1037,13 +955,28 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   String get id => widget.id;
 
   @override
+  void initState() {
+    super.initState();
+    // Initialize custom percent from stored option once
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final v = await getSessionCustomScalePercent(widget.ffi.sessionId);
+        if (_customPercent.value != v) {
+          _customPercent.value = v;
+        }
+      } catch (_) {}
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     _screenAdjustor.updateScreen();
-    menuChildrenGetter() {
+    menuChildrenGetter(_IconSubmenuButtonState state) {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
-        viewStyle(),
-        scrollStyle(),
+        viewStyle(customPercent: _customPercent),
+        scrollStyle(state, colorScheme),
         imageQuality(),
         codec(),
         if (ffi.connType == ConnType.defaultConn)
@@ -1107,62 +1040,146 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     );
   }
 
-  viewStyle() {
+  viewStyle({required RxInt customPercent}) {
     return futureBuilder(
         future: toolbarViewStyle(context, widget.id, widget.ffi),
         hasData: (data) {
           final v = data as List<TRadioMenu<String>>;
+          final bool isCustomSelected = v.isNotEmpty
+              ? v.first.groupValue == kRemoteViewStyleCustom
+              : false;
           return Column(children: [
-            ...v
-                .map((e) => RdoMenuButton<String>(
-                    value: e.value,
-                    groupValue: e.groupValue,
-                    onChanged: e.onChanged,
-                    child: e.child,
-                    ffi: ffi))
-                .toList(),
-            Divider(),
+            ...v.map((e) {
+              final isCustom = e.value == kRemoteViewStyleCustom;
+              final child =
+                  isCustom ? Text(translate('Scale custom')) : e.child;
+              // Whether the current selection is already custom
+              final bool isGroupCustomSelected =
+                  e.groupValue == kRemoteViewStyleCustom;
+              // Keep menu open when switching INTO custom so the slider is visible immediately
+              final bool keepOpenForThisItem =
+                  isCustom && !isGroupCustomSelected;
+              return RdoMenuButton<String>(
+                  value: e.value,
+                  groupValue: e.groupValue,
+                  onChanged: (value) {
+                    // Perform the original change
+                    e.onChanged?.call(value);
+                    // Only force a rebuild when we keep the menu open to reveal the slider
+                    if (keepOpenForThisItem) {
+                      setState(() {});
+                    }
+                  },
+                  child: child,
+                  ffi: ffi,
+                  // When entering custom, keep submenu open to show the slider controls
+                  closeOnActivate: !keepOpenForThisItem);
+            }).toList(),
+            // Only show a divider when custom is NOT selected
+            if (!isCustomSelected) Divider(),
+            _customControlsIfCustomSelected(
+                onChanged: (v) => customPercent.value = v),
           ]);
         });
   }
 
-  scrollStyle() {
+  Widget _customControlsIfCustomSelected({ValueChanged<int>? onChanged}) {
+    return futureBuilder(future: () async {
+      final current = await bind.sessionGetViewStyle(sessionId: ffi.sessionId);
+      return current == kRemoteViewStyleCustom;
+    }(), hasData: (data) {
+      final isCustom = data as bool;
+      return AnimatedSwitcher(
+        duration: Duration(milliseconds: 220),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: isCustom
+            ? _CustomScaleMenuControls(ffi: ffi, onChanged: onChanged)
+            : SizedBox.shrink(),
+      );
+    });
+  }
+
+  scrollStyle(_IconSubmenuButtonState state, ColorScheme colorScheme) {
     return futureBuilder(future: () async {
       final viewStyle =
           await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
-      final visible = viewStyle == kRemoteViewStyleOriginal;
+      final visible = viewStyle == kRemoteViewStyleOriginal ||
+          viewStyle == kRemoteViewStyleCustom;
       final scrollStyle =
           await bind.sessionGetScrollStyle(sessionId: ffi.sessionId) ?? '';
-      return {'visible': visible, 'scrollStyle': scrollStyle};
+      final edgeScrollEdgeThickness = await bind
+          .sessionGetEdgeScrollEdgeThickness(sessionId: ffi.sessionId);
+      return {
+        'visible': visible,
+        'scrollStyle': scrollStyle,
+        'edgeScrollEdgeThickness': edgeScrollEdgeThickness,
+      };
     }(), hasData: (data) {
       final visible = data['visible'] as bool;
       if (!visible) return Offstage();
       final groupValue = data['scrollStyle'] as String;
-      onChange(String? value) async {
+      final edgeScrollEdgeThickness = data['edgeScrollEdgeThickness'] as int;
+
+      onChangeScrollStyle(String? value) async {
         if (value == null) return;
         await bind.sessionSetScrollStyle(
             sessionId: ffi.sessionId, value: value);
         widget.ffi.canvasModel.updateScrollStyle();
+        state.setState(() {});
       }
 
-      final enabled = widget.ffi.canvasModel.imageOverflow.value;
-      return Column(children: [
-        RdoMenuButton<String>(
-          child: Text(translate('ScrollAuto')),
-          value: kRemoteScrollStyleAuto,
-          groupValue: groupValue,
-          onChanged: enabled ? (value) => onChange(value) : null,
-          ffi: widget.ffi,
-        ),
-        RdoMenuButton<String>(
-          child: Text(translate('Scrollbar')),
-          value: kRemoteScrollStyleBar,
-          groupValue: groupValue,
-          onChanged: enabled ? (value) => onChange(value) : null,
-          ffi: widget.ffi,
-        ),
-        Divider(),
-      ]);
+      onChangeEdgeScrollEdgeThickness(double? value) async {
+        if (value == null) return;
+        final newThickness = value.round();
+        await bind.sessionSetEdgeScrollEdgeThickness(
+            sessionId: ffi.sessionId, value: newThickness);
+        widget.ffi.canvasModel.updateEdgeScrollEdgeThickness(newThickness);
+        state.setState(() {});
+      }
+
+      return Obx(() => Column(children: [
+            RdoMenuButton<String>(
+              child: Text(translate('ScrollAuto')),
+              value: kRemoteScrollStyleAuto,
+              groupValue: groupValue,
+              onChanged: widget.ffi.canvasModel.imageOverflow.value
+                  ? (value) => onChangeScrollStyle(value)
+                  : null,
+              closeOnActivate: groupValue != kRemoteScrollStyleEdge,
+              ffi: widget.ffi,
+            ),
+            RdoMenuButton<String>(
+              child: Text(translate('Scrollbar')),
+              value: kRemoteScrollStyleBar,
+              groupValue: groupValue,
+              onChanged: widget.ffi.canvasModel.imageOverflow.value
+                  ? (value) => onChangeScrollStyle(value)
+                  : null,
+              closeOnActivate: groupValue != kRemoteScrollStyleEdge,
+              ffi: widget.ffi,
+            ),
+            if (!isWeb) ...[
+              RdoMenuButton<String>(
+                child: Text(translate('ScrollEdge')),
+                value: kRemoteScrollStyleEdge,
+                groupValue: groupValue,
+                closeOnActivate: false,
+                onChanged: widget.ffi.canvasModel.imageOverflow.value
+                    ? (value) => onChangeScrollStyle(value)
+                    : null,
+                ffi: widget.ffi,
+              ),
+              Offstage(
+                  offstage: groupValue != kRemoteScrollStyleEdge,
+                  child: EdgeThicknessControl(
+                    value: edgeScrollEdgeThickness.toDouble(),
+                    onChanged: onChangeEdgeScrollEdgeThickness,
+                    colorScheme: colorScheme,
+                  )),
+            ],
+            Divider(),
+          ]));
     });
   }
 
@@ -1241,6 +1258,178 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                       ffi: ffi))
                   .toList());
         });
+  }
+}
+
+class _CustomScaleMenuControls extends StatefulWidget {
+  final FFI ffi;
+  final ValueChanged<int>? onChanged;
+  const _CustomScaleMenuControls({Key? key, required this.ffi, this.onChanged})
+      : super(key: key);
+
+  @override
+  State<_CustomScaleMenuControls> createState() =>
+      _CustomScaleMenuControlsState();
+}
+
+class _CustomScaleMenuControlsState
+    extends CustomScaleControls<_CustomScaleMenuControls> {
+  @override
+  FFI get ffi => widget.ffi;
+
+  @override
+  ValueChanged<int>? get onScaleChanged => widget.onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    const smallBtnConstraints = BoxConstraints(minWidth: 28, minHeight: 28);
+
+    final sliderControl = Semantics(
+      label: translate('Custom scale slider'),
+      value: '$scaleValue%',
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          activeTrackColor: colorScheme.primary,
+          thumbColor: colorScheme.primary,
+          overlayColor: colorScheme.primary.withOpacity(0.1),
+          showValueIndicator: ShowValueIndicator.never,
+          thumbShape: _RectValueThumbShape(
+            min: CustomScaleControls.minPercent.toDouble(),
+            max: CustomScaleControls.maxPercent.toDouble(),
+            width: 52,
+            height: 24,
+            radius: 4,
+            displayValueForNormalized: (t) => mapPosToPercent(t),
+          ),
+        ),
+        child: Slider(
+          value: scalePos,
+          min: 0.0,
+          max: 1.0,
+          // Use a wide range of divisions (calculated as (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)) to provide ~1% precision increments.
+          // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons, which is undesirable for big ranges.
+          divisions:
+              (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)
+                  .round(),
+          onChanged: onSliderChanged,
+        ),
+      ),
+    );
+
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        child: Row(children: [
+          Tooltip(
+            message: translate('Decrease'),
+            child: IconButton(
+              iconSize: 16,
+              padding: EdgeInsets.all(1),
+              constraints: smallBtnConstraints,
+              icon: const Icon(Icons.remove),
+              onPressed: () => nudgeScale(-1),
+            ),
+          ),
+          Expanded(child: sliderControl),
+          Tooltip(
+            message: translate('Increase'),
+            child: IconButton(
+              iconSize: 16,
+              padding: EdgeInsets.all(1),
+              constraints: smallBtnConstraints,
+              icon: const Icon(Icons.add),
+              onPressed: () => nudgeScale(1),
+            ),
+          ),
+        ]),
+      ),
+      Divider(),
+    ]);
+  }
+}
+
+// Lightweight rectangular thumb that paints the current percentage.
+// Stateless and uses only SliderTheme colors; avoids allocations beyond a TextPainter per frame.
+class _RectValueThumbShape extends SliderComponentShape {
+  final double min;
+  final double max;
+  final double width;
+  final double height;
+  final double radius;
+  final String unit;
+  // Optional mapper to compute display value from normalized position [0,1]
+  // If null, falls back to linear interpolation between min and max.
+  final int Function(double normalized)? displayValueForNormalized;
+
+  const _RectValueThumbShape({
+    required this.min,
+    required this.max,
+    required this.width,
+    required this.height,
+    required this.radius,
+    this.displayValueForNormalized,
+    this.unit = '%',
+  });
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return Size(width, height);
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final Canvas canvas = context.canvas;
+
+    // Resolve color based on enabled/disabled animation, with safe fallbacks.
+    final ColorTween colorTween = ColorTween(
+      begin: sliderTheme.disabledThumbColor,
+      end: sliderTheme.thumbColor,
+    );
+    final Color? evaluatedColor = colorTween.evaluate(enableAnimation);
+    final Color? thumbColor = sliderTheme.thumbColor;
+    final Color fillColor = evaluatedColor ?? thumbColor ?? Colors.blueAccent;
+
+    final RRect rrect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: width, height: height),
+      Radius.circular(radius),
+    );
+    final Paint paint = Paint()..color = fillColor;
+    canvas.drawRRect(rrect, paint);
+
+    // Compute displayed value from normalized slider value.
+    final int displayValue = displayValueForNormalized != null
+        ? displayValueForNormalized!(value)
+        : (min + value * (max - min)).round();
+    final TextSpan span = TextSpan(
+      text: '$displayValue$unit',
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final TextPainter tp = TextPainter(
+      text: span,
+      textAlign: TextAlign.center,
+      textDirection: textDirection,
+    );
+    tp.layout(maxWidth: width - 4);
+    tp.paint(
+        canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
   }
 }
 
@@ -1576,26 +1765,57 @@ class _KeyboardMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     var ffiModel = Provider.of<FfiModel>(context);
     if (!ffiModel.keyboard) return Offstage();
-    toolbarToggles() => toolbarKeyboardToggles(ffi)
-        .map((e) => CkbMenuButton(
-            value: e.value, onChanged: e.onChanged, child: e.child, ffi: ffi))
-        .toList();
+    toolbarToggles() {
+      final toggles = toolbarKeyboardToggles(ffi)
+          .map((e) => CkbMenuButton(
+              value: e.value,
+              onChanged: e.onChanged,
+              child: e.child,
+              ffi: ffi) as Widget)
+          .toList();
+      if (toggles.isNotEmpty) {
+        toggles.add(Divider());
+      }
+      return toggles;
+    }
+
     return _IconSubmenuButton(
         tooltip: 'Keyboard Settings',
-        svg: "assets/keyboard.svg",
+        svg: "assets/keyboard_mouse.svg",
         ffi: ffi,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
-        menuChildrenGetter: () => [
+        menuChildrenGetter: (_) => [
               keyboardMode(),
               localKeyboardType(),
               inputSource(),
               Divider(),
               viewMode(),
+              if ([kPeerPlatformWindows, kPeerPlatformMacOS, kPeerPlatformLinux]
+                  .contains(pi.platform))
+                showMyCursor(),
               Divider(),
               ...toolbarToggles(),
+              ...mouseSpeed(),
               ...mobileActions(),
             ]);
+  }
+
+  mouseSpeed() {
+    final speedWidgets = [];
+    final sessionId = ffi.sessionId;
+    if (isDesktop) {
+      if (ffi.ffiModel.keyboard) {
+        final enabled = !ffi.ffiModel.viewOnly;
+        final trackpad = MenuButton(
+          child: Text(translate('Trackpad speed')).paddingOnly(left: 26.0),
+          onPressed: enabled ? () => trackpadSpeedDialog(sessionId, ffi) : null,
+          ffi: ffi,
+        );
+        speedWidgets.add(trackpad);
+      }
+    }
+    return speedWidgets;
   }
 
   keyboardMode() {
@@ -1641,8 +1861,18 @@ class _KeyboardMenu extends StatelessWidget {
           continue;
         }
 
-        if (pi.isWayland && mode.key != kKeyMapMode) {
-          continue;
+        if (pi.isWayland) {
+          // Legacy mode is hidden on desktop control side because dead keys
+          // don't work properly on Wayland. When the control side is mobile,
+          // Legacy mode is used automatically (mobile always sends Legacy events).
+          if (mode.key == kKeyLegacyMode) {
+            continue;
+          }
+          // Translate mode requires server >= 1.4.6.
+          if (mode.key == kKeyTranslateMode &&
+              versionCmp(pi.version, '1.4.6') < 0) {
+            continue;
+          }
         }
 
         var text = translate(mode.menu);
@@ -1730,10 +1960,41 @@ class _KeyboardMenu extends StatelessWidget {
                 final viewOnly = await bind.sessionGetToggleOption(
                     sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
                 ffiModel.setViewOnly(id, viewOnly ?? value);
+                final showMyCursor = await bind.sessionGetToggleOption(
+                    sessionId: ffi.sessionId, arg: kOptionToggleShowMyCursor);
+                ffiModel.setShowMyCursor(showMyCursor ?? value);
               }
             : null,
         ffi: ffi,
         child: Text(translate('View Mode')));
+  }
+
+  showMyCursor() {
+    final ffiModel = ffi.ffiModel;
+    return CkbMenuButton(
+            value: ffiModel.showMyCursor,
+            onChanged: (value) async {
+              if (value == null) return;
+              await bind.sessionToggleOption(
+                  sessionId: ffi.sessionId, value: kOptionToggleShowMyCursor);
+              final showMyCursor = await bind.sessionGetToggleOption(
+                      sessionId: ffi.sessionId,
+                      arg: kOptionToggleShowMyCursor) ??
+                  value;
+              ffiModel.setShowMyCursor(showMyCursor);
+
+              // Also set view only if showMyCursor is enabled and viewOnly is not enabled.
+              if (showMyCursor && !ffiModel.viewOnly) {
+                await bind.sessionToggleOption(
+                    sessionId: ffi.sessionId, value: kOptionToggleViewOnly);
+                final viewOnly = await bind.sessionGetToggleOption(
+                    sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
+                ffiModel.setViewOnly(id, viewOnly ?? value);
+              }
+            },
+            ffi: ffi,
+            child: Text(translate('Show my cursor')))
+        .paddingOnly(left: 26.0);
   }
 
   mobileActions() {
@@ -1799,7 +2060,7 @@ class _ChatMenuState extends State<_ChatMenu> {
           ffi: widget.ffi,
           color: _ToolbarTheme.blueColor,
           hoverColor: _ToolbarTheme.hoverBlueColor,
-          menuChildrenGetter: () => [textChat(), voiceCall()]);
+          menuChildrenGetter: (_) => [textChat(), voiceCall()]);
     }
   }
 
@@ -1855,7 +2116,7 @@ class _VoiceCallMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    menuChildrenGetter() {
+    menuChildrenGetter(_IconSubmenuButtonState state) {
       final audioInput = AudioInput(
         builder: (devices, currentDevice, setDevice) {
           return Column(
@@ -1961,7 +2222,12 @@ class _CloseMenu extends StatelessWidget {
     return _IconMenuButton(
       assetName: 'assets/close.svg',
       tooltip: 'Close',
-      onPressed: () => closeConnection(id: id),
+      onPressed: () async {
+        if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) {
+          return;
+        }
+        closeConnection(id: id);
+      },
       color: _ToolbarTheme.redColor,
       hoverColor: _ToolbarTheme.hoverRedColor,
     );
@@ -2055,7 +2321,7 @@ class _IconSubmenuButton extends StatefulWidget {
   final Widget? icon;
   final Color color;
   final Color hoverColor;
-  final List<Widget> Function() menuChildrenGetter;
+  final List<Widget> Function(_IconSubmenuButtonState state) menuChildrenGetter;
   final MenuStyle? menuStyle;
   final FFI? ffi;
   final double? width;
@@ -2079,6 +2345,11 @@ class _IconSubmenuButton extends StatefulWidget {
 
 class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
   bool hover = false;
+
+  @override // discard @protected
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2112,7 +2383,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
                         ),
                         child: icon))),
             menuChildren: widget
-                .menuChildrenGetter()
+                .menuChildrenGetter(this)
                 .map((e) => _buildPointerTrackWidget(e, widget.ffi))
                 .toList()));
     return MenuBar(children: [
@@ -2213,6 +2484,8 @@ class RdoMenuButton<T> extends StatelessWidget {
   final ValueChanged<T?>? onChanged;
   final Widget? child;
   final FFI? ffi;
+  // When true, submenu will be dismissed on activate; when false, it stays open.
+  final bool closeOnActivate;
   const RdoMenuButton({
     Key? key,
     required this.value,
@@ -2220,6 +2493,7 @@ class RdoMenuButton<T> extends StatelessWidget {
     required this.child,
     this.ffi,
     this.onChanged,
+    this.closeOnActivate = true,
   }) : super(key: key);
 
   @override
@@ -2228,9 +2502,10 @@ class RdoMenuButton<T> extends StatelessWidget {
       value: value,
       groupValue: groupValue,
       child: child,
+      closeOnActivate: closeOnActivate,
       onChanged: onChanged != null
           ? (T? value) {
-              if (ffi != null) {
+              if (ffi != null && closeOnActivate) {
                 _menuDismissCallback(ffi!);
               }
               onChanged?.call(value);
@@ -2273,7 +2548,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
   double left = 0.0;
   double right = 1.0;
 
-  RxBool get show => widget.toolbarState.show;
+  RxBool get collapse => widget.toolbarState.collapse;
 
   @override
   initState() {
@@ -2396,20 +2671,20 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
               )),
         buttonWrapper(
           () => setState(() {
-            widget.toolbarState.switchShow(widget.sessionId);
+            widget.toolbarState.switchCollapse(widget.sessionId);
           }),
           Obx((() => Tooltip(
-                message:
-                    translate(show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
+                message: translate(
+                    collapse.isFalse ? 'Hide Toolbar' : 'Show Toolbar'),
                 child: Icon(
-                  show.isTrue ? Icons.expand_less : Icons.expand_more,
+                  collapse.isFalse ? Icons.expand_less : Icons.expand_more,
                   size: iconSize,
                 ),
               ))),
         ),
         if (isWebDesktop)
           Obx(() {
-            if (show.isTrue) {
+            if (collapse.isFalse) {
               return Offstage();
             } else {
               return buttonWrapper(
@@ -2470,4 +2745,57 @@ Widget _buildPointerTrackWidget(Widget child, FFI? ffi) {
       child: child,
     ),
   );
+}
+
+class EdgeThicknessControl extends StatelessWidget {
+  final double value;
+  final ValueChanged<double>? onChanged;
+  final ColorScheme? colorScheme;
+
+  const EdgeThicknessControl({
+    Key? key,
+    required this.value,
+    this.onChanged,
+    this.colorScheme,
+  }) : super(key: key);
+
+  static const double kMin = 20;
+  static const double kMax = 150;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = this.colorScheme ?? Theme.of(context).colorScheme;
+
+    final slider = SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: colorScheme.primary,
+        thumbColor: colorScheme.primary,
+        overlayColor: colorScheme.primary.withOpacity(0.1),
+        showValueIndicator: ShowValueIndicator.never,
+        thumbShape: _RectValueThumbShape(
+          min: EdgeThicknessControl.kMin,
+          max: EdgeThicknessControl.kMax,
+          width: 52,
+          height: 24,
+          radius: 4,
+          unit: 'px',
+        ),
+      ),
+      child: Semantics(
+        value: value.toInt().toString(),
+        child: Slider(
+          value: value,
+          min: EdgeThicknessControl.kMin,
+          max: EdgeThicknessControl.kMax,
+          divisions:
+              (EdgeThicknessControl.kMax - EdgeThicknessControl.kMin).round(),
+          semanticFormatterCallback: (double newValue) =>
+              "${newValue.round()}px",
+          onChanged: onChanged,
+        ),
+      ),
+    );
+
+    return slider;
+  }
 }

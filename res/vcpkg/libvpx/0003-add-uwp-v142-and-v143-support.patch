@@ -1,8 +1,8 @@
 diff --git a/build/make/configure.sh b/build/make/configure.sh
-index 110f16e..c161d0e 100644
+index cc5bf6ce4..9380e87a7 100644
 --- a/build/make/configure.sh
 +++ b/build/make/configure.sh
-@@ -1038,7 +1038,7 @@ EOF
+@@ -1092,7 +1092,7 @@ EOF
            # A number of ARM-based Windows platforms are constrained by their
            # respective SDKs' limitations. Fortunately, these are all 32-bit ABIs
            # and so can be selected as 'win32'.
@@ -11,7 +11,7 @@ index 110f16e..c161d0e 100644
              asm_conversion_cmd="${source_path_mk}/build/make/ads2armasm_ms.pl"
              AS_SFX=.S
              msvs_arch_dir=arm-msvs
-@@ -1272,6 +1272,9 @@ EOF
+@@ -1366,6 +1366,9 @@ EOF
          android)
            soft_enable realtime_only
            ;;
@@ -21,12 +21,12 @@ index 110f16e..c161d0e 100644
          win*)
            enabled gcc && add_cflags -fno-common
            ;;
-@@ -1390,6 +1393,16 @@ EOF
+@@ -1484,14 +1487,26 @@ EOF
        fi
        AS_SFX=.asm
        case  ${tgt_os} in
 +        uwp)
-+          if [ {$tgt_isa} = "x86" ] || [ {$tgt_isa} = "armv7" ]; then
++          if [ ${tgt_isa} = "x86" ] || [ ${tgt_isa} = "armv7" ]; then
 +            add_asflags -f win32
 +          else
 +            add_asflags -f win64
@@ -37,8 +37,20 @@ index 110f16e..c161d0e 100644
 +          ;;
          win32)
            add_asflags -f win32
-           enabled debug && [ "${AS}" = yasm ] && add_asflags -g cv8
-@@ -1519,6 +1532,8 @@ EOF
+-          enabled debug && add_asflags -g cv8
++          enabled debug && [ "${AS}" = yasm ] && add_asflags -g cv8
++          enabled debug && [ "${AS}" = nasm ] && add_asflags -gcv8
+           EXE_SFX=.exe
+           ;;
+         win64)
+           add_asflags -f win64
+-          enabled debug && add_asflags -g cv8
++          enabled debug && [ "${AS}" = yasm ] && add_asflags -g cv8
++          enabled debug && [ "${AS}" = nasm ] && add_asflags -gcv8
+           EXE_SFX=.exe
+           ;;
+         linux*|solaris*|android*)
+@@ -1622,6 +1637,8 @@ EOF
    # Almost every platform uses pthreads.
    if enabled multithread; then
      case ${toolchain} in
@@ -48,10 +60,10 @@ index 110f16e..c161d0e 100644
          ;;
        *-android-gcc)
 diff --git a/build/make/gen_msvs_vcxproj.sh b/build/make/gen_msvs_vcxproj.sh
-index 58bb66b..b4cad6c 100644
+index 1e1db05bb..543eb37b2 100755
 --- a/build/make/gen_msvs_vcxproj.sh
 +++ b/build/make/gen_msvs_vcxproj.sh
-@@ -296,7 +296,22 @@ generate_vcxproj() {
+@@ -310,7 +310,22 @@ generate_vcxproj() {
          tag_content ProjectGuid "{${guid}}"
          tag_content RootNamespace ${name}
          tag_content Keyword ManagedCProj
@@ -75,7 +87,7 @@ index 58bb66b..b4cad6c 100644
              tag_content AppContainerApplication true
              # The application type can be one of "Windows Store",
              # "Windows Phone" or "Windows Phone Silverlight". The
-@@ -394,7 +409,7 @@ generate_vcxproj() {
+@@ -412,7 +427,7 @@ generate_vcxproj() {
                  Condition="'\$(Configuration)|\$(Platform)'=='$config|$plat'"
              if [ "$name" == "vpx" ]; then
                  hostplat=$plat
@@ -85,19 +97,19 @@ index 58bb66b..b4cad6c 100644
                  fi
              fi
 diff --git a/configure b/configure
-index b212e07..1a9fa98 100755
+index 457bd6b38..fa4bce71b 100755
 --- a/configure
 +++ b/configure
-@@ -104,6 +104,8 @@ all_platforms="${all_platforms} arm64-darwin21-gcc"
- all_platforms="${all_platforms} arm64-darwin22-gcc"
+@@ -105,6 +105,8 @@ all_platforms="${all_platforms} arm64-darwin22-gcc"
  all_platforms="${all_platforms} arm64-darwin23-gcc"
+ all_platforms="${all_platforms} arm64-darwin24-gcc"
  all_platforms="${all_platforms} arm64-linux-gcc"
 +all_platforms="${all_platforms} arm64-uwp-vs16"
 +all_platforms="${all_platforms} arm64-uwp-vs17"
  all_platforms="${all_platforms} arm64-win64-gcc"
  all_platforms="${all_platforms} arm64-win64-vs15"
  all_platforms="${all_platforms} arm64-win64-vs16"
-@@ -115,6 +117,8 @@ all_platforms="${all_platforms} armv7-darwin-gcc"    #neon Cortex-A8
+@@ -116,6 +118,8 @@ all_platforms="${all_platforms} armv7-darwin-gcc"    #neon Cortex-A8
  all_platforms="${all_platforms} armv7-linux-rvct"    #neon Cortex-A8
  all_platforms="${all_platforms} armv7-linux-gcc"     #neon Cortex-A8
  all_platforms="${all_platforms} armv7-none-rvct"     #neon Cortex-A8
@@ -106,7 +118,7 @@ index b212e07..1a9fa98 100755
  all_platforms="${all_platforms} armv7-win32-gcc"
  all_platforms="${all_platforms} armv7-win32-vs14"
  all_platforms="${all_platforms} armv7-win32-vs15"
-@@ -146,6 +150,8 @@ all_platforms="${all_platforms} x86-linux-gcc"
+@@ -147,6 +151,8 @@ all_platforms="${all_platforms} x86-linux-gcc"
  all_platforms="${all_platforms} x86-linux-icc"
  all_platforms="${all_platforms} x86-os2-gcc"
  all_platforms="${all_platforms} x86-solaris-gcc"
@@ -115,7 +127,7 @@ index b212e07..1a9fa98 100755
  all_platforms="${all_platforms} x86-win32-gcc"
  all_platforms="${all_platforms} x86-win32-vs14"
  all_platforms="${all_platforms} x86-win32-vs15"
-@@ -171,6 +177,8 @@ all_platforms="${all_platforms} x86_64-iphonesimulator-gcc"
+@@ -173,6 +179,8 @@ all_platforms="${all_platforms} x86_64-iphonesimulator-gcc"
  all_platforms="${all_platforms} x86_64-linux-gcc"
  all_platforms="${all_platforms} x86_64-linux-icc"
  all_platforms="${all_platforms} x86_64-solaris-gcc"
@@ -124,7 +136,7 @@ index b212e07..1a9fa98 100755
  all_platforms="${all_platforms} x86_64-win64-gcc"
  all_platforms="${all_platforms} x86_64-win64-vs14"
  all_platforms="${all_platforms} x86_64-win64-vs15"
-@@ -503,11 +511,10 @@ process_targets() {
+@@ -507,11 +515,10 @@ process_targets() {
      ! enabled multithread && DIST_DIR="${DIST_DIR}-nomt"
      ! enabled install_docs && DIST_DIR="${DIST_DIR}-nodocs"
      DIST_DIR="${DIST_DIR}-${tgt_isa}-${tgt_os}"
@@ -140,7 +152,7 @@ index b212e07..1a9fa98 100755
      if [ -f "${source_path}/build/make/version.sh" ]; then
          ver=`"$source_path/build/make/version.sh" --bare "$source_path"`
          DIST_DIR="${DIST_DIR}-${ver}"
-@@ -596,6 +603,10 @@ process_detect() {
+@@ -600,6 +607,10 @@ process_detect() {
  
              # Specialize windows and POSIX environments.
              case $toolchain in
@@ -151,3 +163,6 @@ index b212e07..1a9fa98 100755
                  *-win*-*)
                      # Don't check for any headers in Windows builds.
                      false
+-- 
+2.49.0
+

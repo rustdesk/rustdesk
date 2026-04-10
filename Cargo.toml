@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.4.0"
+version = "1.4.6"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -76,11 +76,13 @@ crossbeam-queue = "0.3"
 hex = "0.4"
 chrono = "0.4"
 cidr-utils = "0.5"
-libloading = "0.8"
 fon = "0.6"
 zip = "0.6"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
+stunclient = "0.4"
+kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
+reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 # https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
@@ -97,6 +99,7 @@ ctrlc = "3.2"
 # arboard = { version = "3.4", features = ["wayland-data-control"] }
 arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
 clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
+portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rustdesk/pty_based_0.8.1", package = "portable-pty" }
 
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
@@ -119,10 +122,19 @@ winapi = { version = "0.3", features = [
 ] }
 windows = { version = "0.61", features = [
     "Win32",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
     "Win32_System",
     "Win32_System_Diagnostics",
-    "Win32_System_Threading",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Environment",
+    "Win32_System_IO",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
 ] }
 winreg = "0.11"
 windows-service = "0.6"
@@ -142,9 +154,13 @@ core-graphics = "0.22"
 include_dir = "0.7"
 fruitbasket = "0.10"
 objc_id = "0.1"
+# If we use piet "0.7" here, we must also update core-graphics to "0.24".
+piet = "0.6"
+piet-coregraphics = "0.6"
+foreign-types = "0.3"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
-tray-icon = { git = "https://github.com/tauri-apps/tray-icon" }
+tray-icon = { git = "https://github.com/tauri-apps/tray-icon", version = "0.21.3" }
 tao = { git = "https://github.com/rustdesk-org/tao", branch = "dev" }
 image = "0.24"
 
@@ -153,15 +169,14 @@ keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 wallpaper = { git = "https://github.com/rustdesk-org/wallpaper.rs" }
-
-[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
-# https://github.com/rustdesk/rustdesk-server-pro/issues/189, using native-tls for better tls support
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "socks", "json", "native-tls", "gzip"], default-features=false }
-
-[target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "socks", "json", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
+tiny-skia = "0.11"
+softbuffer = "0.4"
+fontdb = "0.23"
+bytemuck = "1.23"
+ttf-parser = "0.25"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libxdo-sys = "0.11"
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
 rust-pulsectl = { git = "https://github.com/rustdesk-org/pulsectl" }
@@ -170,7 +185,6 @@ evdev = { git="https://github.com/rustdesk-org/evdev" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
 pam = { git="https://github.com/rustdesk-org/pam" }
-users = { version = "0.11" }
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
 percent-encoding = {version = "2.3", optional = true}
@@ -178,6 +192,11 @@ once_cell = {version = "1.18", optional = true}
 nix = { version = "0.29", features = ["term", "process"]}
 gtk = "0.18"
 termios = "0.3"
+terminfo = "0.8"
+winit = "0.30"
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
@@ -187,6 +206,11 @@ android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
 exclude = ["vdi/host", "examples/custom_plugin"]
+
+# Patch libxdo-sys to use a stub implementation that doesn't require libxdo
+# This allows building and running on systems without libxdo installed (e.g., Wayland-only)
+[patch.crates-io]
+libxdo-sys = { path = "libs/libxdo-sys-stub" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."

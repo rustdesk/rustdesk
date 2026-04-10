@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 lazy_static! {
     static ref JVM: RwLock<Option<JavaVM>> = RwLock::new(None);
     static ref MAIN_SERVICE_CTX: RwLock<Option<GlobalRef>> = RwLock::new(None); // MainService -> video service / audio service / info
+    static ref APPLICATION_CONTEXT: RwLock<Option<GlobalRef>> = RwLock::new(None);
     static ref VIDEO_RAW: Mutex<FrameRaw> = Mutex::new(FrameRaw::new("video", MAX_VIDEO_FRAME_TIMEOUT));
     static ref AUDIO_RAW: Mutex<FrameRaw> = Mutex::new(FrameRaw::new("audio", MAX_AUDIO_FRAME_TIMEOUT));
     static ref NDK_CONTEXT_INITED: Mutex<bool> = Default::default();
@@ -462,6 +463,23 @@ fn init_ndk_context(java_vm: *mut c_void, context_jobject: *mut c_void) {
     *lock = true;
 }
 
+fn try_init_rustls_platform_verifier(env: &mut JNIEnv, context_jobject: *mut c_void) {
+    use hbb_common::config::ANDROID_RUSTLS_PLATFORM_VERIFIER_INITIALIZED as INITIALIZED;
+    use std::sync::atomic::Ordering;
+    let initialized = INITIALIZED.load(Ordering::Relaxed);
+    if !initialized {
+        let ctx_for_rustls = unsafe { JObject::from_raw(context_jobject as jni::sys::jobject) };
+        if let Err(e) =
+            hbb_common::rustls_platform_verifier::android::init_hosted(env, ctx_for_rustls)
+        {
+            log::error!("Failed to initialize rustls-platform-verifier: {:?}", e);
+        } else {
+            INITIALIZED.store(true, Ordering::Relaxed);
+            log::info!("rustls-platform-verifier initialized successfully");
+        }
+    }
+}
+
 // https://cjycode.com/flutter_rust_bridge/guides/how-to/ndk-init
 #[no_mangle]
 pub extern "C" fn JNI_OnLoad(vm: jni::JavaVM, res: *mut std::os::raw::c_void) -> jni::sys::jint {
@@ -470,4 +488,24 @@ pub extern "C" fn JNI_OnLoad(vm: jni::JavaVM, res: *mut std::os::raw::c_void) ->
         init_ndk_context(vm, res);
     }
     jni::JNIVersion::V6.into()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ffi_FFI_onAppStart(mut env: JNIEnv, _class: JClass, ctx: JObject) {
+    if ctx.is_null() {
+        log::error!("application context is null");
+        return;
+    }
+    if APPLICATION_CONTEXT.read().unwrap().is_some() {
+        log::info!("application context already initialized");
+        return;
+    }
+    if let Ok(jvm) = env.get_java_vm() {
+        if let Ok(context) = env.new_global_ref(ctx) {
+            let java_vm = jvm.get_java_vm_pointer() as *mut c_void;
+            let context_jobject = context.as_obj().as_raw() as *mut c_void;
+            *APPLICATION_CONTEXT.write().unwrap() = Some(context);
+            try_init_rustls_platform_verifier(&mut env, context_jobject);
+        }
+    }
 }

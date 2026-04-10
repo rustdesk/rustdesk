@@ -137,7 +137,7 @@ class JobTable: Reactor.Component {
     self.timer(30ms, function() { self.update(); });
   }
 
-  function addJob(id, path, to, file_num, show_hidden, is_remote) {
+  function addJob(id, path, to, file_num, show_hidden, is_remote, auto_start) {
     var job = { type: "transfer",
     id: id, path: path, to: to,
     include_hidden: show_hidden,
@@ -146,6 +146,10 @@ class JobTable: Reactor.Component {
     this.job_map[id] = this.jobs[this.jobs.length - 1];
     handler.update_next_job_id(id + 1);
     handler.add_job(id, 0, path, to, file_num, show_hidden, is_remote);
+    if (auto_start) {
+      this.continueJob(id);
+      this.update();
+    }
     stdout.println(JSON.stringify(job));
   }
 
@@ -279,7 +283,8 @@ class JobTable: Reactor.Component {
         if (!err) {
           handler.remove_dir(job.id, job.path, job.is_remote);
           refreshDir(job.is_remote);
-          if (is_remote) file_transfer.remote_folder_view.table.resetCurrent();
+          // Use the job's is_remote; local variable `is_remote` is undefined in this scope.
+          if (job.is_remote) file_transfer.remote_folder_view.table.resetCurrent();
           else file_transfer.local_folder_view.table.resetCurrent();
         }
       } else if (!job.no_confirm) {
@@ -697,9 +702,9 @@ handler.clearAllJobs = function() {
   file_transfer.job_table.clearAllJobs();
 }
 
-handler.addJob = function (id, path, to, file_num, show_hidden, is_remote) { // load last job
+handler.addJob = function (id, path, to, file_num, show_hidden, is_remote, auto_start) { // load last job
   // stdout.println("restore job: " + is_remote);
-  file_transfer.job_table.addJob(id,path,to,file_num,show_hidden,is_remote);
+  file_transfer.job_table.addJob(id,path,to,file_num,show_hidden,is_remote,auto_start);
 }
 
 handler.updateTransferList = function () {

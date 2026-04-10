@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/remote_input.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 
 import '../../consts.dart';
@@ -77,6 +76,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   String keyboardMode = "legacy";
   bool _isWindowBlur = false;
   final _cursorOverImage = false.obs;
+  final _uniqueKey = UniqueKey();
 
   var _blockableOverlayState = BlockableOverlayState();
 
@@ -124,9 +124,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     if (!isWeb) bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
@@ -185,26 +183,20 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     if (isWindows) {
       _isWindowBlur = false;
     }
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
   }
 
   // When the window is unminimized, onWindowMaximize or onWindowRestore can be called when the old state was maximized or not.
   @override
   void onWindowMaximize() {
     super.onWindowMaximize();
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
   }
 
   @override
   void onWindowMinimize() {
     super.onWindowMinimize();
-    if (!isLinux) {
-      WakelockPlus.disable();
-    }
+    WakelockManager.disable(_uniqueKey);
   }
 
   @override
@@ -247,9 +239,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: SystemUiOverlay.values);
     }
-    if (!isLinux) {
-      await WakelockPlus.disable();
-    }
+    WakelockManager.disable(_uniqueKey);
     await Get.delete<FFI>(tag: widget.id);
     removeSharedStates(widget.id);
   }
@@ -360,7 +350,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     super.build(context);
     return WillPopScope(
         onWillPop: () async {
-          clientClose(sessionId, _ffi.dialogManager);
+          clientClose(sessionId, _ffi);
           return false;
         },
         child: MultiProvider(providers: [
@@ -465,7 +455,6 @@ class _ViewCameraPageState extends State<ViewCameraPage>
           () => _ffi.ffiModel.pi.isSet.isFalse
               ? Container(color: Colors.transparent)
               : Obx(() {
-                  widget.toolbarState.initShow(sessionId);
                   _ffi.textureModel.updateCurrentDisplay(peerDisplay.value);
                   return ImagePaint(
                     id: widget.id,
@@ -515,8 +504,6 @@ class ImagePaint extends StatefulWidget {
 }
 
 class _ImagePaintState extends State<ImagePaint> {
-  bool _lastRemoteCursorMoved = false;
-
   String get id => widget.id;
   RxBool get cursorOverImage => widget.cursorOverImage;
   Widget Function(Widget)? get listenerBuilder => widget.listenerBuilder;
@@ -529,7 +516,7 @@ class _ImagePaintState extends State<ImagePaint> {
 
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
-    if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
+    if (c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto) {
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);

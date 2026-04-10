@@ -8,6 +8,7 @@ use librustdesk::*;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 fn main() {
     if !common::global_init() {
+        eprintln!("Global initialization failed.");
         return;
     }
     common::test_rendezvous_server();
@@ -22,9 +23,6 @@ fn main() {
     feature = "flutter"
 )))]
 fn main() {
-    if !common::global_init() {
-        return;
-    }
     #[cfg(all(windows, not(feature = "inline")))]
     unsafe {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2);

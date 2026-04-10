@@ -1,6 +1,6 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.10)
-project(runner LANGUAGES CXX)
+project(runner LANGUAGES C CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
@@ -54,6 +54,55 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
+# Wayland protocol for keyboard shortcuts inhibit
+pkg_check_modules(WAYLAND_CLIENT IMPORTED_TARGET wayland-client)
+pkg_check_modules(WAYLAND_PROTOCOLS_PKG QUIET wayland-protocols)
+pkg_check_modules(WAYLAND_SCANNER_PKG QUIET wayland-scanner)
+
+if(WAYLAND_PROTOCOLS_PKG_FOUND)
+  pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+endif()
+if(WAYLAND_SCANNER_PKG_FOUND)
+  pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
+endif()
+
+if(WAYLAND_CLIENT_FOUND AND WAYLAND_PROTOCOLS_DIR AND WAYLAND_SCANNER)
+  set(KEYBOARD_SHORTCUTS_INHIBIT_PROTOCOL
+    "${WAYLAND_PROTOCOLS_DIR}/unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml")
+
+  if(EXISTS ${KEYBOARD_SHORTCUTS_INHIBIT_PROTOCOL})
+    set(WAYLAND_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/wayland-protocols")
+    file(MAKE_DIRECTORY ${WAYLAND_GENERATED_DIR})
+
+    # Generate client header
+    add_custom_command(
+      OUTPUT "${WAYLAND_GENERATED_DIR}/keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
+      COMMAND ${WAYLAND_SCANNER} client-header
+        ${KEYBOARD_SHORTCUTS_INHIBIT_PROTOCOL}
+        "${WAYLAND_GENERATED_DIR}/keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
+      DEPENDS ${KEYBOARD_SHORTCUTS_INHIBIT_PROTOCOL}
+      VERBATIM
+    )
+
+    # Generate protocol code
+    add_custom_command(
+      OUTPUT "${WAYLAND_GENERATED_DIR}/keyboard-shortcuts-inhibit-unstable-v1-protocol.c"
+      COMMAND ${WAYLAND_SCANNER} private-code
+        ${KEYBOARD_SHORTCUTS_INHIBIT_PROTOCOL}
+        "${WAYLAND_GENERATED_DIR}/keyboard-shortcuts-inhibit-unstable-v1-protocol.c"
+      DEPENDS ${KEYBOARD_SHORTCUTS_INHIBIT_PROTOCOL}
+      VERBATIM
+    )
+
+    set(WAYLAND_PROTOCOL_SOURCES
+      "${WAYLAND_GENERATED_DIR}/keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
+      "${WAYLAND_GENERATED_DIR}/keyboard-shortcuts-inhibit-unstable-v1-protocol.c"
+    )
+
+    set(HAS_KEYBOARD_SHORTCUTS_INHIBIT TRUE)
+  endif()
+endif()
+
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
 # Define the application target. To change its name, change BINARY_NAME above,
@@ -63,7 +112,11 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
+  "wayland_shortcuts_inhibit.cc"
+  "bump_mouse.cc"
+  "bump_mouse_x11.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
+  ${WAYLAND_PROTOCOL_SOURCES}
 )
 
 # Apply the standard set of build settings. This can be removed for applications
@@ -75,6 +128,13 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
 # target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
+
+# Wayland support for keyboard shortcuts inhibit
+if(HAS_KEYBOARD_SHORTCUTS_INHIBIT)
+  target_compile_definitions(${BINARY_NAME} PRIVATE HAS_KEYBOARD_SHORTCUTS_INHIBIT)
+  target_include_directories(${BINARY_NAME} PRIVATE ${WAYLAND_GENERATED_DIR})
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::WAYLAND_CLIENT)
+endif()
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: RustDesk <support@rustdesk.com>
+Date: Fri, 1 Nov 2025 08:00:00 +0000
+Subject: [PATCH] Fix CVBufferCopyAttachments crash on macOS Big Sur
+
+Use weak linking for CVBufferCopyAttachments to avoid symbol resolution
+crash on macOS < 12. The function will be NULL on older systems and the
+code will fall back to the deprecated CVBufferGetAttachments.
+
+This fixes a crash on macOS Big Sur (11.x) where CVBufferCopyAttachments
+is not available. The runtime check with __builtin_available is not enough
+because the symbol is still resolved at load time, causing a dyld error.
+
+Fixes: https://github.com/rustdesk/rustdesk/issues/13377
+---
+ libavutil/hwcontext_videotoolbox.c | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/libavutil/hwcontext_videotoolbox.c b/libavutil/hwcontext_videotoolbox.c
+index 0000000000..1111111111 100644
+--- a/libavutil/hwcontext_videotoolbox.c
++++ b/libavutil/hwcontext_videotoolbox.c
+@@ -33,6 +33,25 @@
+ #include "pixfmt.h"
+ #include "pixdesc.h"
+ 
++// Weak import CVBufferCopyAttachments to support macOS < 12
++// The runtime check with __builtin_available is not enough because
++// the symbol is still resolved at load time, causing dyld errors on Big Sur.
++// With weak_import, the function pointer will be NULL on older systems.
++#if TARGET_OS_OSX && defined(__MAC_12_0) && __MAC_OS_X_VERSION_MAX_ALLOWED >= __MAC_12_0
++extern CFDictionaryRef CVBufferCopyAttachments(CVBufferRef buffer, CVAttachmentMode mode)
++    __attribute__((weak_import));
++#endif
++#if TARGET_OS_IOS && defined(__IPHONE_15_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_15_0
++extern CFDictionaryRef CVBufferCopyAttachments(CVBufferRef buffer, CVAttachmentMode mode)
++    __attribute__((weak_import));
++#endif
++#if TARGET_OS_TV && defined(__TVOS_15_0) && __TV_OS_VERSION_MAX_ALLOWED >= __TVOS_15_0
++extern CFDictionaryRef CVBufferCopyAttachments(CVBufferRef buffer, CVAttachmentMode mode)
++    __attribute__((weak_import));
++#endif
++
++// End of weak import section
++
+ typedef struct VTFramesContext {
+     /**
+      * The public AVVTFramesContext. See hwcontext_videotoolbox.h for it.
+@@ -547,7 +566,7 @@ static CFDictionaryRef vt_cv_buffer_copy_attachments(CVBufferRef buffer,
+         (TARGET_OS_TV   && defined(__TVOS_15_0)   && __TV_OS_VERSION_MAX_ALLOWED     >= __TVOS_15_0)
+         // On recent enough versions, just use the respective API
+         if (__builtin_available(macOS 12.0, iOS 15.0, tvOS 15.0, *))
+-            return CVBufferCopyAttachments(buffer, attachment_mode);
++            if (CVBufferCopyAttachments != NULL) return CVBufferCopyAttachments(buffer, attachment_mode);
+     #endif
+ 
+     // Check that the target is lower than macOS 12 / iOS 15 / tvOS 15
+-- 
+2.43.0
+

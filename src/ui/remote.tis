@@ -4,10 +4,13 @@ var is_port_forward = handler.is_port_forward();
 var input_blocked = false;
 var display_width = 0;
 var display_height = 0;
+var display_remote_scale = 1;
 var display_origin_x = 0;
 var display_origin_y = 0;
 var display_cursor_embedded = false;
 var display_scale = 1;
+// the scale factor is different from `display_scale` if peer platform is Linux (Wayland).
+var cursor_scale = 1;
 var keyboard_enabled = true; // server side
 var clipboard_enabled = true; // server side
 var audio_enabled = true; // server side
@@ -15,13 +18,15 @@ var file_enabled = true; // server side
 var restart_enabled = true; // server side
 var recording_enabled = true; // server side
 var scroll_body = $(body);
+var peer_platform = "";
 
-handler.setDisplay = function(x, y, w, h, cursor_embedded) {
+handler.setDisplay = function(x, y, w, h, cursor_embedded, scale) {
     display_width = w;
     display_height = h;
     display_origin_x = x;
     display_origin_y = y;
     display_cursor_embedded = cursor_embedded;
+    display_remote_scale = scale;
     adaptDisplay();
     if (recording) handler.record_screen(true, 0, w, h);
 }
@@ -29,12 +34,24 @@ handler.setDisplay = function(x, y, w, h, cursor_embedded) {
 // in case toolbar not shown correctly
 view.windowMinSize = (scaleIt(500), scaleIt(300));
 
+function get_peer_platform() {
+    if (peer_platform == "") {
+        peer_platform = handler.peer_platform();
+    }
+    return peer_platform;
+}
+
+function isRemoteLinux() {
+    return get_peer_platform() == "Linux";
+}
+
 function adaptDisplay() {
     var w = display_width;
     var h = display_height;
     if (!w || !h) return;
     var style = handler.get_view_style();
     display_scale = 1.;
+    cursor_scale = 1.;
     var (sx, sy, sw, sh) = view.screenBox(view.windowState == View.WINDOW_FULL_SCREEN ? #frame : #workarea, #rectw);
     if (sw >= w && sh > h) {
         var hh = $(header).box(#height, #border);
@@ -71,6 +88,12 @@ function adaptDisplay() {
             }
         }
     }
+    if (isRemoteLinux()) {
+        cursor_scale = display_scale * display_remote_scale;
+    } else {
+        cursor_scale = display_scale;
+    }
+    if (cursor_scale <= 0.0001) cursor_scale = 1.;
     refreshCursor();
     handler.style.set {
         width: w / scaleFactor + "px",
@@ -119,6 +142,14 @@ function resetWheel() {
 }
 
 var INERTIA_ACCELERATION = 30;
+var WHEEL_ACCEL_VELOCITY_THRESHOLD = 5000;
+var WHEEL_ACCEL_DT_FAST = 0.04;
+var WHEEL_ACCEL_DT_MEDIUM = 0.08;
+var WHEEL_ACCEL_VALUE_FAST = 3;
+var WHEEL_ACCEL_VALUE_MEDIUM = 2;
+// Wheel burst acceleration (empirical tuning).
+// Applies only on fast, non-smooth wheel bursts to keep single-step scroll unchanged.
+// Sciter uses seconds for dt, so velocity is in delta/sec.
 
 // not good, precision not enough to simulate acceleration effect,
 // seems have to use pixel based rather line based delta
@@ -214,12 +245,28 @@ function handler.onMouse(evt)
         // mouseWheelDistance = 8 * [currentUserDefs floatForKey:@"com.apple.scrollwheel.scaling"];
         mask = 3; 
         {
-            var (dx, dy) = evt.wheelDeltas;
-            if (dx > 0) dx = 1;
-            else if (dx < 0) dx = -1;
-            if (dy > 0) dy = 1;
-            else if (dy < 0) dy = -1;
-            if (Math.abs(dx) > Math.abs(dy)) {
+            var now = getTime();
+            var dt = last_wheel_time > 0 ? (now - last_wheel_time) / 1000 : 0;
+            var (raw_dx, raw_dy) = evt.wheelDeltas;
+            var dx = 0;
+            var dy = 0;
+            var abs_dx = Math.abs(raw_dx);
+            var abs_dy = Math.abs(raw_dy);
+            var dominant = abs_dx > abs_dy ? abs_dx : abs_dy;
+            var is_smooth = dominant < 1;
+            var accel = 1;
+            if (!is_smooth && dt > 0 && (is_win || is_linux) && get_peer_platform() == "Mac OS") {
+                var velocity = dominant / dt;
+                if (velocity >= WHEEL_ACCEL_VELOCITY_THRESHOLD) {
+                    if (dt < WHEEL_ACCEL_DT_FAST) accel = WHEEL_ACCEL_VALUE_FAST;
+                    else if (dt < WHEEL_ACCEL_DT_MEDIUM) accel = WHEEL_ACCEL_VALUE_MEDIUM;
+                }
+            }
+            if (raw_dx > 0) dx = accel;
+            else if (raw_dx < 0) dx = -accel;
+            if (raw_dy > 0) dy = accel;
+            else if (raw_dy < 0) dy = -accel;
+            if (abs_dx > abs_dy) {
                 dy = 0;
             } else {
                 dx = 0;
@@ -230,8 +277,6 @@ function handler.onMouse(evt)
             wheel_delta_y = acc_wheel_delta_y.toInteger();
             acc_wheel_delta_x -= wheel_delta_x;
             acc_wheel_delta_y -= wheel_delta_y;
-            var now = getTime();
-            var dt = last_wheel_time > 0 ? (now - last_wheel_time) / 1000 : 0;
             if (dt > 0) {
                 var vx = dx / dt;
                 var vy = dy / dt;
@@ -274,12 +319,14 @@ function handler.onMouse(evt)
         entered = true;
         stdout.println("enter");
         handler.enter(handler.get_keyboard_mode());
+        last_wheel_time = 0;
         return keyboard_enabled;
       case Event.MOUSE_LEAVE:
         entered = false;
         stdout.println("leave");
         handler.leave(handler.get_keyboard_mode());
-        if (is_left_down && handler.peer_platform() == "Android") {
+        last_wheel_time = 0;
+        if (is_left_down && get_peer_platform() == "Android") {
             is_left_down = false;
             handler.send_mouse((1 << 3) | 2, 0, 0, evt.altKey,
                 evt.ctrlKey, evt.shiftKey, evt.commandKey);
@@ -303,8 +350,8 @@ function handler.onMouse(evt)
         resetWheel();
     }
     if (!keyboard_enabled) return false;
-    x = (x / display_scale).toInteger();
-    y = (y / display_scale).toInteger();
+    x = (x / cursor_scale).toInteger();
+    y = (y / cursor_scale).toInteger();
     // insert down between two up, osx has this behavior for triple click
     if (last_mouse_mask == 2 && mask == 2) {
         handler.send_mouse((evt.buttons << 3) | 1, 0, 0, evt.altKey,
@@ -339,14 +386,18 @@ var cursors = {};
 var image_binded;
 
 function scaleCursorImage(img) {
-    var w = (img.width * display_scale).toInteger();
-    var h = (img.height * display_scale).toInteger();
+    var factor = cursor_scale;
+    if (cursor_img.style#display != 'none') {
+        factor /= scaleFactor;
+    }
+    var w = (img.width * factor).toInteger();
+    var h = (img.height * factor).toInteger();
     cursor_img.style.set {
         width: w + "px",
         height: h + "px",
     };
     self.bindImage("in-memory:cursor", img);
-    if (display_scale == 1) return img;
+    if (factor == 1) return img;
     function paint(gfx) {
         gfx.drawImage(img, 0, 0, w, h);
     }
@@ -360,7 +411,7 @@ function updateCursor(system=false) {
     if (system) {
         handler.style#cursor = undefined;
     } else if (cur_img) {
-        handler.style.cursor(cur_img, (cur_hotx * display_scale).toInteger(), (cur_hoty * display_scale).toInteger());
+        handler.style.cursor(cur_img, (cur_hotx * cursor_scale).toInteger(), (cur_hoty * cursor_scale).toInteger());
     }
 }
 
@@ -413,14 +464,15 @@ handler.setCursorPosition = function(x, y) {
     cur_y = y - display_origin_y;
     var x = cur_x - cur_hotx;
     var y = cur_y - cur_hoty;
-    x *= display_scale / scaleFactor;
-    y *= display_scale / scaleFactor;
+    x *= cursor_scale / scaleFactor;
+    y *= cursor_scale / scaleFactor;
     cursor_img.style.set {
         left: x + "px",
         top: y + "px",
     };
     if (cursor_img.style#display == 'none') {
         cursor_img.style#display = "block";
+        refreshCursor();
     }
 }
 

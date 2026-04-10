@@ -31,6 +31,7 @@ body {
     height: *;
     background: color(bg);
     border-right: color(border) 1px solid;
+    position: relative;
 }
 
 #ab .left-pane {
@@ -49,6 +50,14 @@ body {
 .left-pane > div:nth-child(1) {
     border-spacing: 1em;
     padding: 20px;
+    padding-bottom: 60px; /* reserve space for bottom connect-status */
+}
+
+.left-pane > div.connect-status {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
 }
 
 .left-pane div {
@@ -413,6 +422,16 @@ svg#refresh-password:hover {
 li:disabled, li:disabled:hover {
     color: color(lighter-text);
     background: color(menu);
+    opacity: 0.8;
+}
+
+.grey-text {
+    color: #888 !important;
+}
+
+input.grey-text,
+textarea.grey-text {
+    color: #888 !important;
 }
 
 @media platform == "OSX" {

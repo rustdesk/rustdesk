@@ -26,6 +26,8 @@ vcpkg_from_github(
     patch/0008-remove-amf-loop-query.patch
     patch/0009-fix-nvenc-reconfigure-blur.patch
     patch/0010.disable-loading-DLLs-from-app-dir.patch
+    patch/0011-android-mediacodec-encode-align-64.patch
+    patch/0012-fix-macos-big-sur-CVBufferCopyAttachments.patch
 )
 
 if(SOURCE_PATH MATCHES " ")
@@ -176,6 +178,7 @@ elseif(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "Android")
     string(APPEND OPTIONS "\
 --target-os=android \
 --disable-asm \
+--disable-iconv \
 --enable-jni \
 --enable-mediacodec \
 --disable-hwaccels \

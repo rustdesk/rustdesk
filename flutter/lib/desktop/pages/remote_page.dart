@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 
 import '../../consts.dart';
@@ -15,6 +15,7 @@ import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/toolbar.dart';
 import '../../models/model.dart';
+import '../../models/input_model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
@@ -72,7 +73,10 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage>
-    with AutomaticKeepAliveClientMixin, MultiWindowListener {
+    with
+        AutomaticKeepAliveClientMixin,
+        MultiWindowListener,
+        TickerProviderStateMixin {
   Timer? _timer;
   String keyboardMode = "legacy";
   bool _isWindowBlur = false;
@@ -81,10 +85,15 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
+  final _uniqueKey = UniqueKey();
 
   var _blockableOverlayState = BlockableOverlayState();
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
+
+  // Debounce timer for pointer lock center updates during window events.
+  // Uses kDefaultPointerLockCenterThrottleMs from consts.dart for the duration.
+  Timer? _pointerLockCenterDebounceTimer;
 
   // We need `_instanceIdOnEnterOrLeaveImage4Toolbar` together with `_onEnterOrLeaveImage4Toolbar`
   // to identify the toolbar instance and its callback function.
@@ -112,11 +121,13 @@ class _RemotePageState extends State<RemotePage>
     _ffi = FFI(widget.sessionId);
     Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
+      _ffi.canvasModel.activateLocalCursor();
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
       _ffi.recordingModel
           .updateStatus(bind.sessionGetIsRecording(sessionId: _ffi.sessionId));
     });
+    _ffi.canvasModel.initializeEdgeScrollFallback(this);
     _ffi.start(
       widget.id,
       password: widget.password,
@@ -132,9 +143,7 @@ class _RemotePageState extends State<RemotePage>
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     if (!isWeb) bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
@@ -165,6 +174,16 @@ class _RemotePageState extends State<RemotePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.tabController?.onSelected?.call(widget.id);
     });
+
+    // Register callback to cancel debounce timer when relative mouse mode is disabled
+    _ffi.inputModel.onRelativeMouseModeDisabled =
+        _cancelPointerLockCenterDebounceTimer;
+  }
+
+  /// Cancel the pointer lock center debounce timer
+  void _cancelPointerLockCenterDebounceTimer() {
+    _pointerLockCenterDebounceTimer?.cancel();
+    _pointerLockCenterDebounceTimer = null;
   }
 
   @override
@@ -180,6 +199,13 @@ class _RemotePageState extends State<RemotePage>
       _rawKeyFocusNode.unfocus();
     }
     stateGlobal.isFocused.value = false;
+
+    // When window loses focus, temporarily release relative mouse mode constraints
+    // to allow user to interact with other applications normally.
+    // The cursor will be re-hidden and re-centered when window regains focus.
+    if (_ffi.inputModel.relativeMouseMode.value) {
+      _ffi.inputModel.onWindowBlur();
+    }
   }
 
   @override
@@ -190,6 +216,12 @@ class _RemotePageState extends State<RemotePage>
       _isWindowBlur = false;
     }
     stateGlobal.isFocused.value = true;
+
+    // Restore relative mouse mode constraints when window regains focus.
+    if (_ffi.inputModel.relativeMouseMode.value) {
+      _rawKeyFocusNode.requestFocus();
+      _ffi.inputModel.onWindowFocus();
+    }
   }
 
   @override
@@ -200,25 +232,59 @@ class _RemotePageState extends State<RemotePage>
     if (isWindows) {
       _isWindowBlur = false;
     }
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
+    // Update pointer lock center when window is restored
+    _updatePointerLockCenterIfNeeded();
   }
 
   // When the window is unminimized, onWindowMaximize or onWindowRestore can be called when the old state was maximized or not.
   @override
   void onWindowMaximize() {
     super.onWindowMaximize();
-    if (!isLinux) {
-      WakelockPlus.enable();
-    }
+    WakelockManager.enable(_uniqueKey);
+    // Update pointer lock center when window is maximized
+    _updatePointerLockCenterIfNeeded();
+  }
+
+  @override
+  void onWindowResize() {
+    super.onWindowResize();
+    // Update pointer lock center when window is resized
+    _updatePointerLockCenterIfNeeded();
+  }
+
+  @override
+  void onWindowMove() {
+    super.onWindowMove();
+    // Update pointer lock center when window is moved
+    _updatePointerLockCenterIfNeeded();
+  }
+
+  /// Update pointer lock center with debouncing to avoid excessive updates
+  /// during rapid window move/resize events.
+  void _updatePointerLockCenterIfNeeded() {
+    if (!_ffi.inputModel.relativeMouseMode.value) return;
+
+    // Cancel any pending update and schedule a new one (debounce pattern)
+    _pointerLockCenterDebounceTimer?.cancel();
+    _pointerLockCenterDebounceTimer = Timer(
+      const Duration(milliseconds: kDefaultPointerLockCenterThrottleMs),
+      () {
+        if (!mounted) return;
+        if (_ffi.inputModel.relativeMouseMode.value) {
+          _ffi.inputModel.updatePointerLockCenter();
+        }
+      },
+    );
   }
 
   @override
   void onWindowMinimize() {
     super.onWindowMinimize();
-    if (!isLinux) {
-      WakelockPlus.disable();
+    WakelockManager.disable(_uniqueKey);
+    // Release cursor constraints when minimized
+    if (_ffi.inputModel.relativeMouseMode.value) {
+      _ffi.inputModel.onWindowBlur();
     }
   }
 
@@ -245,6 +311,16 @@ class _RemotePageState extends State<RemotePage>
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
+
+    // Defensive cleanup: ensure host system-key propagation is reset even if
+    // MouseRegion.onExit never fired (e.g., tab closed while cursor inside).
+    if (!isWeb) bind.hostStopSystemKeyPropagate(stopped: true);
+
+    _pointerLockCenterDebounceTimer?.cancel();
+    _pointerLockCenterDebounceTimer = null;
+    // Clear callback reference to prevent memory leaks and stale references
+    _ffi.inputModel.onRelativeMouseModeDisabled = null;
+    // Relative mouse mode cleanup is centralized in FFI.close(closeSession: ...).
     _ffi.textureModel.onRemotePageDispose(closeSession);
     if (closeSession) {
       // ensure we leave this session, this is a double check
@@ -262,9 +338,7 @@ class _RemotePageState extends State<RemotePage>
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: SystemUiOverlay.values);
     }
-    if (!isLinux) {
-      await WakelockPlus.disable();
-    }
+    WakelockManager.disable(_uniqueKey);
     await Get.delete<FFI>(tag: widget.id);
     removeSharedStates(widget.id);
   }
@@ -348,10 +422,15 @@ class _RemotePageState extends State<RemotePage>
                       }
                     }(),
               // Use Overlay to enable rebuild every time on menu button click.
-              _ffi.ffiModel.pi.isSet.isTrue
-                  ? Overlay(
-                      initialEntries: [OverlayEntry(builder: remoteToolbar)])
-                  : remoteToolbar(context),
+              // Hide toolbar when relative mouse mode is active to prevent
+              // cursor from escaping to toolbar area.
+              Obx(() => _ffi.inputModel.relativeMouseMode.value
+                  ? const Offstage()
+                  : _ffi.ffiModel.pi.isSet.isTrue
+                      ? Overlay(initialEntries: [
+                          OverlayEntry(builder: remoteToolbar)
+                        ])
+                      : remoteToolbar(context)),
               _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
             ],
           ),
@@ -395,7 +474,7 @@ class _RemotePageState extends State<RemotePage>
     super.build(context);
     return WillPopScope(
         onWillPop: () async {
-          clientClose(sessionId, _ffi.dialogManager);
+          clientClose(sessionId, _ffi);
           return false;
         },
         child: MultiProvider(providers: [
@@ -408,6 +487,8 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void enterView(PointerEnterEvent evt) {
+    _ffi.canvasModel.rearmEdgeScroll();
+
     _cursorOverImage.value = true;
     _firstEnterImage.value = true;
     if (_onEnterOrLeaveImage4Toolbar != null) {
@@ -417,6 +498,7 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
+
     // See [onWindowBlur].
     if (!isWindows) {
       if (!_rawKeyFocusNode.hasFocus) {
@@ -427,6 +509,8 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void leaveView(PointerExitEvent evt) {
+    _ffi.canvasModel.disableEdgeScroll();
+
     if (_ffi.ffiModel.keyboard) {
       _ffi.inputModel.tryMoveEdgeOnExit(evt.position);
     }
@@ -440,6 +524,7 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
+
     // See [onWindowBlur].
     if (!isWindows) {
       _ffi.inputModel.enterOrLeave(false);
@@ -487,33 +572,39 @@ class _RemotePageState extends State<RemotePage>
 
   Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
-      MouseRegion(onEnter: (evt) {
-        if (!isWeb) bind.hostStopSystemKeyPropagate(stopped: false);
-      }, onExit: (evt) {
-        if (!isWeb) bind.hostStopSystemKeyPropagate(stopped: true);
-      }, child: LayoutBuilder(builder: (context, constraints) {
-        final c = Provider.of<CanvasModel>(context, listen: false);
-        Future.delayed(Duration.zero, () => c.updateViewStyle());
-        final peerDisplay = CurrentDisplayState.find(widget.id);
-        return Obx(
-          () => _ffi.ffiModel.pi.isSet.isFalse
-              ? Container(color: Colors.transparent)
-              : Obx(() {
-                  widget.toolbarState.initShow(sessionId);
-                  _ffi.textureModel.updateCurrentDisplay(peerDisplay.value);
-                  return ImagePaint(
-                    id: widget.id,
-                    zoomCursor: _zoomCursor,
-                    cursorOverImage: _cursorOverImage,
-                    keyboardEnabled: _keyboardEnabled,
-                    remoteCursorMoved: _remoteCursorMoved,
-                    listenerBuilder: (child) => _buildRawTouchAndPointerRegion(
-                        child, enterView, leaveView),
-                    ffi: _ffi,
-                  );
-                }),
-        );
-      }))
+      MouseRegion(
+        onEnter: (evt) {
+          if (!isWeb) bind.hostStopSystemKeyPropagate(stopped: false);
+        },
+        onExit: (evt) {
+          if (!isWeb) bind.hostStopSystemKeyPropagate(stopped: true);
+        },
+        child: _ViewStyleUpdater(
+          canvasModel: _ffi.canvasModel,
+          inputModel: _ffi.inputModel,
+          child: Builder(builder: (context) {
+            final peerDisplay = CurrentDisplayState.find(widget.id);
+            return Obx(
+              () => _ffi.ffiModel.pi.isSet.isFalse
+                  ? Container(color: Colors.transparent)
+                  : Obx(() {
+                      _ffi.textureModel.updateCurrentDisplay(peerDisplay.value);
+                      return ImagePaint(
+                        id: widget.id,
+                        zoomCursor: _zoomCursor,
+                        cursorOverImage: _cursorOverImage,
+                        keyboardEnabled: _keyboardEnabled,
+                        remoteCursorMoved: _remoteCursorMoved,
+                        listenerBuilder: (child) =>
+                            _buildRawTouchAndPointerRegion(
+                                child, enterView, leaveView),
+                        ffi: _ffi,
+                      );
+                    }),
+            );
+          }),
+        ),
+      )
     ];
 
     if (!_ffi.canvasModel.cursorEmbedded) {
@@ -540,6 +631,63 @@ class _RemotePageState extends State<RemotePage>
 
   @override
   bool get wantKeepAlive => true;
+}
+
+/// A widget that tracks the view size and updates CanvasModel.updateViewStyle()
+/// and InputModel.updateImageWidgetSize() only when size actually changes.
+/// This avoids scheduling post-frame callbacks on every LayoutBuilder rebuild.
+class _ViewStyleUpdater extends StatefulWidget {
+  final CanvasModel canvasModel;
+  final InputModel inputModel;
+  final Widget child;
+
+  const _ViewStyleUpdater({
+    Key? key,
+    required this.canvasModel,
+    required this.inputModel,
+    required this.child,
+  }) : super(key: key);
+
+  @override
+  State<_ViewStyleUpdater> createState() => _ViewStyleUpdaterState();
+}
+
+class _ViewStyleUpdaterState extends State<_ViewStyleUpdater> {
+  Size? _lastSize;
+  bool _callbackScheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        final maxHeight = constraints.maxHeight;
+        // Guard against infinite constraints (e.g., unconstrained ancestor).
+        if (!maxWidth.isFinite || !maxHeight.isFinite) {
+          return widget.child;
+        }
+        final newSize = Size(maxWidth, maxHeight);
+        if (_lastSize != newSize) {
+          _lastSize = newSize;
+          // Schedule the update for after the current frame to avoid setState during build.
+          // Use _callbackScheduled flag to prevent accumulating multiple callbacks
+          // when size changes rapidly before any callback executes.
+          if (!_callbackScheduled) {
+            _callbackScheduled = true;
+            SchedulerBinding.instance.addPostFrameCallback((_) {
+              _callbackScheduled = false;
+              final currentSize = _lastSize;
+              if (mounted && currentSize != null) {
+                widget.canvasModel.updateViewStyle();
+                widget.inputModel.updateImageWidgetSize(currentSize);
+              }
+            });
+          }
+        }
+        return widget.child;
+      },
+    );
+  }
 }
 
 class ImagePaint extends StatefulWidget {
@@ -606,26 +754,29 @@ class _ImagePaintState extends State<ImagePaint> {
               cursor: cursorOverImage.isTrue
                   ? c.cursorEmbedded
                       ? SystemMouseCursors.none
-                      : keyboardEnabled.isTrue
-                          ? (() {
-                              if (remoteCursorMoved.isTrue) {
-                                _lastRemoteCursorMoved = true;
-                                return SystemMouseCursors.none;
-                              } else {
-                                if (_lastRemoteCursorMoved) {
-                                  _lastRemoteCursorMoved = false;
-                                  _firstEnterImage.value = true;
-                                }
-                                return _buildCustomCursor(
-                                    context, getCursorScale());
-                              }
-                            }())
-                          : _buildDisabledCursor(context, getCursorScale())
+                      // Hide cursor when relative mouse mode is active
+                      : widget.ffi.inputModel.relativeMouseMode.value
+                          ? SystemMouseCursors.none
+                          : keyboardEnabled.isTrue
+                              ? (() {
+                                  if (remoteCursorMoved.isTrue) {
+                                    _lastRemoteCursorMoved = true;
+                                    return SystemMouseCursors.none;
+                                  } else {
+                                    if (_lastRemoteCursorMoved) {
+                                      _lastRemoteCursorMoved = false;
+                                      _firstEnterImage.value = true;
+                                    }
+                                    return _buildCustomCursor(
+                                        context, getCursorScale());
+                                  }
+                                }())
+                              : _buildDisabledCursor(context, getCursorScale())
                   : MouseCursor.defer,
               onHover: (evt) {},
               child: child);
         });
-    if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
+    if (c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto) {
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);
@@ -680,9 +831,20 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
+    double sizeScale = s;
+    if (widget.ffi.ffiModel.isPeerLinux) {
+      final displays = widget.ffi.ffiModel.pi.getCurDisplays();
+      if (displays.isNotEmpty) {
+        sizeScale = s / displays[0].scale;
+      }
+    }
     return CustomPaint(
       size: Size(c.size.width, c.size.height),
-      painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      painter: ImagePainter(
+          image: m.image,
+          x: c.x / sizeScale,
+          y: c.y / sizeScale,
+          scale: sizeScale),
     );
   }
 
@@ -695,17 +857,19 @@ class _ImagePaintState extends State<ImagePaint> {
     if (rect == null) {
       return Container();
     }
+    final isPeerLinux = ffiModel.isPeerLinux;
     final curDisplay = ffiModel.pi.currentDisplay;
     for (var i = 0; i < displays.length; i++) {
       final textureId = widget.ffi.textureModel
           .getTextureId(curDisplay == kAllDisplayValue ? i : curDisplay);
       if (true) {
         // both "textureId.value != -1" and "true" seems ok
+        final sizeScale = isPeerLinux ? s / displays[i].scale : s;
         children.add(Positioned(
           left: (displays[i].x - rect.left) * s + offset.dx,
           top: (displays[i].y - rect.top) * s + offset.dy,
-          width: displays[i].width * s,
-          height: displays[i].height * s,
+          width: displays[i].width * sizeScale,
+          height: displays[i].height * sizeScale,
           child: Obx(() => Texture(
                 textureId: textureId.value,
                 filterQuality:

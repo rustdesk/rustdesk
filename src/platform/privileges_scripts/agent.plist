@@ -4,6 +4,10 @@
     <dict>
         <key>Label</key>
         <string>com.carriez.RustDesk_server</string>
+
+	<key>AssociatedBundleIdentifiers</key>
+	<string>com.carriez.rustdesk</string>
+    
         <key>LimitLoadToSessionType</key>
         <array>
           <string>LoginWindow</string>
@@ -27,5 +31,7 @@
         </array>
         <key>WorkingDirectory</key>
         <string>/Applications/RustDesk.app/Contents/MacOS/</string>
+        <key>ProcessType</key>
+        <string>Interactive</string>
     </dict>
 </plist>

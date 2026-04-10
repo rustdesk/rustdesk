@@ -287,7 +287,7 @@ impl EncoderApi for AomEncoder {
 }
 
 impl AomEncoder {
-    pub fn encode(&mut self, ms: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
+    pub fn encode<'a>(&'a mut self, ms: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames<'a>> {
         let bpp = if self.i444 { 24 } else { 12 };
         if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
@@ -461,7 +461,7 @@ impl AomDecoder {
         Ok(Self { ctx })
     }
 
-    pub fn decode(&mut self, data: &[u8]) -> Result<DecodeFrames> {
+    pub fn decode<'a>(&'a mut self, data: &[u8]) -> Result<DecodeFrames<'a>> {
         call_aom!(aom_codec_decode(
             &mut self.ctx,
             data.as_ptr(),
@@ -476,7 +476,7 @@ impl AomDecoder {
     }
 
     /// Notify the decoder to return any pending frame
-    pub fn flush(&mut self) -> Result<DecodeFrames> {
+    pub fn flush<'a>(&'a mut self) -> Result<DecodeFrames<'a>> {
         call_aom!(aom_codec_decode(
             &mut self.ctx,
             ptr::null(),

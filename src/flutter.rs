@@ -15,15 +15,15 @@ use hbb_common::{
 };
 use serde::Serialize;
 use serde_json::json;
-
+#[cfg(target_os = "windows")]
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::{
     collections::{HashMap, HashSet},
     ffi::CString,
-    io::{Error as IoError, ErrorKind as IoErrorKind},
     os::raw::{c_char, c_int, c_void},
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, RwLock,
     },
 };
@@ -111,6 +111,7 @@ pub extern "C" fn rustdesk_core_main() -> bool {
         #[cfg(target_os = "macos")]
         std::process::exit(0);
     }
+    #[cfg(not(target_os = "macos"))]
     false
 }
 
@@ -608,7 +609,22 @@ impl FlutterHandler {
                 h.insert("original_width", original_resolution.width);
                 h.insert("original_height", original_resolution.height);
             }
-            h.insert("scale", (d.scale * 100.0f64) as i32);
+            // Don't convert scale (x 100) to i32 directly.
+            // (d.scale * 100.0f64) as i32 may produces inaccuracies.
+            //
+            // Example: GNOME Wayland with Fractional Scaling enabled:
+            // - Physical resolution: 2560x1600
+            // - Logical resolution: 1074x1065
+            // - Scale factor: 150%
+            // Passing physical dimensions and scale factor prevents accurate logical resolution calculation
+            // since 2560/1.5 = 1706.666... (rounded to 1706.67) and 1600/1.5 = 1066.666... (rounded to 1066.67)
+            // h.insert("scale", (d.scale * 100.0f64) as i32);
+
+            // Send scaled_width for accurate logical scale calculation.
+            if d.scale > 0.0 {
+                let scaled_width = (d.width as f64 / d.scale).round() as i32;
+                h.insert("scaled_width", scaled_width);
+            }
             msg_vec.push(h);
         }
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
@@ -678,7 +694,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     /// unused in flutter, use switch_display or set_peer_info
-    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embedded: bool) {}
+    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embedded: bool, _scale: f64) {}
 
     fn update_privacy_mode(&self) {
         self.push_event::<&str>("update_privacy_mode", &[], &[]);
@@ -716,12 +732,13 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
-    fn set_connection_type(&self, is_secured: bool, direct: bool) {
+    fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str) {
         self.push_event(
             "connection_ready",
             &[
                 ("secure", &is_secured.to_string()),
                 ("direct", &direct.to_string()),
+                ("stream_type", &stream_type.to_string()),
             ],
             &[],
         );
@@ -754,7 +771,7 @@ impl InvokeUiSession for FlutterHandler {
     // unused in flutter
     fn clear_all_jobs(&self) {}
 
-    fn load_last_job(&self, _cnt: i32, job_json: &str) {
+    fn load_last_job(&self, _cnt: i32, job_json: &str, _auto_start: bool) {
         self.push_event("load_last_job", &[("value", job_json)], &[]);
     }
 
@@ -1105,6 +1122,63 @@ impl InvokeUiSession for FlutterHandler {
             }
         }
     }
+
+    fn handle_terminal_response(&self, response: TerminalResponse) {
+        use hbb_common::message_proto::terminal_response::Union;
+
+        match response.union {
+            Some(Union::Opened(opened)) => {
+                let mut event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("type", json!("opened")),
+                    ("terminal_id", json!(opened.terminal_id)),
+                    ("success", json!(opened.success)),
+                    ("message", json!(&opened.message)),
+                    ("pid", json!(opened.pid)),
+                    ("service_id", json!(&opened.service_id)),
+                ];
+                if !opened.persistent_sessions.is_empty() {
+                    event_data.push(("persistent_sessions", json!(opened.persistent_sessions)));
+                }
+                self.push_event_("terminal_response", &event_data, &[], &[]);
+            }
+            Some(Union::Data(data)) => {
+                // Decompress data if needed
+                let output_data = if data.compressed {
+                    hbb_common::compress::decompress(&data.data)
+                } else {
+                    data.data.to_vec()
+                };
+
+                let encoded = crate::encode64(&output_data);
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("type", json!("data")),
+                    ("terminal_id", json!(data.terminal_id)),
+                    ("data", json!(&encoded)),
+                ];
+                self.push_event_("terminal_response", &event_data, &[], &[]);
+            }
+            Some(Union::Closed(closed)) => {
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("type", json!("closed")),
+                    ("terminal_id", json!(closed.terminal_id)),
+                    ("exit_code", json!(closed.exit_code)),
+                ];
+                self.push_event_("terminal_response", &event_data, &[], &[]);
+            }
+            Some(Union::Error(error)) => {
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("type", json!("error")),
+                    ("terminal_id", json!(error.terminal_id)),
+                    ("message", json!(&error.message)),
+                ];
+                self.push_event_("terminal_response", &event_data, &[], &[]);
+            }
+            None => {}
+            Some(_) => {
+                log::warn!("Unhandled terminal response type");
+            }
+        }
+    }
 }
 
 impl FlutterHandler {
@@ -1221,6 +1295,7 @@ pub fn session_add(
     is_view_camera: bool,
     is_port_forward: bool,
     is_rdp: bool,
+    is_terminal: bool,
     switch_uuid: &str,
     force_relay: bool,
     password: String,
@@ -1231,6 +1306,8 @@ pub fn session_add(
         ConnType::FILE_TRANSFER
     } else if is_view_camera {
         ConnType::VIEW_CAMERA
+    } else if is_terminal {
+        ConnType::TERMINAL
     } else if is_port_forward {
         if is_rdp {
             ConnType::RDP
@@ -1266,6 +1343,7 @@ pub fn session_add(
         server_keyboard_enabled: Arc::new(RwLock::new(true)),
         server_file_transfer_enabled: Arc::new(RwLock::new(true)),
         server_clipboard_enabled: Arc::new(RwLock::new(true)),
+        reconnect_count: Arc::new(AtomicUsize::new(0)),
         ..Default::default()
     };
 
@@ -1918,7 +1996,7 @@ pub(super) fn session_update_virtual_display(session: &FlutterSession, index: i3
             let mut vdisplays = displays.split(',').collect::<Vec<_>>();
             let len = vdisplays.len();
             if index == 0 {
-                // 0 means we cann't toggle the virtual display by index.
+                // 0 means we can't toggle the virtual display by index.
                 vdisplays.remove(vdisplays.len() - 1);
             } else {
                 if let Some(i) = vdisplays.iter().position(|&x| x == index.to_string()) {
@@ -2034,7 +2112,30 @@ pub mod sessions {
                 None => {}
             }
         }
-        SESSIONS.write().unwrap().remove(&remove_peer_key?)
+        let s = SESSIONS.write().unwrap().remove(&remove_peer_key?);
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        update_session_count_to_server();
+        s
+    }
+
+    /// Check if removing a session by session_id would result in removing the entire peer.
+    ///
+    /// Returns:
+    /// - `true`: The session exists and removing it would leave the peer with no other sessions,
+    ///           so the entire peer would be removed (equivalent to `remove_session_by_session_id` returning `Some`)
+    /// - `false`: The session doesn't exist, or it exists but the peer has other sessions,
+    ///            so the peer would not be removed (equivalent to `remove_session_by_session_id` returning `None`)
+    #[inline]
+    pub fn would_remove_peer_by_session_id(id: &SessionID) -> bool {
+        for (_peer_key, s) in SESSIONS.read().unwrap().iter() {
+            let read_lock = s.ui_handler.session_handlers.read().unwrap();
+            if read_lock.contains_key(id) {
+                // Found the session, check if it's the only one for this peer
+                return read_lock.len() == 1;
+            }
+        }
+        // Session not found
+        false
     }
 
     fn check_remove_unused_displays(
@@ -2136,6 +2237,14 @@ pub mod sessions {
             .write()
             .unwrap()
             .insert(session_id, Default::default());
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        update_session_count_to_server();
+    }
+
+    #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn update_session_count_to_server() {
+        crate::ipc::update_controlling_session_count(SESSIONS.read().unwrap().len()).ok();
     }
 
     #[inline]

@@ -1,5 +1,4 @@
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
 
@@ -29,6 +28,11 @@ class StateGlobal {
   final updateUrl = ''.obs;
 
   String _inputSource = '';
+
+  // Track relative mouse mode state for each peer connection.
+  // Key: peerId, Value: true if relative mouse mode is active.
+  // Note: This is session-only runtime state, NOT persisted to config.
+  final RxMap<String, bool> relativeMouseModeState = <String, bool>{}.obs;
 
   // Use for desktop -> remote toolbar -> resolution
   final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};

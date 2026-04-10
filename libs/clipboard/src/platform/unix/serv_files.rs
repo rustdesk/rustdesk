@@ -5,7 +5,7 @@ use hbb_common::{
     log,
 };
 use parking_lot::Mutex;
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, usize};
 
 lazy_static::lazy_static! {
     // local files are cached, this value should not be changed when copying files
@@ -34,6 +34,7 @@ enum FileContentsRequest {
 struct ClipFiles {
     files: Vec<String>,
     file_list: Vec<LocalFile>,
+    first_file_index: usize,
     files_pdu: Vec<u8>,
 }
 
@@ -41,6 +42,7 @@ impl ClipFiles {
     fn clear(&mut self) {
         self.files.clear();
         self.file_list.clear();
+        self.first_file_index = usize::MAX;
         self.files_pdu.clear();
     }
 
@@ -50,6 +52,11 @@ impl ClipFiles {
             .map(|s| PathBuf::from(s))
             .collect::<Vec<_>>();
         self.file_list = construct_file_list(&clipboard_paths)?;
+        self.first_file_index = self
+            .file_list
+            .iter()
+            .position(|f| !f.path.is_dir())
+            .unwrap_or(usize::MAX);
         self.files = clipboard_files.to_vec();
         Ok(())
     }
@@ -61,6 +68,33 @@ impl ClipFiles {
             data.put(file.as_bin().as_slice());
         }
         self.files_pdu = data.to_vec()
+    }
+
+    fn get_files_for_audit(&self, request: &FileContentsRequest) -> Option<ClipboardFile> {
+        if let FileContentsRequest::Range {
+            file_idx, offset, ..
+        } = request
+        {
+            if *file_idx == self.first_file_index && *offset == 0 {
+                let files: Vec<(String, u64)> = self
+                    .file_list
+                    .iter()
+                    .filter_map(|f| {
+                        if f.path.is_file() {
+                            Some((f.path.to_string_lossy().to_string(), f.size))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<_>();
+                if files.is_empty() {
+                    return None;
+                } else {
+                    return Some(ClipboardFile::Files { files });
+                }
+            }
+        }
+        None
     }
 
     fn serve_file_contents(
@@ -192,7 +226,7 @@ pub fn read_file_contents(
     n_position_low: i32,
     n_position_high: i32,
     cb_requested: i32,
-) -> Result<ClipboardFile, CliprdrError> {
+) -> Vec<Result<ClipboardFile, CliprdrError>> {
     let fcr = if dw_flags == 0x1 {
         FileContentsRequest::Size {
             stream_id,
@@ -209,12 +243,18 @@ pub fn read_file_contents(
             length,
         }
     } else {
-        return Err(CliprdrError::InvalidRequest {
+        return vec![Err(CliprdrError::InvalidRequest {
             description: format!("got invalid FileContentsRequest, dw_flats: {dw_flags}"),
-        });
+        })];
     };
 
-    CLIP_FILES.lock().serve_file_contents(conn_id, fcr)
+    let mut clip_files = CLIP_FILES.lock();
+    let mut res = vec![];
+    if let Some(files_res) = clip_files.get_files_for_audit(&fcr) {
+        res.push(Ok(files_res));
+    }
+    res.push(clip_files.serve_file_contents(conn_id, fcr));
+    res
 }
 
 pub fn sync_files(files: &[String]) -> Result<(), CliprdrError> {

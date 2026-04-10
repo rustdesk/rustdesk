@@ -186,7 +186,6 @@ macro_rules! make_plugin {
 
                 $(let $field = match unsafe { lib.symbol::<$tp>(stringify!($field)) } {
                         Ok(m) => {
-                            log::debug!("{} method found {}", path, stringify!($field));
                             *m
                         },
                         Err(e) => {

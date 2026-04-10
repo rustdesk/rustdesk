@@ -72,6 +72,11 @@ button.button:hover, button.outline:hover {
   border-color: color(hover-border);
 }
 
+button:disabled,
+button:disabled:hover {
+  opacity: 0.3;
+}
+
 button.link {
   background: none !important;
   border: none;
@@ -456,6 +461,15 @@ div#msgbox div.set-password div > input {
 
 div#msgbox div.set-password input {
   font-size: 1em;
+}
+
+.wrap-text {
+  width: *;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  height: auto;
+  overflow: hidden;
 }
 
 div#msgbox #error {

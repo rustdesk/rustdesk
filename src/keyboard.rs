@@ -32,8 +32,32 @@ const OS_LOWER_MACOS: &str = "macos";
 #[allow(dead_code)]
 const OS_LOWER_ANDROID: &str = "android";
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
+
+// Track key down state for relative mouse mode exit shortcut.
+// macOS: Cmd+G (track G key)
+// Windows/Linux: Ctrl+Alt (track whichever modifier was pressed last)
+// This prevents the exit from retriggering on OS key-repeat.
+#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+static EXIT_SHORTCUT_KEY_DOWN: AtomicBool = AtomicBool::new(false);
+
+// Track whether relative mouse mode is currently active.
+// This is set by Flutter via set_relative_mouse_mode_state() and checked
+// by the rdev grab loop to determine if exit shortcuts should be processed.
+#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+static RELATIVE_MOUSE_MODE_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Set the relative mouse mode state from Flutter.
+/// This is called when entering or exiting relative mouse mode.
+#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+pub fn set_relative_mouse_mode_state(active: bool) {
+    RELATIVE_MOUSE_MODE_ACTIVE.store(active, Ordering::SeqCst);
+    // Reset exit shortcut state when mode changes to avoid stale state
+    if !active {
+        EXIT_SHORTCUT_KEY_DOWN.store(false, Ordering::SeqCst);
+    }
+}
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -82,7 +106,7 @@ pub mod client {
             GrabState::Run => {
                 #[cfg(windows)]
                 update_grab_get_key_name(keyboard_mode);
-                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
                 KEYBOARD_HOOKED.swap(true, Ordering::SeqCst);
 
                 #[cfg(target_os = "linux")]
@@ -94,7 +118,7 @@ pub mod client {
 
                 release_remote_keys(keyboard_mode);
 
-                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
                 KEYBOARD_HOOKED.swap(false, Ordering::SeqCst);
 
                 #[cfg(target_os = "linux")]
@@ -266,6 +290,136 @@ fn get_keyboard_mode() -> String {
     "legacy".to_string()
 }
 
+/// Check if exit shortcut for relative mouse mode is active.
+/// Exit shortcuts (only exits, not toggles):
+/// - macOS: Cmd+G
+/// - Windows/Linux: Ctrl+Alt (triggered when both are pressed)
+/// Note: This shortcut is only available in Flutter client. Sciter client does not support relative mouse mode.
+#[cfg(feature = "flutter")]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+fn is_exit_relative_mouse_shortcut(key: Key) -> bool {
+    let modifiers = MODIFIERS_STATE.lock().unwrap();
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: Cmd+G to exit
+        if key != Key::KeyG {
+            return false;
+        }
+        let meta = *modifiers.get(&Key::MetaLeft).unwrap_or(&false)
+            || *modifiers.get(&Key::MetaRight).unwrap_or(&false);
+        return meta;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Windows/Linux: Ctrl+Alt to exit
+        // Triggered when Ctrl is pressed while Alt is down, or Alt is pressed while Ctrl is down
+        let is_ctrl_key = key == Key::ControlLeft || key == Key::ControlRight;
+        let is_alt_key = key == Key::Alt || key == Key::AltGr;
+
+        if !is_ctrl_key && !is_alt_key {
+            return false;
+        }
+
+        let ctrl = *modifiers.get(&Key::ControlLeft).unwrap_or(&false)
+            || *modifiers.get(&Key::ControlRight).unwrap_or(&false);
+        let alt = *modifiers.get(&Key::Alt).unwrap_or(&false)
+            || *modifiers.get(&Key::AltGr).unwrap_or(&false);
+
+        // When Ctrl is pressed and Alt is already down, or vice versa
+        (is_ctrl_key && alt) || (is_alt_key && ctrl)
+    }
+}
+
+/// Notify Flutter to exit relative mouse mode.
+/// Note: This is Flutter-only. Sciter client does not support relative mouse mode.
+#[cfg(feature = "flutter")]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+fn notify_exit_relative_mouse_mode() {
+    let session_id = flutter::get_cur_session_id();
+    flutter::push_session_event(&session_id, "exit_relative_mouse_mode", vec![]);
+}
+
+
+/// Handle relative mouse mode shortcuts in the rdev grab loop.
+/// Returns true if the event should be blocked from being sent to the peer.
+#[cfg(feature = "flutter")]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[inline]
+fn can_exit_relative_mouse_mode_from_grab_loop() -> bool {
+    // Only process exit shortcuts when relative mouse mode is actually active.
+    // This prevents blocking Ctrl+Alt (or Cmd+G) when not in relative mouse mode.
+    if !RELATIVE_MOUSE_MODE_ACTIVE.load(Ordering::SeqCst) {
+        return false;
+    }
+
+    let Some(session) = flutter::get_cur_session() else {
+        return false;
+    };
+
+    // Only for remote desktop sessions.
+    if !session.is_default() {
+        return false;
+    }
+
+    // Must have keyboard permission and not be in view-only mode.
+    if !*session.server_keyboard_enabled.read().unwrap() {
+        return false;
+    }
+    let lc = session.lc.read().unwrap();
+    if lc.view_only.v {
+        return false;
+    }
+
+    // Peer must support relative mouse mode.
+    crate::common::is_support_relative_mouse_mode_num(lc.version)
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[inline]
+fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
+    if !KEYBOARD_HOOKED.load(Ordering::SeqCst) {
+        return false;
+    }
+
+    // Determine which key to track for key-up blocking based on platform
+    #[cfg(target_os = "macos")]
+    let is_tracked_key = key == Key::KeyG;
+    #[cfg(not(target_os = "macos"))]
+    let is_tracked_key = key == Key::ControlLeft
+        || key == Key::ControlRight
+        || key == Key::Alt
+        || key == Key::AltGr;
+
+    // Block key up if key down was blocked (to avoid orphan key up event on remote).
+    // This must be checked before clearing the flag below.
+    if is_tracked_key && !is_press && EXIT_SHORTCUT_KEY_DOWN.swap(false, Ordering::SeqCst) {
+        return true;
+    }
+
+    // Exit relative mouse mode shortcuts:
+    // - macOS: Cmd+G
+    // - Windows/Linux: Ctrl+Alt
+    // Guard it to supported/eligible sessions to avoid blocking the chord unexpectedly.
+    if is_exit_relative_mouse_shortcut(key) {
+        if !can_exit_relative_mouse_mode_from_grab_loop() {
+            return false;
+        }
+        if is_press {
+            // Only trigger exit on transition from "not pressed" to "pressed".
+            // This prevents retriggering on OS key-repeat.
+            if !EXIT_SHORTCUT_KEY_DOWN.swap(true, Ordering::SeqCst) {
+                notify_exit_relative_mouse_mode();
+            }
+        }
+        return true;
+    }
+
+    false
+}
+
 fn start_grab_loop() {
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -278,6 +432,12 @@ fn start_grab_loop() {
 
             let _scan_code = event.position_code;
             let _code = event.platform_code as KeyCode;
+
+            #[cfg(feature = "flutter")]
+            if should_block_relative_mouse_shortcut(key, is_press) {
+                return None;
+            }
+
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 client::process_event(&get_keyboard_mode(), &event, None);
                 if is_press {
@@ -337,9 +497,14 @@ fn start_grab_loop() {
     #[cfg(target_os = "linux")]
     if let Err(err) = rdev::start_grab_listen(move |event: Event| match event.event_type {
         EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+            let is_press = matches!(event.event_type, EventType::KeyPress(_));
             if let Key::Unknown(keycode) = key {
                 log::error!("rdev get unknown key, keycode is {:?}", keycode);
             } else {
+                #[cfg(feature = "flutter")]
+                if should_block_relative_mouse_shortcut(key, is_press) {
+                    return None;
+                }
                 client::process_event(&get_keyboard_mode(), &event, None);
             }
             None
@@ -418,6 +583,7 @@ pub fn is_modifier(key: &rdev::Key) -> bool {
 }
 
 #[inline]
+#[allow(dead_code)]
 pub fn is_modifier_code(evt: &KeyEvent) -> bool {
     match evt.union {
         Some(key_event::Union::Chr(code)) => {
@@ -902,7 +1068,7 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
     let keycode = match _peer {
         OS_LOWER_WINDOWS => {
             // https://github.com/rustdesk/rustdesk/issues/1371
-            // Filter scancodes that are greater than 255 and the hight word is not 0xE0.
+            // Filter scancodes that are greater than 255 and the height word is not 0xE0.
             if event.position_code > 255 && (event.position_code >> 8) != 0xE0 {
                 return None;
             }

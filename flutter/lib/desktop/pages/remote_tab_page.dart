@@ -80,7 +80,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         label: peerId!,
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
-        onTabCloseButton: () => tabController.closeBy(peerId),
+        onTabCloseButton: () async {
+          if (await desktopTryShowTabAuditDialogCloseCancelled(
+            id: peerId!,
+            tabController: tabController,
+          )) {
+            return;
+          }
+          tabController.closeBy(peerId!);
+        },
         page: RemotePage(
           key: ValueKey(peerId),
           id: peerId!,
@@ -127,7 +135,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       body: DesktopTab(
         controller: tabController,
         onWindowCloseButton: handleWindowCloseButton,
-        tail: const AddButton(),
+        tail: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _RelativeMouseModeHint(tabController: tabController),
+            const AddButton(),
+          ],
+        ),
         selectedBorderColor: MyTheme.accent,
         pageViewBuilder: (pageView) => pageView,
         labelGetter: DesktopTab.tablabelGetter,
@@ -146,16 +160,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 connectionType.secure.value == ConnectionType.strSecure;
             bool direct =
                 connectionType.direct.value == ConnectionType.strDirect;
-            String msgConn;
-            if (secure && direct) {
-              msgConn = translate("Direct and encrypted connection");
-            } else if (secure && !direct) {
-              msgConn = translate("Relayed and encrypted connection");
-            } else if (!secure && direct) {
-              msgConn = translate("Direct and unencrypted connection");
-            } else {
-              msgConn = translate("Relayed and unencrypted connection");
-            }
+            String msgConn = getConnectionText(
+                secure, direct, connectionType.stream_type.value);
             var msgFingerprint = '${translate('Fingerprint')}:\n';
             var fingerprint = FingerprintState.find(key).value;
             if (fingerprint.isEmpty) {
@@ -251,11 +257,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Obx(() => Text(
               translate(
-                  toolbarState.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
+                  toolbarState.hide.isTrue ? 'Show Toolbar' : 'Hide Toolbar'),
               style: style,
             )),
         proc: () {
-          toolbarState.switchShow(sessionId);
+          toolbarState.switchHide(sessionId);
           cancelFunc();
         },
         padding: padding,
@@ -324,7 +330,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           translate('Close'),
           style: style,
         ),
-        proc: () {
+        proc: () async {
+          if (await desktopTryShowTabAuditDialogCloseCancelled(
+            id: key,
+            tabController: tabController,
+          )) {
+            return;
+          }
           tabController.closeBy(key);
           cancelFunc();
         },
@@ -368,6 +380,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       loopCloseWindow();
     }
     ConnectionTypeState.delete(id);
+    // Clean up relative mouse mode state for this peer.
+    stateGlobal.relativeMouseModeState.remove(id);
     _update_remote_count();
   }
 
@@ -377,6 +391,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   Future<bool> handleWindowCloseButton() async {
     final connLength = tabController.length;
+    if (connLength == 1) {
+      if (await desktopTryShowTabAuditDialogCloseCancelled(
+        id: tabController.state.value.tabs[0].key,
+        tabController: tabController,
+      )) {
+        return false;
+      }
+    }
     if (connLength <= 1) {
       tabController.clear();
       return true;
@@ -431,7 +453,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         label: id,
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
-        onTabCloseButton: () => tabController.closeBy(id),
+        onTabCloseButton: () async {
+          if (await desktopTryShowTabAuditDialogCloseCancelled(
+            id: id,
+            tabController: tabController,
+          )) {
+            return;
+          }
+          tabController.closeBy(id);
+        },
         page: RemotePage(
           key: ValueKey(id),
           id: id,
@@ -524,5 +554,71 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     }
     _update_remote_count();
     return returnValue;
+  }
+}
+
+/// A widget that displays a hint in the tab bar when relative mouse mode is active.
+/// This helps users remember how to exit relative mouse mode.
+class _RelativeMouseModeHint extends StatelessWidget {
+  final DesktopTabController tabController;
+
+  const _RelativeMouseModeHint({Key? key, required this.tabController})
+      : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      // Check if there are any tabs
+      if (tabController.state.value.tabs.isEmpty) {
+        return const SizedBox.shrink();
+      }
+
+      // Get current selected tab's RemotePage
+      final selectedTabInfo = tabController.state.value.selectedTabInfo;
+      if (selectedTabInfo.page is! RemotePage) {
+        return const SizedBox.shrink();
+      }
+
+      final remotePage = selectedTabInfo.page as RemotePage;
+      final String peerId = remotePage.id;
+
+      // Use global state to check relative mouse mode (synced from InputModel).
+      // This avoids timing issues with FFI registration.
+      final isRelativeMouseMode =
+          stateGlobal.relativeMouseModeState[peerId] ?? false;
+
+      if (!isRelativeMouseMode) {
+        return const SizedBox.shrink();
+      }
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        margin: const EdgeInsets.only(right: 8),
+        decoration: BoxDecoration(
+          color: Colors.orange.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.orange.withOpacity(0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.mouse,
+              size: 14,
+              color: Colors.orange[700],
+            ),
+            const SizedBox(width: 4),
+            Text(
+              translate(
+                  'rel-mouse-exit-{${isMacOS ? "Cmd+G" : "Ctrl+Alt"}}-tip'),
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.orange[700],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 }
