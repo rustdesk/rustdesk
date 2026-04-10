@@ -3994,44 +3994,7 @@ pub mod peer_online {
             let (rendezvous_server, _servers, _contained) =
                 crate::get_rendezvous_server(READ_TIMEOUT).await;
 
-            let group = ids
-                .iter()
-                .filter(|id| {
-                    !hbb_common::is_ip_str(id.as_str())
-                        && !hbb_common::is_domain_port_str(id.as_str())
-                })
-                .map(|id| (id.clone(), super::format_id(id.as_str())))
-                .map(|(raw_id, format)| {
-                    if let Some((pure_id, server, _key)) = format.server {
-                        (raw_id, pure_id, server)
-                    } else {
-                        (raw_id, format.id, rendezvous_server.clone())
-                    }
-                })
-                .map(|(raw_id, id, server)| {
-                    if server == crate::client::PUBLIC_SERVER {
-                        (
-                            raw_id,
-                            id,
-                            check_port(
-                                hbb_common::config::RENDEZVOUS_SERVERS[0],
-                                hbb_common::config::RENDEZVOUS_PORT,
-                            ),
-                        )
-                    } else {
-                        (
-                            raw_id,
-                            id,
-                            check_port(server, hbb_common::config::RENDEZVOUS_PORT),
-                        )
-                    }
-                })
-                .fold(HashMap::new(), |mut map, (raw_id, id, server)| {
-                    map.entry(server)
-                        .or_insert(HashMap::new())
-                        .insert(id, raw_id);
-                    map
-                });
+            let group = group_query_online_states(ids, rendezvous_server.as_str());
 
             let mut onlines = Vec::new();
             let mut offlines = Vec::new();
@@ -4046,10 +4009,12 @@ pub mod peer_online {
                             let on: Vec<String> = on
                                 .into_iter()
                                 .filter_map(|id| map.get(&id).cloned())
+                                .flat_map(|p| p.into_iter())
                                 .collect();
                             let off: Vec<String> = off
                                 .into_iter()
                                 .filter_map(|id| map.get(&id).cloned())
+                                .flat_map(|p| p.into_iter())
                                 .collect();
                             Ok((on, off))
                         }
@@ -4060,7 +4025,6 @@ pub mod peer_online {
 
             while let Some(res) = join.join_next().await {
                 match res {
-                    // 第一个 Ok 是 JoinHandle 的结果，第二个 Ok 是 query 的结果
                     Ok(Ok((on, off))) => {
                         onlines.extend(on);
                         offlines.extend(off);
@@ -4157,6 +4121,50 @@ pub mod peer_online {
         bail!("Failed to query online states, no online response");
     }
 
+    fn group_query_online_states(
+        ids: Vec<String>,
+        main_rendezvous_server: &str,
+    ) -> HashMap<String, HashMap<String, Vec<String>>> {
+        ids.iter()
+            .filter(|id| {
+                !hbb_common::is_ip_str(id.as_str()) && !hbb_common::is_domain_port_str(id.as_str())
+            })
+            .map(|id| (id.clone(), super::format_id(id.as_str())))
+            .map(|(raw_id, format)| {
+                if let Some((pure_id, server, _key)) = format.server {
+                    (raw_id, pure_id, server)
+                } else {
+                    (raw_id, format.id, main_rendezvous_server.to_string())
+                }
+            })
+            .map(|(raw_id, id, server)| {
+                if server == crate::client::PUBLIC_SERVER {
+                    (
+                        raw_id,
+                        id,
+                        check_port(
+                            hbb_common::config::RENDEZVOUS_SERVERS[0],
+                            hbb_common::config::RENDEZVOUS_PORT,
+                        ),
+                    )
+                } else {
+                    (
+                        raw_id,
+                        id,
+                        check_port(server, hbb_common::config::RENDEZVOUS_PORT),
+                    )
+                }
+            })
+            .fold(HashMap::new(), |mut map, (raw_id, id, server)| {
+                map.entry(server)
+                    .or_insert_with(HashMap::new)
+                    .entry(id)
+                    .or_insert_with(Vec::new)
+                    .push(raw_id);
+                map
+            })
+    }
+
     #[cfg(test)]
     mod tests {
         use hbb_common::tokio;
@@ -4175,6 +4183,55 @@ pub mod peer_online {
                 },
             )
             .await;
+        }
+
+        #[test]
+        fn test_group_query_online_states() {
+            use std::collections::HashMap;
+            assert_eq!(
+                super::group_query_online_states(
+                    vec![
+                        "152183996".to_string(),
+                        "152183996/r".to_string(),
+                        "456@custom.com".to_string(),
+                        "45611@custom.com".to_string(),
+                        "45611@custom.com:2000".to_string(),
+                        "789@public".to_string(),
+                        "abc".to_string(),
+                    ],
+                    "localhost",
+                ),
+                HashMap::from([
+                    (
+                        "localhost:21116".to_string(),
+                        HashMap::from([
+                            (
+                                "152183996".to_string(),
+                                vec!["152183996".to_string(), "152183996/r".to_string()]
+                            ),
+                            ("abc".to_string(), vec!["abc".to_string()])
+                        ])
+                    ),
+                    (
+                        "custom.com:21116".to_string(),
+                        HashMap::from([
+                            ("456".to_string(), vec!["456@custom.com".to_string()]),
+                            ("45611".to_string(), vec!["45611@custom.com".to_string()])
+                        ])
+                    ),
+                    (
+                        "custom.com:2000".to_string(),
+                        HashMap::from([(
+                            "45611".to_string(),
+                            vec!["45611@custom.com:2000".to_string()]
+                        )])
+                    ),
+                    (
+                        "rs-ny.rustdesk.com:21116".to_string(),
+                        HashMap::from([("789".to_string(), vec!["789@public".to_string()]),])
+                    )
+                ])
+            );
         }
     }
 }
