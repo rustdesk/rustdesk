@@ -1600,17 +1600,25 @@ fn need_to_uppercase(en: &mut Enigo) -> bool {
 }
 
 fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
-    // On Wayland with uinput mode, use clipboard for character input
+    // On Wayland with uinput mode:
+    // - ASCII printable: input via key events (custom keyboard path, e.g. portal keysym)
+    // - Non-ASCII: input via clipboard paste
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
         // Skip clipboard for hotkeys (Ctrl/Alt/Meta pressed)
         if !is_hotkey_modifier_pressed(en) {
-            if down {
-                if let Ok(c) = char::try_from(chr) {
+            if let Ok(c) = char::try_from(chr) {
+                if is_ascii_printable(c) {
+                    if down {
+                        en.key_down(Key::Layout(c)).ok();
+                    } else {
+                        en.key_up(Key::Layout(c));
+                    }
+                } else if down {
                     input_char_via_clipboard_server(en, c);
                 }
+                return;
             }
-            return;
         }
     }
 
@@ -1643,11 +1651,17 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
 }
 
 fn process_unicode(en: &mut Enigo, chr: u32) {
-    // On Wayland with uinput mode, use clipboard for character input
+    // On Wayland with uinput mode:
+    // - ASCII printable: input via key sequence (custom keyboard path)
+    // - Non-ASCII: input via clipboard paste
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
         if let Ok(c) = char::try_from(chr) {
-            input_char_via_clipboard_server(en, c);
+            if is_ascii_printable(c) {
+                en.key_sequence(&c.to_string());
+            } else {
+                input_char_via_clipboard_server(en, c);
+            }
         }
         return;
     }
@@ -1658,10 +1672,16 @@ fn process_unicode(en: &mut Enigo, chr: u32) {
 }
 
 fn process_seq(en: &mut Enigo, sequence: &str) {
-    // On Wayland with uinput mode, use clipboard for text input
+    // On Wayland with uinput mode:
+    // - pure ASCII printable sequence: input via key sequence (custom keyboard path)
+    // - any non-ASCII present: input whole sequence via clipboard to preserve order
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
-        input_text_via_clipboard_server(en, sequence);
+        if sequence.chars().all(is_ascii_printable) {
+            en.key_sequence(sequence);
+        } else {
+            input_text_via_clipboard_server(en, sequence);
+        }
         return;
     }
 
@@ -1989,49 +2009,53 @@ fn translate_process_code(code: u32, down: bool) {
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match &evt.union {
         Some(key_event::Union::Seq(seq)) => {
-            // On Wayland, handle character input directly in this (--server) process using clipboard.
-            // This function runs in the --server process (logged-in user session), which has
-            // WAYLAND_DISPLAY and XDG_RUNTIME_DIR — so clipboard operations work here.
-            //
-            // Why not let it go through uinput IPC:
-            // 1. For uinput mode: the uinput service thread runs in the --service (root) process,
-            //    which typically lacks user session environment. Clipboard operations there are
-            //    unreliable. Handling clipboard here avoids that issue.
-            // 2. For RDP input mode: Portal's notify_keyboard_keysym API interprets keysyms
-            //    based on its internal modifier state, which may not match our released state.
-            //    Using clipboard bypasses this issue entirely.
+            // On Wayland:
+            // - uinput mode (--service): keep clipboard handling in this process because
+            //   clipboard is unreliable in root service context.
+            // - rdp_input mode (--server): forward sequence to custom keyboard handler so
+            //   ASCII can use Portal keysym and non-ASCII can use clipboard.
             #[cfg(target_os = "linux")]
             if !crate::platform::linux::is_x11() {
                 let mut en = ENIGO.lock().unwrap();
-
-                // Check if this is a hotkey (Ctrl/Alt/Meta pressed)
-                // For hotkeys, we send character-based key events via Enigo instead of
-                // using the clipboard. This relies on the local keyboard layout for
-                // mapping characters to physical keys.
-                // This assumes client and server use the same keyboard layout (common case).
-                // Note: For non-Latin keyboards (e.g., Arabic), hotkeys may not work
-                // correctly if the character cannot be mapped to a key via KEY_MAP_LAYOUT.
-                // This is a known limitation - most common hotkeys (Ctrl+A/C/V/Z) use Latin
-                // characters which are mappable on most keyboard layouts.
-                if is_hotkey_modifier_pressed(&mut en) {
-                    // For hotkeys, send character-based key events via Enigo.
-                    // This relies on the local keyboard layout mapping (KEY_MAP_LAYOUT).
-                    for chr in seq.chars() {
-                        if !is_ascii_printable(chr) {
-                            log::warn!(
-                                "Hotkey with non-ASCII character may not work correctly on non-Latin keyboard layouts"
-                            );
-                        }
-                        en.key_click(Key::Layout(chr));
-                    }
+                if wayland_use_rdp_input() {
+                    release_shift_for_char_input(&mut en);
+                    en.key_sequence(seq);
                     return;
                 }
 
-                // Normal text input: release Shift and use clipboard
-                release_shift_for_char_input(&mut en);
+                if wayland_use_uinput() {
+                    // Check if this is a hotkey (Ctrl/Alt/Meta pressed)
+                    // For hotkeys, we send character-based key events via Enigo instead of
+                    // using the clipboard. This relies on the local keyboard layout for
+                    // mapping characters to physical keys.
+                    // This assumes client and server use the same keyboard layout (common case).
+                    // Note: For non-Latin keyboards (e.g., Arabic), hotkeys may not work
+                    // correctly if the character cannot be mapped to a key via KEY_MAP_LAYOUT.
+                    // This is a known limitation - most common hotkeys (Ctrl+A/C/V/Z) use Latin
+                    // characters which are mappable on most keyboard layouts.
+                    if is_hotkey_modifier_pressed(&mut en) {
+                        // For hotkeys, send character-based key events via Enigo.
+                        // This relies on the local keyboard layout mapping (KEY_MAP_LAYOUT).
+                        for chr in seq.chars() {
+                            if !is_ascii_printable(chr) {
+                                log::warn!(
+                                    "Hotkey with non-ASCII character may not work correctly on non-Latin keyboard layouts"
+                                );
+                            }
+                            en.key_click(Key::Layout(chr));
+                        }
+                        return;
+                    }
 
-                input_text_via_clipboard_server(&mut en, seq);
-                return;
+                    // Normal text input: release Shift and use clipboard
+                    release_shift_for_char_input(&mut en);
+                    if seq.chars().all(is_ascii_printable) {
+                        en.key_sequence(seq);
+                    } else {
+                        input_text_via_clipboard_server(&mut en, seq);
+                    }
+                    return;
+                }
             }
 
             // Fr -> US
