@@ -1,1 +1,0 @@
-Een open-source toepassing voor bureaublad op afstand, het open-source alternatief voor TeamViewer.
