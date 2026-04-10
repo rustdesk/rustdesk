@@ -61,6 +61,7 @@ use hbb_common::{
     timeout,
     tokio::{
         self,
+        task::JoinSet,
         time::{interval, Duration, Instant},
     },
     AddrMangle, ResultType, Stream,
@@ -3598,6 +3599,7 @@ pub mod peer_online {
         rendezvous_proto::*,
         sleep,
         socket_client::{check_port, connect_tcp},
+        tokio::task::JoinSet,
         ResultType, Stream,
     };
 
@@ -3615,7 +3617,11 @@ pub mod peer_online {
 
             let group = ids
                 .iter()
-                .map(|id| (id, super::format_id(id)))
+                .filter(|id| {
+                    !hbb_common::is_ip_str(id.as_str())
+                        && !hbb_common::is_domain_port_str(id.as_str())
+                })
+                .map(|id| (id.clone(), super::format_id(id.as_str())))
                 .map(|(raw_id, format)| {
                     if let Some((pure_id, server, _key)) = format.server {
                         (raw_id, pure_id, server)
@@ -3648,33 +3654,47 @@ pub mod peer_online {
                     map
                 });
 
-            let query_group = group.iter().map(|(server, map)| {
-                let ids: Vec<String> = map.keys().map(|t| t.to_string()).collect();
-                (map, query_online_states_(ids, query_timeout, server))
-            });
-
             let mut onlines = Vec::new();
             let mut offlines = Vec::new();
+            let mut join = JoinSet::new();
 
-            for (map, query) in query_group.into_iter() {
-                match query.await {
-                    Ok((on, off)) => {
-                        for id in on.iter() {
-                            if let Some(raw_id) = map.get(id) {
-                                onlines.push(raw_id.to_string());
-                            }
+            for (server, map) in group.into_iter() {
+                let ids: Vec<String> = map.keys().map(|t| t.to_string()).collect();
+                let query_timeout = query_timeout.clone();
+                join.spawn(async move {
+                    match query_online_states_(ids, query_timeout, server.as_str()).await {
+                        Ok((on, off)) => {
+                            let on: Vec<String> = on
+                                .into_iter()
+                                .filter_map(|id| map.get(&id).cloned())
+                                .collect();
+                            let off: Vec<String> = off
+                                .into_iter()
+                                .filter_map(|id| map.get(&id).cloned())
+                                .collect();
+                            Ok((on, off))
                         }
-                        for id in off.iter() {
-                            if let Some(raw_id) = map.get(id) {
-                                offlines.push(raw_id.to_string());
-                            }
-                        }
+                        Err(e) => Err(e),
+                    }
+                });
+            }
+
+            while let Some(res) = join.join_next().await {
+                match res {
+                    // 第一个 Ok 是 JoinHandle 的结果，第二个 Ok 是 query 的结果
+                    Ok(Ok((on, off))) => {
+                        onlines.extend(on);
+                        offlines.extend(off);
+                    }
+                    Ok(Err(e)) => {
+                        log::debug!("query onlines error: {}", e);
                     }
                     Err(e) => {
-                        log::debug!("query onlines, {}", &e);
+                        log::error!("task panicked: {}", e);
                     }
                 }
             }
+
             f(onlines, offlines);
         }
     }
