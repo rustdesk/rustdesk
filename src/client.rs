@@ -1527,7 +1527,7 @@ impl LoginConfigHandler {
         let id = format_id.id;
         if format_id.force_relay {
             force_relay = true;
-        };
+        }
         if format_id.server.is_some() {
             self.other_server = format_id.server;
         }
