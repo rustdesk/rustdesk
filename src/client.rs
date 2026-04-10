@@ -3628,7 +3628,10 @@ pub mod peer_online {
                         (
                             raw_id,
                             id,
-                            hbb_common::config::RENDEZVOUS_SERVERS[0].to_string(),
+                            check_port(
+                                hbb_common::config::RENDEZVOUS_SERVERS[0],
+                                hbb_common::config::RENDEZVOUS_PORT,
+                            ),
                         )
                     } else {
                         (
