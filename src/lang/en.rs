@@ -275,9 +275,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("password-hidden-tip", "Permanent password is set (hidden)."),
         ("preset-password-in-use-tip", "Preset password is currently in use."),
         ("wayland-keyboard-input-disabled-tip", "Keyboard input disabled"),
-        ("wayland-keyboard-input-consent-tip", "This remote session uses Wayland. On-screen keyboard input may be copied to the remote clipboard and pasted into the focused app. Clipboard history or other apps on the remote side may read this text, including passwords. See issue #14586:"),
-        ("wayland-keyboard-input-reset-remembered-tip", "Reset remembered Wayland keyboard choice"),
-        ("dont-ask-again-for-this-connection-tip", "Don't ask again for this connection"),
-        ("remember-wayland-keyboard-choice-tip", "Remember this choice on this device"),
+        ("wayland-keyboard-input-consent-tip", "This session uses Wayland. Keyboard input may be temporarily pasted via the remote clipboard, and clipboard history or other apps may read it (including passwords).\nPress OK to allow input for this session only.\nSee issue #14586:"),
+        ("wayland-keyboard-input-clear-perm-tip", "Clear saved keyboard permission"),
+        ("remember-wayland-keyboard-choice-tip", "Always allow keyboard input on this device"),
     ].iter().cloned().collect();
 }

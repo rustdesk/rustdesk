@@ -745,7 +745,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", "현재 사전 설정된 비밀번호가 사용 중입니다."),
         ("wayland-keyboard-input-disabled-tip", ""),
         ("wayland-keyboard-input-consent-tip", ""),
-        ("wayland-keyboard-input-reset-remembered-tip", ""),
+        ("wayland-keyboard-input-clear-perm-tip", ""),
         ("dont-ask-again-for-this-connection-tip", ""),
         ("remember-wayland-keyboard-choice-tip", ""),
     ].iter().cloned().collect();

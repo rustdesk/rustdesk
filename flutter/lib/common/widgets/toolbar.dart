@@ -124,7 +124,6 @@ void showWaylandKeyboardInputWarningDialog(
     required FFI ffi,
     required Future<void> Function() onEnable}) {
   bool remember = false;
-  bool dontAskAgainForConnection = false;
   bool consentInProgress = false;
   bool dialogClosed = false;
 
@@ -177,9 +176,8 @@ void showWaylandKeyboardInputWarningDialog(
           debugPrintStack(stackTrace: st);
         }
       }
-      if (dontAskAgainForConnection) {
-        setWaylandKeyboardPromptSuppressedForConnection(connectionId, true);
-      }
+      // Always suppress prompt for current connection after explicit consent.
+      setWaylandKeyboardPromptSuppressedForConnection(connectionId, true);
       closeDialog();
     }
 
@@ -204,18 +202,6 @@ void showWaylandKeyboardInputWarningDialog(
           const SizedBox(height: 6),
           createDialogContent(kWaylandKeyboardIssueUrl).marginOnly(bottom: 6),
           CheckboxListTile(
-            value: dontAskAgainForConnection,
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(translate('dont-ask-again-for-this-connection-tip')),
-            onChanged: consentInProgress
-                ? null
-                : (v) {
-                    safeSetState(() => dontAskAgainForConnection = v == true);
-                  },
-          ),
-          CheckboxListTile(
             value: remember,
             dense: true,
             contentPadding: EdgeInsets.zero,
@@ -236,7 +222,7 @@ void showWaylandKeyboardInputWarningDialog(
           isOutline: true,
         ),
         dialogButton(
-          'Enable',
+          'OK',
           onPressed:
               consentInProgress ? null : () => unawaited(enableAndContinue()),
         ),
@@ -331,15 +317,11 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           await sendClipboardKeystrokes();
         }));
   }
-  // reset canvas
-  if (isDefaultConn && isMobile) {
+  if (isDefaultConn &&
+      isWaylandPeer &&
+      mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard)) {
     v.add(TTextMenu(
-        child: Text(translate('Reset canvas')),
-        onPressed: () => ffi.cursorModel.reset()));
-  }
-  if (isDefaultConn && isWaylandPeer) {
-    v.add(TTextMenu(
-        child: Text(translate('wayland-keyboard-input-reset-remembered-tip')),
+        child: Text(translate('wayland-keyboard-input-clear-perm-tip')),
         onPressed: () async {
           await bind.mainSetPeerOption(
               id: id,
@@ -353,6 +335,12 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           }
           showToast(translate('Successful'));
         }));
+  }
+  // reset canvas
+  if (isDefaultConn && isMobile) {
+    v.add(TTextMenu(
+        child: Text(translate('Reset canvas')),
+        onPressed: () => ffi.cursorModel.reset()));
   }
 
   // https://github.com/rustdesk/rustdesk/pull/9731
