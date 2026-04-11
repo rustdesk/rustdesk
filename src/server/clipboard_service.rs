@@ -115,19 +115,18 @@ const WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES: usize =
 
 #[cfg(target_os = "linux")]
 fn decode_utf8_prefix(bytes: &[u8]) -> Option<String> {
-    let mut end = bytes.len().min(WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES);
-    loop {
-        match std::str::from_utf8(&bytes[..end]) {
-            Ok(text) => return Some(text.to_owned()),
-            Err(e) => {
-                if e.error_len().is_some() {
-                    return None;
-                }
-                if end == 0 {
-                    return Some(String::new());
-                }
-                end -= 1;
+    let end = bytes.len().min(WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES);
+    let slice = &bytes[..end];
+    match std::str::from_utf8(slice) {
+        Ok(text) => Some(text.to_owned()),
+        Err(e) => {
+            if e.error_len().is_some() {
+                return None;
             }
+            let valid_up_to = e.valid_up_to();
+            std::str::from_utf8(&slice[..valid_up_to])
+                .ok()
+                .map(ToOwned::to_owned)
         }
     }
 }
