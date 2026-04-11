@@ -1617,8 +1617,13 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
                 } else if down {
                     input_char_via_clipboard_server(en, c);
                 }
-                return;
+            } else {
+                log::warn!(
+                    "Ignore invalid unicode scalar in Wayland+uinput path: {}",
+                    chr
+                );
             }
+            return;
         }
     }
 
