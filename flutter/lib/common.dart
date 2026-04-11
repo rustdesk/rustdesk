@@ -251,17 +251,21 @@ class MyTheme {
   MyTheme._();
 
   static const Color grayBg = Color(0xFFEFEFF2);
-  static const Color accent = Color(0xFF135bec);
-  static const Color accent50 = Color(0x77135bec);
-  static const Color accent80 = Color(0xAA135bec);
+  static const Color accent = Color(0xFF0D47A1);
+  static const Color accent50 = Color(0x770D47A1);
+  static const Color accent80 = Color(0xAA0D47A1);
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
-  static const Color idColor = Color(0xFF135bec);
+  static const Color idColor = Color(0xFF0D47A1);
   static const Color darkGray = Color.fromARGB(255, 148, 148, 148);
   static const Color cmIdColor = Color(0xFF21790B);
   static const Color dark = Colors.black87;
-  static const Color button = Color(0xFF2C8CFF);
+  static const Color button = Color(0xFF0D47A1);
   static const Color hoverBorder = Color(0xFF999999);
+  // BVAi Design System Colors
+  static const Color heading = Color(0xFF0D47A1);
+  static const Color headerBg = Color(0xFFE3F2FD);
+  static const Color inputBorder = Color(0xFFE0E0E0);
 
   // ListTile
   static const ListTileThemeData listTileTheme = ListTileThemeData(
@@ -399,10 +403,16 @@ class MyTheme {
             isDense: true,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: inputBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: heading, width: 2),
             ),
           )
         : null,
     textTheme: const TextTheme(
+        fontFamily: 'Roboto',
         titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
         titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
         bodySmall: TextStyle(fontSize: 12, color: Colors.black87, height: 1.25),
