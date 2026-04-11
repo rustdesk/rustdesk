@@ -31,6 +31,8 @@ class TerminalModel with ChangeNotifier {
   static const int _kMaxOutputBufferChars = 8 * 1024;
   // View ready state: true when terminal has valid dimensions, safe to write
   bool _terminalViewReady = false;
+  // Buffer for incomplete UTF-8 trailing bytes across data chunks.
+  final _utf8Remainder = <int>[];
 
   bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
 
@@ -333,29 +335,78 @@ class TerminalModel with ChangeNotifier {
 
     if (data != null) {
       try {
-        String text = '';
+        List<int> bytes;
         if (data is String) {
           // Try to decode as base64 first
           try {
-            final bytes = base64Decode(data);
-            text = utf8.decode(bytes, allowMalformed: true);
+            bytes = base64Decode(data);
           } catch (e) {
             // If base64 decode fails, treat as plain text
-            text = data;
+            _writeToTerminal(data);
+            return;
           }
         } else if (data is List) {
-          // Handle if data comes as byte array
-          text = utf8.decode(List<int>.from(data), allowMalformed: true);
+          bytes = List<int>.from(data);
         } else {
           debugPrint('[TerminalModel] Unknown data type: ${data.runtimeType}');
           return;
         }
 
-        _writeToTerminal(text);
+        // Prepend any leftover bytes from previous chunk.
+        if (_utf8Remainder.isNotEmpty) {
+          bytes = [..._utf8Remainder, ...bytes];
+          _utf8Remainder.clear();
+        }
+
+        // Find the split point so we only decode complete UTF-8 sequences.
+        final split = _findUtf8SplitPoint(bytes);
+        if (split < bytes.length) {
+          _utf8Remainder.addAll(bytes.sublist(split));
+        }
+
+        if (split > 0) {
+          final text = utf8.decode(bytes.sublist(0, split));
+          _writeToTerminal(text);
+        }
       } catch (e) {
         debugPrint('[TerminalModel] Failed to process terminal data: $e');
       }
     }
+  }
+
+  /// Find the largest prefix length that ends on a complete UTF-8 character
+  /// boundary. Returns [bytes.length] if no trailing incomplete sequence.
+  static int _findUtf8SplitPoint(List<int> bytes) {
+    if (bytes.isEmpty) return 0;
+    // Inspect at most the last 3 bytes (max incomplete tail of 4-byte seq).
+    final start = bytes.length >= 3 ? bytes.length - 3 : 0;
+    for (int i = bytes.length - 1; i >= start; i--) {
+      final b = bytes[i];
+      if (b & 0x80 == 0) {
+        // ASCII – everything is complete.
+        return bytes.length;
+      }
+      if (b & 0xC0 == 0x80) {
+        // Continuation byte – keep scanning backwards.
+        continue;
+      }
+      // Leading byte – determine expected sequence length.
+      int seqLen;
+      if (b & 0xE0 == 0xC0) {
+        seqLen = 2;
+      } else if (b & 0xF0 == 0xE0) {
+        seqLen = 3;
+      } else if (b & 0xF8 == 0xF0) {
+        seqLen = 4;
+      } else {
+        // Invalid leading byte – treat as complete.
+        return bytes.length;
+      }
+      final available = bytes.length - i;
+      return available >= seqLen ? bytes.length : i;
+    }
+    // All inspected bytes are continuation bytes – treat as complete.
+    return bytes.length;
   }
 
   /// Write text to terminal, buffering if the view is not yet ready.
@@ -427,6 +478,7 @@ class TerminalModel with ChangeNotifier {
     _inputBuffer.clear();
     _pendingOutputChunks.clear();
     _pendingOutputSize = 0;
+    _utf8Remainder.clear();
     // Terminal cleanup is handled server-side when service closes
     super.dispose();
   }
