@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - branding-v2
+      - windows-ci-simplified
 
 env:
   RUST_VERSION: "1.75"
