@@ -40,6 +40,7 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
 
