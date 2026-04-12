@@ -195,7 +195,7 @@ void showWaylandKeyboardInputWarningDialog(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           msgboxContent(
-            'info',
+            '',
             'wayland-keyboard-input-disabled-tip',
             'wayland-keyboard-input-consent-tip',
           ),
