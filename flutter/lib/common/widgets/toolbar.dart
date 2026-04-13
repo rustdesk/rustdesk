@@ -134,9 +134,8 @@ void showWaylandKeyboardInputWarningDialog(
       }
       try {
         setState(fn);
-      } catch (e, st) {
+      } catch (e) {
         debugPrint('Ignore setState after dialog disposal: $e');
-        debugPrintStack(stackTrace: st);
       }
     }
 
@@ -171,9 +170,8 @@ void showWaylandKeyboardInputWarningDialog(
               id: id,
               key: kPeerOptionAllowWaylandKeyboard,
               value: bool2option(kPeerOptionAllowWaylandKeyboard, true));
-        } catch (e, st) {
+        } catch (e) {
           debugPrint('Failed to persist Wayland keyboard input consent: $e');
-          debugPrintStack(stackTrace: st);
         }
       }
       // Always suppress prompt for current connection after explicit consent.
@@ -323,17 +321,25 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(TTextMenu(
         child: Text(translate('wayland-keyboard-input-clear-perm-tip')),
         onPressed: () async {
-          await bind.mainSetPeerOption(
-              id: id,
-              key: kPeerOptionAllowWaylandKeyboard,
-              value: bool2option(kPeerOptionAllowWaylandKeyboard, false));
-          clearWaylandKeyboardPromptSuppressedForConnection(
-              sessionId.toString());
-          ffi.inputModel.keyboardInputAllowed = false;
-          if (isMobile) {
-            await ffi.invokeMethod("enable_soft_keyboard", false);
+          var persistedCleared = false;
+          try {
+            await bind.mainSetPeerOption(
+                id: id,
+                key: kPeerOptionAllowWaylandKeyboard,
+                value: bool2option(kPeerOptionAllowWaylandKeyboard, false));
+            persistedCleared = true;
+          } catch (e) {
+            debugPrint(
+                'Failed to clear persisted Wayland keyboard permission: $e');
+          } finally {
+            clearWaylandKeyboardPromptSuppressedForConnection(
+                sessionId.toString());
+            ffi.inputModel.keyboardInputAllowed = false;
+            if (isMobile) {
+              await ffi.invokeMethod("enable_soft_keyboard", false);
+            }
           }
-          showToast(translate('Successful'));
+          showToast(translate(persistedCleared ? 'Successful' : 'Failed'));
         }));
   }
   // reset canvas
