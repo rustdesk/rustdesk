@@ -342,6 +342,7 @@ class TerminalModel with ChangeNotifier {
             bytes = base64Decode(data);
           } catch (e) {
             // If base64 decode fails, treat as plain text
+            _utf8Remainder.clear();
             _writeToTerminal(data);
             return;
           }
@@ -365,7 +366,7 @@ class TerminalModel with ChangeNotifier {
         }
 
         if (split > 0) {
-          final text = utf8.decode(bytes.sublist(0, split));
+          final text = utf8.decode(bytes.sublist(0, split), allowMalformed: true);
           _writeToTerminal(text);
         }
       } catch (e) {
