@@ -1,0 +1,262 @@
+name: Build FordplusDesk Portable x64
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  APP_NAME: FordplusDesk
+  APP_DISPLAY_NAME: "Fordplus.pl Remote"
+  RENDEZVOUS_SERVER: "hq.fordplus.pl:21116"
+  RELAY_SERVER: "hq.fordplus.pl:21117"
+  RS_PUB_KEY: "HtgcrxBFuoa2uY5VyKUPN0a8wf8UyjQgJ07QiI9LDGc="
+
+jobs:
+  build-portable:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-x64-portable
+
+      - name: Install LLVM
+        run: |
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      - name: Install vcpkg dependencies
+        run: |
+          vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+          echo "VCPKG_ROOT=$env:VCPKG_ROOT" >> $env:GITHUB_ENV
+
+      # ---------------------------------------------------------------
+      # PATCH 1: Serwer, klucz, tryb prywatny
+      # ---------------------------------------------------------------
+      - name: Patch — serwer i klucz
+        shell: python
+        run: |
+          import re, pathlib
+
+          config = pathlib.Path("src/config.rs").read_text(encoding="utf-8")
+
+          config = re.sub(
+              r'(pub const RENDEZVOUS_SERVERS.*?&\[)[^\]]*(\])',
+              r'\1"hq.fordplus.pl:21116"\2',
+              config, flags=re.DOTALL
+          )
+          config = re.sub(
+              r'(pub const RS_PUB_KEY.*?=\s*")[^"]*(")',
+              r'\1HtgcrxBFuoa2uY5VyKUPN0a8wf8UyjQgJ07QiI9LDGc=\2',
+              config
+          )
+          pathlib.Path("src/config.rs").write_text(config, encoding="utf-8")
+          print("OK: config.rs patched")
+
+          # custom.toml wbudowany w res/
+          toml = (
+              'rendezvous_server = "hq.fordplus.pl:21116"\n'
+              'relay_server = "hq.fordplus.pl:21117"\n'
+              'rs-pub-key-b64 = "HtgcrxBFuoa2uY5VyKUPN0a8wf8UyjQgJ07QiI9LDGc="\n'
+              'hide-server-settings = true\n'
+              'hide-network-settings = true\n'
+              'hide-username-on-card = false\n'
+              'hide-tray = false\n'
+          )
+          pathlib.Path("res/custom.toml").write_text(toml)
+          print("OK: res/custom.toml written")
+
+      # ---------------------------------------------------------------
+      # PATCH 2: Tryb kiosk — ukryj zakładkę Network i zmianę hasła
+      # Dotyczy Flutter UI (desktop)
+      # ---------------------------------------------------------------
+      - name: Patch — kiosk mode (Flutter desktop)
+        shell: python
+        run: |
+          import pathlib, re
+
+          # --- Ukryj zakładkę Network w desktop settings ---
+          settings_page = pathlib.Path(
+              "flutter/lib/desktop/pages/desktop_setting_page.dart"
+          )
+          if settings_page.exists():
+              text = settings_page.read_text(encoding="utf-8")
+
+              # Usuń wpis SettingsTab.network z listy zakładek
+              text = re.sub(
+                  r'\s*SettingsTab\.network,?',
+                  '',
+                  text
+              )
+              # Usuń case network z switch
+              text = re.sub(
+                  r'case SettingsTab\.network:.*?(?=case SettingsTab\.|default:|^\s*\})',
+                  '',
+                  text, flags=re.DOTALL | re.MULTILINE
+              )
+
+              settings_page.write_text(text, encoding="utf-8")
+              print("OK: desktop_setting_page.dart — network tab removed")
+          else:
+              print("WARN: desktop_setting_page.dart not found, skipping")
+
+          # --- Ukryj zmianę hasła w desktop settings ---
+          security_page = pathlib.Path(
+              "flutter/lib/desktop/pages/desktop_setting_page.dart"
+          )
+          if security_page.exists():
+              text = security_page.read_text(encoding="utf-8")
+              # Owiń ChangePasswordWidget w if(false)
+              text = re.sub(
+                  r'(ChangePasswordWidget\s*\()',
+                  r'if (false) \1',
+                  text
+              )
+              # Alternatywna nazwa widgetu w nowszych wersjach
+              text = re.sub(
+                  r'(_PasswordWidget\s*\()',
+                  r'if (false) \1',
+                  text
+              )
+              security_page.write_text(text, encoding="utf-8")
+              print("OK: password change widget hidden")
+
+      # ---------------------------------------------------------------
+      # PATCH 3: Tryb kiosk — ukryj zakładkę Network (mobile UI)
+      # ---------------------------------------------------------------
+      - name: Patch — kiosk mode (Flutter mobile)
+        shell: python
+        run: |
+          import pathlib, re
+
+          mobile_settings = pathlib.Path(
+              "flutter/lib/mobile/pages/settings_page.dart"
+          )
+          if mobile_settings.exists():
+              text = mobile_settings.read_text(encoding="utf-8")
+
+              # Usuń sekcję Server/Network z mobile settings
+              text = re.sub(
+                  r'//\s*server[\s\S]{0,2000}?(?=//\s*\w|\Z)',
+                  '',
+                  text, flags=re.IGNORECASE
+              )
+              # Ukryj pola serwera (TextEditingController dla host/key)
+              for field in ['idServerMsg', 'relayServerMsg', 'apiServerMsg', 'keyMsg']:
+                  text = re.sub(
+                      rf'({field}.*?\n)',
+                      r'// FORDPLUS_HIDDEN \1',
+                      text
+                  )
+
+              mobile_settings.write_text(text, encoding="utf-8")
+              print("OK: mobile settings_page.dart patched")
+          else:
+              print("WARN: mobile settings_page.dart not found, skipping")
+
+      # ---------------------------------------------------------------
+      # PATCH 4: Branding — nazwa aplikacji
+      # ---------------------------------------------------------------
+      - name: Patch — branding
+        shell: python
+        run: |
+          import pathlib, re
+
+          cargo = pathlib.Path("Cargo.toml").read_text(encoding="utf-8")
+          cargo = re.sub(
+              r'^name\s*=\s*"rustdesk"',
+              'name = "fordplusdesk"',
+              cargo, flags=re.MULTILINE
+          )
+          pathlib.Path("Cargo.toml").write_text(cargo, encoding="utf-8")
+
+          for src_file in [
+              "src/ui_interface.rs",
+              "src/lib.rs",
+              "flutter/lib/common.dart",
+          ]:
+              p = pathlib.Path(src_file)
+              if p.exists():
+                  t = p.read_text(encoding="utf-8")
+                  t = t.replace('"RustDesk"', '"Fordplus.pl Remote"')
+                  t = t.replace("'RustDesk'", "'Fordplus.pl Remote'")
+                  p.write_text(t, encoding="utf-8")
+                  print(f"OK: branding patched in {src_file}")
+
+      # ---------------------------------------------------------------
+      # PATCH 5: Portable — flaga --portable + autostart serwisu
+      # ---------------------------------------------------------------
+      - name: Patch — portable mode i autostart
+        shell: python
+        run: |
+          import pathlib, re
+
+          # W src/main.rs dodaj --portable do domyślnych flag
+          main_rs = pathlib.Path("src/main.rs")
+          if main_rs.exists():
+              text = main_rs.read_text(encoding="utf-8")
+
+              # Ustaw portable jako domyślny tryb
+              text = re.sub(
+                  r'(fn\s+main\s*\(\s*\)\s*\{)',
+                  r'\1\n    // Fordplus: force portable mode\n    std::env::set_var("RUSTDESK_PORTABLE", "1");',
+                  text
+              )
+              # Dodaj autostart serwisu przy pierwszym uruchomieniu
+              text = re.sub(
+                  r'(fn\s+main\s*\(\s*\)\s*\{[^}]{0,500})',
+                  r'\1\n    // Fordplus: install service on first run silently\n    if !is_service_running() {\n        let _ = crate::platform::install_service(true);\n    }\n',
+                  text, flags=re.DOTALL
+              )
+              main_rs.write_text(text, encoding="utf-8")
+              print("OK: main.rs portable + autostart patched")
+
+      # ---------------------------------------------------------------
+      # BUILD
+      # ---------------------------------------------------------------
+      - name: Build release (portable)
+        run: |
+          cargo build --release --target x86_64-pc-windows-msvc --features portable
+        env:
+          RUSTFLAGS: "-C target-feature=+crt-static"
+
+      - name: Rename portable exe
+        run: |
+          copy "target\x86_64-pc-windows-msvc\release\fordplusdesk.exe" `
+               "FordplusDesk-portable-x64.exe"
+
+      # ---------------------------------------------------------------
+      # ARTIFACTS
+      # ---------------------------------------------------------------
+      - name: Upload portable exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: FordplusDesk-portable-x64
+          path: FordplusDesk-portable-x64.exe
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FordplusDesk-portable-x64.exe
+          name: "Fordplus.pl Remote ${{ github.ref_name }}"
+          body: |
+            ## Fordplus.pl Remote ${{ github.ref_name }} — Portable
+
+            Pojedynczy plik `.exe` — nie wymaga instalacji.
+
+            **Uruchamia się jako serwis w tle.**  
+            Użytkownik widzi tylko swoje ID — brak dostępu do ustawień serwera.
+
+            **Serwer:** hq.fordplus.pl (prywatny, zablokowany)

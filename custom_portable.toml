@@ -1,0 +1,13 @@
+rendezvous_server = "hq.fordplus.pl:21116"
+relay_server = "hq.fordplus.pl:21117"
+rs-pub-key-b64 = "HtgcrxBFuoa2uY5VyKUPN0a8wf8UyjQgJ07QiI9LDGc="
+
+# Tryb kiosk — ukryj ustawienia serwera
+hide-server-settings = true
+hide-network-settings = true
+
+# Zablokuj zmianę hasła przez użytkownika
+disable-account = true
+
+# Serwis startuje automatycznie w tle
+enable-service = true
