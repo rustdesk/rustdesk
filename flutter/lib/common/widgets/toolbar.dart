@@ -164,6 +164,7 @@ void showWaylandKeyboardInputWarningDialog(
       }
 
       ffi.inputModel.keyboardInputAllowed = true;
+      var rememberPersisted = true;
       if (remember) {
         try {
           await bind.mainSetPeerOption(
@@ -171,12 +172,18 @@ void showWaylandKeyboardInputWarningDialog(
               key: kPeerOptionAllowWaylandKeyboard,
               value: bool2option(kPeerOptionAllowWaylandKeyboard, true));
         } catch (e) {
+          rememberPersisted = false;
           debugPrint('Failed to persist Wayland keyboard input consent: $e');
         }
       }
       // Always suppress prompt for current connection after explicit consent.
       setWaylandKeyboardPromptSuppressedForConnection(connectionId, true);
       closeDialog();
+      if (remember && !rememberPersisted) {
+        // It's a rare edge case that persisting the user's choice fails.
+        // Failed to persist the user's choice, but still allow keyboard input for current session.
+        showToast(translate('Failed'));
+      }
     }
 
     void cancel() {
