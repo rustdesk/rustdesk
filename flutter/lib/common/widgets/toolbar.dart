@@ -47,6 +47,23 @@ bool shouldShowWaylandKeyboardPrompt({
       !isWaylandKeyboardPromptSuppressedForConnection(connectionId);
 }
 
+Widget waylandKeyboardScopeChip(BuildContext context, String text) {
+  final colorScheme = Theme.of(context).colorScheme;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: colorScheme.primary.withOpacity(0.35)),
+    ),
+    child: Text(
+      text,
+      style: Theme.of(
+        context,
+      ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+    ),
+  );
+}
+
 class TTextMenu {
   final Widget child;
   final VoidCallback? onPressed;
@@ -204,7 +221,25 @@ void showWaylandKeyboardInputWarningDialog(
             'wayland-keyboard-input-disabled-tip',
             'wayland-keyboard-input-consent-tip',
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: isMobile ? 2 : 6),
+          if (isMobile) ...[
+            Text(
+              translate('wayland-keyboard-input-applies-to-tip'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ).marginOnly(bottom: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                waylandKeyboardScopeChip(
+                    context, translate('Send clipboard keystrokes')),
+                waylandKeyboardScopeChip(
+                    context, translate('wayland-soft-keyboard-input-label')),
+              ],
+            ).marginOnly(bottom: 10),
+          ],
           createDialogContent(kWaylandKeyboardIssueUrl).marginOnly(bottom: 6),
           CheckboxListTile(
             value: remember,
@@ -324,7 +359,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   }
   if (isDefaultConn &&
       isWaylandPeer &&
-      mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard)) {
+      (mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard) ||
+          isWaylandKeyboardPromptSuppressedForConnection(
+              sessionId.toString()))) {
     v.add(TTextMenu(
         child: Text(translate('wayland-keyboard-input-clear-perm-tip')),
         onPressed: () async {
