@@ -547,9 +547,17 @@ pub fn release_remote_keys(keyboard_mode: &str) {
     for (key, mut event) in to_release.into_iter() {
         event.event_type = EventType::KeyRelease(key);
         client::process_event(keyboard_mode, &event, None);
-        // If Alt or AltGr is pressed, we need to send another key stoke to release it.
-        // Because the controlled side may hold the alt state, if local window is switched by [Alt + Tab].
-        if key == Key::Alt || key == Key::AltGr {
+        // If a modifier key is pressed, we need to send another key stroke to release it.
+        // Because the controlled side may hold the modifier state, if local window is switched
+        // by [Alt + Tab] or by releasing the key during a focus change.
+        // This handles Alt, AltGr, Control, and Meta (Command/Win) keys.
+        if key == Key::Alt
+            || key == Key::AltGr
+            || key == Key::ControlLeft
+            || key == Key::ControlRight
+            || key == Key::MetaLeft
+            || key == Key::MetaRight
+        {
             event.event_type = EventType::KeyPress(key);
             client::process_event(keyboard_mode, &event, None);
             event.event_type = EventType::KeyRelease(key);
