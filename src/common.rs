@@ -934,6 +934,33 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     hbb_common::socket_client::increase_port(host, offset)
 }
 
+pub fn resolve_trusted_relay_server(
+    rendezvous_server: &str,
+    provided_by_rendezvous_server: &str,
+) -> String {
+    let configured_relay_server = Config::get_option(keys::OPTION_RELAY_SERVER);
+    if !configured_relay_server.is_empty() {
+        return check_port(configured_relay_server, RELAY_PORT);
+    }
+
+    let derived_relay_server = if rendezvous_server.is_empty() {
+        String::new()
+    } else {
+        increase_port(check_port(rendezvous_server, RENDEZVOUS_PORT), 1)
+    };
+    if !provided_by_rendezvous_server.is_empty() {
+        let provided_relay_server = check_port(provided_by_rendezvous_server, RELAY_PORT);
+        if !derived_relay_server.is_empty() && provided_relay_server != derived_relay_server {
+            log::warn!(
+                "Ignoring rendezvous-provided relay server {} in favor of derived relay {}",
+                provided_relay_server,
+                derived_relay_server
+            );
+        }
+    }
+    derived_relay_server
+}
+
 pub const POSTFIX_SERVICE: &'static str = "_service";
 
 #[inline]
@@ -3858,6 +3885,47 @@ mod tests {
         );
 
         assert_eq!(get_tcp_proxy_addr(), format!("[1:2]:{RENDEZVOUS_PORT}"));
+    }
+
+    #[test]
+    fn test_resolve_trusted_relay_server_prefers_explicit_override() {
+        struct RestoreRelayServer(String);
+
+        impl Drop for RestoreRelayServer {
+            fn drop(&mut self) {
+                Config::set_option(keys::OPTION_RELAY_SERVER.to_string(), self.0.clone());
+            }
+        }
+
+        let _restore = RestoreRelayServer(Config::get_option(keys::OPTION_RELAY_SERVER));
+        Config::set_option(
+            keys::OPTION_RELAY_SERVER.to_string(),
+            "relay.override.example".to_string(),
+        );
+
+        assert_eq!(
+            resolve_trusted_relay_server("hbbs.example.com:21116", "attacker.example.com:29999"),
+            format!("relay.override.example:{RELAY_PORT}")
+        );
+    }
+
+    #[test]
+    fn test_resolve_trusted_relay_server_ignores_server_supplied_override() {
+        struct RestoreRelayServer(String);
+
+        impl Drop for RestoreRelayServer {
+            fn drop(&mut self) {
+                Config::set_option(keys::OPTION_RELAY_SERVER.to_string(), self.0.clone());
+            }
+        }
+
+        let _restore = RestoreRelayServer(Config::get_option(keys::OPTION_RELAY_SERVER));
+        Config::set_option(keys::OPTION_RELAY_SERVER.to_string(), "".to_string());
+
+        assert_eq!(
+            resolve_trusted_relay_server("hbbs.example.com:21116", "attacker.example.com:29999"),
+            "hbbs.example.com:21117"
+        );
     }
 
     #[tokio::test]
