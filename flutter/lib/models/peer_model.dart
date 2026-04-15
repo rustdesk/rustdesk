@@ -22,6 +22,14 @@ class Peer {
   String device_group_name;
   String note;
   bool? sameServer;
+  String discoveryEndpoint;
+  String discoveryTrustPhrase;
+  bool discoveryTrusted;
+
+  bool get isDiscoveredPeer =>
+      discoveryEndpoint.isNotEmpty || discoveryTrustPhrase.isNotEmpty;
+
+  bool get isUntrustedDiscoveredPeer => isDiscoveredPeer && !discoveryTrusted;
 
   String getId() {
     if (alias != '') {
@@ -45,7 +53,11 @@ class Peer {
         loginName = json['loginName'] ?? '',
         device_group_name = json['device_group_name'] ?? '',
         note = json['note'] is String ? json['note'] : '',
-        sameServer = json['same_server'];
+        sameServer = json['same_server'],
+        discoveryEndpoint = json['endpoint'] ?? '',
+        discoveryTrustPhrase = json['trust_phrase'] ?? '',
+        discoveryTrusted =
+            json['trusted'] == true || json['trusted'] == 'true';
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -64,6 +76,9 @@ class Peer {
       'device_group_name': device_group_name,
       'note': note,
       'same_server': sameServer,
+      'endpoint': discoveryEndpoint,
+      'trust_phrase': discoveryTrustPhrase,
+      'trusted': discoveryTrusted.toString(),
     };
   }
 
@@ -109,6 +124,9 @@ class Peer {
     required this.device_group_name,
     required this.note,
     this.sameServer,
+    this.discoveryEndpoint = '',
+    this.discoveryTrustPhrase = '',
+    this.discoveryTrusted = false,
   });
 
   Peer.loading()
@@ -142,7 +160,11 @@ class Peer {
         rdpUsername == other.rdpUsername &&
         device_group_name == other.device_group_name &&
         loginName == other.loginName &&
-        note == other.note;
+        note == other.note &&
+        sameServer == other.sameServer &&
+        discoveryEndpoint == other.discoveryEndpoint &&
+        discoveryTrustPhrase == other.discoveryTrustPhrase &&
+        discoveryTrusted == other.discoveryTrusted;
   }
 
   Peer.copy(Peer other)
@@ -161,7 +183,10 @@ class Peer {
             loginName: other.loginName,
             device_group_name: other.device_group_name,
             note: other.note,
-            sameServer: other.sameServer);
+            sameServer: other.sameServer,
+            discoveryEndpoint: other.discoveryEndpoint,
+            discoveryTrustPhrase: other.discoveryTrustPhrase,
+            discoveryTrusted: other.discoveryTrusted);
 }
 
 enum UpdateEvent { online, load }

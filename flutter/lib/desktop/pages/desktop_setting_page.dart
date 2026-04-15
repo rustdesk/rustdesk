@@ -1234,8 +1234,36 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
       shareRdp(context, enabled),
-      _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
-          reverse: true, enabled: enabled),
+      peerPairingPassphrase(context, enabled),
+      _OptionCheckBox(context, 'Allow unverified peer trust',
+          kOptionAllowUnverifiedPeerTrust,
+          enabled: enabled,
+          labelSuffix: Tooltip(
+            waitDuration: const Duration(milliseconds: 0),
+            message: translate(
+                'Allows first-contact trust without pairing or pretrusted peer keys. Only enable this if you accept TOFU risk.'),
+            child: Icon(
+              Icons.warning_amber_rounded,
+              size: 16,
+              color: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.color
+                  ?.withOpacity(0.6),
+            ),
+          ),
+          optSetter: (key, value) async {
+            if (!value) {
+              await mainSetBoolOption(key, value);
+              return;
+            }
+            final approved =
+                await _confirmEnableUnverifiedPeerTrust(context) ?? false;
+            if (approved) {
+              await mainSetBoolOption(key, value);
+            }
+          }),
+      lanDiscoveryMode(context, enabled),
       ...directIp(context),
       whitelist(),
       ...autoDisconnect(context),
@@ -1248,6 +1276,34 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             reverse: false, enabled: enabled),
       if (bind.mainIsInstalled() && !isUnlockPinDisabled()) unlockPin()
     ]);
+  }
+
+  Widget lanDiscoveryMode(BuildContext context, bool enabled) {
+    final keys = <String>[
+      kLanDiscoveryModeOff,
+      kLanDiscoveryModeTrustedPeersOnly,
+      kLanDiscoveryModeStandard,
+    ];
+    final values = keys.map(lanDiscoveryModeLabel).map(translate).toList();
+    final currentMode = normalizeLanDiscoveryMode(
+      bind.mainGetOptionSync(key: kOptionLanDiscoveryMode),
+      legacyOptionValue: bind.mainGetOptionSync(key: kOptionEnableLanDiscovery),
+    );
+    return _SubLabeledWidget(
+      context,
+      'LAN discovery',
+      ComboBox(
+        enabled: enabled && !isLanDiscoveryModeFixed(),
+        keys: keys,
+        values: values,
+        initialKey: currentMode,
+        onChanged: (key) async {
+          await setLanDiscoveryMode(key);
+          setState(() {});
+        },
+      ),
+      enabled: enabled && !isLanDiscoveryModeFixed(),
+    );
   }
 
   shareRdp(BuildContext context, bool enabled) {
@@ -1277,6 +1333,54 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     );
   }
 
+  Widget peerPairingPassphrase(BuildContext context, bool enabled) {
+    final pairingPassphrase =
+        bind.mainGetOptionSync(key: kOptionPeerPairingPassphrase);
+    final isOptFixed = isOptionFixed(kOptionPeerPairingPassphrase);
+    return _SubLabeledWidget(
+      context,
+      'Peer pairing passphrase',
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              translate(
+                  pairingPassphrase.isEmpty ? 'Disabled' : 'Configured'),
+              style: TextStyle(
+                color: disabledTextColor(
+                    context, enabled && !locked && !isOptFixed),
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: enabled && !locked && !isOptFixed
+                ? () async {
+                    await changePeerPairingPassphrase(pairingPassphrase);
+                    setState(() {});
+                  }
+                : null,
+            child: Text(
+                translate(pairingPassphrase.isEmpty ? 'Set' : 'Change')),
+          ).marginOnly(right: 8),
+          OutlinedButton(
+            onPressed: enabled &&
+                    !locked &&
+                    !isOptFixed &&
+                    pairingPassphrase.isNotEmpty
+                ? () async {
+                    await bind.mainSetOption(
+                        key: kOptionPeerPairingPassphrase, value: '');
+                    setState(() {});
+                  }
+                : null,
+            child: Text(translate('Clear')),
+          ),
+        ],
+      ),
+      enabled: enabled && !locked && !isOptFixed,
+    );
+  }
+
   List<Widget> directIp(BuildContext context) {
     TextEditingController controller = TextEditingController();
     update(bool v) => setState(() {});
@@ -1293,47 +1397,102 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           controller.text =
               bind.mainGetOptionSync(key: kOptionDirectAccessPort);
           final isOptFixed = isOptionFixed(kOptionDirectAccessPort);
+          final pairingPassphrase =
+              bind.mainGetOptionSync(key: kOptionDirectAccessPairingPassphrase);
+          final isPairingOptFixed =
+              isOptionFixed(kOptionDirectAccessPairingPassphrase);
           return Offstage(
             offstage: !enabled,
-            child: _SubLabeledWidget(
-              context,
-              'Port',
-              Row(children: [
-                SizedBox(
-                  width: 95,
-                  child: TextField(
-                    controller: controller,
-                    enabled: enabled && !locked && !isOptFixed,
-                    onChanged: (_) => applyEnabled.value = true,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(
-                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
-                    ],
-                    decoration: const InputDecoration(
-                      hintText: '21118',
-                      contentPadding:
-                          EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+            child: Column(
+              children: [
+                _SubLabeledWidget(
+                  context,
+                  'Port',
+                  Row(children: [
+                    SizedBox(
+                      width: 95,
+                      child: TextField(
+                        controller: controller,
+                        enabled: enabled && !locked && !isOptFixed,
+                        onChanged: (_) => applyEnabled.value = true,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(
+                              r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                        ],
+                        decoration: const InputDecoration(
+                          hintText: '21118',
+                          contentPadding: EdgeInsets.symmetric(
+                              vertical: 12, horizontal: 12),
+                        ),
+                      ).workaroundFreezeLinuxMint().marginOnly(right: 15),
                     ),
-                  ).workaroundFreezeLinuxMint().marginOnly(right: 15),
+                    Obx(() => ElevatedButton(
+                          onPressed: applyEnabled.value &&
+                                  enabled &&
+                                  !locked &&
+                                  !isOptFixed
+                              ? () async {
+                                  applyEnabled.value = false;
+                                  await bind.mainSetOption(
+                                      key: kOptionDirectAccessPort,
+                                      value: controller.text);
+                                }
+                              : null,
+                          child: Text(
+                            translate('Apply'),
+                          ),
+                        ))
+                  ]),
+                  enabled: enabled && !locked && !isOptFixed,
                 ),
-                Obx(() => ElevatedButton(
-                      onPressed: applyEnabled.value &&
-                              enabled &&
-                              !locked &&
-                              !isOptFixed
-                          ? () async {
-                              applyEnabled.value = false;
-                              await bind.mainSetOption(
-                                  key: kOptionDirectAccessPort,
-                                  value: controller.text);
-                            }
-                          : null,
-                      child: Text(
-                        translate('Apply'),
+                _SubLabeledWidget(
+                  context,
+                  'Pairing passphrase',
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          translate(pairingPassphrase.isEmpty
+                              ? 'Disabled'
+                              : 'Configured'),
+                          style: TextStyle(
+                            color: disabledTextColor(
+                              context,
+                              enabled && !locked && !isPairingOptFixed,
+                            ),
+                          ),
+                        ),
                       ),
-                    ))
-              ]),
-              enabled: enabled && !locked && !isOptFixed,
+                      ElevatedButton(
+                        onPressed: enabled && !locked && !isPairingOptFixed
+                            ? () async {
+                                await changeDirectAccessPairingPassphrase(
+                                    pairingPassphrase);
+                                setState(() {});
+                              }
+                            : null,
+                        child: Text(translate(
+                            pairingPassphrase.isEmpty ? 'Set' : 'Change')),
+                      ).marginOnly(right: 8),
+                      OutlinedButton(
+                        onPressed: enabled &&
+                                !locked &&
+                                !isPairingOptFixed &&
+                                pairingPassphrase.isNotEmpty
+                            ? () async {
+                                await bind.mainSetOption(
+                                    key: kOptionDirectAccessPairingPassphrase,
+                                    value: '');
+                                setState(() {});
+                              }
+                            : null,
+                        child: Text(translate('Clear')),
+                      ),
+                    ],
+                  ),
+                  enabled: enabled && !locked && !isPairingOptFixed,
+                ),
+              ],
             ),
           );
         }
@@ -2492,6 +2651,7 @@ Widget _OptionCheckBox(
   bool isServer = true,
   bool Function()? optGetter,
   Future<void> Function(String, bool)? optSetter,
+  Widget? labelSuffix,
 }) {
   getOpt() => optGetter != null
       ? optGetter()
@@ -2536,9 +2696,15 @@ Widget _OptionCheckBox(
             child: checkedIcon?.marginOnly(right: 5),
           ),
           Expanded(
-              child: Text(
-            translate(label),
-            style: TextStyle(color: disabledTextColor(context, enabled)),
+              child: Row(
+            children: [
+              Expanded(
+                  child: Text(
+                translate(label),
+                style: TextStyle(color: disabledTextColor(context, enabled)),
+              )),
+              if (labelSuffix != null) labelSuffix.marginOnly(left: 6),
+            ],
           ))
         ],
       ),
@@ -2549,6 +2715,47 @@ Widget _OptionCheckBox(
           }
         : null,
   );
+}
+
+Future<bool?> _confirmEnableUnverifiedPeerTrust(BuildContext context) {
+  return gFFI.dialogManager.show<bool>((setState, close, context) {
+    void accept() {
+      close(true);
+    }
+
+    void cancel() {
+      close(false);
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('Enable unverified peer trust?')),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(translate(
+                'This allows first-contact trust without pairing or pretrusted peer keys.')),
+            const SizedBox(height: 12),
+            Text(
+              translate(
+                  'A compromised or malicious server could present the wrong peer identity on first connection.'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 12),
+            Text(translate(
+                'Only enable this if you explicitly accept the trust-on-first-use risk.')),
+          ],
+        ),
+      ),
+      actions: [
+        dialogButton('Cancel', onPressed: cancel, isOutline: true),
+        dialogButton('Accept', onPressed: accept),
+      ],
+      onCancel: cancel,
+    );
+  });
 }
 
 // ignore: non_constant_identifier_names
@@ -2786,10 +2993,10 @@ Widget _SubLabeledWidget(BuildContext context, String label, Widget child,
         '${translate(label)}: ',
         style: TextStyle(color: disabledTextColor(context, enabled)),
       ),
-      SizedBox(
+      const SizedBox(
         width: 10,
       ),
-      child,
+      Flexible(child: child),
     ],
   ).marginOnly(left: _kContentHSubMargin);
 }

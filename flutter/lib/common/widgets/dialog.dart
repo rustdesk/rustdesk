@@ -332,6 +332,90 @@ Future<String> changeDirectAccessPort(
   return controller.text;
 }
 
+Future<String> changePairingPassphrase(
+  String currentValue, {
+  required String title,
+  required String description,
+  required String optionKey,
+}) async {
+  final controller = TextEditingController(text: "");
+  final obscure = true.obs;
+  await gFFI.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text(translate(title)),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            translate(description),
+          ).marginOnly(bottom: 12),
+          Obx(
+            () => TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: obscure.value,
+              autocorrect: false,
+              maxLength: bind.mainMaxEncryptLen(),
+              decoration: InputDecoration(
+                hintText: translate('Optional'),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        obscure.value ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () => obscure.value = !obscure.value,
+                    ),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.clear, size: 16),
+                      onPressed: controller.clear,
+                    ),
+                  ],
+                ),
+              ),
+            ).workaroundFreezeLinuxMint(),
+          ),
+        ],
+      ),
+      actions: [
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        dialogButton('OK', onPressed: () async {
+          if (controller.text.isNotEmpty) {
+            await bind.mainSetOption(key: optionKey, value: controller.text);
+          }
+          close();
+        }),
+      ],
+      onCancel: close,
+    );
+  });
+  return controller.text.isNotEmpty ? controller.text : currentValue;
+}
+
+Future<String> changeDirectAccessPairingPassphrase(String currentValue) async {
+  return changePairingPassphrase(
+    currentValue,
+    title: "Local pairing passphrase",
+    description:
+        "Require this passphrase for first direct local-only connections.",
+    optionKey: kOptionDirectAccessPairingPassphrase,
+  );
+}
+
+Future<String> changePeerPairingPassphrase(String currentValue) async {
+  return changePairingPassphrase(
+    currentValue,
+    title: "Peer pairing passphrase",
+    description:
+        "Require this passphrase for first secure peer connections before the device key is trusted.",
+    optionKey: kOptionPeerPairingPassphrase,
+  );
+}
+
 Future<String> changeAutoDisconnectTimeout(String old) async {
   final controller = TextEditingController(text: old);
   await gFFI.dialogManager.show((setState, close, context) {

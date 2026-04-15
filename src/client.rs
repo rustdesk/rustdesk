@@ -30,11 +30,13 @@ use uuid::Uuid;
 use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
-    create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported,
+    create_symmetric_key_msg, decode_direct_id_pk, decode_id_pk, decode_secure_signed_id,
+    get_rs_pk, is_direct_handshake_ack_ok, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
     secure_tcp,
     ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
+    wrap_direct_public_key_symmetric_value,
 };
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::check_clipboard_files, clipboard_file::unix_file_clip};
@@ -48,7 +50,7 @@ use hbb_common::{
     bail,
     config::{
         self, keys, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution,
-        CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
+        CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT,
     },
     fs::JobType,
     futures::future::{select_ok, FutureExt},
@@ -59,7 +61,10 @@ use hbb_common::{
     rendezvous_proto::*,
     sha2::{Digest, Sha256},
     socket_client::{connect_tcp, connect_tcp_local, ipv4_to_ipv6, new_direct_udp_for},
-    sodiumoxide::{base64, crypto::sign},
+    sodiumoxide::{
+        base64,
+        crypto::{box_, sign},
+    },
     timeout,
     tokio::{
         self,
@@ -121,11 +126,9 @@ pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen is not supported";
 #[cfg(target_os = "linux")]
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "ubuntu-21-04-required";
 #[cfg(target_os = "linux")]
-pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
-    "wayland-requires-higher-linux-version";
+pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str = "wayland-requires-higher-linux-version";
 #[cfg(target_os = "linux")]
-pub const SCRAP_XDP_PORTAL_UNAVAILABLE: &str =
-    "xdp-portal-unavailable";
+pub const SCRAP_XDP_PORTAL_UNAVAILABLE: &str = "xdp-portal-unavailable";
 pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
 pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
@@ -255,29 +258,33 @@ impl Client {
         }
         // to-do: remember the port for each peer, so that we can retry easier
         if hbb_common::is_ip_str(peer) {
+            let mut conn =
+                connect_tcp_local(check_port(peer, RELAY_PORT + 1), None, CONNECT_TIMEOUT).await?;
+            let pk = Self::secure_direct_connection(
+                peer,
+                &interface.get_id(),
+                &mut conn,
+                interface.clone(),
+            )
+            .await?;
             return Ok((
-                (
-                    connect_tcp_local(check_port(peer, RELAY_PORT + 1), None, CONNECT_TIMEOUT)
-                        .await?,
-                    true,
-                    None,
-                    None,
-                    "TCP",
-                ),
+                (conn, true, Some(pk), None, "TCP"),
                 (0, "".to_owned()),
                 false,
             ));
         }
         // Allow connect to {domain}:{port}
         if hbb_common::is_domain_port_str(peer) {
+            let mut conn = connect_tcp_local(peer, None, CONNECT_TIMEOUT).await?;
+            let pk = Self::secure_direct_connection(
+                peer,
+                &interface.get_id(),
+                &mut conn,
+                interface.clone(),
+            )
+            .await?;
             return Ok((
-                (
-                    connect_tcp_local(peer, None, CONNECT_TIMEOUT).await?,
-                    true,
-                    None,
-                    None,
-                    "TCP",
-                ),
+                (conn, true, Some(pk), None, "TCP"),
                 (0, "".to_owned()),
                 false,
             ));
@@ -293,18 +300,19 @@ impl Client {
             crate::get_rendezvous_server(1_000).await
         } else {
             if other_server == PUBLIC_SERVER {
-                (
-                    check_port(RENDEZVOUS_SERVERS[0], RENDEZVOUS_PORT),
-                    RENDEZVOUS_SERVERS[1..]
-                        .iter()
-                        .map(|x| x.to_string())
-                        .collect(),
-                    true,
-                )
+                let mut servers = Config::get_bootstrap_rendezvous_servers().into_iter();
+                let rendezvous_server = servers
+                    .next()
+                    .map(|server| check_port(&server, RENDEZVOUS_PORT))
+                    .ok_or_else(|| anyhow!("No bootstrap rendezvous server configured"))?;
+                (rendezvous_server, servers.collect(), true)
             } else {
                 (check_port(other_server, RENDEZVOUS_PORT), Vec::new(), true)
             }
         };
+        if rendezvous_server.is_empty() {
+            bail!("No rendezvous server configured");
+        }
 
         if crate::get_ipv6_punch_enabled() {
             crate::test_ipv6().await;
@@ -573,8 +581,16 @@ impl Client {
                         let mut conn = conn?;
                         feedback = rr.feedback;
                         log::info!("{:?} used to establish {typ} connection", start.elapsed());
-                        let pk =
-                            Self::secure_connection(&peer, signed_id_pk, &key, &mut conn).await?;
+                        let pk = Self::secure_connection(
+                            &peer,
+                            &peer,
+                            &interface.get_id(),
+                            signed_id_pk,
+                            &key,
+                            &interface,
+                            &mut conn,
+                        )
+                        .await?;
                         return Ok((
                             (conn, typ == "IPv6", pk, kcp, typ),
                             (feedback, rendezvous_server),
@@ -741,7 +757,17 @@ impl Client {
             start.elapsed(),
             punch_type
         );
-        let res = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await;
+        let peer_config_id = interface.get_id();
+        let res = Self::secure_connection(
+            peer_id,
+            peer_id,
+            &peer_config_id,
+            signed_id_pk,
+            key,
+            &interface,
+            &mut conn,
+        )
+        .await;
         let pk: Option<Vec<u8>> = match res {
             Ok(pk) => pk,
             Err(e) => {
@@ -756,81 +782,256 @@ impl Client {
 
     /// Establish secure connection with the server.
     async fn secure_connection(
+        peer: &str,
         peer_id: &str,
+        peer_config_id: &str,
         signed_id_pk: Vec<u8>,
         key: &str,
+        interface: &impl Interface,
         conn: &mut Stream,
     ) -> ResultType<Option<Vec<u8>>> {
-        let rs_pk = get_rs_pk(if key.is_empty() {
-            config::RS_PUB_KEY
+        let key = if key.is_empty() {
+            Config::get_bootstrap_key()
         } else {
-            key
-        });
-        let mut sign_pk = None;
-        let mut option_pk = None;
-        if !signed_id_pk.is_empty() {
-            if let Some(rs_pk) = rs_pk {
-                if let Ok((id, pk)) = decode_id_pk(&signed_id_pk, &rs_pk) {
-                    if id == peer_id {
-                        sign_pk = Some(sign::PublicKey(pk));
-                        option_pk = Some(pk.to_vec());
-                    }
-                }
-            }
-            if sign_pk.is_none() {
-                log::error!("Handshake failed: invalid public key from rendezvous server");
-            }
-        }
-        let sign_pk = match sign_pk {
-            Some(v) => v,
-            None => {
-                // send an empty message out in case server is setting up secure and waiting for first message
-                conn.send(&Message::new()).await?;
-                return Ok(option_pk);
-            }
+            key.to_owned()
         };
+        let rs_pk = get_rs_pk(&key).ok_or_else(|| {
+            anyhow!("Handshake failed: no valid rendezvous signing key is configured")
+        })?;
+        if signed_id_pk.is_empty() {
+            bail!("Handshake failed: missing public key from rendezvous server");
+        }
+        let (id, pk) = decode_id_pk(&signed_id_pk, &rs_pk).map_err(|e| {
+            anyhow!("Handshake failed: invalid public key from rendezvous server: {e}")
+        })?;
+        if id != peer_id {
+            bail!("Handshake failed: peer id mismatch from rendezvous server");
+        }
+        let sign_pk = sign::PublicKey(pk);
+        let option_pk = Some(pk.to_vec());
         match timeout(READ_TIMEOUT, conn.next()).await? {
             Some(res) => {
                 let bytes = res?;
-                if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    if let Some(message::Union::SignedId(si)) = msg_in.union {
-                        if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
-                            if id == peer_id {
-                                let (asymmetric_value, symmetric_value, key) =
-                                    create_symmetric_key_msg(their_pk_b);
-                                let mut msg_out = Message::new();
-                                msg_out.set_public_key(PublicKey {
-                                    asymmetric_value,
-                                    symmetric_value,
-                                    ..Default::default()
-                                });
-                                timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                                conn.set_key(key);
-                            } else {
-                                log::error!("Handshake failed: sign failure");
-                                conn.send(&Message::new()).await?;
-                            }
-                        } else {
-                            // fall back to non-secure connection in case pk mismatch
-                            log::info!("pk mismatch, fall back to non-secure");
-                            let mut msg_out = Message::new();
-                            msg_out.set_public_key(PublicKey::new());
-                            conn.send(&msg_out).await?;
-                        }
-                    } else {
-                        log::error!("Handshake failed: invalid message type");
-                        conn.send(&Message::new()).await?;
-                    }
+                let msg_in = Message::parse_from_bytes(&bytes)
+                    .map_err(|e| anyhow!("Handshake failed: invalid message format: {e}"))?;
+                let Some(message::Union::SignedId(si)) = msg_in.union else {
+                    bail!("Handshake failed: invalid message type");
+                };
+                let secure_id = decode_secure_signed_id(&si.id, &sign_pk)
+                    .map_err(|e| anyhow!("Handshake failed: invalid signed peer key: {e}"))?;
+                if secure_id.id != peer_id {
+                    bail!("Handshake failed: peer id mismatch");
+                }
+                let mut pending_trust = if crate::common::needs_trusted_peer_signing_key(
+                    peer_id,
+                    peer_config_id,
+                    option_pk.as_deref().unwrap_or_default(),
+                )? {
+                    let fingerprint = crate::common::pk_to_fingerprint(pk.to_vec());
+                    let trust_phrase = crate::common::fingerprint_to_trust_phrase(&fingerprint);
+                    Some((fingerprint, trust_phrase))
                 } else {
-                    log::error!("Handshake failed: invalid message format");
-                    conn.send(&Message::new()).await?;
+                    None
+                };
+                if let Some((fingerprint, trust_phrase)) = pending_trust.as_ref() {
+                    if !secure_id.pairing_required {
+                        if !crate::common::allow_unverified_peer_trust() {
+                            bail!(
+                                "Handshake failed: first secure contact requires a trusted peer key or peer pairing passphrase. Enable 'Allow unverified peer trust' to allow legacy first-contact trust"
+                            );
+                        }
+                        interface
+                            .confirm_peer_trust(peer, peer_id, fingerprint, trust_phrase, false)
+                            .await?;
+                        crate::common::pin_trusted_peer_signing_key(peer_id, peer_config_id, &pk)?;
+                        pending_trust = None;
+                    }
+                }
+                let (asymmetric_value, symmetric_value, key) =
+                    create_symmetric_key_msg(secure_id.box_pk);
+                let pairing_proof = if let Some(pairing_salt) = secure_id.pairing_salt {
+                    let mut our_pk_b = [0u8; box_::PUBLICKEYBYTES];
+                    our_pk_b.copy_from_slice(&asymmetric_value);
+                    let passphrase = interface
+                        .request_pairing_passphrase(peer, peer_id, false)
+                        .await?;
+                    Some(crate::common::compute_direct_pairing_proof(
+                        &passphrase,
+                        &pairing_salt,
+                        peer_id,
+                        &pk,
+                        &secure_id.box_pk,
+                        &our_pk_b,
+                    )?)
+                } else {
+                    None
+                };
+                let mut msg_out = Message::new();
+                msg_out.set_public_key(PublicKey {
+                    asymmetric_value,
+                    symmetric_value: wrap_direct_public_key_symmetric_value(
+                        &symmetric_value,
+                        pairing_proof,
+                    ),
+                    ..Default::default()
+                });
+                timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
+                conn.set_key(key);
+                if secure_id.pairing_required {
+                    match timeout(READ_TIMEOUT, conn.next()).await? {
+                        Some(res) => {
+                            let bytes = res?;
+                            let msg_in = Message::parse_from_bytes(&bytes).map_err(|e| {
+                                anyhow!("Handshake failed: invalid pairing acknowledgement: {e}")
+                            })?;
+                            match msg_in.union {
+                                Some(message::Union::SignedId(si))
+                                    if is_direct_handshake_ack_ok(&si.id) => {}
+                                Some(message::Union::MessageBox(msgbox))
+                                    if msgbox.msgtype == "error" =>
+                                {
+                                    bail!("{}", msgbox.text);
+                                }
+                                _ => bail!("Handshake failed: invalid pairing acknowledgement"),
+                            }
+                        }
+                        None => bail!("Handshake failed: pairing acknowledgement missing"),
+                    }
+                }
+                if let Some((fingerprint, trust_phrase)) = pending_trust.take() {
+                    let _ = (fingerprint, trust_phrase);
+                    crate::common::pin_trusted_peer_signing_key(peer_id, peer_config_id, &pk)?;
                 }
             }
             None => {
                 bail!("Reset by the peer");
             }
-        }
+        };
         Ok(option_pk)
+    }
+
+    async fn secure_direct_connection(
+        peer: &str,
+        peer_config_id: &str,
+        conn: &mut Stream,
+        interface: impl Interface,
+    ) -> ResultType<Vec<u8>> {
+        match timeout(READ_TIMEOUT, conn.next()).await? {
+            Some(res) => {
+                let bytes = res?;
+                let msg_in = Message::parse_from_bytes(&bytes)
+                    .map_err(|e| anyhow!("Handshake failed: invalid message format: {e}"))?;
+                let Some(message::Union::SignedId(si)) = msg_in.union else {
+                    bail!("Handshake failed: invalid message type");
+                };
+                let direct_id = decode_direct_id_pk(&si.id)
+                    .map_err(|e| anyhow!("Handshake failed: invalid direct peer key: {e}"))?;
+                let peer_id = direct_id.id;
+                let sign_pk = direct_id.sign_pk;
+                let their_pk_b = direct_id.box_pk;
+                if peer_id.is_empty() {
+                    bail!("Handshake failed: empty peer id");
+                }
+                let mut pending_trust = if crate::common::needs_trusted_peer_signing_key(
+                    &peer_id,
+                    peer_config_id,
+                    &sign_pk,
+                )? {
+                    let fingerprint = crate::common::pk_to_fingerprint(sign_pk.to_vec());
+                    let trust_phrase = crate::common::fingerprint_to_trust_phrase(&fingerprint);
+                    Some((fingerprint, trust_phrase))
+                } else {
+                    None
+                };
+                if let Some((fingerprint, trust_phrase)) = pending_trust.as_ref() {
+                    if !direct_id.pairing_required {
+                        if !crate::common::allow_unverified_peer_trust() {
+                            bail!(
+                                "Handshake failed: first direct secure contact requires a trusted peer key or local pairing passphrase. Enable 'Allow unverified peer trust' to allow legacy first-contact trust"
+                            );
+                        }
+                        interface
+                            .confirm_peer_trust(peer, &peer_id, fingerprint, trust_phrase, true)
+                            .await?;
+                        crate::common::pin_trusted_peer_signing_key(
+                            &peer_id,
+                            peer_config_id,
+                            &sign_pk,
+                        )?;
+                        pending_trust = None;
+                    }
+                }
+                let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(their_pk_b);
+                let pairing_proof = if let Some(pairing_salt) = direct_id.pairing_salt {
+                    let mut our_pk_b = [0u8; box_::PUBLICKEYBYTES];
+                    our_pk_b.copy_from_slice(&asymmetric_value);
+                    let passphrase = interface
+                        .request_pairing_passphrase(peer, &peer_id, true)
+                        .await?;
+                    Some(crate::common::compute_direct_pairing_proof(
+                        &passphrase,
+                        &pairing_salt,
+                        &peer_id,
+                        &sign_pk,
+                        &their_pk_b,
+                        &our_pk_b,
+                    )?)
+                } else {
+                    None
+                };
+                let mut msg_out = Message::new();
+                msg_out.set_public_key(PublicKey {
+                    asymmetric_value,
+                    symmetric_value: wrap_direct_public_key_symmetric_value(
+                        &symmetric_value,
+                        pairing_proof,
+                    ),
+                    ..Default::default()
+                });
+                timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
+                conn.set_key(key);
+                if direct_id.pairing_required {
+                    match timeout(READ_TIMEOUT, conn.next()).await? {
+                        Some(res) => {
+                            let bytes = res?;
+                            let msg_in = Message::parse_from_bytes(&bytes).map_err(|e| {
+                                anyhow!(
+                                    "Handshake failed: invalid direct handshake acknowledgement: {e}"
+                                )
+                            })?;
+                            match msg_in.union {
+                                Some(message::Union::SignedId(si))
+                                    if is_direct_handshake_ack_ok(&si.id) => {}
+                                Some(message::Union::MessageBox(msgbox))
+                                    if msgbox.msgtype == "error" =>
+                                {
+                                    bail!("{}", msgbox.text);
+                                }
+                                _ => {
+                                    bail!("Handshake failed: invalid direct handshake acknowledgement");
+                                }
+                            }
+                        }
+                        None => {
+                            bail!("Handshake failed: missing direct handshake acknowledgement");
+                        }
+                    }
+                }
+                if let Some((fingerprint, trust_phrase)) = pending_trust.take() {
+                    let _ = (fingerprint, trust_phrase);
+                    crate::common::pin_trusted_peer_signing_key(
+                        &peer_id,
+                        peer_config_id,
+                        &sign_pk,
+                    )?;
+                }
+                log::info!("Established direct secure connection to {peer} as {peer_id}");
+                Ok(sign_pk.to_vec())
+            }
+            None => {
+                bail!("Reset by the peer");
+            }
+        }
     }
 
     /// Request a relay connection to the server.
@@ -1793,7 +1994,7 @@ impl LoginConfigHandler {
             let server = server_key.next().unwrap_or_default();
             let args = server_key.next().unwrap_or_default();
             let key = if server == PUBLIC_SERVER {
-                config::RS_PUB_KEY.to_owned()
+                Config::get_bootstrap_key()
             } else {
                 let mut args_map: HashMap<String, &str> = HashMap::new();
                 for arg in args.split('&') {
@@ -2630,16 +2831,15 @@ impl LoginConfigHandler {
         };
         let mut avatar = get_builtin_option(keys::OPTION_AVATAR);
         if avatar.is_empty() {
-            avatar = serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option(
-                "user_info",
-            ))
-            .ok()
-            .and_then(|x| {
-                x.get("avatar")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.trim().to_owned())
-            })
-            .unwrap_or_default();
+            avatar =
+                serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option("user_info"))
+                    .ok()
+                    .and_then(|x| {
+                        x.get("avatar")
+                            .and_then(|x| x.as_str())
+                            .map(|x| x.trim().to_owned())
+                    })
+                    .unwrap_or_default();
         }
         avatar = resolve_avatar_url(avatar);
         let mut display_name = get_builtin_option(keys::OPTION_DISPLAY_NAME);
@@ -3609,7 +3809,7 @@ async fn send_switch_login_request(
 
 /// Interface for client to send data and commands.
 #[async_trait]
-pub trait Interface: Send + Clone + 'static + Sized {
+pub trait Interface: Send + Sync + Clone + 'static + Sized {
     /// Send message data to remote peer.
     fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
@@ -3629,6 +3829,24 @@ pub trait Interface: Send + Clone + 'static + Sized {
         peer: &mut Stream,
     );
     async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream);
+    async fn confirm_peer_trust(
+        &self,
+        _peer: &str,
+        _peer_id: &str,
+        _fingerprint: &str,
+        _trust_phrase: &str,
+        _direct: bool,
+    ) -> ResultType<()> {
+        bail!("Handshake failed: peer trust approval is not supported by this client UI")
+    }
+    async fn request_pairing_passphrase(
+        &self,
+        _peer: &str,
+        _peer_id: &str,
+        _direct: bool,
+    ) -> ResultType<String> {
+        bail!("Handshake failed: pairing passphrase input is not supported by this client UI")
+    }
 
     fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>>;
 
@@ -3651,6 +3869,10 @@ pub trait Interface: Send + Clone + 'static + Sized {
     }
 
     fn on_establish_connection_error(&self, err: String) {
+        if err == "Handshake failed: peer trust was not approved" {
+            log::info!("Peer trust prompt was rejected for {}", self.get_id());
+            return;
+        }
         let title = "Connection Error";
         let text = err.to_string();
         let lc = self.get_lch();
@@ -3979,6 +4201,9 @@ pub mod peer_online {
     async fn create_online_stream() -> ResultType<Stream> {
         let (rendezvous_server, _servers, _contained) =
             crate::get_rendezvous_server(READ_TIMEOUT).await;
+        if rendezvous_server.is_empty() {
+            bail!("No rendezvous server configured");
+        }
         let tmp: Vec<&str> = rendezvous_server.split(":").collect();
         if tmp.len() != 2 {
             bail!("Invalid server address: {}", rendezvous_server);

@@ -20,6 +20,7 @@ use serde_derive::Serialize;
 use std::process::Child;
 use std::{
     collections::HashMap,
+    net::IpAddr,
     sync::{Arc, Mutex},
 };
 
@@ -807,17 +808,83 @@ pub fn peer_exists(id: &str) -> bool {
     PeerConfig::exists(id)
 }
 
+fn format_discovered_endpoint(ip: &str) -> String {
+    let port = crate::common::get_direct_access_port();
+    match ip.parse::<IpAddr>() {
+        Ok(IpAddr::V4(ip)) => format!("{ip}:{port}"),
+        Ok(IpAddr::V6(ip)) => format!("[{ip}]:{port}"),
+        Err(_) if !ip.is_empty() => format!("{ip}:{port}"),
+        Err(_) => "".to_owned(),
+    }
+}
+
+fn get_discovered_endpoint(peer: &config::DiscoveryPeer) -> String {
+    let mut ips: Vec<_> = peer.ip_mac.keys().cloned().collect();
+    ips.sort();
+    ips.into_iter()
+        .find(|ip| !ip.is_empty())
+        .map(|ip| format_discovered_endpoint(&ip))
+        .unwrap_or_default()
+}
+
+fn decode_discovered_signing_key(peer: &config::DiscoveryPeer) -> Option<Vec<u8>> {
+    if peer.sign_pk.is_empty() {
+        return None;
+    }
+    hbb_common::sodiumoxide::base64::decode(
+        &peer.sign_pk,
+        hbb_common::sodiumoxide::base64::Variant::Original,
+    )
+    .ok()
+}
+
+fn get_discovered_trust(peer: &config::DiscoveryPeer) -> (bool, String) {
+    let Some(sign_pk) = decode_discovered_signing_key(peer) else {
+        return (false, "".to_owned());
+    };
+    let trusted = crate::common::has_trusted_peer_signing_key(&peer.id, &sign_pk).unwrap_or(false);
+    let trust_phrase =
+        crate::common::fingerprint_to_trust_phrase(&crate::common::pk_to_fingerprint(sign_pk));
+    (trusted, trust_phrase)
+}
+
 #[inline]
 pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
     config::LanPeers::load()
         .peers
         .iter()
         .map(|peer| {
+            let endpoint = get_discovered_endpoint(peer);
+            let (trusted, trust_phrase) = get_discovered_trust(peer);
             HashMap::<&str, String>::from_iter([
                 ("id", peer.id.clone()),
-                ("username", peer.username.clone()),
-                ("hostname", peer.hostname.clone()),
-                ("platform", peer.platform.clone()),
+                (
+                    "username",
+                    if trusted {
+                        peer.username.clone()
+                    } else {
+                        "".to_owned()
+                    },
+                ),
+                (
+                    "hostname",
+                    if trusted {
+                        peer.hostname.clone()
+                    } else {
+                        "".to_owned()
+                    },
+                ),
+                (
+                    "platform",
+                    if trusted {
+                        peer.platform.clone()
+                    } else {
+                        "".to_owned()
+                    },
+                ),
+                ("endpoint", endpoint),
+                ("trust_phrase", trust_phrase),
+                ("trusted", trusted.to_string()),
             ])
         })
         .collect()

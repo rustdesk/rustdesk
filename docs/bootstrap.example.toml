@@ -1,0 +1,22 @@
+# Copy this file to the client config directory as:
+#   RustDesk-bootstrap.toml
+#
+# If you ship a custom app name, the file name becomes:
+#   <AppName>-bootstrap.toml
+#
+# This bootstrap file is loaded before the mutable option space.
+# Use it for trust roots and fixed infrastructure endpoints that
+# must not fall back to RustDesk public services.
+
+rendezvous-servers = [
+  "hbbs.example.com",
+  "hbbs-backup.example.com",
+]
+
+key = "BASE64_SERVER_PUBLIC_KEY"
+api-server = "https://hbbs.example.com:21114"
+update-server = "https://updates.example.com/version/latest"
+
+[trusted-peers]
+"peer-1" = "BASE64_PEER_1_SIGNING_KEY"
+"peer-2" = "BASE64_PEER_2_SIGNING_KEY"
