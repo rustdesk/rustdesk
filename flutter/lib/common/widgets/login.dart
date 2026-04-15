@@ -224,21 +224,59 @@ class _WidgetOPState extends State<WidgetOP> {
           return Offstage(
             offstage:
                 _failedMsg.isEmpty && widget.curOP.value != widget.config.op,
-            child: RichText(
-              text: TextSpan(
-                text: '$_stateMsg  ',
-                style:
-                    DefaultTextStyle.of(context).style.copyWith(fontSize: 12),
-                children: <TextSpan>[
-                  TextSpan(
-                    text: _failedMsg,
-                    style: DefaultTextStyle.of(context).style.copyWith(
-                          fontSize: 14,
-                          color: Colors.red,
-                        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (_stateMsg.isNotEmpty && _failedMsg.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: SelectableText(
+                      translate(_stateMsg),
+                      style: DefaultTextStyle.of(context)
+                          .style
+                          .copyWith(fontSize: 12),
+                    ),
                   ),
-                ],
-              ),
+                if (_failedMsg.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Builder(builder: (context) {
+                      final errorColor =
+                          Theme.of(context).colorScheme.error;
+                      final bgColor = Theme.of(context)
+                          .colorScheme
+                          .errorContainer
+                          .withOpacity(0.3);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8.0, vertical: 6.0),
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          borderRadius: BorderRadius.circular(4.0),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.error_outline,
+                                color: errorColor, size: 16),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: SelectableText(
+                                translate(_failedMsg),
+                                style: DefaultTextStyle.of(context)
+                                    .style
+                                    .copyWith(
+                                      fontSize: 13,
+                                      color: errorColor,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+              ],
             ),
           );
         }),
