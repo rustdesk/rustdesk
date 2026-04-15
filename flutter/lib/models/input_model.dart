@@ -396,7 +396,7 @@ class InputModel {
   static const int _wheelAccelFastThresholdUs = 40000; // 40ms
   static const int _wheelAccelMediumThresholdUs = 80000; // 80ms
   static const double _wheelBurstVelocityThreshold =
-      0.002; // delta units per microsecond
+  0.002; // delta units per microsecond
   // Wheel burst acceleration (empirical tuning).
   // Applies only to fast, non-smooth bursts to preserve single-step scrolling.
   // Flutter uses microseconds for dt, so velocity is in delta/us.
@@ -545,8 +545,8 @@ class InputModel {
   /// - Default: `kDefaultTrackpadSpeed`
   Future<void> updateTrackpadSpeed() async {
     _trackpadSpeed =
-        (await bind.sessionGetTrackpadSpeed(sessionId: sessionId) ??
-            kDefaultTrackpadSpeed);
+    (await bind.sessionGetTrackpadSpeed(sessionId: sessionId) ??
+        kDefaultTrackpadSpeed);
     if (_trackpadSpeed < kMinTrackpadSpeed ||
         _trackpadSpeed > kMaxTrackpadSpeed) {
       _trackpadSpeed = kDefaultTrackpadSpeed;
@@ -556,10 +556,10 @@ class InputModel {
 
   void handleKeyDownEventModifiers(KeyEvent e) {
     KeyUpEvent upEvent(e) => KeyUpEvent(
-          physicalKey: e.physicalKey,
-          logicalKey: e.logicalKey,
-          timeStamp: e.timeStamp,
-        );
+      physicalKey: e.physicalKey,
+      logicalKey: e.logicalKey,
+      timeStamp: e.timeStamp,
+    );
     if (!(isAndroid &&
         androidSoftKeyboardActive &&
         _isAndroidSoftKeyboardEvent(e))) {
@@ -1655,7 +1655,7 @@ class InputModel {
   static Future<Rect?> fillRemoteCoordsAndGetCurFrame(
       List<RemoteWindowCoords> remoteWindowCoords) async {
     final coords =
-        await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain();
+    await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain();
     final wc = WindowController.fromWindowId(kWindowId!);
     try {
       final frame = await wc.getFrame();
@@ -1683,7 +1683,8 @@ class InputModel {
     if (e is PointerScrollEvent) {
       final rawDx = e.scrollDelta.dx;
       final rawDy = e.scrollDelta.dy;
-      final dominantDelta = rawDx.abs() > rawDy.abs() ? rawDx.abs() : rawDy.abs();
+      final dominantDelta =
+      rawDx.abs() > rawDy.abs() ? rawDx.abs() : rawDy.abs();
       final isSmooth = dominantDelta < 1;
       final nowUs = DateTime.now().microsecondsSinceEpoch;
       final dtUs = _lastWheelTsUs == 0 ? 0 : nowUs - _lastWheelTsUs;
@@ -1727,18 +1728,18 @@ class InputModel {
   }
 
   void refreshMousePos() => handleMouse({
-        'buttons': 0,
-        'type': _kMouseEventMove,
-      }, lastMousePos, edgeScroll: useEdgeScroll);
+    'buttons': 0,
+    'type': _kMouseEventMove,
+  }, lastMousePos, edgeScroll: useEdgeScroll);
 
   void tryMoveEdgeOnExit(Offset pos) => handleMouse(
-        {
-          'buttons': 0,
-          'type': _kMouseEventMove,
-        },
-        pos,
-        onExit: true,
-      );
+    {
+      'buttons': 0,
+      'type': _kMouseEventMove,
+    },
+    pos,
+    onExit: true,
+  );
 
   static double tryGetNearestRange(double v, double min, double max, double n) {
     if (v < min && v >= min - n) {
@@ -1832,12 +1833,12 @@ class InputModel {
   }
 
   Map<String, dynamic>? processEventToPeer(
-    Map<String, dynamic> evt,
-    Offset offset, {
-    bool onExit = false,
-    bool moveCanvas = true,
-    bool edgeScroll = false,
-  }) {
+      Map<String, dynamic> evt,
+      Offset offset, {
+        bool onExit = false,
+        bool moveCanvas = true,
+        bool edgeScroll = false,
+      }) {
     if (isViewCamera) return null;
     double x = offset.dx;
     double y = max(0.0, offset.dy);
@@ -1907,12 +1908,12 @@ class InputModel {
   }
 
   Map<String, dynamic>? handleMouse(
-    Map<String, dynamic> evt,
-    Offset offset, {
-    bool onExit = false,
-    bool moveCanvas = true,
-    bool edgeScroll = false,
-  }) {
+      Map<String, dynamic> evt,
+      Offset offset, {
+        bool onExit = false,
+        bool moveCanvas = true,
+        bool edgeScroll = false,
+      }) {
     final evtToPeer = processEventToPeer(evt, offset,
         onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
     if (evtToPeer != null) {
@@ -1923,19 +1924,19 @@ class InputModel {
   }
 
   Point? handlePointerDevicePos(
-    String kind,
-    double x,
-    double y,
-    bool isMove,
-    String evtType, {
-    bool onExit = false,
-    int buttons = kPrimaryMouseButton,
-    bool moveCanvas = true,
-    bool edgeScroll = false,
-  }) {
+      String kind,
+      double x,
+      double y,
+      bool isMove,
+      String evtType, {
+        bool onExit = false,
+        int buttons = kPrimaryMouseButton,
+        bool moveCanvas = true,
+        bool edgeScroll = false,
+      }) {
     final ffiModel = parent.target!.ffiModel;
     CanvasCoords canvas =
-        CanvasCoords.fromCanvasModel(parent.target!.canvasModel);
+    CanvasCoords.fromCanvasModel(parent.target!.canvasModel);
     Rect? rect = ffiModel.rect;
 
     if (isMove) {
@@ -1943,7 +1944,7 @@ class InputModel {
           _windowRect != null &&
           !_isInCurrentWindow(x, y)) {
         final coords =
-            findRemoteCoords(x, y, _remoteWindowCoords, devicePixelRatio);
+        findRemoteCoords(x, y, _remoteWindowCoords, devicePixelRatio);
         if (coords != null) {
           isMove = false;
           canvas = coords.canvas;
@@ -2013,16 +2014,16 @@ class InputModel {
   }
 
   Point? _handlePointerDevicePos(
-    String kind,
-    double x,
-    double y,
-    bool moveInCanvas,
-    CanvasCoords canvas,
-    Rect? rect,
-    String evtType, {
-    bool onExit = false,
-    int buttons = kPrimaryMouseButton,
-  }) {
+      String kind,
+      double x,
+      double y,
+      bool moveInCanvas,
+      CanvasCoords canvas,
+      Rect? rect,
+      String evtType, {
+        bool onExit = false,
+        int buttons = kPrimaryMouseButton,
+      }) {
     if (rect == null) {
       return null;
     }
