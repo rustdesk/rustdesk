@@ -180,3 +180,7 @@ Please ensure that you run these commands from the root of the RustDesk reposito
 
 ![TCP Tunneling](https://github.com/rustdesk/rustdesk/assets/28412477/78e8708f-e87e-4570-8373-1360033ea6c5)
 
+
+## Related community projects
+
+- [mcp-rustdesk](https://github.com/meumeu-dev/mcp-rustdesk) — An MCP (Model Context Protocol) server that lets an LLM (Claude, etc.) see and control a remote machine through the RustDesk protocol, reusing this project's codec pipeline and `Interface` trait. E2EE, NAT hole-punch via self-hosted hbbs, optional Gemini Live continuous watcher.
