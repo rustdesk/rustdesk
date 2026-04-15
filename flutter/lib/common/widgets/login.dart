@@ -20,7 +20,8 @@ const kOpSvgList = [
   'okta',
   'facebook',
   'azure',
-  'auth0'
+  'auth0',
+  'microsoft'
 ];
 
 class _IconOP extends StatelessWidget {
