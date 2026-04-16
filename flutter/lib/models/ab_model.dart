@@ -99,6 +99,7 @@ class AbModel {
     print("reset ab model");
     addressbooks.clear();
     _currentName.value = '';
+    _listPullError.value = '';
     _pulledOnce = false;
     await bind.mainClearAb();
     listInitialized = false;
