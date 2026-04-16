@@ -649,13 +649,24 @@ class InputModel {
     }
   }
 
-  bool _isAndroidSoftKeyboardEvent(KeyEvent e) {
-    final usbHidUsage = e.physicalKey.usbHidUsage;
+  bool _isSoftKeyboardPhysicalKey(PhysicalKeyboardKey key) {
+    final usbHidUsage = key.usbHidUsage;
+    // Flutter hardware keyboard HID usages are normally in the low keyboard-page
+    // range (for example 0x00070004 for 'A', 0x00070028 for Enter), which means
+    // bits above the lower 20-bit region are zero and `usbHidUsage >> 20` becomes
+    // 0. Some Android IME/soft-keyboard events instead report abnormal high-bit
+    // values (observed examples look like 0x1100000042), so shifting right by 20
+    // leaves a non-zero value. We use that cheap heuristic here to treat such
+    // events as soft-keyboard/IME-generated rather than real hardware keys.
     final isNormalUsbHidUsage = (usbHidUsage >> 20) == 0;
     // Real hardware keyboard events generally have a normal keyboard HID usage.
     // IME/soft-keyboard events on Android often do not, especially for modifier
     // and special keys when the on-screen keyboard is visible.
     return !isNormalUsbHidUsage;
+  }
+
+  bool _isAndroidSoftKeyboardEvent(KeyEvent e) {
+    return _isSoftKeyboardPhysicalKey(e.physicalKey);
   }
 
   bool _isModifierLogicalKey(LogicalKeyboardKey key) {
@@ -671,9 +682,7 @@ class InputModel {
   }
 
   bool _isAndroidSoftKeyboardRawEvent(RawKeyEvent e) {
-    final usbHidUsage = e.physicalKey.usbHidUsage;
-    final isNormalUsbHidUsage = (usbHidUsage >> 20) == 0;
-    return !isNormalUsbHidUsage;
+    return _isSoftKeyboardPhysicalKey(e.physicalKey);
   }
 
   void _setHardwareModifierState(LogicalKeyboardKey key, bool down) {
