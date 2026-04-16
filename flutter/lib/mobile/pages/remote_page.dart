@@ -176,6 +176,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       return;
     }
 
+    // safer fix: final newBottom = MediaQueryData.fromView(View.of(context)).viewInsets.bottom;
+    // Given this repo is pinned to Flutter 3.24.5, ui.window may still be tolerated, but it is indeed deprecated in newer flutter versions.
+    // Best fix in widget code is usually to stop using ui.window directly and use the active view from the framework side.
+    // These kind of fixes should be made when more general flutter version update will happen but to not introduce
+    // any regression current code will be kept intact
     final newBottom = MediaQueryData.fromView(ui.window).viewInsets.bottom;
     _timerDidChangeMetrics?.cancel();
     _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () async {
