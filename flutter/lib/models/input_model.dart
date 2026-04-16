@@ -1103,56 +1103,41 @@ class InputModel {
   }
 
   void releaseTransientModifiersToHost() {
-    if (!keyboardPerm || isViewCamera) {
-      shift = false;
-      ctrl = false;
-      alt = false;
-      command = false;
-      return;
-    }
     if (shift && !shiftLocked) {
-      bind.sessionInputKey(
-          sessionId: sessionId,
-          name: 'VK_SHIFT',
+      inputKey('VK_SHIFT',
           down: false,
           press: false,
-          alt: false,
-          ctrl: false,
-          shift: false,
-          command: false);
+          altOverride: false,
+          ctrlOverride: false,
+          shiftOverride: false,
+          commandOverride: false);
     }
     if (ctrl && !ctrlLocked) {
-      bind.sessionInputKey(
-          sessionId: sessionId,
-          name: 'VK_CONTROL',
+      inputKey('VK_CONTROL',
           down: false,
           press: false,
-          alt: false,
-          ctrl: false,
-          shift: false,
-          command: false);
+          altOverride: false,
+          ctrlOverride: false,
+          shiftOverride: false,
+          commandOverride: false);
     }
     if (alt && !altLocked) {
-      bind.sessionInputKey(
-          sessionId: sessionId,
-          name: 'VK_MENU',
+      inputKey('VK_MENU',
           down: false,
           press: false,
-          alt: false,
-          ctrl: false,
-          shift: false,
-          command: false);
+          altOverride: false,
+          ctrlOverride: false,
+          shiftOverride: false,
+          commandOverride: false);
     }
     if (command && !commandLocked) {
-      bind.sessionInputKey(
-          sessionId: sessionId,
-          name: 'Meta',
+      inputKey('Meta',
           down: false,
           press: false,
-          alt: false,
-          ctrl: false,
-          shift: false,
-          command: false);
+          altOverride: false,
+          ctrlOverride: false,
+          shiftOverride: false,
+          commandOverride: false);
     }
     shift = false;
     ctrl = false;
