@@ -105,6 +105,11 @@ class AbModel {
     listInitialized = false;
   }
 
+  void clearPullErrors() {
+    _listPullError.value = '';
+    current.pullError.value = '';
+  }
+
 // #region ab
   /// Pulls the address book data from the server.
   ///
@@ -124,6 +129,7 @@ class AbModel {
     _pulling = true;
     if (!quiet) {
       _listPullError.value = '';
+      current.pullError.value = '';
     }
     try {
       await _pullAb(force: force, quiet: quiet);

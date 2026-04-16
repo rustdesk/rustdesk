@@ -56,7 +56,7 @@ class _AddressBookState extends State<AddressBook> {
                   loading: gFFI.abModel.currentAbLoading,
                   err: gFFI.abModel.abPullError,
                   retry: null,
-                  close: () => gFFI.abModel.abPullError.value = ''),
+                  close: gFFI.abModel.clearPullErrors),
               buildErrorBanner(context,
                   loading: gFFI.abModel.currentAbLoading,
                   err: gFFI.abModel.currentAbPushError,
