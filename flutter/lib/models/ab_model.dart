@@ -234,7 +234,7 @@ class AbModel {
         return false;
       }
       Map<String, dynamic> json =
-          _jsonDecodeRespMap(decode_http_response(resp), statusCode);
+          _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
       if (json.containsKey('error')) {
         throw json['error'];
       }
@@ -267,7 +267,7 @@ class AbModel {
         return true;
       }
       Map<String, dynamic> json =
-          _jsonDecodeRespMap(decode_http_response(resp), statusCode);
+          _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
       if (json.containsKey('error')) {
         throw json['error'];
       }
@@ -316,7 +316,7 @@ class AbModel {
           return false;
         }
         Map<String, dynamic> json =
-            _jsonDecodeRespMap(decode_http_response(resp), statusCode);
+            _jsonDecodeRespMap(decode_http_response(resp), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         }
