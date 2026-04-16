@@ -101,6 +101,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _isUsingPublicServer = false;
   var _allowAskForNoteAtEndOfConnection = false;
   var _preventSleepWhileConnected = true;
+  var _useLegacyKeyMapping = false;
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -145,6 +146,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         mainGetLocalBoolOptionSync(kOptionKeepAwakeDuringOutgoingSessions);
     _showTerminalExtraKeys =
         mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+    _useLegacyKeyMapping =
+        mainGetLocalBoolOptionSync(kOptionAllowLegacyKeyMapping);
   }
 
   @override
@@ -934,6 +937,24 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             tiles: shareScreenTiles,
           ),
         if (!bind.isIncomingOnly()) defaultDisplaySection(),
+        if (isAndroid && !incomingOnly)
+          SettingsSection(
+            title: Text(translate('Keyboard input')),
+            tiles: [
+              SettingsTile.switchTile(
+                title: Text(translate('Use Legacy Key Mapping')),
+                initialValue: _useLegacyKeyMapping,
+                onToggle: (v) async {
+                  await mainSetLocalBoolOption(kOptionAllowLegacyKeyMapping, v);
+                  final newValue =
+                  mainGetLocalBoolOptionSync(kOptionAllowLegacyKeyMapping);
+                  setState(() {
+                    _useLegacyKeyMapping = newValue;
+                  });
+                },
+              ),
+            ],
+          ),
         if (isAndroid &&
             !disabledSettings &&
             !outgoingOnly &&

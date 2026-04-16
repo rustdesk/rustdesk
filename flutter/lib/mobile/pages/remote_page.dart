@@ -318,6 +318,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // Clear modifiers before forwarding soft-keyboard text so host-side
       // legacy character input does not apply Shift twice.
       inputModel.releaseTransientModifiersToHost();
+      final composedContent =
+      inputModel.shiftLocked ? content.toUpperCase() : content;
       if (content.length > 1) {
         if (oldValue != '' &&
             content.length == 2 &&
@@ -331,11 +333,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 content == '（）' ||
                 content == '【】')) {
           // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          bind.sessionInputString(sessionId: sessionId, value: content);
+          bind.sessionInputString(sessionId: sessionId, value: composedContent);
           openKeyboard();
           return;
         }
-        bind.sessionInputString(sessionId: sessionId, value: content);
+        bind.sessionInputString(sessionId: sessionId, value: composedContent);
       } else {
         inputChar(content);
       }
@@ -353,10 +355,31 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   void inputChar(String char) {
     inputModel.releaseTransientModifiersToHost();
+    final useLegacyKeyMapping =
+    mainGetLocalBoolOptionSync(kOptionAllowLegacyKeyMapping);
+    final hasShortcutModifier = inputModel.ctrlLocked ||
+        inputModel.altLocked ||
+        inputModel.commandLocked;
+    final shouldUseKeyPath = useLegacyKeyMapping || hasShortcutModifier;
     if (char == '\n') {
-      char = 'VK_RETURN';
+      if (shouldUseKeyPath) {
+        char = 'VK_RETURN';
+      } else {
+        bind.sessionInputString(sessionId: inputModel.sessionId, value: '\n');
+        return;
+      }
     } else if (char == ' ') {
-      char = 'VK_SPACE';
+      if (shouldUseKeyPath) {
+        char = 'VK_SPACE';
+      } else {
+        bind.sessionInputString(sessionId: inputModel.sessionId, value: ' ');
+        return;
+      }
+    }
+    if (!shouldUseKeyPath) {
+      final value = inputModel.shiftLocked ? char.toUpperCase() : char;
+      bind.sessionInputString(sessionId: inputModel.sessionId, value: value);
+      return;
     }
     // Android soft-keyboard text is already composed; forwarding leaked modifier
     // state from IMEs like Gboard can make subsequent characters stay shifted.
