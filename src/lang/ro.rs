@@ -276,7 +276,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Do you accept?", "Accepți?"),
         ("Open System Setting", "Deschide setări sistem"),
         ("How to get Android input permission?", "Cum autorizez dispozitive de intrare pe Android?"),
-        ("android_input_permission_tip1", "Pentru ca un dispozitiv la distanță să poată controla un dispozitiv Android folosind mouse-ul sau suportul tactil, trebuie să permiți RustDesk să utilize serviciul „Accesibilitate"."),
+        ("android_input_permission_tip1", "Pentru ca un dispozitiv la distanță să poată controla un dispozitiv Android folosind mouse-ul sau suportul tactil, trebuie să permiți RustDesk să utilizeze serviciul „Accesibilitate"."),
         ("android_input_permission_tip2", "Accesează următoarea pagină din Setări, deschide [Aplicații instalate] și pornește serviciul [RustDesk Input]."),
         ("android_new_connection_tip", "Ai primit o nouă solicitare de controlare a dispozitivului actual."),
         ("android_service_will_start_tip", "Activarea setării de capturare a ecranului va porni automat serviciul, permițând altor dispozitive să solicite conectarea la dispozitivul tău."),
