@@ -621,6 +621,8 @@ class InputModel {
     }
   }
 
+  // Safe: this only re-dispatches synthesized Shift key-up events.
+  // The key-up path clears the tracked Shift state so this does not loop.
   void _releaseTrackedShiftKeyEventIfNeeded() {
     final leftShift = toReleaseKeys.lastLShiftKeyEvent;
     final rightShift = toReleaseKeys.lastRShiftKeyEvent;
@@ -632,6 +634,8 @@ class InputModel {
     }
   }
 
+  // Safe: this only re-dispatches synthesized Shift key-up events.
+  // The raw key-up path clears the tracked Shift state so this does not loop.
   void _releaseTrackedRawShiftKeyEventIfNeeded() {
     final leftShift = toReleaseRawKeys.lastLShiftKeyEvent;
     final rightShift = toReleaseRawKeys.lastRShiftKeyEvent;
@@ -710,6 +714,8 @@ class InputModel {
       legacyKeyboardModeRaw(e);
     }
 
+    // On some mobile soft-keyboard paths, Flutter may leave cached Shift state
+    // set even though the current raw key event is not shifted anymore.
     if (e is RawKeyDownEvent &&
         shouldReleaseStaleMobileShift(
           isMobile: isMobile,
@@ -759,6 +765,8 @@ class InputModel {
       iosCapsLock = _getIosCapsFromCharacter(e);
     }
 
+    // Update cached modifier state before sending the event. The stale mobile
+    // Shift release check below relies on this cached state.
     if (e is KeyUpEvent) {
       handleKeyUpEventModifiers(e);
     } else if (e is KeyDownEvent) {
@@ -796,6 +804,9 @@ class InputModel {
         }
       }
     }
+
+    // On some mobile soft-keyboard paths, Flutter may leave cached Shift state
+    // set even though the current key event is not shifted anymore.
     if (e is KeyDownEvent &&
         shouldReleaseStaleMobileShift(
           isMobile: isMobile,
