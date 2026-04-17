@@ -92,11 +92,14 @@ pub mod client {
     struct GrabOwnerState {
         owner: Option<u64>,
         last_grab: Option<std::time::Instant>,
+        /// True while a deferred-release thread is in flight. Prevents
+        /// spawning redundant threads during the X11 feedback loop.
+        deferred_pending: bool,
     }
 
     impl Default for GrabOwnerState {
         fn default() -> Self {
-            Self { owner: None, last_grab: None }
+            Self { owner: None, last_grab: None, deferred_pending: false }
         }
     }
 
@@ -184,14 +187,46 @@ pub mod client {
                 // feedback loop (grab -> PointerExit -> ungrab -> PointerEnter ->
                 // grab -> ...). Suppress Wait if the grab was acquired recently
                 // by this same session -- it is X11 feedback, not a real leave.
+                // A deferred release is scheduled so that a genuine leave within
+                // the debounce window is not permanently lost.
                 #[cfg(target_os = "linux")]
                 if let Some(t) = gs.last_grab {
                     let elapsed = t.elapsed().as_millis();
                     if elapsed < GRAB_DEBOUNCE_MS {
-                        log::debug!(
-                            "[grab] Wait(0x{:x}): debounced ({}ms < {}ms)",
-                            session_id, elapsed, GRAB_DEBOUNCE_MS,
-                        );
+                        if !gs.deferred_pending {
+                            log::debug!(
+                                "[grab] Wait(0x{:x}): debounced ({}ms < {}ms), scheduling deferred release",
+                                session_id, elapsed, GRAB_DEBOUNCE_MS,
+                            );
+                            gs.deferred_pending = true;
+                            let remaining = (GRAB_DEBOUNCE_MS - elapsed) as u64 + 50;
+                            let snapshot = gs.last_grab;
+                            let mode = keyboard_mode.to_string();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_millis(remaining));
+                                let mut gs = GRAB_STATE.lock().unwrap();
+                                gs.deferred_pending = false;
+                                // Release only if no new Run has refreshed the grab since.
+                                if gs.owner == Some(session_id) && gs.last_grab == snapshot {
+                                    log::info!("[grab] Wait(0x{:x}): deferred release", session_id);
+                                    release_remote_keys(&mode);
+                                    KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
+                                    rdev::disable_grab();
+                                    gs.owner = None;
+                                    gs.last_grab = None;
+                                } else {
+                                    log::debug!(
+                                        "[grab] Wait(0x{:x}): deferred release cancelled (grab refreshed)",
+                                        session_id,
+                                    );
+                                }
+                            });
+                        } else {
+                            log::debug!(
+                                "[grab] Wait(0x{:x}): debounced, deferred release already pending",
+                                session_id,
+                            );
+                        }
                         return;
                     }
                 }
