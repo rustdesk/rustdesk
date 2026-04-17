@@ -82,8 +82,31 @@ lazy_static::lazy_static! {
 pub mod client {
     use super::*;
 
+    /// Tracks grab ownership and serializes transitions across threads.
+    ///
+    /// On Linux/X11, `XGrabKeyboard` can cause a focus-change feedback loop:
+    /// grab -> focus shifts -> PointerExit -> ungrab -> focus returns ->
+    /// PointerEnter -> grab -> ... at ~10 Hz. `last_grab` lets us debounce
+    /// spurious `Wait` events that arrive shortly after a `Run` for the same
+    /// session - these are X11 focus feedback, not real user actions.
+    struct GrabOwnerState {
+        owner: Option<u64>,
+        last_grab: Option<std::time::Instant>,
+    }
+
+    impl Default for GrabOwnerState {
+        fn default() -> Self {
+            Self { owner: None, last_grab: None }
+        }
+    }
+
+    /// How long after a grab acquisition we suppress Wait from the same session.
+    /// Must exceed one full X11 feedback cycle (~100 ms: 50 ms enable + 50 ms disable).
+    const GRAB_DEBOUNCE_MS: u128 = 300;
+
     lazy_static::lazy_static! {
         static ref IS_GRAB_STARTED: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+        static ref GRAB_STATE: Arc<Mutex<GrabOwnerState>> = Arc::new(Mutex::new(GrabOwnerState::default()));
     }
 
     pub fn start_grab_loop() {
@@ -96,33 +119,98 @@ pub mod client {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn change_grab_status(state: GrabState, keyboard_mode: &str) {
+    pub fn change_grab_status(state: GrabState, keyboard_mode: &str, session_id: u64) {
         #[cfg(feature = "flutter")]
         if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
             return;
         }
+        // Serialize transitions so a stale `Wait` from a previous owner cannot
+        // clobber a fresh `Run` from a different session window.
+        let mut gs = GRAB_STATE.lock().unwrap();
         match state {
             GrabState::Ready => {}
             GrabState::Run => {
                 #[cfg(windows)]
                 update_grab_get_key_name(keyboard_mode);
+
+                // Idempotent: if this session already owns the grab, just
+                // refresh the debounce timer (proves the session is still
+                // actively focused) and skip the actual grab call.
+                if gs.owner == Some(session_id) {
+                    gs.last_grab = Some(std::time::Instant::now());
+                    log::debug!("[grab] Run(0x{:x}): already owner, refresh debounce", session_id);
+                    return;
+                }
+
+                log::info!(
+                    "[grab] Run(0x{:x}): prev_owner={}, mode={}",
+                    session_id,
+                    gs.owner.map_or("none".to_string(), |id| format!("0x{:x}", id)),
+                    keyboard_mode,
+                );
+
                 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-                KEYBOARD_HOOKED.swap(true, Ordering::SeqCst);
+                KEYBOARD_HOOKED.store(true, Ordering::SeqCst);
 
                 #[cfg(target_os = "linux")]
-                rdev::enable_grab();
+                {
+                    // On handoff, explicitly release any prior owner's X11 grab
+                    // before taking our own. This keeps the rdev control thread
+                    // and the X server in a consistent state even if the prior
+                    // owner never sent `Wait` (e.g. disconnected or raced).
+                    if gs.owner.is_some() {
+                        log::info!("[grab] handoff: disable_grab before re-grab");
+                        rdev::disable_grab();
+                    }
+                    rdev::enable_grab();
+                }
+                gs.owner = Some(session_id);
+                gs.last_grab = Some(std::time::Instant::now());
             }
             GrabState::Wait => {
+                // Drop stale `Wait` events that do not correspond to the
+                // current grab owner. This prevents a late PointerExit from
+                // session A from releasing session B's freshly acquired grab.
+                if gs.owner != Some(session_id) {
+                    log::debug!(
+                        "[grab] Wait(0x{:x}): ignored, owner={}",
+                        session_id,
+                        gs.owner.map_or("none".to_string(), |id| format!("0x{:x}", id)),
+                    );
+                    return;
+                }
+
+                // Debounce: on Linux/X11, XGrabKeyboard causes a focus-change
+                // feedback loop (grab -> PointerExit -> ungrab -> PointerEnter ->
+                // grab -> ...). Suppress Wait if the grab was acquired recently
+                // by this same session -- it is X11 feedback, not a real leave.
+                #[cfg(target_os = "linux")]
+                if let Some(t) = gs.last_grab {
+                    let elapsed = t.elapsed().as_millis();
+                    if elapsed < GRAB_DEBOUNCE_MS {
+                        log::debug!(
+                            "[grab] Wait(0x{:x}): debounced ({}ms < {}ms)",
+                            session_id, elapsed, GRAB_DEBOUNCE_MS,
+                        );
+                        return;
+                    }
+                }
+
+                log::info!("[grab] Wait(0x{:x}): releasing grab", session_id);
+
                 #[cfg(windows)]
                 rdev::set_get_key_unicode(false);
 
                 release_remote_keys(keyboard_mode);
 
                 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-                KEYBOARD_HOOKED.swap(false, Ordering::SeqCst);
+                KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
 
                 #[cfg(target_os = "linux")]
                 rdev::disable_grab();
+
+                gs.owner = None;
+                gs.last_grab = None;
             }
             GrabState::Exit => {}
         }
