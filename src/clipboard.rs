@@ -1,5 +1,7 @@
 #[cfg(not(target_os = "android"))]
 use arboard::{ClipboardData, ClipboardFormat};
+#[cfg(target_os = "linux")]
+use arboard::{LinuxClipboardKind, SetExtLinux};
 use hbb_common::{bail, log, message_proto::*, ResultType};
 use std::{
     sync::{Arc, Mutex},
@@ -54,6 +56,27 @@ pub fn check_clipboard(
     side: ClipboardSide,
     force: bool,
 ) -> Option<Message> {
+    let (msg, clipboards) = read_clipboard_message(ctx, side, force)?;
+    *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
+    Some(msg)
+}
+
+#[cfg(target_os = "linux")]
+pub fn peek_clipboard(
+    ctx: &mut Option<ClipboardContext>,
+    side: ClipboardSide,
+    force: bool,
+) -> Option<Message> {
+    let (msg, _) = read_clipboard_message(ctx, side, force)?;
+    Some(msg)
+}
+
+#[cfg(not(target_os = "android"))]
+fn read_clipboard_message(
+    ctx: &mut Option<ClipboardContext>,
+    side: ClipboardSide,
+    force: bool,
+) -> Option<(Message, MultiClipboards)> {
     if ctx.is_none() {
         *ctx = ClipboardContext::new().ok();
     }
@@ -64,8 +87,7 @@ pub fn check_clipboard(
                 let mut msg = Message::new();
                 let clipboards = proto::create_multi_clipboards(content);
                 msg.set_multi_clipboards(clipboards.clone());
-                *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
-                return Some(msg);
+                return Some((msg, clipboards));
             }
         }
         Err(e) => {
@@ -219,16 +241,36 @@ fn do_update_clipboard_(mut to_update_data: Vec<ClipboardData>, side: ClipboardS
         }
     }
     if let Some(ctx) = ctx.as_mut() {
-        to_update_data.push(ClipboardData::Special((
-            RUSTDESK_CLIPBOARD_OWNER_FORMAT.to_owned(),
-            side.get_owner_data(),
-        )));
+        to_update_data = append_owner_marker(to_update_data, side);
         if let Err(e) = ctx.set(&to_update_data) {
             log::debug!("Failed to set clipboard: {}", e);
         } else {
             log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
         }
     }
+}
+
+#[cfg(not(target_os = "android"))]
+fn append_owner_marker(mut data: Vec<ClipboardData>, side: ClipboardSide) -> Vec<ClipboardData> {
+    data.push(ClipboardData::Special((
+        RUSTDESK_CLIPBOARD_OWNER_FORMAT.to_owned(),
+        side.get_owner_data(),
+    )));
+    data
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_text_clipboard_with_owner_sync(text: &str, side: ClipboardSide) -> ResultType<()> {
+    let mut ctx = CLIPBOARD_CTX.lock().unwrap();
+    if ctx.is_none() {
+        *ctx = Some(ClipboardContext::new()?);
+    }
+    let clipboard_ctx = match ctx.as_mut() {
+        Some(ctx) => ctx,
+        None => bail!("Failed to create clipboard context"),
+    };
+    let data = append_owner_marker(vec![ClipboardData::Text(text.to_owned())], side);
+    clipboard_ctx.set_with_owner_marker_for_linux(&data)
 }
 
 #[cfg(not(target_os = "android"))]
@@ -379,6 +421,24 @@ impl ClipboardContext {
     fn set(&mut self, data: &[ClipboardData]) -> ResultType<()> {
         let _lock = ARBOARD_MTX.lock().unwrap();
         self.inner.set_formats(data)?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn set_with_owner_marker_for_linux(&mut self, data: &[ClipboardData]) -> ResultType<()> {
+        let _lock = ARBOARD_MTX.lock().unwrap();
+        self.inner
+            .set()
+            .clipboard(LinuxClipboardKind::Clipboard)
+            .formats(data)?;
+        if let Err(e) = self
+            .inner
+            .set()
+            .clipboard(LinuxClipboardKind::Primary)
+            .formats(data)
+        {
+            log::warn!("Failed to set PRIMARY clipboard with owner marker: {}", e);
+        }
         Ok(())
     }
 

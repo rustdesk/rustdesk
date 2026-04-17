@@ -15,6 +15,54 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 bool isEditOsPassword = false;
+const String kPeerOptionAllowWaylandKeyboard = 'allow-wayland-keyboard';
+const String kWaylandKeyboardIssueUrl =
+    'https://github.com/rustdesk/rustdesk/issues/14586';
+final Set<String> _waylandKeyboardPromptSuppressedConnectionIds = <String>{};
+
+bool isWaylandKeyboardPromptSuppressedForConnection(String connectionId) {
+  return _waylandKeyboardPromptSuppressedConnectionIds.contains(connectionId);
+}
+
+void setWaylandKeyboardPromptSuppressedForConnection(
+    String connectionId, bool suppressed) {
+  if (suppressed) {
+    _waylandKeyboardPromptSuppressedConnectionIds.add(connectionId);
+  } else {
+    _waylandKeyboardPromptSuppressedConnectionIds.remove(connectionId);
+  }
+}
+
+void clearWaylandKeyboardPromptSuppressedForConnection(String connectionId) {
+  _waylandKeyboardPromptSuppressedConnectionIds.remove(connectionId);
+}
+
+bool shouldShowWaylandKeyboardPrompt({
+  required String connectionId,
+  required bool isWaylandPeer,
+  required bool allowWaylandKeyboardRemembered,
+}) {
+  return isWaylandPeer &&
+      !allowWaylandKeyboardRemembered &&
+      !isWaylandKeyboardPromptSuppressedForConnection(connectionId);
+}
+
+Widget waylandKeyboardScopeChip(BuildContext context, String text) {
+  final colorScheme = Theme.of(context).colorScheme;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: colorScheme.primary.withOpacity(0.35)),
+    ),
+    child: Text(
+      text,
+      style: Theme.of(
+        context,
+      ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+    ),
+  );
+}
 
 class TTextMenu {
   final Widget child;
@@ -87,12 +135,152 @@ handleOsPasswordAction(
   }
 }
 
+void showWaylandKeyboardInputWarningDialog(
+    {required String id,
+    required String connectionId,
+    required FFI ffi,
+    required Future<void> Function() onEnable}) {
+  bool remember = false;
+  bool consentInProgress = false;
+  bool dialogClosed = false;
+
+  final dialogFuture = ffi.dialogManager.show((setState, close, context) {
+    void safeSetState(VoidCallback fn) {
+      if (dialogClosed) {
+        return;
+      }
+      try {
+        setState(fn);
+      } catch (e) {
+        debugPrint('Ignore setState after dialog disposal: $e');
+      }
+    }
+
+    void closeDialog() {
+      if (dialogClosed) {
+        return;
+      }
+      dialogClosed = true;
+      close();
+    }
+
+    Future<void> enableAndContinue() async {
+      if (consentInProgress || dialogClosed) {
+        return;
+      }
+      consentInProgress = true;
+      safeSetState(() {});
+      try {
+        await onEnable();
+      } catch (e, st) {
+        debugPrint('Failed to enable Wayland keyboard input consent: $e');
+        debugPrintStack(stackTrace: st);
+        consentInProgress = false;
+        safeSetState(() {});
+        return;
+      }
+
+      ffi.inputModel.keyboardInputAllowed = true;
+      var rememberPersisted = true;
+      if (remember) {
+        try {
+          await bind.mainSetPeerOption(
+              id: id,
+              key: kPeerOptionAllowWaylandKeyboard,
+              value: bool2option(kPeerOptionAllowWaylandKeyboard, true));
+        } catch (e) {
+          rememberPersisted = false;
+          debugPrint('Failed to persist Wayland keyboard input consent: $e');
+        }
+      }
+      // Always suppress prompt for current connection after explicit consent.
+      setWaylandKeyboardPromptSuppressedForConnection(connectionId, true);
+      closeDialog();
+      if (remember && !rememberPersisted) {
+        // It's a rare edge case that persisting the user's choice fails.
+        // Failed to persist the user's choice, but still allow keyboard input for current session.
+        showToast(translate('Failed'));
+      }
+    }
+
+    void cancel() {
+      if (consentInProgress) {
+        return;
+      }
+      closeDialog();
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          msgboxContent(
+            '',
+            'wayland-keyboard-input-disabled-tip',
+            'wayland-keyboard-input-consent-tip',
+          ),
+          SizedBox(height: isMobile ? 2 : 6),
+          if (isMobile) ...[
+            Text(
+              translate('wayland-keyboard-input-applies-to-tip'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ).marginOnly(bottom: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                waylandKeyboardScopeChip(
+                    context, translate('Send clipboard keystrokes')),
+                waylandKeyboardScopeChip(
+                    context, translate('wayland-soft-keyboard-input-label')),
+              ],
+            ).marginOnly(bottom: 10),
+          ],
+          createDialogContent(kWaylandKeyboardIssueUrl).marginOnly(bottom: 6),
+          CheckboxListTile(
+            value: remember,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(translate('remember-wayland-keyboard-choice-tip')),
+            onChanged: consentInProgress
+                ? null
+                : (v) {
+                    safeSetState(() => remember = v == true);
+                  },
+          ),
+        ],
+      ),
+      actions: [
+        dialogButton(
+          'Cancel',
+          onPressed: consentInProgress ? null : cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          'OK',
+          onPressed:
+              consentInProgress ? null : () => unawaited(enableAndContinue()),
+        ),
+      ],
+      onCancel: consentInProgress ? null : cancel,
+      onSubmit: consentInProgress ? null : () => unawaited(enableAndContinue()),
+    );
+  }, clickMaskDismiss: false, backDismiss: false);
+  unawaited(dialogFuture.whenComplete(() => dialogClosed = true));
+}
+
 List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
   final perms = ffiModel.permissions;
   final sessionId = ffi.sessionId;
   final isDefaultConn = ffi.connType == ConnType.defaultConn;
+  final isWaylandPeer = pi.platform == kPeerPlatformLinux && pi.isWayland;
 
   List<TTextMenu> v = [];
   // elevation
@@ -142,11 +330,60 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(TTextMenu(
         child: Text(translate('Send clipboard keystrokes')),
         onPressed: () async {
-          ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-          if (data != null && data.text != null) {
-            bind.sessionInputString(
-                sessionId: sessionId, value: data.text ?? "");
+          Future<void> sendClipboardKeystrokes() async {
+            ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
+            if (data != null && data.text != null) {
+              bind.sessionInputString(
+                  sessionId: sessionId, value: data.text ?? "");
+            }
           }
+
+          final allowWaylandKeyboard =
+              mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard);
+          if (shouldShowWaylandKeyboardPrompt(
+            connectionId: sessionId.toString(),
+            isWaylandPeer: isWaylandPeer,
+            allowWaylandKeyboardRemembered: allowWaylandKeyboard,
+          )) {
+            ffi.inputModel.keyboardInputAllowed = false;
+            showWaylandKeyboardInputWarningDialog(
+              id: id,
+              connectionId: sessionId.toString(),
+              ffi: ffi,
+              onEnable: sendClipboardKeystrokes,
+            );
+            return;
+          }
+          await sendClipboardKeystrokes();
+        }));
+  }
+  if (isDefaultConn &&
+      isWaylandPeer &&
+      (mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard) ||
+          isWaylandKeyboardPromptSuppressedForConnection(
+              sessionId.toString()))) {
+    v.add(TTextMenu(
+        child: Text(translate('wayland-keyboard-input-clear-perm-tip')),
+        onPressed: () async {
+          var persistedCleared = false;
+          try {
+            await bind.mainSetPeerOption(
+                id: id,
+                key: kPeerOptionAllowWaylandKeyboard,
+                value: bool2option(kPeerOptionAllowWaylandKeyboard, false));
+            persistedCleared = true;
+          } catch (e) {
+            debugPrint(
+                'Failed to clear persisted Wayland keyboard permission: $e');
+          } finally {
+            clearWaylandKeyboardPromptSuppressedForConnection(
+                sessionId.toString());
+            ffi.inputModel.keyboardInputAllowed = false;
+            if (isMobile) {
+              await ffi.invokeMethod("enable_soft_keyboard", false);
+            }
+          }
+          showToast(translate(persistedCleared ? 'Successful' : 'Failed'));
         }));
   }
   // reset canvas

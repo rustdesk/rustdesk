@@ -743,5 +743,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "显示名称"),
         ("password-hidden-tip", "永久密码已设置（已隐藏）"),
         ("preset-password-in-use-tip", "当前使用预设密码"),
+        ("wayland-keyboard-input-disabled-tip", "键盘输入已禁用"),
+        ("wayland-keyboard-input-consent-tip", "此会话使用 Wayland。键盘输入可能会临时通过被控端剪贴板粘贴到当前应用，剪贴板历史或其他应用可能读取这些内容（包括密码）。\n点击“OK”允许当前会话。"),
+        ("wayland-keyboard-input-applies-to-tip", "此授权适用于："),
+        ("wayland-soft-keyboard-input-label", "软键盘输入"),
+        ("wayland-keyboard-input-clear-perm-tip", "清除已保存键盘授权"),
+        ("remember-wayland-keyboard-choice-tip", "在此设备上始终允许键盘输入"),
     ].iter().cloned().collect();
 }
