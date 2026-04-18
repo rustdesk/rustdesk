@@ -89,18 +89,13 @@ pub mod client {
     /// PointerEnter -> grab -> ... at ~10 Hz. `last_grab` lets us debounce
     /// spurious `Wait` events that arrive shortly after a `Run` for the same
     /// session - these are X11 focus feedback, not real user actions.
+    #[derive(Default)]
     struct GrabOwnerState {
         owner: Option<u64>,
         last_grab: Option<std::time::Instant>,
         /// True while a deferred-release thread is in flight. Prevents
         /// spawning redundant threads during the X11 feedback loop.
         deferred_pending: bool,
-    }
-
-    impl Default for GrabOwnerState {
-        fn default() -> Self {
-            Self { owner: None, last_grab: None, deferred_pending: false }
-        }
     }
 
     /// How long after a grab acquisition we suppress Wait from the same session.
@@ -141,6 +136,9 @@ pub mod client {
                 // actively focused) and skip the actual grab call.
                 if gs.owner == Some(session_id) {
                     gs.last_grab = Some(std::time::Instant::now());
+                    // Reset so the next Wait can spawn a fresh deferred-release
+                    // timer with an up-to-date snapshot of last_grab.
+                    gs.deferred_pending = false;
                     log::debug!("[grab] Run(0x{:x}): already owner, refresh debounce", session_id);
                     return;
                 }
@@ -169,6 +167,9 @@ pub mod client {
                 }
                 gs.owner = Some(session_id);
                 gs.last_grab = Some(std::time::Instant::now());
+                // Invalidate any in-flight deferred release from the previous
+                // owner so it cannot suppress a fresh timer for the new owner.
+                gs.deferred_pending = false;
             }
             GrabState::Wait => {
                 // Drop stale `Wait` events that do not correspond to the
