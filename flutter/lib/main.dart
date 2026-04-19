@@ -28,6 +28,7 @@ import 'consts.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'models/platform_model.dart';
+import 'models/input_model.dart';
 
 import 'package:flutter_hbb/plugin/handlers.dart'
     if (dart.library.html) 'package:flutter_hbb/web/plugin/handlers.dart';
@@ -130,6 +131,8 @@ Future<void> initEnv(String appType) async {
   _registerEventHandler();
   // Update the system theme.
   updateSystemWindowTheme();
+  // Initialize side mouse button channel (Linux only, no-op on other platforms).
+  InputModel.initSideButtonChannel();
 }
 
 void runMainApp(bool startService) async {

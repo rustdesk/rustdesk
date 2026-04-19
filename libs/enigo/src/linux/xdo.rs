@@ -8,6 +8,7 @@
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 use hbb_common::libc::c_int;
+use hbb_common::x11::xlib::{Display, XGetPointerMapping, XSetPointerMapping};
 use libxdo_sys::{self, xdo_t, CURRENTWINDOW};
 use std::{borrow::Cow, ffi::CString};
 
@@ -32,6 +33,75 @@ fn mousebutton(button: MouseButton) -> c_int {
     }
 }
 
+/// Minimum number of buttons the X11 core pointer must support.
+/// Buttons 8 (Back) and 9 (Forward) are needed for mouse side buttons.
+const MIN_POINTER_BUTTONS: usize = 9;
+
+/// Ensure the X11 core pointer's button map includes at least 9 buttons so that
+/// `XTestFakeButtonEvent` can simulate Back (8) and Forward (9) side buttons.
+///
+/// On headless or remote machines the XTEST virtual pointer often only advertises
+/// buttons 1-3 (or 1-7). Without extending the map, libxdo's calls for buttons
+/// 8/9 are silently ignored by the X server.
+fn ensure_x11_button_map(xdo: *mut xdo_t) {
+    // The first field of libxdo's xdo_t struct is `Display *xdpy` (offset 0).
+    let display: *mut Display = unsafe { *(xdo as *const *mut Display) };
+    if display.is_null() {
+        log::warn!("xdo Display pointer is null, cannot extend button map");
+        return;
+    }
+
+    let mut current_map = [0u8; 32];
+    let nbuttons =
+        unsafe { XGetPointerMapping(display, current_map.as_mut_ptr(), current_map.len() as i32) };
+
+    if nbuttons < 0 {
+        log::warn!("XGetPointerMapping failed (returned {nbuttons})");
+        return;
+    }
+
+    let nbuttons = nbuttons as usize;
+    if nbuttons >= MIN_POINTER_BUTTONS {
+        log::info!("X11 pointer already has {nbuttons} buttons, no extension needed");
+        return;
+    }
+
+    // Preserve existing entries, append identity mapping for new ones.
+    let mut new_map = [0u8; MIN_POINTER_BUTTONS];
+    new_map[..nbuttons].copy_from_slice(&current_map[..nbuttons]);
+    for i in nbuttons..MIN_POINTER_BUTTONS {
+        new_map[i] = (i + 1) as u8;
+    }
+
+    // XSetPointerMapping returns:
+    //   MappingSuccess (0) - mapping was changed
+    //   MappingBusy    (1) - a button is currently held, try again later
+    //   MappingFailed  (2) - the server rejected the mapping
+    const MAPPING_SUCCESS: c_int = 0;
+    const MAPPING_BUSY: c_int = 1;
+    const MAX_RETRIES: usize = 5;
+    const RETRY_DELAY_MS: u64 = 100;
+
+    for attempt in 1..=MAX_RETRIES {
+        let result = unsafe {
+            XSetPointerMapping(display, new_map.as_ptr(), MIN_POINTER_BUTTONS as c_int)
+        };
+        if result == MAPPING_SUCCESS {
+            log::info!("Extended X11 pointer button map from {nbuttons} to {MIN_POINTER_BUTTONS} buttons");
+            return;
+        }
+        if result == MAPPING_BUSY {
+            log::info!("XSetPointerMapping returned MappingBusy (attempt {attempt}), retrying");
+            std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+            continue;
+        }
+        // MappingFailed or unexpected code - no point retrying.
+        log::warn!("XSetPointerMapping failed with code {result} (tried {nbuttons} -> {MIN_POINTER_BUTTONS})");
+        return;
+    }
+    log::warn!("XSetPointerMapping failed after {MAX_RETRIES} retries (all MappingBusy)");
+}
+
 /// The main struct for handling the event emitting
 pub(super) struct EnigoXdo {
     xdo: *mut xdo_t,
@@ -52,6 +122,7 @@ impl Default for EnigoXdo {
             log::warn!("Failed to create xdo context, xdo functions will be disabled");
         } else {
             log::info!("xdo context created successfully");
+            ensure_x11_button_map(xdo);
         }
         Self {
             xdo,

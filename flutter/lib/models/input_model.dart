@@ -20,7 +20,7 @@ import '../common.dart';
 import '../consts.dart';
 
 /// Mouse button enum.
-enum MouseButtons { left, right, wheel, back }
+enum MouseButtons { left, right, wheel, back, forward }
 
 const _kMouseEventDown = 'mousedown';
 const _kMouseEventUp = 'mouseup';
@@ -157,6 +157,8 @@ extension ToString on MouseButtons {
         return 'wheel';
       case MouseButtons.back:
         return 'back';
+      case MouseButtons.forward:
+        return 'forward';
     }
   }
 }
@@ -327,6 +329,54 @@ class ToReleaseKeys {
 }
 
 class InputModel {
+  // Side mouse button support for Linux.
+  // Flutter's Linux embedder drops X11 button 8/9 events, so we capture them
+  // natively via GDK and forward through the platform channel.
+  static InputModel? _activeSideButtonModel;
+  // Tracks the model that received a side button down event, so the matching
+  // up event is routed there even if the pointer has left the remote view.
+  static InputModel? _sideButtonDownModel;
+  static bool _sideButtonChannelInitialized = false;
+
+  static void initSideButtonChannel() {
+    if (!Platform.isLinux) return;
+    if (_sideButtonChannelInitialized) return;
+    _sideButtonChannelInitialized = true;
+
+    const channel = MethodChannel('org.rustdesk.rustdesk/side_buttons');
+    channel.setMethodCallHandler((call) async {
+      if (call.method == 'onSideMouseButton') {
+        final args = call.arguments as Map<dynamic, dynamic>;
+        final button = args['button'] as String;
+        final type = args['type'] as String;
+        final mb = button == 'back' ? MouseButtons.back : MouseButtons.forward;
+
+        if (type == 'down') {
+          final model = _activeSideButtonModel;
+          if (model != null) {
+            _sideButtonDownModel = model;
+            await model.sendMouse(type, mb);
+          }
+        } else {
+          // Route 'up' to the model that received the matching 'down',
+          // even if the pointer has since left the remote view.
+          final model = _sideButtonDownModel ?? _activeSideButtonModel;
+          _sideButtonDownModel = null;
+          if (model != null) {
+            await model.sendMouse(type, mb);
+          }
+        }
+      }
+      return null;
+    });
+  }
+
+  /// Clear any static references to this model (prevents stale routing).
+  void disposeSideButtonTracking() {
+    if (_activeSideButtonModel == this) _activeSideButtonModel = null;
+    if (_sideButtonDownModel == this) _sideButtonDownModel = null;
+  }
+
   final WeakReference<FFI> parent;
   String keyboardMode = '';
 
@@ -981,6 +1031,13 @@ class InputModel {
     _pointerMovedAfterEnter = false;
     _pointerInsideImage = enter;
     _lastWheelTsUs = 0;
+
+    // Track active model for side button events (Linux).
+    if (enter) {
+      _activeSideButtonModel = this;
+    } else if (_activeSideButtonModel == this) {
+      _activeSideButtonModel = null;
+    }
 
     // Fix status
     if (!enter) {
