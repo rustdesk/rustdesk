@@ -20,8 +20,6 @@ if [ -z "$VCPKG_ROOT" ]; then
   exit 1
 fi
 
-API_LEVEL="21"
-
 # Get directory of this script
 
 SCRIPTDIR="$(readlink -f "$0")"
@@ -36,27 +34,20 @@ fi
 
 # NDK llvm toolchain
 
-HOST_TAG="linux-x86_64" # current platform, set as `ls $ANDROID_NDK/toolchains/llvm/prebuilt/`
-TOOLCHAIN=$ANDROID_NDK/toolchains/llvm/prebuilt/$HOST_TAG
-
 function build {
   ANDROID_ABI=$1
 
   case "$ANDROID_ABI" in
   arm64-v8a)
-     ABI=aarch64-linux-android$API_LEVEL
      VCPKG_TARGET=arm64-android
      ;;
   armeabi-v7a)
-     ABI=armv7a-linux-androideabi$API_LEVEL
      VCPKG_TARGET=arm-neon-android
      ;;
   x86_64)
-     ABI=x86_64-linux-android$API_LEVEL
      VCPKG_TARGET=x64-android
      ;;
   x86)
-     ABI=i686-linux-android$API_LEVEL
      VCPKG_TARGET=x86-android
      ;;
   *)

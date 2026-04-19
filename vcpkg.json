@@ -90,6 +90,9 @@
     },
     "overlay-ports": [
       "./res/vcpkg"
+    ],
+    "overlay-triplets": [
+      "./res/vcpkg-triplets"
     ]
   },
   "overrides": [
