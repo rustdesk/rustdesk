@@ -108,7 +108,7 @@ pub mod client {
     }
 
     pub fn start_grab_loop() {
-        let mut lock = IS_GRAB_STARTED.lock().unwrap();
+        let mut lock = IS_GRAB_STARTED.lock().unwrap_or_else(|e| e.into_inner());
         if *lock {
             return;
         }
@@ -124,7 +124,7 @@ pub mod client {
         }
         // Serialize transitions so a stale `Wait` from a previous owner cannot
         // clobber a fresh `Run` from a different session window.
-        let mut gs = GRAB_STATE.lock().unwrap();
+        let mut gs = GRAB_STATE.lock().unwrap_or_else(|e| e.into_inner());
         match state {
             GrabState::Ready => {}
             GrabState::Run => {
@@ -205,7 +205,7 @@ pub mod client {
                             let mode = keyboard_mode.to_string();
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_millis(remaining));
-                                let mut gs = GRAB_STATE.lock().unwrap();
+                                let mut gs = GRAB_STATE.lock().unwrap_or_else(|e| e.into_inner());
                                 gs.deferred_pending = false;
                                 // Release only if no new Run has refreshed the grab since.
                                 if gs.owner == Some(session_id) && gs.last_grab == snapshot {
