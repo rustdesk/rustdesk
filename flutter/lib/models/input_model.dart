@@ -354,15 +354,15 @@ class InputModel {
 
         if (type == 'down') {
           final model = _activeSideButtonModel;
-          if (model != null) {
+          if (model != null &&
+              !(model.isViewOnly && !model.showMyCursor)) {
             _sideButtonDownModels[mb] = model;
             await model.sendMouse(type, mb);
           }
         } else {
-          // Route 'up' to the model that received the matching 'down',
-          // even if the pointer has since left the remote view.
-          final model =
-              _sideButtonDownModels.remove(mb) ?? _activeSideButtonModel;
+          // Only route 'up' when we recorded the matching 'down';
+          // dropping avoids sending unpaired 'up' to an unrelated session.
+          final model = _sideButtonDownModels.remove(mb);
           if (model != null) {
             await model.sendMouse(type, mb);
           }
@@ -373,9 +373,18 @@ class InputModel {
   }
 
   /// Clear any static references to this model (prevents stale routing).
+  /// Releases any held side buttons on the peer so closing a session
+  /// mid-press does not leave a stuck button.
   void disposeSideButtonTracking() {
     if (_activeSideButtonModel == this) _activeSideButtonModel = null;
-    _sideButtonDownModels.removeWhere((_, model) => model == this);
+    final held = _sideButtonDownModels.entries
+        .where((e) => e.value == this)
+        .map((e) => e.key)
+        .toList();
+    for (final mb in held) {
+      _sideButtonDownModels.remove(mb);
+      unawaited(sendMouse('up', mb));
+    }
   }
 
   final WeakReference<FFI> parent;
