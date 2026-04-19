@@ -333,9 +333,10 @@ class InputModel {
   // Flutter's Linux embedder drops X11 button 8/9 events, so we capture them
   // natively via GDK and forward through the platform channel.
   static InputModel? _activeSideButtonModel;
-  // Tracks the model that received a side button down event, so the matching
-  // up event is routed there even if the pointer has left the remote view.
-  static InputModel? _sideButtonDownModel;
+  // Tracks per-button which model received a side button down event, so the
+  // matching up event is routed there even if the pointer has left the view
+  // or a different button was pressed in between.
+  static final Map<MouseButtons, InputModel> _sideButtonDownModels = {};
   static bool _sideButtonChannelInitialized = false;
 
   static void initSideButtonChannel() {
@@ -354,14 +355,14 @@ class InputModel {
         if (type == 'down') {
           final model = _activeSideButtonModel;
           if (model != null) {
-            _sideButtonDownModel = model;
+            _sideButtonDownModels[mb] = model;
             await model.sendMouse(type, mb);
           }
         } else {
           // Route 'up' to the model that received the matching 'down',
           // even if the pointer has since left the remote view.
-          final model = _sideButtonDownModel ?? _activeSideButtonModel;
-          _sideButtonDownModel = null;
+          final model =
+              _sideButtonDownModels.remove(mb) ?? _activeSideButtonModel;
           if (model != null) {
             await model.sendMouse(type, mb);
           }
@@ -374,7 +375,7 @@ class InputModel {
   /// Clear any static references to this model (prevents stale routing).
   void disposeSideButtonTracking() {
     if (_activeSideButtonModel == this) _activeSideButtonModel = null;
-    if (_sideButtonDownModel == this) _sideButtonDownModel = null;
+    _sideButtonDownModels.removeWhere((_, model) => model == this);
   }
 
   final WeakReference<FFI> parent;

@@ -8,7 +8,7 @@
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 use hbb_common::libc::c_int;
-use hbb_common::x11::xlib::{Display, XGetPointerMapping, XSetPointerMapping};
+use hbb_common::x11::xlib::{Display, XCloseDisplay, XGetPointerMapping, XOpenDisplay, XSetPointerMapping};
 use libxdo_sys::{self, xdo_t, CURRENTWINDOW};
 use std::{borrow::Cow, ffi::CString};
 
@@ -43,11 +43,12 @@ const MIN_POINTER_BUTTONS: usize = 9;
 /// On headless or remote machines the XTEST virtual pointer often only advertises
 /// buttons 1-3 (or 1-7). Without extending the map, libxdo's calls for buttons
 /// 8/9 are silently ignored by the X server.
-fn ensure_x11_button_map(xdo: *mut xdo_t) {
-    // The first field of libxdo's xdo_t struct is `Display *xdpy` (offset 0).
-    let display: *mut Display = unsafe { *(xdo as *const *mut Display) };
+fn ensure_x11_button_map() {
+    // Open an independent display connection rather than extracting the pointer
+    // from xdo_t's private struct layout (which is an undocumented ABI detail).
+    let display: *mut Display = unsafe { XOpenDisplay(std::ptr::null()) };
     if display.is_null() {
-        log::warn!("xdo Display pointer is null, cannot extend button map");
+        log::warn!("XOpenDisplay failed, cannot extend button map");
         return;
     }
 
@@ -57,12 +58,14 @@ fn ensure_x11_button_map(xdo: *mut xdo_t) {
 
     if nbuttons < 0 {
         log::warn!("XGetPointerMapping failed (returned {nbuttons})");
+        unsafe { XCloseDisplay(display) };
         return;
     }
 
     let nbuttons = nbuttons as usize;
     if nbuttons >= MIN_POINTER_BUTTONS {
         log::info!("X11 pointer already has {nbuttons} buttons, no extension needed");
+        unsafe { XCloseDisplay(display) };
         return;
     }
 
@@ -88,7 +91,7 @@ fn ensure_x11_button_map(xdo: *mut xdo_t) {
         };
         if result == MAPPING_SUCCESS {
             log::info!("Extended X11 pointer button map from {nbuttons} to {MIN_POINTER_BUTTONS} buttons");
-            return;
+            break;
         }
         if result == MAPPING_BUSY {
             log::info!("XSetPointerMapping returned MappingBusy (attempt {attempt}), retrying");
@@ -97,9 +100,10 @@ fn ensure_x11_button_map(xdo: *mut xdo_t) {
         }
         // MappingFailed or unexpected code - no point retrying.
         log::warn!("XSetPointerMapping failed with code {result} (tried {nbuttons} -> {MIN_POINTER_BUTTONS})");
-        return;
+        break;
     }
-    log::warn!("XSetPointerMapping failed after {MAX_RETRIES} retries (all MappingBusy)");
+
+    unsafe { XCloseDisplay(display) };
 }
 
 /// The main struct for handling the event emitting
@@ -122,7 +126,7 @@ impl Default for EnigoXdo {
             log::warn!("Failed to create xdo context, xdo functions will be disabled");
         } else {
             log::info!("xdo context created successfully");
-            ensure_x11_button_map(xdo);
+            ensure_x11_button_map();
         }
         Self {
             xdo,
