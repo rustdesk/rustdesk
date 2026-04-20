@@ -17,7 +17,8 @@ use hbb_common::{
     bail, base64,
     bytes::Bytes,
     config::{
-        self, keys, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT,
+        self, keys, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        RENDEZVOUS_PORT,
     },
     futures::future::join_all,
     futures_util::future::poll_fn,
@@ -654,8 +655,10 @@ async fn test_nat_type_() -> ResultType<bool> {
     let server2 = crate::increase_port(&server1, -1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
+    let licence_key = crate::get_key(true).await;
     msg_out.set_test_nat_request(TestNatRequest {
         serial,
+        licence_key,
         ..Default::default()
     });
     let mut port1 = 0;
@@ -1327,6 +1330,41 @@ fn is_usable_direct_access_ip(ip: IpAddr) -> bool {
     }
 }
 
+fn is_safe_rendezvous_peer_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            !ip.is_loopback()
+                && !ip.is_unspecified()
+                && !ip.is_multicast()
+                && !ip.is_link_local()
+                && ip.octets() != [255, 255, 255, 255]
+        }
+        IpAddr::V6(ip) => {
+            !ip.is_loopback()
+                && !ip.is_unspecified()
+                && !ip.is_multicast()
+                && !ip.is_unicast_link_local()
+        }
+    }
+}
+
+fn is_safe_local_rendezvous_peer_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => ip.is_private(),
+        IpAddr::V6(ip) => (ip.segments()[0] & 0xfe00) == 0xfc00,
+    }
+}
+
+pub fn is_safe_rendezvous_peer_hint(addr: SocketAddr, is_local_hint: bool) -> bool {
+    if addr.port() == 0 {
+        return false;
+    }
+    if is_local_hint {
+        return is_safe_local_rendezvous_peer_ip(addr.ip());
+    }
+    is_safe_rendezvous_peer_ip(addr.ip())
+}
+
 #[inline]
 fn format_direct_access_endpoint(ip: IpAddr, port: i32) -> String {
     match ip {
@@ -1444,14 +1482,14 @@ pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
 #[inline]
 fn should_use_raw_tcp_for_api(url: &str) -> bool {
     get_builtin_option(keys::OPTION_USE_RAW_TCP_FOR_API) == "Y"
-        && !use_ws()
+        && !config::use_ws()
         && is_tcp_proxy_api_target(url)
 }
 
 /// Check if we can attempt raw TCP proxy fallback for this target URL.
 #[inline]
 fn can_fallback_to_raw_tcp(url: &str) -> bool {
-    !use_ws() && is_tcp_proxy_api_target(url)
+    !config::use_ws() && is_tcp_proxy_api_target(url)
 }
 
 #[inline]
@@ -2937,6 +2975,16 @@ pub fn create_lan_discovery_ping_misc(nonce: &str) -> String {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn create_lan_discovery_ping_misc_for_test(
+    peer_id: &str,
+    nonce: &str,
+    sign_pk: &[u8; sign::PUBLICKEYBYTES],
+    sign_sk: &sign::SecretKey,
+) -> String {
+    create_lan_discovery_ping_misc_with_keys(peer_id, nonce, sign_pk, sign_sk)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanDiscoveryPingRequest {
     pub nonce: String,
@@ -3675,8 +3723,10 @@ mod tests {
         self,
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
-    use std::collections::HashSet;
+    use std::{collections::HashSet, sync::Mutex};
     use uuid::Uuid;
+
+    static TEST_CONFIG_LOCK: Mutex<()> = Mutex::new(());
 
     #[inline]
     fn get_timestamp_secs() -> u128 {
@@ -4301,6 +4351,96 @@ mod tests {
     }
 
     #[test]
+    fn test_lan_discovery_mode_explicit_modes() {
+        let _guard = TEST_CONFIG_LOCK.lock().unwrap();
+        let saved_mode = Config::get_option(keys::OPTION_LAN_DISCOVERY_MODE);
+        let saved_legacy = Config::get_option(keys::OPTION_ENABLE_LAN_DISCOVERY);
+
+        Config::set_option(
+            keys::OPTION_LAN_DISCOVERY_MODE.to_owned(),
+            LAN_DISCOVERY_MODE_OFF.to_owned(),
+        );
+        assert_eq!(get_lan_discovery_mode(), LAN_DISCOVERY_MODE_OFF);
+        assert!(!lan_discovery_is_enabled());
+        assert!(!lan_discovery_replies_to_unknown_peers());
+
+        Config::set_option(
+            keys::OPTION_LAN_DISCOVERY_MODE.to_owned(),
+            LAN_DISCOVERY_MODE_TRUSTED_ONLY.to_owned(),
+        );
+        assert_eq!(get_lan_discovery_mode(), LAN_DISCOVERY_MODE_TRUSTED_ONLY);
+        assert!(lan_discovery_is_enabled());
+        assert!(!lan_discovery_replies_to_unknown_peers());
+
+        Config::set_option(
+            keys::OPTION_LAN_DISCOVERY_MODE.to_owned(),
+            LAN_DISCOVERY_MODE_STANDARD.to_owned(),
+        );
+        assert_eq!(get_lan_discovery_mode(), LAN_DISCOVERY_MODE_STANDARD);
+        assert!(lan_discovery_is_enabled());
+        assert!(lan_discovery_replies_to_unknown_peers());
+
+        Config::set_option(keys::OPTION_LAN_DISCOVERY_MODE.to_owned(), saved_mode);
+        Config::set_option(keys::OPTION_ENABLE_LAN_DISCOVERY.to_owned(), saved_legacy);
+    }
+
+    #[test]
+    fn test_lan_discovery_mode_falls_back_to_legacy_boolean() {
+        let _guard = TEST_CONFIG_LOCK.lock().unwrap();
+        let saved_mode = Config::get_option(keys::OPTION_LAN_DISCOVERY_MODE);
+        let saved_legacy = Config::get_option(keys::OPTION_ENABLE_LAN_DISCOVERY);
+
+        Config::set_option(keys::OPTION_LAN_DISCOVERY_MODE.to_owned(), "".to_owned());
+        Config::set_option(
+            keys::OPTION_ENABLE_LAN_DISCOVERY.to_owned(),
+            "N".to_owned(),
+        );
+        assert_eq!(get_lan_discovery_mode(), LAN_DISCOVERY_MODE_OFF);
+        assert!(!lan_discovery_is_enabled());
+
+        Config::set_option(
+            keys::OPTION_ENABLE_LAN_DISCOVERY.to_owned(),
+            "".to_owned(),
+        );
+        assert_eq!(get_lan_discovery_mode(), LAN_DISCOVERY_MODE_STANDARD);
+        assert!(lan_discovery_is_enabled());
+        assert!(lan_discovery_replies_to_unknown_peers());
+
+        Config::set_option(keys::OPTION_LAN_DISCOVERY_MODE.to_owned(), saved_mode);
+        Config::set_option(keys::OPTION_ENABLE_LAN_DISCOVERY.to_owned(), saved_legacy);
+    }
+
+    #[test]
+    fn test_trusted_peer_signing_key_flow_is_fail_closed() {
+        let _guard = TEST_CONFIG_LOCK.lock().unwrap();
+        let peer_id = format!("trusted-peer-{}", Uuid::new_v4());
+        let trusted_pk = [7u8; 32];
+        let changed_pk = [8u8; 32];
+        hbb_common::config::PeerConfig::remove(&peer_id);
+
+        assert!(needs_trusted_peer_signing_key(&peer_id, &peer_id, &trusted_pk).unwrap());
+        assert!(!has_trusted_peer_signing_key(&peer_id, &trusted_pk).unwrap());
+
+        pin_trusted_peer_signing_key(&peer_id, &peer_id, &trusted_pk).unwrap();
+
+        assert!(!needs_trusted_peer_signing_key(&peer_id, &peer_id, &trusted_pk).unwrap());
+        assert!(has_trusted_peer_signing_key(&peer_id, &trusted_pk).unwrap());
+        verify_discovered_peer_signing_key(&peer_id, &trusted_pk).unwrap();
+
+        let err = needs_trusted_peer_signing_key(&peer_id, &peer_id, &changed_pk)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("peer identity changed"));
+
+        let err = verify_discovered_peer_signing_key(&peer_id, &changed_pk)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("peer identity changed"));
+
+        hbb_common::config::PeerConfig::remove(&peer_id);
+    }
+
+    #[test]
     fn test_is_usable_direct_access_ip_filters_local_only_noise() {
         assert!(is_usable_direct_access_ip(IpAddr::V4(
             "192.168.1.10".parse().unwrap()
@@ -4329,5 +4469,37 @@ mod tests {
             format_direct_access_endpoint(IpAddr::V6("fd00::5".parse().unwrap()), 21118),
             "[fd00::5]:21118"
         );
+    }
+
+    #[test]
+    fn test_is_safe_rendezvous_peer_hint_rejects_unsafe_and_requires_local_ranges() {
+        assert!(is_safe_rendezvous_peer_hint(
+            "203.0.113.10:21116".parse().unwrap(),
+            false
+        ));
+        assert!(!is_safe_rendezvous_peer_hint(
+            "127.0.0.1:21116".parse().unwrap(),
+            false
+        ));
+        assert!(!is_safe_rendezvous_peer_hint(
+            "169.254.1.20:21116".parse().unwrap(),
+            false
+        ));
+        assert!(is_safe_rendezvous_peer_hint(
+            "192.168.1.20:21116".parse().unwrap(),
+            true
+        ));
+        assert!(!is_safe_rendezvous_peer_hint(
+            "203.0.113.10:21116".parse().unwrap(),
+            true
+        ));
+        assert!(is_safe_rendezvous_peer_hint(
+            "[fd00::20]:21116".parse().unwrap(),
+            true
+        ));
+        assert!(!is_safe_rendezvous_peer_hint(
+            "[2001:db8::20]:21116".parse().unwrap(),
+            true
+        ));
     }
 }

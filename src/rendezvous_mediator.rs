@@ -310,6 +310,12 @@ impl RendezvousMediator {
                     Ok(register_pk_response::Result::UUID_MISMATCH) => {
                         self.handle_uuid_mismatch(sink).await?;
                     }
+                    Ok(register_pk_response::Result::LICENSE_MISMATCH) => {
+                        log::error!("Authentication failed for {}", self.host);
+                    }
+                    Ok(register_pk_response::Result::PEER_LIMIT_REACHED) => {
+                        log::error!("Peer record limit reached on {}", self.host);
+                    }
                     _ => {
                         log::error!("unknown RegisterPkResponse");
                     }
@@ -431,10 +437,11 @@ impl RendezvousMediator {
         if last.0 == addr && last.1.elapsed().as_millis() < 100 {
             return Ok(());
         }
+        let relay_server = self.get_relay_server(rr.relay_server);
 
         self.create_relay(
             rr.socket_addr.into(),
-            rr.relay_server,
+            relay_server,
             rr.uuid,
             server,
             rr.secure,
@@ -589,11 +596,34 @@ impl RendezvousMediator {
         if last.0 == peer_addr && last.1.elapsed().as_millis() < 100 {
             return Ok(());
         }
+        if !crate::common::is_safe_rendezvous_peer_hint(peer_addr, false) {
+            log::warn!(
+                "Ignoring unsafe rendezvous-provided direct peer address {} and falling back to relay",
+                peer_addr
+            );
+            let relay_server = self.get_relay_server(ph.relay_server);
+            let uuid = Uuid::new_v4().to_string();
+            return self
+                .create_relay(
+                    ph.socket_addr.into(),
+                    relay_server,
+                    uuid,
+                    server,
+                    true,
+                    true,
+                    Default::default(),
+                    ph.control_permissions.into_option(),
+                )
+                .await;
+        }
         let peer_addr_v6 = hbb_common::AddrMangle::decode(&ph.socket_addr_v6);
         let relay = use_ws() || Config::is_proxy() || ph.force_relay;
         let mut socket_addr_v6 = Default::default();
         let control_permissions = ph.control_permissions.into_option();
-        if peer_addr_v6.port() > 0 && !relay {
+        if peer_addr_v6.port() > 0
+            && !relay
+            && crate::common::is_safe_rendezvous_peer_hint(peer_addr_v6, false)
+        {
             socket_addr_v6 = start_ipv6(
                 peer_addr_v6,
                 peer_addr,
@@ -601,6 +631,11 @@ impl RendezvousMediator {
                 control_permissions.clone(),
             )
             .await;
+        } else if peer_addr_v6.port() > 0 && !relay {
+            log::warn!(
+                "Ignoring unsafe rendezvous-provided IPv6 direct peer address {}",
+                peer_addr_v6
+            );
         }
         let relay_server = self.get_relay_server(ph.relay_server);
         // for ensure, websocket go relay directly
@@ -694,11 +729,13 @@ impl RendezvousMediator {
         let pk = Config::get_key_pair().1;
         let uuid = hbb_common::get_uuid();
         let id = Config::get_id();
+        let licence_key = crate::get_key(true).await;
         msg_out.set_register_pk(RegisterPk {
             id,
             uuid: uuid.into(),
             pk: pk.into(),
             no_register_device: Config::no_register_device(),
+            licence_key,
             ..Default::default()
         });
         socket.send(&msg_out).await?;
@@ -742,9 +779,11 @@ impl RendezvousMediator {
         );
         let mut msg_out = Message::new();
         let serial = Config::get_serial();
+        let licence_key = crate::get_key(true).await;
         msg_out.set_register_peer(RegisterPeer {
             id,
             serial,
+            licence_key,
             ..Default::default()
         });
         socket.send(&msg_out).await?;
