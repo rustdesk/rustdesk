@@ -1450,7 +1450,7 @@ showSetOSAccount(
   dialogManager.show((setState, close, context) {
     submit() {
       final username = usernameController.text.trim();
-      final password = usernameController.text.trim();
+      final password = passwdController.text;
       bind.sessionPeerOption(
           sessionId: sessionId, name: 'os-username', value: username);
       bind.sessionPeerOption(
