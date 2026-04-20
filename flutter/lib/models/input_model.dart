@@ -359,16 +359,20 @@ class InputModel {
         if (type == 'down') {
           final model = _activeSideButtonModel;
           if (model != null &&
-              !(model.isViewOnly && !model.showMyCursor)) {
+              !(model.isViewOnly && !model.showMyCursor) &&
+              model.keyboardPerm &&
+              !model.isViewCamera) {
             _sideButtonDownModels[mb] = model;
-            await model.sendMouse(type, mb);
+            await model._sendMouseUnchecked(type, mb);
           }
         } else {
           // Only route 'up' when we recorded the matching 'down';
           // dropping avoids sending unpaired 'up' to an unrelated session.
+          // Use _sendMouseUnchecked to bypass permission checks so the
+          // release always goes through even if permissions changed.
           final model = _sideButtonDownModels.remove(mb);
           if (model != null) {
-            await model.sendMouse(type, mb);
+            await model._sendMouseUnchecked(type, mb);
           }
         }
       }
@@ -388,7 +392,7 @@ class InputModel {
     for (final mb in held) {
       _sideButtonDownModels.remove(mb);
       // Best-effort release; session may already be tearing down.
-      unawaited(sendMouse('up', mb).catchError((Object e) {
+      unawaited(_sendMouseUnchecked('up', mb).catchError((Object e) {
         debugPrint('[InputModel] failed to release side button $mb: $e');
       }));
     }
@@ -1033,13 +1037,20 @@ class InputModel {
     return evt;
   }
 
+  /// Send mouse event unconditionally (no permission checks).
+  /// Used for side button releases that must go through even if permissions
+  /// changed after the matching down was sent.
+  Future<void> _sendMouseUnchecked(String type, MouseButtons button) async {
+    await bind.sessionSendMouse(
+        sessionId: sessionId,
+        msg: json.encode(modify({'type': type, 'buttons': button.value})));
+  }
+
   /// Send mouse press event.
   Future<void> sendMouse(String type, MouseButtons button) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
-    await bind.sessionSendMouse(
-        sessionId: sessionId,
-        msg: json.encode(modify({'type': type, 'buttons': button.value})));
+    await _sendMouseUnchecked(type, button);
   }
 
   void enterOrLeave(bool enter) {
