@@ -24,6 +24,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
+import 'package:flutter_hbb/models/security_dialog_helpers.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/plugin/event.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
@@ -1063,12 +1064,15 @@ class FfiModel with ChangeNotifier {
                     : 'First secure connection for this peer. Approve and remember this device key?',
               ).marginOnly(bottom: 12),
               Text(
-                'Compare the trust phrase with the remote device, then type it below to continue.',
+                'Verify the trust phrase or fingerprint on the remote device, then type the trust phrase below to continue.',
               ).marginOnly(bottom: 12),
-              buildLine(direct ? 'Endpoint' : 'Peer', peer),
-              buildLine('Peer ID', peerId),
+              Text(
+                'Other session details below help identify the connection, but the trust phrase and fingerprint are the identity check.',
+              ).marginOnly(bottom: 12),
               buildLine('Trust phrase', trustPhrase),
               buildLine('Fingerprint', fingerprint),
+              buildLine(direct ? 'Endpoint' : 'Peer', peer),
+              buildLine('Peer ID', peerId),
               if (invalidTrustPayload)
                 Text(
                   'The trust information from the remote side is missing or invalid. Reject this connection.',
@@ -1207,6 +1211,7 @@ class FfiModel with ChangeNotifier {
 
   void showPeerIdentityChangedDialog(
       SessionID sessionId, OverlayDialogManager dialogManager, String text) {
+    final details = parsePeerIdentityChangedDetails(text);
     dialogManager.show(
       tag: '$sessionId-peer-identity-changed',
       (setState, close, context) {
@@ -1231,6 +1236,29 @@ class FfiModel with ChangeNotifier {
           }();
         }
 
+        Widget buildLine(String label, String value) {
+          if (value.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SelectionArea(
+              child: RichText(
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: [
+                    TextSpan(
+                      text: '$label: ',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(text: value),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
         return CustomAlertDialog(
           title: Text(translate('Peer identity changed')),
           content: SelectionArea(
@@ -1241,7 +1269,16 @@ class FfiModel with ChangeNotifier {
                 Text(
                   'The stored device identity no longer matches the remote peer.',
                 ).marginOnly(bottom: 12),
-                Text(text),
+                Text(
+                  'Do not reset trust unless you verify the new trust phrase or fingerprint with the remote device.',
+                ).marginOnly(bottom: 12),
+                if (details != null) ...[
+                  buildLine(
+                      'Expected fingerprint', details.expectedFingerprint),
+                  buildLine(
+                      'Presented fingerprint', details.presentedFingerprint),
+                ] else
+                  Text(text),
               ],
             ),
           ),
