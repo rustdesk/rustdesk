@@ -43,6 +43,11 @@ const MIN_POINTER_BUTTONS: usize = 9;
 /// On headless or remote machines the XTEST virtual pointer often only advertises
 /// buttons 1-3 (or 1-7). Without extending the map, libxdo's calls for buttons
 /// 8/9 are silently ignored by the X server.
+///
+/// NOTE: `XSetPointerMapping` mutates the global X11 pointer map (not per-client).
+/// On typical desktops with >= 9 buttons this is a no-op. On minimal/headless
+/// servers it appends identity entries that persist for the X server's lifetime.
+/// Called once from `EnigoXdo::default()` which is a lazy_static singleton.
 fn ensure_x11_button_map() {
     // Open an independent display connection rather than extracting the pointer
     // from xdo_t's private struct layout (which is an undocumented ABI detail).

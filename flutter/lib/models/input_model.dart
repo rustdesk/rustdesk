@@ -339,6 +339,10 @@ class InputModel {
   static final Map<MouseButtons, InputModel> _sideButtonDownModels = {};
   static bool _sideButtonChannelInitialized = false;
 
+  /// Each Flutter engine (main window + sub-windows from desktop_multi_window)
+  /// runs its own Dart isolate with its own statics. Called from initEnv()
+  /// which runs per-engine, so each isolate registers its own handler tied
+  /// to its own set of InputModels.
   static void initSideButtonChannel() {
     if (!Platform.isLinux) return;
     if (_sideButtonChannelInitialized) return;

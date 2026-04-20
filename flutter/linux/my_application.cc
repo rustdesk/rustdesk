@@ -169,7 +169,9 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_show(GTK_WIDGET(view));
 
   // Register callback for sub-windows created by desktop_multi_window plugin.
-  // Handles both Wayland shortcuts inhibition and side button forwarding.
+  // Handles both Wayland shortcuts inhibition (guarded inside) and side button
+  // forwarding. Safe to call on X11-only builds - the plugin just stores the
+  // callback pointer regardless of windowing system.
   desktop_multi_window_plugin_set_window_created_callback(
       (WindowCreatedCallback)on_subwindow_created);
 
