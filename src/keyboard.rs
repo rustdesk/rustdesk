@@ -211,9 +211,9 @@ pub mod client {
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_millis(remaining));
                                 let mut gs = GRAB_STATE.lock().unwrap_or_else(|e| e.into_inner());
-                                gs.deferred_pending = false;
                                 // Release only if no new Run has refreshed the grab since.
                                 if gs.owner == Some(session_id) && gs.last_grab == snapshot {
+                                    gs.deferred_pending = false;
                                     log::info!("[grab] Wait(0x{:x}): deferred release", session_id);
                                     release_remote_keys(&mode);
                                     KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
