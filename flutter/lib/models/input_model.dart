@@ -387,7 +387,10 @@ class InputModel {
         .toList();
     for (final mb in held) {
       _sideButtonDownModels.remove(mb);
-      unawaited(sendMouse('up', mb));
+      // Best-effort release; session may already be tearing down.
+      unawaited(sendMouse('up', mb).catchError((Object e) {
+        debugPrint('[InputModel] failed to release side button $mb: $e');
+      }));
     }
   }
 
