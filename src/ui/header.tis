@@ -81,7 +81,7 @@ function editOSPassword(login=false) {
     msgbox("custom-os-password", 'OS Password', p0, "", function(res=null) {
         if (!res) return;
         var a0 = handler.get_option('auto-login') != '';
-        var p = (res.password || '').trim();
+        var p = (res.password || '');
         var a = res.autoLogin || false;
         if (p == p0 && a == a0) return;
         if (p != p0) handler.set_option('os-password', p);

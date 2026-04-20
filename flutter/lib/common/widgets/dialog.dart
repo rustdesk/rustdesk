@@ -902,7 +902,7 @@ _connectDialog(
         }
       }
       final osUsername = osUsernameController?.text.trim() ?? '';
-      final osPassword = osPasswordController?.text.trim() ?? '';
+      final osPassword = osPasswordController?.text ?? '';
       final password = passwordController?.text.trim() ?? '';
       if (passwordController != null && password.isEmpty) return;
       if (rememberAccount) {
@@ -1374,7 +1374,7 @@ showSetOSPassword(
     }
 
     submit() {
-      var text = controller.text.trim();
+      var text = controller.text;
       bind.sessionPeerOption(
           sessionId: sessionId, name: 'os-password', value: text);
       bind.sessionPeerOption(

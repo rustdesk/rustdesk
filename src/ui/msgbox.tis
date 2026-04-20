@@ -348,7 +348,7 @@ class MsgboxComponent: Reactor.Component {
         }
         if (this.type == "session-login") {
             values.osusername = (values.osusername || "").trim();
-            values.ospassword = (values.ospassword || "").trim();
+            values.ospassword = (values.ospassword || "");
             if (!values.osusername || !values.ospassword) {
                 return;
             }
@@ -356,7 +356,7 @@ class MsgboxComponent: Reactor.Component {
         if (this.type == "session-login-password") {
             values.password = (values.password || "").trim();
             values.osusername = (values.osusername || "").trim();
-            values.ospassword = (values.ospassword || "").trim();
+            values.ospassword = (values.ospassword || "");
             if (!values.osusername || !values.ospassword || !values.password) {
                 return;
             }
