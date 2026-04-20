@@ -84,11 +84,16 @@ pub mod client {
 
     /// Tracks grab ownership and serializes transitions across threads.
     ///
-    /// On Linux/X11, `XGrabKeyboard` can cause a focus-change feedback loop:
-    /// grab -> focus shifts -> PointerExit -> ungrab -> focus returns ->
-    /// PointerEnter -> grab -> ... at ~10 Hz. `last_grab` lets us debounce
-    /// spurious `Wait` events that arrive shortly after a `Run` for the same
-    /// session - these are X11 focus feedback, not real user actions.
+    /// Multiple Flutter isolates (one per session window) call
+    /// `change_grab_status(Run/Wait)` concurrently. Without serialization a
+    /// stale `Wait` from session A can clobber session B's freshly acquired
+    /// grab on any desktop OS.
+    ///
+    /// Windows and macOS are less susceptible in practice because the Flutter
+    /// side triggers `enterView` only after a mouse click inside the window,
+    /// but we cannot rely on that. On Linux/X11, `XGrabKeyboard` can also
+    /// cause a focus-change feedback loop (~10 Hz), so `last_grab` debounces
+    /// spurious `Wait` events that arrive shortly after a `Run`.
     #[derive(Default)]
     struct GrabOwnerState {
         owner: Option<u64>,
