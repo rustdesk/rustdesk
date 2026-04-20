@@ -616,10 +616,10 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     }
 
     if (IsServiceRunningW(svcName)) {
-        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not stoped after 1000 ms.", svcName);
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not stopped after 1000 ms.", svcName);
     }
     else {
-        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stoped.", svcName);
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stopped.", svcName);
     }
 
     if (MyDeleteServiceW(svcName)) {
@@ -645,7 +645,7 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     }
 
     // It's really strange that we need sleep here.
-    // But the upgrading may be stucked at "copying new files" because the file is in using.
+    // But the upgrading may be stuck at "copying new files" because the file is in using.
     // Steps to reproduce: Install -> stop service in tray --> start service -> upgrade
     // Sleep(300);
 
@@ -758,7 +758,7 @@ UINT __stdcall AddRegSoftwareSASGeneration(__in MSIHANDLE hInstall)
     }
 
     // Why RegSetValueExW always return 998?
-    // 
+    //
     result = RegCreateKeyExW(HKEY_LOCAL_MACHINE, subKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL);
     if (result != ERROR_SUCCESS) {
         WcaLog(LOGMSG_STANDARD, "Failed to create or open registry key: %d", result);
@@ -874,7 +874,7 @@ void TryCreateStartServiceByShell(LPWSTR svcName, LPWSTR svcBinary, LPWSTR szSvc
     i = 0;
     j = 0;
     // svcBinary is a string with double quotes, we need to escape it for shell arguments.
-    // It is orignal used for `CreateServiceW`.
+    // It is original used for `CreateServiceW`.
     // eg. "C:\Program Files\MyApp\MyApp.exe" --service -> \"C:\Program Files\MyApp\MyApp.exe\" --service
     while (true) {
         if (svcBinary[j] == L'"') {
