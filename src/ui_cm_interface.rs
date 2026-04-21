@@ -143,6 +143,7 @@ pub struct Client {
     pub restart: bool,
     pub recording: bool,
     pub block_input: bool,
+    pub privacy_mode: bool,
     pub from_switch: bool,
     pub in_voice_call: bool,
     pub incoming_voice_call: bool,
@@ -230,6 +231,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         restart: bool,
         recording: bool,
         block_input: bool,
+        privacy_mode: bool,
         from_switch: bool,
         #[cfg(not(any(target_os = "ios")))] tx: mpsc::UnboundedSender<Data>,
     ) {
@@ -251,6 +253,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             restart,
             recording,
             block_input,
+            privacy_mode,
             from_switch,
             #[cfg(not(any(target_os = "ios")))]
             tx,
@@ -503,9 +506,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
+                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, privacy_mode, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, privacy_mode, from_switch, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(target_os = "windows")]
                                     {
@@ -532,6 +535,26 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 Data::ChatMessage { text } => {
                                     self.cm.new_message(self.conn_id, text);
+                                }
+                                Data::SwitchPermission { name, enabled } => {
+                                    // Keep this branch scoped to privacy mode rollback.
+                                    // Other CM permission toggles are updated optimistically by the UI itself.
+                                    // The backend currently sends SwitchPermission back to CM only when
+                                    // privacy-mode turn-off fails and the UI state must be restored.
+                                    if name == "privacy_mode" {
+                                        let client = {
+                                            let mut clients = CLIENTS.write().unwrap();
+                                            clients.get_mut(&self.conn_id).map(|c| {
+                                                c.privacy_mode = enabled;
+                                                c.clone()
+                                            })
+                                        };
+                                        if let Some(client) = client {
+                                            // This reuses add_connection(), and cm.tis only selectively updates
+                                            // existing rows (authorized/privacy_mode) for this fallback path.
+                                            self.cm.ui_handler.add_connection(&client);
+                                        }
+                                    }
                                 }
                                 Data::FS(mut fs) => {
                                     if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
@@ -835,6 +858,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 restart,
                 recording,
                 block_input,
+                privacy_mode,
                 from_switch,
                 ..
             }) => {
@@ -856,6 +880,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     restart,
                     recording,
                     block_input,
+                    privacy_mode,
                     from_switch,
                     tx.clone(),
                 );
