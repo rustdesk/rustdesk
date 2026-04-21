@@ -615,9 +615,9 @@ pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncRetur
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
         let keyboard_mode = session.get_keyboard_mode();
-        // Use the per-window UUID (not lc.session_id which is per-connection)
+        // Use the full per-window UUID (not lc.session_id which is per-connection)
         // so that two windows viewing the same peer get distinct grab owners.
-        let window_id = _session_id.as_u128() as u64;
+        let window_id = _session_id.as_u128();
         if _enter {
             set_cur_session_id_(_session_id, &keyboard_mode);
             crate::keyboard::client::change_grab_status(

@@ -870,13 +870,13 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn enter(&self, keyboard_mode: String) {
-        let session_id = self.lc.read().unwrap().session_id;
+        let session_id = self.lc.read().unwrap().session_id as u128;
         keyboard::client::change_grab_status(GrabState::Run, &keyboard_mode, session_id);
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn leave(&self, keyboard_mode: String) {
-        let session_id = self.lc.read().unwrap().session_id;
+        let session_id = self.lc.read().unwrap().session_id as u128;
         keyboard::client::change_grab_status(GrabState::Wait, &keyboard_mode, session_id);
     }
 
