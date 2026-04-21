@@ -363,7 +363,10 @@ class InputModel {
               model.keyboardPerm &&
               !model.isViewCamera) {
             _sideButtonDownModels[mb] = model;
-            await model._sendMouseUnchecked(type, mb);
+            // Fire-and-forget to avoid blocking the platform channel handler.
+            unawaited(model._sendMouseUnchecked(type, mb).catchError((Object e) {
+              debugPrint('[InputModel] failed to send side button $type for $mb: $e');
+            }));
           }
         } else {
           // Only route 'up' when we recorded the matching 'down';
@@ -372,7 +375,9 @@ class InputModel {
           // release always goes through even if permissions changed.
           final model = _sideButtonDownModels.remove(mb);
           if (model != null) {
-            await model._sendMouseUnchecked(type, mb);
+            unawaited(model._sendMouseUnchecked(type, mb).catchError((Object e) {
+              debugPrint('[InputModel] failed to send side button $type for $mb: $e');
+            }));
           }
         }
       }

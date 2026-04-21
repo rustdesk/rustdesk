@@ -92,10 +92,12 @@ static void on_subwindow_created(FlPluginRegistry* registry) {
   wayland_shortcuts_inhibit_init_for_subwindow(registry);
 #endif
   // Set up side button forwarding for sub-windows.
+  if (registry == NULL || !FL_IS_VIEW(registry)) return;
   FlView* view = FL_VIEW(registry);
   GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(view));
   if (toplevel != NULL && GTK_IS_WINDOW(toplevel)) {
     FlMethodChannel* channel = side_buttons_create_channel(fl_view_get_engine(view));
+    if (channel == NULL) return;
     side_buttons_init_for_window(GTK_WINDOW(toplevel), channel);
     g_object_unref(channel);  // window now owns a ref via g_object_set_data_full
   }
