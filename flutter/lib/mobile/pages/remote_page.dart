@@ -342,11 +342,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     });
   }
 
-  Widget _bottomWidget() => _showGestureHelp
-      ? getGestureHelp()
-      : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
-          ? getBottomAppBar()
-          : Offstage());
+  Widget _bottomWidget() => AnimatedSize(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        child: _showGestureHelp
+            ? getGestureHelp()
+            : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
+                ? getBottomAppBar()
+                : const SizedBox(width: double.infinity, height: 0)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -360,6 +364,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         return false;
       },
       child: Scaffold(
+          extendBody: true,
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
           floatingActionButtonLocation: keyboardIsVisible
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
@@ -389,24 +394,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       }
                     });
                   }),
-          bottomNavigationBar: Obx(() => Stack(
-                alignment: Alignment.bottomCenter,
-                children: [
-                  gFFI.ffiModel.pi.isSet.isTrue &&
-                          gFFI.ffiModel.waitForFirstImage.isTrue
-                      ? emptyOverlay(MyTheme.canvasColor)
-                      : () {
-                          gFFI.ffiModel.tryShowAndroidActionsOverlay();
-                          return Offstage();
-                        }(),
-                  _bottomWidget(),
-                  gFFI.ffiModel.pi.isSet.isFalse
-                      ? emptyOverlay(MyTheme.canvasColor)
-                      : Offstage(),
-                ],
-              )),
           body: Obx(
-            () => getRawPointerAndKeyBody(Overlay(
+            () => Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                getRawPointerAndKeyBody(Overlay(
               initialEntries: [
                 OverlayEntry(builder: (context) {
                   return Container(
@@ -439,7 +431,20 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 })
               ],
             )),
-          )),
+            gFFI.ffiModel.pi.isSet.isTrue &&
+                    gFFI.ffiModel.waitForFirstImage.isTrue
+                ? emptyOverlay(MyTheme.canvasColor)
+                : () {
+                    gFFI.ffiModel.tryShowAndroidActionsOverlay();
+                    return Offstage();
+                  }(),
+            _bottomWidget(),
+            gFFI.ffiModel.pi.isSet.isFalse
+                ? emptyOverlay(MyTheme.canvasColor)
+                : Offstage(),
+          ],
+        ),
+      )),
     );
   }
 
@@ -464,7 +469,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     return BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
-      child: Row(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 5.0, left: 16.0, right: 16.0),
+        child: Row(
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
@@ -554,6 +561,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       },
               )),
         ],
+      ),
       ),
     );
   }
@@ -789,8 +797,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   /// aka changeTouchMode
   BottomAppBar getGestureHelp() {
     return BottomAppBar(
-        child: SingleChildScrollView(
-            controller: ScrollController(),
+        child: Padding(
+            padding: const EdgeInsets.only(bottom: 5.0, left: 16.0, right: 16.0),
+            child: SingleChildScrollView(
+                controller: ScrollController(),
             padding: EdgeInsets.symmetric(vertical: 10),
             child: GestureHelp(
               touchMode: gFFI.ffiModel.touchMode,
@@ -801,7 +811,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               },
               virtualMouseMode: gFFI.ffiModel.virtualMouseMode,
               inputModel: gFFI.inputModel,
-            )));
+            ))));
   }
 
   // * Currently mobile does not enable map mode
