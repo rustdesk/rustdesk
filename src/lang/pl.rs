@@ -379,7 +379,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Screen Share", "Udostępnianie ekranu"),
         ("ubuntu-21-04-required", "Wayland wymaga Ubuntu 21.04 lub nowszego."),
         ("wayland-requires-higher-linux-version", "Wayland wymaga nowszej dystrybucji Linuksa. Wypróbuj pulpit X11 lub zmień system operacyjny."),
-        ("xdp-portal-unavailable", ""),
+        ("xdp-portal-unavailable", "Nie udało się przechwycić ekranu Wayland. Portal XDG Desktop mógł ulec awarii lub jest niedostępny. Spróbuj go ponownie uruchomić poleceniem `systemctl --user restart xdg-desktop-portal`."),
         ("JumpLink", "Podgląd"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Wybierz ekran do udostępnienia (działaj po zdalnego urządzenia)."),
         ("Show RustDesk", "Pokaż RustDesk"),
@@ -740,8 +740,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-outgoing-sessions-label", "Utrzymuj urządzenie w stanie aktywnym podczas sesji wychodzących"),
         ("keep-awake-during-incoming-sessions-label", "Utrzymuj urządzenie w stanie aktywnym podczas sesji przychodzących"),
         ("Continue with {}", "Kontynuuj z {}"),
-        ("Display Name", ""),
-        ("password-hidden-tip", ""),
-        ("preset-password-in-use-tip", ""),
+        ("Display Name", "Nazwa wyświetlana"),
+        ("password-hidden-tip", "Ustawiono (ukryto) stare hasło."),
+        ("preset-password-in-use-tip", "Obecnie używane jest hasło domyślne."),
     ].iter().cloned().collect();
 }

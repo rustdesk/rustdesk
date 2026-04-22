@@ -3870,6 +3870,7 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
                 && !text.to_lowercase().contains("resolve")
                 && !text.to_lowercase().contains("mismatch")
                 && !text.to_lowercase().contains("manually")
+                && !text.to_lowercase().contains("restricted")
                 && !text.to_lowercase().contains("not allowed")))
 }
 

@@ -1538,7 +1538,10 @@ class RustdeskImpl {
 
   Future<void> mainAccountAuth(
       {required String op, required bool rememberMe, dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', [
+    // Safari only allows auth popups while handling the original user gesture.
+    // Use Future.sync so the JS call runs synchronously (pre-opening the OIDC
+    // window) while any interop error still surfaces as a Future error.
+    return Future.sync(() => js.context.callMethod('setByName', [
           'account_auth',
           jsonEncode({'op': op, 'remember': rememberMe})
         ]));
