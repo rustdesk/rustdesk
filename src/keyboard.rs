@@ -105,6 +105,7 @@ pub mod client {
 
     /// How long after a grab acquisition we suppress Wait from the same session.
     /// Must exceed one full X11 feedback cycle (~100 ms: 50 ms enable + 50 ms disable).
+    #[cfg(target_os = "linux")]
     const GRAB_DEBOUNCE_MS: u128 = 300;
 
     lazy_static::lazy_static! {
