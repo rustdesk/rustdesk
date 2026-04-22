@@ -488,6 +488,7 @@ class InputModel {
   bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
 
   InputModel(this.parent) {
+    initSideButtonChannel();
     sessionId = parent.target!.sessionId;
     _relativeMouse = RelativeMouseModel(
       sessionId: sessionId,

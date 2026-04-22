@@ -45,6 +45,12 @@ const MIN_POINTER_BUTTONS: usize = 9;
 /// diagnosable. `XSetPointerMapping` cannot extend the button count (its
 /// length must match `XGetPointerMapping`), so we only diagnose here.
 fn check_x11_button_map() {
+    // Skip on non-X11 sessions to avoid noisy "XOpenDisplay failed" warnings
+    // on pure Wayland or headless environments without $DISPLAY.
+    if std::env::var_os("DISPLAY").is_none() {
+        return;
+    }
+
     let display: *mut Display = unsafe { XOpenDisplay(std::ptr::null()) };
     if display.is_null() {
         log::warn!("XOpenDisplay failed, cannot check button map");
