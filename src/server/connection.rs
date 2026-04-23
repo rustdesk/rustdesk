@@ -687,20 +687,22 @@ impl Connection {
                                 if !enabled && privacy_mode::is_in_privacy_mode() {
                                     if let Some(conn_id) = privacy_mode::get_privacy_mode_conn_id() {
                                         if conn_id == conn.inner.id() {
+                                            let impl_key =
+                                                privacy_mode::get_cur_impl_key().unwrap_or_default();
                                             let turn_off_res =
                                                 privacy_mode::turn_off_privacy(conn_id, None);
                                             match turn_off_res {
                                                 Some(Ok(_)) => {
                                                     let msg_out = crate::common::make_privacy_mode_msg(
                                                         back_notification::PrivacyModeState::PrvOffByPeer,
-                                                        "".to_owned(),
+                                                        impl_key.clone(),
                                                     );
                                                     conn.send(msg_out).await;
                                                 }
                                                 _ => {
                                                     let msg_out = Self::turn_off_privacy_result_to_msg(
                                                         turn_off_res,
-                                                        "".to_owned(),
+                                                        impl_key,
                                                     );
                                                     conn.send(msg_out).await;
                                                     // Turn-off failed, so revert CM's optimistic toggle
