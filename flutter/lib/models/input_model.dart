@@ -335,6 +335,19 @@ class InputModel {
   var ctrl = false;
   var alt = false;
   var command = false;
+  var shiftLocked = false;
+  var ctrlLocked = false;
+  var altLocked = false;
+  var commandLocked = false;
+  var hardwareShiftLeft = false;
+  var hardwareShiftRight = false;
+  var hardwareCtrlLeft = false;
+  var hardwareCtrlRight = false;
+  var hardwareAltLeft = false;
+  var hardwareAltRight = false;
+  var hardwareCommandLeft = false;
+  var hardwareCommandRight = false;
+  var hardwareCommandSuper = false;
 
   final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
@@ -367,6 +380,12 @@ class InputModel {
   bool _pointerMovedAfterEnter = false;
   bool _pointerInsideImage = false;
 
+  /// True while the Android soft keyboard editor is active.
+  /// When set, key events are ignored so they flow through to the
+  /// hidden TextFormField's onChanged handler instead of being
+  /// processed here with potentially incorrect physicalKey data.
+  bool androidSoftKeyboardActive = false;
+
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
@@ -377,7 +396,7 @@ class InputModel {
   static const int _wheelAccelFastThresholdUs = 40000; // 40ms
   static const int _wheelAccelMediumThresholdUs = 80000; // 80ms
   static const double _wheelBurstVelocityThreshold =
-      0.002; // delta units per microsecond
+  0.002; // delta units per microsecond
   // Wheel burst acceleration (empirical tuning).
   // Applies only to fast, non-smooth bursts to preserve single-step scrolling.
   // Flutter uses microseconds for dt, so velocity is in delta/us.
@@ -526,8 +545,8 @@ class InputModel {
   /// - Default: `kDefaultTrackpadSpeed`
   Future<void> updateTrackpadSpeed() async {
     _trackpadSpeed =
-        (await bind.sessionGetTrackpadSpeed(sessionId: sessionId) ??
-            kDefaultTrackpadSpeed);
+    (await bind.sessionGetTrackpadSpeed(sessionId: sessionId) ??
+        kDefaultTrackpadSpeed);
     if (_trackpadSpeed < kMinTrackpadSpeed ||
         _trackpadSpeed > kMaxTrackpadSpeed) {
       _trackpadSpeed = kDefaultTrackpadSpeed;
@@ -537,10 +556,15 @@ class InputModel {
 
   void handleKeyDownEventModifiers(KeyEvent e) {
     KeyUpEvent upEvent(e) => KeyUpEvent(
-          physicalKey: e.physicalKey,
-          logicalKey: e.logicalKey,
-          timeStamp: e.timeStamp,
-        );
+      physicalKey: e.physicalKey,
+      logicalKey: e.logicalKey,
+      timeStamp: e.timeStamp,
+    );
+    if (!(isAndroid &&
+        androidSoftKeyboardActive &&
+        _isAndroidSoftKeyboardEvent(e))) {
+      _setHardwareModifierState(e.logicalKey, true);
+    }
     if (e.logicalKey == LogicalKeyboardKey.altLeft) {
       if (!alt) {
         alt = true;
@@ -590,6 +614,11 @@ class InputModel {
   }
 
   void handleKeyUpEventModifiers(KeyEvent e) {
+    if (!(isAndroid &&
+        androidSoftKeyboardActive &&
+        _isAndroidSoftKeyboardEvent(e))) {
+      _setHardwareModifierState(e.logicalKey, false);
+    }
     if (e.logicalKey == LogicalKeyboardKey.altLeft) {
       alt = false;
       toReleaseKeys.lastLAltKeyEvent = null;
@@ -620,9 +649,79 @@ class InputModel {
     }
   }
 
+  bool _isSoftKeyboardPhysicalKey(PhysicalKeyboardKey key) {
+    final usbHidUsage = key.usbHidUsage;
+    // Flutter hardware keyboard HID usages are normally in the low keyboard-page
+    // range (for example 0x00070004 for 'A', 0x00070028 for Enter), which means
+    // bits above the lower 20-bit region are zero and `usbHidUsage >> 20` becomes
+    // 0. Some Android IME/soft-keyboard events instead report abnormal high-bit
+    // values (observed examples look like 0x1100000042), so shifting right by 20
+    // leaves a non-zero value. We use that cheap heuristic here to treat such
+    // events as soft-keyboard/IME-generated rather than real hardware keys.
+    final isNormalUsbHidUsage = (usbHidUsage >> 20) == 0;
+    // Real hardware keyboard events generally have a normal keyboard HID usage.
+    // IME/soft-keyboard events on Android often do not, especially for modifier
+    // and special keys when the on-screen keyboard is visible.
+    return !isNormalUsbHidUsage;
+  }
+
+  bool _isAndroidSoftKeyboardEvent(KeyEvent e) {
+    return _isSoftKeyboardPhysicalKey(e.physicalKey);
+  }
+
+  bool _isModifierLogicalKey(LogicalKeyboardKey key) {
+    return key == LogicalKeyboardKey.shiftLeft ||
+        key == LogicalKeyboardKey.shiftRight ||
+        key == LogicalKeyboardKey.controlLeft ||
+        key == LogicalKeyboardKey.controlRight ||
+        key == LogicalKeyboardKey.altLeft ||
+        key == LogicalKeyboardKey.altRight ||
+        key == LogicalKeyboardKey.metaLeft ||
+        key == LogicalKeyboardKey.metaRight ||
+        key == LogicalKeyboardKey.superKey;
+  }
+
+  bool _isAndroidSoftKeyboardRawEvent(RawKeyEvent e) {
+    return _isSoftKeyboardPhysicalKey(e.physicalKey);
+  }
+
+  void _setHardwareModifierState(LogicalKeyboardKey key, bool down) {
+    if (key == LogicalKeyboardKey.shiftLeft) {
+      hardwareShiftLeft = down;
+    } else if (key == LogicalKeyboardKey.shiftRight) {
+      hardwareShiftRight = down;
+    } else if (key == LogicalKeyboardKey.controlLeft) {
+      hardwareCtrlLeft = down;
+    } else if (key == LogicalKeyboardKey.controlRight) {
+      hardwareCtrlRight = down;
+    } else if (key == LogicalKeyboardKey.altLeft) {
+      hardwareAltLeft = down;
+    } else if (key == LogicalKeyboardKey.altRight) {
+      hardwareAltRight = down;
+    } else if (key == LogicalKeyboardKey.metaLeft) {
+      hardwareCommandLeft = down;
+    } else if (key == LogicalKeyboardKey.metaRight) {
+      hardwareCommandRight = down;
+    } else if (key == LogicalKeyboardKey.superKey) {
+      hardwareCommandSuper = down;
+    }
+  }
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
+    final isAndroidSoftRaw = isAndroid &&
+        androidSoftKeyboardActive &&
+        _isAndroidSoftKeyboardRawEvent(e);
+    if (isAndroidSoftRaw &&
+        !_hasHardwareModifierPressed &&
+        _isModifierLogicalKey(e.logicalKey)) {
+      alt = false;
+      ctrl = false;
+      shift = false;
+      command = false;
+      return KeyEventResult.handled;
+    }
     if (!isInputSourceFlutter) {
       if (isDesktop) {
         return KeyEventResult.handled;
@@ -642,6 +741,9 @@ class InputModel {
 
     final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
+      if (!isAndroidSoftRaw) {
+        _setHardwareModifierState(key, true);
+      }
       if (!e.repeat) {
         if (e.isAltPressed && !alt) {
           alt = true;
@@ -656,6 +758,9 @@ class InputModel {
       toReleaseRawKeys.updateKeyDown(key, e);
     }
     if (e is RawKeyUpEvent) {
+      if (!isAndroidSoftRaw) {
+        _setHardwareModifierState(key, false);
+      }
       if (key == LogicalKeyboardKey.altLeft ||
           key == LogicalKeyboardKey.altRight) {
         alt = false;
@@ -687,6 +792,39 @@ class InputModel {
   KeyEventResult handleKeyEvent(KeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
+    // When the Android soft keyboard is active, avoid processing key events
+    // through the normal input pipeline because physicalKey data from the
+    // soft keyboard is unreliable (Flutter issue #157771) and can corrupt
+    // subsequent input, causing every keypress to repeat a single character.
+    //
+    // Return `handled` (not `ignored`) so Android keeps sending key-repeat
+    // events for held keys and the TextFormField does not consume sentinel
+    // buffer characters.
+    //
+    // For Backspace and Enter, send them directly using the reliable logical
+    // key data. This is required because for some IMEs (ko/zh/ja) returning
+    // `handled` prevents the IME from processing the key through onChanged.
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        !_hasHardwareModifierPressed &&
+        _isModifierLogicalKey(e.logicalKey)) {
+      releaseTransientModifiersToHost();
+      return KeyEventResult.handled;
+    }
+
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        _isAndroidSoftKeyboardEvent(e)) {
+      if (e is KeyDownEvent || e is KeyRepeatEvent) {
+        if (e.logicalKey == LogicalKeyboardKey.backspace) {
+          inputKey('VK_BACK', press: true);
+        } else if (e.logicalKey == LogicalKeyboardKey.enter ||
+            e.logicalKey == LogicalKeyboardKey.numpadEnter) {
+          inputKey('VK_RETURN', press: true);
+        }
+      }
+      return KeyEventResult.handled;
+    }
     if (!isInputSourceFlutter) {
       if (isDesktop) {
         return KeyEventResult.handled;
@@ -873,7 +1011,13 @@ class InputModel {
   /// Send key stroke event.
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).
-  void inputKey(String name, {bool? down, bool? press}) {
+  void inputKey(String name,
+      {bool? down,
+        bool? press,
+        bool? altOverride,
+        bool? ctrlOverride,
+        bool? shiftOverride,
+        bool? commandOverride}) {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
     bind.sessionInputKey(
@@ -881,16 +1025,16 @@ class InputModel {
         name: name,
         down: down ?? false,
         press: press ?? true,
-        alt: alt,
-        ctrl: ctrl,
-        shift: shift,
-        command: command);
+        alt: altOverride ?? (alt || altLocked),
+        ctrl: ctrlOverride ?? (ctrl || ctrlLocked),
+        shift: shiftOverride ?? (shift || shiftLocked),
+        command: commandOverride ?? (command || commandLocked));
   }
 
   static Map<String, dynamic> getMouseEventMove() => {
-        'type': _kMouseEventMove,
-        'buttons': 0,
-      };
+    'type': _kMouseEventMove,
+    'buttons': 0,
+  };
 
   Map<String, dynamic> _getMouseEvent(PointerEvent evt, String type) {
     final Map<String, dynamic> out = {};
@@ -946,6 +1090,11 @@ class InputModel {
   /// Send scroll event with scroll distance [y].
   Future<void> scroll(int y) async {
     if (isViewCamera) return;
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        !_hasHardwareModifierPressed) {
+      releaseTransientModifiersToHost();
+    }
     await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json
@@ -955,14 +1104,92 @@ class InputModel {
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   void resetModifiers() {
     shift = ctrl = alt = command = false;
+    shiftLocked = ctrlLocked = altLocked = commandLocked = false;
+    hardwareShiftLeft = hardwareShiftRight = false;
+    hardwareCtrlLeft = hardwareCtrlRight = false;
+    hardwareAltLeft = hardwareAltRight = false;
+    hardwareCommandLeft = hardwareCommandRight = hardwareCommandSuper = false;
+  }
+
+  void releaseTransientModifiersToHost() {
+    if (shift && !shiftLocked) {
+      inputKey('VK_SHIFT',
+          down: false,
+          press: false,
+          altOverride: false,
+          ctrlOverride: false,
+          shiftOverride: false,
+          commandOverride: false);
+    }
+    if (ctrl && !ctrlLocked) {
+      inputKey('VK_CONTROL',
+          down: false,
+          press: false,
+          altOverride: false,
+          ctrlOverride: false,
+          shiftOverride: false,
+          commandOverride: false);
+    }
+    if (alt && !altLocked) {
+      inputKey('VK_MENU',
+          down: false,
+          press: false,
+          altOverride: false,
+          ctrlOverride: false,
+          shiftOverride: false,
+          commandOverride: false);
+    }
+    if (command && !commandLocked) {
+      inputKey('Meta',
+          down: false,
+          press: false,
+          altOverride: false,
+          ctrlOverride: false,
+          shiftOverride: false,
+          commandOverride: false);
+    }
+    shift = false;
+    ctrl = false;
+    alt = false;
+    command = false;
+  }
+
+  bool get _hasHardwareModifierPressed {
+    return _hardwareShiftPressed ||
+        _hardwareCtrlPressed ||
+        _hardwareAltPressed ||
+        _hardwareCommandPressed;
+  }
+
+  bool get _hardwareShiftPressed {
+    return hardwareShiftLeft || hardwareShiftRight;
+  }
+
+  bool get _hardwareCtrlPressed {
+    return hardwareCtrlLeft || hardwareCtrlRight;
+  }
+
+  bool get _hardwareAltPressed {
+    return hardwareAltLeft || hardwareAltRight;
+  }
+
+  bool get _hardwareCommandPressed {
+    return hardwareCommandLeft || hardwareCommandRight || hardwareCommandSuper;
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.
   Map<String, dynamic> modify(Map<String, dynamic> evt) {
-    if (ctrl) evt['ctrl'] = 'true';
-    if (shift) evt['shift'] = 'true';
-    if (alt) evt['alt'] = 'true';
-    if (command) evt['command'] = 'true';
+    if (isAndroid) {
+      if (_hardwareCtrlPressed || ctrlLocked) evt['ctrl'] = 'true';
+      if (_hardwareShiftPressed || shiftLocked) evt['shift'] = 'true';
+      if (_hardwareAltPressed || altLocked) evt['alt'] = 'true';
+      if (_hardwareCommandPressed || commandLocked) evt['command'] = 'true';
+      return evt;
+    }
+    if (ctrl || ctrlLocked) evt['ctrl'] = 'true';
+    if (shift || shiftLocked) evt['shift'] = 'true';
+    if (alt || altLocked) evt['alt'] = 'true';
+    if (command || commandLocked) evt['command'] = 'true';
     return evt;
   }
 
@@ -970,6 +1197,11 @@ class InputModel {
   Future<void> sendMouse(String type, MouseButtons button) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
+    if (isAndroid &&
+        androidSoftKeyboardActive &&
+        !_hasHardwareModifierPressed) {
+      releaseTransientModifiersToHost();
+    }
     await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
@@ -1417,7 +1649,7 @@ class InputModel {
   static Future<Rect?> fillRemoteCoordsAndGetCurFrame(
       List<RemoteWindowCoords> remoteWindowCoords) async {
     final coords =
-        await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain();
+    await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain();
     final wc = WindowController.fromWindowId(kWindowId!);
     try {
       final frame = await wc.getFrame();
@@ -1445,7 +1677,8 @@ class InputModel {
     if (e is PointerScrollEvent) {
       final rawDx = e.scrollDelta.dx;
       final rawDy = e.scrollDelta.dy;
-      final dominantDelta = rawDx.abs() > rawDy.abs() ? rawDx.abs() : rawDy.abs();
+      final dominantDelta =
+      rawDx.abs() > rawDy.abs() ? rawDx.abs() : rawDy.abs();
       final isSmooth = dominantDelta < 1;
       final nowUs = DateTime.now().microsecondsSinceEpoch;
       final dtUs = _lastWheelTsUs == 0 ? 0 : nowUs - _lastWheelTsUs;
@@ -1489,18 +1722,18 @@ class InputModel {
   }
 
   void refreshMousePos() => handleMouse({
-        'buttons': 0,
-        'type': _kMouseEventMove,
-      }, lastMousePos, edgeScroll: useEdgeScroll);
+    'buttons': 0,
+    'type': _kMouseEventMove,
+  }, lastMousePos, edgeScroll: useEdgeScroll);
 
   void tryMoveEdgeOnExit(Offset pos) => handleMouse(
-        {
-          'buttons': 0,
-          'type': _kMouseEventMove,
-        },
-        pos,
-        onExit: true,
-      );
+    {
+      'buttons': 0,
+      'type': _kMouseEventMove,
+    },
+    pos,
+    onExit: true,
+  );
 
   static double tryGetNearestRange(double v, double min, double max, double n) {
     if (v < min && v >= min - n) {
@@ -1594,12 +1827,12 @@ class InputModel {
   }
 
   Map<String, dynamic>? processEventToPeer(
-    Map<String, dynamic> evt,
-    Offset offset, {
-    bool onExit = false,
-    bool moveCanvas = true,
-    bool edgeScroll = false,
-  }) {
+      Map<String, dynamic> evt,
+      Offset offset, {
+        bool onExit = false,
+        bool moveCanvas = true,
+        bool edgeScroll = false,
+      }) {
     if (isViewCamera) return null;
     double x = offset.dx;
     double y = max(0.0, offset.dy);
@@ -1669,12 +1902,12 @@ class InputModel {
   }
 
   Map<String, dynamic>? handleMouse(
-    Map<String, dynamic> evt,
-    Offset offset, {
-    bool onExit = false,
-    bool moveCanvas = true,
-    bool edgeScroll = false,
-  }) {
+      Map<String, dynamic> evt,
+      Offset offset, {
+        bool onExit = false,
+        bool moveCanvas = true,
+        bool edgeScroll = false,
+      }) {
     final evtToPeer = processEventToPeer(evt, offset,
         onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
     if (evtToPeer != null) {
@@ -1685,19 +1918,19 @@ class InputModel {
   }
 
   Point? handlePointerDevicePos(
-    String kind,
-    double x,
-    double y,
-    bool isMove,
-    String evtType, {
-    bool onExit = false,
-    int buttons = kPrimaryMouseButton,
-    bool moveCanvas = true,
-    bool edgeScroll = false,
-  }) {
+      String kind,
+      double x,
+      double y,
+      bool isMove,
+      String evtType, {
+        bool onExit = false,
+        int buttons = kPrimaryMouseButton,
+        bool moveCanvas = true,
+        bool edgeScroll = false,
+      }) {
     final ffiModel = parent.target!.ffiModel;
     CanvasCoords canvas =
-        CanvasCoords.fromCanvasModel(parent.target!.canvasModel);
+    CanvasCoords.fromCanvasModel(parent.target!.canvasModel);
     Rect? rect = ffiModel.rect;
 
     if (isMove) {
@@ -1705,7 +1938,7 @@ class InputModel {
           _windowRect != null &&
           !_isInCurrentWindow(x, y)) {
         final coords =
-            findRemoteCoords(x, y, _remoteWindowCoords, devicePixelRatio);
+        findRemoteCoords(x, y, _remoteWindowCoords, devicePixelRatio);
         if (coords != null) {
           isMove = false;
           canvas = coords.canvas;
@@ -1775,16 +2008,16 @@ class InputModel {
   }
 
   Point? _handlePointerDevicePos(
-    String kind,
-    double x,
-    double y,
-    bool moveInCanvas,
-    CanvasCoords canvas,
-    Rect? rect,
-    String evtType, {
-    bool onExit = false,
-    int buttons = kPrimaryMouseButton,
-  }) {
+      String kind,
+      double x,
+      double y,
+      bool moveInCanvas,
+      CanvasCoords canvas,
+      Rect? rect,
+      String evtType, {
+        bool onExit = false,
+        int buttons = kPrimaryMouseButton,
+      }) {
     if (rect == null) {
       return null;
     }

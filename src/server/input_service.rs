@@ -1593,7 +1593,15 @@ fn need_to_uppercase(en: &mut Enigo) -> bool {
     get_modifier_state(Key::Shift, en) || get_modifier_state(Key::CapsLock, en)
 }
 
-fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
+#[inline]
+fn has_shift_modifier(key_event: &KeyEvent) -> bool {
+    key_event.modifiers.iter().any(|ck| {
+        let v = ck.value();
+        v == ControlKey::Shift.value() || v == ControlKey::RShift.value()
+    })
+}
+
+fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool, uppercase_hint: bool) {
     // On Wayland with uinput mode, use clipboard for character input
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
@@ -1608,7 +1616,35 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
         }
     }
 
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(target_os = "windows")]
+    if !_hotkey {
+        let key = char_value_to_key(chr);
+
+        if down {
+            if en.key_down(key).is_ok() {
+                // The current Windows OS keyboard layout provided a valid key mapping for this
+                // character, so it was sent through the normal key down/up path.
+                // Only unmappable characters need the key_sequence() fallback below.
+                // If something needs to be done right after the key_down it can be done here
+            } else {
+                // The character could not be mapped to a layout-dependent physical key in
+                // the current OS keyboard layout. In that case, inject the resulting text
+                // directly through key_sequence() as a fallback.
+                if let Ok(chr) = char::try_from(chr) {
+                    let mut s = chr.to_string();
+                    if uppercase_hint {
+                        s = s.to_uppercase();
+                    }
+                    en.key_sequence(&s);
+                };
+            }
+        } else {
+            en.key_up(key);
+        }
+        return;
+    }
+
+    #[cfg(target_os = "macos")]
     if !_hotkey {
         if down {
             if let Ok(chr) = char::try_from(chr) {
@@ -1887,7 +1923,8 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
             let record_key = chr as u64 + KEY_CHAR_START;
             record_pressed_key(KeysDown::EnigoKey(record_key), down);
-            process_chr(&mut en, chr, down, has_hotkey_modifiers(evt))
+            let uppercase_hint = has_shift_modifier(evt) || get_modifier_state(Key::CapsLock, &mut en);
+            process_chr(&mut en, chr, down, has_hotkey_modifiers(evt), uppercase_hint)
         }
         Some(key_event::Union::Unicode(chr)) => {
             // Same as Chr: release Shift for Unicode input
@@ -2140,7 +2177,7 @@ pub fn handle_key_(evt: &KeyEvent) {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let mut _lock_mode_handler = None;
+        let mut _lock_mode_handler = None;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     match &evt.union {
         Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
