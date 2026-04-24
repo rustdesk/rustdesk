@@ -12,7 +12,10 @@ use hbb_common::fs::serialize_transfer_job;
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 use hbb_common::{
     allow_err, bail,
-    config::{keys::OPTION_FILE_TRANSFER_MAX_FILES, Config},
+    config::{
+        keys::{OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW, OPTION_FILE_TRANSFER_MAX_FILES},
+        option2bool, Config,
+    },
     fs::{self, get_string, is_write_need_confirmation, new_send_confirm, DigestCheckResult},
     log,
     message_proto::*,
@@ -25,10 +28,7 @@ use hbb_common::{
     ResultType,
 };
 #[cfg(target_os = "windows")]
-use hbb_common::{
-    config::{keys::*, option2bool},
-    tokio::sync::Mutex as TokioMutex,
-};
+use hbb_common::{config::keys::*, tokio::sync::Mutex as TokioMutex};
 use serde_derive::Serialize;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use std::iter::FromIterator;
@@ -395,6 +395,23 @@ pub fn send_chat(id: i32, text: String) {
 #[inline]
 #[cfg(not(any(target_os = "ios")))]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
+    #[cfg(target_os = "android")]
+    let is_keyboard_permission = name == "keyboard";
+    #[cfg(not(target_os = "android"))]
+    let is_keyboard_permission = false;
+    if !option2bool(
+        OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+        &crate::get_builtin_option(OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+    ) && !is_keyboard_permission
+    {
+        log::info!(
+            "blocked cm switch_permission by policy, conn_id={}, permission={}, enabled={}",
+            id,
+            name,
+            enabled
+        );
+        return;
+    }
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
     };
@@ -403,6 +420,19 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
 #[inline]
 #[cfg(target_os = "android")]
 pub fn switch_permission_all(name: String, enabled: bool) {
+    if name != "keyboard"
+        && !option2bool(
+            OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+        )
+    {
+        log::info!(
+            "blocked cm switch_permission_all by policy, permission={}, enabled={}",
+            name,
+            enabled
+        );
+        return;
+    }
     for (_, client) in CLIENTS.read().unwrap().iter() {
         allow_err!(client.tx.send(Data::SwitchPermission {
             name: name.clone(),
@@ -423,6 +453,13 @@ pub fn get_clients_state() -> String {
 pub fn get_clients_length() -> usize {
     let clients = CLIENTS.read().unwrap();
     clients.len()
+}
+
+#[inline]
+#[cfg(target_os = "android")]
+pub fn has_active_clients() -> bool {
+    let clients = CLIENTS.read().unwrap();
+    clients.values().any(|c| !c.disconnected)
 }
 
 #[inline]
