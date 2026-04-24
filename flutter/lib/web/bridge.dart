@@ -1726,7 +1726,7 @@ class RustdeskImpl {
   }
 
   String mainSupportedPrivacyModeImpls({dynamic hint}) {
-    throw UnimplementedError("mainSupportedPrivacyModeImpls");
+    return '[]';
   }
 
   String mainSupportedInputSource({dynamic hint}) {
