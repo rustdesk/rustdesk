@@ -34,9 +34,9 @@ Les versions de bureau utilisent [sciter](https://sciter.com/) pour l'interface 
 - Installez [vcpkg](https://github.com/microsoft/vcpkg), et définissez correctement la variable d'environnement `VCPKG_ROOT`.
 
   - Windows : vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-  - Linux/Osx : vcpkg install libvpx libyuv opus aom
+  - Linux/macOS : vcpkg install libvpx libyuv opus aom
 
-- Exécuter `cargo run`
+- Exécutez `cargo run`
 
 ## Comment compiler/build sous Linux
 
@@ -93,7 +93,7 @@ cd rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
-Exécution du cargo
+cargo run
 ```
 
 ## Comment construire avec Docker
