@@ -368,8 +368,23 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     final persistentSessions =
         args['persistent_sessions'] as List<dynamic>? ?? [];
     final sortedSessions = persistentSessions.whereType<int>().toList()..sort();
+    var peerId = args['peer_id'] as String? ?? '';
+    if (peerId.isEmpty) {
+      final currentTab = tabController.state.value.selectedTabInfo;
+      final parsed = _parseTabKey(currentTab.key);
+      if (parsed == null) return;
+      peerId = parsed.$1;
+    }
+    final existingTerminalIds = tabController.state.value.tabs
+        .map((tab) => _parseTabKey(tab.key))
+        .where((parsed) => parsed != null && parsed.$1 == peerId)
+        .map((parsed) => parsed!.$2)
+        .toSet();
     for (final terminalId in sortedSessions) {
-      _addNewTerminalForCurrentPeer(terminalId: terminalId);
+      if (!existingTerminalIds.add(terminalId)) {
+        continue;
+      }
+      _addNewTerminal(peerId, terminalId: terminalId);
       // A delay is required to ensure the UI has sufficient time to update
       // before adding the next terminal. Without this delay, `_TerminalPageState::dispose()`
       // may be called prematurely while the tab widget is still in the tab controller.

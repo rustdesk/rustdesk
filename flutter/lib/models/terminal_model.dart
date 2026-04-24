@@ -110,14 +110,16 @@ class TerminalModel with ChangeNotifier {
   void onReady() {
     parent.dialogManager.dismissAll();
 
-    // Fire and forget - don't block onReady
-    openTerminal().catchError((e) {
+    // Fire and forget - don't block onReady. If the transport reconnects while
+    // this model is still open, re-send OpenTerminal so the remote service marks
+    // the persistent session active again and resumes output streaming.
+    openTerminal(force: _terminalOpened).catchError((e) {
       debugPrint('[TerminalModel] Error opening terminal: $e');
     });
   }
 
-  Future<void> openTerminal() async {
-    if (_terminalOpened) return;
+  Future<void> openTerminal({bool force = false}) async {
+    if (_terminalOpened && !force) return;
     // Request the remote side to open a terminal with default shell
     // The remote side will decide which shell to use based on its OS
 
@@ -297,12 +299,16 @@ class TerminalModel with ChangeNotifier {
       });
 
       final persistentSessions =
-          evt['persistent_sessions'] as List<dynamic>? ?? [];
+          (evt['persistent_sessions'] as List<dynamic>? ?? [])
+          .whereType<int>()
+          .where((id) => !parent.terminalModels.containsKey(id))
+          .toList();
       if (kWindowId != null && persistentSessions.isNotEmpty) {
         DesktopMultiWindow.invokeMethod(
             kWindowId!,
             kWindowEventRestoreTerminalSessions,
             jsonEncode({
+              'peer_id': id,
               'persistent_sessions': persistentSessions,
             }));
       }
