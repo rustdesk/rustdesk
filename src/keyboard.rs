@@ -113,6 +113,38 @@ pub mod client {
         static ref GRAB_STATE: Arc<Mutex<GrabOwnerState>> = Arc::new(Mutex::new(GrabOwnerState::default()));
     }
 
+    #[cfg(target_os = "linux")]
+    lazy_static::lazy_static! {
+        static ref GRAB_OP_LOCK: Mutex<()> = Mutex::new(());
+    }
+
+    #[cfg(target_os = "linux")]
+    fn apply_run_grab_if_owner(session_id: u128, disable_first: bool) {
+        let _lock = GRAB_OP_LOCK.lock().unwrap();
+        let gs = GRAB_STATE.lock().unwrap();
+        if gs.owner != Some(session_id) {
+            return;
+        }
+        drop(gs);
+        if disable_first {
+            log::debug!("[grab] handoff: disable_grab before re-grab");
+            rdev::disable_grab();
+        }
+        rdev::enable_grab();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn disable_grab_if_released() {
+        let _lock = GRAB_OP_LOCK.lock().unwrap();
+        let should_disable = {
+            let gs = GRAB_STATE.lock().unwrap();
+            gs.owner.is_none() && gs.last_grab.is_none()
+        };
+        if should_disable {
+            rdev::disable_grab();
+        }
+    }
+
     pub fn start_grab_loop() {
         let mut lock = IS_GRAB_STARTED.lock().unwrap_or_else(|e| e.into_inner());
         if *lock {
@@ -130,6 +162,11 @@ pub mod client {
         }
         // Serialize transitions so a stale `Wait` from a previous owner cannot
         // clobber a fresh `Run` from a different session window.
+        let mut release_after_unlock = None;
+        #[cfg(target_os = "linux")]
+        let mut run_grab_after_unlock = None;
+        #[cfg(target_os = "linux")]
+        let mut disable_after_unlock = false;
         let mut gs = GRAB_STATE.lock().unwrap_or_else(|e| e.into_inner());
         match state {
             GrabState::Ready => {}
@@ -145,14 +182,18 @@ pub mod client {
                     // Reset so the next Wait can spawn a fresh deferred-release
                     // timer with an up-to-date snapshot of last_grab.
                     gs.deferred_pending = false;
-                    log::debug!("[grab] Run(0x{:x}): already owner, refresh debounce", session_id);
+                    log::debug!(
+                        "[grab] Run(0x{:x}): already owner, refresh debounce",
+                        session_id
+                    );
                     return;
                 }
 
                 log::debug!(
                     "[grab] Run(0x{:x}): prev_owner={}, mode={}",
                     session_id,
-                    gs.owner.map_or("none".to_string(), |id| format!("0x{:x}", id)),
+                    gs.owner
+                        .map_or("none".to_string(), |id| format!("0x{:x}", id)),
                     keyboard_mode,
                 );
 
@@ -160,22 +201,16 @@ pub mod client {
                 KEYBOARD_HOOKED.store(true, Ordering::SeqCst);
 
                 #[cfg(target_os = "linux")]
-                {
-                    // On handoff, explicitly release any prior owner's X11 grab
-                    // before taking our own. This keeps the rdev control thread
-                    // and the X server in a consistent state even if the prior
-                    // owner never sent `Wait` (e.g. disconnected or raced).
-                    if gs.owner.is_some() {
-                        log::debug!("[grab] handoff: disable_grab before re-grab");
-                        rdev::disable_grab();
-                    }
-                    rdev::enable_grab();
-                }
+                let had_owner = gs.owner.is_some();
                 gs.owner = Some(session_id);
                 gs.last_grab = Some(std::time::Instant::now());
                 // Invalidate any in-flight deferred release from the previous
                 // owner so it cannot suppress a fresh timer for the new owner.
                 gs.deferred_pending = false;
+                #[cfg(target_os = "linux")]
+                {
+                    run_grab_after_unlock = Some(had_owner);
+                }
             }
             GrabState::Wait => {
                 // Drop stale `Wait` events that do not correspond to the
@@ -185,7 +220,8 @@ pub mod client {
                     log::debug!(
                         "[grab] Wait(0x{:x}): ignored, owner={}",
                         session_id,
-                        gs.owner.map_or("none".to_string(), |id| format!("0x{:x}", id)),
+                        gs.owner
+                            .map_or("none".to_string(), |id| format!("0x{:x}", id)),
                     );
                     return;
                 }
@@ -211,21 +247,32 @@ pub mod client {
                             let mode = keyboard_mode.to_string();
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_millis(remaining));
-                                let mut gs = GRAB_STATE.lock().unwrap_or_else(|e| e.into_inner());
-                                // Release only if no new Run has refreshed the grab since.
-                                if gs.owner == Some(session_id) && gs.last_grab == snapshot {
-                                    gs.deferred_pending = false;
-                                    log::debug!("[grab] Wait(0x{:x}): deferred release", session_id);
-                                    release_remote_keys(&mode);
-                                    KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
-                                    rdev::disable_grab();
-                                    gs.owner = None;
-                                    gs.last_grab = None;
-                                } else {
-                                    log::debug!(
-                                        "[grab] Wait(0x{:x}): deferred release cancelled (grab refreshed)",
-                                        session_id,
-                                    );
+                                let release_keys = {
+                                    let mut gs =
+                                        GRAB_STATE.lock().unwrap_or_else(|e| e.into_inner());
+                                    // Release only if no new Run has refreshed the grab since.
+                                    if gs.owner == Some(session_id) && gs.last_grab == snapshot {
+                                        let to_release = take_remote_keys();
+                                        gs.deferred_pending = false;
+                                        log::debug!(
+                                            "[grab] Wait(0x{:x}): deferred release",
+                                            session_id
+                                        );
+                                        KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
+                                        gs.owner = None;
+                                        gs.last_grab = None;
+                                        Some(to_release)
+                                    } else {
+                                        log::debug!(
+                                            "[grab] Wait(0x{:x}): deferred release cancelled (grab refreshed)",
+                                            session_id,
+                                        );
+                                        None
+                                    }
+                                };
+                                if let Some(to_release) = release_keys {
+                                    disable_grab_if_released();
+                                    release_remote_keys_for_events(&mode, to_release);
                                 }
                             });
                         } else {
@@ -243,19 +290,32 @@ pub mod client {
                 #[cfg(windows)]
                 rdev::set_get_key_unicode(false);
 
-                release_remote_keys(keyboard_mode);
-
                 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
                 KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
-
-                #[cfg(target_os = "linux")]
-                rdev::disable_grab();
 
                 gs.owner = None;
                 gs.last_grab = None;
                 gs.deferred_pending = false;
+                release_after_unlock = Some(take_remote_keys());
+                #[cfg(target_os = "linux")]
+                {
+                    disable_after_unlock = true;
+                }
             }
             GrabState::Exit => {}
+        }
+        drop(gs);
+        #[cfg(target_os = "linux")]
+        {
+            if disable_after_unlock {
+                disable_grab_if_released();
+            }
+            if let Some(disable_first) = run_grab_after_unlock {
+                apply_run_grab_if_owner(session_id, disable_first);
+            }
+        }
+        if let Some(to_release) = release_after_unlock {
+            release_remote_keys_for_events(keyboard_mode, to_release);
         }
     }
 
@@ -472,7 +532,6 @@ fn notify_exit_relative_mouse_mode() {
     flutter::push_session_event(&session_id, "exit_relative_mouse_mode", vec![]);
 }
 
-
 /// Handle relative mouse mode shortcuts in the rdev grab loop.
 /// Returns true if the event should be blocked from being sent to the peer.
 #[cfg(feature = "flutter")]
@@ -671,10 +730,12 @@ pub fn is_long_press(event: &Event) -> bool {
     return false;
 }
 
-pub fn release_remote_keys(keyboard_mode: &str) {
-    // todo!: client quit suddenly, how to release keys?
-    let to_release = TO_RELEASE.lock().unwrap().clone();
-    TO_RELEASE.lock().unwrap().clear();
+fn take_remote_keys() -> HashMap<Key, Event> {
+    let mut to_release = TO_RELEASE.lock().unwrap_or_else(|e| e.into_inner());
+    std::mem::take(&mut *to_release)
+}
+
+fn release_remote_keys_for_events(keyboard_mode: &str, to_release: HashMap<Key, Event>) {
     for (key, mut event) in to_release.into_iter() {
         event.event_type = EventType::KeyRelease(key);
         client::process_event(keyboard_mode, &event, None);
@@ -687,6 +748,12 @@ pub fn release_remote_keys(keyboard_mode: &str) {
             client::process_event(keyboard_mode, &event, None);
         }
     }
+}
+
+#[allow(dead_code)]
+pub fn release_remote_keys(keyboard_mode: &str) {
+    // todo!: client quit suddenly, how to release keys?
+    release_remote_keys_for_events(keyboard_mode, take_remote_keys());
 }
 
 pub fn get_keyboard_mode_enum(keyboard_mode: &str) -> KeyboardMode {
@@ -879,7 +946,6 @@ pub fn event_to_key_events(
 ) -> Vec<KeyEvent> {
     peer.retain(|c| !c.is_whitespace());
 
-    let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
 
     match event.event_type {
@@ -892,6 +958,7 @@ pub fn event_to_key_events(
         _ => {}
     }
 
+    let mut key_event = KeyEvent::new();
     key_event.mode = keyboard_mode.into();
 
     let mut key_events = match keyboard_mode {
