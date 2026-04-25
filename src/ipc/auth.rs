@@ -79,7 +79,7 @@ fn macos_service_ipc_allows_gui_and_service_binaries(
     let Some(current_dir) = current_exe.parent() else {
         return false;
     };
-    if peer_dir != current_dir {
+    if !executable_paths_match(peer_dir, current_dir) {
         return false;
     }
 
@@ -91,7 +91,12 @@ fn macos_service_ipc_allows_gui_and_service_binaries(
     let allowed_exe = [Some(gui_exe), Some(service_exe)];
     let peer_name = peer_exe.file_name();
     let current_name = current_exe.file_name();
-    allowed_exe.contains(&peer_name) && allowed_exe.contains(&current_name)
+    allowed_exe
+        .iter()
+        .any(|name| os_str_eq_ignore_ascii_case(peer_name, *name))
+        && allowed_exe
+            .iter()
+            .any(|name| os_str_eq_ignore_ascii_case(current_name, *name))
 }
 
 #[cfg(target_os = "windows")]
@@ -352,10 +357,39 @@ pub(crate) fn executable_paths_match(left: &Path, right: &Path) -> bool {
         }
         return normalize(left) == normalize(right);
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        return paths_refer_to_same_file(left, right);
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         left == right
     }
+}
+
+#[cfg(target_os = "macos")]
+#[inline]
+fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    let (Ok(left), Ok(right)) = (fs::metadata(left), fs::metadata(right)) else {
+        return false;
+    };
+    left.dev() == right.dev() && left.ino() == right.ino()
+}
+
+#[cfg(target_os = "macos")]
+#[inline]
+fn os_str_eq_ignore_ascii_case(
+    left: Option<&std::ffi::OsStr>,
+    right: Option<&std::ffi::OsStr>,
+) -> bool {
+    let (Some(left), Some(right)) = (left, right) else {
+        return false;
+    };
+    left.to_string_lossy()
+        .eq_ignore_ascii_case(&right.to_string_lossy())
 }
 
 #[cfg(all(windows, not(feature = "flutter")))]
@@ -894,6 +928,19 @@ mod tests {
         let left = std::path::PathBuf::from(r"\\?\C:\Program Files\RustDesk\RustDesk.exe");
         let right = std::path::PathBuf::from(r"c:\program files\rustdesk\rustdesk.exe");
         assert!(super::executable_paths_match(&left, &right));
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_os_str_eq_ignore_ascii_case_for_process_names() {
+        assert!(super::os_str_eq_ignore_ascii_case(
+            Some(std::ffi::OsStr::new("RustDesk")),
+            Some(std::ffi::OsStr::new("rustdesk"))
+        ));
+        assert!(!super::os_str_eq_ignore_ascii_case(
+            Some(std::ffi::OsStr::new("RustDesk")),
+            Some(std::ffi::OsStr::new("service"))
+        ));
     }
 
     #[cfg(all(windows, not(feature = "flutter")))]
