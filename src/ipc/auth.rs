@@ -650,13 +650,13 @@ pub(crate) fn authorize_windows_portable_service_ipc_connection(
     let (authorized, peer_pid, peer_session_id, peer_is_system) =
         stream.portable_service_authorization_status_for_session(expected_session_id);
     if !authorized {
-        let identity_unavailable =
-            peer_pid.is_some() && peer_session_id.is_none() && peer_is_system.is_none();
+        // Don't use `peer_pid.is_some() && peer_is_system.is_none() && peer_is_system.is_none();` here.
+        let identity_unavailable = peer_pid.is_some() && peer_is_system.is_none();
         if identity_unavailable {
-            // In portable-service startup, resolving SYSTEM peer identity may fail on some hosts
-            // (for example, access denied while opening the peer process). Keep executable
-            // verification as best-effort telemetry and defer final authorization to pipe ACL
-            // + token handshake.
+            // In portable-service startup, resolving SYSTEM peer identity may fail on some hosts.
+            // `ProcessIdToSessionId` can still succeed while `OpenProcessToken(TOKEN_QUERY)` is
+            // denied by the peer token DACL or missing privileges. Treat that partial identity
+            // failure as unavailable and defer final authorization to pipe ACL + token handshake.
             if let Err(err) = ensure_peer_executable_matches_current_by_pid_opt(peer_pid, postfix) {
                 log::warn!(
                     "Portable service ipc peer identity unavailable and executable verification failed; continue with ACL+token-gated flow: postfix={}, peer_pid={:?}, err={}",
