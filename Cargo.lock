@@ -5997,7 +5997,7 @@ dependencies = [
 [[package]]
 name = "parity-tokio-ipc"
 version = "0.7.3-5"
-source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#c8c8bbcbabf9be1201c53afb0269b92b9b02d291"
+source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#d141d4eb28eb9f7a96278f3373ba6dea9140cbbd"
 dependencies = [
  "futures",
  "libc",
