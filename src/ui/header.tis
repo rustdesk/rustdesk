@@ -602,7 +602,13 @@ function togglePrivacyMode(privacy_id) {
     if (!supported) {
         msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), "", function() { });
     } else {
-        handler.toggle_option(privacy_id);
+        var privacy_mode_impls = pi.platform_additions?.supported_privacy_mode_impl;
+        if (privacy_mode_impls == null || privacy_mode_impls == undefined) {
+            handler.toggle_option(privacy_id);
+            return;
+        }
+        var is_on = handler.get_toggle_option("privacy-mode");
+        handler.toggle_privacy_mode("", !is_on);
     }
 }
 

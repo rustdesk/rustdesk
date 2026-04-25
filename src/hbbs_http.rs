@@ -1,4 +1,4 @@
-use reqwest::blocking::Response;
+use hbb_common::ResultType;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
@@ -21,11 +21,9 @@ pub enum HbbHttpResponse<T> {
     Data(T),
 }
 
-impl<T: DeserializeOwned> TryFrom<Response> for HbbHttpResponse<T> {
-    type Error = reqwest::Error;
-
-    fn try_from(resp: Response) -> Result<Self, <Self as TryFrom<Response>>::Error> {
-        let map = resp.json::<Map<String, Value>>()?;
+impl<T: DeserializeOwned> HbbHttpResponse<T> {
+    pub fn parse(body: &str) -> ResultType<Self> {
+        let map = serde_json::from_str::<Map<String, Value>>(body)?;
         if let Some(error) = map.get("error") {
             if let Some(err) = error.as_str() {
                 Ok(Self::Error(err.to_owned()))

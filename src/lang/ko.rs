@@ -741,7 +741,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "수신 세션 중 화면 켜짐 유지"),
         ("Continue with {}", "{}(으)로 계속"),
         ("Display Name", "표시 이름"),
-        ("password-hidden-tip", ""),
-        ("preset-password-in-use-tip", ""),
+        ("password-hidden-tip", "영구 비밀번호가 설정되었습니다 (숨김)."),
+        ("preset-password-in-use-tip", "현재 사전 설정된 비밀번호가 사용 중입니다."),
     ].iter().cloned().collect();
 }
