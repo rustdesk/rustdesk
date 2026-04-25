@@ -146,7 +146,7 @@ pub mod client {
     }
 
     pub fn start_grab_loop() {
-        let mut lock = IS_GRAB_STARTED.lock().unwrap_or_else(|e| e.into_inner());
+        let mut lock = IS_GRAB_STARTED.lock().unwrap();
         if *lock {
             return;
         }
@@ -167,7 +167,7 @@ pub mod client {
         let mut run_grab_after_unlock = None;
         #[cfg(target_os = "linux")]
         let mut disable_after_unlock = false;
-        let mut gs = GRAB_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut gs = GRAB_STATE.lock().unwrap();
         match state {
             GrabState::Ready => {}
             GrabState::Run => {
@@ -248,8 +248,7 @@ pub mod client {
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_millis(remaining));
                                 let release_keys = {
-                                    let mut gs =
-                                        GRAB_STATE.lock().unwrap_or_else(|e| e.into_inner());
+                                    let mut gs = GRAB_STATE.lock().unwrap();
                                     // Release only if no new Run has refreshed the grab since.
                                     if gs.owner == Some(session_id) && gs.last_grab == snapshot {
                                         let to_release = take_remote_keys();
@@ -731,7 +730,7 @@ pub fn is_long_press(event: &Event) -> bool {
 }
 
 fn take_remote_keys() -> HashMap<Key, Event> {
-    let mut to_release = TO_RELEASE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut to_release = TO_RELEASE.lock().unwrap();
     std::mem::take(&mut *to_release)
 }
 
