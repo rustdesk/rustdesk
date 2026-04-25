@@ -15,6 +15,7 @@ import 'package:get/get.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
+import 'ios_caps_lock_state_tracker.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
@@ -411,6 +412,7 @@ class InputModel {
   var ctrl = false;
   var alt = false;
   var command = false;
+  final _iosCapsLockTracker = IosCapsLockStateTracker();
 
   final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
@@ -518,39 +520,42 @@ class InputModel {
   // incorrect CapsLock state on iOS.
   bool _getIosCapsFromCharacter(KeyEvent e) {
     if (!isIOS) return false;
-    final ch = e.character;
-    return _getIosCapsFromCharacterImpl(
-        ch, HardwareKeyboard.instance.isShiftPressed);
+    return _getIosCapsLockState(
+      character: e.character,
+      shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+      logicalKey: e.logicalKey,
+      isKeyDown: e is KeyDownEvent || e is KeyRepeatEvent,
+    );
   }
 
   // RawKeyEvent version of _getIosCapsFromCharacter.
   bool _getIosCapsFromRawCharacter(RawKeyEvent e) {
     if (!isIOS) return false;
-    final ch = e.character;
-    return _getIosCapsFromCharacterImpl(ch, e.isShiftPressed);
+    return _getIosCapsLockState(
+      character: e.character,
+      shiftPressed: e.isShiftPressed,
+      logicalKey: e.logicalKey,
+      isKeyDown: e is RawKeyDownEvent,
+    );
   }
 
-  // Shared implementation for inferring CapsLock state from character.
-  // Uses Unicode-aware case detection to support non-ASCII letters (e.g., ü/Ü, é/É).
-  //
-  // Limitations:
-  // 1. This inference assumes the client and server use the same keyboard layout.
-  //    If layouts differ (e.g., client uses EN, server uses DE), the character output
-  //    may not match expectations. For example, ';' on EN layout maps to 'ö' on DE
-  //    layout, making it impossible to correctly infer CapsLock state from the
-  //    character alone.
-  // 2. On iOS, CapsLock+Shift produces uppercase letters (unlike desktop where it
-  //    produces lowercase). This method cannot handle that case correctly.
-  bool _getIosCapsFromCharacterImpl(String? ch, bool shiftPressed) {
-    if (ch == null || ch.length != 1) return false;
-    // Use Dart's built-in Unicode-aware case detection
-    final upper = ch.toUpperCase();
-    final lower = ch.toLowerCase();
-    final isUpper = upper == ch && lower != ch;
-    final isLower = lower == ch && upper != ch;
-    // Skip non-letter characters (e.g., numbers, symbols, CJK characters without case)
-    if (!isUpper && !isLower) return false;
-    return isUpper != shiftPressed;
+  bool _getIosCapsLockState({
+    required String? character,
+    required bool shiftPressed,
+    required LogicalKeyboardKey logicalKey,
+    required bool isKeyDown,
+  }) {
+    if (!isIOS) return false;
+    // Flutter's reported lock state is unreliable on iOS. Keep a cached
+    // value and update it from explicit CapsLock presses or inferable
+    // character output, then reuse that cached state for key-up and
+    // non-character events.
+    return _iosCapsLockTracker.update(
+      character: character,
+      shiftPressed: shiftPressed,
+      logicalKey: logicalKey,
+      isKeyDown: isKeyDown,
+    );
   }
 
   int _buildLockModes(bool iosCapsLock) {
@@ -713,7 +718,7 @@ class InputModel {
     }
 
     bool iosCapsLock = false;
-    if (isIOS && e is RawKeyDownEvent) {
+    if (isIOS) {
       iosCapsLock = _getIosCapsFromRawCharacter(e);
     }
 
@@ -790,7 +795,7 @@ class InputModel {
     }
 
     bool iosCapsLock = false;
-    if (isIOS && (e is KeyDownEvent || e is KeyRepeatEvent)) {
+    if (isIOS) {
       iosCapsLock = _getIosCapsFromCharacter(e);
     }
 
@@ -1029,9 +1034,12 @@ class InputModel {
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
 
-  /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
+  /// Reset local key state, including modifiers and cached iOS lock state.
   void resetModifiers() {
     shift = ctrl = alt = command = false;
+    if (isIOS) {
+      _iosCapsLockTracker.reset();
+    }
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.
