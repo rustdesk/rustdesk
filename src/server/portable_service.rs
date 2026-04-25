@@ -3,6 +3,7 @@ use crate::{
     platform::{
         set_path_permission, set_path_permission_for_portable_service_shmem_dir,
         set_path_permission_for_portable_service_shmem_file,
+        validate_path_for_portable_service_shmem_dir,
     },
 };
 use core::slice;
@@ -329,6 +330,10 @@ impl SharedMemory {
         if parent_created || crate::platform::is_root() {
             // Harden parent ACL on first provisioning and periodically on SYSTEM path.
             set_path_permission_for_portable_service_shmem_dir(&dir)?;
+        } else {
+            // Existing parents still need type/reparse validation. Non-SYSTEM callers may lack
+            // WRITE_DAC on a valid parent, so avoid rebuilding the ACL here.
+            validate_path_for_portable_service_shmem_dir(&dir)?;
         }
         Ok(dir
             .join(format!("shared_memory{}", name))

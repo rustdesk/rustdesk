@@ -272,6 +272,11 @@ pub fn set_path_permission_for_portable_service_shmem_dir(path: &Path) -> Result
 }
 
 #[inline]
+pub fn validate_path_for_portable_service_shmem_dir(path: &Path) -> ResultType<()> {
+    validate_portable_service_shmem_dir_target(path)
+}
+
+#[inline]
 pub fn set_path_permission_for_portable_service_shmem_file(path: &Path) -> ResultType<()> {
     set_path_permission_for_portable_service_shmem_impl(path, false)
 }
@@ -341,32 +346,37 @@ fn make_sid_trustee_entry(
     }
 }
 
+fn validate_portable_service_shmem_dir_target(path: &Path) -> ResultType<()> {
+    let metadata = fs::symlink_metadata(path).map_err(|e| {
+        anyhow!(
+            "Failed to inspect portable service shared-memory ACL directory '{}': {}",
+            path.display(),
+            e
+        )
+    })?;
+    if is_reparse_point(&metadata) {
+        bail!(
+            "Portable service shared-memory ACL directory target is a reparse point and is rejected: '{}'",
+            path.display()
+        );
+    }
+    if !metadata.file_type().is_dir() {
+        bail!(
+            "Portable service shared-memory ACL target is not a directory: '{}'",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
 fn set_path_permission_for_portable_service_shmem_impl(
     path: &Path,
     expect_dir: bool,
 ) -> ResultType<()> {
-    let metadata_result = fs::symlink_metadata(path);
     if expect_dir {
-        let metadata = metadata_result.map_err(|e| {
-            anyhow!(
-                "Failed to inspect portable service shared-memory ACL directory '{}': {}",
-                path.display(),
-                e
-            )
-        })?;
-        if is_reparse_point(&metadata) {
-            bail!(
-                "Portable service shared-memory ACL directory target is a reparse point and is rejected: '{}'",
-                path.display()
-            );
-        }
-        if !metadata.file_type().is_dir() {
-            bail!(
-                "Portable service shared-memory ACL target is not a directory: '{}'",
-                path.display()
-            );
-        }
+        validate_portable_service_shmem_dir_target(path)?;
     } else {
+        let metadata_result = fs::symlink_metadata(path);
         match metadata_result {
             Ok(metadata) => {
                 if metadata.file_type().is_dir() {
