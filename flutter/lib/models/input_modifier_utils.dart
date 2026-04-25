@@ -18,5 +18,5 @@ bool shouldReleaseStaleMobileShift({
       logicalKey == LogicalKeyboardKey.shiftRight) {
     return false;
   }
-  return character?.isNotEmpty == true;
+  return true;
 }

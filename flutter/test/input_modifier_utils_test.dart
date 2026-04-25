@@ -74,7 +74,7 @@ void main() {
       );
     });
 
-    test('does not release with empty character', () {
+    test('releases on non-text keys with empty character', () {
       expect(
         shouldReleaseStaleMobileShift(
           isMobile: true,
@@ -84,11 +84,11 @@ void main() {
           character: '',
           hasTrackedShiftKeyDown: true,
         ),
-        isFalse,
+        isTrue,
       );
     });
 
-    test('does not release with null character on non-modifier keys', () {
+    test('releases on non-text keys with null character', () {
       expect(
         shouldReleaseStaleMobileShift(
           isMobile: true,
@@ -98,7 +98,7 @@ void main() {
           character: null,
           hasTrackedShiftKeyDown: true,
         ),
-        isFalse,
+        isTrue,
       );
     });
 
