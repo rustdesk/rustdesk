@@ -20,7 +20,7 @@ import '../common.dart';
 import '../consts.dart';
 
 /// Mouse button enum.
-enum MouseButtons { left, right, wheel, back }
+enum MouseButtons { left, right, wheel, back, forward }
 
 const _kMouseEventDown = 'mousedown';
 const _kMouseEventUp = 'mouseup';
@@ -157,6 +157,8 @@ extension ToString on MouseButtons {
         return 'wheel';
       case MouseButtons.back:
         return 'back';
+      case MouseButtons.forward:
+        return 'forward';
     }
   }
 }
@@ -327,6 +329,80 @@ class ToReleaseKeys {
 }
 
 class InputModel {
+  // Side mouse button support for Linux.
+  // Flutter's Linux embedder drops X11 button 8/9 events, so we capture them
+  // natively via GDK and forward through the platform channel.
+  static InputModel? _activeSideButtonModel;
+  // Tracks per-button which model received a side button down event, so the
+  // matching up event is routed there even if the pointer has left the view
+  // or a different button was pressed in between.
+  static final Map<MouseButtons, InputModel> _sideButtonDownModels = {};
+  static bool _sideButtonChannelInitialized = false;
+
+  /// Each Flutter engine (main window + sub-windows from desktop_multi_window)
+  /// runs its own Dart isolate with its own statics. Called from initEnv()
+  /// which runs per-engine, so each isolate registers its own handler tied
+  /// to its own set of InputModels.
+  static void initSideButtonChannel() {
+    if (!Platform.isLinux) return;
+    if (_sideButtonChannelInitialized) return;
+    _sideButtonChannelInitialized = true;
+
+    const channel = MethodChannel('org.rustdesk.rustdesk/side_buttons');
+    channel.setMethodCallHandler((call) async {
+      if (call.method == 'onSideMouseButton') {
+        final args = call.arguments as Map<dynamic, dynamic>;
+        final button = args['button'] as String;
+        final type = args['type'] as String;
+        final mb = button == 'back' ? MouseButtons.back : MouseButtons.forward;
+
+        if (type == 'down') {
+          final model = _activeSideButtonModel;
+          if (model != null &&
+              !(model.isViewOnly && !model.showMyCursor) &&
+              model.keyboardPerm &&
+              !model.isViewCamera) {
+            _sideButtonDownModels[mb] = model;
+            // Fire-and-forget to avoid blocking the platform channel handler.
+            unawaited(model._sendMouseUnchecked(type, mb).catchError((Object e) {
+              debugPrint('[InputModel] failed to send side button $type for $mb: $e');
+            }));
+          }
+        } else {
+          // Only route 'up' when we recorded the matching 'down';
+          // dropping avoids sending unpaired 'up' to an unrelated session.
+          // Use _sendMouseUnchecked to bypass permission checks so the
+          // release always goes through even if permissions changed.
+          final model = _sideButtonDownModels.remove(mb);
+          if (model != null) {
+            unawaited(model._sendMouseUnchecked(type, mb).catchError((Object e) {
+              debugPrint('[InputModel] failed to send side button $type for $mb: $e');
+            }));
+          }
+        }
+      }
+      return null;
+    });
+  }
+
+  /// Clear any static references to this model (prevents stale routing).
+  /// Releases any held side buttons on the peer so closing a session
+  /// mid-press does not leave a stuck button.
+  void disposeSideButtonTracking() {
+    if (_activeSideButtonModel == this) _activeSideButtonModel = null;
+    final held = _sideButtonDownModels.entries
+        .where((e) => e.value == this)
+        .map((e) => e.key)
+        .toList();
+    for (final mb in held) {
+      _sideButtonDownModels.remove(mb);
+      // Best-effort release; session may already be tearing down.
+      unawaited(_sendMouseUnchecked('up', mb).catchError((Object e) {
+        debugPrint('[InputModel] failed to release side button $mb: $e');
+      }));
+    }
+  }
+
   final WeakReference<FFI> parent;
   String keyboardMode = '';
 
@@ -412,6 +488,7 @@ class InputModel {
   bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
 
   InputModel(this.parent) {
+    initSideButtonChannel();
     sessionId = parent.target!.sessionId;
     _relativeMouse = RelativeMouseModel(
       sessionId: sessionId,
@@ -966,13 +1043,20 @@ class InputModel {
     return evt;
   }
 
+  /// Send mouse event unconditionally (no permission checks).
+  /// Used for side button releases that must go through even if permissions
+  /// changed after the matching down was sent.
+  Future<void> _sendMouseUnchecked(String type, MouseButtons button) async {
+    await bind.sessionSendMouse(
+        sessionId: sessionId,
+        msg: json.encode(modify({'type': type, 'buttons': button.value})));
+  }
+
   /// Send mouse press event.
   Future<void> sendMouse(String type, MouseButtons button) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
-    await bind.sessionSendMouse(
-        sessionId: sessionId,
-        msg: json.encode(modify({'type': type, 'buttons': button.value})));
+    await _sendMouseUnchecked(type, button);
   }
 
   void enterOrLeave(bool enter) {
@@ -981,6 +1065,13 @@ class InputModel {
     _pointerMovedAfterEnter = false;
     _pointerInsideImage = enter;
     _lastWheelTsUs = 0;
+
+    // Track active model for side button events (Linux).
+    if (enter) {
+      _activeSideButtonModel = this;
+    } else if (_activeSideButtonModel == this) {
+      _activeSideButtonModel = null;
+    }
 
     // Fix status
     if (!enter) {
