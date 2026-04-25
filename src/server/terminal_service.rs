@@ -435,6 +435,7 @@ impl OutputBuffer {
                 // Find first newline in new data
                 if let Some(newline_pos) = data.iter().position(|&b| b == b'\n') {
                     last_line.extend_from_slice(&data[..=newline_pos]);
+                    self.total_size += newline_pos + 1;
                     start = newline_pos + 1;
                     self.last_line_incomplete = false;
                 } else {
@@ -473,7 +474,17 @@ impl OutputBuffer {
         // Trim old data if buffer is too large
         while self.total_size > MAX_OUTPUT_BUFFER_SIZE || self.lines.len() > MAX_BUFFER_LINES {
             if let Some(removed) = self.lines.pop_front() {
-                self.total_size -= removed.len();
+                if removed.len() > self.total_size {
+                    log::error!(
+                        "OutputBuffer total_size underflow avoided: total_size={}, removed_len={}, lines_len={}",
+                        self.total_size,
+                        removed.len(),
+                        self.lines.len()
+                    );
+                    self.total_size = self.lines.iter().map(|line| line.len()).sum();
+                } else {
+                    self.total_size -= removed.len();
+                }
             }
         }
     }
@@ -655,7 +666,11 @@ fn try_send_output(
             false
         }
         Err(mpsc::TrySendError::Disconnected(_)) => {
-            log::debug!("Terminal {}{} output channel disconnected", terminal_id, label);
+            log::debug!(
+                "Terminal {}{} output channel disconnected",
+                terminal_id,
+                label
+            );
             true
         }
     }
@@ -1573,7 +1588,16 @@ impl TerminalServiceProxy {
         data: &TerminalData,
     ) -> Result<Option<TerminalResponse>> {
         if let Some(session_arc) = session {
-            let mut session = session_arc.lock().unwrap();
+            let mut session = match session_arc.lock() {
+                Ok(guard) => guard,
+                Err(e) => {
+                    return Err(anyhow!(
+                        "Failed to lock terminal session {} for input handling: {}",
+                        data.terminal_id,
+                        e
+                    ));
+                }
+            };
             session.update_activity();
             if let Some(input_tx) = &session.input_tx {
                 // Encode data for helper mode or send raw for direct PTY mode
@@ -1959,7 +1983,11 @@ impl TerminalServiceProxy {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_utf8_split_point, Utf8ChunkAccumulator};
+    use super::{
+        find_utf8_split_point, OutputBuffer, TerminalData, TerminalServiceProxy, TerminalSession,
+        Utf8ChunkAccumulator, MAX_BUFFER_LINES,
+    };
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn utf8_split_point_returns_full_len_for_complete_input() {
@@ -2045,5 +2073,52 @@ mod tests {
         let mut chunker = Utf8ChunkAccumulator::default();
         assert_eq!(chunker.push_chunk(vec![0xFF, 0xE4]), Some(vec![0xFF, 0xE4]));
         assert!(chunker.finish().is_none());
+    }
+
+    #[test]
+    fn output_buffer_trim_after_incomplete_merge_does_not_underflow() {
+        let mut buffer = OutputBuffer::new();
+
+        // Create an incomplete line first.
+        buffer.append(b"hello");
+
+        // Merge a large chunk that contains the first newline at the tail.
+        // This exercises the "append to last incomplete line" branch.
+        let mut large = vec![b'a'; 30_000];
+        large.push(b'\n');
+        buffer.append(&large);
+
+        // Exceed MAX_BUFFER_LINES so trim pops the first large merged line.
+        for _ in 0..=MAX_BUFFER_LINES {
+            buffer.append(b"x\n");
+        }
+
+        let actual_size: usize = buffer.lines.iter().map(|line| line.len()).sum();
+        assert_eq!(buffer.total_size, actual_size);
+    }
+
+    #[test]
+    fn handle_data_returns_error_when_session_mutex_poisoned() {
+        let session = Arc::new(Mutex::new(TerminalSession::new(1, 24, 80)));
+        let poison_target = session.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poison_target.lock().unwrap();
+            panic!("poison terminal session mutex");
+        })
+        .join();
+
+        let proxy = TerminalServiceProxy {
+            service_id: "test_service".to_string(),
+            is_persistent: false,
+            #[cfg(target_os = "windows")]
+            user_token: None,
+        };
+
+        let mut data = TerminalData::new();
+        data.terminal_id = 1;
+        data.data = bytes::Bytes::from_static(b"echo test");
+
+        let result = proxy.handle_data(Some(session), &data);
+        assert!(result.is_err(), "expected poisoned lock to return error");
     }
 }
