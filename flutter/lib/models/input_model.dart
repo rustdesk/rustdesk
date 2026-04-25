@@ -707,13 +707,6 @@ class InputModel {
       toReleaseRawKeys.updateKeyUp(key, e);
     }
 
-    // * Currently mobile does not enable map mode
-    if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
-      mapKeyboardModeRaw(e, iosCapsLock);
-    } else {
-      legacyKeyboardModeRaw(e);
-    }
-
     // On some mobile soft-keyboard paths, Flutter may leave cached Shift state
     // set even though the current raw key event is not shifted anymore.
     if (e is RawKeyDownEvent &&
@@ -726,6 +719,13 @@ class InputModel {
               toReleaseRawKeys.lastRShiftKeyEvent != null,
         )) {
       _releaseTrackedRawShiftKeyEventIfNeeded();
+    }
+
+    // * Currently mobile does not enable map mode
+    if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
+      mapKeyboardModeRaw(e, iosCapsLock);
+    } else {
+      legacyKeyboardModeRaw(e);
     }
 
     return KeyEventResult.handled;
