@@ -722,7 +722,6 @@ class InputModel {
           cachedShiftPressed: shift,
           actualShiftPressed: e.isShiftPressed,
           logicalKey: e.logicalKey,
-          character: e.character,
           hasTrackedShiftKeyDown: toReleaseRawKeys.lastLShiftKeyEvent != null ||
               toReleaseRawKeys.lastRShiftKeyEvent != null,
         )) {
@@ -813,10 +812,8 @@ class InputModel {
           cachedShiftPressed: shift,
           actualShiftPressed: HardwareKeyboard.instance.isShiftPressed,
           logicalKey: e.logicalKey,
-          character: e.character,
-          hasTrackedShiftKeyDown:
-              toReleaseKeys.lastLShiftKeyEvent != null ||
-                  toReleaseKeys.lastRShiftKeyEvent != null,
+          hasTrackedShiftKeyDown: toReleaseKeys.lastLShiftKeyEvent != null ||
+              toReleaseKeys.lastRShiftKeyEvent != null,
         )) {
       _releaseTrackedShiftKeyEventIfNeeded();
     }

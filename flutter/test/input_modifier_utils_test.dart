@@ -11,7 +11,6 @@ void main() {
           cachedShiftPressed: false,
           actualShiftPressed: false,
           logicalKey: LogicalKeyboardKey.keyD,
-          character: 'D',
           hasTrackedShiftKeyDown: true,
         ),
         isFalse,
@@ -25,21 +24,20 @@ void main() {
           cachedShiftPressed: true,
           actualShiftPressed: false,
           logicalKey: LogicalKeyboardKey.keyD,
-          character: 'D',
           hasTrackedShiftKeyDown: true,
         ),
         isTrue,
       );
     });
 
-    test('does not release manually toggled shift without tracked key down', () {
+    test('does not release manually toggled shift without tracked key down',
+        () {
       expect(
         shouldReleaseStaleMobileShift(
           isMobile: true,
           cachedShiftPressed: true,
           actualShiftPressed: false,
           logicalKey: LogicalKeyboardKey.keyD,
-          character: 'D',
           hasTrackedShiftKeyDown: false,
         ),
         isFalse,
@@ -53,7 +51,6 @@ void main() {
           cachedShiftPressed: true,
           actualShiftPressed: true,
           logicalKey: LogicalKeyboardKey.keyD,
-          character: 'D',
           hasTrackedShiftKeyDown: true,
         ),
         isFalse,
@@ -67,35 +64,32 @@ void main() {
           cachedShiftPressed: true,
           actualShiftPressed: false,
           logicalKey: LogicalKeyboardKey.keyD,
-          character: 'D',
           hasTrackedShiftKeyDown: true,
         ),
         isFalse,
       );
     });
 
-    test('releases on non-text keys with empty character', () {
+    test('releases on enter key', () {
       expect(
         shouldReleaseStaleMobileShift(
           isMobile: true,
           cachedShiftPressed: true,
           actualShiftPressed: false,
-          logicalKey: LogicalKeyboardKey.keyD,
-          character: '',
+          logicalKey: LogicalKeyboardKey.enter,
           hasTrackedShiftKeyDown: true,
         ),
         isTrue,
       );
     });
 
-    test('releases on non-text keys with null character', () {
+    test('releases on arrow key', () {
       expect(
         shouldReleaseStaleMobileShift(
           isMobile: true,
           cachedShiftPressed: true,
           actualShiftPressed: false,
-          logicalKey: LogicalKeyboardKey.keyD,
-          character: null,
+          logicalKey: LogicalKeyboardKey.arrowLeft,
           hasTrackedShiftKeyDown: true,
         ),
         isTrue,
@@ -109,7 +103,6 @@ void main() {
           cachedShiftPressed: true,
           actualShiftPressed: false,
           logicalKey: LogicalKeyboardKey.shiftLeft,
-          character: null,
           hasTrackedShiftKeyDown: true,
         ),
         isFalse,
@@ -123,7 +116,6 @@ void main() {
           cachedShiftPressed: true,
           actualShiftPressed: false,
           logicalKey: LogicalKeyboardKey.shiftRight,
-          character: null,
           hasTrackedShiftKeyDown: true,
         ),
         isFalse,

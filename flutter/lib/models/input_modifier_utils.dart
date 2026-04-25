@@ -5,7 +5,6 @@ bool shouldReleaseStaleMobileShift({
   required bool cachedShiftPressed,
   required bool actualShiftPressed,
   required LogicalKeyboardKey logicalKey,
-  required String? character,
   required bool hasTrackedShiftKeyDown,
 }) {
   if (!isMobile || !cachedShiftPressed || actualShiftPressed) {
