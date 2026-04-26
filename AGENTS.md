@@ -1,114 +1,114 @@
-# RustDesk Guide 
+# RustDesk Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working in this repository.
 
 ## Development Commands
 
-### Build Commands
-- `cargo run` - Build and run the desktop application (requires libsciter library)
-- `python3 build.py --flutter` - Build Flutter version (desktop)
-- `python3 build.py --flutter --release` - Build Flutter version in release mode
-- `python3 build.py --hwcodec` - Build with hardware codec support
-- `python3 build.py --vram` - Build with VRAM feature (Windows only)
-- `cargo build --release` - Build Rust binary in release mode
-- `cargo build --features hwcodec` - Build with specific features
+### Build
 
-### Flutter Mobile Commands
-- `cd flutter && flutter build android` - Build Android APK
-- `cd flutter && flutter build ios` - Build iOS app
-- `cd flutter && flutter run` - Run Flutter app in development mode
-- `cd flutter && flutter test` - Run Flutter tests
+* `cargo run`
+* `cargo build --release`
+* `cargo build --features hwcodec`
+* `python3 build.py --flutter`
+* `python3 build.py --flutter --release`
+* `python3 build.py --hwcodec`
+* `python3 build.py --vram`
 
-### Testing
-- `cargo test` - Run Rust tests
-- `cd flutter && flutter test` - Run Flutter tests
+### Flutter
 
-### Platform-Specific Build Scripts
-- `flutter/build_android.sh` - Android build script
-- `flutter/build_ios.sh` - iOS build script
-- `flutter/build_fdroid.sh` - F-Droid build script
+* `cd flutter && flutter run`
+* `cd flutter && flutter test`
+* `cd flutter && flutter build android`
+* `cd flutter && flutter build ios`
 
-## Project Architecture
+### Test
 
-### Directory Structure
-- **`src/`** - Main Rust application code
-  - `src/ui/` - Legacy Sciter UI (deprecated, use Flutter instead)
-  - `src/server/` - Audio/clipboard/input/video services and network connections
-  - `src/client.rs` - Peer connection handling
-  - `src/platform/` - Platform-specific code
-- **`flutter/`** - Flutter UI code for desktop and mobile
-- **`libs/`** - Core libraries
-  - `libs/hbb_common/` - Video codec, config, network wrapper, protobuf, file transfer utilities
-  - `libs/scrap/` - Screen capture functionality
-  - `libs/enigo/` - Platform-specific keyboard/mouse control
-  - `libs/clipboard/` - Cross-platform clipboard implementation
+* `cargo test`
 
-### Key Components
-- **Remote Desktop Protocol**: Custom protocol implemented in `src/rendezvous_mediator.rs` for communicating with rustdesk-server
-- **Screen Capture**: Platform-specific screen capture in `libs/scrap/`
-- **Input Handling**: Cross-platform input simulation in `libs/enigo/`
-- **Audio/Video Services**: Real-time audio/video streaming in `src/server/`
-- **File Transfer**: Secure file transfer implementation in `libs/hbb_common/`
+---
 
-### UI Architecture
-- **Legacy UI**: Sciter-based (deprecated) - files in `src/ui/`
-- **Modern UI**: Flutter-based - files in `flutter/`
-  - Desktop: `flutter/lib/desktop/`
-  - Mobile: `flutter/lib/mobile/`
-  - Shared: `flutter/lib/common/` and `flutter/lib/models/`
+## Project Layout
 
-## Important Build Notes
+* `src/` Rust app
+* `src/server/` audio / clipboard / input / video / network
+* `src/platform/` platform-specific code
+* `src/ui/` legacy Sciter UI (deprecated)
+* `flutter/` current UI
+* `libs/hbb_common/` config / proto / shared utils
+* `libs/scrap/` screen capture
+* `libs/enigo/` input control
+* `libs/clipboard/` clipboard
+
+---
+
+## Build Notes
 
 ### Dependencies
-- Requires vcpkg for C++ dependencies: `libvpx`, `libyuv`, `opus`, `aom`
-- Set `VCPKG_ROOT` environment variable
-- Download appropriate Sciter library for legacy UI support
 
-### Ignore Patterns
-When working with files, ignore these directories:
-- `target/` - Rust build artifacts
-- `flutter/build/` - Flutter build output
-- `flutter/.dart_tool/` - Flutter tooling files
+* Requires `vcpkg`
+* Set `VCPKG_ROOT`
+* Legacy UI needs Sciter library
 
-### Cross-Platform Considerations
-- Windows builds require additional DLLs and virtual display drivers
-- macOS builds need proper signing and notarization for distribution
-- Linux builds support multiple package formats (deb, rpm, AppImage)
-- Mobile builds require platform-specific toolchains (Android SDK, Xcode)
+### Ignore
+
+* `target/`
+* `flutter/build/`
+* `flutter/.dart_tool/`
 
 ### Feature Flags
-- `hwcodec` - Hardware video encoding/decoding
-- `vram` - VRAM optimization (Windows only)
-- `flutter` - Enable Flutter UI
-- `unix-file-copy-paste` - Unix file clipboard support
-- `screencapturekit` - macOS ScreenCaptureKit (macOS only)
+
+* `hwcodec`
+* `vram`
+* `flutter`
+* `unix-file-copy-paste`
+* `screencapturekit`
 
 ### Config
-All configurations or options are under `libs/hbb_common/src/config.rs` file, 4 types:
-- Settings
-- Local
-- Display
-- Built-in
+
+All options are in `libs/hbb_common/src/config.rs`
+
+---
 
 ## Rust Rules
 
-- In Rust code, do not introduce `unwrap()` or `expect()`.
-- Allowed exceptions:
-- Tests may use `unwrap()` or `expect()` when it keeps the test focused and readable.
-- Lock acquisition may use `unwrap()` only when the locking API makes that the practical option and the failure mode is poison handling rather than normal control flow.
-- Outside those exceptions, propagate errors, handle them explicitly, or use safer fallbacks instead of `unwrap()` and `expect()`.
+* Avoid `unwrap()` / `expect()` in production code.
+* Exceptions:
 
-### Tokio Runtime Constraints
+  * tests;
+  * lock acquisition where failure means poisoning, not normal control flow.
+* Otherwise prefer `Result` + `?` or explicit handling.
+* Do not ignore errors silently.
+* Avoid unnecessary `.clone()`.
+* Prefer borrowing when practical.
+* Do not add dependencies unless needed.
+* Keep code simple and idiomatic.
 
-- In a single async execution context, keep one runtime owner per call chain.
-- Never nest runtimes or block a Tokio runtime thread from code already driven by Tokio.
-- Library and helper layers must not start their own runtime or hide runtime-blocking behavior.
-- Keep async paths non-blocking; if blocking work is unavoidable, isolate it behind an explicit blocking boundary (for example, a blocking pool or a dedicated thread).
-- Treat runtime-nesting errors, errors caused by blocking in an async runtime context, or hangs (for example, `Cannot start a runtime from within a runtime`, `Cannot block the current thread from within a runtime`, or `Cannot drop a runtime in a context where blocking is not allowed`) as design bugs and refactor control flow instead of adding fallback logic.
+---
+
+## Tokio Rules
+
+* Assume a Tokio runtime already exists.
+* Never create nested runtimes.
+* Never call `Runtime::block_on()` inside Tokio / async code.
+* Do not hide runtime creation inside helpers or libraries.
+* Do not hold locks across `.await`.
+* Prefer `.await`, `tokio::spawn`, channels.
+* Use `spawn_blocking` or dedicated threads for blocking work.
+* Do not use `std::thread::sleep()` in async code.
+
+If errors like:
+
+* `Cannot start a runtime from within a runtime`
+* `Cannot block the current thread from within a runtime`
+
+Treat them as design issues and refactor flow.
+
+---
 
 ## Editing Hygiene
 
-- Do not introduce formatting-only changes.
-- Do not run repository-wide formatters or reflow unrelated code unless the
-  user explicitly asks for formatting.
-- Keep diffs limited to semantic changes required for the task.
+* Change only what is required.
+* Prefer the smallest valid diff.
+* Do not refactor unrelated code.
+* Do not make formatting-only changes.
+* Keep naming/style consistent with nearby code.
