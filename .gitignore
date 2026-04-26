@@ -56,3 +56,12 @@ vcpkg_installed
 flutter/lib/generated_plugin_registrant.dart
 libsciter.dylib
 flutter/web/
+
+# === Tabby (fork-local) ===
+archive-docs/
+SPIKE_NOTES.local.md
+.env.local
+.env.*.local
+
+# FVM Version Cache
+.fvm/
