@@ -293,26 +293,22 @@ open flutter/ios/Runner.xcworkspace
   - We may *cherry-pick* specific iOS-targeted simplifications later if they prove useful, but we won't rebase.
   - The `ios` branch is a useful *reference* for "what could be simplified for iOS-only" — keep it as a research tab open during Phase 2.
 
-## Day 4 — Sibling directory  *(deferred to Phase 1)*
+## Day 4 — Sibling directory  *(landed in Phase 1)*
 
-- [ ] `flutter/lib/custom/` created (stub)
-- [ ] `app_root.dart` stub renders
-- [ ] Feature flag in `main.dart` works both ways (`CUSTOM_UI=true` / `false`)
+- [x] `flutter/lib/custom/` created with `app_root.dart` + `input/input_bridge.dart`
+- [x] `app_root.dart` stub renders (MaterialApp → Scaffold → centered placeholder + paw icon + Esc POC FAB)
+- [x] Feature flag in `main.dart` works both ways (`CUSTOM_UI=true` ⇒ `tabby.AppRoot`, `CUSTOM_UI=false` ⇒ upstream `App()`)
 
-**Deferred** to the opening commits of **Phase 1 — Build Hardening** so that
-the first custom-code commits land alongside the build-script and toolchain
-pinning that will review them together. Phase 0's mandate ("prove the project
-is feasible before committing 8+ weeks") is already satisfied by Days 1–3
-plus the Day 2 smoke test.
+**Upstream touch in `main.dart`** — kept minimal: 1 import, 1 const, 1 helper
+function, 2 `runApp(App())` → `runApp(_rootWidget())` swaps. `flutter analyze`
+on `lib/custom/` and `lib/main.dart` reports no errors from Tabby code (the
+remaining `info`-level diagnostics are pre-existing upstream Flutter SDK
+deprecations).
 
-## Day 5 — Keyboard POC  *(deferred to Phase 1)*
+## Day 5 — Keyboard POC  *(landed mechanically in Phase 1; end-to-end verify in Phase 2)*
 
-- [ ] Custom button fired Esc on a real remote machine
-- Path: button → InputBridge → `bind.sessionInputKey('escape', ...)` → remote
-
-**Deferred** for the same reason as Day 4 — this is the first end-to-end
-exercise of the sibling-directory pattern with a real FFI call. Belongs in
-the same Phase 1 cluster of commits.
+- [x] **`InputBridge.tapKey('escape')`** wraps `bind.sessionInputKey` with the verified Day 3 signature; compiles + links cleanly. Path: scaffold FAB → `InputBridge.poc().tapKey('escape')` → `bind.sessionInputKey(...)` → Rust core.
+- [ ] **End-to-end Esc on a real remote** — *deferred to Phase 2.* The Phase 1 POC fires the FFI with a placeholder zero-UUID, which the Rust core safely ignores (no session matches). Verifying the keystroke arrives on the remote requires an active session, which requires a connection flow in the custom UI — that flow is Phase 2 work. The mechanical seam is proven; the connection-bound proof comes later.
 
 ## Decision (Days 6–7)
 
