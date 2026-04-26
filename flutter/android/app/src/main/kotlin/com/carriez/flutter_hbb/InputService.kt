@@ -91,6 +91,10 @@ class InputService : AccessibilityService() {
 
     private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
+    fun wakeUpDevice() {
+        performGlobalAction(GLOBAL_ACTION_HOME)
+    }
+
     @RequiresApi(Build.VERSION_CODES.N)
     fun onMouseInput(mask: Int, _x: Int, _y: Int) {
         val x = max(0, _x)

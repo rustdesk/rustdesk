@@ -62,6 +62,8 @@ const val VIDEO_KEY_FRAME_RATE = 30
 
 class MainService : Service() {
 
+    private val wakeRetryHandler = Handler(Looper.getMainLooper())
+
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustPointerInput(kind: Int, mask: Int, x: Int, y: Int) {
@@ -128,6 +130,7 @@ class MainService : Service() {
                     }
                     if (authorized) {
                         if (!isFileTransfer && !isStart) {
+                            wakeAndRefreshIncomingScreenIfNeeded("authorized_connection")
                             startCapture()
                         }
                         onClientAuthorizedNotification(id, type, username, peerId)
@@ -228,6 +231,41 @@ class MainService : Service() {
     private lateinit var notificationChannel: String
     private lateinit var notificationBuilder: NotificationCompat.Builder
 
+    private fun wakeScreen(reason: String) {
+        if (wakeLock.isHeld) {
+            Log.d(logTag, "WakeLock release before wake, reason:$reason")
+            wakeLock.release()
+        }
+        Log.d(logTag, "Wake screen, reason:$reason")
+        wakeLock.acquire(5000)
+    }
+
+    private fun wakeAndRefreshIncomingScreenIfNeeded(reason: String) {
+        if (powerManager.isInteractive) {
+            return
+        }
+        wakeRetryHandler.removeCallbacksAndMessages(null)
+        wakeScreen(reason)
+        wakeRetryHandler.postDelayed({
+            if (powerManager.isInteractive) {
+                Log.d(logTag, "Skip delayed wake refresh, device already interactive, reason:$reason")
+                return@postDelayed
+            }
+            // HOME works better here than faking a tap.
+            InputService.ctx?.wakeUpDevice()
+            FFI.refreshScreen()
+        }, 500)
+        wakeRetryHandler.postDelayed({
+            if (powerManager.isInteractive) {
+                Log.d(logTag, "Skip retry wake refresh, device already interactive, reason:$reason")
+                return@postDelayed
+            }
+            wakeScreen("$reason-retry")
+            InputService.ctx?.wakeUpDevice()
+            FFI.refreshScreen()
+        }, 1200)
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.d(logTag,"MainService onCreate, sdk int:${Build.VERSION.SDK_INT} reuseVirtualDisplay:$reuseVirtualDisplay")
@@ -249,6 +287,7 @@ class MainService : Service() {
     }
 
     override fun onDestroy() {
+        wakeRetryHandler.removeCallbacksAndMessages(null)
         checkMediaPermission()
         stopService(Intent(this, FloatingWindowService::class.java))
         super.onDestroy()
