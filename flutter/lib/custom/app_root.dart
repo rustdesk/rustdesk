@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'input/input_bridge.dart';
+import 'theme/app_theme.dart';
+import 'theme/tokens.dart';
 
 class AppRoot extends StatelessWidget {
   const AppRoot({super.key});
@@ -9,13 +11,7 @@ class AppRoot extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Tabby',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2563EB),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.dark,
       home: const _ScaffoldHome(),
     );
   }
@@ -28,24 +24,28 @@ class _ScaffoldHome extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Tabby')),
-      body: const Center(
+      body: Center(
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceXl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.pets, size: 80),
-              SizedBox(height: 16),
+              const Icon(Icons.pets, size: 80),
+              const SizedBox(height: AppTokens.spaceLg),
               Text(
                 'Tabby — Phase 1 scaffold mounted',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style: AppTokens.fontTitle.copyWith(
+                  color: AppTokens.colorTextHigh,
+                ),
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: AppTokens.spaceMd),
               Text(
                 'Build with --dart-define=CUSTOM_UI=false to fall back to the vanilla RustDesk UI.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: AppTokens.fontBody.copyWith(
+                  color: AppTokens.colorTextMid,
+                ),
               ),
             ],
           ),
