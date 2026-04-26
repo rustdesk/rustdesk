@@ -1,7 +1,5 @@
 # RustDesk Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working in this repository.
-
 ## Development Commands
 
 ### Build
