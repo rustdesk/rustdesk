@@ -1,30 +1,5 @@
 # RustDesk Guide
 
-## Development Commands
-
-### Build
-
-* `cargo run`
-* `cargo build --release`
-* `cargo build --features hwcodec`
-* `python3 build.py --flutter`
-* `python3 build.py --flutter --release`
-* `python3 build.py --hwcodec`
-* `python3 build.py --vram`
-
-### Flutter
-
-* `cd flutter && flutter run`
-* `cd flutter && flutter test`
-* `cd flutter && flutter build android`
-* `cd flutter && flutter build ios`
-
-### Test
-
-* `cargo test`
-
----
-
 ## Project Layout
 
 * `src/` Rust app
@@ -36,36 +11,7 @@
 * `libs/scrap/` screen capture
 * `libs/enigo/` input control
 * `libs/clipboard/` clipboard
-
----
-
-## Build Notes
-
-### Dependencies
-
-* Requires `vcpkg`
-* Set `VCPKG_ROOT`
-* Legacy UI needs Sciter library
-
-### Ignore
-
-* `target/`
-* `flutter/build/`
-* `flutter/.dart_tool/`
-
-### Feature Flags
-
-* `hwcodec`
-* `vram`
-* `flutter`
-* `unix-file-copy-paste`
-* `screencapturekit`
-
-### Config
-
-All options are in `libs/hbb_common/src/config.rs`
-
----
+* `libs/hbb_common/src/config.rs` all options
 
 ## Rust Rules
 
@@ -81,8 +27,6 @@ All options are in `libs/hbb_common/src/config.rs`
 * Do not add dependencies unless needed.
 * Keep code simple and idiomatic.
 
----
-
 ## Tokio Rules
 
 * Assume a Tokio runtime already exists.
@@ -93,15 +37,6 @@ All options are in `libs/hbb_common/src/config.rs`
 * Prefer `.await`, `tokio::spawn`, channels.
 * Use `spawn_blocking` or dedicated threads for blocking work.
 * Do not use `std::thread::sleep()` in async code.
-
-If errors like:
-
-* `Cannot start a runtime from within a runtime`
-* `Cannot block the current thread from within a runtime`
-
-Treat them as design issues and refactor flow.
-
----
 
 ## Editing Hygiene
 
