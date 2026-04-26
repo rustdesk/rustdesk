@@ -36,7 +36,7 @@
 - [x] Branch `tabby/phase-0-spike` checked out at tag `1.4.6`
 - [x] Upstream remote added: `upstream → https://github.com/rustdesk/rustdesk.git`
 - [x] hbbs / hbbr server: `rustdesk.rbv1000.win` (single host for both ID + relay). Public key + values held in 1Password (`RemoteAccess` vault → `RustDesk Server (PC - Ronen)`) and mirrored locally to `.env.local` (gitignored). Pull with `op item get 'RustDesk Server (PC - Ronen)' --vault RemoteAccess --format=json`.
-- [ ] iOS device UDID recorded: **<pending — see Day 2 instructions>**
+- [x] iOS device UDID recorded: `00008150-00115DEA1A40401C` (primary dev iPhone)
 - [ ] iOS device registered in Apple Developer portal
 - [ ] Distribution / development provisioning profile generated for `dev.ronenmars.tabby`
 
