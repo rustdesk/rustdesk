@@ -293,11 +293,12 @@ open flutter/ios/Runner.xcworkspace
   - We may *cherry-pick* specific iOS-targeted simplifications later if they prove useful, but we won't rebase.
   - The `ios` branch is a useful *reference* for "what could be simplified for iOS-only" — keep it as a research tab open during Phase 2.
 
-## Day 4 — Sibling directory  *(landed in Phase 1)*
+## Day 4 — Sibling directory  *(landed in Phase 1, verified on device)*
 
 - [x] `flutter/lib/custom/` created with `app_root.dart` + `input/input_bridge.dart`
 - [x] `app_root.dart` stub renders (MaterialApp → Scaffold → centered placeholder + paw icon + Esc POC FAB)
 - [x] Feature flag in `main.dart` works both ways (`CUSTOM_UI=true` ⇒ `tabby.AppRoot`, `CUSTOM_UI=false` ⇒ upstream `App()`)
+- [x] **Verified on real iPhone (Ronen Mars's iPhone 17 Pro, iOS 26.2):** Tabby scaffold renders as designed — AppBar, paw icon, mount-confirmation copy, Send Esc FAB.
 
 **Upstream touch in `main.dart`** — kept minimal: 1 import, 1 const, 1 helper
 function, 2 `runApp(App())` → `runApp(_rootWidget())` swaps. `flutter analyze`
@@ -305,10 +306,11 @@ on `lib/custom/` and `lib/main.dart` reports no errors from Tabby code (the
 remaining `info`-level diagnostics are pre-existing upstream Flutter SDK
 deprecations).
 
-## Day 5 — Keyboard POC  *(landed mechanically in Phase 1; end-to-end verify in Phase 2)*
+## Day 5 — Keyboard POC  *(mechanically green on device; remote-arrival verify in Phase 2)*
 
 - [x] **`InputBridge.tapKey('escape')`** wraps `bind.sessionInputKey` with the verified Day 3 signature; compiles + links cleanly. Path: scaffold FAB → `InputBridge.poc().tapKey('escape')` → `bind.sessionInputKey(...)` → Rust core.
-- [ ] **End-to-end Esc on a real remote** — *deferred to Phase 2.* The Phase 1 POC fires the FFI with a placeholder zero-UUID, which the Rust core safely ignores (no session matches). Verifying the keystroke arrives on the remote requires an active session, which requires a connection flow in the custom UI — that flow is Phase 2 work. The mechanical seam is proven; the connection-bound proof comes later.
+- [x] **Verified on real iPhone:** tap of "Send Esc" FAB invokes the FFI without crashing. App stays alive; snackbar surfaces ("FFI invoked. No active session — wire one up in Phase 2.") confirming the await on `tapKey()` resolves cleanly. The Rust core treats the placeholder zero-UUID as "no matching session" and returns silently — exactly the design.
+- [ ] **End-to-end Esc keystroke arrives on a real remote** — *deferred to Phase 2.* Requires an active session, which requires a connection flow in the custom UI. That flow is Phase 2 scope. The mechanical seam and the FFI invocation are now proven on hardware; the session wiring is the next phase.
 
 ## Decision (Days 6–7)
 
