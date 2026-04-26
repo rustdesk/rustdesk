@@ -60,14 +60,93 @@
 
 ## Day 2 — Vanilla iOS build
 
-- [ ] hbbs / hbbr reachable from device (URL / TLS verified)
-- [ ] vcpkg ports built for `arm64-ios` (libvpx, libyuv, opus, aom, ffmpeg, libjpeg-turbo)
-- [ ] Flutter SDK patched with `flutter_3.24.4_dropdown_menu_enableFilter.diff`
-- [ ] App built and signed with Tabby team ID + bundle ID
-- [ ] Deployed to device (UDID: ____)
-- [ ] Connected to remote desktop end-to-end (video + input)
-- [ ] Build time clean → IPA: ____ minutes
-- Notes / blockers: ____
+- [x] hbbs / hbbr reachable from device (`rustdesk.rbv1000.win`, single host for both)
+- [x] vcpkg ports built for `arm64-ios` (libvpx, libyuv, opus, aom, ffmpeg, libjpeg-turbo) — built into project-local `vcpkg_installed/arm64-ios/`
+- [x] Flutter SDK patched with `flutter_3.24.4_dropdown_menu_enableFilter.diff` (applied to fvm-managed `~/fvm/versions/3.24.5`)
+- [x] App built and signed with Tabby team ID `GUW6BN8X57` + bundle ID `dev.ronenmars.tabby`
+- [x] Deployed to device (UDID `00008150-00115DEA1A40401C`)
+- [x] Connected to remote desktop end-to-end (video + input verified via Mac RustDesk → iPhone Tabby through `rustdesk.rbv1000.win`)
+
+### Day 2 build invariants (must preserve into Phase 1 build script)
+
+These are the actual steps that produce a working iOS device build from a clean clone.
+The placeholders in `tabby-build-plan.md` were close but not exact — the real commands:
+
+```bash
+# 1. Clone with submodules (the manifest workspace breaks without libs/hbb_common)
+git clone --recurse-submodules <fork-url> Tabby
+# or after the fact:
+git submodule update --init --recursive
+
+# 2. Pin Flutter (committed via .fvmrc) and patch the Flutter SDK
+fvm install 3.24.5
+fvm use 3.24.5
+( cd ~/fvm/versions/3.24.5 \
+  && git apply <repo>/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff )
+
+# 3. vcpkg in manifest mode (reads vcpkg.json) — installs to <repo>/vcpkg_installed/
+~/vcpkg/vcpkg install --triplet=arm64-ios
+
+# 4. Symlink manifest install dirs into vcpkg's global "installed/" so that
+#    upstream crates (magnum-opus, hwcodec) which hardcode VCPKG_ROOT/installed/<triplet>/
+#    can find headers/libs.
+ln -s "$(pwd)/vcpkg_installed/arm64-ios" ~/vcpkg/installed/arm64-ios
+ln -s "$(pwd)/vcpkg_installed/arm64-osx" ~/vcpkg/installed/arm64-osx
+
+# 5. Generate flutter_rust_bridge bindings (Rust + Dart + iOS C header)
+cargo install flutter_rust_bridge_codegen --version 1.80.1
+PATH="$(pwd)/.fvm/flutter_sdk/bin:$PATH" \
+  flutter_rust_bridge_codegen \
+    --rust-input src/flutter_ffi.rs \
+    --dart-output flutter/lib/generated_bridge.dart \
+    --c-output flutter/ios/Runner/bridge_generated.h
+
+# 6. Resolve Flutter deps
+( cd flutter && fvm flutter pub get )
+
+# 7. Build the Rust core for iOS device. `IPHONEOS_DEPLOYMENT_TARGET=13.0` is required:
+#    cc-rs defaults to the Xcode SDK's max deployment (iOS 26.4 on Xcode 26), but rustc
+#    targets iOS 10.0 by default for `aarch64-apple-ios`, and the linker fails on
+#    `__chkstk_darwin` (introduced in iOS 13) due to the version mismatch.
+IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+  VCPKG_ROOT="$HOME/vcpkg" \
+  VCPKG_INSTALLED_ROOT="$(pwd)/vcpkg_installed" \
+  cargo build --features flutter,hwcodec --release --target aarch64-apple-ios --lib
+# → target/aarch64-apple-ios/release/liblibrustdesk.a (~140 MB)
+
+# 8. Build the iOS app bundle (unsigned — Xcode signs)
+( cd flutter && fvm flutter build ios --release --no-codesign )
+
+# 9. Open Xcode, configure team + bundle ID, run
+open flutter/ios/Runner.xcworkspace
+# In Xcode:
+#   - Runner target → Signing & Capabilities: team = GUW6BN8X57, bundle = dev.ronenmars.tabby
+#   - Edit Scheme → Run → Build Configuration: Release  (Debug is unusably slow on device)
+#   - Destination dropdown: pick the *physical* device (USB icon), not the simulator
+#   - ▶
+```
+
+### Day 2 — observations / surprises
+
+- vcpkg's manifest mode installs to `<repo>/vcpkg_installed/<triplet>/`, but `magnum-opus` and `hwcodec` (both rustdesk-org git deps) hardcode `~/vcpkg/installed/<triplet>/` (only respect `VCPKG_ROOT`, not `VCPKG_INSTALLED_ROOT`). Symlink is the cleanest workaround. Phase 1 build script must do this automatically.
+- `IPHONEOS_DEPLOYMENT_TARGET=13.0` is mandatory at cargo build time. Without it the link fails on `__chkstk_darwin`.
+- Xcode default destination after Flutter build is the iOS *Simulator* with the same model name as a connected device. Easy to miss. Linker error gives it away (`Building for 'iOS-simulator'` while the static lib was built for `'iOS'`).
+- **Debug** Run configuration on physical device is unusably slow for a heavy Flutter app like RustDesk (white screen for 3+ minutes — Dart kernel interpreter). **Release** is required for any actual testing on device.
+- Clone-without-submodules makes `flutter_rust_bridge_codegen` fail with a confusing cargo workspace error (`failed to read libs/hbb_common/Cargo.toml`). Must `git submodule update --init --recursive` before any cargo or codegen step.
+- The Xcode build emits two warnings about `Info.plist` missing `NSBonjourServices` / `NSLocalNetworkUsageDescription`. These didn't actually block our smoke test (peer-to-peer over the relay does *not* need local-network privacy), but if/when we want LAN discovery to work, those keys must be added to `flutter/ios/Runner/Info.plist`. Deferred.
+- Upstream `Info.plist` already has `Photo Library`, `Camera`, and `Wi-Fi Information` privacy keys — those came along for free.
+
+### Day 2 — clean build time on this machine (M-series Mac, cold)
+
+| Stage | Time |
+|---|---|
+| vcpkg arm64-ios manifest install | 6.9 min |
+| `flutter pub get` | < 30 s |
+| `flutter_rust_bridge_codegen` | ~30 s |
+| `cargo build --release --target aarch64-apple-ios` (cold) | 2 min 19 s |
+| `flutter build ios --release --no-codesign` | 7 min 47 s (mostly Xcode build = 6 min 47 s) |
+| Xcode Release rebuild + sign + install on device | ~3 min |
+| **Total clean → installed** | **~20 min** |
 
 ## Day 3 — Reconnaissance
 
@@ -130,8 +209,17 @@
 
 ## Decision (Days 6–7)
 
-- [ ] **GREEN** — proceed to Phase 1
-- [ ] **YELLOW** — proceed with reduced scope: ____
+- [x] **GREEN** — proceed to Phase 1
+- [ ] **YELLOW** — proceed with reduced scope
 - [ ] **RED** — abandon / revisit alternatives
 
-Reason: ____
+**Reason:** Day 2 hard gate cleared on the first end-to-end attempt. Vanilla
+RustDesk (`1.4.6`) builds cleanly from a clone, signs against the Tabby
+Apple Developer team, installs on a registered iPhone, and connects through
+the user's self-hosted `rustdesk.rbv1000.win` relay with both video and
+input working. The build pipeline is non-trivial (the eight invariants above
+are the price of admission) but every step is deterministic and scriptable;
+nothing in the chain depends on undocumented behavior or upstream changes
+we don't control. The sibling-directory pattern from §4 of the plan is
+viable as written. Day 3 reconnaissance (FFI signature audit) is the
+remaining Phase 0 work and unblocks Phases 1 and beyond.
