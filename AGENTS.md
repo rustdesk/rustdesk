@@ -98,6 +98,14 @@ All configurations or options are under `libs/hbb_common/src/config.rs` file, 4 
 - Lock acquisition may use `unwrap()` only when the locking API makes that the practical option and the failure mode is poison handling rather than normal control flow.
 - Outside those exceptions, propagate errors, handle them explicitly, or use safer fallbacks instead of `unwrap()` and `expect()`.
 
+### Tokio Runtime Constraints
+
+- In a single async execution context, keep one runtime owner per call chain.
+- Never nest runtimes or block a Tokio runtime thread from code already driven by Tokio.
+- Library and helper layers must not start their own runtime or hide runtime-blocking behavior.
+- Keep async paths non-blocking; if blocking work is unavoidable, isolate it behind an explicit blocking boundary (for example, a blocking pool or a dedicated thread).
+- Treat runtime-nesting errors, errors caused by blocking in an async runtime context, or hangs (for example, `Cannot start a runtime from within a runtime`, `Cannot block the current thread from within a runtime`, or `Cannot drop a runtime in a context where blocking is not allowed`) as design bugs and refactor control flow instead of adding fallback logic.
+
 ## Editing Hygiene
 
 - Do not introduce formatting-only changes.
