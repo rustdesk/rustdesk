@@ -426,15 +426,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                               }
                               return Container(
                                 color: MyTheme.canvasColor,
-                                child: RawTouchGestureDetectorRegion(
-                                  // Keep touch gestures available even after an
-                                  // external mouse or trackpad is detected on
-                                  // iPad. Pointer input still flows through the
-                                  // session body listener, while this wrapper
-                                  // preserves pinch / pan touch gestures.
-                                  child: getBodyForMobile(),
-                                  ffi: gFFI,
-                                ),
+                                child:
+                                    Obx(() => inputModel.isPhysicalMouse.value
+                                        ? getBodyForMobile()
+                                        : RawTouchGestureDetectorRegion(
+                                            child: getBodyForMobile(),
+                                            ffi: gFFI,
+                                          )),
                               );
                             }),
                           ),
