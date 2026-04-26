@@ -293,18 +293,26 @@ open flutter/ios/Runner.xcworkspace
   - We may *cherry-pick* specific iOS-targeted simplifications later if they prove useful, but we won't rebase.
   - The `ios` branch is a useful *reference* for "what could be simplified for iOS-only" — keep it as a research tab open during Phase 2.
 
-## Day 4 — Sibling directory
+## Day 4 — Sibling directory  *(deferred to Phase 1)*
 
 - [ ] `flutter/lib/custom/` created (stub)
 - [ ] `app_root.dart` stub renders
 - [ ] Feature flag in `main.dart` works both ways (`CUSTOM_UI=true` / `false`)
-- Notes: ____
 
-## Day 5 — Keyboard POC
+**Deferred** to the opening commits of **Phase 1 — Build Hardening** so that
+the first custom-code commits land alongside the build-script and toolchain
+pinning that will review them together. Phase 0's mandate ("prove the project
+is feasible before committing 8+ weeks") is already satisfied by Days 1–3
+plus the Day 2 smoke test.
+
+## Day 5 — Keyboard POC  *(deferred to Phase 1)*
 
 - [ ] Custom button fired Esc on a real remote machine
-- Path: button → InputBridge → `bind.____` → remote
-- Notes / surprises: ____
+- Path: button → InputBridge → `bind.sessionInputKey('escape', ...)` → remote
+
+**Deferred** for the same reason as Day 4 — this is the first end-to-end
+exercise of the sibling-directory pattern with a real FFI call. Belongs in
+the same Phase 1 cluster of commits.
 
 ## Decision (Days 6–7)
 
