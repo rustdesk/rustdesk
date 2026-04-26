@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -15,6 +16,7 @@ import 'package:get/get.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
+import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
@@ -697,6 +699,38 @@ class InputModel {
     }
   }
 
+  // Safe: this only re-dispatches synthesized Shift key-up events.
+  // The key-up path clears the tracked Shift state so this does not loop.
+  void _releaseTrackedShiftKeyEventIfNeeded() {
+    final leftShift = toReleaseKeys.lastLShiftKeyEvent;
+    final rightShift = toReleaseKeys.lastRShiftKeyEvent;
+    if (leftShift != null) {
+      handleKeyEvent(leftShift);
+    }
+    if (rightShift != null) {
+      handleKeyEvent(rightShift);
+    }
+  }
+
+  // Safe: this only re-dispatches synthesized Shift key-up events.
+  // The raw key-up path clears the tracked Shift state so this does not loop.
+  void _releaseTrackedRawShiftKeyEventIfNeeded() {
+    final leftShift = toReleaseRawKeys.lastLShiftKeyEvent;
+    final rightShift = toReleaseRawKeys.lastRShiftKeyEvent;
+    if (leftShift != null) {
+      handleRawKeyEvent(RawKeyUpEvent(
+        data: leftShift.data,
+        character: leftShift.character,
+      ));
+    }
+    if (rightShift != null) {
+      handleRawKeyEvent(RawKeyUpEvent(
+        data: rightShift.data,
+        character: rightShift.character,
+      ));
+    }
+  }
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
@@ -751,6 +785,27 @@ class InputModel {
       toReleaseRawKeys.updateKeyUp(key, e);
     }
 
+    // On some mobile soft-keyboard paths, Flutter may leave cached Shift state
+    // set even though the current raw key event is not shifted anymore.
+    if (e is RawKeyDownEvent &&
+        shouldReleaseStaleMobileShift(
+          isMobile: isMobile,
+          cachedShiftPressed: shift,
+          actualShiftPressed: e.isShiftPressed,
+          logicalKey: e.logicalKey,
+          hasTrackedShiftKeyDown: toReleaseRawKeys.lastLShiftKeyEvent != null ||
+              toReleaseRawKeys.lastRShiftKeyEvent != null,
+        )) {
+      if (kDebugMode) {
+        debugPrint(
+          'input: releasing stale mobile Shift before replaying tracked raw '
+          'key-up (logicalKey=${e.logicalKey.keyLabel}, '
+          'actualShiftPressed=${e.isShiftPressed}, cachedShiftPressed=$shift)',
+        );
+      }
+      _releaseTrackedRawShiftKeyEventIfNeeded();
+    }
+
     // * Currently mobile does not enable map mode
     if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
       mapKeyboardModeRaw(e, iosCapsLock);
@@ -794,6 +849,8 @@ class InputModel {
       iosCapsLock = _getIosCapsFromCharacter(e);
     }
 
+    // Update cached modifier state before sending the event. The stale mobile
+    // Shift release check below relies on this cached state.
     if (e is KeyUpEvent) {
       handleKeyUpEventModifiers(e);
     } else if (e is KeyDownEvent) {
@@ -831,6 +888,21 @@ class InputModel {
         }
       }
     }
+
+    // On some mobile soft-keyboard paths, Flutter may leave cached Shift state
+    // set even though the current key event is not shifted anymore.
+    if (e is KeyDownEvent &&
+        shouldReleaseStaleMobileShift(
+          isMobile: isMobile,
+          cachedShiftPressed: shift,
+          actualShiftPressed: HardwareKeyboard.instance.isShiftPressed,
+          logicalKey: e.logicalKey,
+          hasTrackedShiftKeyDown: toReleaseKeys.lastLShiftKeyEvent != null ||
+              toReleaseKeys.lastRShiftKeyEvent != null,
+        )) {
+      _releaseTrackedShiftKeyEventIfNeeded();
+    }
+
     final isDesktopAndMapMode =
         isDesktop || (isWebDesktop && keyboardMode == kKeyMapMode);
     if (isMobileAndMapMode || isDesktopAndMapMode) {
