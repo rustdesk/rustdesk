@@ -53,12 +53,19 @@ fi
 PATCH_PATH="$REPO_ROOT/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
 PATCHED_MARKER="$HOME/fvm/versions/$FLUTTER_VERSION/.tabby-patched"
 if [ -f "$PATCH_PATH" ] && [ ! -f "$PATCHED_MARKER" ]; then
-  log "applying Flutter dropdown_menu patch to $FLUTTER_VERSION"
-  ( cd "$HOME/fvm/versions/$FLUTTER_VERSION" \
-    && git apply "$PATCH_PATH" \
-    && touch "$PATCHED_MARKER" )
+  if ( cd "$HOME/fvm/versions/$FLUTTER_VERSION" && git apply --check "$PATCH_PATH" ) 2>/dev/null; then
+    log "applying Flutter dropdown_menu patch to $FLUTTER_VERSION"
+    ( cd "$HOME/fvm/versions/$FLUTTER_VERSION" \
+      && git apply "$PATCH_PATH" \
+      && touch "$PATCHED_MARKER" )
+  elif ( cd "$HOME/fvm/versions/$FLUTTER_VERSION" && git apply --reverse --check "$PATCH_PATH" ) 2>/dev/null; then
+    log "Flutter patch already applied; recording marker"
+    touch "$PATCHED_MARKER"
+  else
+    die "Flutter patch neither applies nor is already applied — Flutter SDK at $HOME/fvm/versions/$FLUTTER_VERSION may have unexpected state"
+  fi
 else
-  log "Flutter patch already applied (or not needed)"
+  log "Flutter patch already applied (marker present)"
 fi
 
 # ── 3. vcpkg manifest install + symlinks ─────────────────────────────────────
