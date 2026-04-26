@@ -2,6 +2,7 @@
 
 ## Project Layout
 
+### Directory Structure
 * `src/` Rust app
 * `src/server/` audio / clipboard / input / video / network
 * `src/platform/` platform-specific code
@@ -12,6 +13,20 @@
 * `libs/enigo/` input control
 * `libs/clipboard/` clipboard
 * `libs/hbb_common/src/config.rs` all options
+
+### Key Components
+- **Remote Desktop Protocol**: Custom protocol implemented in `src/rendezvous_mediator.rs` for communicating with rustdesk-server
+- **Screen Capture**: Platform-specific screen capture in `libs/scrap/`
+- **Input Handling**: Cross-platform input simulation in `libs/enigo/`
+- **Audio/Video Services**: Real-time audio/video streaming in `src/server/`
+- **File Transfer**: Secure file transfer implementation in `libs/hbb_common/`
+
+### UI Architecture
+- **Legacy UI**: Sciter-based (deprecated) - files in `src/ui/`
+- **Modern UI**: Flutter-based - files in `flutter/`
+  - Desktop: `flutter/lib/desktop/`
+  - Mobile: `flutter/lib/mobile/`
+  - Shared: `flutter/lib/common/` and `flutter/lib/models/`
 
 ## Rust Rules
 
