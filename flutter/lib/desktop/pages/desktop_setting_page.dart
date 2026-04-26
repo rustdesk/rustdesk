@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
+import 'package:flutter_hbb/common/widgets/easy_access.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
@@ -844,7 +844,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               child: Column(children: [
                 permissions(context),
                 password(context),
-                easyAccess(context),
+                if (isAllowEasyAccess()) easyAccess(context),
                 _Card(title: '2FA', children: [tfa()]),
                 if (!isChangeIdDisabled())
                   _Card(title: 'ID', children: [changeId()]),
@@ -1239,7 +1239,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   Widget easyAccess(BuildContext context) {
     return _Card(title: 'Easy Access', children: [
       Text(
-        'View users and groups with easy access permission for this device.',
+        easyAccessDescriptionText,
       ).marginOnly(
         left: _kContentHMargin,
         top: 12,
@@ -1260,63 +1260,12 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         ),
         content: SizedBox(
           width: 430,
-          child: FutureBuilder<List<Map<String, dynamic>>>(
-            future: _fetchEasyAccessManagers(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(
-                  child: CircularProgressIndicator(),
-                ).marginAll(20);
-              }
-
-              final entries = (snapshot.data ?? const <Map<String, dynamic>>[])
-                  .map((user) => Map<String, dynamic>.from(user))
-                  .toList();
-              if (entries.isEmpty) {
-                return Text('No easy access managers').marginAll(20);
-              }
-
-              final users = _mergeEasyAccessEntriesByName(
-                entries
-                    .where((entry) => _isEasyAccessUserType(entry['type']))
-                    .toList(),
-              );
-              final userGroups = _mergeEasyAccessEntriesByName(
-                entries
-                    .where((entry) => _isEasyAccessUserGroupType(entry['type']))
-                    .toList(),
-              );
-              final theme = Theme.of(context);
-
-              return DefaultTabController(
-                length: 2,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TabBar(
-                      labelColor: theme.colorScheme.primary,
-                      unselectedLabelColor: theme.textTheme.bodyMedium?.color,
-                      tabs: const [
-                        Tab(text: 'Users'),
-                        Tab(text: 'User Groups'),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 190,
-                      child: TabBarView(
-                        children: [
-                          _buildEasyAccessTable(context, users, 'No users'),
-                          _buildEasyAccessTable(
-                            context,
-                            userGroups,
-                            'No user groups',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+          child: EasyAccessContent(
+            expandTabView: false,
+            entryBuilder: (context, entries, emptyText) {
+              return EasyAccessTable(
+                entries: entries,
+                emptyText: emptyText,
               );
             },
           ),
@@ -1325,103 +1274,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         onCancel: close,
       );
     });
-  }
-
-  Widget _buildEasyAccessTable(
-    BuildContext context,
-    List<Map<String, dynamic>> entries,
-    String emptyText,
-  ) {
-    if (entries.isEmpty) {
-      return Text(emptyText).marginAll(20);
-    }
-
-    final theme = Theme.of(context);
-    final borderColor = theme.dividerColor;
-    final headerColor = theme.colorScheme.surfaceVariant;
-    final headerTextStyle = theme.textTheme.bodyMedium?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-      fontWeight: FontWeight.bold,
-    );
-
-    return SingleChildScrollView(
-      child: Table(
-        border: TableBorder.all(color: borderColor),
-        children: [
-          TableRow(
-            decoration: BoxDecoration(color: headerColor),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text('Name', style: headerTextStyle),
-              ),
-            ],
-          ),
-          ...entries.map(
-            (entry) => TableRow(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Text(entry['name'] ?? ''),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Map<String, dynamic>> _mergeEasyAccessEntriesByName(
-    List<Map<String, dynamic>> entries,
-  ) {
-    final merged = <String, Map<String, dynamic>>{};
-    for (final entry in entries) {
-      final name = (entry['name'] ?? '').toString().trim();
-      if (name.isEmpty) {
-        continue;
-      }
-      final key = name.toLowerCase();
-      merged.putIfAbsent(key, () {
-        final normalizedEntry = Map<String, dynamic>.from(entry);
-        normalizedEntry['name'] = name;
-        return normalizedEntry;
-      });
-    }
-
-    final deduped = merged.values.toList();
-    deduped.sort((a, b) => (a['name'] ?? '').toString().toLowerCase().compareTo(
-          (b['name'] ?? '').toString().toLowerCase(),
-        ));
-    return deduped;
-  }
-
-  bool _isEasyAccessUserGroupType(dynamic type) => type == 1 || type == 3;
-
-  bool _isEasyAccessUserType(dynamic type) => type == 2 || type == 4;
-
-  Future<List<Map<String, dynamic>>> _fetchEasyAccessManagers() async {
-    try {
-      final authBody = await bind.mainGetEasyAccessDeviceAuth();
-      if (authBody.isEmpty) return [];
-
-      final url = await bind.mainGetApiServer();
-      if (url.isEmpty) return [];
-
-      final response = await http.post(
-        Uri.parse('$url/api/devices/easy-access-managers'),
-        headers: {'Content-Type': 'application/json'},
-        body: authBody,
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.cast<Map<String, dynamic>>();
-      }
-    } catch (e) {
-      debugPrint('Failed to fetch easy access managers: $e');
-    }
-    return [];
   }
 
   Widget more(BuildContext context) {

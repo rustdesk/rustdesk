@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/easy_access.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:get/get.dart';
@@ -678,6 +679,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     final disabledSettings = bind.isDisableSettings();
     final hideSecuritySettings =
         bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) == 'Y';
+    final canShowEasyAccess = isAndroid &&
+        !disabledSettings &&
+        !outgoingOnly &&
+        !hideSecuritySettings &&
+        isAllowEasyAccess();
     final settings = SettingsList(
       sections: [
         customClientSection,
@@ -917,6 +923,24 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               SettingsTile(
                 title: Text(translate("Directory")),
                 description: Text(bind.mainVideoSaveDirectory(root: false)),
+              ),
+            ],
+          ),
+        if (canShowEasyAccess)
+          SettingsSection(
+            title: Text(translate('Easy Access')),
+            tiles: [
+              SettingsTile(
+                title: Text(translate('View users and groups')),
+                description: Text(
+                  translate(easyAccessDescriptionText),
+                ),
+                trailing: Icon(Icons.arrow_forward_ios),
+                onPressed: (context) {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) {
+                    return const _EasyAccessPage();
+                  }));
+                },
               ),
             ],
           ),
@@ -1233,6 +1257,32 @@ class __DisplayPageState extends State<_DisplayPage> {
                   key: key, value: b ? 'Y' : defaultOptionNo);
               setState(() {});
             },
+    );
+  }
+}
+
+class _EasyAccessPage extends StatelessWidget {
+  const _EasyAccessPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: Icon(Icons.arrow_back_ios)),
+        title: Text(translate('Easy Access')),
+        centerTitle: true,
+      ),
+      body: EasyAccessContent(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        entryBuilder: (context, entries, emptyText) {
+          return EasyAccessNameList(
+            entries: entries,
+            emptyText: emptyText,
+          );
+        },
+      ),
     );
   }
 }
