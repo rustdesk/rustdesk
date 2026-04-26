@@ -23,6 +23,8 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:flutter_hbb/custom/app_root.dart' as tabby;
+
 import 'common.dart';
 import 'consts.dart';
 import 'mobile/pages/home_page.dart';
@@ -31,6 +33,10 @@ import 'models/platform_model.dart';
 
 import 'package:flutter_hbb/plugin/handlers.dart'
     if (dart.library.html) 'package:flutter_hbb/web/plugin/handlers.dart';
+
+const _kUseCustomUI =
+    bool.fromEnvironment('CUSTOM_UI', defaultValue: true);
+Widget _rootWidget() => _kUseCustomUI ? const tabby.AppRoot() : App();
 
 /// Basic window and launch properties.
 int? kWindowId;
@@ -145,7 +151,7 @@ void runMainApp(bool startService) async {
   }
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
-  runApp(App());
+  runApp(_rootWidget());
 
   bool? alwaysOnTop;
   if (isDesktop) {
@@ -185,7 +191,7 @@ void runMobileApp() async {
   draggablePositions.load();
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
-  runApp(App());
+  runApp(_rootWidget());
   await initUniLinks();
 }
 
