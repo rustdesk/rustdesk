@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -718,6 +719,13 @@ class InputModel {
           hasTrackedShiftKeyDown: toReleaseRawKeys.lastLShiftKeyEvent != null ||
               toReleaseRawKeys.lastRShiftKeyEvent != null,
         )) {
+      if (kDebugMode) {
+        debugPrint(
+          'input: releasing stale mobile Shift before replaying tracked raw '
+          'key-up (logicalKey=${e.logicalKey.keyLabel}, '
+          'actualShiftPressed=${e.isShiftPressed}, cachedShiftPressed=$shift)',
+        );
+      }
       _releaseTrackedRawShiftKeyEventIfNeeded();
     }
 
