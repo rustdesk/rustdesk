@@ -150,49 +150,148 @@ open flutter/ios/Runner.xcworkspace
 
 ## Day 3 — Reconnaissance
 
-> The most important day. Replace every "____" below with the **actual** signature
-> read from the cloned repo, not the placeholder snippets in `tabby-build-plan.md`.
+> Verified against `1.4.6`. The placeholders in `tabby-build-plan.md` were
+> close but had quirks — these are the actual signatures, paths, and names
+> that the production code uses today.
 
 ### FFI: key input
 
-- Function name: ____
-- File path (Dart side): ____
-- File path (Rust side): ____
-- Signature:
+- **Function name (Rust)**: `session_input_key`
+- **Function name (Dart, generated)**: `sessionInputKey`
+- **Rust file**: `src/flutter_ffi.rs:628`
+- **Dart abstract / impl**: `flutter/lib/generated_bridge.dart:366` (abstract) and `:3059` (impl)
+- **Existing Dart wrapper** (do **not** reinvent — but Tabby's `InputBridge` will still call `bind.*` directly per plan §3.1, to keep the FFI seam single): `InputModel.inputKey()` at `flutter/lib/models/input_model.dart:870` calls `bind.sessionInputKey(...)`.
+- **Signature** — matches the build plan placeholder exactly:
+  ```rust
+  // src/flutter_ffi.rs:628
+  pub fn session_input_key(
+      session_id: SessionID,
+      name: String,
+      down: bool,
+      press: bool,
+      alt: bool,
+      ctrl: bool,
+      shift: bool,
+      command: bool,
+  )
+  ```
   ```dart
-  // paste here
+  // flutter/lib/generated_bridge.dart
+  Future<void> sessionInputKey({
+    required UuidValue sessionId,
+    required String name,
+    required bool down,
+    required bool press,
+    required bool alt,
+    required bool ctrl,
+    required bool shift,
+    required bool command,
+    dynamic hint,
+  });
   ```
 
 ### FFI: string input
 
-- Function name: ____
-- Signature: ____
+- **Function name (Rust)**: `session_input_string`
+- **Function name (Dart)**: `sessionInputString`
+- **Rust file**: `src/flutter_ffi.rs:644`
+- **Signature**:
+  ```rust
+  pub fn session_input_string(session_id: SessionID, value: String)
+  ```
+  ```dart
+  Future<void> sessionInputString({
+    required UuidValue sessionId,
+    required String value,
+    dynamic hint,
+  });
+  ```
+- **Used for**: bulk string injection — Hebrew / IME composition / pasted text. No modifier handling at this layer.
 
 ### FFI: mouse / scroll
 
-- Function name: ____
-- Signature: ____
+- **Function name (Rust)**: `session_send_mouse`
+- **Function name (Dart)**: `sessionSendMouse`
+- **Rust file**: `src/flutter_ffi.rs:1843`
+- **Signature**:
+  ```rust
+  pub fn session_send_mouse(session_id: SessionID, msg: String)
+  ```
+  ```dart
+  Future<void> sessionSendMouse({
+    required UuidValue sessionId,
+    required String msg,
+    dynamic hint,
+  });
+  ```
+- **Wire format**: `msg` is a JSON-encoded `HashMap<String, String>`. Recognised keys include `type` (`"wheel"`, `"trackpad"`, `"down"`, `"up"`, `"move"`), `x`, `y`, `buttons`, `relative_mouse_mode`, etc. Plan's `{type:"wheel", x, y}` payload is correct for our 2-finger scroll. Note: there's a *relative-mouse-mode marker* at `:1849` — Flutter-only filtering, irrelevant for our scroll flow but worth knowing exists.
 
 ### Canonical key names
 
-- Source enum / file: ____
-- Names (full enumerated set):
-  - ____
+- **Source**: `libs/hbb_common/protos/message.proto:209` — the `ControlKey` protobuf enum is the authoritative set of named (non-character) keys.
+- **All current values** (extract — full list in the proto):
+  ```
+  Unknown(0)  Alt(1)  Backspace(2)  CapsLock(3)  Control(4)  Delete(5)
+  DownArrow(6)  End(7)  Escape(8)  F1..F12(9-20)  Home(21)  LeftArrow(22)
+  Meta(23)  Option(24, deprecated→Alt)  PageDown(25)  PageUp(26)  Return(27)
+  RightArrow(28)  Shift(29)  Space(30)  Tab(31)  UpArrow(32)
+  Numpad0..9(33-42)  Cancel(43)  Clear(44)  Menu(45, deprecated→Alt)
+  Pause(46)  Kana/Hangul/Junja/Final/Hanja/Kanji/Convert(47-53)
+  Select(54)  Print(55)  Execute(56)  Snapshot(57)  Insert(58)
+  Help(59)  Sleep(60)  Separator(61)  Scroll(62)  NumLock(63)
+  RWin(64)  Apps(65)  Multiply/Add/Subtract/Decimal/Divide(66-70)
+  Equals(71)  NumpadEnter(72)  RShift/RControl/RAlt(73-75)
+  VolumeMute/Up/Down(76-78)  Power(79)
+  CtrlAltDel(100)  LockScreen(101)
+  ```
+- **Name string form passed through `session_input_key`**: not raw enum names. Two forms observed in upstream call-sites:
+  1. **Lowercase descriptive** for our use case: e.g. `"escape"`, `"tab"`, `"control"`, `"alt"`, `"meta"`, `"shift"`, `"backspace"`, `"return"`, `"left"`, `"right"`, `"up"`, `"down"`. The matching is in `src/keyboard.rs` (`name_to_key`-style logic).
+  2. **`VK_*` prefixed form** for some keys: `flutter/lib/mobile/pages/remote_page.dart:279` uses `inputKey('VK_BACK')` for backspace from the IME; `:978` uses `inputKey('VK_$name')` from gesture-help. These are Windows VK_ codes the Rust core also resolves.
+- **Tabby strip mapping** — for our 8 power keys, the lowercase descriptive form (option 1) is the safe pick:
+  - `escape`, `tab`, `control`, `alt`, `meta`, `backspace`, `left`, `down`, `up`, `right`.
+- **TODO before Phase 3 implementation**: read `name_to_key` in `src/keyboard.rs` (or wherever the name string is decoded into `rdev::Key` / `ControlKey`) and confirm the exact accepted strings, especially for `meta` vs `command` vs `super`.
 
-### Existing keyboard overlay widget
+### Existing keyboard overlay widget(s)
 
-- File: ____
-- Notes: ____
+- **`flutter/lib/mobile/widgets/gesture_help.dart`** — a *gesture tutorial* overlay (taps explained, two-finger tap, etc.), not a power-keys strip. Conditional render via `_showGestureHelp` flag in `remote_page.dart`. Tabby's strip will replace this slot or live alongside it.
+- **`flutter/lib/mobile/widgets/floating_mouse.dart` + `floating_mouse_widgets.dart`** — a floating on-screen mouse cursor for touch input. Distinct from the keyboard strip; we leave this alone for v1 (it's how mouse interaction currently works on iOS).
+- **`flutter/lib/common/widgets/toolbar.dart`** — *desktop* toolbar (window controls etc.). Not relevant on iOS.
+- **There is no current "power-keys strip" widget** in upstream. Tabby's `PowerStrip` is the first.
 
-### Remote page widget (the mounting point for `PowerStrip`)
+### Remote page widget (mount point for `PowerStrip`)
 
-- File: ____
-- Notes: ____
+- **File**: `flutter/lib/mobile/pages/remote_page.dart`
+- **Layout**: builds a `Scaffold` (line 386) with:
+  - `body` = the remote canvas (image stream + gesture detector)
+  - `bottomNavigationBar` (line 416) = `Obx(() => Stack(...))` showing the bottom UI based on observable state
+  - `floatingActionButton` (line ~389) = the show/hide toggle
+- **Existing bottom widget logic** at `_bottomWidget()` (line 369):
+  ```dart
+  Widget _bottomWidget() => _showGestureHelp
+      ? getGestureHelp()
+      : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
+          ? getBottomAppBar()
+          : Offstage());
+  ```
+- **Tabby integration plan**: The cleanest sibling-directory mount is to **not** edit `remote_page.dart` directly. Instead, the `app_root.dart` feature flag (per plan §4.1) routes the entire app to `custom/screens/remote_session_screen.dart` when `CUSTOM_UI=true`, which builds its own `Scaffold` and embeds upstream's `RemoteCanvas` (or equivalent) underneath the Tabby `PowerStrip` overlay. This keeps `flutter/lib/mobile/pages/remote_page.dart` untouched.
+- **Caveat**: extracting the canvas/render layer from `remote_page.dart` may require importing helpers (e.g. `_ImagePaint`, `RemoteMenubarState` etc.). If those are private (`_`-prefixed) we either (a) live with re-implementing the wrapping, or (b) accept a single targeted upstream edit to expose them. Decide in Phase 2.
 
 ### Cross-check upstream `ios` branch
 
-- Diff `upstream/ios` vs `1.4.6` for any FFI / Flutter changes:
-- Findings: ____
+- **Tip commit**: `a92d2301d9eb55e203fe5a90351d277430be4987` (vs `1.4.6` = `1abc897c4`)
+- **Diff scope** (`git diff --stat 1.4.6 upstream/ios -- flutter/lib/ flutter/ios/ src/flutter_ffi.rs libs/hbb_common/`):
+  - 73 files changed, **+1,500 / −9,672** — i.e. the `ios` branch is a *deletion* fork. It strips desktop-only paths.
+  - Notable removals from `flutter/lib/`:
+    - `models/relative_mouse_model.dart` — entire file deleted (1,061 lines)
+    - `models/relative_mouse_accumulator.dart` — entire file deleted
+    - `models/model.dart` shrinks by ~863 lines
+    - `models/input_model.dart` shrinks by ~557 lines
+  - `src/flutter_ffi.rs` shrinks by ~425 lines (FFI surface narrowed)
+  - `flutter/lib/web/bridge.dart` rewritten substantially
+- **Tabby decision**: **stay on `1.4.6`, do NOT base on `upstream/ios`**.
+  - The `ios` branch is too divergent (and continues to diverge) to be a stable base. Merging future stable tags forward becomes painful.
+  - We may *cherry-pick* specific iOS-targeted simplifications later if they prove useful, but we won't rebase.
+  - The `ios` branch is a useful *reference* for "what could be simplified for iOS-only" — keep it as a research tab open during Phase 2.
 
 ## Day 4 — Sibling directory
 
