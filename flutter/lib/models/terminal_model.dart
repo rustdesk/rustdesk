@@ -32,20 +32,21 @@ class TerminalModel with ChangeNotifier {
   // View ready state: true when terminal has valid dimensions, safe to write
   bool _terminalViewReady = false;
 
-  bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
-
   void Function(int w, int h, int pw, int ph)? onResizeExternal;
 
   Future<void> _handleInput(String data) async {
-    // If we press the `Enter` button on Android,
-    // `data` can be '\r' or '\n' when using different keyboards.
-    // Android -> Windows. '\r' works, but '\n' does not. '\n' is just a newline.
-    // Android -> Linux. Both '\r' and '\n' work as expected (execute a command).
-    // So when we receive '\n', we may need to convert it to '\r' to ensure compatibility.
-    // Desktop -> Desktop works fine.
-    // Check if we are on mobile or web(mobile), and convert '\n' to '\r'.
+    // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
+    // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
+    // - Peer Windows: '\r' works, '\n' is just a newline (https://github.com/rustdesk/rustdesk/pull/14736).
+    // - Peer Linux: canonical-mode shells accept both, but raw-mode apps
+    //   (readline, prompt_toolkit, vim, TUI frameworks) expect '\r'.
+    // - Peer macOS: same as Linux, raw-mode apps expect '\r'
+    //   (https://github.com/rustdesk/rustdesk/issues/14907).
+    // So on mobile / web-mobile, always normalize a lone '\n' to '\r'.
+    // We deliberately do not touch multi-character payloads (e.g. pasted text)
+    // so embedded newlines in pasted content are preserved.
     final isMobileOrWebMobile = (isMobile || (isWeb && !isWebDesktop));
-    if (isMobileOrWebMobile && isPeerWindows && data == '\n') {
+    if (isMobileOrWebMobile && data == '\n') {
       data = '\r';
     }
     if (_terminalOpened) {
