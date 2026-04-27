@@ -1337,7 +1337,6 @@ class InputModel {
   /// even when the position is far (e.g., near the top edge).
   bool shouldIgnoreTouchAfterMouse(ui.Offset pos, int nowMs) {
     if (!isIOS) return false;
-    if (shouldIgnoreTouchTap(pos)) return true;
     const int kTouchAfterMouseWindowMs = 700;
     final dt = nowMs - _lastMouseDownTimeMs;
     return dt >= 0 && dt < kTouchAfterMouseWindowMs;
