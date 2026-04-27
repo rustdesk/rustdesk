@@ -466,35 +466,6 @@ pub fn is_support_multi_clipboard(peer_version: &str, peer_platform: &str) -> bo
     true
 }
 
-/// Returns the first plain-text clipboard entry from a multi-clipboard payload.
-pub fn get_first_text_clipboard(multi_clipboards: &MultiClipboards) -> Option<Clipboard> {
-    multi_clipboards
-        .clipboards
-        .iter()
-        .find(|c| c.format.enum_value() == Ok(hbb_common::message_proto::ClipboardFormat::Text))
-        .cloned()
-}
-
-/// Decodes a plain-text clipboard entry, including RustDesk's compressed payloads.
-pub fn decode_text_clipboard(clipboard: &Clipboard) -> Option<String> {
-    if clipboard.format.enum_value() != Ok(hbb_common::message_proto::ClipboardFormat::Text) {
-        return None;
-    }
-    let content = if clipboard.compress {
-        hbb_common::compress::decompress(&clipboard.content)
-    } else {
-        clipboard.content.to_vec()
-    };
-    String::from_utf8(content).ok()
-}
-
-/// Extracts and decodes the first plain-text entry from a multi-clipboard payload.
-pub fn decode_multi_clipboards_text(multi_clipboards: &MultiClipboards) -> Option<String> {
-    get_first_text_clipboard(multi_clipboards)
-        .as_ref()
-        .and_then(decode_text_clipboard)
-}
-
 #[cfg(not(target_os = "android"))]
 pub fn get_current_clipboard_msg(
     peer_version: &str,
@@ -718,72 +689,15 @@ mod proto {
         }
 
         // Find the first text clipboard and send it.
-        crate::clipboard::get_first_text_clipboard(multi_clipboards).map(|clipboard| {
-            let mut msg = Message::new();
-            msg.set_clipboard(clipboard);
-            msg
-        })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bytes::Bytes;
-
-    fn make_clipboard(
-        format: hbb_common::message_proto::ClipboardFormat,
-        content: &[u8],
-        compress: bool,
-    ) -> Clipboard {
-        let mut clipboard = Clipboard::new();
-        clipboard.format = format.into();
-        clipboard.content = if compress {
-            Bytes::from(hbb_common::compress::compress(content))
-        } else {
-            Bytes::copy_from_slice(content)
-        };
-        clipboard.compress = compress;
-        clipboard
-    }
-
-    #[test]
-    fn selects_first_text_clipboard() {
-        let multi = MultiClipboards {
-            clipboards: vec![
-                make_clipboard(
-                    hbb_common::message_proto::ClipboardFormat::Html,
-                    b"<b>hello</b>",
-                    false,
-                ),
-                make_clipboard(
-                    hbb_common::message_proto::ClipboardFormat::Text,
-                    b"hello",
-                    false,
-                ),
-            ],
-            ..Default::default()
-        };
-
-        let clipboard = get_first_text_clipboard(&multi).expect("text clipboard");
-        assert_eq!(decode_text_clipboard(&clipboard).as_deref(), Some("hello"));
-    }
-
-    #[test]
-    fn decodes_compressed_text_from_multi_clipboards() {
-        let multi = MultiClipboards {
-            clipboards: vec![make_clipboard(
-                hbb_common::message_proto::ClipboardFormat::Text,
-                b"hello from windows",
-                true,
-            )],
-            ..Default::default()
-        };
-
-        assert_eq!(
-            decode_multi_clipboards_text(&multi).as_deref(),
-            Some("hello from windows")
-        );
+        multi_clipboards
+            .clipboards
+            .iter()
+            .find(|c| c.format.enum_value() == Ok(ClipboardFormat::Text))
+            .map(|c| {
+                let mut msg = Message::new();
+                msg.set_clipboard(c.clone());
+                msg
+            })
     }
 }
 

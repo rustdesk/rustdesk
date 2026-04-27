@@ -1429,7 +1429,12 @@ impl<T: InvokeUiSession> Remote<T> {
                         update_clipboard(vec![cb], ClipboardSide::Client);
                         #[cfg(target_os = "ios")]
                         {
-                            if let Some(content) = crate::clipboard::decode_text_clipboard(&cb) {
+                            let content = if cb.compress {
+                                hbb_common::compress::decompress(&cb.content)
+                            } else {
+                                cb.content.into()
+                            };
+                            if let Ok(content) = String::from_utf8(content) {
                                 self.handler.clipboard(content);
                             }
                         }
@@ -1443,10 +1448,19 @@ impl<T: InvokeUiSession> Remote<T> {
                         update_clipboard(_mcb.clipboards, ClipboardSide::Client);
                         #[cfg(target_os = "ios")]
                         {
-                            if let Some(content) =
-                                crate::clipboard::decode_multi_clipboards_text(&_mcb)
+                            if let Some(cb) = _mcb
+                                .clipboards
+                                .iter()
+                                .find(|c| c.format.enum_value() == Ok(ClipboardFormat::Text))
                             {
-                                self.handler.clipboard(content);
+                                let content = if cb.compress {
+                                    hbb_common::compress::decompress(&cb.content)
+                                } else {
+                                    cb.content.to_vec()
+                                };
+                                if let Ok(content) = String::from_utf8(content) {
+                                    self.handler.clipboard(content);
+                                }
                             }
                         }
                         #[cfg(target_os = "android")]

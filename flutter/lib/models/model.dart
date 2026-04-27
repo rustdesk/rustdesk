@@ -353,10 +353,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'cursor_position') {
         await parent.target?.cursorModel.updateCursorPosition(evt, peerId);
       } else if (name == 'clipboard') {
-        final content = evt['content'];
-        if (content is String) {
-          await Clipboard.setData(ClipboardData(text: content));
-        }
+        Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
         updatePermission(evt, peerId);
       } else if (name == 'chat_client_mode') {
