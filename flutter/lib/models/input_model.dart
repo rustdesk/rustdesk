@@ -1335,7 +1335,7 @@ class InputModel {
   /// iOS may emit a synthesized touch event after a real mouse click.
   /// This helper ignores touch-down events that arrive shortly after a mouse down,
   /// even when the position is far (e.g., near the top edge).
-  bool shouldIgnoreTouchAfterMouse(ui.Offset pos, int nowMs) {
+  bool _shouldIgnoreTouchAfterMouse(int nowMs) {
     if (!isIOS) return false;
     const int kTouchAfterMouseWindowMs = 700;
     final dt = nowMs - _lastMouseDownTimeMs;
@@ -1367,7 +1367,7 @@ class InputModel {
 
     if (e.kind != ui.PointerDeviceKind.mouse) {
       // Ignore duplicate touch events that follow a recent mouse click (iOS Magic Mouse issue).
-      if (isPhysicalMouse.value && shouldIgnoreTouchAfterMouse(e.position, nowMs)) {
+      if (isPhysicalMouse.value && _shouldIgnoreTouchAfterMouse(nowMs)) {
         return;
       }
       if (isPhysicalMouse.value) {
