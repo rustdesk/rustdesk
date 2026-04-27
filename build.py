@@ -3,6 +3,7 @@
 import os
 import pathlib
 import platform
+import subprocess
 import zipfile
 import urllib.request
 import shutil
@@ -24,6 +25,7 @@ else:
     flutter_build_dir = 'build/linux/x64/release/bundle/'
 flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
+force_codegen = False
 
 
 def get_deb_arch() -> str:
@@ -133,6 +135,16 @@ def make_parser():
         '--skip-cargo',
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
+    )
+    parser.add_argument(
+        '--clean',
+        action='store_true',
+        help='Wipe target/, flutter/build, flutter/.dart_tool, and the four generated bridge files, then exit.'
+    )
+    parser.add_argument(
+        '--force-codegen',
+        action='store_true',
+        help='Re-run flutter_rust_bridge codegen even if outputs look fresh.'
     )
     if windows:
         parser.add_argument(
@@ -309,16 +321,176 @@ Description: A remote control software.
     file.close()
 
 
-def ffi_bindgen_function_refactor():
-    # workaround ffigen
-    system2(
-        'sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart')
+# Match the version pinned in Cargo.toml ("flutter_rust_bridge = =1.80") and
+# pubspec.yaml ("flutter_rust_bridge: 1.80.1"). If those move, bump this too.
+FRB_VERSION_PIN = "1.80"
+
+BRIDGE_OUTPUT_FILES = (
+    "src/bridge_generated.rs",
+    "src/bridge_generated.io.rs",
+    "flutter/lib/generated_bridge.dart",
+    "flutter/lib/generated_bridge.freezed.dart",
+)
+
+
+def _detect_clang_resource_include():
+    # ffigen needs stdbool.h to resolve C `bool`. Without it, the generated
+    # bridge contains `typedef bool = NativeFunction<...>` which shadows
+    # Dart's bool and the Flutter build fails with confusing errors.
+    candidates = []
+    libclang = os.environ.get("LIBCLANG_PATH")
+    if libclang:
+        sibling = os.path.join(os.path.dirname(libclang), "bin", "clang")
+        if os.path.isfile(sibling):
+            candidates.append(sibling)
+    candidates.append("clang")
+    for clang in candidates:
+        try:
+            out = subprocess.check_output(
+                [clang, "-print-resource-dir"], text=True).strip()
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+        inc = os.path.join(out, "include")
+        if os.path.isfile(os.path.join(inc, "stdbool.h")):
+            return inc
+    return None
+
+
+def _detect_llvm_path():
+    libclang = os.environ.get("LIBCLANG_PATH")
+    if libclang:
+        return os.path.dirname(libclang)
+    return None
+
+
+def _detect_vcpkg_root():
+    if os.environ.get("VCPKG_ROOT"):
+        return os.environ["VCPKG_ROOT"]
+    for cand in ("./vcpkg", "../vcpkg"):
+        marker = os.path.join(cand, "vcpkg.exe" if windows else "vcpkg")
+        if os.path.isfile(marker):
+            return os.path.abspath(cand)
+    return None
+
+
+def _resolve_frb_codegen():
+    # PATH first, then ~/.cargo/bin (common: cargo installs there but users
+    # don't always have it on PATH).
+    found = shutil.which("flutter_rust_bridge_codegen")
+    if found:
+        return found
+    fallback = os.path.expanduser(
+        "~/.cargo/bin/flutter_rust_bridge_codegen"
+        + (".exe" if windows else ""))
+    if os.path.isfile(fallback):
+        return fallback
+    return None
+
+
+def _ensure_frb_codegen_installed():
+    binpath = _resolve_frb_codegen()
+    if not binpath:
+        sys.stderr.write(
+            "flutter_rust_bridge_codegen not found in PATH or ~/.cargo/bin.\n"
+            f"  Install with: cargo install flutter_rust_bridge_codegen "
+            f"--version {FRB_VERSION_PIN}.1 --locked\n")
+        sys.exit(1)
+    try:
+        out = subprocess.check_output([binpath, "--version"], text=True).strip()
+    except subprocess.CalledProcessError:
+        sys.stderr.write(f"flutter_rust_bridge_codegen at {binpath} failed --version check.\n")
+        sys.exit(1)
+    if FRB_VERSION_PIN not in out:
+        sys.stderr.write(
+            f"flutter_rust_bridge_codegen version mismatch: '{out}'.\n"
+            f"  Required: {FRB_VERSION_PIN}.x (matches Cargo.toml pin).\n"
+            f"  Reinstall with: cargo install flutter_rust_bridge_codegen "
+            f"--version {FRB_VERSION_PIN}.1 --locked --force\n")
+        sys.exit(1)
+    return binpath
+
+
+def _verify_bridge_output():
+    bridge_dart = "flutter/lib/generated_bridge.dart"
+    if not os.path.exists(bridge_dart):
+        sys.stderr.write(
+            f"Codegen reported success but {bridge_dart} is missing.\n")
+        sys.exit(1)
+    with open(bridge_dart, encoding="utf-8") as f:
+        content = f.read()
+    # ffigen emits this when stdbool.h is missing; it shadows Dart's bool.
+    if "typedef bool = ffi.NativeFunction" in content:
+        sys.stderr.write(
+            "Bridge codegen produced poisoned `typedef bool = NativeFunction<...>`.\n"
+            "  Cause: ffigen could not find stdbool.h.\n"
+            "  Look in the codegen log for `[SEVERE] : ... 'stdbool.h' file not found`.\n"
+            "  Fix: install a clang whose resource-dir/include contains stdbool.h,\n"
+            "       or set LIBCLANG_PATH so its sibling bin/clang resolves.\n")
+        sys.exit(1)
+
+
+def run_frb_codegen(force=None):
+    if force is None:
+        force = force_codegen
+    ffi_src = "src/flutter_ffi.rs"
+    fresh = (not force
+             and all(os.path.exists(f) for f in BRIDGE_OUTPUT_FILES)
+             and all(os.path.getmtime(f) >= os.path.getmtime(ffi_src)
+                     for f in BRIDGE_OUTPUT_FILES))
+    if fresh:
+        print("[build] flutter_rust_bridge codegen: outputs are fresh, skipping")
+        return
+
+    binpath = _ensure_frb_codegen_installed()
+    clang_inc = _detect_clang_resource_include()
+    if not clang_inc:
+        sys.stderr.write(
+            "Could not locate a clang resource-dir/include containing stdbool.h.\n"
+            "  Install clang and ensure `clang -print-resource-dir` works,\n"
+            "  or set LIBCLANG_PATH to a clang lib dir whose sibling bin/ has clang.\n")
+        sys.exit(1)
+
+    cmd = (f'"{binpath}" '
+           f'--rust-input ./{ffi_src} '
+           '--dart-output ./flutter/lib/generated_bridge.dart '
+           f'--llvm-compiler-opts="-I{clang_inc}"')
+    llvm_path = _detect_llvm_path()
+    if llvm_path:
+        cmd += f' --llvm-path "{llvm_path}"'
+
+    print(f"[build] flutter_rust_bridge codegen: clang include = {clang_inc}")
+    system2(cmd)
+    _verify_bridge_output()
+
+
+def _ensure_build_env():
+    # GCC 15 dropped implicit <cstdint>; webm-sys won't compile without this.
+    os.environ.setdefault("CXXFLAGS", "-include cstdint")
+    if not os.environ.get("VCPKG_ROOT"):
+        vcpkg = _detect_vcpkg_root()
+        if vcpkg:
+            os.environ["VCPKG_ROOT"] = vcpkg
+            print(f"[build] VCPKG_ROOT auto-detected: {vcpkg}")
+
+
+def do_clean():
+    print("[build] cargo clean")
+    system2("cargo clean")
+    print("[build] flutter clean")
+    cwd = os.getcwd()
+    os.chdir("flutter")
+    system2("flutter clean")
+    os.chdir(cwd)
+    for f in BRIDGE_OUTPUT_FILES:
+        if os.path.exists(f):
+            os.remove(f)
+            print(f"[build] removed {f}")
 
 
 def build_flutter_deb(version, features):
     if not skip_cargo:
+        run_frb_codegen()
         system2(f'cargo build --features {features} --lib --release')
-        ffi_bindgen_function_refactor()
     os.chdir('flutter')
     system2('flutter build linux --release')
     system2('mkdir -p tmpdeb/usr/bin/')
@@ -403,6 +575,7 @@ def build_deb_from_folder(version, binary_folder):
 
 def build_flutter_dmg(version, features):
     if not skip_cargo:
+        run_frb_codegen()
         # set minimum osx build target, now is 10.14, which is the same as the flutter xcode project
         system2(
             f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --release')
@@ -422,8 +595,8 @@ def build_flutter_dmg(version, features):
 
 def build_flutter_arch_manjaro(version, features):
     if not skip_cargo:
+        run_frb_codegen()
         system2(f'cargo build --features {features} --lib --release')
-    ffi_bindgen_function_refactor()
     os.chdir('flutter')
     system2('flutter build linux --release')
     system2(f'strip {flutter_build_dir}/lib/librustdesk.so')
@@ -433,6 +606,7 @@ def build_flutter_arch_manjaro(version, features):
 
 def build_flutter_windows(version, features, skip_portable_pack):
     if not skip_cargo:
+        run_frb_codegen()
         system2(f'cargo build --features {features} --lib --release')
         if not os.path.exists("target/release/librustdesk.dll"):
             print("cargo build failed, please check rust source code.")
@@ -463,9 +637,15 @@ def build_flutter_windows(version, features, skip_portable_pack):
 
 
 def main():
-    global skip_cargo
+    global skip_cargo, force_codegen
     parser = make_parser()
     args = parser.parse_args()
+
+    if args.clean:
+        do_clean()
+        return
+
+    _ensure_build_env()
 
     if os.path.exists(exe_path):
         os.unlink(exe_path)
@@ -479,6 +659,8 @@ def main():
     print(args.skip_cargo)
     if args.skip_cargo:
         skip_cargo = True
+    if args.force_codegen:
+        force_codegen = True
     portable = args.portable
     package = args.package
     if package:
