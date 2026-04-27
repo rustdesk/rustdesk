@@ -56,3 +56,6 @@ vcpkg_installed
 flutter/lib/generated_plugin_registrant.dart
 libsciter.dylib
 flutter/web/
+# makepkg artifacts (Arch / Manjaro pacman build path)
+res/pkg/
+res/*.pkg.tar.zst
