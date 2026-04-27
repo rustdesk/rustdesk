@@ -100,11 +100,10 @@ thread_local! {
 // X11 error event structure for the custom error handler.
 // See: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Using-the-Default-Error-Handlers
 #[repr(C)]
-#[allow(non_snake_case)]
 struct XErrorEvent {
     type_: c_int,
-    display: *mut c_void,   // Display*
-    resourceid: c_ulong,    // XID
+    display: *mut c_void, // Display*
+    resourceid: c_ulong,  // XID
     serial: c_ulong,
     error_code: u8,
     request_code: u8,
@@ -113,20 +112,24 @@ struct XErrorEvent {
 
 type XErrorHandler = unsafe extern "C" fn(*mut c_void, *mut XErrorEvent) -> c_int;
 
+const X11_BAD_WINDOW: u8 = 3;
+const XDO_SUCCESS: c_int = 0;
+const XDO_ERROR: c_int = 1;
+
 /// Atomic flag set by the custom X error handler when a BadWindow error occurs.
 static X_BAD_WINDOW_DETECTED: AtomicBool = AtomicBool::new(false);
+static X_UNEXPECTED_ERROR_DETECTED: AtomicBool = AtomicBool::new(false);
 
 /// Custom X error handler that catches BadWindow errors (error_code == 3) instead of
 /// letting the default handler terminate the process.
 /// See issue: https://github.com/rustdesk/rustdesk/issues/9003
 unsafe extern "C" fn handle_x_error(_display: *mut c_void, event: *mut XErrorEvent) -> c_int {
-    const BAD_WINDOW: u8 = 3; // X11 BadWindow error code
-    if !event.is_null() && (*event).error_code == BAD_WINDOW {
+    if !event.is_null() && (*event).error_code == X11_BAD_WINDOW {
         X_BAD_WINDOW_DETECTED.store(true, Ordering::SeqCst);
         log::debug!("Caught X11 BadWindow error (suppressed), window was likely destroyed");
         return 0;
     }
-    // For non-BadWindow errors, just log and return (don't crash).
+    X_UNEXPECTED_ERROR_DETECTED.store(true, Ordering::SeqCst);
     if !event.is_null() {
         log::warn!(
             "X11 error: error_code={}, request_code={}, minor_code={}",
@@ -143,7 +146,6 @@ extern "C" {
     fn XOpenDisplay(display_name: *const c_char) -> *mut c_void;
     // fn XCloseDisplay(d: *mut c_void) -> c_int;
     fn XSetErrorHandler(handler: Option<XErrorHandler>) -> Option<XErrorHandler>;
-    fn XSync(display: *mut c_void, discard: c_int) -> c_int;
 }
 
 #[link(name = "Xfixes")]
@@ -275,12 +277,12 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
                     return;
                 }
 
-                // Install a custom X error handler to catch BadWindow errors.
-                // Between xdo_get_active_window and the subsequent calls, the
-                // window can be destroyed (e.g. user closes it), causing a
-                // BadWindow X error that would crash the process with the
-                // default handler. See: https://github.com/rustdesk/rustdesk/issues/9003
+                // XSetErrorHandler is process-global, not scoped to this Display/thread.
+                // This path is currently called by the single window_focus service thread.
+                // While installed, this handler can still observe unrelated X11 errors from
+                // other threads; unexpected errors make this geometry query fail.
                 X_BAD_WINDOW_DETECTED.store(false, Ordering::SeqCst);
+                X_UNEXPECTED_ERROR_DETECTED.store(false, Ordering::SeqCst);
                 let prev_handler = XSetErrorHandler(Some(handle_x_error));
 
                 let loc_ret = libxdo_sys::xdo_get_window_location(
@@ -290,8 +292,7 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
                     &mut y as _,
                     std::ptr::null_mut(),
                 );
-
-                let size_ret = if loc_ret == 0 {
+                let size_ret = if loc_ret == XDO_SUCCESS {
                     libxdo_sys::xdo_get_window_size(
                         *xdo as *const _,
                         window,
@@ -299,22 +300,20 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
                         &mut height,
                     )
                 } else {
-                    1 // skip if location failed
+                    XDO_ERROR
                 };
 
-                // Flush to ensure any deferred X errors are delivered to our handler.
-                DISPLAY.with(|disp| {
-                    let d = *disp.borrow();
-                    if !d.is_null() {
-                        XSync(d, 0);
-                    }
-                });
-
-                // Restore the previous error handler.
+                // Do not call XSync(DISPLAY) here: DISPLAY is a separate
+                // XOpenDisplay() connection, while libxdo owns the Display*
+                // used by these geometry queries. These libxdo calls are
+                // synchronous XGetWindowAttributes-based queries, so the target
+                // BadWindow is expected to be delivered before the calls return.
                 XSetErrorHandler(prev_handler);
-
-                // If a BadWindow error was caught, or either call failed, bail out.
-                if X_BAD_WINDOW_DETECTED.load(Ordering::SeqCst) || loc_ret != 0 || size_ret != 0 {
+                if X_BAD_WINDOW_DETECTED.load(Ordering::SeqCst)
+                    || X_UNEXPECTED_ERROR_DETECTED.load(Ordering::SeqCst)
+                    || loc_ret != XDO_SUCCESS
+                    || size_ret != XDO_SUCCESS
+                {
                     return;
                 }
 
@@ -2218,7 +2217,10 @@ pub fn clear_gnome_shortcuts_inhibitor_permission() -> ResultType<()> {
                 || err_name == "org.freedesktop.DBus.Error.UnknownObject"
                 || err_name == "org.freedesktop.DBus.Error.ServiceUnknown"
             {
-                log::info!("GNOME shortcuts inhibitor permission was not set ({})", err_name);
+                log::info!(
+                    "GNOME shortcuts inhibitor permission was not set ({})",
+                    err_name
+                );
                 Ok(())
             } else {
                 bail!("Failed to clear permission: {}", e)
