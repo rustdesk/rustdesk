@@ -62,14 +62,6 @@ const val VIDEO_KEY_FRAME_RATE = 30
 
 class MainService : Service() {
 
-    companion object {
-        private const val WAKELOCK_TIMEOUT_MS = 5000L
-        private const val WAKE_POLL_INTERVAL_MS = 100L
-        private const val WAKE_MAX_WAIT_MS = 2000L
-        private const val WAKE_THROTTLE_MS = 10_000L
-        private const val WAKE_RETRY_AFTER_MS = 1200L
-    }
-
     private val wakeRetryHandler = Handler(Looper.getMainLooper())
     private val keyguardManager: KeyguardManager by lazy {
         applicationContext.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
@@ -81,6 +73,7 @@ class MainService : Service() {
     private var wakeDidHome = false
     private var wakeRetried = false
     private var wakeNotifiedLocked = false
+    private var wakeNotifiedInputDisabled = false
 
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
@@ -211,6 +204,12 @@ class MainService : Service() {
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
     companion object {
+        private const val WAKELOCK_TIMEOUT_MS = 5000L
+        private const val WAKE_POLL_INTERVAL_MS = 100L
+        private const val WAKE_MAX_WAIT_MS = 2000L
+        private const val WAKE_THROTTLE_MS = 10_000L
+        private const val WAKE_RETRY_AFTER_MS = 1200L
+
         private var _isReady = false // media permission ready status
         private var _isStart = false // screen capture start status
         private var _isAudioStart = false // audio capture start status
@@ -249,6 +248,10 @@ class MainService : Service() {
             val reason = wakePendingReason ?: return
             val now = SystemClock.elapsedRealtime()
             if (now >= wakeDeadlineAt) {
+                if (wakeNotifiedLocked) {
+                    wakePendingReason = null
+                    return
+                }
                 Log.w(
                     logTag,
                     "wake timeout, interactive=${powerManager.isInteractive}, input=${InputService.isOpen}, reason:$reason"
@@ -281,7 +284,11 @@ class MainService : Service() {
                 wakeDidHome = true
                 InputService.ctx?.goHome()
             } else if (!InputService.isOpen) {
-                Log.w(logTag, "input service not open, skip HOME, reason:$reason")
+                if (!wakeNotifiedInputDisabled) {
+                    wakeNotifiedInputDisabled = true
+                    Log.w(logTag, "input service not open, skip HOME, reason:$reason")
+                    setTextNotification(null, "Remote session: enable Accessibility")
+                }
             }
 
             FFI.refreshScreen()
@@ -299,6 +306,10 @@ class MainService : Service() {
     }
 
     private fun wakeAndRefreshIncomingScreenIfNeeded(reason: String) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            wakeRetryHandler.post { wakeAndRefreshIncomingScreenIfNeeded(reason) }
+            return
+        }
         if (powerManager.isInteractive) {
             return
         }
@@ -316,6 +327,7 @@ class MainService : Service() {
         wakeDidHome = false
         wakeRetried = false
         wakeNotifiedLocked = false
+        wakeNotifiedInputDisabled = false
         wakeScreen(reason)
         wakeRetryHandler.postDelayed(wakePollRunnable, WAKE_POLL_INTERVAL_MS)
     }
