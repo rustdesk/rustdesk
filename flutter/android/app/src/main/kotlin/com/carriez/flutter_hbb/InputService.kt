@@ -91,7 +91,8 @@ class InputService : AccessibilityService() {
 
     private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
-    fun wakeUpDevice() {
+    // Just HOME. Caller handles the actual wake lock.
+    internal fun goHome() {
         performGlobalAction(GLOBAL_ACTION_HOME)
     }
 
