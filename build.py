@@ -41,10 +41,16 @@ def get_deb_extra_depends() -> str:
     return ""
 
 def system2(cmd):
+    # Flush so prior `print()` output lands before the child writes — otherwise
+    # Python's block-buffered stdout (when redirected to a file) shows our
+    # messages AFTER the child's, making logs unreadable.
+    sys.stdout.flush()
+    sys.stderr.flush()
     exit_code = os.system(cmd)
     if exit_code != 0:
         sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
-        sys.exit(-1)
+        sys.stderr.flush()
+        sys.exit(1)
 
 
 def get_version():
@@ -139,7 +145,9 @@ def make_parser():
     parser.add_argument(
         '--clean',
         action='store_true',
-        help='Wipe target/, flutter/build, flutter/.dart_tool, and the four generated bridge files, then exit.'
+        help='Wipe target/, flutter/build, flutter/.dart_tool, and the four generated bridge files. '
+             'Repopulates flutter pub deps. Exits unless a build target (--flutter, --portable, --package) '
+             'is also specified, in which case the build runs after the clean.'
     )
     parser.add_argument(
         '--force-codegen',
@@ -480,6 +488,13 @@ def do_clean():
     cwd = os.getcwd()
     os.chdir("flutter")
     system2("flutter clean")
+    # `flutter clean` removes .dart_tool/package_config.json. Without it,
+    # the next codegen invocation fails with "Cannot open file ...
+    # package_config.json" because flutter_rust_bridge_codegen shells out to
+    # `flutter pub run ffigen`, which needs that file. Repopulate it now so
+    # `--clean` followed by `--flutter` is a one-command flow.
+    print("[build] flutter pub get (post-clean)")
+    system2("flutter pub get")
     os.chdir(cwd)
     for f in BRIDGE_OUTPUT_FILES:
         if os.path.exists(f):
@@ -643,7 +658,14 @@ def main():
 
     if args.clean:
         do_clean()
-        return
+        # If a build target was also requested, chain into it. Otherwise
+        # clean-and-exit so `python3 build.py --clean` stays a quick wipe.
+        build_targets_requested = any([
+            args.flutter, args.portable, args.package,
+        ])
+        if not build_targets_requested:
+            return
+        print("[build] --clean done, continuing with requested build targets")
 
     _ensure_build_env()
 
