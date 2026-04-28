@@ -5,6 +5,7 @@ import '../../common/formatter/id_formatter.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import '../theme/tokens.dart';
+import 'remote_session_screen.dart';
 
 class ConnectScreen extends StatefulWidget {
   const ConnectScreen({super.key});
@@ -31,11 +32,23 @@ class _ConnectScreenState extends State<ConnectScreen> {
     super.dispose();
   }
 
-  void _onConnect([String? peerId]) {
-    final id = peerId ?? _idController.id;
-    if (id.isEmpty) return;
+  void _onConnect([String? peerId]) async {
+    final rawId = peerId ?? _idController.id;
+    if (rawId.isEmpty) return;
     final pw = _passwordController.text.trim();
-    connect(context, id, password: pw.isEmpty ? null : pw);
+    final id = await bind.mainHandleRelayId(id: rawId);
+    final forceRelay = id != rawId;
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RemoteSessionScreen(
+          id: id,
+          password: pw.isEmpty ? null : pw,
+          forceRelay: forceRelay,
+        ),
+      ),
+    );
   }
 
   @override
