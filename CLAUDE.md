@@ -89,3 +89,14 @@ All configurations or options are under `libs/hbb_common/src/config.rs` file, 4 
 - Local
 - Display
 - Built-in
+
+## TestFlight Deployment
+
+To ship a Tabby iOS build to TestFlight, follow `docs/tabby/deploy-testflight.md`. The full procedure is encoded in the `tabby-testflight` skill — invoke it on requests like "ship to TestFlight" or "deploy Tabby".
+
+Quick reference:
+1. Bump build number in `flutter/pubspec.yaml` (`version: 1.x.y+N` → `+N+1`).
+2. `cd flutter && flutter pub get && flutter build ipa --release --export-options-plist=ios/exportOptions.plist --no-pub`.
+3. `xcrun altool --upload-app --type ios -f flutter/build/ios/ipa/*.ipa --apiKey G7S8Q6D6Z9 --apiIssuer e84dd3bd-1e5d-4db4-8b57-46637e2510ff`.
+
+API key file at `~/.appstoreconnect/private_keys/AuthKey_G7S8Q6D6Z9.p8` (recover from 1Password if missing — see the doc).
