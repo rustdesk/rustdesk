@@ -371,6 +371,12 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     final sortedSessions = persistentSessions.whereType<int>().toList()..sort();
     var peerId = args['peer_id'] as String? ?? '';
     if (peerId.isEmpty) {
+      if (tabController.state.value.tabs.isEmpty ||
+          tabController.state.value.selected >=
+              tabController.state.value.tabs.length) {
+        debugPrint('[TerminalTabPage] Skip restore: no selected tab');
+        return;
+      }
       final currentTab = tabController.state.value.selectedTabInfo;
       final parsed = _parseTabKey(currentTab.key);
       if (parsed == null) return;
@@ -381,6 +387,11 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         .where((parsed) => parsed != null && parsed.$1 == peerId)
         .map((parsed) => parsed!.$2)
         .toSet();
+    if (existingTerminalIds.isEmpty) {
+      debugPrint(
+          '[TerminalTabPage] Skip restore: no seed tab for peer $peerId');
+      return;
+    }
     for (final terminalId in sortedSessions) {
       if (!existingTerminalIds.add(terminalId)) {
         continue;

@@ -1059,7 +1059,11 @@ impl TerminalServiceProxy {
             let mut opened = TerminalOpened::new();
             opened.terminal_id = open.terminal_id;
             opened.success = true;
-            opened.message = "Reconnected to existing terminal".to_string();
+            opened.message = if has_pending {
+                "Reconnected to existing terminal with pending output".to_string()
+            } else {
+                "Reconnected to existing terminal".to_string()
+            };
             opened.pid = session.pid;
             opened.service_id = self.service_id.clone();
             if service.needs_session_sync {
