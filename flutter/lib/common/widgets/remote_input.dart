@@ -97,6 +97,11 @@ class _RawTouchGestureDetectorRegionState
   int _cacheLongPressPositionTs = 0;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   double _scale = 1;
+  // Tabby: per-gesture lock for two-finger pinch detection.
+  // Set on the first frame whose cumulative scale exceeds the pinch
+  // threshold; cleared in onTwoFingerScaleStart/End. Avoids the
+  // frame-to-frame oscillation where a slow pinch leaks scroll events.
+  bool _twoFingerPinchLocked = false;
 
   // Workaround tap down event when two fingers are used to scale(mobile)
   TapDownDetails? _lastTapDownDetails;
@@ -453,6 +458,7 @@ class _RawTouchGestureDetectorRegionState
   // scale + pan event
   onTwoFingerScaleStart(ScaleStartDetails d) {
     _lastTapDownDetails = null;
+    _twoFingerPinchLocked = false;
     if (isNotTouchBasedDevice()) {
       return;
     }
@@ -490,18 +496,23 @@ class _RawTouchGestureDetectorRegionState
       }
     } else {
       // mobile
-      // Tabby: redirect two-finger pan (no significant pinch) to the
-      // remote-scroll callback. Pinch updates still zoom the local canvas
-      // so the user can frame the remote display.
-      const pinchEpsilon = 0.02;
-      final isPinch = (d.scale - _scale).abs() > pinchEpsilon;
-      if (widget.onTwoFingerScroll != null && !isPinch) {
-        widget.onTwoFingerScroll!(
-          d.focalPointDelta.dx,
-          d.focalPointDelta.dy,
-        );
-        _scale = d.scale;
-        return;
+      // Tabby: redirect two-finger pan (no pinch) to the remote-scroll
+      // callback. Pinch is detected against the cumulative gesture scale
+      // (not frame-to-frame); once detected, the lock holds for the rest
+      // of the gesture so a slow pinch doesn't leak scroll between frames.
+      if (widget.onTwoFingerScroll != null) {
+        const pinchEpsilon = 0.02;
+        if ((d.scale - 1.0).abs() > pinchEpsilon) {
+          _twoFingerPinchLocked = true;
+        }
+        if (!_twoFingerPinchLocked) {
+          widget.onTwoFingerScroll!(
+            d.focalPointDelta.dx,
+            d.focalPointDelta.dy,
+          );
+          _scale = d.scale;
+          return;
+        }
       }
       ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
       _scale = d.scale;
@@ -511,6 +522,7 @@ class _RawTouchGestureDetectorRegionState
   }
 
   onTwoFingerScaleEnd(ScaleEndDetails d) async {
+    _twoFingerPinchLocked = false;
     if (isNotTouchBasedDevice()) {
       return;
     }
