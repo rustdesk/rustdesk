@@ -315,6 +315,15 @@ pub struct Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     terminal_user_token: Option<TerminalUserToken>,
     terminal_generic_service: Option<Box<GenericService>>,
+    // When the host has multiple sessions and the client must pick one,
+    // defer notifying the CM (which would pop the permission window in the
+    // current `--server` session) until the client confirms the chosen
+    // session. Otherwise the dialog can briefly appear in the wrong session
+    // before the server is relaunched in the chosen one.
+    #[cfg(windows)]
+    wait_for_windows_session_id_confirm: bool,
+    #[cfg(windows)]
+    pending_cm_login: Option<(String, String, bool)>,
 }
 
 impl ConnInner {
@@ -492,6 +501,10 @@ impl Connection {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             terminal_user_token: None,
             terminal_generic_service: None,
+            #[cfg(windows)]
+            wait_for_windows_session_id_confirm: false,
+            #[cfg(windows)]
+            pending_cm_login: None,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -1824,6 +1837,10 @@ impl Connection {
                 })
                 .into();
                 *wait_session_id_confirm = true;
+                // Defer the CM permission window until the client confirms
+                // the session it wants — otherwise the prompt pops up in the
+                // current `--server` session before any choice is made.
+                self.wait_for_windows_session_id_confirm = true;
             }
         }
     }
@@ -1882,6 +1899,14 @@ impl Connection {
     }
 
     fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
+        // While waiting for the client to pick a Windows session, hold the
+        // Login back instead of telling the CM to show its window. The
+        // request will be replayed once the chosen session is confirmed.
+        #[cfg(windows)]
+        if self.wait_for_windows_session_id_confirm {
+            self.pending_cm_login = Some((peer_id, name, authorized));
+            return;
+        }
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),
@@ -3298,6 +3323,17 @@ impl Connection {
                                     let _ = ipc::connect_to_user_session(Some(sid));
                                 });
                                 return false;
+                            }
+                            // Client confirmed it wants this session: replay
+                            // the deferred CM login so the permission window
+                            // appears here and only here.
+                            if self.wait_for_windows_session_id_confirm {
+                                self.wait_for_windows_session_id_confirm = false;
+                                if let Some((peer_id, name, authorized)) =
+                                    self.pending_cm_login.take()
+                                {
+                                    self.try_start_cm(peer_id, name, authorized);
+                                }
                             }
                             if self.file_transfer.is_some() {
                                 if let Some((dir, show_hidden)) = self.delayed_read_dir.take() {
