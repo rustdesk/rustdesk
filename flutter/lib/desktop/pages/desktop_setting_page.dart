@@ -13,6 +13,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
@@ -1743,6 +1744,7 @@ class _DisplayState extends State<_Display> {
     return ListView(controller: scrollController, children: [
       viewStyle(context),
       scrollStyle(context),
+      remoteCanvasMargin(context),
       imageQuality(context),
       codec(context),
       if (isDesktop) trackpadSpeed(context),
@@ -1817,6 +1819,26 @@ class _DisplayState extends State<_Display> {
                   : onEdgeScrollEdgeThicknessChanged,
             )),
       ],
+    ]);
+  }
+
+  Widget remoteCanvasMargin(BuildContext context) {
+    final canvasModel = Provider.of<CanvasModel>(context, listen: false);
+    onChanged(double value) async {
+      await canvasModel.setRemoteCanvasMargin(value);
+      setState(() {});
+    }
+
+    final currentValue = canvasModel.remoteCanvasMargin;
+
+    return _Card(title: 'Remote canvas margin', children: [
+      EdgeThicknessControl(
+        value: currentValue,
+        min: 0,
+        max: 400,
+        onChanged:
+            isOptionFixed(kOptionRemoteCanvasMargin) ? null : onChanged,
+      ),
     ]);
   }
 
