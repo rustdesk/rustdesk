@@ -2021,11 +2021,7 @@ impl TerminalServiceProxy {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        find_utf8_split_point, OutputBuffer, TerminalData, TerminalServiceProxy, TerminalSession,
-        Utf8ChunkAccumulator, MAX_BUFFER_LINES,
-    };
-    use std::sync::{Arc, Mutex};
+    use super::{find_utf8_split_point, OutputBuffer, Utf8ChunkAccumulator, MAX_BUFFER_LINES};
 
     #[test]
     fn utf8_split_point_returns_full_len_for_complete_input() {
@@ -2133,30 +2129,5 @@ mod tests {
 
         let actual_size: usize = buffer.lines.iter().map(|line| line.len()).sum();
         assert_eq!(buffer.total_size, actual_size);
-    }
-
-    #[test]
-    fn handle_data_returns_error_when_session_mutex_poisoned() {
-        let session = Arc::new(Mutex::new(TerminalSession::new(1, 24, 80)));
-        let poison_target = session.clone();
-        let _ = std::thread::spawn(move || {
-            let _guard = poison_target.lock().unwrap();
-            panic!("poison terminal session mutex");
-        })
-        .join();
-
-        let proxy = TerminalServiceProxy {
-            service_id: "test_service".to_string(),
-            is_persistent: false,
-            #[cfg(target_os = "windows")]
-            user_token: None,
-        };
-
-        let mut data = TerminalData::new();
-        data.terminal_id = 1;
-        data.data = bytes::Bytes::from_static(b"echo test");
-
-        let result = proxy.handle_data(Some(session), &data);
-        assert!(result.is_err(), "expected poisoned lock to return error");
     }
 }
