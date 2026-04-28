@@ -65,3 +65,5 @@ SPIKE_NOTES.local.md
 
 # FVM Version Cache
 .fvm/
+
+logs/
