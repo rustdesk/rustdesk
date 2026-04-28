@@ -46,13 +46,19 @@ class RemotePage extends StatefulWidget {
       required this.id,
       this.password,
       this.isSharedPassword,
-      this.forceRelay})
+      this.forceRelay,
+      this.hideKeyHelpTools = false,
+      this.hideBottomBar = false})
       : super(key: key);
 
   final String id;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
+  // Tabby: when wrapped by RemoteSessionScreen the PowerStrip replaces these
+  // legacy panels, so callers can suppress them.
+  final bool hideKeyHelpTools;
+  final bool hideBottomBar;
 
   @override
   State<RemotePage> createState() => _RemotePageState(id);
@@ -344,7 +350,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Widget _bottomWidget() => _showGestureHelp
       ? getGestureHelp()
-      : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
+      : (_showBar &&
+              !widget.hideBottomBar &&
+              gFFI.ffiModel.pi.displays.isNotEmpty
           ? getBottomAppBar()
           : Offstage());
 
@@ -573,9 +581,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               right: 10,
               child: QualityMonitor(gFFI.qualityMonitorModel),
             ),
-            KeyHelpTools(
-                keyboardIsVisible: keyboardIsVisible,
-                showGestureHelp: _showGestureHelp),
+            if (!widget.hideKeyHelpTools)
+              KeyHelpTools(
+                  keyboardIsVisible: keyboardIsVisible,
+                  showGestureHelp: _showGestureHelp),
             SizedBox(
               width: 0,
               height: 0,

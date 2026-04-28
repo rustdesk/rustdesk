@@ -55,12 +55,18 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final mq = MediaQuery.of(context);
+    final keyboardHeight = mq.viewInsets.bottom;
+    final isKeyboardOpen = keyboardHeight > 0;
+    // When the iOS keyboard is closed, sit just above the home indicator;
+    // when open, sit just above the keyboard (no home indicator below it).
+    final stripBottom = isKeyboardOpen ? keyboardHeight : mq.viewPadding.bottom;
 
     return Stack(
       children: [
         // Layer 0: upstream RemotePage — owns canvas, connection lifecycle,
-        // and all existing mobile gestures.
+        // and all existing mobile gestures. KeyHelpTools and the
+        // BottomAppBar are suppressed; PowerStrip replaces them.
         TwoFingerScrollDetector(
           inputBridge: _bridge,
           child: RemotePage(
@@ -68,6 +74,8 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
             password: widget.password,
             isSharedPassword: widget.isSharedPassword,
             forceRelay: widget.forceRelay,
+            hideKeyHelpTools: true,
+            hideBottomBar: true,
           ),
         ),
 
@@ -84,11 +92,11 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
           ),
         ),
 
-        // Layer 2: power strip — floats just above the iOS keyboard.
+        // Layer 2: power strip.
         Positioned(
           left: 0,
           right: 0,
-          bottom: keyboardHeight,
+          bottom: stripBottom,
           child: PowerStrip(
             inputBridge: _bridge,
             modifierController: _modCtl,
