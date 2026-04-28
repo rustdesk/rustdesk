@@ -485,6 +485,17 @@ impl OutputBuffer {
                 } else {
                     self.total_size -= removed.len();
                 }
+                if self.lines.is_empty() {
+                    self.last_line_incomplete = false;
+                }
+            } else {
+                log::error!(
+                    "OutputBuffer trim invariant broken: total_size={}, lines_len=0",
+                    self.total_size
+                );
+                self.total_size = 0;
+                self.last_line_incomplete = false;
+                break;
             }
         }
     }
@@ -1607,29 +1618,28 @@ impl TerminalServiceProxy {
         data: &TerminalData,
     ) -> Result<Option<TerminalResponse>> {
         if let Some(session_arc) = session {
-            let mut session = match session_arc.lock() {
-                Ok(guard) => guard,
-                Err(e) => {
-                    return Err(anyhow!(
-                        "Failed to lock terminal session {} for input handling: {}",
-                        data.terminal_id,
-                        e
-                    ));
+            let input = {
+                let mut session = session_arc.lock().unwrap();
+                session.update_activity();
+                if let Some(input_tx) = session.input_tx.clone() {
+                    // Encode data for helper mode or send raw for direct PTY mode
+                    #[cfg(target_os = "windows")]
+                    let msg = if session.is_helper_mode {
+                        encode_helper_message(MSG_TYPE_DATA, &data.data)
+                    } else {
+                        data.data.to_vec()
+                    };
+                    #[cfg(not(target_os = "windows"))]
+                    let msg = data.data.to_vec();
+
+                    Some((input_tx, msg))
+                } else {
+                    None
                 }
             };
-            session.update_activity();
-            if let Some(input_tx) = &session.input_tx {
-                // Encode data for helper mode or send raw for direct PTY mode
-                #[cfg(target_os = "windows")]
-                let msg = if session.is_helper_mode {
-                    encode_helper_message(MSG_TYPE_DATA, &data.data)
-                } else {
-                    data.data.to_vec()
-                };
-                #[cfg(not(target_os = "windows"))]
-                let msg = data.data.to_vec();
 
-                // Send data to writer thread
+            if let Some((input_tx, msg)) = input {
+                // Send outside the session lock; SyncSender::send can block when full.
                 if let Err(e) = input_tx.send(msg) {
                     log::error!(
                         "Failed to send data to terminal {}: {}",

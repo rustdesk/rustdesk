@@ -32,6 +32,7 @@ class TerminalModel with ChangeNotifier {
   static const int _kMaxOutputBufferChars = 8 * 1024;
   // View ready state: true when terminal has valid dimensions, safe to write
   bool _terminalViewReady = false;
+  bool _markViewReadyScheduled = false;
   bool _suppressTerminalOutput = false;
   bool _suppressNextTerminalDataOutput = false;
 
@@ -91,7 +92,7 @@ class TerminalModel with ChangeNotifier {
         // Mark terminal view as ready and flush any buffered output on first valid resize.
         // Must be after onResizeExternal so the view layer has valid dimensions before flushing.
         if (!_terminalViewReady) {
-          _markViewReady();
+          _scheduleMarkViewReady();
         }
 
         if (_terminalOpened) {
@@ -296,7 +297,7 @@ class TerminalModel with ChangeNotifier {
       if (!_terminalViewReady &&
           terminal.viewWidth > 0 &&
           terminal.viewHeight > 0) {
-        _markViewReady();
+        _scheduleMarkViewReady();
       }
 
       // Process any buffered input
@@ -447,6 +448,18 @@ class TerminalModel with ChangeNotifier {
   }
 
   /// Mark terminal view as ready and flush buffered output.
+  void _scheduleMarkViewReady() {
+    if (_disposed || _terminalViewReady || _markViewReadyScheduled) return;
+    _markViewReadyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _markViewReadyScheduled = false;
+      if (_disposed || _terminalViewReady) return;
+      if (terminal.viewWidth > 0 && terminal.viewHeight > 0) {
+        _markViewReady();
+      }
+    });
+  }
+
   void _markViewReady() {
     if (_terminalViewReady) return;
     _terminalViewReady = true;
@@ -474,6 +487,7 @@ class TerminalModel with ChangeNotifier {
     _pendingOutputChunks.clear();
     _pendingOutputSuppressFlags.clear();
     _pendingOutputSize = 0;
+    _markViewReadyScheduled = false;
     _suppressNextTerminalDataOutput = false;
     // Terminal cleanup is handled server-side when service closes
     super.dispose();
