@@ -1037,18 +1037,33 @@ impl TerminalServiceProxy {
         if let Some(session_arc) = service.sessions.get(&open.terminal_id) {
             // Reconnect to existing terminal
             let mut session = session_arc.lock().unwrap();
-            // Directly enter Active state with pending buffer for immediate streaming.
-            // Historical buffer is sent first by read_outputs(), then real-time data follows.
-            // No overlap: pending_buffer comes from output_buffer (pre-disconnect history),
-            // while received_data in read_outputs() comes from the channel (post-reconnect).
-            // During disconnect, the run loop (sp.ok()) exits so read_outputs() stops being
-            // called; output_buffer is not updated, and channel data may be lost if it fills up.
+            // Directly enter Active state with pending replay for immediate streaming.
+            // The replay starts with output_buffer history, then drains any current channel
+            // backlog into the same pending response. Keeping reconnect backlog in the first
+            // response lets the client suppress xterm query answers for the whole replay batch.
+            // During disconnect, read_outputs() is not called; channel data can still be lost
+            // if output_rx fills before reconnect drains it.
             let buffer = session
                 .output_buffer
                 .get_recent(DEFAULT_RECONNECT_BUFFER_BYTES);
-            let has_pending = !buffer.is_empty();
+            let mut pending_buffer = buffer;
+            let mut reconnect_backlog = Vec::new();
+            if let Some(output_rx) = &session.output_rx {
+                while let Ok(data) = output_rx.try_recv() {
+                    reconnect_backlog.push(data);
+                }
+            }
+            for data in reconnect_backlog {
+                session.output_buffer.append(&data);
+                pending_buffer.extend_from_slice(&data);
+            }
+            let has_pending = !pending_buffer.is_empty();
             session.state = SessionState::Active {
-                pending_buffer: if has_pending { Some(buffer) } else { None },
+                pending_buffer: if has_pending {
+                    Some(pending_buffer)
+                } else {
+                    None
+                },
                 // Always trigger two-phase SIGWINCH on reconnect to force TUI app redraw,
                 // regardless of whether there's pending buffer data. This avoids edge cases
                 // where buffer is empty but a TUI app (top/htop) still needs a full redraw.
@@ -1844,9 +1859,18 @@ impl TerminalServiceProxy {
                         _ => continue,
                     };
 
-                    // Send pending buffer response first (set on reconnection in handle_open).
-                    // This ensures historical buffer is sent before any real-time data.
+                    // Send pending replay first (set on reconnection in handle_open). If new
+                    // channel data was drained in this same read_outputs() cycle, keep it in the
+                    // replay response so the client suppresses one complete reconnect batch.
                     if let Some(buffer) = pending_buffer.take() {
+                        let mut buffer = buffer;
+                        for data in received_data.drain(..) {
+                            // Reconnect replay can include terminal queries like DSR/DA.
+                            // Keep this first backlog batch in one response so the client can
+                            // suppress xterm-generated answers and avoid printing
+                            // "^[[1;1R^[[2;2R^[[>0;0;0c" back to the remote shell.
+                            buffer.extend_from_slice(&data);
+                        }
                         if !buffer.is_empty() {
                             responses
                                 .push(Self::create_terminal_data_response(terminal_id, buffer));
