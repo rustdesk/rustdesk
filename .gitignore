@@ -67,3 +67,4 @@ SPIKE_NOTES.local.md
 .fvm/
 
 logs/
+.threadbase-uploads/
