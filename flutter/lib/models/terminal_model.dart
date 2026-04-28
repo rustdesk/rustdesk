@@ -458,6 +458,7 @@ class TerminalModel with ChangeNotifier {
         _markViewReady();
       }
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _markViewReady() {
