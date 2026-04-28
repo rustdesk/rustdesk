@@ -292,6 +292,9 @@ class MainService : Service() {
             }
 
             FFI.refreshScreen()
+            if (wakeNotifiedLocked || wakeNotifiedInputDisabled) {
+                setTextNotification(null, null)
+            }
             wakePendingReason = null
         }
     }
@@ -313,6 +316,10 @@ class MainService : Service() {
         if (powerManager.isInteractive) {
             return
         }
+
+        // Reset any previous transient status text for a new attempt.
+        setTextNotification(null, null)
+
         val now = SystemClock.elapsedRealtime()
         if (now - lastWakeAttemptAt < WAKE_THROTTLE_MS) {
             Log.i(logTag, "skip wake due to throttle, reason:$reason")
