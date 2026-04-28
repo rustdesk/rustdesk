@@ -43,6 +43,9 @@ class TerminalPage extends StatefulWidget {
 
 class _TerminalPageState extends State<TerminalPage>
     with AutomaticKeepAliveClientMixin {
+  static const EdgeInsets _defaultTerminalPadding =
+      EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+
   late FFI _ffi;
   late TerminalModel _terminalModel;
   double? _cellHeight;
@@ -155,11 +158,22 @@ class _TerminalPageState extends State<TerminalPage>
   // extra space left after dividing the available height by the height of a single
   // terminal row (`_cellHeight`) and distributing it evenly as top and bottom padding.
   EdgeInsets _calculatePadding(double heightPx) {
-    if (_cellHeight == null) {
-      return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+    final cellHeight = _cellHeight;
+    if (!heightPx.isFinite ||
+        heightPx <= 0 ||
+        cellHeight == null ||
+        !cellHeight.isFinite ||
+        cellHeight <= 0) {
+      return _defaultTerminalPadding;
     }
-    final rows = (heightPx / _cellHeight!).floor();
-    final extraSpace = heightPx - rows * _cellHeight!;
+    final rows = (heightPx / cellHeight).floor();
+    if (rows <= 0) {
+      return _defaultTerminalPadding;
+    }
+    final extraSpace = heightPx - rows * cellHeight;
+    if (!extraSpace.isFinite || extraSpace < 0) {
+      return _defaultTerminalPadding;
+    }
     final topBottom = extraSpace / 2.0;
     return EdgeInsets.symmetric(horizontal: 5.0, vertical: topBottom);
   }
