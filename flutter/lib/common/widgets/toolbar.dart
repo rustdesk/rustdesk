@@ -21,11 +21,13 @@ class TTextMenu {
   final VoidCallback? onPressed;
   Widget? trailingIcon;
   bool divider;
+  final String? actionId;
   TTextMenu(
       {required this.child,
       required this.onPressed,
       this.trailingIcon,
-      this.divider = false});
+      this.divider = false,
+      this.actionId});
 
   Widget getChild() {
     if (trailingIcon != null) {
@@ -229,7 +231,8 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(
       TTextMenu(
           child: Text('${translate("Insert Ctrl + Alt + Del")}'),
-          onPressed: () => bind.sessionCtrlAltDel(sessionId: sessionId)),
+          onPressed: () => bind.sessionCtrlAltDel(sessionId: sessionId),
+          actionId: kShortcutActionSendCtrlAltDel),
     );
   }
   // restart
@@ -250,7 +253,8 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(
       TTextMenu(
           child: Text(translate('Insert Lock')),
-          onPressed: () => bind.sessionLockScreen(sessionId: sessionId)),
+          onPressed: () => bind.sessionLockScreen(sessionId: sessionId),
+          actionId: kShortcutActionInsertLock),
     );
   }
   // blockUserInput
@@ -268,7 +272,8 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
               sessionId: sessionId,
               value: '${blockInput.value ? 'un' : ''}block-input');
           blockInput.value = !blockInput.value;
-        }));
+        },
+        actionId: kShortcutActionToggleBlockInput));
   }
   // switchSides
   if (isDefaultConn &&
@@ -280,13 +285,15 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(TTextMenu(
         child: Text(translate('Switch Sides')),
         onPressed: () =>
-            showConfirmSwitchSidesDialog(sessionId, id, ffi.dialogManager)));
+            showConfirmSwitchSidesDialog(sessionId, id, ffi.dialogManager),
+        actionId: kShortcutActionSwitchSides));
   }
   // refresh
   if (pi.version.isNotEmpty) {
     v.add(TTextMenu(
       child: Text(translate('Refresh')),
       onPressed: () => sessionRefreshVideo(sessionId, pi),
+      actionId: kShortcutActionRefresh,
     ));
   }
   // record
@@ -308,7 +315,8 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
             )
           ],
         ),
-        onPressed: () => ffi.recordingModel.toggle()));
+        onPressed: () => ffi.recordingModel.toggle(),
+        actionId: kShortcutActionToggleRecording));
   }
 
   // to-do:
@@ -342,6 +350,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
                   });
                 }
               },
+        actionId: kShortcutActionScreenshot,
       ));
     }
   }
@@ -351,6 +360,13 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       child: Text(translate('Copy Fingerprint')),
       onPressed: () => onCopyFingerprint(FingerprintState.find(id).value),
     ));
+  }
+  // Register tagged callbacks with the shortcut model so global keyboard
+  // shortcuts can dispatch the same actions as the toolbar menu items.
+  for (final menu in v) {
+    if (menu.actionId != null && menu.onPressed != null) {
+      ffi.shortcutModel.register(menu.actionId!, menu.onPressed!);
+    }
   }
   return v;
 }

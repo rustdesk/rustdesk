@@ -699,6 +699,7 @@ class InputModel {
     }
   }
 
+<<<<<<< HEAD
   // Safe: this only re-dispatches synthesized Shift key-up events.
   // The key-up path clears the tracked Shift state so this does not loop.
   void _releaseTrackedShiftKeyEventIfNeeded() {
@@ -826,6 +827,7 @@ class InputModel {
         return KeyEventResult.ignored;
       }
     }
+
     if (isWindows || isLinux) {
       // Ignore meta keys. Because flutter window will loose focus if meta key is pressed.
       if (e.physicalKey == PhysicalKeyboardKey.metaLeft ||

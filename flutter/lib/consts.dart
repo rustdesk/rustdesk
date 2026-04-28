@@ -686,3 +686,24 @@ extension WindowsTargetExt on int {
 }
 
 const kCheckSoftwareUpdateFinish = 'check_software_update_finish';
+
+// Keyboard shortcut Action IDs - must match src/keyboard/shortcuts.rs::action_id.
+const kShortcutActionSendCtrlAltDel = 'send_ctrl_alt_del';
+const kShortcutActionToggleFullscreen = 'toggle_fullscreen';
+const kShortcutActionSwitchDisplayNext = 'switch_display_next';
+const kShortcutActionSwitchDisplayPrev = 'switch_display_prev';
+const kShortcutActionScreenshot = 'screenshot';
+const kShortcutActionInsertLock = 'insert_lock';
+const kShortcutActionRefresh = 'refresh';
+const kShortcutActionToggleAudio = 'toggle_audio';
+const kShortcutActionToggleBlockInput = 'toggle_block_input';
+const kShortcutActionToggleRecording = 'toggle_recording';
+const kShortcutActionTogglePrivacyMode = 'toggle_privacy_mode';
+const kShortcutActionViewMode1to1 = 'view_mode_1_to_1';
+const kShortcutActionViewModeShrink = 'view_mode_shrink';
+const kShortcutActionViewModeStretch = 'view_mode_stretch';
+const kShortcutActionSwitchSides = 'switch_sides';
+String kShortcutActionSwitchTab(int n) => 'switch_tab_$n';
+
+const kShortcutLocalConfigKey = 'keyboard-shortcuts';
+const kShortcutEventName = 'shortcut_triggered';

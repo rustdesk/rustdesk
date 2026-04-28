@@ -10,12 +10,14 @@ import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_keyboard_shortcuts_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_hbb/models/shortcut_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desktop_settings.dart';
@@ -421,9 +423,55 @@ class _GeneralState extends State<_General> {
         if (!isWeb) audio(context),
         if (!isWeb) record(context),
         if (!isWeb) WaylandCard(),
-        other()
+        other(),
+        if (!bind.isIncomingOnly()) keyboardShortcuts(),
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
+  }
+
+  Widget keyboardShortcuts() {
+    // The bindings JSON (LocalConfig key `keyboard-shortcuts`) is the single
+    // source of truth — it embeds an `enabled` boolean alongside the bindings
+    // list. We mutate the JSON in place via _OptionCheckBox's optGetter /
+    // optSetter hooks rather than introducing a parallel boolean key, so the
+    // Rust matcher and the Web matcher both read the same flag without drift.
+    return _Card(title: 'Keyboard Shortcuts', children: [
+      _OptionCheckBox(
+        context,
+        'Enable keyboard shortcuts in remote session',
+        kShortcutLocalConfigKey,
+        isServer: false,
+        optGetter: ShortcutModel.isEnabled,
+        optSetter: (k, v) async {
+          final raw = bind.mainGetLocalOption(key: k);
+          Map<String, dynamic> parsed = {};
+          if (raw.isNotEmpty) {
+            try {
+              parsed = jsonDecode(raw) as Map<String, dynamic>;
+            } catch (_) {
+              parsed = {};
+            }
+          }
+          parsed['enabled'] = v;
+          parsed['bindings'] ??= <dynamic>[];
+          // Seed defaults the first time the user enables shortcuts so the
+          // common combos (Ctrl+Alt+Shift+Enter for fullscreen, etc.) work
+          // out of the box. Mirrors the same logic on the dedicated config
+          // page.
+          final list = (parsed['bindings'] as List?) ?? const [];
+          if (v && list.isEmpty) {
+            parsed['bindings'] =
+                jsonDecode(bind.mainGetDefaultKeyboardShortcuts());
+          }
+          await bind.mainSetLocalOption(key: k, value: jsonEncode(parsed));
+          // Refresh the matcher cache so the new flag / bindings take effect
+          // immediately. On native this hits the Rust matcher; on Web the
+          // bridge forwards to the JS-side matcher in flutter/web/js/.
+          bind.mainReloadKeyboardShortcuts();
+        },
+      ),
+      _ShortcutsConfigureRow(),
+    ]);
   }
 
   Widget theme() {
@@ -2941,6 +2989,37 @@ class _CountDownButtonState extends State<_CountDownButton> {
             },
       child: Text(
         _isButtonDisabled ? '$_countdownSeconds s' : translate(widget.text),
+      ),
+    );
+  }
+}
+
+// Tappable row that pushes the shortcut configuration page.
+class _ShortcutsConfigureRow extends StatelessWidget {
+  // ignore: unused_element
+  const _ShortcutsConfigureRow({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => const DesktopKeyboardShortcutsPage(),
+        ));
+      },
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(translate('Configure shortcuts...')),
+          ),
+          Icon(Icons.arrow_forward_ios,
+                  size: 16, color: disabledTextColor(context, true))
+              .marginOnly(right: 4),
+        ],
+      ).marginOnly(
+        left: _kCheckBoxLeftMargin,
+        top: 6,
+        bottom: 6,
       ),
     );
   }

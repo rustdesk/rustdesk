@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:html' as html;
 
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/common.dart' as common;
 
 final _privateConstructorUsedError = UnsupportedError(
     'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
@@ -930,6 +931,30 @@ class RustdeskImpl {
         ]));
   }
 
+  // Tell the JS-side matcher (flutter/web/js/src/shortcut_matcher.ts) to
+  // re-read its bindings from LocalStorage. Mirrors the native call which
+  // refreshes the Rust matcher's in-memory cache.
+  void mainReloadKeyboardShortcuts({dynamic hint}) {
+    js.context.callMethod('reloadShortcuts', []);
+  }
+
+  // Mirror of `default_bindings()` in `src/keyboard/shortcuts.rs`. Keep these
+  // two lists in sync — if you add or change a default binding on the Rust
+  // side, update the literal below to match.
+  String mainGetDefaultKeyboardShortcuts({dynamic hint}) {
+    const prefix = ['primary', 'alt', 'shift'];
+    final list = <Map<String, dynamic>>[
+      {'action': 'send_ctrl_alt_del', 'mods': prefix, 'key': 'delete'},
+      {'action': 'toggle_fullscreen', 'mods': prefix, 'key': 'enter'},
+      {'action': 'switch_display_next', 'mods': prefix, 'key': 'arrow_right'},
+      {'action': 'switch_display_prev', 'mods': prefix, 'key': 'arrow_left'},
+      {'action': 'screenshot', 'mods': prefix, 'key': 'p'},
+      for (var n = 1; n <= 9; n++)
+        {'action': 'switch_tab_$n', 'mods': prefix, 'key': 'digit$n'},
+    ];
+    return jsonEncode(list);
+  }
+
   String mainGetInputSource({dynamic hint}) {
     final inputSource =
         js.context.callMethod('getByName', ['option:local', 'input-source']);
@@ -1176,6 +1201,15 @@ class RustdeskImpl {
   }
 
   Future<void> mainInit({required String appDir, dynamic hint}) {
+    // JS -> Dart shortcut bridge. The matcher in flutter/web/js/src/
+    // shortcut_matcher.ts calls `window.onShortcutTriggered(actionId)` when a
+    // binding fires; route it to the active session's ShortcutModel.
+    // Web is single-window so `gFFI` is always the active session.
+    js.context['onShortcutTriggered'] = (dynamic action) {
+      if (action is String) {
+        common.gFFI.shortcutModel.onTriggered(action);
+      }
+    };
     return Future.value();
   }
 

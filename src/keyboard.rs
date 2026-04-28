@@ -10,6 +10,7 @@ use crate::{client::get_key_state, common::GrabState};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::log;
 use hbb_common::message_proto::*;
+use hbb_common::SessionID;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use rdev::KeyCode;
 use rdev::{Event, EventType, Key};
@@ -78,6 +79,8 @@ lazy_static::lazy_static! {
         Mutex::new(m)
     };
 }
+
+pub mod shortcuts;
 
 pub mod client {
     use super::*;
@@ -319,6 +322,33 @@ pub mod client {
     }
 
     pub fn process_event(keyboard_mode: &str, event: &Event, lock_modes: Option<i32>) {
+        // Shortcut intercept — must come before any wire encoding.
+        // Only fires on KeyPress (event_to_key_name in shortcuts.rs returns None
+        // for KeyRelease and other non-press events), so flushed releases from
+        // release_remote_keys pass straight through to the encode/forward path.
+        if let Some(action_id) = crate::keyboard::shortcuts::match_event(event) {
+            #[cfg(feature = "flutter")]
+            {
+                // The rdev grab loop is genuinely process-wide: it does not know which
+                // Flutter SessionID the keystroke was meant for, so we route to the
+                // globally-current session via flutter::get_cur_session_id() (maintained
+                // by session_enter_or_leave). This is the only behavior available on the
+                // rdev path; the Flutter path threads the explicit per-call SessionID
+                // through process_event_with_session instead.
+                let session_id = crate::flutter::get_cur_session_id();
+                crate::flutter::push_session_event(
+                    &session_id,
+                    "shortcut_triggered",
+                    vec![("action", &action_id)],
+                );
+            }
+            #[cfg(not(feature = "flutter"))]
+            {
+                let _ = action_id;
+            }
+            return;
+        }
+
         let keyboard_mode = get_keyboard_mode_enum(keyboard_mode);
         if is_long_press(&event) {
             return;
@@ -334,7 +364,33 @@ pub mod client {
         event: &Event,
         lock_modes: Option<i32>,
         session: &Session<T>,
+        session_id: SessionID,
     ) {
+        // Shortcut intercept — must come before any wire encoding.
+        // Only fires on KeyPress (event_to_key_name in shortcuts.rs returns None
+        // for KeyRelease and other non-press events), so flushed releases from
+        // release_remote_keys pass straight through to the encode/forward path.
+        if let Some(action_id) = crate::keyboard::shortcuts::match_event(event) {
+            #[cfg(feature = "flutter")]
+            {
+                // The Flutter path threads the explicit SessionID from the FFI entry
+                // (session_handle_flutter_*key_event) through this call, so the dispatch
+                // targets the exact tab the keystroke originated from — no dependency on
+                // the global focus tracker and no multi-window race.
+                crate::flutter::push_session_event(
+                    &session_id,
+                    "shortcut_triggered",
+                    vec![("action", &action_id)],
+                );
+            }
+            #[cfg(not(feature = "flutter"))]
+            {
+                let _ = action_id;
+                let _ = session_id;
+            }
+            return;
+        }
+
         let keyboard_mode = get_keyboard_mode_enum(keyboard_mode);
         if is_long_press(&event) {
             return;
