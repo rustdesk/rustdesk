@@ -65,7 +65,7 @@ class _TextFieldBridgeState extends State<TextFieldBridge> {
     final mods = widget.modifierController.heldModifiers;
     if (mods.isNotEmpty && typed.length == 1) {
       // Modifier + single char → key event (e.g. ⌘C)
-      widget.inputBridge.tapKeyWithModifiers(typed.toLowerCase(), mods);
+      widget.inputBridge.tapKey(typed.toLowerCase(), modifiers: mods);
       widget.modifierController.releaseOneShot();
     } else {
       // Plain text → string injection (handles Hebrew, emoji, IME)

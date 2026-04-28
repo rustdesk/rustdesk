@@ -36,6 +36,44 @@ const _kKeyAliases = <String, String>{
 String _resolveKeyName(String name) =>
     _kKeyAliases[name.toLowerCase()] ?? name;
 
+class _ModifierFlags {
+  final bool alt;
+  final bool ctrl;
+  final bool shift;
+  final bool command;
+  const _ModifierFlags({
+    this.alt = false,
+    this.ctrl = false,
+    this.shift = false,
+    this.command = false,
+  });
+
+  static const empty = _ModifierFlags();
+
+  factory _ModifierFlags.from(Set<String> modifiers) {
+    var alt = false, ctrl = false, shift = false, command = false;
+    for (final m in modifiers) {
+      switch (m.toLowerCase()) {
+        case 'alt':
+        case 'option':
+        case 'menu':
+          alt = true;
+        case 'ctrl':
+        case 'control':
+          ctrl = true;
+        case 'shift':
+          shift = true;
+        case 'meta':
+        case 'cmd':
+        case 'command':
+        case 'win':
+          command = true;
+      }
+    }
+    return _ModifierFlags(alt: alt, ctrl: ctrl, shift: shift, command: command);
+  }
+}
+
 class InputBridge {
   final UuidValue sessionId;
 
@@ -44,29 +82,15 @@ class InputBridge {
   factory InputBridge.poc() =>
       InputBridge(UuidValue('00000000-0000-0000-0000-000000000000'));
 
-  Future<void> tapKey(String name) async {
-    await keyDown(name);
+  Future<void> tapKey(String name, {Set<String> modifiers = const {}}) async {
+    final flags = _ModifierFlags.from(modifiers);
+    await _key(name, down: true, flags: flags);
     await Future<void>.delayed(const Duration(milliseconds: 8));
-    await keyUp(name);
+    await _key(name, down: false, flags: flags);
   }
-
-  Future<void> keyDown(String name) => _key(name, down: true);
-  Future<void> keyUp(String name) => _key(name, down: false);
 
   Future<void> typeString(String s) =>
       bind.sessionInputString(sessionId: sessionId, value: s);
-
-  Future<void> tapKeyWithModifiers(String key, Set<String> modifiers) async {
-    for (final m in modifiers) {
-      await keyDown(m);
-      await Future<void>.delayed(const Duration(milliseconds: 12));
-    }
-    await tapKey(key);
-    for (final m in modifiers) {
-      await keyUp(m);
-      await Future<void>.delayed(const Duration(milliseconds: 8));
-    }
-  }
 
   // RustDesk's flutter_ffi.rs deserialises mouse events as
   // HashMap<String, String>, so all values must be strings — int x/y are
@@ -80,16 +104,20 @@ class InputBridge {
         }),
       );
 
-  Future<void> _key(String name, {required bool down}) {
+  Future<void> _key(
+    String name, {
+    required bool down,
+    _ModifierFlags flags = _ModifierFlags.empty,
+  }) {
     return bind.sessionInputKey(
       sessionId: sessionId,
       name: _resolveKeyName(name),
       down: down,
       press: false,
-      alt: false,
-      ctrl: false,
-      shift: false,
-      command: false,
+      alt: flags.alt,
+      ctrl: flags.ctrl,
+      shift: flags.shift,
+      command: flags.command,
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
 
 import '../input/input_bridge.dart';
-import '../input/scroll_gesture.dart';
 import '../input/text_field_bridge.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
@@ -28,14 +27,13 @@ class RemoteSessionScreen extends StatefulWidget {
 
 class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   late final InputBridge _bridge;
-  late final ModifierController _modCtl;
+  final _modCtl = ModifierController();
   final _kbFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _bridge = InputBridge(gFFI.sessionId);
-    _modCtl = ModifierController(_bridge);
   }
 
   @override
@@ -53,6 +51,11 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     }
   }
 
+  void _onTwoFingerScroll(double dx, double dy) {
+    // Round to int — wheel deltas are integers on the wire.
+    _bridge.scroll(dx.round(), dy.round());
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -67,16 +70,15 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         // Layer 0: upstream RemotePage — owns canvas, connection lifecycle,
         // and all existing mobile gestures. KeyHelpTools and the
         // BottomAppBar are suppressed; PowerStrip replaces them.
-        TwoFingerScrollDetector(
-          inputBridge: _bridge,
-          child: RemotePage(
-            id: widget.id,
-            password: widget.password,
-            isSharedPassword: widget.isSharedPassword,
-            forceRelay: widget.forceRelay,
-            hideKeyHelpTools: true,
-            hideBottomBar: true,
-          ),
+        // Two-finger pan is redirected to remote scroll via the callback.
+        RemotePage(
+          id: widget.id,
+          password: widget.password,
+          isSharedPassword: widget.isSharedPassword,
+          forceRelay: widget.forceRelay,
+          hideKeyHelpTools: true,
+          hideBottomBar: true,
+          onTwoFingerScroll: _onTwoFingerScroll,
         ),
 
         // Layer 1: hidden 1×1 TextField — captures native iOS keyboard input

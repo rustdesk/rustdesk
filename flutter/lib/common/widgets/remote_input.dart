@@ -62,6 +62,10 @@ class RawTouchGestureDetectorRegion extends StatefulWidget {
   final Widget child;
   final FFI ffi;
   final bool isCamera;
+  // Tabby: when set, two-finger pan (no significant pinch) routes to this
+  // callback instead of panning the local canvas. Pinch-to-zoom of the
+  // local canvas is preserved.
+  final void Function(double dx, double dy)? onTwoFingerScroll;
   late final InputModel inputModel = ffi.inputModel;
   late final FfiModel ffiModel = ffi.ffiModel;
 
@@ -69,6 +73,7 @@ class RawTouchGestureDetectorRegion extends StatefulWidget {
     required this.child,
     required this.ffi,
     this.isCamera = false,
+    this.onTwoFingerScroll,
   });
 
   @override
@@ -485,6 +490,19 @@ class _RawTouchGestureDetectorRegionState
       }
     } else {
       // mobile
+      // Tabby: redirect two-finger pan (no significant pinch) to the
+      // remote-scroll callback. Pinch updates still zoom the local canvas
+      // so the user can frame the remote display.
+      const pinchEpsilon = 0.02;
+      final isPinch = (d.scale - _scale).abs() > pinchEpsilon;
+      if (widget.onTwoFingerScroll != null && !isPinch) {
+        widget.onTwoFingerScroll!(
+          d.focalPointDelta.dx,
+          d.focalPointDelta.dy,
+        );
+        _scale = d.scale;
+        return;
+      }
       ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
       _scale = d.scale;
       ffi.canvasModel.panX(d.focalPointDelta.dx);

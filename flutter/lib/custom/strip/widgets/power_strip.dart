@@ -97,9 +97,12 @@ class PowerStrip extends StatelessWidget {
   }
 
   // Haptic fires once on touch-down inside _RepeatingKeyButton (not here),
-  // so repeat ticks don't buzz on every fire.
-  Future<void> _onRegularPressStart(KeyDef k) =>
-      inputBridge.tapKey(k.keyName);
+  // so repeat ticks don't buzz on every fire. Held modifiers are passed
+  // as flags on the KeyEvent — see ModifierController doc for the why.
+  Future<void> _onRegularPressStart(KeyDef k) => inputBridge.tapKey(
+        k.keyName,
+        modifiers: modifierController.heldModifiers,
+      );
 
   void _onRegularPressEnd(KeyDef k) {
     modifierController.releaseOneShot();
