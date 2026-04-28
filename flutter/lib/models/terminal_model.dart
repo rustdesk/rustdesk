@@ -309,9 +309,9 @@ class TerminalModel with ChangeNotifier {
 
       final persistentSessions =
           (evt['persistent_sessions'] as List<dynamic>? ?? [])
-          .whereType<int>()
-          .where((id) => !parent.terminalModels.containsKey(id))
-          .toList();
+              .whereType<int>()
+              .where((id) => !parent.terminalModels.containsKey(id))
+              .toList();
       if (kWindowId != null && persistentSessions.isNotEmpty) {
         DesktopMultiWindow.invokeMethod(
             kWindowId!,

@@ -46,6 +46,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
           .setTitle(getWindowNameWithId(id));
     };
     tabController.onRemoved = (_, id) => onRemoveId(id);
+    tabController.onCloseWindow = _closeWindowFromConnection;
     final terminalId = params['terminalId'] ?? _nextTerminalId++;
     tabController.add(_createTerminalTab(
       peerId: params['id'],
@@ -559,6 +560,11 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     if (tabController.state.value.tabs.isEmpty) {
       WindowController.fromWindowId(windowId()).close();
     }
+  }
+
+  Future<void> _closeWindowFromConnection() async {
+    await _closeAllTabs();
+    await WindowController.fromWindowId(windowId()).close();
   }
 
   int windowId() {

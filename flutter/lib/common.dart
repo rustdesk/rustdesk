@@ -716,6 +716,11 @@ closeConnection({String? id}) {
       stateGlobal.isInMainPage = true;
     } else {
       final controller = Get.find<DesktopTabController>();
+      if (controller.tabType == DesktopTabType.terminal &&
+          controller.onCloseWindow != null) {
+        controller.onCloseWindow!();
+        return;
+      }
       controller.closeBy(id);
     }
   }
