@@ -1,14 +1,15 @@
 import 'package:flutter/foundation.dart';
 
-import '../../input/input_bridge.dart';
-
 enum ModifierMode { off, oneShot, sticky, held }
 
+/// Tracks held-modifier state without emitting key events. Modifier state is
+/// applied as flags on the next regular KeyEvent (via InputBridge.tapKey's
+/// `modifiers` argument), matching upstream RustDesk's `inputModel.command`
+/// pattern. RustDesk's macOS server reads these flags from
+/// `key_event.modifiers` to set CGEventFlagCommand on the synthetic event;
+/// emitting Meta as a separate keyDown does not translate to that flag.
 class ModifierController extends ChangeNotifier {
-  final InputBridge bridge;
   final Map<String, ModifierMode> _state = {};
-
-  ModifierController(this.bridge);
 
   Set<String> get heldModifiers => _state.entries
       .where((e) => e.value != ModifierMode.off)
@@ -23,41 +24,35 @@ class ModifierController extends ChangeNotifier {
     switch (current) {
       case ModifierMode.off:
         _state[name] = ModifierMode.oneShot;
-        bridge.keyDown(name);
       case ModifierMode.oneShot:
         _state[name] = ModifierMode.sticky;
-        // key already held down, no additional FFI call needed
       case ModifierMode.sticky:
       case ModifierMode.held:
         _state[name] = ModifierMode.off;
-        bridge.keyUp(name);
     }
     notifyListeners();
   }
 
   void hold(String name) {
     _state[name] = ModifierMode.held;
-    bridge.keyDown(name);
     notifyListeners();
   }
 
   void release(String name) {
     if (modeFor(name) == ModifierMode.held) {
       _state[name] = ModifierMode.off;
-      bridge.keyUp(name);
       notifyListeners();
     }
   }
 
   void releaseOneShot() {
-    final toRelease = _state.entries
+    final cleared = _state.entries
         .where((e) => e.value == ModifierMode.oneShot)
         .map((e) => e.key)
         .toList();
-    for (final k in toRelease) {
+    for (final k in cleared) {
       _state[k] = ModifierMode.off;
-      bridge.keyUp(k);
     }
-    if (toRelease.isNotEmpty) notifyListeners();
+    if (cleared.isNotEmpty) notifyListeners();
   }
 }

@@ -49,7 +49,8 @@ class RemotePage extends StatefulWidget {
       this.isSharedPassword,
       this.forceRelay,
       this.hideKeyHelpTools = false,
-      this.hideBottomBar = false})
+      this.hideBottomBar = false,
+      this.onTwoFingerScroll})
       : super(key: key);
 
   final String id;
@@ -60,6 +61,9 @@ class RemotePage extends StatefulWidget {
   // legacy panels, so callers can suppress them.
   final bool hideKeyHelpTools;
   final bool hideBottomBar;
+  // Tabby: two-finger pan (no pinch) routes here instead of panning the
+  // local canvas. Forwarded to RawTouchGestureDetectorRegion.
+  final void Function(double dx, double dy)? onTwoFingerScroll;
 
   @override
   State<RemotePage> createState() => _RemotePageState(id);
@@ -463,6 +467,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                     : RawTouchGestureDetectorRegion(
                                         child: getBodyForMobile(),
                                         ffi: gFFI,
+                                        onTwoFingerScroll:
+                                            widget.onTwoFingerScroll,
                                       ),
                               );
                             }),
