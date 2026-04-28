@@ -105,6 +105,7 @@ fn main() -> io::Result<()> {
             quality,
             codec: vpx_codec,
             keyframe_interval: None,
+            image_quality: hbb_common::message_proto::ImageQuality::Balanced,
         }),
         false,
     )

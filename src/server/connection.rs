@@ -945,7 +945,7 @@ impl Connection {
                         let mut msg_out = Message::new();
                         msg_out.set_test_delay(TestDelay{
                             last_delay: conn.network_delay,
-                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate(),
+                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate_in_test_delay(),
                             ..Default::default()
                         });
                         conn.send(msg_out.into()).await;
