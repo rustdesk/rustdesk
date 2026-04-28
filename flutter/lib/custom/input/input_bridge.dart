@@ -3,6 +3,39 @@ import 'dart:convert';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:uuid/uuid.dart';
 
+// Friendly names used by the PowerStrip layout → names recognised by
+// RustDesk's KEY_MAP (src/client.rs). Multi-char names that are not in
+// KEY_MAP are silently dropped by ui_session_interface.rs::input_key, so
+// every non-single-char key in our layout must be translated here.
+const _kKeyAliases = <String, String>{
+  'escape': 'VK_ESCAPE',
+  'tab': 'VK_TAB',
+  'backspace': 'VK_BACK',
+  'return': 'VK_RETURN',
+  'enter': 'VK_RETURN',
+  'space': 'VK_SPACE',
+  'delete': 'VK_DELETE',
+  'left': 'VK_LEFT',
+  'right': 'VK_RIGHT',
+  'up': 'VK_UP',
+  'down': 'VK_DOWN',
+  'home': 'VK_HOME',
+  'end': 'VK_END',
+  'pageup': 'VK_PRIOR',
+  'pagedown': 'VK_NEXT',
+  'control': 'VK_CONTROL',
+  'ctrl': 'VK_CONTROL',
+  'alt': 'VK_MENU',
+  'shift': 'VK_SHIFT',
+  'meta': 'Meta',
+  'cmd': 'Meta',
+  'command': 'Meta',
+  'win': 'Meta',
+};
+
+String _resolveKeyName(String name) =>
+    _kKeyAliases[name.toLowerCase()] ?? name;
+
 class InputBridge {
   final UuidValue sessionId;
 
@@ -35,15 +68,22 @@ class InputBridge {
     }
   }
 
+  // RustDesk's flutter_ffi.rs deserialises mouse events as
+  // HashMap<String, String>, so all values must be strings — int x/y are
+  // silently dropped.
   Future<void> scroll(int dx, int dy) => bind.sessionSendMouse(
         sessionId: sessionId,
-        msg: jsonEncode({'type': 'wheel', 'x': dx, 'y': dy}),
+        msg: jsonEncode({
+          'type': 'wheel',
+          'x': dx.toString(),
+          'y': dy.toString(),
+        }),
       );
 
   Future<void> _key(String name, {required bool down}) {
     return bind.sessionInputKey(
       sessionId: sessionId,
-      name: name,
+      name: _resolveKeyName(name),
       down: down,
       press: false,
       alt: false,

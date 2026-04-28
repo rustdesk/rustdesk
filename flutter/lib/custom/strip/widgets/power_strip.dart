@@ -68,6 +68,12 @@ class PowerStrip extends StatelessWidget {
           keyDef: k,
           modifierController: modifierController,
           onTap: () => _handle(k),
+          onPressStart: k.type == KeyType.regular
+              ? () => _onRegularPressStart(k)
+              : null,
+          onPressEnd: k.type == KeyType.regular
+              ? () => _onRegularPressEnd(k)
+              : null,
         ),
       );
 
@@ -81,11 +87,21 @@ class PowerStrip extends StatelessWidget {
       case KeyType.keyboardToggle:
         onKeyboardTap();
       case KeyType.regular:
-        inputBridge.tapKey(k.keyName);
-        modifierController.releaseOneShot();
+        // Regular keys go through onPressStart / onPressEnd in KeyCell so the
+        // held modifier (if any) stays down until the in-flight tap finishes.
+        break;
       case KeyType.layer:
         // Fn layer not implemented in v1 — use macros instead
         break;
     }
+  }
+
+  // Haptic fires once on touch-down inside _RepeatingKeyButton (not here),
+  // so repeat ticks don't buzz on every fire.
+  Future<void> _onRegularPressStart(KeyDef k) =>
+      inputBridge.tapKey(k.keyName);
+
+  void _onRegularPressEnd(KeyDef k) {
+    modifierController.releaseOneShot();
   }
 }
