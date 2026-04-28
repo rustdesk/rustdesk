@@ -13,6 +13,7 @@ class PowerStrip extends StatelessWidget {
   final ModifierController modifierController;
   final VoidCallback onMacrosTap;
   final VoidCallback onKeyboardTap;
+  final VoidCallback onDisconnect;
   final bool leftHanded;
 
   const PowerStrip({
@@ -21,6 +22,7 @@ class PowerStrip extends StatelessWidget {
     required this.modifierController,
     required this.onMacrosTap,
     required this.onKeyboardTap,
+    required this.onDisconnect,
     this.leftHanded = false,
   });
 
@@ -86,6 +88,8 @@ class PowerStrip extends StatelessWidget {
         onMacrosTap();
       case KeyType.keyboardToggle:
         onKeyboardTap();
+      case KeyType.disconnect:
+        onDisconnect();
       case KeyType.regular:
         // Regular keys go through onPressStart / onPressEnd in KeyCell so the
         // held modifier (if any) stays down until the in-flight tap finishes.

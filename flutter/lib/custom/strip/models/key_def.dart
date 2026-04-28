@@ -1,4 +1,11 @@
-enum KeyType { regular, modifier, macroOpener, layer, keyboardToggle }
+enum KeyType {
+  regular,
+  modifier,
+  macroOpener,
+  layer,
+  keyboardToggle,
+  disconnect,
+}
 
 class KeyDef {
   final String label;
