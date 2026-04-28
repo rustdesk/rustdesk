@@ -391,14 +391,30 @@ class FileController {
 
     await Future.delayed(Duration(milliseconds: 100));
 
-    final dir = (await bind.sessionGetPeerOption(
+    final savedDir = (await bind.sessionGetPeerOption(
         sessionId: sessionId, name: isLocal ? "local_dir" : "remote_dir"));
-    openDirectory(dir.isEmpty ? options.value.home : dir);
+    Future<bool> tryOpenReadyDirs() async {
+      final dirs = <String>{
+        if (directory.value.path.isNotEmpty) directory.value.path,
+        if (savedDir.isNotEmpty) savedDir,
+        options.value.home,
+      };
+      for (final dir in dirs) {
+        if (await openDirectory(dir, isBack: true)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    var opened = await tryOpenReadyDirs();
 
     await Future.delayed(Duration(seconds: 1));
 
-    if (directory.value.path.isEmpty) {
-      openDirectory(options.value.home);
+    if (!opened) {
+      // The peer may become ready during the reconnect delay, so retry the
+      // same candidates instead of only retrying the default home directory.
+      await tryOpenReadyDirs();
     }
   }
 
@@ -429,19 +445,23 @@ class FileController {
     });
   }
 
-  Future<void> refresh() async {
-    await openDirectory(directory.value.path);
+  Future<bool> refresh() async {
+    // "." can be both a refresh command and a real remote directory path.
+    // Refresh must bypass openDirectory's command dispatch to avoid recursion.
+    return await _openDirectoryPath(directory.value.path, isBack: true);
   }
 
-  Future<void> openDirectory(String path, {bool isBack = false}) async {
+  Future<bool> openDirectory(String path, {bool isBack = false}) async {
     if (path == ".") {
-      refresh();
-      return;
+      return await refresh();
     }
     if (path == "..") {
-      goToParentDirectory();
-      return;
+      return await _goToParentDirectory(isBack: isBack);
     }
+    return await _openDirectoryPath(path, isBack: isBack);
+  }
+
+  Future<bool> _openDirectoryPath(String path, {bool isBack = false}) async {
     if (!isBack) {
       pushHistory();
     }
@@ -458,8 +478,10 @@ class FileController {
       final fd = await fileFetcher.fetchDirectory(path, isLocal, showHidden);
       fd.format(isWindows, sort: sortBy.value);
       directory.value = fd;
+      return true;
     } catch (e) {
       debugPrint("Failed to openDirectory $path: $e");
+      return false;
     }
   }
 
@@ -491,15 +513,18 @@ class FileController {
   }
 
   void goToParentDirectory() {
+    unawaited(_goToParentDirectory());
+  }
+
+  Future<bool> _goToParentDirectory({bool isBack = false}) async {
     final isWindows = options.value.isWindows;
     final dirPath = directory.value.path;
     var parent = PathUtil.dirname(dirPath, isWindows);
     // specially for C:\, D:\, goto '/'
     if (parent == dirPath && isWindows) {
-      openDirectory('/');
-      return;
+      return await openDirectory('/', isBack: isBack);
     }
-    openDirectory(parent);
+    return await openDirectory(parent, isBack: isBack);
   }
 
   // TODO deprecated this
