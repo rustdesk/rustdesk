@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
 
 import '../input/input_bridge.dart';
@@ -56,6 +57,13 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     _bridge.scroll(dx.round(), dy.round());
   }
 
+  void _onDisconnect() {
+    // Upstream's clientClose shows the standard "Are you sure?" dialog and
+    // closes the connection on confirm; matches the X button in the legacy
+    // BottomAppBar.
+    clientClose(gFFI.sessionId, gFFI);
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -104,6 +112,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
             modifierController: _modCtl,
             onMacrosTap: _onMacrosTap,
             onKeyboardTap: _onKeyboardTap,
+            onDisconnect: _onDisconnect,
           ),
         ),
       ],
