@@ -499,17 +499,23 @@ class _RawTouchGestureDetectorRegionState
       // Tabby: redirect two-finger pan (no pinch) to the remote-scroll
       // callback. Pinch is detected against the cumulative gesture scale
       // (not frame-to-frame); once detected, the lock holds for the rest
-      // of the gesture so a slow pinch doesn't leak scroll between frames.
+      // of the gesture. A 15% threshold tolerates natural finger drift
+      // during a drag, which can routinely reach 5-7%. The minPanDelta
+      // filter suppresses sub-pixel jitter during the pre-lock frames so
+      // a real drag doesn't emit micro-scrolls that race the lock.
       if (widget.onTwoFingerScroll != null) {
-        const pinchEpsilon = 0.02;
+        const pinchEpsilon = 0.15;
+        const minPanDelta = 1.0;
         if ((d.scale - 1.0).abs() > pinchEpsilon) {
           _twoFingerPinchLocked = true;
         }
         if (!_twoFingerPinchLocked) {
-          widget.onTwoFingerScroll!(
-            d.focalPointDelta.dx,
-            d.focalPointDelta.dy,
-          );
+          if (d.focalPointDelta.distance >= minPanDelta) {
+            widget.onTwoFingerScroll!(
+              d.focalPointDelta.dx,
+              d.focalPointDelta.dy,
+            );
+          }
           _scale = d.scale;
           return;
         }
