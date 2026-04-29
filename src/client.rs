@@ -1544,6 +1544,7 @@ pub struct VideoHandler {
     record: bool,
     record_tx: Option<std::sync::mpsc::SyncSender<RecordTask>>,
     record_send_err_logged: bool,
+    record_drop_logged: bool,
     _display: usize, // useful for debug
     fail_counter: usize,
     first_frame: bool,
@@ -1585,6 +1586,7 @@ impl VideoHandler {
             record: false,
             record_tx: None,
             record_send_err_logged: false,
+            record_drop_logged: false,
             _display,
             fail_counter: 0,
             first_frame: true,
@@ -1603,11 +1605,10 @@ impl VideoHandler {
         if format != self.decoder.format() {
             self.reset(Some(format));
         }
-        if vf.union.is_none() {
+        let Some(frame) = vf.union.as_ref() else {
             return Ok(false);
-        }
+        };
         let res = {
-            let frame = vf.union.as_ref().unwrap();
             self.decoder.handle_video_frame(
                 frame,
                 &mut self.rgb,
@@ -1646,6 +1647,12 @@ impl VideoHandler {
                                 Ok(()) => {}
                                 Err(TrySendError::Full(_task)) => {
                                     // Drop frames if recorder can't keep up (e.g. slow network share).
+                                    if !self.record_drop_logged {
+                                        self.record_drop_logged = true;
+                                        log::warn!(
+                                            "recording is falling behind; dropping frames to keep rendering responsive"
+                                        );
+                                    }
                                 }
                                 Err(TrySendError::Disconnected(_task)) => {
                                     if !self.record_send_err_logged {
@@ -1684,6 +1691,7 @@ impl VideoHandler {
         self.record = false;
         self.record_tx = None;
         self.record_send_err_logged = false;
+        self.record_drop_logged = false;
         if start {
             let (tx, rx) = std::sync::mpsc::sync_channel::<RecordTask>(120);
             let ctx = RecorderContext {
