@@ -1155,6 +1155,7 @@ impl InvokeUiSession for FlutterHandler {
                     ("type", json!("data")),
                     ("terminal_id", json!(data.terminal_id)),
                     ("data", json!(&encoded)),
+                    ("replay", json!(data.replay)),
                 ];
                 self.push_event_("terminal_response", &event_data, &[], &[]);
             }

@@ -176,7 +176,10 @@ class _TerminalPageState extends State<TerminalPage>
       return _defaultTerminalPadding;
     }
     final topBottom = extraSpace / 2.0;
-    return EdgeInsets.symmetric(horizontal: 5.0, vertical: topBottom);
+    return EdgeInsets.symmetric(
+      horizontal: _defaultTerminalPadding.horizontal / 2,
+      vertical: topBottom,
+    );
   }
 
   @override

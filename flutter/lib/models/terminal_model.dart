@@ -41,7 +41,7 @@ class TerminalModel with ChangeNotifier {
   Future<void> _handleInput(String data) async {
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
     // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
-    // - Peer Windows: '\r' works, '\n' is just a newline (https://github.com/rustdesk/rustdesk/pull/14736).
+    // - Peer Windows: '\r' works, '\n' is just a newline.
     // - Peer Linux: canonical-mode shells accept both, but raw-mode apps
     //   (readline, prompt_toolkit, vim, TUI frameworks) expect '\r'.
     // - Peer macOS: same as Linux, raw-mode apps expect '\r'
@@ -347,7 +347,8 @@ class TerminalModel with ChangeNotifier {
     final data = evt['data'];
 
     if (data != null) {
-      final suppressTerminalOutput = _suppressNextTerminalDataOutput;
+      final suppressTerminalOutput =
+          evt['replay'] == true || _suppressNextTerminalDataOutput;
       _suppressNextTerminalDataOutput = false;
       try {
         String text = '';
