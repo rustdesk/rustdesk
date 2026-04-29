@@ -22,8 +22,6 @@ use crate::{
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use cidr_utils::cidr::IpCidr;
-#[cfg(target_os = "linux")]
-use hbb_common::platform::linux::run_cmds;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
@@ -4880,6 +4878,9 @@ pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+// IPC bootstrap summary:
+// - Resolve target CM socket (headless/non-headless, optional UID-scoped path on Linux).
+// - Start CM when missing, then bridge bidirectional messages between this task and CM IPC.
 async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
@@ -4894,10 +4895,19 @@ async fn start_ipc(
         }
         sleep(1.).await;
     }
+    #[cfg(target_os = "linux")]
+    let headless_cm = crate::is_server()
+        && crate::platform::is_headless_allowed()
+        && linux_desktop_manager::is_headless();
+    #[cfg(not(target_os = "linux"))]
+    let headless_cm = false;
     let mut stream = None;
-    if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
-        stream = Some(s);
-    } else {
+    if !headless_cm {
+        if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
+            stream = Some(s);
+        }
+    }
+    if stream.is_none() {
         #[allow(unused_mut)]
         #[allow(unused_assignments)]
         let mut args = vec!["--cm"];
@@ -4907,74 +4917,122 @@ async fn start_ipc(
 
         // Cm run as user, wait until desktop session is ready.
         #[cfg(target_os = "linux")]
-        if crate::platform::is_headless_allowed() && linux_desktop_manager::is_headless() {
+        if headless_cm {
             let mut username = linux_desktop_manager::get_username();
             loop {
                 if !username.is_empty() {
                     break;
                 }
+                // `_rx_desktop_ready` is used as a wake-up signal from desktop/session state changes
+                // (for example wait_desktop_cm_ready paths). It is not itself a proof of CM readiness.
+                // TODO:
+                // When `_rx_desktop_ready` is closed, `recv()` returns
+                // `None` immediately and this loop may spin if `username` remains empty.
+                // Keep behavior unchanged for now; if field reports appear, handle `Ok(None)` by
+                // breaking/returning to avoid hot-looping.
                 let _res = timeout(1_000, _rx_desktop_ready.recv()).await;
                 username = linux_desktop_manager::get_username();
             }
             let uid = {
-                let output = run_cmds(&format!("id -u {}", &username))?;
+                let username_for_cmd = username.clone();
+                let mut uid_cmd = hbb_common::tokio::process::Command::new("id");
+                // TODO:
+                // Keep current behavior for now to minimize change risk.
+                // If usernames starting with '-' are observed in the field, prefer:
+                // `id -u -- <username>` to avoid option-parsing ambiguity.
+                // Already verified that `id -u -- <username>` works as expected on macOS and Ubuntu 24.04.
+                uid_cmd.arg("-u").arg(&username_for_cmd).kill_on_drop(true);
+                let output = timeout(10_000, uid_cmd.output())
+                    .await
+                    .map_err(|_| anyhow!("Timed out querying uid for {}", username))?
+                    .map_err(|e| anyhow!("Failed to run `id -u {}`: {}", username, e))?;
+                if !output.status.success() {
+                    bail!("Failed to query uid for {}", username);
+                }
+                let output = String::from_utf8_lossy(&output.stdout);
                 let output = output.trim();
-                if output.is_empty() || !output.parse::<i32>().is_ok() {
-                    bail!("Invalid username {}", &username);
+                if output.parse::<u32>().is_err() {
+                    bail!("Invalid uid {}", output);
                 }
                 output.to_string()
             };
             user = Some((uid, username));
             args = vec!["--cm-no-ui"];
         }
-        let run_done;
-        if crate::platform::is_root() {
-            let mut res = Ok(None);
-            for _ in 0..10 {
-                #[cfg(not(any(target_os = "linux")))]
-                {
-                    log::debug!("Start cm");
-                    res = crate::platform::run_as_user(args.clone());
-                }
-                #[cfg(target_os = "linux")]
-                {
-                    log::debug!("Start cm");
-                    res = crate::platform::run_as_user(
-                        args.clone(),
-                        user.clone(),
-                        None::<(&str, &str)>,
-                    );
-                }
-                if res.is_ok() {
-                    break;
-                }
-                log::error!("Failed to run cm: {res:?}");
-                sleep(1.).await;
-            }
-            if let Some(task) = res? {
-                super::CHILD_PROCESS.lock().unwrap().push(task);
-            }
-            run_done = true;
-        } else {
-            run_done = false;
-        }
-        if !run_done {
-            log::debug!("Start cm");
-            super::CHILD_PROCESS
-                .lock()
-                .unwrap()
-                .push(crate::run_me(args)?);
-        }
-        for _ in 0..20 {
-            sleep(0.3).await;
-            if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
+        #[cfg(target_os = "linux")]
+        let cm_uid: Option<u32> = match &user {
+            Some((uid, _)) => Some(
+                uid.parse::<u32>()
+                    .map_err(|_| anyhow!("Invalid uid {}", uid))?,
+            ),
+            None => None,
+        };
+        #[cfg(target_os = "linux")]
+        if let Some(uid) = cm_uid {
+            if let Ok(s) = crate::ipc::connect_for_uid(1000, uid, "_cm").await {
                 stream = Some(s);
-                break;
             }
         }
         if stream.is_none() {
-            bail!("Failed to connect to connection manager");
+            let run_done;
+            if crate::platform::is_root() {
+                let mut res = Ok(None);
+                for _ in 0..10 {
+                    #[cfg(not(any(target_os = "linux")))]
+                    {
+                        log::debug!("Start cm");
+                        res = crate::platform::run_as_user(args.clone());
+                    }
+                    #[cfg(target_os = "linux")]
+                    {
+                        log::debug!("Start cm");
+                        res = crate::platform::run_as_user(
+                            args.clone(),
+                            user.clone(),
+                            None::<(&str, &str)>,
+                        );
+                    }
+                    if res.is_ok() {
+                        break;
+                    }
+                    log::error!("Failed to run cm: {res:?}");
+                    sleep(1.).await;
+                }
+                if let Some(task) = res? {
+                    super::CHILD_PROCESS.lock().unwrap().push(task);
+                }
+                run_done = true;
+            } else {
+                run_done = false;
+            }
+            if !run_done {
+                log::debug!("Start cm");
+                super::CHILD_PROCESS
+                    .lock()
+                    .unwrap()
+                    .push(crate::run_me(args)?);
+            }
+            for _ in 0..20 {
+                sleep(0.3).await;
+                #[cfg(target_os = "linux")]
+                {
+                    if let Some(uid) = cm_uid {
+                        if let Ok(s) = crate::ipc::connect_for_uid(1000, uid, "_cm").await {
+                            stream = Some(s);
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
+                    stream = Some(s);
+                    break;
+                }
+            }
         }
+    }
+    if stream.is_none() {
+        bail!("Failed to connect to connection manager");
     }
 
     let _res = tx_stream_ready.send(()).await;

@@ -185,9 +185,13 @@ pub mod client {
 pub mod service {
     use super::*;
     use hbb_common::lazy_static;
+    #[cfg(target_os = "linux")]
+    use parity_tokio_ipc::Connection as RawIpcConnection;
     use scrap::wayland::{
         pipewire::RDP_SESSION_INFO, remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop,
     };
+    #[cfg(target_os = "linux")]
+    use std::os::unix::io::AsRawFd;
     use std::{collections::HashMap, sync::Mutex};
 
     lazy_static::lazy_static! {
@@ -602,7 +606,10 @@ pub mod service {
             }
             DataKeyboard::KeyDown(enigo::Key::Raw(code)) => {
                 if *code < 8 {
-                    log::error!("Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping", code);
+                    log::error!(
+                        "Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping",
+                        code
+                    );
                 } else {
                     let down_event = InputEvent::new(EventType::KEY, *code - 8, 1);
                     allow_err!(keyboard.emit(&[down_event]));
@@ -610,7 +617,10 @@ pub mod service {
             }
             DataKeyboard::KeyUp(enigo::Key::Raw(code)) => {
                 if *code < 8 {
-                    log::error!("Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping", code);
+                    log::error!(
+                        "Invalid Raw keycode {} (must be >= 8 due to XKB offset), skipping",
+                        code
+                    );
                 } else {
                     let up_event = InputEvent::new(EventType::KEY, *code - 8, 0);
                     allow_err!(keyboard.emit(&[up_event]));
@@ -909,6 +919,31 @@ pub mod service {
         });
     }
 
+    #[cfg(target_os = "linux")]
+    fn authorize_uinput_peer(postfix: &str, stream: &RawIpcConnection) -> bool {
+        if !hbb_common::config::is_service_ipc_postfix(postfix) {
+            return true;
+        }
+        let peer_uid = ipc::peer_uid_from_fd(stream.as_raw_fd());
+        let active_uid = ipc::active_uid();
+        let authorized =
+            peer_uid.is_some_and(|uid| ipc::is_allowed_service_peer_uid(uid, active_uid));
+        if !authorized {
+            crate::ipc::log_rejected_uinput_connection(postfix, peer_uid, active_uid);
+            return false;
+        }
+        if let Err(err) = ipc::ensure_peer_executable_matches_current_by_fd(stream.as_raw_fd(), postfix)
+        {
+            log::warn!(
+                "Rejected connection on protected uinput ipc channel due to executable mismatch: postfix={}, err={}",
+                postfix,
+                err
+            );
+            return false;
+        }
+        true
+    }
+
     /// Start uinput service.
     async fn start_service<F: FnOnce(ipc::Connection) + Copy>(postfix: &str, handler: F) {
         match new_listener(postfix).await {
@@ -916,6 +951,10 @@ pub mod service {
                 while let Some(result) = incoming.next().await {
                     match result {
                         Ok(stream) => {
+                            #[cfg(target_os = "linux")]
+                            if !authorize_uinput_peer(postfix, &stream) {
+                                continue;
+                            }
                             log::debug!("Got new connection of uinput ipc {}", postfix);
                             handler(Connection::new(stream));
                         }

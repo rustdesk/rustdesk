@@ -73,9 +73,18 @@ use winapi::{
 };
 use windows::Win32::{
     Foundation::{CloseHandle as WinCloseHandle, HANDLE as WinHANDLE},
+    Security::{
+        GetTokenInformation as WinGetTokenInformation, IsWellKnownSid, TokenUser,
+        WinLocalSystemSid, TOKEN_QUERY as WIN_TOKEN_QUERY, TOKEN_USER,
+    },
     System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
         TH32CS_SNAPPROCESS,
+    },
+    System::Threading::{
+        OpenProcess as WinOpenProcess, OpenProcessToken as WinOpenProcessToken,
+        QueryFullProcessImageNameW as WinQueryFullProcessImageNameW,
+        PROCESS_QUERY_LIMITED_INFORMATION as WIN_PROCESS_QUERY_LIMITED_INFORMATION,
     },
 };
 use windows_service::{
@@ -87,6 +96,14 @@ use windows_service::{
     service_control_handler::{self, ServiceControlHandlerResult},
 };
 use winreg::{enums::*, RegKey};
+
+mod acl;
+pub(crate) use acl::current_process_user_sid_string;
+pub use acl::{
+    set_path_permission, set_path_permission_for_portable_service_shmem_dir,
+    set_path_permission_for_portable_service_shmem_file,
+    validate_path_for_portable_service_shmem_dir,
+};
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
 pub const EXPLORER_EXE: &'static str = "explorer.exe";
@@ -565,6 +582,55 @@ pub fn get_current_session_id(share_rdp: bool) -> DWORD {
     unsafe { get_current_session(if share_rdp { TRUE } else { FALSE }) }
 }
 
+#[inline]
+fn resolve_expected_active_session_id_for_service(session_id: u32) -> Option<u32> {
+    let share_rdp_enabled = is_share_rdp();
+    if get_available_sessions(false)
+        .iter()
+        .any(|e| e.sid == session_id)
+    {
+        return Some(session_id);
+    }
+    let current_active_session =
+        unsafe { get_current_session(if share_rdp_enabled { TRUE } else { FALSE }) };
+    if current_active_session == u32::MAX {
+        None
+    } else {
+        Some(current_active_session)
+    }
+}
+
+#[inline]
+fn authorize_service_scoped_ipc_connection(
+    stream: &ipc::Connection,
+    expected_active_session_id: Option<u32>,
+) -> bool {
+    let (authorized, peer_pid, peer_session_id, peer_is_system) =
+        stream.service_authorization_status_for_session(expected_active_session_id);
+    if !authorized {
+        ipc::log_rejected_windows_ipc_connection(
+            crate::POSTFIX_SERVICE,
+            peer_pid,
+            peer_session_id,
+            expected_active_session_id,
+            peer_is_system,
+        );
+        return false;
+    }
+    if let Err(err) =
+        ipc::ensure_peer_executable_matches_current_by_pid_opt(peer_pid, crate::POSTFIX_SERVICE)
+    {
+        log::warn!(
+                "Rejected unauthorized connection on protected service-scoped IPC channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
+                crate::POSTFIX_SERVICE,
+                peer_pid,
+                err
+            );
+        return false;
+    }
+    true
+}
+
 extern "system" {
     fn BlockInput(v: BOOL) -> BOOL;
 }
@@ -631,6 +697,15 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
             Ok(res) => match res {
                 Some(Ok(stream)) => {
                     let mut stream = ipc::Connection::new(stream);
+                    // Keep IPC authorization consistent with the session we are currently serving.
+                    // Recompute expected session right before authorization to avoid using a stale
+                    // session_id after awaiting incoming.next().
+                    let expected_active_session_id =
+                        resolve_expected_active_session_id_for_service(session_id);
+                    if !authorize_service_scoped_ipc_connection(&stream, expected_active_session_id)
+                    {
+                        continue;
+                    }
                     if let Ok(Some(data)) = stream.next_timeout(1000).await {
                         match data {
                             ipc::Data::Close => {
@@ -1139,6 +1214,22 @@ pub fn get_active_user_home() -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(not(feature = "flutter"))]
+#[inline]
+pub fn portable_service_logon_helper_paths() -> Option<(PathBuf, PathBuf)> {
+    // Keep parity with history for now: derive LocalAppData from user profile path.
+    // If users report redirected/non-standard LocalAppData issues, switch to:
+    // `BaseDirs::new()?.data_local_dir()` for Known Folder-based resolution.
+    let user_dir = hbb_common::directories_next::UserDirs::new()?;
+    let dir = user_dir
+        .home_dir()
+        .join("AppData")
+        .join("Local")
+        .join("rustdesk-sciter");
+    let dst = dir.join("rustdesk.exe");
+    Some((dir, dst))
 }
 
 pub fn is_prelogin() -> bool {
@@ -2327,16 +2418,33 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
         is_run_as_system,
         crate::username(),
     );
-    let arg_elevate = if is_setup {
+    let mut arg_elevate = if is_setup {
         "--noinstall --elevate"
     } else {
         "--elevate"
-    };
-    let arg_run_as_system = if is_setup {
+    }
+    .to_owned();
+    let mut arg_run_as_system = if is_setup {
         "--noinstall --run-as-system"
     } else {
         "--run-as-system"
-    };
+    }
+    .to_owned();
+    let shmem_name_from_args = crate::portable_service::portable_service_shmem_name_from_args();
+    if shmem_name_from_args.is_none() && crate::portable_service::has_portable_service_shmem_arg() {
+        log::error!("Invalid portable service shared memory argument, aborting elevation flow");
+        // This is a malformed bootstrap argument in a privilege-sensitive path.
+        // Keep fail-closed process termination here to avoid continuing elevation
+        // with inconsistent shared-memory contract.
+        std::process::exit(1);
+    }
+    if let Some(shmem_name) = shmem_name_from_args {
+        let shmem_arg = crate::portable_service::portable_service_shmem_arg(&shmem_name);
+        arg_elevate.push(' ');
+        arg_elevate.push_str(&shmem_arg);
+        arg_run_as_system.push(' ');
+        arg_run_as_system.push_str(&shmem_arg);
+    }
     if is_root() {
         if is_run_as_system {
             log::info!("run portable service");
@@ -2347,7 +2455,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
             Ok(elevated) => {
                 if elevated {
                     if !is_run_as_system {
-                        if run_as_system(arg_run_as_system).is_ok() {
+                        if run_as_system(arg_run_as_system.as_str()).is_ok() {
                             std::process::exit(0);
                         } else {
                             log::error!(
@@ -2358,7 +2466,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                     }
                 } else {
                     if !is_elevate {
-                        if let Ok(true) = elevate(arg_elevate) {
+                        if let Ok(true) = elevate(arg_elevate.as_str()) {
                             std::process::exit(0);
                         } else {
                             log::error!("Failed to elevate, error {}", io::Error::last_os_error());
@@ -2413,6 +2521,115 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
         }
 
         Ok(token_elevation.TokenIsElevated != 0)
+    }
+}
+
+#[inline]
+unsafe fn read_token_user_buffer(token: WinHANDLE, subject: &str) -> ResultType<Vec<u8>> {
+    let mut token_user_size = 0u32;
+    let get_info_result = WinGetTokenInformation(token, TokenUser, None, 0, &mut token_user_size);
+    match get_info_result {
+        Ok(()) => {
+            if token_user_size == 0 {
+                bail!(
+                    "Failed to get {} token user size: unexpected zero buffer size",
+                    subject
+                );
+            }
+        }
+        Err(e) => {
+            // Allow expected size-probe failures if Windows still returns required size.
+            let is_insufficient_buffer =
+                e.code() == windows::core::HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER as u32);
+            let is_bad_length =
+                e.code() == windows::core::HRESULT::from_win32(ERROR_BAD_LENGTH as u32);
+            if (!is_insufficient_buffer && !is_bad_length) || token_user_size == 0 {
+                bail!("Failed to get {} token user size: {}", subject, e);
+            }
+        }
+    }
+
+    let mut buffer = vec![0u8; token_user_size as usize];
+    WinGetTokenInformation(
+        token,
+        TokenUser,
+        Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+        token_user_size,
+        &mut token_user_size,
+    )
+    .map_err(|e| anyhow!("Failed to get {} token user: {}", subject, e))?;
+
+    let min_size = std::mem::size_of::<TOKEN_USER>();
+    if buffer.len() < min_size {
+        bail!(
+            "Failed to parse {} token user: buffer too small (got {}, need >= {})",
+            subject,
+            buffer.len(),
+            min_size
+        );
+    }
+    Ok(buffer)
+}
+
+/// Similar to `is_root()` / `is_local_system()` but for an arbitrary process.
+///
+/// Returns `true` if the target process is running as LocalSystem (SID: S-1-5-18).
+///
+/// TODO: After a few releases of real-world validation, consider replacing
+/// the legacy `is_local_system()` with this implementation.
+pub fn is_process_running_as_system(process_id: DWORD) -> ResultType<bool> {
+    unsafe {
+        let process = WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, process_id)
+            .map_err(|e| anyhow!("Failed to open process {}: {}", process_id, e))?;
+
+        let mut token = WinHANDLE::default();
+        let result = (|| -> ResultType<bool> {
+            WinOpenProcessToken(process, WIN_TOKEN_QUERY, &mut token)
+                .map_err(|e| anyhow!("Failed to open process {} token: {}", process_id, e))?;
+
+            let token_subject = format!("process {}", process_id);
+            let buffer = read_token_user_buffer(token, token_subject.as_str())?;
+            let token_user: TOKEN_USER =
+                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
+            Ok(IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool())
+        })();
+
+        if !token.is_invalid() {
+            let _ = WinCloseHandle(token);
+        }
+        let _ = WinCloseHandle(process);
+        result
+    }
+}
+
+pub fn get_process_executable_path(process_id: DWORD) -> ResultType<PathBuf> {
+    const PROCESS_IMAGE_PATH_BUFFER_LEN: usize = 32 * 1024;
+    unsafe {
+        let process = WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, process_id)
+            .map_err(|e| anyhow!("Failed to open process {}: {}", process_id, e))?;
+
+        let result = (|| -> ResultType<PathBuf> {
+            let mut buffer = vec![0u16; PROCESS_IMAGE_PATH_BUFFER_LEN];
+            let mut length = PROCESS_IMAGE_PATH_BUFFER_LEN as u32;
+            WinQueryFullProcessImageNameW(
+                process,
+                windows::Win32::System::Threading::PROCESS_NAME_FORMAT(0),
+                windows::core::PWSTR(buffer.as_mut_ptr()),
+                &mut length,
+            )
+            .map_err(|e| anyhow!("Failed to query process {} image path: {}", process_id, e))?;
+            if length == 0 {
+                bail!(
+                    "Failed to query process {} image path: empty result",
+                    process_id
+                );
+            }
+            buffer.truncate(length as usize);
+            Ok(PathBuf::from(OsString::from_wide(&buffer)))
+        })();
+
+        let _ = WinCloseHandle(process);
+        result
     }
 }
 
@@ -2706,16 +2923,6 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
         }
     }
     return Ok(());
-}
-
-pub fn set_path_permission(dir: &Path, permission: &str) -> ResultType<()> {
-    std::process::Command::new("icacls")
-        .arg(dir.as_os_str())
-        .arg("/grant")
-        .arg(format!("*S-1-1-0:(OI)(CI){}", permission))
-        .arg("/T")
-        .spawn()?;
-    Ok(())
 }
 
 #[inline]
@@ -4281,6 +4488,87 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Test-only reusable Win32 HANDLE RAII helper.
+    // If a future non-test path needs the same pattern, move it out of this test module.
+    //
+    // This struct is similar to `hbb_common::platform::windows::RAIIHandle`,
+    // but `RAIIHandle` depends on `WinApi` crate, while this `HandleGuard` only depends on `windows` crate.
+    struct HandleGuard(WinHANDLE);
+
+    impl HandleGuard {
+        #[inline]
+        fn new(handle: WinHANDLE) -> Self {
+            Self(handle)
+        }
+
+        #[inline]
+        fn get(&self) -> WinHANDLE {
+            self.0
+        }
+    }
+
+    impl Drop for HandleGuard {
+        fn drop(&mut self) {
+            unsafe {
+                if !self.0.is_invalid() {
+                    let _ = WinCloseHandle(self.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_process_running_as_system_invalid_pid_errors() {
+        assert!(is_process_running_as_system(u32::MAX).is_err());
+    }
+
+    #[test]
+    fn test_is_process_running_as_system_matches_current_process_token_user() {
+        let pid = unsafe { windows::Win32::System::Threading::GetCurrentProcessId() };
+        let actual = is_process_running_as_system(pid).unwrap();
+
+        let expected = unsafe {
+            // Keep this test consistent: use only the `windows` crate APIs/types.
+            let process = HandleGuard::new(
+                WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+                    .expect("WinOpenProcess should succeed for current process"),
+            );
+            let mut token = WinHANDLE::default();
+            WinOpenProcessToken(process.get(), WIN_TOKEN_QUERY, &mut token)
+                .expect("WinOpenProcessToken should succeed for current process");
+            let token = HandleGuard::new(token);
+
+            let mut token_user_size = 0u32;
+            let _ = WinGetTokenInformation(token.get(), TokenUser, None, 0, &mut token_user_size);
+            assert_ne!(token_user_size, 0, "TokenUser size should be non-zero");
+
+            let mut buffer = vec![0u8; token_user_size as usize];
+            WinGetTokenInformation(
+                token.get(),
+                TokenUser,
+                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+                token_user_size,
+                &mut token_user_size,
+            )
+            .expect("WinGetTokenInformation(TokenUser) should succeed for current process");
+
+            let min_size = std::mem::size_of::<TOKEN_USER>();
+            assert!(
+                buffer.len() >= min_size,
+                "TokenUser buffer too small (got {}, need >= {})",
+                buffer.len(),
+                min_size
+            );
+            let token_user: TOKEN_USER =
+                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
+            let expected = IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool();
+            expected
+        };
+
+        assert_eq!(actual, expected);
+    }
+
     #[test]
     fn test_uninstall_cert() {
         println!("uninstall driver certs: {:?}", cert::uninstall_cert());
