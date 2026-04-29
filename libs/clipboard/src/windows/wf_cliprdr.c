@@ -624,6 +624,7 @@ void CliprdrStream_Delete(CliprdrStream *instance)
 	if (instance)
 	{
 		free(instance->iStream.lpVtbl);
+		instance->iStream.lpVtbl = NULL;
 		free(instance);
 	}
 }
@@ -2160,7 +2161,7 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 		return FALSE;
 
 	/* add to name array */
-	clipboard->file_names[clipboard->nFiles] = (LPWSTR)malloc(MAX_PATH * 2);
+	clipboard->file_names[clipboard->nFiles] = (LPWSTR)malloc((size_t)MAX_PATH * sizeof(WCHAR));
 
 	if (!clipboard->file_names[clipboard->nFiles])
 		return FALSE;
