@@ -288,7 +288,8 @@ class TerminalModel with ChangeNotifier {
       // On reconnect, the server may replay recent output. That replay can include
       // terminal queries like DSR/DA; xterm answers them through onOutput as
       // "^[[1;1R^[[2;2R^[[>0;0;0c", which must not be sent back to the peer.
-      _suppressNextTerminalDataOutput =
+      final replayTerminalOutput = evt['replay_terminal_output'];
+      _suppressNextTerminalDataOutput = replayTerminalOutput == true ||
           message == 'Reconnected to existing terminal with pending output';
 
       // Fallback: if terminal view is not yet ready but already has valid

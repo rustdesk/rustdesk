@@ -1118,6 +1118,7 @@ impl TerminalServiceProxy {
             };
             opened.pid = session.pid;
             opened.service_id = self.service_id.clone();
+            opened.replay_terminal_output = has_pending;
             if service.needs_session_sync {
                 if service.sessions.len() > 1 {
                     // No need to include the current terminal in the list.
