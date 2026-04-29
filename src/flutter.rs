@@ -1135,7 +1135,6 @@ impl InvokeUiSession for FlutterHandler {
                     ("message", json!(&opened.message)),
                     ("pid", json!(opened.pid)),
                     ("service_id", json!(&opened.service_id)),
-                    ("replay_in_next_data", json!(opened.replay_in_next_data)),
                 ];
                 if !opened.persistent_sessions.is_empty() {
                     event_data.push(("persistent_sessions", json!(opened.persistent_sessions)));
@@ -1155,7 +1154,6 @@ impl InvokeUiSession for FlutterHandler {
                     ("type", json!("data")),
                     ("terminal_id", json!(data.terminal_id)),
                     ("data", json!(&encoded)),
-                    ("replay", json!(data.replay)),
                 ];
                 self.push_event_("terminal_response", &event_data, &[], &[]);
             }
