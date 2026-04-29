@@ -1111,6 +1111,7 @@ impl TerminalServiceProxy {
             } else {
                 "Reconnected to existing terminal".to_string()
             };
+            opened.replay_in_next_data = has_pending;
             opened.pid = session.pid;
             opened.service_id = self.service_id.clone();
             if service.needs_session_sync {
