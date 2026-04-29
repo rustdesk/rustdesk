@@ -568,6 +568,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
         ("Swap control-command key", ""),
+        ("Swap option-command key", ""),
         ("swap-left-right-mouse", ""),
         ("2FA code", ""),
         ("More", ""),

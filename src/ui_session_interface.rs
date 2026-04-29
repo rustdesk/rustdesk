@@ -169,6 +169,82 @@ impl ChangeDisplayRecord {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ModifierSwapMode {
+    None,
+    ControlCommand,
+    OptionCommand,
+}
+
+fn modifier_swap_mode(
+    control_command_enabled: bool,
+    option_command_enabled: bool,
+) -> ModifierSwapMode {
+    if option_command_enabled {
+        ModifierSwapMode::OptionCommand
+    } else if control_command_enabled {
+        ModifierSwapMode::ControlCommand
+    } else {
+        ModifierSwapMode::None
+    }
+}
+
+fn swap_control_command_control_key(ck: ControlKey) -> ControlKey {
+    match ck {
+        ControlKey::Control => ControlKey::Meta,
+        ControlKey::Meta => ControlKey::Control,
+        ControlKey::RControl => ControlKey::Meta,
+        ControlKey::RWin => ControlKey::Control,
+        _ => ck,
+    }
+}
+
+fn swap_option_command_control_key(ck: ControlKey) -> ControlKey {
+    match ck {
+        ControlKey::Alt => ControlKey::Meta,
+        ControlKey::Meta => ControlKey::Alt,
+        ControlKey::RAlt => ControlKey::Meta,
+        ControlKey::RWin => ControlKey::Alt,
+        _ => ck,
+    }
+}
+
+fn remap_control_key_for_mode(mode: ModifierSwapMode, ck: ControlKey) -> ControlKey {
+    match mode {
+        ModifierSwapMode::None => ck,
+        ModifierSwapMode::ControlCommand => swap_control_command_control_key(ck),
+        ModifierSwapMode::OptionCommand => swap_option_command_control_key(ck),
+    }
+}
+
+fn swap_control_command_rdev_key(key: rdev::Key) -> rdev::Key {
+    match key {
+        rdev::Key::ControlLeft => rdev::Key::MetaLeft,
+        rdev::Key::MetaLeft => rdev::Key::ControlLeft,
+        rdev::Key::ControlRight => rdev::Key::MetaLeft,
+        rdev::Key::MetaRight => rdev::Key::ControlLeft,
+        _ => key,
+    }
+}
+
+fn swap_option_command_rdev_key(key: rdev::Key) -> rdev::Key {
+    match key {
+        rdev::Key::Alt => rdev::Key::MetaLeft,
+        rdev::Key::MetaLeft => rdev::Key::Alt,
+        rdev::Key::AltGr => rdev::Key::MetaLeft,
+        rdev::Key::MetaRight => rdev::Key::Alt,
+        _ => key,
+    }
+}
+
+fn remap_rdev_key_for_mode(mode: ModifierSwapMode, key: rdev::Key) -> rdev::Key {
+    match mode {
+        ModifierSwapMode::None => key,
+        ModifierSwapMode::ControlCommand => swap_control_command_rdev_key(key),
+        ModifierSwapMode::OptionCommand => swap_option_command_rdev_key(key),
+    }
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl SessionPermissionConfig {
     pub fn is_text_clipboard_required(&self) -> bool {
@@ -186,6 +262,13 @@ impl SessionPermissionConfig {
 }
 
 impl<T: InvokeUiSession> Session<T> {
+    fn modifier_swap_mode(&self) -> ModifierSwapMode {
+        modifier_swap_mode(
+            self.get_toggle_option("allow_swap_key".to_string()),
+            self.get_toggle_option("allow_swap_option_command_key".to_string()),
+        )
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn get_permission_config(&self) -> SessionPermissionConfig {
         SessionPermissionConfig {
@@ -688,32 +771,20 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn swap_modifier_key(&self, msg: &mut KeyEvent) {
-        let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
-        if allow_swap_key {
+        let mode = self.modifier_swap_mode();
+        if mode != ModifierSwapMode::None {
             if let Some(key_event::Union::ControlKey(ck)) = msg.union {
-                let ck = ck.enum_value_or_default();
-                let ck = match ck {
-                    ControlKey::Control => ControlKey::Meta,
-                    ControlKey::Meta => ControlKey::Control,
-                    ControlKey::RControl => ControlKey::Meta,
-                    ControlKey::RWin => ControlKey::Control,
-                    _ => ck,
-                };
+                let ck = remap_control_key_for_mode(mode, ck.enum_value_or_default());
                 msg.set_control_key(ck);
             }
             msg.modifiers = msg
                 .modifiers
                 .iter()
                 .map(|ck| {
-                    let ck = ck.enum_value_or_default();
-                    let ck = match ck {
-                        ControlKey::Control => ControlKey::Meta,
-                        ControlKey::Meta => ControlKey::Control,
-                        ControlKey::RControl => ControlKey::Meta,
-                        ControlKey::RWin => ControlKey::Control,
-                        _ => ck,
-                    };
-                    hbb_common::protobuf::EnumOrUnknown::new(ck)
+                    hbb_common::protobuf::EnumOrUnknown::new(remap_control_key_for_mode(
+                        mode,
+                        ck.enum_value_or_default(),
+                    ))
                 })
                 .collect();
 
@@ -723,39 +794,21 @@ impl<T: InvokeUiSession> Session<T> {
                 peer.retain(|c| !c.is_whitespace());
 
                 let key = match peer.as_str() {
-                    "windows" => {
-                        let key = rdev::win_key_from_scancode(code);
-                        let key = match key {
-                            rdev::Key::ControlLeft => rdev::Key::MetaLeft,
-                            rdev::Key::MetaLeft => rdev::Key::ControlLeft,
-                            rdev::Key::ControlRight => rdev::Key::MetaLeft,
-                            rdev::Key::MetaRight => rdev::Key::ControlLeft,
-                            _ => key,
-                        };
-                        rdev::win_scancode_from_key(key).unwrap_or_default()
-                    }
-                    "macos" => {
-                        let key = rdev::macos_key_from_code(code as _);
-                        let key = match key {
-                            rdev::Key::ControlLeft => rdev::Key::MetaLeft,
-                            rdev::Key::MetaLeft => rdev::Key::ControlLeft,
-                            rdev::Key::ControlRight => rdev::Key::MetaLeft,
-                            rdev::Key::MetaRight => rdev::Key::ControlLeft,
-                            _ => key,
-                        };
-                        rdev::macos_keycode_from_key(key).unwrap_or_default() as _
-                    }
-                    _ => {
-                        let key = rdev::linux_key_from_code(code);
-                        let key = match key {
-                            rdev::Key::ControlLeft => rdev::Key::MetaLeft,
-                            rdev::Key::MetaLeft => rdev::Key::ControlLeft,
-                            rdev::Key::ControlRight => rdev::Key::MetaLeft,
-                            rdev::Key::MetaRight => rdev::Key::ControlLeft,
-                            _ => key,
-                        };
-                        rdev::linux_keycode_from_key(key).unwrap_or_default()
-                    }
+                    "windows" => rdev::win_scancode_from_key(remap_rdev_key_for_mode(
+                        mode,
+                        rdev::win_key_from_scancode(code),
+                    ))
+                    .unwrap_or_default(),
+                    "macos" => rdev::macos_keycode_from_key(remap_rdev_key_for_mode(
+                        mode,
+                        rdev::macos_key_from_code(code as _),
+                    ))
+                    .unwrap_or_default() as _,
+                    _ => rdev::linux_keycode_from_key(remap_rdev_key_for_mode(
+                        mode,
+                        rdev::linux_key_from_code(code),
+                    ))
+                    .unwrap_or_default(),
                 };
                 msg.set_chr(key);
             }
@@ -1891,21 +1944,16 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 
     fn swap_modifier_mouse(&self, msg: &mut hbb_common::protos::message::MouseEvent) {
-        let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
-        if allow_swap_key {
+        let mode = self.modifier_swap_mode();
+        if mode != ModifierSwapMode::None {
             msg.modifiers = msg
                 .modifiers
                 .iter()
                 .map(|ck| {
-                    let ck = ck.enum_value_or_default();
-                    let ck = match ck {
-                        ControlKey::Control => ControlKey::Meta,
-                        ControlKey::Meta => ControlKey::Control,
-                        ControlKey::RControl => ControlKey::Meta,
-                        ControlKey::RWin => ControlKey::Control,
-                        _ => ck,
-                    };
-                    hbb_common::protobuf::EnumOrUnknown::new(ck)
+                    hbb_common::protobuf::EnumOrUnknown::new(remap_control_key_for_mode(
+                        mode,
+                        ck.enum_value_or_default(),
+                    ))
                 })
                 .collect();
         };
@@ -2054,4 +2102,65 @@ async fn start_one_port_forward<T: InvokeUiSession>(
 async fn send_note(url: String, id: String, sid: u64, note: String) {
     let body = serde_json::json!({ "id": id, "session_id": sid, "note": note });
     allow_err!(crate::post_request(url, body.to_string(), "").await);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn modifier_swap_mode_prefers_option_command_when_both_enabled() {
+        assert_eq!(
+            modifier_swap_mode(true, true),
+            ModifierSwapMode::OptionCommand
+        );
+    }
+
+    #[test]
+    fn swap_option_command_maps_alt_to_meta() {
+        assert_eq!(
+            swap_option_command_control_key(ControlKey::Alt),
+            ControlKey::Meta
+        );
+    }
+
+    #[test]
+    fn swap_option_command_maps_meta_to_alt() {
+        assert_eq!(
+            swap_option_command_control_key(ControlKey::Meta),
+            ControlKey::Alt
+        );
+    }
+
+    #[test]
+    fn swap_option_command_maps_ralt_to_meta() {
+        assert_eq!(
+            swap_option_command_control_key(ControlKey::RAlt),
+            ControlKey::Meta
+        );
+    }
+
+    #[test]
+    fn swap_option_command_maps_rwin_to_alt() {
+        assert_eq!(
+            swap_option_command_control_key(ControlKey::RWin),
+            ControlKey::Alt
+        );
+    }
+
+    #[test]
+    fn swap_option_command_maps_alt_rdev_to_meta_left() {
+        assert_eq!(
+            swap_option_command_rdev_key(rdev::Key::Alt),
+            rdev::Key::MetaLeft
+        );
+    }
+
+    #[test]
+    fn swap_option_command_maps_meta_right_rdev_to_alt() {
+        assert_eq!(
+            swap_option_command_rdev_key(rdev::Key::MetaRight),
+            rdev::Key::Alt
+        );
+    }
 }
