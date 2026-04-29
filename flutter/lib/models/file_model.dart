@@ -400,7 +400,7 @@ class FileController {
         options.value.home,
       };
       for (final dir in dirs) {
-        if (await openDirectory(dir, isBack: true)) {
+        if (await _openDirectoryPath(dir, isBack: true)) {
           return true;
         }
       }
@@ -513,7 +513,7 @@ class FileController {
   }
 
   void goToParentDirectory() {
-    unawaited(_goToParentDirectory());
+    unawaited(_goToParentDirectory().then<void>((_) {}));
   }
 
   Future<bool> _goToParentDirectory({bool isBack = false}) async {
@@ -522,9 +522,9 @@ class FileController {
     var parent = PathUtil.dirname(dirPath, isWindows);
     // specially for C:\, D:\, goto '/'
     if (parent == dirPath && isWindows) {
-      return await openDirectory('/', isBack: isBack);
+      return await _openDirectoryPath('/', isBack: isBack);
     }
-    return await openDirectory(parent, isBack: isBack);
+    return await _openDirectoryPath(parent, isBack: isBack);
   }
 
   // TODO deprecated this
