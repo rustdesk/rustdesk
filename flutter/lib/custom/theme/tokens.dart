@@ -8,6 +8,7 @@ class AppTokens {
   static const colorBgSurface = Color(0xFF1E293B);
   static const colorTextHigh = Color(0xFFE2E8F0);
   static const colorTextMid = Color(0xFF94A3B8);
+  static const colorOnline = Color(0xFF22C55E);
 
   static const spaceXs = 4.0;
   static const spaceSm = 8.0;

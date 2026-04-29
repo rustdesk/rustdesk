@@ -23,13 +23,22 @@ class _ConnectScreenState extends State<ConnectScreen> {
   void initState() {
     super.initState();
     bind.mainLoadRecentPeers();
+    gFFI.recentPeersModel.addListener(_onPeersChanged);
   }
 
   @override
   void dispose() {
+    gFFI.recentPeersModel.removeListener(_onPeersChanged);
     _idController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onPeersChanged() {
+    if (gFFI.recentPeersModel.event == UpdateEvent.load) {
+      final ids = gFFI.recentPeersModel.peers.map((p) => p.id).toList();
+      if (ids.isNotEmpty) bind.queryOnlines(ids: ids);
+    }
   }
 
   void _onConnect([String? peerId]) async {
@@ -267,8 +276,29 @@ class _PeerTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.computer,
-                    color: AppTokens.colorTextMid, size: 20),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.computer,
+                        color: AppTokens.colorTextMid, size: 20),
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: peer.online
+                              ? AppTokens.colorOnline
+                              : AppTokens.colorTextMid.withValues(alpha: 0.3),
+                          border: Border.all(
+                              color: AppTokens.colorBgSurface, width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(width: AppTokens.spaceMd),
                 Expanded(
                   child: Column(
