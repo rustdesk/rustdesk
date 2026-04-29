@@ -1198,8 +1198,8 @@ impl TerminalServiceProxy {
 
             if should_force_process_utf8_ctype() {
                 cmd.env_remove("LC_ALL");
-                cmd.env("LC_CTYPE", "UTF-8");
-                log::debug!("Set LC_CTYPE=UTF-8 for macOS PTY");
+                cmd.env("LC_CTYPE", "en_US.UTF-8");
+                log::debug!("Set LC_CTYPE=en_US.UTF-8 for macOS PTY");
             }
         }
 
