@@ -20,10 +20,11 @@ use std::{
 // Windows-specific imports from terminal_helper module
 #[cfg(target_os = "windows")]
 use super::terminal_helper::{
-    create_named_pipe_server, encode_helper_message, encode_resize_message,
-    is_helper_process_running, launch_terminal_helper_with_token, wait_for_pipe_connection,
-    HelperProcessGuard, OwnedHandle, SendableHandle, WinCloseHandle, WinTerminateProcess,
-    WinWaitForSingleObject, MSG_TYPE_DATA, PIPE_CONNECTION_TIMEOUT_MS, WIN_WAIT_OBJECT_0,
+    configure_utf8_shell_command, create_named_pipe_server, encode_helper_message,
+    encode_resize_message, is_helper_process_running, launch_terminal_helper_with_token,
+    wait_for_pipe_connection, HelperProcessGuard, OwnedHandle, SendableHandle, WinCloseHandle,
+    WinTerminateProcess, WinWaitForSingleObject, MSG_TYPE_DATA, PIPE_CONNECTION_TIMEOUT_MS,
+    WIN_WAIT_OBJECT_0,
 };
 
 const MAX_OUTPUT_BUFFER_SIZE: usize = 1024 * 1024; // 1MB per terminal
@@ -131,6 +132,26 @@ fn get_default_shell() -> String {
         // Final fallback to /bin/sh which should exist on all POSIX systems
         "/bin/sh".to_string()
     }
+}
+
+#[cfg(target_os = "macos")]
+fn locale_value_is_utf8(value: &str) -> bool {
+    let value = value.to_ascii_uppercase();
+    value.contains("UTF-8") || value.contains("UTF8")
+}
+
+#[cfg(target_os = "macos")]
+fn should_force_process_utf8_ctype() -> bool {
+    if let Ok(value) = std::env::var("LC_ALL") {
+        return !locale_value_is_utf8(&value);
+    }
+    if let Ok(value) = std::env::var("LC_CTYPE") {
+        return !locale_value_is_utf8(&value);
+    }
+    if let Ok(value) = std::env::var("LANG") {
+        return !locale_value_is_utf8(&value);
+    }
+    true
 }
 
 pub fn is_service_specified_user(service_id: &str) -> Option<bool> {
@@ -1146,6 +1167,9 @@ impl TerminalServiceProxy {
         #[allow(unused_mut)]
         let mut cmd = CommandBuilder::new(&shell);
 
+        #[cfg(target_os = "windows")]
+        configure_utf8_shell_command(&shell, &mut cmd);
+
         // macOS-specific terminal configuration
         // 1. Use login shell (-l) to load user's shell profile (~/.zprofile, ~/.bash_profile)
         //    This ensures PATH includes Homebrew paths (/opt/homebrew/bin, /usr/local/bin)
@@ -1166,6 +1190,12 @@ impl TerminalServiceProxy {
             };
             cmd.env("TERM", term);
             log::debug!("Set TERM={} for macOS PTY", term);
+
+            if should_force_process_utf8_ctype() {
+                cmd.env_remove("LC_ALL");
+                cmd.env("LC_CTYPE", "UTF-8");
+                log::debug!("Set LC_CTYPE=UTF-8 for macOS PTY");
+            }
         }
 
         // Note: On Windows with user_token, we use helper mode (handle_open_with_helper)

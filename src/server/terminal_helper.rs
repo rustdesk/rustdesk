@@ -318,6 +318,35 @@ pub fn get_default_shell() -> String {
     std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
 }
 
+fn utf8_shell_args(shell: &str) -> Vec<String> {
+    let name = std::path::Path::new(shell)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(shell)
+        .to_ascii_lowercase();
+
+    if name == "cmd.exe" || name == "cmd" {
+        return vec!["/K".to_string(), "chcp 65001 >NUL".to_string()];
+    }
+
+    if name == "pwsh.exe" || name == "pwsh" || name == "powershell.exe" {
+        return vec![
+            "-NoLogo".to_string(),
+            "-NoExit".to_string(),
+            "-Command".to_string(),
+            "chcp.com 65001 > $null; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8".to_string(),
+        ];
+    }
+
+    Vec::new()
+}
+
+pub fn configure_utf8_shell_command(shell: &str, cmd: &mut CommandBuilder) {
+    for arg in utf8_shell_args(shell) {
+        cmd.arg(arg);
+    }
+}
+
 /// Get the SID of the user from a token.
 /// Returns a Vec<u8> containing the SID bytes.
 pub fn get_user_sid_from_token(user_token: UserToken) -> Result<Vec<u8>> {
@@ -831,7 +860,8 @@ pub fn run_terminal_helper(args: &[String]) -> Result<()> {
     let shell = get_default_shell();
     log::debug!("Using shell: {}", shell);
 
-    let cmd = CommandBuilder::new(&shell);
+    let mut cmd = CommandBuilder::new(&shell);
+    configure_utf8_shell_command(&shell, &mut cmd);
     let mut child = pty_pair
         .slave
         .spawn_command(cmd)
