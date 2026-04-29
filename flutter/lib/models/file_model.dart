@@ -452,10 +452,10 @@ class FileController {
   }
 
   Future<bool> openDirectory(String path, {bool isBack = false}) async {
-    if (path == ".") {
+    if (!isBack && path == ".") {
       return await refresh();
     }
-    if (path == "..") {
+    if (!isBack && path == "..") {
       return await _goToParentDirectory(isBack: isBack);
     }
     return await _openDirectoryPath(path, isBack: isBack);
@@ -509,7 +509,7 @@ class FileController {
       goBack();
       return;
     }
-    openDirectory(path, isBack: true);
+    unawaited(_openDirectoryPath(path, isBack: true).then<void>((_) {}));
   }
 
   void goToParentDirectory() {
