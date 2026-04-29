@@ -97,11 +97,13 @@ class _RawTouchGestureDetectorRegionState
   int _cacheLongPressPositionTs = 0;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   double _scale = 1;
-  // Tabby: per-gesture lock for two-finger pinch detection.
-  // Set on the first frame whose cumulative scale exceeds the pinch
-  // threshold; cleared in onTwoFingerScaleStart/End. Avoids the
-  // frame-to-frame oscillation where a slow pinch leaks scroll events.
+  // Tabby: per-gesture state for the two-finger classifier. Pan distance
+  // and scale change race their thresholds; whichever crosses first wins
+  // the gesture. Until one locks we absorb the gesture (no canvas pan,
+  // no remote scroll) so a misclassified frame can't leak.
   bool _twoFingerPinchLocked = false;
+  bool _twoFingerScrollLocked = false;
+  double _twoFingerPanAccum = 0;
 
   // Workaround tap down event when two fingers are used to scale(mobile)
   TapDownDetails? _lastTapDownDetails;
@@ -459,6 +461,8 @@ class _RawTouchGestureDetectorRegionState
   onTwoFingerScaleStart(ScaleStartDetails d) {
     _lastTapDownDetails = null;
     _twoFingerPinchLocked = false;
+    _twoFingerScrollLocked = false;
+    _twoFingerPanAccum = 0;
     if (isNotTouchBasedDevice()) {
       return;
     }
@@ -496,39 +500,61 @@ class _RawTouchGestureDetectorRegionState
       }
     } else {
       // mobile
-      // Tabby: redirect two-finger pan (no pinch) to the remote-scroll
-      // callback. Pinch is detected against the cumulative gesture scale
-      // (not frame-to-frame); once detected, the lock holds for the rest
-      // of the gesture. A 15% threshold tolerates natural finger drift
-      // during a drag, which can routinely reach 5-7%. The minPanDelta
-      // filter suppresses sub-pixel jitter during the pre-lock frames so
-      // a real drag doesn't emit micro-scrolls that race the lock.
-      if (widget.onTwoFingerScroll != null) {
-        const pinchEpsilon = 0.15;
-        const minPanDelta = 1.0;
-        if ((d.scale - 1.0).abs() > pinchEpsilon) {
+      if (widget.onTwoFingerScroll == null) {
+        // Upstream behaviour: pan + zoom the local canvas immediately.
+        ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
+        _scale = d.scale;
+        ffi.canvasModel.panX(d.focalPointDelta.dx);
+        ffi.canvasModel.panY(d.focalPointDelta.dy);
+        return;
+      }
+
+      // Tabby: race two thresholds, lock to whichever crosses first.
+      // Pan distance commits within 2-3 frames of a real drag, so it
+      // wins long before scale-change drift can cross — even with wide
+      // finger spacing where iOS multi-touch smoothing reports more
+      // scale jitter. Pre-lock frames are absorbed (no canvas pan, no
+      // remote scroll) so a misclassified frame cannot leak through.
+      const pinchThreshold = 0.10;
+      const scrollThreshold = 12.0;
+      _twoFingerPanAccum += d.focalPointDelta.distance;
+      final scaleAccum = (d.scale - 1.0).abs();
+
+      if (!_twoFingerPinchLocked && !_twoFingerScrollLocked) {
+        if (_twoFingerPanAccum >= scrollThreshold) {
+          _twoFingerScrollLocked = true;
+        } else if (scaleAccum >= pinchThreshold) {
           _twoFingerPinchLocked = true;
         }
-        if (!_twoFingerPinchLocked) {
-          if (d.focalPointDelta.distance >= minPanDelta) {
-            widget.onTwoFingerScroll!(
-              d.focalPointDelta.dx,
-              d.focalPointDelta.dy,
-            );
-          }
-          _scale = d.scale;
-          return;
-        }
       }
-      ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
+
+      if (_twoFingerScrollLocked) {
+        widget.onTwoFingerScroll!(
+          d.focalPointDelta.dx,
+          d.focalPointDelta.dy,
+        );
+        _scale = d.scale;
+        return;
+      }
+
+      if (_twoFingerPinchLocked) {
+        ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
+        _scale = d.scale;
+        ffi.canvasModel.panX(d.focalPointDelta.dx);
+        ffi.canvasModel.panY(d.focalPointDelta.dy);
+        return;
+      }
+
+      // Pre-classification — track scale for the next frame's diff but
+      // do not act on the canvas or send a scroll yet.
       _scale = d.scale;
-      ffi.canvasModel.panX(d.focalPointDelta.dx);
-      ffi.canvasModel.panY(d.focalPointDelta.dy);
     }
   }
 
   onTwoFingerScaleEnd(ScaleEndDetails d) async {
     _twoFingerPinchLocked = false;
+    _twoFingerScrollLocked = false;
+    _twoFingerPanAccum = 0;
     if (isNotTouchBasedDevice()) {
       return;
     }
