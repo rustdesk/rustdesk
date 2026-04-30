@@ -716,6 +716,13 @@ closeConnection({String? id}) {
       stateGlobal.isInMainPage = true;
     } else {
       final controller = Get.find<DesktopTabController>();
+      if (controller.tabType == DesktopTabType.terminal &&
+          controller.onCloseWindow != null) {
+        unawaited(controller.onCloseWindow!().catchError((e, _) {
+          debugPrint('[closeConnection] Failed to close terminal window: $e');
+        }));
+        return;
+      }
       controller.closeBy(id);
     }
   }
@@ -4179,8 +4186,7 @@ Widget? buildAvatarWidget({
       width: size,
       height: size,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) =>
-          fallback ?? SizedBox.shrink(),
+      errorBuilder: (_, __, ___) => fallback ?? SizedBox.shrink(),
     ),
   );
 }
