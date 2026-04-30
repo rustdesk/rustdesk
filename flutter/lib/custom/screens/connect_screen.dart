@@ -116,7 +116,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 ),
               ),
               const SizedBox(height: AppTokens.spaceSm),
-              _ResetServerKeyButton(),
               _EditServerIdButton(),
               const SizedBox(height: AppTokens.spaceXl),
               _RecentPeers(onConnect: _onConnect),
@@ -254,32 +253,6 @@ class _RecentPeers extends StatelessWidget {
   }
 }
 
-class _ResetServerKeyButton extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: TextButton.icon(
-        onPressed: () async {
-          await bind.mainSetOption(key: 'key', value: '');
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Server key cleared — reconnect to re-verify'),
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        },
-        icon: const Icon(Icons.key_off_outlined,
-            size: 16, color: AppTokens.colorTextMid),
-        label: Text(
-          'Reset server key',
-          style: AppTokens.fontKeySmall.copyWith(color: AppTokens.colorTextMid),
-        ),
-      ),
-    );
-  }
-}
 
 class _EditServerIdButton extends StatelessWidget {
   @override
