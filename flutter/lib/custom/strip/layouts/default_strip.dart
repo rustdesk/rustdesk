@@ -33,12 +33,12 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '⏎', keyName: 'return', type: KeyType.regular),
         ],
         right: [
-          KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle),
-          KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle),
-          KeyDef(label: '✕', keyName: '', type: KeyType.disconnect),
+          KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle, widthFactor: 0.7),
+          KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
+          KeyDef(label: '✕', keyName: '', type: KeyType.disconnect, widthFactor: 0.7),
           KeyDef(label: '⌫', keyName: 'backspace', type: KeyType.regular),
           KeyDef(label: 'Tab', keyName: 'tab', type: KeyType.regular),
-          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle),
+          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7),
         ],
       ),
       // Row 2: macros (left)  |  arrow cluster (right)
