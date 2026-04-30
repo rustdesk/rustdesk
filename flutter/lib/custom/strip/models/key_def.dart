@@ -14,12 +14,14 @@ class KeyDef {
   final String keyName;
   final KeyType type;
   final double widthFactor;
+  final double? height;
 
   const KeyDef({
     required this.label,
     required this.keyName,
     required this.type,
     this.widthFactor = 1.0,
+    this.height,
   });
 
   KeyDef copyWith({double? widthFactor}) => KeyDef(
@@ -27,6 +29,7 @@ class KeyDef {
         keyName: keyName,
         type: type,
         widthFactor: widthFactor ?? this.widthFactor,
+        height: height,
       );
 }
 

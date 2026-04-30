@@ -44,6 +44,7 @@ class KeyCell extends StatelessWidget {
           return _KeyButton(
             label: keyDef.label,
             widthFactor: keyDef.widthFactor,
+            height: keyDef.height,
             mode: mode,
             onTap: onTap,
             onLongPressStart: (_) => modifierController.hold(keyDef.keyName),
@@ -57,6 +58,7 @@ class KeyCell extends StatelessWidget {
       return _RepeatingKeyButton(
         label: keyDef.label,
         widthFactor: keyDef.widthFactor,
+        height: keyDef.height,
         onPressStart: onPressStart!,
         onPressEnd: onPressEnd,
       );
@@ -65,6 +67,7 @@ class KeyCell extends StatelessWidget {
     return _KeyButton(
       label: keyDef.label,
       widthFactor: keyDef.widthFactor,
+      height: keyDef.height,
       mode: ModifierMode.off,
       onTap: onTap,
     );
@@ -74,6 +77,7 @@ class KeyCell extends StatelessWidget {
 class _KeyButton extends StatelessWidget {
   final String label;
   final double widthFactor;
+  final double? height;
   final ModifierMode mode;
   final VoidCallback onTap;
   final GestureLongPressStartCallback? onLongPressStart;
@@ -84,6 +88,7 @@ class _KeyButton extends StatelessWidget {
     required this.widthFactor,
     required this.mode,
     required this.onTap,
+    this.height,
     this.onLongPressStart,
     this.onLongPressEnd,
   });
@@ -112,6 +117,7 @@ class _KeyButton extends StatelessWidget {
       child: _KeyVisual(
         label: label,
         widthFactor: widthFactor,
+        height: height,
         bg: _bg,
         fg: _fg,
       ),
@@ -126,6 +132,7 @@ class _KeyButton extends StatelessWidget {
 class _RepeatingKeyButton extends StatefulWidget {
   final String label;
   final double widthFactor;
+  final double? height;
   final AsyncCallback onPressStart;
   final VoidCallback? onPressEnd;
 
@@ -133,6 +140,7 @@ class _RepeatingKeyButton extends StatefulWidget {
     required this.label,
     required this.widthFactor,
     required this.onPressStart,
+    this.height,
     this.onPressEnd,
   });
 
@@ -186,6 +194,7 @@ class _RepeatingKeyButtonState extends State<_RepeatingKeyButton> {
       child: _KeyVisual(
         label: widget.label,
         widthFactor: widget.widthFactor,
+        height: widget.height,
         bg: AppTokens.colorBgSurface,
         fg: AppTokens.colorTextHigh,
       ),
@@ -196,6 +205,7 @@ class _RepeatingKeyButtonState extends State<_RepeatingKeyButton> {
 class _KeyVisual extends StatelessWidget {
   final String label;
   final double widthFactor;
+  final double? height;
   final Color bg;
   final Color fg;
 
@@ -204,6 +214,7 @@ class _KeyVisual extends StatelessWidget {
     required this.widthFactor,
     required this.bg,
     required this.fg,
+    this.height,
   });
 
   @override
@@ -211,7 +222,7 @@ class _KeyVisual extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       width: kKeyBaseWidth * widthFactor,
-      height: _kHeight,
+      height: height ?? _kHeight,
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(AppTokens.radiusKey),
