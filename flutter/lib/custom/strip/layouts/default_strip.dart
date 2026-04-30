@@ -25,7 +25,7 @@ StripLayout stripLayoutForPlatform(String platform) {
 
   return StripLayout(
     rows: [
-      // Row 1: utilities + modifiers + Enter (left)  |  strip-toggle + ⌨ + ✕ + ⌫ + Tab (right)
+      // Row 1: utilities + modifiers + Enter (left)  |  strip-toggle + ⌨ + ✕ + 💬 (right)
       StripRow(
         left: [
           KeyDef(label: 'Esc', keyName: 'escape', type: KeyType.regular),
@@ -36,31 +36,23 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle, widthFactor: 0.7),
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
           KeyDef(label: '✕', keyName: '', type: KeyType.disconnect, widthFactor: 0.7),
-          KeyDef(label: '⌫', keyName: 'backspace', type: KeyType.regular),
-          KeyDef(label: 'Tab', keyName: 'tab', type: KeyType.regular),
           KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7),
         ],
       ),
-      // Row 2: macros (left)  |  arrow cluster (right)
+      // Row 2: macros + ⌫ + Tab (left)  |  PgUp + PgDn + arrow cluster (right)
       StripRow(
         left: [
           KeyDef(label: '⚡', keyName: '', type: KeyType.macroOpener),
+          KeyDef(label: '⌫', keyName: 'backspace', type: KeyType.regular),
+          KeyDef(label: 'Tab', keyName: 'tab', type: KeyType.regular),
         ],
         right: [
+          KeyDef(label: 'PgUp', keyName: 'pageup', type: KeyType.regular),
+          KeyDef(label: 'PgDn', keyName: 'pagedown', type: KeyType.regular),
           KeyDef(label: '←', keyName: 'left', type: KeyType.regular),
           KeyDef(label: '↓', keyName: 'down', type: KeyType.regular),
           KeyDef(label: '↑', keyName: 'up', type: KeyType.regular),
           KeyDef(label: '→', keyName: 'right', type: KeyType.regular),
-        ],
-      ),
-      // Row 3: nav cluster
-      StripRow(
-        left: [],
-        right: [
-          KeyDef(label: 'Home', keyName: 'home', type: KeyType.regular),
-          KeyDef(label: 'PgUp', keyName: 'pageup', type: KeyType.regular),
-          KeyDef(label: 'PgDn', keyName: 'pagedown', type: KeyType.regular),
-          KeyDef(label: 'End', keyName: 'end', type: KeyType.regular),
         ],
       ),
     ],
