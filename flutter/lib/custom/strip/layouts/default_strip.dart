@@ -2,46 +2,40 @@ import '../../../consts.dart';
 import '../models/key_def.dart';
 
 StripLayout stripLayoutForPlatform(String platform) {
-  final modifiers = switch (platform) {
-    kPeerPlatformMacOS => [
-        KeyDef(label: 'Ctrl', keyName: 'control', type: KeyType.modifier),
-        KeyDef(label: '⌥', keyName: 'alt', type: KeyType.modifier),
-        KeyDef(label: '⌘', keyName: 'meta', type: KeyType.modifier),
-        KeyDef(label: '⇧', keyName: 'shift', type: KeyType.modifier),
-      ],
-    kPeerPlatformWindows => [
-        KeyDef(label: 'Ctrl', keyName: 'control', type: KeyType.modifier),
-        KeyDef(label: 'Alt', keyName: 'alt', type: KeyType.modifier),
-        KeyDef(label: '⊞', keyName: 'meta', type: KeyType.modifier),
-        KeyDef(label: 'Shift', keyName: 'shift', type: KeyType.modifier),
-      ],
-    _ => [
-        KeyDef(label: 'Ctrl', keyName: 'control', type: KeyType.modifier),
-        KeyDef(label: 'Alt', keyName: 'alt', type: KeyType.modifier),
-        KeyDef(label: 'Super', keyName: 'meta', type: KeyType.modifier),
-        KeyDef(label: 'Shift', keyName: 'shift', type: KeyType.modifier),
-      ],
+  final altDef = switch (platform) {
+    kPeerPlatformMacOS => KeyDef(label: '⌥', keyName: 'alt', type: KeyType.modifier),
+    _ => KeyDef(label: 'Alt', keyName: 'alt', type: KeyType.modifier),
+  };
+  final shiftDef = KeyDef(label: '⇧', keyName: 'shift', type: KeyType.modifier);
+  final ctrlDef = KeyDef(label: 'Ctrl', keyName: 'control', type: KeyType.modifier);
+  final cmdDef = switch (platform) {
+    kPeerPlatformMacOS => KeyDef(label: '⌘', keyName: 'meta', type: KeyType.modifier),
+    kPeerPlatformWindows => KeyDef(label: '⊞', keyName: 'meta', type: KeyType.modifier),
+    _ => KeyDef(label: 'Super', keyName: 'meta', type: KeyType.modifier),
   };
 
   return StripLayout(
     rows: [
-      // Row 1: modifiers + Enter (left)  |  strip-toggle + ⌨ + ✕ + Esc (right)
+      // Row 1: disconnect + Esc + Alt + Shift + Ctrl + Cmd + Enter (left)  |  strip-toggle + ⌨ (right)
       StripRow(
         left: [
-          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7),
-          ...modifiers,
+          KeyDef(label: '✕', keyName: '', type: KeyType.disconnect, widthFactor: 0.7),
+          KeyDef(label: 'Esc', keyName: 'escape', type: KeyType.regular),
+          altDef,
+          shiftDef,
+          ctrlDef,
+          cmdDef,
           KeyDef(label: '⏎', keyName: 'return', type: KeyType.regular),
         ],
         right: [
           KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle, widthFactor: 0.7),
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
-          KeyDef(label: '✕', keyName: '', type: KeyType.disconnect, widthFactor: 0.7),
-          KeyDef(label: 'Esc', keyName: 'escape', type: KeyType.regular),
         ],
       ),
       // Row 2: macros + ⌫ + Tab (left)  |  PgUp + PgDn + arrow cluster (right)
       StripRow(
         left: [
+          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7),
           KeyDef(label: '⚡', keyName: '', type: KeyType.macroOpener),
           KeyDef(label: '⌫', keyName: 'backspace', type: KeyType.regular),
           KeyDef(label: 'Tab', keyName: 'tab', type: KeyType.regular),
