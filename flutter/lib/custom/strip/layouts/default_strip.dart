@@ -38,6 +38,7 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '✕', keyName: '', type: KeyType.disconnect),
           KeyDef(label: '⌫', keyName: 'backspace', type: KeyType.regular),
           KeyDef(label: 'Tab', keyName: 'tab', type: KeyType.regular),
+          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle),
         ],
       ),
       // Row 2: macros (left)  |  arrow cluster (right)

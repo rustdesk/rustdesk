@@ -6,6 +6,7 @@ enum KeyType {
   keyboardToggle,
   stripToggle,
   disconnect,
+  chatToggle,
 }
 
 class KeyDef {

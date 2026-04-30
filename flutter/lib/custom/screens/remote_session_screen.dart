@@ -3,8 +3,10 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
 
+import '../chat/terminal_chat_overlay.dart';
 import '../input/input_bridge.dart';
 import '../input/text_field_bridge.dart';
+import '../settings/settings_store.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
 
@@ -30,6 +32,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   late final InputBridge _bridge;
   final _modCtl = ModifierController();
   final _kbFocusNode = FocusNode();
+  bool _chatOpen = false;
 
   @override
   void initState() {
@@ -53,15 +56,15 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onTwoFingerScroll(double dx, double dy) {
-    // Round to int — wheel deltas are integers on the wire.
     _bridge.scroll(dx.round(), dy.round());
   }
 
   void _onDisconnect() {
-    // Upstream's clientClose shows the standard "Are you sure?" dialog and
-    // closes the connection on confirm; matches the X button in the legacy
-    // BottomAppBar.
     clientClose(gFFI.sessionId, gFFI);
+  }
+
+  void _onChatToggle() {
+    setState(() => _chatOpen = !_chatOpen);
   }
 
   @override
@@ -69,29 +72,28 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     final mq = MediaQuery.of(context);
     final keyboardHeight = mq.viewInsets.bottom;
     final isKeyboardOpen = keyboardHeight > 0;
-    // When the iOS keyboard is closed, sit just above the home indicator;
-    // when open, sit just above the keyboard (no home indicator below it).
     final stripBottom = isKeyboardOpen ? keyboardHeight : mq.viewPadding.bottom;
+
+    // When chat is open the remote canvas shrinks to the top portion.
+    // In partial mode we show ~55% of screen height for the canvas so
+    // the user can still see the remote is live.
+    const canvasFraction = 0.55;
 
     return Stack(
       children: [
-        // Layer 0: upstream RemotePage — owns canvas, connection lifecycle,
-        // and all existing mobile gestures. KeyHelpTools and the
-        // BottomAppBar are suppressed; PowerStrip replaces them.
-        // Two-finger pan is redirected to remote scroll via the callback.
-        RemotePage(
-          id: widget.id,
-          password: widget.password,
-          isSharedPassword: widget.isSharedPassword,
-          forceRelay: widget.forceRelay,
-          hideKeyHelpTools: true,
-          hideBottomBar: true,
-          onTwoFingerScroll: _onTwoFingerScroll,
-        ),
+        // Layer 0: remote canvas — always present, shrinks when chat is open.
+        if (_chatOpen)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: mq.size.height * (1 - canvasFraction),
+            child: _remoteCanvas(),
+          )
+        else
+          Positioned.fill(child: _remoteCanvas()),
 
-        // Layer 1: hidden 1×1 TextField — captures native iOS keyboard input
-        // (letters, Hebrew, emoji, IME) and injects it to the remote.
-        // Focused/unfocused via the ⌨ key in the PowerStrip.
+        // Layer 1: hidden 1×1 TextField for iOS keyboard input.
         Positioned(
           left: 0,
           top: 0,
@@ -102,22 +104,47 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
           ),
         ),
 
-        // Layer 2: power strip.
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: stripBottom,
-          child: PowerStrip(
-            inputBridge: _bridge,
-            modifierController: _modCtl,
-            onMacrosTap: _onMacrosTap,
-            onKeyboardTap: _onKeyboardTap,
-            onDisconnect: _onDisconnect,
+        // Layer 2: power strip — anchored above keyboard / home indicator.
+        if (!_chatOpen)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: stripBottom,
+            child: PowerStrip(
+              inputBridge: _bridge,
+              modifierController: _modCtl,
+              onMacrosTap: _onMacrosTap,
+              onKeyboardTap: _onKeyboardTap,
+              onDisconnect: _onDisconnect,
+              onChatToggle: _onChatToggle,
+            ),
           ),
-        ),
+
+        // Layer 3: terminal chat overlay — slides up from bottom when open.
+        if (_chatOpen)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: TerminalChatOverlay(
+              inputBridge: _bridge,
+              startMaximized: settingsStore.chatStartMaximized,
+              onClose: _onChatToggle,
+            ),
+          ),
       ],
     );
   }
+
+  Widget _remoteCanvas() => RemotePage(
+        id: widget.id,
+        password: widget.password,
+        isSharedPassword: widget.isSharedPassword,
+        forceRelay: widget.forceRelay,
+        hideKeyHelpTools: true,
+        hideBottomBar: true,
+        onTwoFingerScroll: _onTwoFingerScroll,
+      );
 
   void _onMacrosTap() {
     // Macro bottom sheet — Phase 3b

@@ -12,6 +12,7 @@ class SettingsStore extends ChangeNotifier {
   double get scrollSensitivity =>
       double.tryParse(_read('scroll_sensitivity') ?? '') ?? 1.0;
   bool get scrollInverted => _read('scroll_inverted') == '1';
+  bool get chatStartMaximized => _read('chat_start_maximized') == '1';
 
   Future<void> setServer({
     required String idServer,
@@ -29,6 +30,9 @@ class SettingsStore extends ChangeNotifier {
 
   Future<void> setLeftHanded(bool value) =>
       _write('left_handed', value ? '1' : '0');
+
+  Future<void> setChatStartMaximized(bool value) =>
+      _write('chat_start_maximized', value ? '1' : '0');
 
   Future<void> setScrollSensitivity(double value) =>
       _write('scroll_sensitivity', value.toStringAsFixed(2));

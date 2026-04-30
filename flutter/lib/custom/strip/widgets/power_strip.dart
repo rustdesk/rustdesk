@@ -15,6 +15,7 @@ class PowerStrip extends StatefulWidget {
   final VoidCallback onMacrosTap;
   final VoidCallback onKeyboardTap;
   final VoidCallback onDisconnect;
+  final VoidCallback onChatToggle;
   final bool leftHanded;
 
   const PowerStrip({
@@ -24,6 +25,7 @@ class PowerStrip extends StatefulWidget {
     required this.onMacrosTap,
     required this.onKeyboardTap,
     required this.onDisconnect,
+    required this.onChatToggle,
     this.leftHanded = false,
   });
 
@@ -112,6 +114,8 @@ class _PowerStripState extends State<PowerStrip> {
         setState(() => _collapsed = !_collapsed);
       case KeyType.disconnect:
         widget.onDisconnect();
+      case KeyType.chatToggle:
+        widget.onChatToggle();
       case KeyType.regular:
         // Regular keys go through onPressStart / onPressEnd in KeyCell so the
         // held modifier (if any) stays down until the in-flight tap finishes.
