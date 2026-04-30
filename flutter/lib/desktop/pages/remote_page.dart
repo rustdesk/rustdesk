@@ -134,12 +134,10 @@ class _RemotePageState extends State<RemotePage>
       // what we want here.
       if (mounted) {
         toolbarControls(context, widget.id, _ffi);
-        // Register the default-bound actions that `toolbarControls` doesn't
-        // own (fullscreen, switch display, switch tab). Done in addition,
-        // not instead of, the toolbar registration above.
         registerSessionShortcutActions(_ffi,
             tabController: widget.tabController,
             toolbarState: widget.toolbarState);
+        registerToolbarShortcuts(context, widget.id, _ffi);
       }
     });
     _ffi.canvasModel.initializeEdgeScrollFallback(this);

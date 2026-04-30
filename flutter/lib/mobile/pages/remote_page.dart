@@ -127,10 +127,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // what we want here.
       if (mounted) {
         toolbarControls(context, widget.id, gFFI);
-        // Mobile has no DesktopTabController, so tab-switch shortcuts
-        // remain unregistered (they will simply log a no-handler debug
-        // line if a mobile user binds one — they have no tabs to switch).
+        // Mobile has no DesktopTabController, so tab-switch shortcuts will
+        // log a no-handler debug line if a user binds one.
         registerSessionShortcutActions(gFFI);
+        registerToolbarShortcuts(context, widget.id, gFFI);
       }
     });
     WidgetsBinding.instance.addObserver(this);

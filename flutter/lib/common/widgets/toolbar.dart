@@ -11,26 +11,17 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/shortcut_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 bool isEditOsPassword = false;
 
-/// Action IDs that `toolbarControls` is the sole registrar for. Each call to
-/// `toolbarControls` (e.g. opening the toolbar menu after a permission was
-/// revoked or a state changed) wipes these so a previously-registered closure
-/// can't outlive the menu entry that owns it. The for-loop at the bottom of
-/// `toolbarControls` then re-registers whichever entries are still present in
-/// the rebuilt menu list.
-///
-/// Actions registered elsewhere — `registerSessionShortcutActions` on desktop
-/// owns toggle_recording, fullscreen, switch_display, switch_tab, close_tab,
-/// toggle_toolbar — MUST NOT appear here, otherwise this list would clobber
-/// their registration on every menu rebuild.
-///
-/// `kShortcutActionToggleRecording` is platform-conditional (mobile-only —
-/// see the `!(isDesktop || isWeb)` guard in `toolbarControls`). It is handled
-/// separately in the unregister pass rather than appearing in this const list.
+/// Action IDs that `toolbarControls` is the sole registrar for. Wiped on
+/// every call so stale closures don't outlive the menu entry that owned
+/// them. Actions registered by `registerSessionShortcutActions` MUST NOT
+/// appear here. `kShortcutActionToggleRecording` is platform-conditional
+/// and handled separately in the unregister pass below.
 const _kToolbarOwnedActionIds = <String>[
   kShortcutActionSendCtrlAltDel,
   kShortcutActionRestartRemote,
@@ -39,6 +30,8 @@ const _kToolbarOwnedActionIds = <String>[
   kShortcutActionSwitchSides,
   kShortcutActionRefresh,
   kShortcutActionScreenshot,
+  kShortcutActionResetCanvas,
+  kShortcutActionSendClipboardKeystrokes,
 ];
 
 class TTextMenu {
@@ -74,20 +67,61 @@ class TRadioMenu<T> {
   final T value;
   final T groupValue;
   final ValueChanged<T?>? onChanged;
+  final String? actionId;
 
   TRadioMenu(
       {required this.child,
       required this.value,
       required this.groupValue,
-      required this.onChanged});
+      required this.onChanged,
+      this.actionId});
 }
 
 class TToggleMenu {
   final Widget child;
   final bool value;
   final ValueChanged<bool?>? onChanged;
+  final String? actionId;
   TToggleMenu(
-      {required this.child, required this.value, required this.onChanged});
+      {required this.child,
+      required this.value,
+      required this.onChanged,
+      this.actionId});
+}
+
+/// Register each tagged entry's `onChanged` with the session [ShortcutModel].
+/// Passthrough — returns [menus] so a caller can wrap `return [...]` directly.
+List<TToggleMenu> _registerToggleMenuShortcuts(
+    FFI ffi, List<TToggleMenu> menus) {
+  for (final menu in menus) {
+    final actionId = menu.actionId;
+    if (actionId == null) continue;
+    final onChanged = menu.onChanged;
+    if (onChanged == null) {
+      ffi.shortcutModel.unregister(actionId);
+    } else {
+      final value = menu.value;
+      ffi.shortcutModel.register(actionId, () => onChanged(!value));
+    }
+  }
+  return menus;
+}
+
+/// Radio variant of [_registerToggleMenuShortcuts].
+List<TRadioMenu<T>> _registerRadioMenuShortcuts<T>(
+    FFI ffi, List<TRadioMenu<T>> menus) {
+  for (final menu in menus) {
+    final actionId = menu.actionId;
+    if (actionId == null) continue;
+    final onChanged = menu.onChanged;
+    if (onChanged == null) {
+      ffi.shortcutModel.unregister(actionId);
+    } else {
+      final value = menu.value;
+      ffi.shortcutModel.register(actionId, () => onChanged(value));
+    }
+  }
+  return menus;
 }
 
 handleOsPasswordEditIcon(
@@ -121,16 +155,13 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   final sessionId = ffi.sessionId;
   final isDefaultConn = ffi.connType == ConnType.defaultConn;
 
-  // Wipe everything `toolbarControls` could have registered last call so
-  // stale closures (e.g. for a menu entry whose permission has since been
-  // revoked) don't outlive the menu rebuild. See _kToolbarOwnedActionIds.
+  // Wipe stale registrations from previous menu builds before re-registering
+  // below; runs unconditionally so mid-session enable works without reconnect.
   for (final actionId in _kToolbarOwnedActionIds) {
     ffi.shortcutModel.unregister(actionId);
   }
-  // toggle_recording is platform-conditional — toolbarControls only builds
-  // the menu entry on `!(isDesktop || isWeb)`. On desktop the registration
-  // is owned by `registerSessionShortcutActions` and must NOT be touched
-  // here. See the recording menu entry below.
+  // toggle_recording is mobile-only here; desktop's registration is owned by
+  // `registerSessionShortcutActions` and must not be touched.
   if (!(isDesktop || isWeb)) {
     ffi.shortcutModel.unregister(kShortcutActionToggleRecording);
   }
@@ -188,13 +219,15 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
             bind.sessionInputString(
                 sessionId: sessionId, value: data.text ?? "");
           }
-        }));
+        },
+        actionId: kShortcutActionSendClipboardKeystrokes));
   }
   // reset canvas
   if (isDefaultConn && isMobile) {
     v.add(TTextMenu(
         child: Text(translate('Reset canvas')),
-        onPressed: () => ffi.cursorModel.reset()));
+        onPressed: () => ffi.cursorModel.reset(),
+        actionId: kShortcutActionResetCanvas));
   }
 
   // https://github.com/rustdesk/rustdesk/pull/9731
@@ -409,19 +442,8 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       onPressed: () => onCopyFingerprint(FingerprintState.find(id).value),
     ));
   }
-  // Register tagged callbacks with the shortcut model so global keyboard
-  // shortcuts can dispatch the same actions as the toolbar menu items.
-  //
-  // For action IDs already cleared at the top of this function (i.e. those
-  // in [_kToolbarOwnedActionIds] plus the conditional toggle_recording),
-  // the `else` branch below is a redundant idempotent no-op — `unregister`
-  // just calls `Map.remove` on something already absent.
-  //
-  // The branch is kept as **defense in depth** for the case where a future
-  // contributor tags a menu item with an actionId that they forget to add
-  // to [_kToolbarOwnedActionIds]: without this `else`, the original
-  // "stale-closure-outlives-disabled-state" bug (e.g. Screenshot cooldown
-  // bypass) would silently come back for that new action only.
+  // Register tagged TTextMenu callbacks. The else-unregister is defense in
+  // depth for actionIds tagged but missing from `_kToolbarOwnedActionIds`.
   for (final menu in v) {
     final actionId = menu.actionId;
     if (actionId == null) continue;
@@ -445,23 +467,26 @@ Future<List<TRadioMenu<String>>> toolbarViewStyle(
         .then((_) => ffi.canvasModel.updateViewStyle());
   }
 
-  return [
+  return _registerRadioMenuShortcuts(ffi, [
     TRadioMenu<String>(
         child: Text(translate('Scale original')),
         value: kRemoteViewStyleOriginal,
         groupValue: groupValue,
-        onChanged: onChanged),
+        onChanged: onChanged,
+        actionId: kShortcutActionViewModeOriginal),
     TRadioMenu<String>(
         child: Text(translate('Scale adaptive')),
         value: kRemoteViewStyleAdaptive,
         groupValue: groupValue,
-        onChanged: onChanged),
+        onChanged: onChanged,
+        actionId: kShortcutActionViewModeAdaptive),
     TRadioMenu<String>(
         child: Text(translate('Scale custom')),
         value: kRemoteViewStyleCustom,
         groupValue: groupValue,
-        onChanged: onChanged)
-  ];
+        onChanged: onChanged,
+        actionId: kShortcutActionViewModeCustom)
+  ]);
 }
 
 Future<List<TRadioMenu<String>>> toolbarImageQuality(
@@ -473,22 +498,25 @@ Future<List<TRadioMenu<String>>> toolbarImageQuality(
     await bind.sessionSetImageQuality(sessionId: ffi.sessionId, value: value);
   }
 
-  return [
+  return _registerRadioMenuShortcuts(ffi, [
     TRadioMenu<String>(
         child: Text(translate('Good image quality')),
         value: kRemoteImageQualityBest,
         groupValue: groupValue,
-        onChanged: onChanged),
+        onChanged: onChanged,
+        actionId: kShortcutActionImageQualityBest),
     TRadioMenu<String>(
         child: Text(translate('Balanced')),
         value: kRemoteImageQualityBalanced,
         groupValue: groupValue,
-        onChanged: onChanged),
+        onChanged: onChanged,
+        actionId: kShortcutActionImageQualityBalanced),
     TRadioMenu<String>(
         child: Text(translate('Optimize reaction time')),
         value: kRemoteImageQualityLow,
         groupValue: groupValue,
-        onChanged: onChanged),
+        onChanged: onChanged,
+        actionId: kShortcutActionImageQualityLow),
     TRadioMenu<String>(
       child: Text(translate('Custom')),
       value: kRemoteImageQualityCustom,
@@ -498,7 +526,7 @@ Future<List<TRadioMenu<String>>> toolbarImageQuality(
         customImageQualityDialog(ffi.sessionId, id, ffi);
       },
     ),
-  ];
+  ]);
 }
 
 Future<List<TRadioMenu<String>>> toolbarCodec(
@@ -533,12 +561,14 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
     bind.sessionChangePreferCodec(sessionId: sessionId);
   }
 
-  TRadioMenu<String> radio(String label, String value, bool enabled) {
+  TRadioMenu<String> radio(
+      String label, String value, bool enabled, String actionId) {
     return TRadioMenu<String>(
         child: Text(label),
         value: value,
         groupValue: groupValue,
-        onChanged: enabled ? onChanged : null);
+        onChanged: enabled ? onChanged : null,
+        actionId: actionId);
   }
 
   var autoLabel = translate('Auto');
@@ -546,14 +576,14 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
       ffi.qualityMonitorModel.data.codecFormat != null) {
     autoLabel = '$autoLabel (${ffi.qualityMonitorModel.data.codecFormat})';
   }
-  return [
-    radio(autoLabel, 'auto', true),
-    if (codecs[0]) radio('VP8', 'vp8', codecs[0]),
-    radio('VP9', 'vp9', true),
-    if (codecs[1]) radio('AV1', 'av1', codecs[1]),
-    if (codecs[2]) radio('H264', 'h264', codecs[2]),
-    if (codecs[3]) radio('H265', 'h265', codecs[3]),
-  ];
+  return _registerRadioMenuShortcuts(ffi, [
+    radio(autoLabel, 'auto', true, kShortcutActionCodecAuto),
+    if (codecs[0]) radio('VP8', 'vp8', codecs[0], kShortcutActionCodecVp8),
+    radio('VP9', 'vp9', true, kShortcutActionCodecVp9),
+    if (codecs[1]) radio('AV1', 'av1', codecs[1], kShortcutActionCodecAv1),
+    if (codecs[2]) radio('H264', 'h264', codecs[2], kShortcutActionCodecH264),
+    if (codecs[3]) radio('H265', 'h265', codecs[3], kShortcutActionCodecH265),
+  ]);
 }
 
 Future<List<TToggleMenu>> toolbarCursor(
@@ -578,6 +608,7 @@ Future<List<TToggleMenu>> toolbarCursor(
     v.add(TToggleMenu(
         child: Text(translate('Show remote cursor')),
         value: state.value,
+        actionId: kShortcutActionToggleShowRemoteCursor,
         onChanged: enabled && !lockState.value
             ? (value) async {
                 if (value == null) return;
@@ -614,6 +645,7 @@ Future<List<TToggleMenu>> toolbarCursor(
     v.add(TToggleMenu(
         child: Text(translate('Follow remote cursor')),
         value: value,
+        actionId: kShortcutActionToggleFollowRemoteCursor,
         onChanged: (value) async {
           if (value == null) return;
           await bind.sessionToggleOption(sessionId: sessionId, value: option);
@@ -642,6 +674,7 @@ Future<List<TToggleMenu>> toolbarCursor(
     v.add(TToggleMenu(
         child: Text(translate('Follow remote window focus')),
         value: value,
+        actionId: kShortcutActionToggleFollowRemoteWindow,
         onChanged: (value) async {
           if (value == null) return;
           await bind.sessionToggleOption(sessionId: sessionId, value: option);
@@ -659,6 +692,7 @@ Future<List<TToggleMenu>> toolbarCursor(
     v.add(TToggleMenu(
       child: Text(translate('Zoom cursor')),
       value: peerState.value,
+      actionId: kShortcutActionToggleZoomCursor,
       onChanged: (value) async {
         if (value == null) return;
         await bind.sessionToggleOption(sessionId: sessionId, value: option);
@@ -667,7 +701,7 @@ Future<List<TToggleMenu>> toolbarCursor(
       },
     ));
   }
-  return v;
+  return _registerToggleMenuShortcuts(ffi, v);
 }
 
 Future<List<TToggleMenu>> toolbarDisplayToggle(
@@ -683,6 +717,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   final option = 'show-quality-monitor';
   v.add(TToggleMenu(
       value: bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option),
+      actionId: kShortcutActionToggleQualityMonitor,
       onChanged: (value) async {
         if (value == null) return;
         await bind.sessionToggleOption(sessionId: sessionId, value: option);
@@ -696,6 +731,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     v.add(TToggleMenu(
         value: value,
+        actionId: kShortcutActionToggleMute,
         onChanged: (value) {
           if (value == null) return;
           bind.sessionToggleOption(sessionId: sessionId, value: option);
@@ -720,6 +756,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         sessionId: sessionId, arg: kOptionEnableFileCopyPaste);
     v.add(TToggleMenu(
         value: value,
+        actionId: kShortcutActionToggleEnableFileCopyPaste,
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
@@ -738,6 +775,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
     if (ffiModel.viewOnly) value = true;
     v.add(TToggleMenu(
         value: value,
+        actionId: kShortcutActionToggleDisableClipboard,
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
@@ -754,6 +792,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     v.add(TToggleMenu(
         value: value,
+        actionId: kShortcutActionToggleLockAfterSessionEnd,
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
@@ -804,6 +843,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     v.add(TToggleMenu(
         value: value,
+        actionId: kShortcutActionToggleTrueColor,
         onChanged: (value) async {
           if (value == null) return;
           await bind.sessionToggleOption(sessionId: sessionId, value: option);
@@ -828,7 +868,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         },
         child: Text(translate('View Mode'))));
   }
-  return v;
+  return _registerToggleMenuShortcuts(ffi, v);
 }
 
 var togglePrivacyModeTime = DateTime.now().subtract(const Duration(hours: 1));
@@ -927,6 +967,7 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
     final enabled = !ffi.ffiModel.viewOnly;
     v.add(TToggleMenu(
         value: value,
+        actionId: kShortcutActionToggleSwapCtrlCmd,
         onChanged: enabled ? onChanged : null,
         child: Text(translate('Swap control-command key'))));
   }
@@ -992,10 +1033,26 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
     final enabled = !ffi.ffiModel.viewOnly;
     v.add(TToggleMenu(
         value: value,
+        actionId: kShortcutActionToggleSwapLeftRightMouse,
         onChanged: enabled ? onChanged : null,
         child: Text(translate('swap-left-right-mouse'))));
   }
-  return v;
+  return _registerToggleMenuShortcuts(ffi, v);
+}
+
+/// Drive each toolbar helper for its registration side effect, so a shortcut
+/// fires from the first keystroke without needing the user to open the
+/// matching submenu. Mobile gets `toolbarKeyboardToggles` via
+/// `toolbarDisplayToggle`'s `isMobile` branch — calling it explicitly there
+/// would double-register.
+void registerToolbarShortcuts(BuildContext context, String id, FFI ffi) {
+  if (isDesktop) toolbarKeyboardToggles(ffi);
+  unawaited(toolbarCursor(context, id, ffi));
+  unawaited(toolbarDisplayToggle(context, id, ffi));
+  unawaited(toolbarViewStyle(context, id, ffi));
+  unawaited(toolbarImageQuality(context, id, ffi));
+  unawaited(toolbarCodec(context, id, ffi));
+  toolbarPrivacyMode(PrivacyModeState.find(id), context, id, ffi);
 }
 
 bool showVirtualDisplayMenu(FFI ffi) {

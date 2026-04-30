@@ -10,6 +10,7 @@ import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/page_body.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_keyboard_shortcuts_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
@@ -459,6 +460,7 @@ class _GeneralState extends State<_General> {
               await ShortcutModel.setPassThrough(v);
               setLocalState(() {});
             },
+            trailing: const InfoTooltipIcon(tipKey: 'shortcut-passthrough-tip'),
           ),
           _ShortcutsConfigureRow(),
         ],
@@ -2532,6 +2534,8 @@ Widget _OptionCheckBox(
   bool isServer = true,
   bool Function()? optGetter,
   Future<void> Function(String, bool)? optSetter,
+  // Optional widget rendered between the label and the trailing space.
+  Widget? trailing,
 }) {
   getOpt() => optGetter != null
       ? optGetter()
@@ -2575,11 +2579,23 @@ Widget _OptionCheckBox(
             offstage: !ref.value || checkedIcon == null,
             child: checkedIcon?.marginOnly(right: 5),
           ),
-          Expanded(
+          // Without `trailing`, keep the original Expanded(Text) layout.
+          if (trailing == null)
+            Expanded(
+                child: Text(
+              translate(label),
+              style: TextStyle(color: disabledTextColor(context, enabled)),
+            ))
+          else ...[
+            Flexible(
               child: Text(
-            translate(label),
-            style: TextStyle(color: disabledTextColor(context, enabled)),
-          ))
+                translate(label),
+                style: TextStyle(color: disabledTextColor(context, enabled)),
+              ),
+            ),
+            trailing,
+            const Spacer(),
+          ],
         ],
       ),
     ).marginOnly(left: _kCheckBoxLeftMargin),

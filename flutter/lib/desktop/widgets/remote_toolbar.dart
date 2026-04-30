@@ -611,8 +611,9 @@ class _MonitorMenu extends StatelessWidget {
             tooltip: isMulti
                 ? ''
                 : isAllMonitors
-                    ? 'all monitors'
-                    : '#${i + 1} monitor',
+                    ? translate('All monitors')
+                    : translate('Monitor #{}')
+                        .replaceAll('{}', '${i + 1}'),
             hMargin: isMulti ? null : 6,
             vMargin: isMulti ? null : 12,
             topLevel: false,
