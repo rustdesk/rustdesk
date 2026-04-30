@@ -27,7 +27,6 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  screen_retriever:
   ffi: ^2.1.0
   path_provider: ^2.1.1
   external_path: ^1.0.3
@@ -51,7 +50,7 @@ dependencies:
   image_picker: ^1.1.2
   image: ^4.0.17
   back_button_interceptor: ^6.0.1
-  flutter_rust_bridge: "2.12.0"
+  flutter_rust_bridge: "1.80.1"
   window_manager:
     git:
       url: https://github.com/rustdesk-org/window_manager
@@ -114,8 +113,8 @@ dependencies:
 
 dev_dependencies:
   icons_launcher: ^2.0.4
-  #flutter_test:
-  #sdk: flutter
+  flutter_test:
+    sdk: flutter
   build_runner: ^2.4.6
   freezed: ^2.4.2
   flutter_lints: ^2.0.2
