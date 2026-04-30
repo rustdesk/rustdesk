@@ -4,6 +4,7 @@ enum KeyType {
   macroOpener,
   layer,
   keyboardToggle,
+  stripToggle,
   disconnect,
 }
 
