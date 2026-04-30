@@ -7,7 +7,7 @@ import '../../theme/tokens.dart';
 import '../models/key_def.dart';
 import '../models/modifier_state.dart';
 
-const _kBaseWidth = 44.0;
+const kKeyBaseWidth = 44.0;
 const _kHeight = 40.0;
 const _kRepeatDelay = Duration(milliseconds: 400);
 const _kRepeatInterval = Duration(milliseconds: 60);
@@ -210,7 +210,7 @@ class _KeyVisual extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
-      width: _kBaseWidth * widthFactor,
+      width: kKeyBaseWidth * widthFactor,
       height: _kHeight,
       decoration: BoxDecoration(
         color: bg,

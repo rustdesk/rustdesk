@@ -21,6 +21,13 @@ class KeyDef {
     required this.type,
     this.widthFactor = 1.0,
   });
+
+  KeyDef copyWith({double? widthFactor}) => KeyDef(
+        label: label,
+        keyName: keyName,
+        type: type,
+        widthFactor: widthFactor ?? this.widthFactor,
+      );
 }
 
 class StripRow {

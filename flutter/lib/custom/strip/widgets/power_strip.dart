@@ -73,12 +73,21 @@ class _PowerStripState extends State<PowerStrip> {
         children: visibleRows.map((row) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              children: [
-                ...row.left.map(_wrap),
-                const Spacer(),
-                ...row.right.map(_wrap),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                double leftW = row.left.fold(0.0, (s, k) => s + kKeyBaseWidth * k.widthFactor + 4);
+                double rightW = row.right.fold(0.0, (s, k) => s + kKeyBaseWidth * k.widthFactor + 4);
+                double totalW = leftW + rightW;
+                double available = constraints.maxWidth;
+                double scale = totalW > available ? available / totalW : 1.0;
+                return Row(
+                  children: [
+                    ...row.left.map((k) => _wrapScaled(k, scale)),
+                    const Spacer(),
+                    ...row.right.map((k) => _wrapScaled(k, scale)),
+                  ],
+                );
+              },
             ),
           );
         }).toList(),
@@ -86,20 +95,23 @@ class _PowerStripState extends State<PowerStrip> {
     );
   }
 
-  Widget _wrap(KeyDef k) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: KeyCell(
-          keyDef: k,
-          modifierController: widget.modifierController,
-          onTap: () => _handle(k),
-          onPressStart: k.type == KeyType.regular
-              ? () => _onRegularPressStart(k)
-              : null,
-          onPressEnd: k.type == KeyType.regular
-              ? () => _onRegularPressEnd(k)
-              : null,
-        ),
-      );
+  Widget _wrapScaled(KeyDef k, double scale) {
+    final scaled = scale < 1.0 ? k.copyWith(widthFactor: k.widthFactor * scale) : k;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 2 * scale),
+      child: KeyCell(
+        keyDef: scaled,
+        modifierController: widget.modifierController,
+        onTap: () => _handle(k),
+        onPressStart: k.type == KeyType.regular
+            ? () => _onRegularPressStart(k)
+            : null,
+        onPressEnd: k.type == KeyType.regular
+            ? () => _onRegularPressEnd(k)
+            : null,
+      ),
+    );
+  }
 
   void _handle(KeyDef k) {
     HapticFeedback.lightImpact();
