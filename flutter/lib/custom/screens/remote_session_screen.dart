@@ -33,6 +33,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   final _modCtl = ModifierController();
   final _kbFocusNode = FocusNode();
   bool _chatOpen = false;
+  double _stripHeight = 0;
 
   @override
   void initState() {
@@ -71,27 +72,24 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final keyboardHeight = mq.viewInsets.bottom;
-    final isKeyboardOpen = keyboardHeight > 0;
-    final stripBottom = isKeyboardOpen ? keyboardHeight : mq.viewPadding.bottom;
+    final stripBottom = keyboardHeight > 0 ? keyboardHeight : mq.viewPadding.bottom;
 
-    // When chat is open the remote canvas shrinks to the top portion.
-    // In partial mode we show ~55% of screen height for the canvas so
-    // the user can still see the remote is live.
-    const canvasFraction = 0.55;
+    // Canvas bottom: reserve space for the strip (and keyboard when open) so
+    // the remote screen is never occluded by the strip or system keyboard.
+    final canvasBottom = _chatOpen
+        ? mq.size.height * (1 - 0.55)
+        : stripBottom + _stripHeight;
 
     return Stack(
       children: [
-        // Layer 0: remote canvas — always present, shrinks when chat is open.
-        if (_chatOpen)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: mq.size.height * (1 - canvasFraction),
-            child: _remoteCanvas(),
-          )
-        else
-          Positioned.fill(child: _remoteCanvas()),
+        // Layer 0: remote canvas — shrinks above strip and keyboard.
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: canvasBottom,
+          child: _remoteCanvas(),
+        ),
 
         // Layer 1: hidden 1×1 TextField for iOS keyboard input.
         Positioned(
@@ -110,13 +108,18 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
             left: 0,
             right: 0,
             bottom: stripBottom,
-            child: PowerStrip(
-              inputBridge: _bridge,
-              modifierController: _modCtl,
-              onMacrosTap: _onMacrosTap,
-              onKeyboardTap: _onKeyboardTap,
-              onDisconnect: _onDisconnect,
-              onChatToggle: _onChatToggle,
+            child: _MeasureHeight(
+              onChange: (h) {
+                if (h != _stripHeight) setState(() => _stripHeight = h);
+              },
+              child: PowerStrip(
+                inputBridge: _bridge,
+                modifierController: _modCtl,
+                onMacrosTap: _onMacrosTap,
+                onKeyboardTap: _onKeyboardTap,
+                onDisconnect: _onDisconnect,
+                onChatToggle: _onChatToggle,
+              ),
             ),
           ),
 
@@ -148,5 +151,31 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
 
   void _onMacrosTap() {
     // Macro bottom sheet — Phase 3b
+  }
+}
+
+// Reports its child's rendered height after each layout pass.
+class _MeasureHeight extends StatefulWidget {
+  final Widget child;
+  final ValueChanged<double> onChange;
+
+  const _MeasureHeight({required this.child, required this.onChange});
+
+  @override
+  State<_MeasureHeight> createState() => _MeasureHeightState();
+}
+
+class _MeasureHeightState extends State<_MeasureHeight> {
+  final _key = GlobalKey();
+
+  void _measure(_) {
+    final box = _key.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null) widget.onChange(box.size.height);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback(_measure);
+    return KeyedSubtree(key: _key, child: widget.child);
   }
 }
