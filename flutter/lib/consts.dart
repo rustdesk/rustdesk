@@ -175,6 +175,7 @@ const String kOptionEnableFlutterHttpOnRust = "enable-flutter-http-on-rust";
 const String kOptionHideServerSetting = "hide-server-settings";
 const String kOptionHideProxySetting = "hide-proxy-settings";
 const String kOptionHideWebSocketSetting = "hide-websocket-settings";
+const String kOptionHideStopService = "hide-stop-service";
 const String kOptionHideRemotePrinterSetting = "hide-remote-printer-settings";
 const String kOptionHideSecuritySetting = "hide-security-settings";
 const String kOptionHideNetworkSetting = "hide-network-settings";
@@ -186,6 +187,9 @@ const String kOptionDisableChangeId = "disable-change-id";
 const String kOptionDisableUnlockPin = "disable-unlock-pin";
 const kHideUsernameOnCard = "hide-username-on-card";
 const String kOptionHideHelpCards = "hide-help-cards";
+const String kOptionAllowDeepLinkPassword = "allow-deep-link-password";
+const String kOptionAllowDeepLinkServerSettings =
+    "allow-deep-link-server-settings";
 
 const String kOptionToggleViewOnly = "view-only";
 const String kOptionToggleShowMyCursor = "show-my-cursor";

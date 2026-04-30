@@ -377,8 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "鍵盤設定"),
         ("Full Access", "完全存取"),
         ("Screen Share", "僅分享螢幕畫面"),
-        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland 需要 Ubuntu 21.04 或更新的版本。"),
-        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland 需要更新版的 Linux 發行版。請嘗試使用 X11 桌面或更改您的作業系統。"),
+        ("ubuntu-21-04-required", "Wayland 需要 Ubuntu 21.04 或更新的版本。"),
+        ("wayland-requires-higher-linux-version", "Wayland 需要更新版的 Linux 發行版。請嘗試使用 X11 桌面或更改您的作業系統。"),
+        ("xdp-portal-unavailable", ""),
         ("JumpLink", "查看"),
         ("Please Select the screen to be shared(Operate on the peer side).", "請選擇要分享的螢幕畫面（在對方的裝置上操作）。"),
         ("Show RustDesk", "顯示 RustDesk"),
@@ -739,6 +740,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-outgoing-sessions-label", "在連出工作階段期間保持螢幕喚醒"),
         ("keep-awake-during-incoming-sessions-label", "在連入工作階段期間保持螢幕喚醒"),
         ("Continue with {}", "使用 {} 登入"),
-        ("Display Name", ""),
+        ("Display Name", "顯示名稱"),
+        ("password-hidden-tip", "固定密碼已設定（已隱藏）"),
+        ("preset-password-in-use-tip", "目前正在使用預設密碼"),
     ].iter().cloned().collect();
 }

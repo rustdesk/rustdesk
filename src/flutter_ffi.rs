@@ -605,21 +605,30 @@ pub fn session_handle_flutter_raw_key_event(
     }
 }
 
-// SyncReturn<()> is used to make sure enter() and leave() are executed in the sequence this function is called.
-//
 // If the cursor jumps between remote page of two connections, leave view and enter view will be called.
 // session_enter_or_leave() will be called then.
-// As rust is multi-thread, it is possible that enter() is called before leave().
-// This will cause the keyboard input to take no effect.
+// As Rust is multi-threaded, enter() can be called before leave().
+// The Rust-side grab ownership state filters stale transitions.
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
         let keyboard_mode = session.get_keyboard_mode();
+        // Use the full per-window UUID (not lc.session_id which is per-connection)
+        // so that two windows viewing the same peer get distinct grab owners.
+        let window_id = _session_id.as_u128();
         if _enter {
             set_cur_session_id_(_session_id, &keyboard_mode);
-            session.enter(keyboard_mode);
+            crate::keyboard::client::change_grab_status(
+                crate::common::GrabState::Run,
+                &keyboard_mode,
+                window_id,
+            );
         } else {
-            session.leave(keyboard_mode);
+            crate::keyboard::client::change_grab_status(
+                crate::common::GrabState::Wait,
+                &keyboard_mode,
+                window_id,
+            );
         }
     }
     SyncReturn(())
@@ -1693,8 +1702,8 @@ pub fn main_get_temporary_password() -> String {
     ui_interface::temporary_password()
 }
 
-pub fn main_get_permanent_password() -> String {
-    ui_interface::permanent_password()
+pub fn main_set_permanent_password_with_result(password: String) -> bool {
+    ui_interface::set_permanent_password_with_result(password)
 }
 
 pub fn main_get_fingerprint() -> String {
@@ -2072,10 +2081,6 @@ pub fn main_update_temporary_password() {
     update_temporary_password();
 }
 
-pub fn main_set_permanent_password(password: String) {
-    set_permanent_password(password);
-}
-
 pub fn main_check_super_user_permission() -> bool {
     check_super_user_permission()
 }
@@ -2423,16 +2428,23 @@ pub fn is_disable_installation() -> SyncReturn<bool> {
 }
 
 pub fn is_preset_password() -> bool {
-    config::HARD_SETTINGS
+    let hard = config::HARD_SETTINGS
         .read()
         .unwrap()
         .get("password")
-        .map_or(false, |p| {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            return p == &crate::ipc::get_permanent_password();
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            return p == &config::Config::get_permanent_password();
-        })
+        .cloned()
+        .unwrap_or_default();
+    if hard.is_empty() {
+        return false;
+    }
+
+    // On desktop, service owns the authoritative config; query it via IPC and return only a boolean.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::ipc::is_permanent_password_preset();
+
+    // On mobile, we have no service IPC; verify against local storage.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return config::Config::matches_permanent_password_plain(&hard);
 }
 
 // Don't call this function for desktop version.
@@ -2768,6 +2780,10 @@ pub fn main_get_common(key: String) -> String {
         return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();
         #[cfg(not(target_os = "linux"))]
         return false.to_string();
+    } else if key == "permanent-password-set" {
+        return ui_interface::is_permanent_password_set().to_string();
+    } else if key == "local-permanent-password-set" {
+        return ui_interface::is_local_permanent_password_set().to_string();
     } else {
         if key.starts_with("download-data-") {
             let id = key.replace("download-data-", "");
@@ -2877,7 +2893,7 @@ pub fn main_set_common(_key: String, _value: String) {
         } else if _key == "update-me" {
             if let Some(new_version_file) = get_download_file_from_url(&_value) {
                 log::debug!(
-                    "New version file is downloaed, update begin, {:?}",
+                    "New version file is downloaded, update begin, {:?}",
                     new_version_file.to_str()
                 );
                 if let Some(f) = new_version_file.to_str() {
@@ -3043,6 +3059,22 @@ pub mod server_side {
         let res = if let Ok(key) = env.get_string(&key) {
             let key: String = key.into();
             super::get_local_option(key)
+        } else {
+            "".into()
+        };
+        return env.new_string(res).unwrap_or_default().into_raw();
+    }
+
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_ffi_FFI_getBuildinOption(
+        env: JNIEnv,
+        _class: JClass,
+        key: JString,
+    ) -> jstring {
+        let mut env = env;
+        let res = if let Ok(key) = env.get_string(&key) {
+            let key: String = key.into();
+            super::get_builtin_option(&key)
         } else {
             "".into()
         };

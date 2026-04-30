@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
+import '../../mobile/widgets/dialog.dart' show showServerSettings;
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import '../theme/tokens.dart';
@@ -114,6 +115,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
                       .copyWith(color: AppTokens.colorTextHigh),
                 ),
               ),
+              const SizedBox(height: AppTokens.spaceSm),
+              _EditServerIdButton(),
               const SizedBox(height: AppTokens.spaceXl),
               _RecentPeers(onConnect: _onConnect),
             ],
@@ -246,6 +249,24 @@ class _RecentPeers extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+
+class _EditServerIdButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: TextButton.icon(
+        onPressed: () => showServerSettings(gFFI.dialogManager, (fn) => fn()),
+        icon: const Icon(Icons.dns_outlined,
+            size: 16, color: AppTokens.colorTextMid),
+        label: Text(
+          'Edit server ID',
+          style: AppTokens.fontKeySmall.copyWith(color: AppTokens.colorTextMid),
+        ),
+      ),
     );
   }
 }

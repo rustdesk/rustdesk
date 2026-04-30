@@ -167,7 +167,7 @@ target/release/rustdesk
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: графический пользовательский интерфейс на Sciter (устаревшее)
 - **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: сервисы аудио, буфера обмена, ввода, видео и сетевых подключений
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: одноранговое соединение
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: связь с [сервером Rustdesk](https://github.com/rustdesk/rustdesk-server), ожидает удаленного прямого (через TCP hole punching) или ретранслируемого соединения
+- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: связь с [сервером RustDesk](https://github.com/rustdesk/rustdesk-server), ожидает удаленного прямого (через TCP hole punching) или ретранслируемого соединения
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: специфичный для платформы код
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: код Flutter для ПК-версии и мобильных устройств
 - **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/v1/js)**: JavaScript для Web-клиента Flutter

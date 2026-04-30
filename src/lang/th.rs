@@ -377,8 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "การตั้งค่าคีย์บอร์ด"),
         ("Full Access", "การเข้าถึงทั้งหมด"),
         ("Screen Share", "การแชร์จอ"),
-        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland ต้องการ Ubuntu เวอร์ชัน 21.04 หรือสูงกว่า"),
-        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland ต้องการลินุกซ์เวอร์ชันที่สูงกว่านี้ กรุณาเปลี่ยนไปใช้เดสก์ท็อป X11 หรือเปลี่ยนระบบปฏิบัติการของคุณ"),
+        ("ubuntu-21-04-required", "Wayland ต้องการ Ubuntu เวอร์ชัน 21.04 หรือสูงกว่า"),
+        ("wayland-requires-higher-linux-version", "Wayland ต้องการลินุกซ์เวอร์ชันที่สูงกว่านี้ กรุณาเปลี่ยนไปใช้เดสก์ท็อป X11 หรือเปลี่ยนระบบปฏิบัติการของคุณ"),
+        ("xdp-portal-unavailable", ""),
         ("JumpLink", "View"),
         ("Please Select the screen to be shared(Operate on the peer side).", "กรุณาเลือกหน้าจอที่ต้องการแชร์ (ใช้งานในอีกฝั่งของการเชื่อมต่อ)"),
         ("Show RustDesk", "แสดง RustDesk"),
@@ -740,5 +741,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", ""),
         ("Continue with {}", "ทำต่อด้วย {}"),
         ("Display Name", ""),
+        ("password-hidden-tip", ""),
+        ("preset-password-in-use-tip", ""),
     ].iter().cloned().collect();
 }

@@ -275,7 +275,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       isDesktop &&
       ffiModel.keyboard &&
       pi.platform != kPeerPlatformAndroid &&
-      pi.platform != kPeerPlatformMacOS &&
       versionCmp(pi.version, '1.2.0') >= 0 &&
       bind.peerGetSessionsCount(id: id, connType: ffi.connType.index) == 1) {
     v.add(TTextMenu(

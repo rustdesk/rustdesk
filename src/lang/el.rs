@@ -377,8 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "Ρυθμίσεις πληκτρολογίου"),
         ("Full Access", "Πλήρης πρόσβαση"),
         ("Screen Share", "Κοινή χρήση οθόνης"),
-        ("Wayland requires Ubuntu 21.04 or higher version.", "Το Wayland απαιτεί Ubuntu 21.04 ή νεότερη έκδοση."),
-        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Το Wayland απαιτεί υψηλότερη έκδοση διανομής του linux. Δοκιμάστε την επιφάνεια εργασίας X11 ή αλλάξτε το λειτουργικό σας σύστημα."),
+        ("ubuntu-21-04-required", "Το Wayland απαιτεί Ubuntu 21.04 ή νεότερη έκδοση."),
+        ("wayland-requires-higher-linux-version", "Το Wayland απαιτεί υψηλότερη έκδοση διανομής του linux. Δοκιμάστε την επιφάνεια εργασίας X11 ή αλλάξτε το λειτουργικό σας σύστημα."),
+        ("xdp-portal-unavailable", ""),
         ("JumpLink", "Σύνδεσμος μετάβασης"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Επιλέξτε την οθόνη που θέλετε να μοιραστείτε (Λειτουργία στην πλευρά του απομακρυσμένου σταθμού)."),
         ("Show RustDesk", "Εμφάνιση του RustDesk"),
@@ -740,5 +741,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "Διατήρηση ενεργής οθόνης κατά τη διάρκεια των εισερχόμενων συνεδριών"),
         ("Continue with {}", "Συνέχεια με {}"),
         ("Display Name", "Εμφανιζόμενο όνομα"),
+        ("password-hidden-tip", ""),
+        ("preset-password-in-use-tip", ""),
     ].iter().cloned().collect();
 }

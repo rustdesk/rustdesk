@@ -151,7 +151,7 @@ fn create_media_codec(name: &str, direction: MediaCodecDirection) -> Option<Medi
         log::error!("Failed to start decoder: {:?}", e);
         return None;
     };
-    log::debug!("Init decoder successed!: {:?}", name);
+    log::debug!("Init decoder succeeded!: {:?}", name);
     return Some(MediaCodecDecoder {
         decoder: codec,
         name: name.to_owned(),

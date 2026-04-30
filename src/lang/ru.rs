@@ -377,8 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "Настройки клавиатуры"),
         ("Full Access", "Полный доступ"),
         ("Screen Share", "Демонстрация экрана"),
-        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland требуется Ubuntu версии 21.04 или новее."),
-        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Для Wayland требуется более поздняя версия дистрибутива Linux. Используйте рабочий стол X11 или смените ОС."),
+        ("ubuntu-21-04-required", "Wayland требуется Ubuntu версии 21.04 или новее."),
+        ("wayland-requires-higher-linux-version", "Для Wayland требуется более поздняя версия дистрибутива Linux. Используйте рабочий стол X11 или смените ОС."),
+        ("xdp-portal-unavailable", "Невозможно сделать снимок экрана Wayland. Возможно, в XDG Desktop Portal сбой или он недоступен. Попробуйте перезапустить его с помощью `systemctl --user restart xdg-desktop-portal`."),
         ("JumpLink", "Просмотр"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Выберите экран для демонстрации (работайте на одноранговой стороне)."),
         ("Show RustDesk", "Показать RustDesk"),
@@ -665,7 +666,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Incoming Print Job", "Входящее задание печати"),
         ("use-the-default-printer-tip", "Использовать принтер по умолчанию"),
         ("use-the-selected-printer-tip", "Использовать выбранный принтер"),
-        ("auto-print-tip", "Автоматически выполнять печать на выбранном принтере."),
+        ("auto-print-tip", "Автоматически выполнять печать на выбранном принтере"),
         ("print-incoming-job-confirm-tip", "Получено задание на печать с удалённого устройства. Выполнить его локально?"),
         ("remote-printing-disallowed-tile-tip", "Удалённая печать запрещена"),
         ("remote-printing-disallowed-text-tip", "Настройки разрешений на управляемой стороне запрещают удалённую печать."),
@@ -740,5 +741,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "Не отключать экран во время входящих сеансов"),
         ("Continue with {}", "Продолжить с {}"),
         ("Display Name", "Отображаемое имя"),
+        ("password-hidden-tip", "Установлен постоянный пароль (скрытый)."),
+        ("preset-password-in-use-tip", "Установленный пароль сейчас используется."),
     ].iter().cloned().collect();
 }

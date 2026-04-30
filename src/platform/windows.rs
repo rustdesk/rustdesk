@@ -523,7 +523,7 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
     fn get_current_session(rdp: BOOL) -> DWORD;
-    fn is_session_locked(include_rdp: BOOL) -> BOOL;
+    fn is_session_locked(session_id: DWORD) -> BOOL;
     fn LaunchProcessWin(
         cmd: *const u16,
         session_id: DWORD,
@@ -1149,20 +1149,21 @@ pub fn is_prelogin() -> bool {
 }
 
 pub fn is_locked() -> bool {
-    unsafe { is_session_locked(share_rdp()) == TRUE }
+    let Some(session_id) = get_current_process_session_id() else {
+        return false;
+    };
+    unsafe { is_session_locked(session_id) == TRUE }
 }
 
-// `is_logon_ui()` is regardless of multiple sessions now.
-// It only check if "LogonUI.exe" exists.
-//
-// If there're mulitple sessions (logged in users),
-// some are in the login screen, while the others are not.
-// Then this function may not work fine if the session we want to handle(connect) is not in the login screen.
-// But it's a rare case and cannot be simply handled, so it will not be dealt with for the time being.
 #[inline]
 pub fn is_logon_ui() -> ResultType<bool> {
+    let Some(current_sid) = get_current_process_session_id() else {
+        return Ok(false);
+    };
     let pids = get_pids("LogonUI.exe")?;
-    Ok(!pids.is_empty())
+    Ok(pids
+        .into_iter()
+        .any(|pid| get_session_id_of_process(pid) == Some(current_sid)))
 }
 
 pub fn is_root() -> bool {
@@ -1471,7 +1472,7 @@ pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> Res
 
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
     let cur_exe = current_exe.to_str().unwrap_or("").to_owned();
-    let shortcut_icon_location = get_shortcut_icon_location(&cur_exe);
+    let shortcut_icon_location = get_shortcut_icon_location(&path, &cur_exe);
     let mk_shortcut = write_cmds(
         format!(
             "
@@ -1509,7 +1510,7 @@ oLink.Save
     .to_str()
     .unwrap_or("")
     .to_owned();
-    let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
+    let tray_shortcut = get_tray_shortcut(&path, &exe, &cur_exe, &tmp_path)?;
     let mut reg_value_desktop_shortcuts = "0".to_owned();
     let mut reg_value_start_menu_shortcuts = "0".to_owned();
     let mut reg_value_printer = "0".to_owned();
@@ -1620,7 +1621,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {install_remote_printer}
 {sleep}
     ",
-        display_icon = get_custom_icon(&cur_exe).unwrap_or(exe.to_string()),
+        display_icon = get_custom_icon(&path, &cur_exe).unwrap_or(exe.to_string()),
         version = crate::VERSION.replace("-", "."),
         build_date = crate::BUILD_DATE,
         after_install = get_after_install(
@@ -2029,6 +2030,9 @@ pub fn update_install_option(k: &str, v: &str) -> ResultType<()> {
     if !is_installed() || !crate::is_server() {
         return Ok(());
     }
+    if ![REG_NAME_INSTALL_PRINTER].contains(&k) || !["0", "1"].contains(&v) {
+        return Ok(());
+    }
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
     let cmds =
@@ -2121,12 +2125,16 @@ unsafe fn set_default_dll_directories() -> bool {
     true
 }
 
-fn get_custom_icon(exe: &str) -> Option<String> {
+fn get_custom_icon(install_dir: &str, exe: &str) -> Option<String> {
+    const RELATIVE_ICON_PATH: &str = "data\\flutter_assets\\assets\\icon.ico";
     if crate::is_custom_client() {
         if let Some(p) = PathBuf::from(exe).parent() {
-            let alter_icon_path = p.join("data\\flutter_assets\\assets\\icon.ico");
+            let alter_icon_path = p.join(RELATIVE_ICON_PATH);
             if alter_icon_path.exists() {
-                // Verify that the icon is not a symlink for security
+                // During installation, files under `install_dir` may not exist yet.
+                // So we validate the icon from the current executable directory first.
+                // But for shortcut/registry icon location, we should point to the final
+                // installed path so the icon works across different Windows users.
                 if let Ok(metadata) = std::fs::symlink_metadata(&alter_icon_path) {
                     if metadata.is_symlink() {
                         log::warn!(
@@ -2136,7 +2144,11 @@ fn get_custom_icon(exe: &str) -> Option<String> {
                         return None;
                     }
                     if metadata.is_file() {
-                        return Some(alter_icon_path.to_string_lossy().to_string());
+                        return if install_dir.is_empty() {
+                            Some(alter_icon_path.to_string_lossy().to_string())
+                        } else {
+                            Some(format!("{}\\{}", install_dir, RELATIVE_ICON_PATH))
+                        };
                     }
                 }
             }
@@ -2146,12 +2158,12 @@ fn get_custom_icon(exe: &str) -> Option<String> {
 }
 
 #[inline]
-fn get_shortcut_icon_location(exe: &str) -> String {
+fn get_shortcut_icon_location(install_dir: &str, exe: &str) -> String {
     if exe.is_empty() {
         return "".to_owned();
     }
 
-    get_custom_icon(exe)
+    get_custom_icon(install_dir, exe)
         .map(|p| format!("oLink.IconLocation = \"{}\"", p))
         .unwrap_or_default()
 }
@@ -2162,7 +2174,7 @@ pub fn create_shortcut(id: &str) -> ResultType<()> {
     // Replace ':' with '_' for filename since ':' is not allowed in Windows filenames
     // https://github.com/rustdesk/hbb_common/blob/8b0e25867375ba9e6bff548acf44fe6d6ffa7c0e/src/config.rs#L1384
     let filename = id.replace(':', "_");
-    let shortcut_icon_location = get_shortcut_icon_location(&exe);
+    let shortcut_icon_location = get_shortcut_icon_location("", &exe);
     let shortcut = write_cmds(
         format!(
             "
@@ -2949,9 +2961,9 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
 pub fn install_service() -> bool {
     log::info!("Installing service...");
     let _installing = crate::platform::InstallingService::new();
-    let (_, _, _, exe) = get_install_info();
+    let (_, path, _, exe) = get_install_info();
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
-    let tray_shortcut = get_tray_shortcut(&exe, &tmp_path).unwrap_or_default();
+    let tray_shortcut = get_tray_shortcut(&path, &exe, &exe, &tmp_path).unwrap_or_default();
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "".into());
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
@@ -3060,7 +3072,8 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     let version = crate::VERSION.replace("-", ".");
     let size = get_directory_size_kb(&path);
     let build_date = crate::BUILD_DATE;
-    let display_icon = get_custom_icon(&exe).unwrap_or(exe.to_string());
+    // Use the icon in the previous installation directory if possible.
+    let display_icon = get_custom_icon("", &exe).unwrap_or(exe.to_string());
 
     let is_msi = is_msi_installed().ok();
 
@@ -3417,8 +3430,13 @@ pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
     Ok(())
 }
 
-pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
-    let shortcut_icon_location = get_shortcut_icon_location(exe);
+pub fn get_tray_shortcut(
+    install_dir: &str,
+    exe: &str,
+    icon_source_exe: &str,
+    tmp_path: &str,
+) -> ResultType<String> {
+    let shortcut_icon_location = get_shortcut_icon_location(install_dir, icon_source_exe);
     Ok(write_cmds(
         format!(
             "

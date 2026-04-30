@@ -1159,10 +1159,6 @@ class RustdeskImpl {
     return Future.value('');
   }
 
-  Future<String> mainGetPermanentPassword({dynamic hint}) {
-    return Future.value('');
-  }
-
   Future<String> mainGetFingerprint({dynamic hint}) {
     return Future.value('');
   }
@@ -1346,9 +1342,9 @@ class RustdeskImpl {
     throw UnimplementedError("mainUpdateTemporaryPassword");
   }
 
-  Future<void> mainSetPermanentPassword(
+  Future<bool> mainSetPermanentPasswordWithResult(
       {required String password, dynamic hint}) {
-    throw UnimplementedError("mainSetPermanentPassword");
+    throw UnimplementedError("mainSetPermanentPasswordWithResult");
   }
 
   Future<bool> mainCheckSuperUserPermission({dynamic hint}) {
@@ -1542,7 +1538,10 @@ class RustdeskImpl {
 
   Future<void> mainAccountAuth(
       {required String op, required bool rememberMe, dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', [
+    // Safari only allows auth popups while handling the original user gesture.
+    // Use Future.sync so the JS call runs synchronously (pre-opening the OIDC
+    // window) while any interop error still surfaces as a Future error.
+    return Future.sync(() => js.context.callMethod('setByName', [
           'account_auth',
           jsonEncode({'op': op, 'remember': rememberMe})
         ]));

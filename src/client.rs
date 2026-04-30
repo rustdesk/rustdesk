@@ -119,10 +119,13 @@ pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
 pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen is not supported";
 #[cfg(target_os = "linux")]
-pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
+pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "ubuntu-21-04-required";
 #[cfg(target_os = "linux")]
 pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
-    "Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.";
+    "wayland-requires-higher-linux-version";
+#[cfg(target_os = "linux")]
+pub const SCRAP_XDP_PORTAL_UNAVAILABLE: &str =
+    "xdp-portal-unavailable";
 pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
 pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
@@ -3867,6 +3870,7 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
                 && !text.to_lowercase().contains("resolve")
                 && !text.to_lowercase().contains("mismatch")
                 && !text.to_lowercase().contains("manually")
+                && !text.to_lowercase().contains("restricted")
                 && !text.to_lowercase().contains("not allowed")))
 }
 

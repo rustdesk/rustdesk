@@ -27,6 +27,7 @@ use hbb_common::platform::linux::run_cmds;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
+    config::decode_permanent_password_h1_from_storage,
     config::{self, keys, Config, TrustedDevice},
     fs::{self, can_enable_overwrite_detection, JobType},
     futures::{SinkExt, StreamExt},
@@ -75,6 +76,18 @@ lazy_static::lazy_static! {
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
     static ref WAKELOCK_KEEP_AWAKE_OPTION: Arc::<Mutex<Option<bool>>> = Default::default();
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    // Avoid data-dependent early exits.
+    let mut x: u8 = 0;
+    for i in 0..a.len() {
+        x |= a[i] ^ b[i];
+    }
+    x == 0
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -1969,34 +1982,135 @@ impl Connection {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
-    fn validate_one_password(&self, password: String) -> bool {
-        if password.len() == 0 {
-            return false;
-        }
-        let mut hasher = Sha256::new();
-        hasher.update(password);
-        hasher.update(&self.hash.salt);
+    fn verify_h1(&self, h1: &[u8]) -> bool {
         let mut hasher2 = Sha256::new();
-        hasher2.update(&hasher.finalize()[..]);
-        hasher2.update(&self.hash.challenge);
-        hasher2.finalize()[..] == self.lr.password[..]
+        hasher2.update(h1);
+        hasher2.update(self.hash.challenge.as_bytes());
+        // A normal `==` on slices may short-circuit on the first mismatch, which can leak how many leading
+        // bytes matched via timing. In typical remote scenarios this is difficult to exploit due to network
+        // jitter, changing challenges, and login attempt throttling, but a constant-time comparison here is
+        // low-cost defensive programming.
+        constant_time_eq(&hasher2.finalize()[..], &self.lr.password[..])
     }
 
-    fn validate_password(&mut self) -> bool {
+    fn validate_password_plain(&self, password: &str) -> bool {
+        if password.is_empty() {
+            return false;
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(password.as_bytes());
+        hasher.update(self.hash.salt.as_bytes());
+        let h1_plain = hasher.finalize();
+        self.verify_h1(&h1_plain[..])
+    }
+
+    fn validate_password_storage(&self, storage: &str) -> bool {
+        if storage.is_empty() {
+            return false;
+        }
+
+        // Use strict decode success to detect hashed storage.
+        // If decode fails, treat as legacy plaintext storage for compatibility.
+        if let Some(h1) = decode_permanent_password_h1_from_storage(storage) {
+            return self.verify_h1(&h1[..]);
+        }
+
+        // Legacy plaintext storage path.
+        self.validate_password_plain(storage)
+    }
+
+    // This is coarse brute-force protection for the current temporary password value.
+    // We only care whether the active temporary password itself was presented correctly,
+    // not whether later authorization steps succeed. A successful temporary-password
+    // match clears this state immediately, and the counter also resets whenever the
+    // temporary password changes or is rotated.
+    fn check_update_temporary_password(&self, temporary_password_success: bool) {
+        const MAX_CONSECUTIVE_FAILURES: i32 = 10;
+        #[derive(Default)]
+        struct State {
+            password: String,
+            failures: i32,
+        }
+        lazy_static::lazy_static! {
+            static ref TEMPORARY_PASSWORD_FAILURES: Mutex<State> =
+                Mutex::new(State::default());
+        }
+
+        if !password::temporary_enabled() {
+            return;
+        }
+
+        let mut state = TEMPORARY_PASSWORD_FAILURES.lock().unwrap();
+        let current_password = password::temporary_password();
+        if current_password.is_empty() {
+            return;
+        }
+        if state.password != current_password {
+            state.password = current_password;
+            state.failures = 0;
+        }
+
+        if temporary_password_success {
+            state.failures = 0;
+            return;
+        }
+        state.failures += 1;
+
+        if state.failures < MAX_CONSECUTIVE_FAILURES {
+            return;
+        }
+
+        password::update_temporary_password();
+        let new_password = password::temporary_password();
+        log::warn!(
+            "Temporary password rotated after too many consecutive wrong attempts: failures={}, ip={}",
+            state.failures,
+            self.ip,
+        );
+        state.password = new_password;
+        state.failures = 0;
+    }
+
+    fn validate_password(&mut self, allow_permanent_password: bool) -> bool {
         if password::temporary_enabled() {
             let password = password::temporary_password();
-            if self.validate_one_password(password.clone()) {
+            if self.validate_password_plain(&password) {
                 raii::AuthedConnID::update_or_insert_session(
                     self.session_key(),
                     Some(password),
                     Some(false),
                 );
+                self.check_update_temporary_password(true);
                 return true;
             }
         }
-        if password::permanent_enabled() {
-            if self.validate_one_password(Config::get_permanent_password()) {
-                return true;
+        if password::permanent_enabled() || allow_permanent_password {
+            let print_fallback = || {
+                if allow_permanent_password && !password::permanent_enabled() {
+                    log::info!("Permanent password accepted via logon-screen fallback");
+                }
+            };
+            // Since hashed storage uses a prefix-based encoding, a hard plaintext that
+            // happens to look like hashed storage could be mis-detected. Validate local storage
+            // and hard/preset plaintext via separate paths to avoid that ambiguity.
+            let (local_storage, _) = Config::get_local_permanent_password_storage_and_salt();
+            if !local_storage.is_empty() {
+                if self.validate_password_storage(&local_storage) {
+                    print_fallback();
+                    return true;
+                }
+            } else {
+                let hard = config::HARD_SETTINGS
+                    .read()
+                    .unwrap()
+                    .get("password")
+                    .cloned()
+                    .unwrap_or_default();
+                if !hard.is_empty() && self.validate_password_plain(&hard) {
+                    print_fallback();
+                    return true;
+                }
             }
         }
         false
@@ -2016,7 +2130,7 @@ impl Connection {
         if let Some(session) = session {
             if !self.lr.password.is_empty()
                 && (tfa && session.tfa
-                    || !tfa && self.validate_one_password(session.random_password.clone()))
+                    || !tfa && self.validate_password_plain(&session.random_password))
             {
                 log::info!("is recent session");
                 return true;
@@ -2290,6 +2404,10 @@ impl Connection {
             #[cfg(any(target_os = "android", target_os = "ios"))]
             let is_logon = || crate::platform::is_prelogin();
 
+            let allow_logon_screen_password =
+                crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
+                    && is_logon();
+
             if !hbb_common::is_ip_str(&lr.username)
                 && !hbb_common::is_domain_port_str(&lr.username)
                 && lr.username != Config::get_id()
@@ -2298,8 +2416,7 @@ impl Connection {
                     .await;
                 return false;
             } else if (password::approve_mode() == ApproveMode::Click
-                && !(crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
-                    && is_logon()))
+                && !allow_logon_screen_password)
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
@@ -2335,8 +2452,9 @@ impl Connection {
                 if !res {
                     return true;
                 }
-                if !self.validate_password() {
+                if !self.validate_password(allow_logon_screen_password) {
                     self.update_failure(failure, false, 0);
+                    self.check_update_temporary_password(false);
                     if err_msg.is_empty() {
                         self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
                             .await;

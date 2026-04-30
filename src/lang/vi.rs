@@ -377,8 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "Cài đặt bàn phím"),
         ("Full Access", "Toàn quyền truy cập"),
         ("Screen Share", "Chia sẻ màn hình"),
-        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland yêu cầu Ubuntu 21.04 trở lên."),
-        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland yêu cầu phiên bản Linux mới hơn. Hãy thử X11 hoặc đổi hệ điều hành."),
+        ("ubuntu-21-04-required", "Wayland yêu cầu Ubuntu 21.04 trở lên."),
+        ("wayland-requires-higher-linux-version", "Wayland yêu cầu phiên bản Linux mới hơn. Hãy thử X11 hoặc đổi hệ điều hành."),
+        ("xdp-portal-unavailable", ""),
         ("JumpLink", "Xem"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Vui lòng chọn màn hình chia sẻ (Thao tác ở phía đối tác)."),
         ("Show RustDesk", "Hiện RustDesk"),
@@ -740,5 +741,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", ""),
         ("Continue with {}", "Tiếp tục với {}"),
         ("Display Name", ""),
+        ("password-hidden-tip", ""),
+        ("preset-password-in-use-tip", ""),
     ].iter().cloned().collect();
 }

@@ -213,7 +213,7 @@ pub fn core_main() -> Option<Vec<String>> {
                     }
                     Ok(false) => "Update failed!".to_string(),
                     Ok(true) => match platform::update_me(false) {
-                        Ok(_) => "Update successfully!".to_string(),
+                        Ok(_) => "Updated successfully!".to_string(),
                         Err(err) => {
                             log::error!("Failed with error: {err}");
                             "Update failed!".to_string()
@@ -335,8 +335,8 @@ pub fn core_main() -> Option<Vec<String>> {
                     log::info!("Starting update process...");
                     let _text = match platform::update_me() {
                         Ok(_) => {
-                            println!("{}", translate("Update successfully!".to_string()));
-                            log::info!("Update successfully!");
+                            println!("{}", translate("Updated successfully!".to_string()));
+                            log::info!("Updated successfully!");
                         }
                         Err(err) => {
                             eprintln!("Update failed with error: {}", err);

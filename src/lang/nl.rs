@@ -377,8 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "Toetsenbordinstellingen"),
         ("Full Access", "Volledige Toegang"),
         ("Screen Share", "Scherm Delen"),
-        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland vereist Ubuntu 21.04 of hoger."),
-        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland vereist een hogere versie van Linux distro. Probeer X11 desktop of verander van OS."),
+        ("ubuntu-21-04-required", "Wayland vereist Ubuntu 21.04 of hoger."),
+        ("wayland-requires-higher-linux-version", "Wayland vereist een hogere versie van Linux distro. Probeer X11 desktop of verander van OS."),
+        ("xdp-portal-unavailable", ""),
         ("JumpLink", "JumpLink"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Selecteer het scherm dat moet worden gedeeld (Bediening aan de kant van de peer)."),
         ("Show RustDesk", "Toon RustDesk"),
@@ -740,5 +741,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "Houd het scherm open tijdens de inkomende sessies."),
         ("Continue with {}", "Ga verder met {}"),
         ("Display Name", "Naam Weergeven"),
+        ("password-hidden-tip", "Er is een permanent wachtwoord ingesteld (verborgen)."),
+        ("preset-password-in-use-tip", "Het basis wachtwoord is momenteel in gebruik."),
     ].iter().cloned().collect();
 }

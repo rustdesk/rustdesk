@@ -377,8 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "Tastatūras iestatījumi"),
         ("Full Access", "Pilna piekļuve"),
         ("Screen Share", "Ekrāna kopīgošana"),
-        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland nepieciešama Ubuntu 21.04 vai jaunāka versija."),
-        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland nepieciešama augstāka Linux distro versija. Lūdzu, izmēģiniet X11 desktop vai mainiet savu OS."),
+        ("ubuntu-21-04-required", "Wayland nepieciešama Ubuntu 21.04 vai jaunāka versija."),
+        ("wayland-requires-higher-linux-version", "Wayland nepieciešama augstāka Linux distro versija. Lūdzu, izmēģiniet X11 desktop vai mainiet savu OS."),
+        ("xdp-portal-unavailable", ""),
         ("JumpLink", "Skatīt"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Lūdzu, atlasiet kopīgojamo ekrānu (darbojieties sesijas pusē)."),
         ("Show RustDesk", "Rādīt RustDesk"),
@@ -740,5 +741,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", ""),
         ("Continue with {}", "Turpināt ar {}"),
         ("Display Name", ""),
+        ("password-hidden-tip", ""),
+        ("preset-password-in-use-tip", ""),
     ].iter().cloned().collect();
 }
