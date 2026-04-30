@@ -221,7 +221,7 @@ jobs:
 
       - name: Download RustDeskTempTopMostWindow artifacts
         uses: actions/download-artifact@master
-        if: ${{ inputs.upload-artifact }}
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           name: topmostwindow-artifacts
           path: "./rustdesk"
@@ -433,7 +433,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   build-rustdesk-ios:
-    if: ${{ inputs.upload-artifact }}
+    if: env.UPLOAD_ARTIFACT == 'true'
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -776,7 +776,7 @@ jobs:
       - build-for-windows-flutter
       - build-for-windows-sciter
     runs-on: ubuntu-latest
-    if: ${{ inputs.upload-artifact }}
+    if: env.UPLOAD_ARTIFACT == 'true'
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@master
@@ -1108,7 +1108,7 @@ jobs:
   build-rustdesk-android-universal:
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
-    if: ${{ inputs.upload-artifact }}
+    if: env.UPLOAD_ARTIFACT == 'true'
     runs-on: ubuntu-24.04
     env:
       reltype: release
@@ -1293,10 +1293,10 @@ jobs:
     needs: [generate-bridge]
     name: build rustdesk linux ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.on }}
+    if: matrix.job.target == 'x86_64-unknown-linux-gnu'
     strategy:
       fail-fast: false
       matrix:
-        # use a high level qemu-user-static
         job:
           - {
               arch: x86_64,
@@ -1305,14 +1305,6 @@ jobs:
               on: ubuntu-22.04,
               deb_arch: amd64,
               vcpkg-triplet: x64-linux,
-            }
-          - {
-              arch: aarch64,
-              target: aarch64-unknown-linux-gnu,
-              distro: ubuntu18.04,
-              on: ubuntu-22.04-arm,
-              deb_arch: arm64,
-              vcpkg-triplet: arm64-linux,
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -1368,11 +1360,17 @@ jobs:
           sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
 
       - name: Restore bridge files
-        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        if: (matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true') && env.ACT != 'true'
         uses: actions/download-artifact@master
         with:
           name: bridge-artifact
           path: ./
+
+      - name: Install zip for vcpkg bootstrap
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip unzip make libva-dev autoconf
 
       - name: Setup vcpkg with Github Actions binary cache
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
@@ -1385,7 +1383,6 @@ jobs:
       - name: Install vcpkg dependencies
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         run: |
-          sudo apt install -y libva-dev && apt show libva-dev
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet ${{ matrix.job.vcpkg-triplet }} \
@@ -1403,7 +1400,7 @@ jobs:
         shell: bash
 
       - name: Restore bridge files
-        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        if: (matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true') && env.ACT != 'true'
         uses: actions/download-artifact@master
         with:
           name: bridge-artifact
@@ -1627,7 +1624,7 @@ jobs:
             res/rustdesk-${{ env.VERSION }}*.zst
 
   build-rustdesk-linux-sciter:
-    if: ${{ inputs.upload-artifact }}
+    if: env.UPLOAD_ARTIFACT == 'true'
     runs-on: ${{ matrix.job.on }}
     name: build-rustdesk-linux-sciter ${{ matrix.job.target }}
     strategy:
@@ -1857,7 +1854,7 @@ jobs:
     name: Build appimage ${{ matrix.job.target }}
     needs: [build-rustdesk-linux]
     runs-on: ubuntu-22.04
-    if: ${{ inputs.upload-artifact }}
+    if: env.UPLOAD_ARTIFACT == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1909,7 +1906,7 @@ jobs:
       - build-rustdesk-linux
       - build-rustdesk-linux-sciter
     runs-on: ${{ matrix.job.on }}
-    if: ${{ inputs.upload-artifact }}
+    if: env.UPLOAD_ARTIFACT == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1989,7 +1986,7 @@ jobs:
             flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak
 
   build-rustdesk-web:
-    if: False
+    if: false
     name: build-rustdesk-web
     runs-on: ubuntu-22.04
     permissions:

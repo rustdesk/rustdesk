@@ -1,0 +1,15 @@
+--- flutter/lib/desktop/pages/desktop_home_page.dart	2024-12-21 02:09:03.000000000 -0500
++++ flutter/lib/desktop/pages/desktop_home_page.dart	2024-12-23 00:34:54.631074022 -0500
+@@ -422,11 +422,11 @@ class _DesktopHomePageState extends Stat
+       ),
+     );
+   }
+ 
+   Widget buildHelpCards(String updateUrl) {
+-    if (!bind.isCustomClient() &&
++    if (false && !bind.isCustomClient() &&
+         updateUrl.isNotEmpty &&
+         !isCardClosed &&
+         bind.mainUriPrefixSync().contains('rustdesk')) {
+       return buildInstallCard(
+           "Status",
