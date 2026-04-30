@@ -25,10 +25,10 @@ StripLayout stripLayoutForPlatform(String platform) {
 
   return StripLayout(
     rows: [
-      // Row 1: utilities + modifiers + Enter (left)  |  strip-toggle + ⌨ + ✕ + 💬 (right)
+      // Row 1: modifiers + Enter (left)  |  strip-toggle + ⌨ + ✕ + Esc (right)
       StripRow(
         left: [
-          KeyDef(label: 'Esc', keyName: 'escape', type: KeyType.regular),
+          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7),
           ...modifiers,
           KeyDef(label: '⏎', keyName: 'return', type: KeyType.regular),
         ],
@@ -36,7 +36,7 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle, widthFactor: 0.7),
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
           KeyDef(label: '✕', keyName: '', type: KeyType.disconnect, widthFactor: 0.7),
-          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7),
+          KeyDef(label: 'Esc', keyName: 'escape', type: KeyType.regular),
         ],
       ),
       // Row 2: macros + ⌫ + Tab (left)  |  PgUp + PgDn + arrow cluster (right)

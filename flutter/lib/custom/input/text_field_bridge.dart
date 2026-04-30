@@ -91,7 +91,7 @@ class _TextFieldBridgeState extends State<TextFieldBridge> {
           autofocus: false,
           enableInteractiveSelection: false,
           autocorrect: false,
-          enableSuggestions: false,
+          enableSuggestions: true,
           textInputAction: TextInputAction.send,
           onSubmitted: (_) {
             widget.inputBridge.tapKey('return');
