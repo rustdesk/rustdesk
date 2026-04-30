@@ -274,5 +274,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "Keep screen awake during incoming sessions"),
         ("password-hidden-tip", "Permanent password is set (hidden)."),
         ("preset-password-in-use-tip", "Preset password is currently in use."),
+        ("shortcut-page-description", "Bind a key combination to each session action below. Each binding must include at least one modifier."),
+        ("shortcut-passthrough-tip", "When on, every bound combination is forwarded to the remote. Useful when a binding collides with something you need on the remote."),
+        ("shortcut-reset-confirm-tip", "This will replace all current bindings with the default set. Continue?"),
+        ("shortcut-recording-instruction", "Press the key combination you want to use."),
+        ("shortcut-recording-press-keys-tip", "Press a key combination..."),
+        ("shortcut-must-include-modifiers", "Must include at least one modifier: {}"),
+        ("shortcut-already-bound-to", "Already bound to"),
+        ("shortcut-mobile-physical-keyboard-tip", "Recording requires a physical keyboard. Soft keyboards are not supported."),
+        ("shortcut-key-not-supported", "\"{}\" can't be used as a shortcut."),
     ].iter().cloned().collect();
 }

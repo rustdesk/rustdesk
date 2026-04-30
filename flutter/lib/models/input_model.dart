@@ -346,7 +346,7 @@ class InputModel {
   /// which runs per-engine, so each isolate registers its own handler tied
   /// to its own set of InputModels.
   static void initSideButtonChannel() {
-    if (!Platform.isLinux) return;
+    if (!isLinux) return;
     if (_sideButtonChannelInitialized) return;
     _sideButtonChannelInitialized = true;
 

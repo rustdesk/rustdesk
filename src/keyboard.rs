@@ -10,6 +10,7 @@ use crate::{client::get_key_state, common::GrabState};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::log;
 use hbb_common::message_proto::*;
+use hbb_common::SessionID;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use rdev::KeyCode;
 use rdev::{Event, EventType, Key};
@@ -78,6 +79,8 @@ lazy_static::lazy_static! {
         Mutex::new(m)
     };
 }
+
+pub mod shortcuts;
 
 pub mod client {
     use super::*;
@@ -319,6 +322,32 @@ pub mod client {
     }
 
     pub fn process_event(keyboard_mode: &str, event: &Event, lock_modes: Option<i32>) {
+        // Shortcut intercept — must come before any wire encoding.
+        // Only fires on KeyPress (event_to_key_name in shortcuts.rs returns None
+        // for KeyRelease and other non-press events), so flushed releases from
+        // release_remote_keys pass straight through to the encode/forward path.
+        //
+        // NOTE: Shortcut matching intentionally happens BEFORE any key swapping
+        // (swap_modifier_key) so that shortcuts bind to the physical keys pressed,
+        // not the swapped keys. This makes shortcut setup intuitive: users bind
+        // shortcuts to the actual keys they press, regardless of swap settings.
+        // Key swapping only affects what gets sent to the remote.
+        //
+        // Gated on `feature = "flutter"` because the dispatch target
+        // (`flutter::push_session_event`) is Flutter-only. Sciter builds never
+        // call `reload_from_config`, so the cache stays disabled and the
+        // matcher would no-op anyway — but we still skip the call entirely so
+        // a hand-edited config can't silently swallow keys on a UI that has
+        // no way to surface the action.
+        //
+        // `None` for session_id makes the helper resolve through
+        // `flutter::get_cur_session_id()` — the rdev grab loop is process-wide
+        // and has no per-event session context to thread.
+        #[cfg(feature = "flutter")]
+        if crate::keyboard::shortcuts::try_dispatch(None, event) {
+            return;
+        }
+
         let keyboard_mode = get_keyboard_mode_enum(keyboard_mode);
         if is_long_press(&event) {
             return;
@@ -334,7 +363,20 @@ pub mod client {
         event: &Event,
         lock_modes: Option<i32>,
         session: &Session<T>,
+        session_id: SessionID,
     ) {
+        // Shortcut intercept — see the long comment in `process_event` above
+        // for the KeyPress-only / feature-gate rationale. The only difference
+        // here is that the Flutter FFI path threads an explicit SessionID
+        // through, so dispatch targets the exact tab the keystroke originated
+        // from — no dependency on the global focus tracker.
+        #[cfg(feature = "flutter")]
+        if crate::keyboard::shortcuts::try_dispatch(Some(&session_id), event) {
+            return;
+        }
+        #[cfg(not(feature = "flutter"))]
+        let _ = session_id;
+
         let keyboard_mode = get_keyboard_mode_enum(keyboard_mode);
         if is_long_press(&event) {
             return;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/display.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -610,8 +611,9 @@ class _MonitorMenu extends StatelessWidget {
             tooltip: isMulti
                 ? ''
                 : isAllMonitors
-                    ? 'all monitors'
-                    : '#${i + 1} monitor',
+                    ? translate('All monitors')
+                    : translate('Monitor #{}')
+                        .replaceAll('{}', '${i + 1}'),
             hMargin: isMulti ? null : 6,
             vMargin: isMulti ? null : 12,
             topLevel: false,
@@ -763,8 +765,31 @@ class _ControlMenu extends StatelessWidget {
               if (e.divider) {
                 return Divider();
               } else {
+                final hint = e.actionId == null
+                    ? null
+                    : ShortcutDisplay.formatFor(e.actionId!);
+                final child = hint == null
+                    ? e.child
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(child: e.child),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16),
+                            child: Text(
+                              hint,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context).hintColor,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      );
                 return MenuButton(
-                    child: e.child,
+                    child: child,
                     onPressed: e.onPressed,
                     ffi: ffi,
                     trailingIcon: e.trailingIcon);
