@@ -1368,11 +1368,17 @@ jobs:
           sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
 
       - name: Restore bridge files
-        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        if: (matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true') && env.ACT != 'true'
         uses: actions/download-artifact@master
         with:
           name: bridge-artifact
           path: ./
+
+      - name: Install zip for vcpkg bootstrap
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip unzip make libva-dev autoconf
 
       - name: Setup vcpkg with Github Actions binary cache
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
@@ -1385,7 +1391,6 @@ jobs:
       - name: Install vcpkg dependencies
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         run: |
-          sudo apt install -y libva-dev && apt show libva-dev
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet ${{ matrix.job.vcpkg-triplet }} \
@@ -1403,7 +1408,7 @@ jobs:
         shell: bash
 
       - name: Restore bridge files
-        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        if: (matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true') && env.ACT != 'true'
         uses: actions/download-artifact@master
         with:
           name: bridge-artifact
@@ -1989,7 +1994,7 @@ jobs:
             flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak
 
   build-rustdesk-web:
-    if: False
+    if: false
     name: build-rustdesk-web
     runs-on: ubuntu-22.04
     permissions:
