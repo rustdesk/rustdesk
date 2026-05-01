@@ -1183,7 +1183,8 @@ void showOptions(
   List<TToggleMenu> privacyModeList = [];
   // privacy mode
   final privacyModeState = PrivacyModeState.find(id);
-  if (gFFI.ffiModel.keyboard && gFFI.ffiModel.pi.features.privacyMode) {
+  if ((gFFI.ffiModel.pi.features.privacyMode && gFFI.ffiModel.keyboard) ||
+      privacyModeState.isNotEmpty) {
     privacyModeList = toolbarPrivacyMode(privacyModeState, context, id, gFFI);
     if (privacyModeList.length == 1) {
       displayToggles.add(privacyModeList[0]);
