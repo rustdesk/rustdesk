@@ -1203,7 +1203,7 @@ class CursorPaint extends StatelessWidget {
       return const Offstage();
     }
     return CustomPaint(
-      painter: ImagePainter(image: image, x: -hotx, y: -hoty, scale: scale),
+      painter: ImagePainter(image: image, x: -hotx, y: -hoty, scale: scale, isCursor: true),
     );
   }
 }

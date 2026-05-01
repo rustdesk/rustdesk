@@ -1048,6 +1048,7 @@ class CursorPaint extends StatelessWidget {
         x: x,
         y: y,
         scale: scale,
+        isCursor: true,
       ),
     );
   }

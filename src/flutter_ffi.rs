@@ -1706,6 +1706,16 @@ pub fn main_set_permanent_password_with_result(password: String) -> bool {
     ui_interface::set_permanent_password_with_result(password)
 }
 
+// Bridge stubs: raw permanent password is no longer retrievable after the
+// hashed-verifier refactor, but the generated bridge still expects these symbols.
+pub fn main_get_permanent_password() -> String {
+    String::new()
+}
+
+pub fn main_set_permanent_password(password: String) {
+    ui_interface::set_permanent_password_with_result(password);
+}
+
 pub fn main_get_fingerprint() -> String {
     get_fingerprint()
 }

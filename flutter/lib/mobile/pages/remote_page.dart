@@ -1132,7 +1132,8 @@ class CursorPaint extends StatelessWidget {
           image: image,
           x: (m.x - hotx) * factor + c.x / s2,
           y: (m.y - hoty) * factor + (c.y + adjust) / s2,
-          scale: s2),
+          scale: s2,
+          isCursor: true),
     );
   }
 }

@@ -91,7 +91,7 @@ Future<ui.Image?> decodeImageFromPixels(
 }
 
 // Scale multiplier applied to the remote cursor for better visibility.
-const double kCursorScaleFactor = 1.5;
+const double kCursorScaleFactor = 1.25;
 
 class ImagePainter extends CustomPainter {
   ImagePainter({
@@ -99,18 +99,21 @@ class ImagePainter extends CustomPainter {
     required this.x,
     required this.y,
     required this.scale,
+    this.isCursor = false,
   });
 
   ui.Image? image;
   double x;
   double y;
   double scale;
+  bool isCursor;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
     if (x.isNaN || y.isNaN) return;
-    final effectiveScale = scale * kCursorScaleFactor;
+    final effectiveScale =
+        isCursor ? scale * kCursorScaleFactor : scale;
     canvas.scale(effectiveScale, effectiveScale);
     // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
     // https://api.flutter-io.cn/flutter/dart-ui/FilterQuality.html
@@ -126,18 +129,14 @@ class ImagePainter extends CustomPainter {
     if (isWeb) {
       paint.filterQuality = FilterQuality.high;
     }
-    // Lighten cursor toward white for better visibility on dark backgrounds.
-    paint.colorFilter = const ColorFilter.matrix(<double>[
-      1, 0, 0, 0, 80,
-      0, 1, 0, 0, 80,
-      0, 0, 1, 0, 80,
-      0, 0, 0, 1, 0,
-    ]);
-    canvas.drawImage(
-        image!,
-        Offset((x / kCursorScaleFactor).toInt().toDouble(),
-            (y / kCursorScaleFactor).toInt().toDouble()),
-        paint);
+    if (isCursor) {
+      // Make cursor white while preserving its alpha shape.
+      paint.colorFilter =
+          const ColorFilter.mode(Color(0xFFFFFFFF), BlendMode.srcATop);
+    }
+    final dx = isCursor ? (x / kCursorScaleFactor).toInt().toDouble() : x.toInt().toDouble();
+    final dy = isCursor ? (y / kCursorScaleFactor).toInt().toDouble() : y.toInt().toDouble();
+    canvas.drawImage(image!, Offset(dx, dy), paint);
   }
 
   @override
