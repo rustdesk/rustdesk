@@ -49,7 +49,7 @@ class _TerminalChatOverlayState extends State<TerminalChatOverlay>
   }
 
   Future<void> _send() async {
-    final text = _textController.text;
+    final text = _textController.text.trimRight();
     if (text.isEmpty || _sending) return;
     setState(() {
       _sending = true;
@@ -401,7 +401,7 @@ class _InputBar extends StatelessWidget {
               ),
               minLines: 1,
               maxLines: 4,
-              textInputAction: TextInputAction.send,
+              textInputAction: TextInputAction.newline,
               onSubmitted: (_) => onSend(),
             ),
           ),

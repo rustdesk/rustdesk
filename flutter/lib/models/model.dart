@@ -1036,11 +1036,13 @@ class FfiModel with ChangeNotifier {
           closeConnection();
         };
       }
-      msgBox(sessionId, type, title, text, link, dialogManager,
-          hasCancel: hasCancel,
-          reconnect: hasRetry ? reconnect : null,
-          reconnectTimeout: hasRetry ? _reconnects : null,
-          onSubmit: onSubmit);
+      if (!hasRetry || _reconnects >= 6) {
+        msgBox(sessionId, type, title, text, link, dialogManager,
+            hasCancel: hasCancel,
+            reconnect: hasRetry ? reconnect : null,
+            reconnectTimeout: hasRetry ? _reconnects : null,
+            onSubmit: onSubmit);
+      }
     }
     _timer?.cancel();
     if (hasRetry) {
