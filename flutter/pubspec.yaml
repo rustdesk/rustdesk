@@ -1,4 +1,4 @@
-name: flutter_hbb
+name: zzndesk
 description: Your Remote Desktop Software
 
 # The following line prevents the package from being accidentally published to
@@ -19,7 +19,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 version: 1.4.6+64
 
 environment:
-  sdk: '^3.1.0'
+  sdk: "^3.1.0"
 
 dependencies:
   flutter:

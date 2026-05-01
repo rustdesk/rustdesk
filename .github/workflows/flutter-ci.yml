@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   pull_request:
     paths-ignore:
-    - "docs/**"
-    - "README.md"
+      - "docs/**"
+      - "README.md"
   push:
     branches:
       - master
@@ -21,4 +21,4 @@ jobs:
   run-ci:
     uses: ./.github/workflows/flutter-build.yml
     with:
-      upload-artifact: false
+      upload-artifact: true
