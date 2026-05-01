@@ -49,7 +49,7 @@ class _TerminalChatOverlayState extends State<TerminalChatOverlay>
   }
 
   Future<void> _send() async {
-    final text = _textController.text.trimRight();
+    final text = _textController.text;
     if (text.isEmpty || _sending) return;
     setState(() {
       _sending = true;
@@ -161,6 +161,7 @@ class _TerminalChatOverlayState extends State<TerminalChatOverlay>
             focusNode: _focusNode,
             sending: _sending,
             onSend: _send,
+            onReturn: () => widget.inputBridge.tapKey('return'),
           ),
         ],
       ),
@@ -344,12 +345,14 @@ class _InputBar extends StatelessWidget {
   final FocusNode focusNode;
   final bool sending;
   final VoidCallback onSend;
+  final VoidCallback onReturn;
 
   const _InputBar({
     required this.controller,
     required this.focusNode,
     required this.sending,
     required this.onSend,
+    required this.onReturn,
   });
 
   @override
@@ -402,7 +405,7 @@ class _InputBar extends StatelessWidget {
               minLines: 1,
               maxLines: 4,
               textInputAction: TextInputAction.newline,
-              onSubmitted: (_) => onSend(),
+              onSubmitted: (_) => onReturn(),
             ),
           ),
           const SizedBox(width: AppTokens.spaceSm),
