@@ -56,7 +56,13 @@ class _TextFieldBridgeState extends State<TextFieldBridge> {
       return;
     }
 
-    final typed = text.replaceFirst(_kSentinel, '');
+    // iOS autocorrect replaces a word and appends a trailing space in one
+    // event. Strip it here — a lone space (user pressing spacebar) arrives as
+    // typed.length == 1 and is sent correctly via the else branch below.
+    final rawTyped = text.replaceFirst(_kSentinel, '');
+    final typed = (rawTyped.length > 1 && rawTyped.endsWith(' '))
+        ? rawTyped.substring(0, rawTyped.length - 1)
+        : rawTyped;
     if (typed.isEmpty) {
       _reset();
       return;
