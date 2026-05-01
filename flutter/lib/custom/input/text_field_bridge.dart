@@ -89,6 +89,13 @@ class _TextFieldBridgeState extends State<TextFieldBridge> {
     // Send new chars — check for modifier combos first.
     if (newStr.isEmpty) return;
 
+    // iOS multiline keyboard delivers Return as a '\n' via onChanged.
+    if (newStr == '\n') {
+      widget.inputBridge.tapKey('return');
+      _resetBuffer();
+      return;
+    }
+
     final mods = widget.modifierController.heldModifiers;
     if (mods.isNotEmpty && newStr.length == 1) {
       widget.inputBridge.tapKey(newStr.toLowerCase(), modifiers: mods);
