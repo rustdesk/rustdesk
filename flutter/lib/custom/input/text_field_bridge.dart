@@ -3,14 +3,11 @@ import 'package:flutter/material.dart';
 import 'input_bridge.dart';
 import '../strip/models/modifier_state.dart';
 
-// Zero-width space used as the always-present sentinel character.
-// This keeps the field non-empty so backspace is always detectable
-// as a delta (sentinel → empty) rather than a no-op on an empty field.
-const _kSentinel = '\u200B';
-const _kSentinelValue = TextEditingValue(
-  text: _kSentinel,
-  selection: TextSelection.collapsed(offset: 1),
-);
+// Pre-filled buffer of '1' characters — same trick as upstream RustDesk's
+// mobile keyboard. Keeping the field non-empty lets iOS backspace always
+// produce a delta (shorter string) rather than a no-op on an empty field,
+// and gives a stable anchor for the old/new diff.
+final _kInitText = '1' * 1024;
 
 class TextFieldBridge extends StatefulWidget {
   final InputBridge inputBridge;
@@ -29,53 +26,83 @@ class TextFieldBridge extends StatefulWidget {
 }
 
 class _TextFieldBridgeState extends State<TextFieldBridge> {
-  final _controller = TextEditingController(text: _kSentinel);
+  late final TextEditingController _controller;
+  String _value = '';
 
   @override
   void initState() {
     super.initState();
-    _controller.selection = const TextSelection.collapsed(offset: 1);
-    _controller.addListener(_onChange);
+    _value = _kInitText;
+    _controller = TextEditingController(text: _kInitText);
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_onChange);
     _controller.dispose();
     super.dispose();
   }
 
-  void _onChange() {
-    final text = _controller.text;
-    if (text == _kSentinel) return;
+  // Ported from upstream RustDesk _handleIOSSoftKeyboardInput.
+  // Diffs newValue against _value to find what was added/removed,
+  // then sends only the delta to the remote. This correctly handles
+  // autocorrect, swipe typing, and suggestion-bar taps including
+  // the trailing space iOS appends after word completion.
+  void _onChanged(String newValue) {
+    final oldValue = _value;
+    _value = newValue;
 
-    if (text.isEmpty) {
-      // User backspaced past the sentinel
+    // Find the last '1' anchor in each string.
+    var i = newValue.length - 1;
+    for (; i >= 0 && newValue[i] != '1'; --i) {}
+    var j = oldValue.length - 1;
+    for (; j >= 0 && oldValue[j] != '1'; --j) {}
+    if (i < j) j = i;
+
+    final subNew = newValue.substring(j + 1);
+    final subOld = oldValue.substring(j + 1);
+
+    // Find common prefix between the two suffixes.
+    var common = 0;
+    for (;
+        common < subOld.length &&
+            common < subNew.length &&
+            subNew[common] == subOld[common];
+        ++common) {}
+
+    final newStr = subNew.length > common ? subNew.substring(common) : '';
+
+    // If still composing and new string is shorter than composing range, ignore.
+    if (_controller.value.isComposingRangeValid) {
+      final composingLength = _controller.value.composing.end -
+          _controller.value.composing.start;
+      if (composingLength > newStr.length) {
+        _value = oldValue;
+        return;
+      }
+    }
+
+    // Send backspaces for deleted chars.
+    for (var k = 0; k < subOld.length - common; ++k) {
       widget.inputBridge.tapKey('backspace');
-      _reset();
-      return;
     }
 
-    final typed = text.replaceFirst(_kSentinel, '');
-    if (typed.isEmpty) {
-      _reset();
-      return;
-    }
+    // Send new chars — check for modifier combos first.
+    if (newStr.isEmpty) return;
 
     final mods = widget.modifierController.heldModifiers;
-    if (mods.isNotEmpty && typed.length == 1) {
-      // Modifier + single char → key event (e.g. ⌘C)
-      widget.inputBridge.tapKey(typed.toLowerCase(), modifiers: mods);
+    if (mods.isNotEmpty && newStr.length == 1) {
+      widget.inputBridge.tapKey(newStr.toLowerCase(), modifiers: mods);
       widget.modifierController.releaseOneShot();
+    } else if (newStr.length > 1) {
+      widget.inputBridge.typeString(newStr);
     } else {
-      // Plain text → string injection (handles Hebrew, emoji, IME)
-      widget.inputBridge.typeString(typed);
+      widget.inputBridge.typeString(newStr);
     }
-    _reset();
   }
 
-  void _reset() {
-    _controller.value = _kSentinelValue;
+  void _resetBuffer() {
+    _value = _kInitText;
+    _controller.text = _kInitText;
   }
 
   @override
@@ -91,10 +118,14 @@ class _TextFieldBridgeState extends State<TextFieldBridge> {
           autofocus: false,
           enableInteractiveSelection: false,
           autocorrect: false,
-          enableSuggestions: true,
+          enableSuggestions: false,
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
           textInputAction: TextInputAction.newline,
+          onChanged: _onChanged,
           onSubmitted: (_) {
             widget.inputBridge.tapKey('return');
+            _resetBuffer();
             widget.focusNode.requestFocus();
           },
           decoration: const InputDecoration(border: InputBorder.none),
