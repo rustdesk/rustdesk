@@ -90,6 +90,9 @@ Future<ui.Image?> decodeImageFromPixels(
   return frameInfo.image;
 }
 
+// Scale multiplier applied to the remote cursor for better visibility.
+const double kCursorScaleFactor = 1.5;
+
 class ImagePainter extends CustomPainter {
   ImagePainter({
     required this.image,
@@ -107,13 +110,14 @@ class ImagePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
     if (x.isNaN || y.isNaN) return;
-    canvas.scale(scale, scale);
+    final effectiveScale = scale * kCursorScaleFactor;
+    canvas.scale(effectiveScale, effectiveScale);
     // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
     // https://api.flutter-io.cn/flutter/dart-ui/FilterQuality.html
     var paint = Paint();
-    if ((scale - 1.0).abs() > 0.001) {
+    if ((effectiveScale - 1.0).abs() > 0.001) {
       paint.filterQuality = FilterQuality.medium;
-      if (scale > 10.00000) {
+      if (effectiveScale > 10.00000) {
         paint.filterQuality = FilterQuality.high;
       }
     }
@@ -122,8 +126,18 @@ class ImagePainter extends CustomPainter {
     if (isWeb) {
       paint.filterQuality = FilterQuality.high;
     }
+    // Lighten cursor toward white for better visibility on dark backgrounds.
+    paint.colorFilter = const ColorFilter.matrix(<double>[
+      1, 0, 0, 0, 80,
+      0, 1, 0, 0, 80,
+      0, 0, 1, 0, 80,
+      0, 0, 0, 1, 0,
+    ]);
     canvas.drawImage(
-        image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
+        image!,
+        Offset((x / kCursorScaleFactor).toInt().toDouble(),
+            (y / kCursorScaleFactor).toInt().toDouble()),
+        paint);
   }
 
   @override
