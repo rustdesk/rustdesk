@@ -161,9 +161,10 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         // Layer 4: cursor overlay — unconstrained so it can cross the
         // canvas/strip boundary without being clipped.
         // Offset by safeAreaTop because CursorModel coords are SafeArea-relative.
+        // IgnorePointer so the full-screen overlay doesn't absorb taps/drags.
         Positioned.fill(
           top: safeAreaTop,
-          child: CursorPaint(widget.id),
+          child: IgnorePointer(child: CursorPaint(widget.id)),
         ),
       ],
     );
