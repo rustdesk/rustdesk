@@ -38,7 +38,9 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7, height: 48),
           KeyDef(label: '⚡', keyName: '', type: KeyType.macroOpener, height: 48),
           KeyDef(label: '⌫', keyName: 'backspace', type: KeyType.regular, widthFactor: 1.2, height: 48),
+          KeyDef(label: '⌦', keyName: 'delete', type: KeyType.regular, widthFactor: 1.2, height: 48),
           KeyDef(label: 'Tab', keyName: 'tab', type: KeyType.regular, widthFactor: 1.2, height: 48),
+          KeyDef(label: '⎵', keyName: 'space', type: KeyType.regular, widthFactor: 1.5, height: 48),
         ],
         right: [
           KeyDef(label: '⇞', keyName: 'pageup', type: KeyType.regular, height: 48),
