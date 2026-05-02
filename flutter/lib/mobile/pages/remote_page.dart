@@ -49,6 +49,7 @@ class RemotePage extends StatefulWidget {
       this.forceRelay,
       this.hideKeyHelpTools = false,
       this.hideBottomBar = false,
+      this.hideCursorPaint = false,
       this.onTwoFingerScroll})
       : super(key: key);
 
@@ -60,6 +61,9 @@ class RemotePage extends StatefulWidget {
   // legacy panels, so callers can suppress them.
   final bool hideKeyHelpTools;
   final bool hideBottomBar;
+  // Tabby: when true, CursorPaint is omitted so the caller can render it in
+  // an unconstrained layer that overflows past the canvas boundary.
+  final bool hideCursorPaint;
   // Tabby: two-finger pan (no pinch) routes here instead of panning the
   // local canvas. Forwarded to RawTouchGestureDetectorRegion.
   final void Function(double dx, double dy)? onTwoFingerScroll;
@@ -625,7 +629,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                     ).workaroundFreezeLinuxMint(),
             ),
           ];
-          if (showCursorPaint) {
+          if (showCursorPaint && !widget.hideCursorPaint) {
             paints.add(CursorPaint(widget.id));
           }
           if (gFFI.ffiModel.touchMode) {

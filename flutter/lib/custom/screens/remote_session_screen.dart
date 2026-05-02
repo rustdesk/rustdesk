@@ -80,9 +80,16 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         ? mq.size.height * (1 - 0.55)
         : stripBottom + _stripHeight;
 
+    // CursorPaint coordinates are relative to SafeArea (status bar excluded).
+    // Offset it back down by the top padding so it aligns with the full-screen Stack.
+    final safeAreaTop = mq.viewPadding.top;
+
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         // Layer 0: remote canvas — shrinks above strip and keyboard.
+        // CursorPaint is suppressed inside RemotePage and hoisted to Layer 4
+        // so the cursor can draw past the canvas boundary into the strip area.
         Positioned(
           top: 0,
           left: 0,
@@ -135,6 +142,14 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
               onClose: _onChatToggle,
             ),
           ),
+
+        // Layer 4: cursor overlay — unconstrained so it can cross the
+        // canvas/strip boundary without being clipped.
+        // Offset by safeAreaTop because CursorModel coords are SafeArea-relative.
+        Positioned.fill(
+          top: safeAreaTop,
+          child: CursorPaint(widget.id),
+        ),
       ],
     );
   }
@@ -146,6 +161,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         forceRelay: widget.forceRelay,
         hideKeyHelpTools: true,
         hideBottomBar: true,
+        hideCursorPaint: true,
         onTwoFingerScroll: _onTwoFingerScroll,
       );
 
