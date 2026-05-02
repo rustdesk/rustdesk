@@ -154,7 +154,8 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 }
 
-// Reports its child's rendered height after each layout pass.
+// Reports its child's rendered height whenever the child's size changes,
+// including when the child rebuilds internally (e.g. PowerStrip collapsing).
 class _MeasureHeight extends StatefulWidget {
   final Widget child;
   final ValueChanged<double> onChange;
@@ -176,6 +177,14 @@ class _MeasureHeightState extends State<_MeasureHeight> {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback(_measure);
-    return KeyedSubtree(key: _key, child: widget.child);
+    return NotificationListener<SizeChangedLayoutNotification>(
+      onNotification: (_) {
+        WidgetsBinding.instance.addPostFrameCallback(_measure);
+        return true;
+      },
+      child: SizeChangedLayoutNotifier(
+        child: KeyedSubtree(key: _key, child: widget.child),
+      ),
+    );
   }
 }
