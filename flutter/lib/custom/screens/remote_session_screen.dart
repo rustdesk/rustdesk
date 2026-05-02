@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
+import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 
 import '../chat/terminal_chat_overlay.dart';
 import '../input/input_bridge.dart';
@@ -34,18 +37,30 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   final _kbFocusNode = FocusNode();
   bool _chatOpen = false;
   double _stripHeight = 0;
+  late final StreamSubscription<bool> _kbVisibilitySub;
 
   @override
   void initState() {
     super.initState();
     _bridge = InputBridge(gFFI.sessionId);
+    _kbVisibilitySub = KeyboardVisibilityController()
+        .onChange
+        .listen(_onKeyboardVisibilityChanged);
   }
 
   @override
   void dispose() {
+    _kbVisibilitySub.cancel();
     _kbFocusNode.dispose();
     _modCtl.dispose();
     super.dispose();
+  }
+
+  void _onKeyboardVisibilityChanged(bool visible) {
+    // Mirror the save/restore logic that KeyHelpTools normally performs so that
+    // the user's zoom level and canvas position are preserved across keyboard
+    // show/hide even though KeyHelpTools is suppressed in this screen.
+    gFFI.cursorModel.keyHelpToolsVisibilityChanged(null, visible);
   }
 
   void _onKeyboardTap() {

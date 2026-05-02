@@ -2703,9 +2703,13 @@ class CanvasModel with ChangeNotifier {
     }
     _timerMobileRestoreCanvasOffset = Timer(Duration(milliseconds: 100), () {
       updateSize();
-      _x = targetOffset.dx;
-      _y = targetOffset.dy;
-      _scale = targetScale;
+      // If the user panned or zoomed while the keyboard was visible, keep their
+      // current position/scale instead of snapping back to the pre-keyboard state.
+      if (!isMobileCanvasChanged) {
+        _x = targetOffset.dx;
+        _y = targetOffset.dy;
+        _scale = targetScale;
+      }
       _offsetBeforeMobileSoftKeyboard = null;
       _scaleBeforeMobileSoftKeyboard = null;
       notifyListeners();
