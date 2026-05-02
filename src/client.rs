@@ -1617,58 +1617,57 @@ impl VideoHandler {
                 chroma,
             )
         };
-                if res.as_ref().is_ok_and(|x| *x) {
-                    self.fail_counter = 0;
-                } else {
-                    if self.fail_counter < usize::MAX {
-                        if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
-                            log::error!("decode first frame failed");
-                            self.fail_counter = MAX_DECODE_FAIL_COUNTER;
-                        } else {
-                            self.fail_counter += 1;
-                        }
-                        log::error!(
-                            "Failed to handle video frame, fail counter: {}",
-                            self.fail_counter
-                        );
-                    }
-                }
-                self.first_frame = false;
-                if self.record {
-                    let (w, h) = if *pixelbuffer {
-                        (self.rgb.w, self.rgb.h)
-                    } else {
-                        (self.texture.w, self.texture.h)
-                    };
-                    if let Some(tx) = self.record_tx.as_ref() {
-                        use std::sync::mpsc::TrySendError;
-                        if let Some(frame) = vf.union.take() {
-                            match tx.try_send(RecordTask::Frame { frame, w, h }) {
-                                Ok(()) => {}
-                                Err(TrySendError::Full(_task)) => {
-                                    // Drop frames if recorder can't keep up (e.g. slow network share).
-                                    if !self.record_drop_logged {
-                                        self.record_drop_logged = true;
-                                        log::warn!(
-                                            "recording is falling behind; dropping frames to keep rendering responsive"
-                                        );
-                                    }
-                                }
-                                Err(TrySendError::Disconnected(_task)) => {
-                                    if !self.record_send_err_logged {
-                                        self.record_send_err_logged = true;
-                                        log::warn!(
-                                            "recording worker disconnected, stop recording frames"
-                                        );
-                                    }
-                                    self.record = false;
-                                    self.record_tx = None;
-                                }
+        let decode_ok = res.as_ref().is_ok_and(|x| *x);
+        if decode_ok {
+            self.fail_counter = 0;
+        } else if self.fail_counter < usize::MAX {
+            if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
+                log::error!("decode first frame failed");
+                self.fail_counter = MAX_DECODE_FAIL_COUNTER;
+            } else {
+                self.fail_counter += 1;
+            }
+            log::error!(
+                "Failed to handle video frame, fail counter: {}",
+                self.fail_counter
+            );
+        }
+        self.first_frame = false;
+        if decode_ok && self.record {
+            let (w, h) = if *pixelbuffer {
+                (self.rgb.w, self.rgb.h)
+            } else {
+                (self.texture.w, self.texture.h)
+            };
+            if let Some(tx) = self.record_tx.as_ref() {
+                use std::sync::mpsc::TrySendError;
+                if let Some(frame) = vf.union.take() {
+                    match tx.try_send(RecordTask::Frame { frame, w, h }) {
+                        Ok(()) => {}
+                        Err(TrySendError::Full(_task)) => {
+                            // Drop frames if recorder can't keep up (e.g. slow network share).
+                            if !self.record_drop_logged {
+                                self.record_drop_logged = true;
+                                log::warn!(
+                                    "recording is falling behind; dropping frames to keep rendering responsive"
+                                );
                             }
                         }
+                        Err(TrySendError::Disconnected(_task)) => {
+                            if !self.record_send_err_logged {
+                                self.record_send_err_logged = true;
+                                log::warn!(
+                                    "recording worker disconnected, stop recording frames"
+                                );
+                            }
+                            self.record = false;
+                            self.record_tx = None;
+                        }
                     }
                 }
-                res
+            }
+        }
+        res
     }
 
     /// Reset the decoder, change format if it is Some
@@ -1715,6 +1714,7 @@ impl VideoHandler {
                         RecordTask::Frame { frame, w, h } => {
                             if let Err(e) = recorder.write_frame(&frame, w, h) {
                                 log::error!("recording write_frame failed: {e}");
+                                break;
                             }
                         }
                     }
