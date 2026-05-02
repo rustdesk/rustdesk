@@ -3720,12 +3720,12 @@ Widget loadLogo() {
             child: image,
           ).marginOnly(left: 12, right: 12, top: 12);
         }
-        return const Offstage();
+        return loadIcon(60);
       });
 }
 
 Widget loadIcon(double size) {
-  return Image.asset('assets/icon.png',
+  return Image.asset('assets/tabby-icon.png',
       width: size,
       height: size,
       errorBuilder: (ctx, error, stackTrace) => SvgPicture.asset(
