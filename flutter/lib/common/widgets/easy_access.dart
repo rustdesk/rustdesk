@@ -61,7 +61,7 @@ Future<List<Map<String, dynamic>>> fetchEasyAccessManagers() async {
     }
 
     final response = await http.post(
-      Uri.parse('$url/api/devices/easy-access-managers'),
+      Uri.parse('$url/api/easy_access/managers'),
       headers: {'Content-Type': 'application/json'},
       body: authBody,
     );
