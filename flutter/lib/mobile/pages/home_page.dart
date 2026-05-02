@@ -150,7 +150,13 @@ class HomePageState extends State<HomePage> {
         ],
       );
     }
-    return Text(bind.mainGetAppNameSync());
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        loadIcon(28).marginOnly(right: 8),
+        Text(bind.mainGetAppNameSync()),
+      ],
+    );
   }
 }
 
