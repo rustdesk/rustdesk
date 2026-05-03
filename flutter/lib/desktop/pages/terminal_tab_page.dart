@@ -145,6 +145,8 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     _windowClosing = true;
     final tabKeys = tabController.state.value.tabs.map((t) => t.key).toList();
     // Remove all UI tabs immediately (same instant behavior as the old tabController.clear())
+    // Keep the cleanup target lookup below synchronous before its first await:
+    // it relies on the current frame still retaining each TerminalPage's FFI/model.
     tabController.clear();
     // Run session cleanup in parallel with bounded timeout (closeTerminal() has internal 3s timeout).
     // Skip tabs already being closed by a concurrent _closeTab() to avoid duplicate FFI calls.
