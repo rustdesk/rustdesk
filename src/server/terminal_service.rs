@@ -612,6 +612,12 @@ fn find_utf8_split_point(buf: &[u8]) -> usize {
     buf.len()
 }
 
+// Terminal output currently follows a UTF-8 text model end to end: the service
+// keeps replay buffers on UTF-8 boundaries, and Flutter decodes payload bytes as
+// UTF-8 before writing to xterm. This accumulator only prevents splitting a
+// trailing UTF-8 code point across PTY reads. Supporting non-UTF-8 terminals
+// would need a separate design covering remote encoding detection, Flutter
+// decoding, replay truncation, and input transcoding.
 #[derive(Default)]
 struct Utf8ChunkAccumulator {
     remainder: Vec<u8>,
