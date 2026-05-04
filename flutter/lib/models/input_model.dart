@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -15,12 +16,13 @@ import 'package:get/get.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
+import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
 
 /// Mouse button enum.
-enum MouseButtons { left, right, wheel, back }
+enum MouseButtons { left, right, wheel, back, forward }
 
 const _kMouseEventDown = 'mousedown';
 const _kMouseEventUp = 'mouseup';
@@ -157,6 +159,8 @@ extension ToString on MouseButtons {
         return 'wheel';
       case MouseButtons.back:
         return 'back';
+      case MouseButtons.forward:
+        return 'forward';
     }
   }
 }
@@ -327,6 +331,80 @@ class ToReleaseKeys {
 }
 
 class InputModel {
+  // Side mouse button support for Linux.
+  // Flutter's Linux embedder drops X11 button 8/9 events, so we capture them
+  // natively via GDK and forward through the platform channel.
+  static InputModel? _activeSideButtonModel;
+  // Tracks per-button which model received a side button down event, so the
+  // matching up event is routed there even if the pointer has left the view
+  // or a different button was pressed in between.
+  static final Map<MouseButtons, InputModel> _sideButtonDownModels = {};
+  static bool _sideButtonChannelInitialized = false;
+
+  /// Each Flutter engine (main window + sub-windows from desktop_multi_window)
+  /// runs its own Dart isolate with its own statics. Called from initEnv()
+  /// which runs per-engine, so each isolate registers its own handler tied
+  /// to its own set of InputModels.
+  static void initSideButtonChannel() {
+    if (!Platform.isLinux) return;
+    if (_sideButtonChannelInitialized) return;
+    _sideButtonChannelInitialized = true;
+
+    const channel = MethodChannel('org.rustdesk.rustdesk/side_buttons');
+    channel.setMethodCallHandler((call) async {
+      if (call.method == 'onSideMouseButton') {
+        final args = call.arguments as Map<dynamic, dynamic>;
+        final button = args['button'] as String;
+        final type = args['type'] as String;
+        final mb = button == 'back' ? MouseButtons.back : MouseButtons.forward;
+
+        if (type == 'down') {
+          final model = _activeSideButtonModel;
+          if (model != null &&
+              !(model.isViewOnly && !model.showMyCursor) &&
+              model.keyboardPerm &&
+              !model.isViewCamera) {
+            _sideButtonDownModels[mb] = model;
+            // Fire-and-forget to avoid blocking the platform channel handler.
+            unawaited(model._sendMouseUnchecked(type, mb).catchError((Object e) {
+              debugPrint('[InputModel] failed to send side button $type for $mb: $e');
+            }));
+          }
+        } else {
+          // Only route 'up' when we recorded the matching 'down';
+          // dropping avoids sending unpaired 'up' to an unrelated session.
+          // Use _sendMouseUnchecked to bypass permission checks so the
+          // release always goes through even if permissions changed.
+          final model = _sideButtonDownModels.remove(mb);
+          if (model != null) {
+            unawaited(model._sendMouseUnchecked(type, mb).catchError((Object e) {
+              debugPrint('[InputModel] failed to send side button $type for $mb: $e');
+            }));
+          }
+        }
+      }
+      return null;
+    });
+  }
+
+  /// Clear any static references to this model (prevents stale routing).
+  /// Releases any held side buttons on the peer so closing a session
+  /// mid-press does not leave a stuck button.
+  void disposeSideButtonTracking() {
+    if (_activeSideButtonModel == this) _activeSideButtonModel = null;
+    final held = _sideButtonDownModels.entries
+        .where((e) => e.value == this)
+        .map((e) => e.key)
+        .toList();
+    for (final mb in held) {
+      _sideButtonDownModels.remove(mb);
+      // Best-effort release; session may already be tearing down.
+      unawaited(_sendMouseUnchecked('up', mb).catchError((Object e) {
+        debugPrint('[InputModel] failed to release side button $mb: $e');
+      }));
+    }
+  }
+
   final WeakReference<FFI> parent;
   String keyboardMode = '';
 
@@ -412,6 +490,7 @@ class InputModel {
   bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
 
   InputModel(this.parent) {
+    initSideButtonChannel();
     sessionId = parent.target!.sessionId;
     _relativeMouse = RelativeMouseModel(
       sessionId: sessionId,
@@ -620,6 +699,38 @@ class InputModel {
     }
   }
 
+  // Safe: this only re-dispatches synthesized Shift key-up events.
+  // The key-up path clears the tracked Shift state so this does not loop.
+  void _releaseTrackedShiftKeyEventIfNeeded() {
+    final leftShift = toReleaseKeys.lastLShiftKeyEvent;
+    final rightShift = toReleaseKeys.lastRShiftKeyEvent;
+    if (leftShift != null) {
+      handleKeyEvent(leftShift);
+    }
+    if (rightShift != null) {
+      handleKeyEvent(rightShift);
+    }
+  }
+
+  // Safe: this only re-dispatches synthesized Shift key-up events.
+  // The raw key-up path clears the tracked Shift state so this does not loop.
+  void _releaseTrackedRawShiftKeyEventIfNeeded() {
+    final leftShift = toReleaseRawKeys.lastLShiftKeyEvent;
+    final rightShift = toReleaseRawKeys.lastRShiftKeyEvent;
+    if (leftShift != null) {
+      handleRawKeyEvent(RawKeyUpEvent(
+        data: leftShift.data,
+        character: leftShift.character,
+      ));
+    }
+    if (rightShift != null) {
+      handleRawKeyEvent(RawKeyUpEvent(
+        data: rightShift.data,
+        character: rightShift.character,
+      ));
+    }
+  }
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
@@ -674,6 +785,27 @@ class InputModel {
       toReleaseRawKeys.updateKeyUp(key, e);
     }
 
+    // On some mobile soft-keyboard paths, Flutter may leave cached Shift state
+    // set even though the current raw key event is not shifted anymore.
+    if (e is RawKeyDownEvent &&
+        shouldReleaseStaleMobileShift(
+          isMobile: isMobile,
+          cachedShiftPressed: shift,
+          actualShiftPressed: e.isShiftPressed,
+          logicalKey: e.logicalKey,
+          hasTrackedShiftKeyDown: toReleaseRawKeys.lastLShiftKeyEvent != null ||
+              toReleaseRawKeys.lastRShiftKeyEvent != null,
+        )) {
+      if (kDebugMode) {
+        debugPrint(
+          'input: releasing stale mobile Shift before replaying tracked raw '
+          'key-up (logicalKey=${e.logicalKey.keyLabel}, '
+          'actualShiftPressed=${e.isShiftPressed}, cachedShiftPressed=$shift)',
+        );
+      }
+      _releaseTrackedRawShiftKeyEventIfNeeded();
+    }
+
     // * Currently mobile does not enable map mode
     if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
       mapKeyboardModeRaw(e, iosCapsLock);
@@ -717,6 +849,8 @@ class InputModel {
       iosCapsLock = _getIosCapsFromCharacter(e);
     }
 
+    // Update cached modifier state before sending the event. The stale mobile
+    // Shift release check below relies on this cached state.
     if (e is KeyUpEvent) {
       handleKeyUpEventModifiers(e);
     } else if (e is KeyDownEvent) {
@@ -754,6 +888,21 @@ class InputModel {
         }
       }
     }
+
+    // On some mobile soft-keyboard paths, Flutter may leave cached Shift state
+    // set even though the current key event is not shifted anymore.
+    if (e is KeyDownEvent &&
+        shouldReleaseStaleMobileShift(
+          isMobile: isMobile,
+          cachedShiftPressed: shift,
+          actualShiftPressed: HardwareKeyboard.instance.isShiftPressed,
+          logicalKey: e.logicalKey,
+          hasTrackedShiftKeyDown: toReleaseKeys.lastLShiftKeyEvent != null ||
+              toReleaseKeys.lastRShiftKeyEvent != null,
+        )) {
+      _releaseTrackedShiftKeyEventIfNeeded();
+    }
+
     final isDesktopAndMapMode =
         isDesktop || (isWebDesktop && keyboardMode == kKeyMapMode);
     if (isMobileAndMapMode || isDesktopAndMapMode) {
@@ -966,13 +1115,20 @@ class InputModel {
     return evt;
   }
 
+  /// Send mouse event unconditionally (no permission checks).
+  /// Used for side button releases that must go through even if permissions
+  /// changed after the matching down was sent.
+  Future<void> _sendMouseUnchecked(String type, MouseButtons button) async {
+    await bind.sessionSendMouse(
+        sessionId: sessionId,
+        msg: json.encode(modify({'type': type, 'buttons': button.value})));
+  }
+
   /// Send mouse press event.
   Future<void> sendMouse(String type, MouseButtons button) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
-    await bind.sessionSendMouse(
-        sessionId: sessionId,
-        msg: json.encode(modify({'type': type, 'buttons': button.value})));
+    await _sendMouseUnchecked(type, button);
   }
 
   void enterOrLeave(bool enter) {
@@ -981,6 +1137,13 @@ class InputModel {
     _pointerMovedAfterEnter = false;
     _pointerInsideImage = enter;
     _lastWheelTsUs = 0;
+
+    // Track active model for side button events (Linux).
+    if (enter) {
+      _activeSideButtonModel = this;
+    } else if (_activeSideButtonModel == this) {
+      _activeSideButtonModel = null;
+    }
 
     // Fix status
     if (!enter) {
@@ -1332,6 +1495,16 @@ class InputModel {
     return false;
   }
 
+  /// iOS may emit a synthesized touch event after a real mouse click.
+  /// This helper ignores touch-down events that arrive shortly after a mouse down,
+  /// even when the position is far (e.g., near the top edge).
+  bool _shouldIgnoreTouchAfterMouse(int nowMs) {
+    if (!isIOS) return false;
+    const int kTouchAfterMouseWindowMs = 700;
+    final dt = nowMs - _lastMouseDownTimeMs;
+    return dt >= 0 && dt < kTouchAfterMouseWindowMs;
+  }
+
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
@@ -1344,6 +1517,9 @@ class InputModel {
     // Track mouse down events for duplicate detection on iOS.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (e.kind == ui.PointerDeviceKind.mouse) {
+      if (!isPhysicalMouse.value) {
+        isPhysicalMouse.value = true;
+      }
       _lastMouseDownTimeMs = nowMs;
       _lastMouseDownPos = e.position;
     }
@@ -1353,6 +1529,10 @@ class InputModel {
     }
 
     if (e.kind != ui.PointerDeviceKind.mouse) {
+      // Ignore duplicate touch events that follow a recent mouse click (iOS Magic Mouse issue).
+      if (isPhysicalMouse.value && _shouldIgnoreTouchAfterMouse(nowMs)) {
+        return;
+      }
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
       }

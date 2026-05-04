@@ -605,21 +605,30 @@ pub fn session_handle_flutter_raw_key_event(
     }
 }
 
-// SyncReturn<()> is used to make sure enter() and leave() are executed in the sequence this function is called.
-//
 // If the cursor jumps between remote page of two connections, leave view and enter view will be called.
 // session_enter_or_leave() will be called then.
-// As rust is multi-thread, it is possible that enter() is called before leave().
-// This will cause the keyboard input to take no effect.
+// As Rust is multi-threaded, enter() can be called before leave().
+// The Rust-side grab ownership state filters stale transitions.
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
         let keyboard_mode = session.get_keyboard_mode();
+        // Use the full per-window UUID (not lc.session_id which is per-connection)
+        // so that two windows viewing the same peer get distinct grab owners.
+        let window_id = _session_id.as_u128();
         if _enter {
             set_cur_session_id_(_session_id, &keyboard_mode);
-            session.enter(keyboard_mode);
+            crate::keyboard::client::change_grab_status(
+                crate::common::GrabState::Run,
+                &keyboard_mode,
+                window_id,
+            );
         } else {
-            session.leave(keyboard_mode);
+            crate::keyboard::client::change_grab_status(
+                crate::common::GrabState::Wait,
+                &keyboard_mode,
+                window_id,
+            );
         }
     }
     SyncReturn(())
@@ -964,6 +973,27 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
 
 pub fn main_set_option(key: String, value: String) {
     #[cfg(target_os = "android")]
+    {
+        let is_permission_option = key.eq(config::keys::OPTION_ENABLE_CLIPBOARD)
+            || key.eq(config::keys::OPTION_ENABLE_FILE_TRANSFER)
+            || key.eq(config::keys::OPTION_ENABLE_AUDIO);
+        let allow_perm_change_in_accept_window = config::option2bool(
+            config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+        );
+        if is_permission_option
+            && !allow_perm_change_in_accept_window
+            && crate::ui_cm_interface::has_active_clients()
+        {
+            log::info!(
+                "blocked main_set_option by policy, key={}, value={}",
+                key,
+                value
+            );
+            return;
+        }
+    }
+    #[cfg(target_os = "android")]
     if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
         crate::ui_cm_interface::switch_permission_all(
             "keyboard".to_owned(),
@@ -1010,7 +1040,29 @@ pub fn main_get_options_sync() -> SyncReturn<String> {
 }
 
 pub fn main_set_options(json: String) {
-    let map: HashMap<String, String> = serde_json::from_str(&json).unwrap_or(HashMap::new());
+    let mut map: HashMap<String, String> = serde_json::from_str(&json).unwrap_or(HashMap::new());
+    #[cfg(target_os = "android")]
+    {
+        let allow_perm_change_in_accept_window = config::option2bool(
+            config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+        );
+        if !allow_perm_change_in_accept_window && crate::ui_cm_interface::has_active_clients() {
+            for key in [
+                config::keys::OPTION_ENABLE_CLIPBOARD,
+                config::keys::OPTION_ENABLE_FILE_TRANSFER,
+                config::keys::OPTION_ENABLE_AUDIO,
+            ] {
+                if let Some(value) = map.remove(key) {
+                    log::info!(
+                        "blocked main_set_options item by policy, key={}, value={}",
+                        key,
+                        value
+                    );
+                }
+            }
+        }
+    }
     if !map.is_empty() {
         set_options(map)
     }

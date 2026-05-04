@@ -426,12 +426,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                               }
                               return Container(
                                 color: MyTheme.canvasColor,
-                                child: inputModel.isPhysicalMouse.value
-                                    ? getBodyForMobile()
-                                    : RawTouchGestureDetectorRegion(
-                                        child: getBodyForMobile(),
-                                        ffi: gFFI,
-                                      ),
+                                child: RawTouchGestureDetectorRegion(
+                                  child: getBodyForMobile(),
+                                  ffi: gFFI,
+                                ),
                               );
                             }),
                           ),
@@ -1185,7 +1183,8 @@ void showOptions(
   List<TToggleMenu> privacyModeList = [];
   // privacy mode
   final privacyModeState = PrivacyModeState.find(id);
-  if (gFFI.ffiModel.keyboard && gFFI.ffiModel.pi.features.privacyMode) {
+  if ((gFFI.ffiModel.pi.features.privacyMode && gFFI.ffiModel.keyboard) ||
+      privacyModeState.isNotEmpty) {
     privacyModeList = toolbarPrivacyMode(privacyModeState, context, id, gFFI);
     if (privacyModeList.length == 1) {
       displayToggles.add(privacyModeList[0]);

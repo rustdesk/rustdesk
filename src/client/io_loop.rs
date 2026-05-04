@@ -1448,6 +1448,23 @@ impl<T: InvokeUiSession> Remote<T> {
                     if !self.handler.lc.read().unwrap().disable_clipboard.v {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(_mcb.clipboards, ClipboardSide::Client);
+                        #[cfg(target_os = "ios")]
+                        {
+                            if let Some(cb) = _mcb
+                                .clipboards
+                                .iter()
+                                .find(|c| c.format.enum_value() == Ok(ClipboardFormat::Text))
+                            {
+                                let content = if cb.compress {
+                                    hbb_common::compress::decompress(&cb.content)
+                                } else {
+                                    cb.content.to_vec()
+                                };
+                                if let Ok(content) = String::from_utf8(content) {
+                                    self.handler.clipboard(content);
+                                }
+                            }
+                        }
                         #[cfg(target_os = "android")]
                         crate::clipboard::handle_msg_multi_clipboards(_mcb);
                     }
@@ -1779,6 +1796,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                             Ok(Permission::BlockInput) => {
                                 self.handler.set_permission("block_input", p.enabled);
+                            }
+                            Ok(Permission::PrivacyMode) => {
+                                self.handler.set_permission("privacy_mode", p.enabled);
                             }
                             _ => {}
                         }
