@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 $serverConfig = @{
     Server = "hbbs.cislink.nl"
     Relay = "hbbr.cislink.nl"
-    Key = "3LyfStjRsPhYPBqqpPQN7Tamhkk1L2Mw6ksqpiLaj1s="
+    Key = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="
 }
 
 # 定义部署路径

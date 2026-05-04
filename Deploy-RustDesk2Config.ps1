@@ -14,7 +14,7 @@ $serverConfig = @{
     Server = "hbbs.cislink.nl"
     ServerPort = "21116"
     Relay = "hbbr.cislink.nl"
-    Key = "3LyfStjRsPhYPBqqpPQN7Tamhkk1L2Mw6ksqpiLaj1s="
+    Key = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="
 }
 
 function Write-Log {
