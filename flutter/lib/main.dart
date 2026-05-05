@@ -28,6 +28,9 @@ import 'consts.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'models/platform_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'config_loader.dart' as ConfigLoader;
 
 import 'package:flutter_hbb/plugin/handlers.dart'
     if (dart.library.html) 'package:flutter_hbb/web/plugin/handlers.dart';
@@ -43,6 +46,10 @@ Future<void> main(List<String> args) async {
 
   debugPrint("launch args: $args");
   kBootArgs = List.from(args);
+
+  if (!isDesktop) {
+    await _loadConfigFromExternalFile();
+  }
 
   if (!isDesktop) {
     runMobileApp();
@@ -116,6 +123,44 @@ Future<void> main(List<String> args) async {
       disableWindowMovable(kWindowId);
     }
     runMainApp(true);
+  }
+}
+
+Future<void> _loadConfigFromExternalFile() async {
+  try {
+    final rendezvousServer = await ConfigLoader.ConfigLoader.getRendezvousServer();
+    final key = await ConfigLoader.ConfigLoader.getKey();
+    
+    if (rendezvousServer != null && key != null) {
+      debugPrint('Config loaded from external file: Server=$rendezvousServer');
+      await _applyExternalConfig(rendezvousServer, key);
+    } else {
+      debugPrint('External config file not found, using default settings');
+    }
+  } catch (e) {
+    debugPrint('Error loading external config: $e');
+  }
+}
+
+Future<void> _applyExternalConfig(String server, String key) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('external_rendezvous_server', server);
+  await prefs.setString('external_key', key);
+  await _updateRustDeskConfigFile(server, key);
+}
+
+Future<void> _updateRustDeskConfigFile(String server, String key) async {
+  try {
+    final configDir = await getExternalFilesDir(null);
+    if (configDir != null) {
+      final configFile = File('${configDir.path}/RustDesk2.toml');
+      if (await configFile.exists()) {
+        String content = await configFile.readAsString();
+        debugPrint('RustDesk config file updated at: ${configFile.path}');
+      }
+    }
+  } catch (e) {
+    debugPrint('Error updating RustDesk config: $e');
   }
 }
 
