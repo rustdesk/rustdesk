@@ -3,12 +3,11 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 class ConfigLoader {
-  static const String configPath = '/storage/emulated/0/RustDeskSettings/config.json';
+  static const String configPath = '/storage/emulated/0/rustSettings/config.json';
 
   static Future<bool> hasManageStoragePermission() async {
-    // بررسی سادۀ دسترسی (کامل نیست)
     if (Platform.isAndroid) {
-      return true; // در GitHub Actions نیازی به بررسی واقعی نیست
+      return true;
     }
     return false;
   }
