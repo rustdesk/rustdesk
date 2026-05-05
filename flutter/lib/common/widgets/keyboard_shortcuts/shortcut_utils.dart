@@ -11,6 +11,30 @@ List<String> canonicalShortcutModsForSave(Set<String> mods) {
   ];
 }
 
+List<Map<String, dynamic>> shortcutBindingMapsFrom(dynamic rawBindings) {
+  if (rawBindings is! Iterable) return <Map<String, dynamic>>[];
+  final bindings = <Map<String, dynamic>>[];
+  for (final raw in rawBindings) {
+    if (raw is! Map) continue;
+    final binding = <String, dynamic>{};
+    for (final entry in raw.entries) {
+      final key = entry.key;
+      if (key is String) {
+        binding[key] = entry.value;
+      }
+    }
+    if (binding.isNotEmpty) {
+      bindings.add(binding);
+    }
+  }
+  return bindings;
+}
+
+Set<String> shortcutModSetFrom(dynamic rawMods) {
+  if (rawMods is! Iterable) return <String>{};
+  return rawMods.whereType<String>().toSet();
+}
+
 bool isSwitchTabShortcutAction(String? actionId) {
   return actionId == kShortcutActionSwitchTabNext ||
       actionId == kShortcutActionSwitchTabPrev;
@@ -144,15 +168,17 @@ List<Map<String, dynamic>> filterDefaultBindingsForPlatform(
   ShortcutPlatformCapabilities cap,
 ) {
   final filtered = <Map<String, dynamic>>[];
-  for (final raw in bindings) {
-    if (raw is! Map) continue;
-    final binding = Map<String, dynamic>.from(raw);
+  for (final binding in shortcutBindingMapsFrom(bindings)) {
     final action = binding['action'] as String?;
     if (!cap.includeFullscreenShortcut &&
         action == kShortcutActionToggleFullscreen) {
       continue;
     }
     if (!cap.includeScreenshotShortcut && action == kShortcutActionScreenshot) {
+      continue;
+    }
+    if (!cap.includeScreenshotShortcut &&
+        action == kShortcutActionToggleRelativeMouseMode) {
       continue;
     }
     if (!cap.includeTabShortcuts && isSwitchTabShortcutAction(action)) {

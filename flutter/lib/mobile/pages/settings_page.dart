@@ -821,22 +821,23 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               showThemeSettings(gFFI.dialogManager);
             },
           ),
-          SettingsTile.navigation(
-            leading: Icon(Icons.keyboard_outlined),
-            title: Text(translate('Keyboard Shortcuts')),
-            description: Text(ShortcutModel.isEnabled()
-                ? translate('On')
-                : translate('Off')),
-            onPressed: (context) {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const MobileKeyboardShortcutsPage(),
-                  )).then((_) {
-                if (mounted) setState(() {});
-              });
-            },
-          ),
+          if (!disabledSettings)
+            SettingsTile.navigation(
+              leading: Icon(Icons.keyboard_outlined),
+              title: Text(translate('Keyboard Shortcuts')),
+              description: Text(ShortcutModel.isEnabled()
+                  ? translate('On')
+                  : translate('Off')),
+              onPressed: (context) {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const MobileKeyboardShortcutsPage(),
+                    )).then((_) {
+                  if (mounted) setState(() {});
+                });
+              },
+            ),
           if (!bind.isDisableAccount())
             SettingsTile.switchTile(
               title: Text(translate('note-at-conn-end-tip')),

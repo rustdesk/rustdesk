@@ -34,6 +34,48 @@ const _kToolbarOwnedActionIds = <String>[
   kShortcutActionSendClipboardKeystrokes,
 ];
 
+const _kToolbarViewStyleActionIds = <String>[
+  kShortcutActionViewModeOriginal,
+  kShortcutActionViewModeAdaptive,
+  kShortcutActionViewModeCustom,
+];
+
+const _kToolbarImageQualityActionIds = <String>[
+  kShortcutActionImageQualityBest,
+  kShortcutActionImageQualityBalanced,
+  kShortcutActionImageQualityLow,
+];
+
+const _kToolbarCodecActionIds = <String>[
+  kShortcutActionCodecAuto,
+  kShortcutActionCodecVp8,
+  kShortcutActionCodecVp9,
+  kShortcutActionCodecAv1,
+  kShortcutActionCodecH264,
+  kShortcutActionCodecH265,
+];
+
+const _kToolbarCursorActionIds = <String>[
+  kShortcutActionToggleShowRemoteCursor,
+  kShortcutActionToggleFollowRemoteCursor,
+  kShortcutActionToggleFollowRemoteWindow,
+  kShortcutActionToggleZoomCursor,
+];
+
+const _kToolbarDisplayToggleActionIds = <String>[
+  kShortcutActionToggleQualityMonitor,
+  kShortcutActionToggleMute,
+  kShortcutActionToggleEnableFileCopyPaste,
+  kShortcutActionToggleDisableClipboard,
+  kShortcutActionToggleLockAfterSessionEnd,
+  kShortcutActionToggleTrueColor,
+];
+
+const _kToolbarKeyboardToggleActionIds = <String>[
+  kShortcutActionToggleSwapCtrlCmd,
+  kShortcutActionToggleSwapLeftRightMouse,
+];
+
 class TTextMenu {
   final Widget child;
   final VoidCallback? onPressed;
@@ -92,7 +134,13 @@ class TToggleMenu {
 /// Register each tagged entry's `onChanged` with the session [ShortcutModel].
 /// Passthrough — returns [menus] so a caller can wrap `return [...]` directly.
 List<TToggleMenu> _registerToggleMenuShortcuts(
-    FFI ffi, List<TToggleMenu> menus) {
+  FFI ffi,
+  List<TToggleMenu> menus, {
+  List<String> ownedActionIds = const [],
+}) {
+  for (final actionId in ownedActionIds) {
+    ffi.shortcutModel.unregister(actionId);
+  }
   for (final menu in menus) {
     final actionId = menu.actionId;
     if (actionId == null) continue;
@@ -109,7 +157,13 @@ List<TToggleMenu> _registerToggleMenuShortcuts(
 
 /// Radio variant of [_registerToggleMenuShortcuts].
 List<TRadioMenu<T>> _registerRadioMenuShortcuts<T>(
-    FFI ffi, List<TRadioMenu<T>> menus) {
+  FFI ffi,
+  List<TRadioMenu<T>> menus, {
+  List<String> ownedActionIds = const [],
+}) {
+  for (final actionId in ownedActionIds) {
+    ffi.shortcutModel.unregister(actionId);
+  }
   for (final menu in menus) {
     final actionId = menu.actionId;
     if (actionId == null) continue;
@@ -486,7 +540,7 @@ Future<List<TRadioMenu<String>>> toolbarViewStyle(
         groupValue: groupValue,
         onChanged: onChanged,
         actionId: kShortcutActionViewModeCustom)
-  ]);
+  ], ownedActionIds: _kToolbarViewStyleActionIds);
 }
 
 Future<List<TRadioMenu<String>>> toolbarImageQuality(
@@ -526,7 +580,7 @@ Future<List<TRadioMenu<String>>> toolbarImageQuality(
         customImageQualityDialog(ffi.sessionId, id, ffi);
       },
     ),
-  ]);
+  ], ownedActionIds: _kToolbarImageQualityActionIds);
 }
 
 Future<List<TRadioMenu<String>>> toolbarCodec(
@@ -553,7 +607,10 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
   }
   final visible =
       codecs.length == 4 && (codecs[0] || codecs[1] || codecs[2] || codecs[3]);
-  if (!visible) return [];
+  if (!visible) {
+    return _registerRadioMenuShortcuts<String>(ffi, [],
+        ownedActionIds: _kToolbarCodecActionIds);
+  }
   onChanged(String? value) async {
     if (value == null) return;
     await bind.sessionPeerOption(
@@ -583,7 +640,7 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
     if (codecs[1]) radio('AV1', 'av1', codecs[1], kShortcutActionCodecAv1),
     if (codecs[2]) radio('H264', 'h264', codecs[2], kShortcutActionCodecH264),
     if (codecs[3]) radio('H265', 'h265', codecs[3], kShortcutActionCodecH265),
-  ]);
+  ], ownedActionIds: _kToolbarCodecActionIds);
 }
 
 Future<List<TToggleMenu>> toolbarCursor(
@@ -701,7 +758,8 @@ Future<List<TToggleMenu>> toolbarCursor(
       },
     ));
   }
-  return _registerToggleMenuShortcuts(ffi, v);
+  return _registerToggleMenuShortcuts(ffi, v,
+      ownedActionIds: _kToolbarCursorActionIds);
 }
 
 Future<List<TToggleMenu>> toolbarDisplayToggle(
@@ -868,7 +926,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         },
         child: Text(translate('View Mode'))));
   }
-  return _registerToggleMenuShortcuts(ffi, v);
+  return _registerToggleMenuShortcuts(ffi, v,
+      ownedActionIds: _kToolbarDisplayToggleActionIds);
 }
 
 var togglePrivacyModeTime = DateTime.now().subtract(const Duration(hours: 1));
@@ -1037,7 +1096,8 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
         onChanged: enabled ? onChanged : null,
         child: Text(translate('swap-left-right-mouse'))));
   }
-  return _registerToggleMenuShortcuts(ffi, v);
+  return _registerToggleMenuShortcuts(ffi, v,
+      ownedActionIds: _kToolbarKeyboardToggleActionIds);
 }
 
 /// Drive each toolbar helper for its registration side effect, so a shortcut

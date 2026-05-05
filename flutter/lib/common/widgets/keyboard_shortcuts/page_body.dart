@@ -109,9 +109,7 @@ class KeyboardShortcutsPageBodyState extends State<KeyboardShortcutsPageBody> {
     String? clearActionId,
   }) async {
     final json = _readJson();
-    final list = ((json['bindings'] as List?) ?? <dynamic>[])
-        .cast<Map<String, dynamic>>()
-        .toList();
+    final list = shortcutBindingMapsFrom(json['bindings']);
     list.removeWhere((b) {
       final a = b['action'];
       return a == actionId || (clearActionId != null && a == clearActionId);
@@ -172,8 +170,7 @@ class KeyboardShortcutsPageBodyState extends State<KeyboardShortcutsPageBody> {
 
   Future<void> _onEdit(KeyboardShortcutActionEntry entry) async {
     final json = _readJson();
-    final bindings = ((json['bindings'] as List?) ?? <dynamic>[])
-        .cast<Map<String, dynamic>>();
+    final bindings = shortcutBindingMapsFrom(json['bindings']);
     final result = await showRecordingDialog(
       context: context,
       actionId: entry.id,

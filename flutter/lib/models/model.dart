@@ -3933,6 +3933,7 @@ class FFI {
           ffiModel.pi.currentDisplay);
     }
     imageModel.callbacksOnFirstImage.clear();
+    shortcutModel.clear();
     await imageModel.update(null);
     cursorModel.clear();
     ffiModel.clear();

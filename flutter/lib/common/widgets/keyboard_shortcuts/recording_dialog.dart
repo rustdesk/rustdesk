@@ -2,9 +2,9 @@
 //
 // Modal dialog used by the Keyboard Shortcuts settings page to capture a new
 // key combination for a given action. The dialog listens for KeyDown events,
-// extracts the modifier set + non-modifier key, validates against the
-// "must include Ctrl+Alt+Shift (Cmd+Option+Shift on macOS)" rule, and reports
-// any conflict with another already-bound action.
+// extracts the modifier set + non-modifier key, validates that at least one
+// modifier is present, and reports any conflict with another already-bound
+// action.
 //
 // On Save, returns the new binding map ({action, mods, key}) plus the
 // optional id of the action whose binding should be cleared (the conflict
@@ -147,8 +147,7 @@ class _RecordingDialogState extends State<_RecordingDialog> {
       final otherAction = b['action'] as String?;
       if (otherAction == null || otherAction == widget.actionId) continue;
       final otherKey = b['key'] as String?;
-      final otherMods =
-          ((b['mods'] as List?) ?? const []).cast<String>().toSet();
+      final otherMods = shortcutModSetFrom(b['mods']);
       if (otherKey == _key &&
           otherMods.length == _mods.length &&
           otherMods.containsAll(_mods)) {

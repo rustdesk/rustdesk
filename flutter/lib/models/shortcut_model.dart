@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,8 @@ import '../models/model.dart';
 import '../models/platform_model.dart';
 import '../models/state_model.dart';
 
+typedef ShortcutCallback = FutureOr<void> Function();
+
 /// Per-session shortcut dispatcher. Attached to FFI when a session is created.
 ///
 /// The Rust matcher (src/keyboard/shortcuts.rs) emits `shortcut_triggered`
@@ -24,13 +27,13 @@ import '../models/state_model.dart';
 /// builders previously registered for that action id.
 class ShortcutModel {
   final WeakReference<FFI> parent;
-  final Map<String, VoidCallback> _callbacks = {};
+  final Map<String, ShortcutCallback> _callbacks = {};
 
   ShortcutModel(this.parent);
 
   /// Called by toolbar / menu builders to register what to do when the
   /// matched shortcut fires.
-  void register(String actionId, VoidCallback callback) {
+  void register(String actionId, ShortcutCallback callback) {
     _callbacks[actionId] = callback;
   }
 
@@ -38,12 +41,19 @@ class ShortcutModel {
     _callbacks.remove(actionId);
   }
 
+  void clear() {
+    _callbacks.clear();
+  }
+
   /// Called by the session event listener when a `shortcut_triggered` event
   /// arrives for this session.
   void onTriggered(String actionId) {
     final cb = _callbacks[actionId];
     if (cb != null) {
-      cb();
+      unawaited(Future.sync(cb).catchError((e, st) {
+        debugPrint(
+            'shortcut_triggered: handler failed for $actionId: $e\n$st');
+      }));
     } else {
       debugPrint('shortcut_triggered: no handler for $actionId');
     }
@@ -55,8 +65,7 @@ class ShortcutModel {
     if (raw.isEmpty) return [];
     try {
       final parsed = jsonDecode(raw) as Map<String, dynamic>;
-      final list = (parsed['bindings'] as List?) ?? [];
-      return list.cast<Map<String, dynamic>>();
+      return shortcutBindingMapsFrom(parsed['bindings']);
     } catch (_) {
       return [];
     }
@@ -120,14 +129,14 @@ class ShortcutModel {
       }
     }
     json['enabled'] = v;
-    final list = (json['bindings'] as List?) ?? const [];
+    final list = shortcutBindingMapsFrom(json['bindings']);
     if (v && list.isEmpty) {
       json['bindings'] = filterDefaultBindingsForPlatform(
         jsonDecode(bind.mainGetDefaultKeyboardShortcuts()) as List,
         currentPlatformCapabilities(),
       );
     } else {
-      json['bindings'] ??= <dynamic>[];
+      json['bindings'] = list;
     }
     await bind.mainSetLocalOption(
         key: kShortcutLocalConfigKey, value: jsonEncode(json));
