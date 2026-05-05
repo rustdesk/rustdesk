@@ -2154,6 +2154,8 @@ class CanvasModel with ChangeNotifier {
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
   // edge scroll mode: trigger scrolling when the cursor is close to the edge of the view
   int _edgeScrollEdgeThickness = 100;
+  double _remoteCanvasMargin = 0;
+  bool _remoteCanvasMarginInitialized = false;
   // tracks whether edge scroll should be active, prevents spurious
   // scrolling when the cursor enters the view from outside
   EdgeScrollState _edgeScrollState = EdgeScrollState.inactive;
@@ -2197,17 +2199,33 @@ class CanvasModel with ChangeNotifier {
     if (!(isDesktop || isWebDesktop)) {
       return 0;
     }
-    final value =
-        double.tryParse(bind.mainGetUserDefaultOption(key: kOptionRemoteCanvasMargin)) ??
-            0;
-    return min(400, max(0, value));
+    return _remoteCanvasMargin;
   }
 
   Future<void> setRemoteCanvasMargin(double value) async {
     final normalizedValue = value.clamp(0, 400).round();
-    await bind.mainSetUserDefaultOption(
-        key: kOptionRemoteCanvasMargin, value: normalizedValue.toString());
+    await bind.sessionSetFlutterOption(
+        sessionId: sessionId,
+        k: kOptionRemoteCanvasMargin,
+        v: normalizedValue.toString());
+    _remoteCanvasMargin = normalizedValue.toDouble();
+    _remoteCanvasMarginInitialized = true;
     await updateViewStyle();
+  }
+
+  Future<void> initializeRemoteCanvasMargin() async {
+    if (_remoteCanvasMarginInitialized || !(isDesktop || isWebDesktop)) {
+      return;
+    }
+    final sessionValue = await bind.sessionGetFlutterOption(
+        sessionId: sessionId, k: kOptionRemoteCanvasMargin);
+    final defaultValue =
+        bind.mainGetUserDefaultOption(key: kOptionRemoteCanvasMargin);
+    final value =
+        sessionValue?.isNotEmpty == true ? sessionValue : defaultValue;
+    _remoteCanvasMargin =
+        (double.tryParse(value ?? '') ?? 0).clamp(0, 400).toDouble();
+    _remoteCanvasMarginInitialized = true;
   }
 
   Rect? get paddedRect {
@@ -2328,6 +2346,7 @@ class CanvasModel with ChangeNotifier {
       return;
     }
 
+    await initializeRemoteCanvasMargin();
     updateSize();
     final displayWidth = getDisplayWidth();
     final displayHeight = getDisplayHeight();
@@ -2706,6 +2725,8 @@ class CanvasModel with ChangeNotifier {
     _y = 0;
     _scale = 1.0;
     _lastViewStyle = ViewStyle.defaultViewStyle();
+    _remoteCanvasMargin = 0;
+    _remoteCanvasMarginInitialized = false;
     _timerMobileFocusCanvasCursor?.cancel();
     _timerMobileRestoreCanvasOffset?.cancel();
     _offsetBeforeMobileSoftKeyboard = null;
@@ -3230,7 +3251,8 @@ class CursorModel with ChangeNotifier {
         dx = min(dx, maxCursorCanMove);
       }
     } else if (dx < 0) {
-      final maxCanvasCanMove = (displayRect?.left ?? 0) - r.left.roundToDouble();
+      final maxCanvasCanMove =
+          (displayRect?.left ?? 0) - r.left.roundToDouble();
       tryMoveCanvasX = _x + dx < cx && maxCanvasCanMove < 0;
       if (tryMoveCanvasX) {
         dx = max(dx, maxCanvasCanMove);

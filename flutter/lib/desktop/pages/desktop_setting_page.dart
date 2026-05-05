@@ -13,7 +13,6 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
-import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
@@ -1813,21 +1812,25 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget remoteCanvasMargin(BuildContext context) {
-    final canvasModel = Provider.of<CanvasModel>(context, listen: false);
     onChanged(double value) async {
-      await canvasModel.setRemoteCanvasMargin(value);
+      final normalizedValue = value.clamp(0, 400).round();
+      await bind.mainSetUserDefaultOption(
+          key: kOptionRemoteCanvasMargin, value: normalizedValue.toString());
       setState(() {});
     }
 
-    final currentValue = canvasModel.remoteCanvasMargin;
+    final currentValue = (double.tryParse(bind.mainGetUserDefaultOption(
+                key: kOptionRemoteCanvasMargin)) ??
+            0)
+        .clamp(0, 400)
+        .toDouble();
 
-    return _Card(title: 'Remote canvas margin', children: [
+    return _Card(title: 'canvas_margin', children: [
       EdgeThicknessControl(
         value: currentValue,
         min: 0,
         max: 400,
-        onChanged:
-            isOptionFixed(kOptionRemoteCanvasMargin) ? null : onChanged,
+        onChanged: onChanged,
       ),
     ]);
   }
