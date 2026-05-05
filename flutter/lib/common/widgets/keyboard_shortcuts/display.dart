@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../../../consts.dart';
 import '../../../models/platform_model.dart';
+import 'shortcut_utils.dart';
 
 /// Read the bindings JSON and produce a human-readable shortcut string for
 /// `actionId`, formatted for the current OS. Returns null if unbound, or —
@@ -44,7 +45,7 @@ class ShortcutDisplay {
     // would press it expecting the local action and instead the keys would go
     // to the remote. Treat as unbound for display purposes.
     if (requireEnabled && parsed['pass_through'] == true) return null;
-    final list = (parsed['bindings'] as List? ?? []).cast<Map<String, dynamic>>();
+    final list = shortcutBindingMapsFrom(parsed['bindings']);
     final found = list.firstWhere(
       (b) => b['action'] == actionId,
       orElse: () => {},

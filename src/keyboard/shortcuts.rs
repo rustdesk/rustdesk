@@ -2,6 +2,7 @@
 
 use std::sync::{Arc, RwLock};
 
+use hbb_common::log;
 use serde::{Deserialize, Serialize};
 
 const LOCAL_CONFIG_KEY: &str = "keyboard-shortcuts";
@@ -255,20 +256,35 @@ pub fn reload_from_config() {
     let parsed = if raw.is_empty() {
         Bindings::default()
     } else {
-        serde_json::from_str(&raw).unwrap_or_default()
+        match serde_json::from_str(&raw) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                log::warn!("Failed to parse keyboard shortcut config: {}", e);
+                Bindings::default()
+            }
+        }
     };
-    if let Ok(mut w) = CACHE.write() {
-        *w = Arc::new(parsed);
+    match CACHE.write() {
+        Ok(mut w) => {
+            *w = Arc::new(parsed);
+        }
+        Err(poison) => {
+            log::error!("Keyboard shortcut cache write lock is poisoned");
+            *poison.into_inner() = Arc::new(parsed);
+        }
     }
 }
 
 /// Snapshot of the currently cached bindings. Cheap (one atomic increment) —
 /// safe to call on every keystroke.
 pub fn current() -> Arc<Bindings> {
-    CACHE
-        .read()
-        .map(|b| Arc::clone(&b))
-        .unwrap_or_else(|_| Arc::new(Bindings::default()))
+    match CACHE.read() {
+        Ok(b) => Arc::clone(&b),
+        Err(poison) => {
+            log::error!("Keyboard shortcut cache read lock is poisoned");
+            Arc::clone(&poison.into_inner())
+        }
+    }
 }
 
 /// Match an `rdev::Event` against the cached bindings. Returns the matched

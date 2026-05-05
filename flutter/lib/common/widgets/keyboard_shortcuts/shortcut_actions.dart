@@ -229,6 +229,10 @@ List<KeyboardShortcutActionGroup> filterKeyboardShortcutActionGroupsForPlatform(
     if (!cap.includeScreenshotShortcut && id == kShortcutActionScreenshot) {
       return false;
     }
+    if (!cap.includeScreenshotShortcut &&
+        id == kShortcutActionToggleRelativeMouseMode) {
+      return false;
+    }
     if (!cap.includeTabShortcuts && isSwitchTabShortcutAction(id)) return false;
     if (!cap.includeToolbarShortcut && id == kShortcutActionToggleToolbar) {
       return false;
