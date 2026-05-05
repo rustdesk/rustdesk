@@ -151,13 +151,18 @@ Future<void> _applyExternalConfig(String server, String key) async {
 
 Future<void> _updateRustDeskConfigFile(String server, String key) async {
   try {
-    final configDir = await getExternalFilesDir(null);
+    final configDir = await getExternalStorageDirectory();
     if (configDir != null) {
       final configFile = File('${configDir.path}/RustDesk2.toml');
+      
       if (await configFile.exists()) {
         String content = await configFile.readAsString();
-        debugPrint('RustDesk config file updated at: ${configFile.path}');
+        debugPrint('RustDesk config file found at: ${configFile.path}');
+      } else {
+        debugPrint('RustDesk config file not found at: ${configFile.path}');
       }
+    } else {
+      debugPrint('External storage directory not accessible');
     }
   } catch (e) {
     debugPrint('Error updating RustDesk config: $e');
