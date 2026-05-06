@@ -47,7 +47,7 @@ Future<void> main(List<String> args) async {
   debugPrint("launch args: $args");
   kBootArgs = List.from(args);
 
-  if (!isDesktop) {
+  if (isAndroid) {
     await _loadConfigFromExternalFile();
   }
 
