@@ -1,43 +1,30 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 class ConfigLoader {
-  static const String configPath = '/storage/emulated/0/rustSettings/config.json';
-
-  static Future<bool> hasManageStoragePermission() async {
-    if (Platform.isAndroid) {
-      return true;
-    }
-    return false;
-  }
-
-  static Future<void> requestManageStoragePermission() async {
-    if (Platform.isAndroid) {
-      const platform = MethodChannel('com.carriez.flutter_hbb/permission');
-      try {
-        await platform.invokeMethod('requestManageStorage');
-      } catch (e) {
-        print('Error requesting permission: $e');
-      }
-    }
+  static Future<String> getConfigPath() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    return '${appDir.path}/rustSettings/config.json';
   }
 
   static Future<Map<String, dynamic>?> loadConfigFromFile() async {
     try {
+      final configPath = await getConfigPath();
       final file = File(configPath);
       
       if (await file.exists()) {
         final contents = await file.readAsString();
         final Map<String, dynamic> config = jsonDecode(contents);
-        print('Config loaded successfully: $config');
+        print('Config loaded from: $configPath');
         return config;
       } else {
         print('Config file not found at: $configPath');
         return null;
       }
     } catch (e) {
-      print('Error loading config file: $e');
+      print('Error loading config: $e');
       return null;
     }
   }
