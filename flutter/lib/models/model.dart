@@ -2226,14 +2226,16 @@ class CanvasModel with ChangeNotifier {
     }
     final sessionValue = await bind.sessionGetFlutterOption(
         sessionId: sessionId, k: kOptionRemoteCanvasMargin);
+    if (_remoteCanvasMarginInitialized || !supportsRemoteCanvasMargin) {
+      return;
+    }
     final defaultValue =
         bind.mainGetUserDefaultOption(key: kOptionRemoteCanvasMargin);
     final value =
         sessionValue?.isNotEmpty == true ? sessionValue : defaultValue;
-    _remoteCanvasMargin =
-        (double.tryParse(value ?? '') ?? 0)
-            .clamp(0, kMaxRemoteCanvasMargin)
-            .toDouble();
+    _remoteCanvasMargin = (double.tryParse(value ?? '') ?? 0)
+        .clamp(0, kMaxRemoteCanvasMargin)
+        .toDouble();
     _remoteCanvasMarginInitialized = true;
   }
 

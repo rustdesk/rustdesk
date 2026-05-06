@@ -62,18 +62,21 @@ class CanvasCoords {
 
   static CanvasCoords fromJson(Map<String, dynamic> json) {
     final model = CanvasCoords();
-    model.x = json['x'];
-    model.y = json['y'];
-    model.scale = json['scale'];
-    model.scrollX = json['scrollX'];
-    model.scrollY = json['scrollY'];
+    model.x = (json['x'] ?? 0).toDouble();
+    model.y = (json['y'] ?? 0).toDouble();
+    model.scale = (json['scale'] ?? 1).toDouble();
+    model.scrollX = (json['scrollX'] ?? 0).toDouble();
+    model.scrollY = (json['scrollY'] ?? 0).toDouble();
     model.displayWidth = (json['displayWidth'] ?? 0).toDouble();
     model.displayHeight = (json['displayHeight'] ?? 0).toDouble();
     model.paddingX = (json['paddingX'] ?? 0).toDouble();
     model.paddingY = (json['paddingY'] ?? 0).toDouble();
     model.scrollStyle =
         ScrollStyle.fromJson(json['scrollStyle'], ScrollStyle.scrollauto);
-    model.size = Size(json['size']['w'], json['size']['h']);
+    model.size = Size(
+      (json['size']['w'] ?? 0).toDouble(),
+      (json['size']['h'] ?? 0).toDouble(),
+    );
     return model;
   }
 
@@ -1461,7 +1464,8 @@ class InputModel {
     if (e is PointerScrollEvent) {
       final rawDx = e.scrollDelta.dx;
       final rawDy = e.scrollDelta.dy;
-      final dominantDelta = rawDx.abs() > rawDy.abs() ? rawDx.abs() : rawDy.abs();
+      final dominantDelta =
+          rawDx.abs() > rawDy.abs() ? rawDx.abs() : rawDy.abs();
       final isSmooth = dominantDelta < 1;
       final nowUs = DateTime.now().microsecondsSinceEpoch;
       final dtUs = _lastWheelTsUs == 0 ? 0 : nowUs - _lastWheelTsUs;

@@ -1125,7 +1125,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       final scrollVisible = data['scrollVisible'] as bool;
       final groupValue = data['scrollStyle'] as String;
       final edgeScrollEdgeThickness =
-          (data['edgeScrollEdgeThickness'] as int?) ?? 0;
+          ((data['edgeScrollEdgeThickness'] as int?) ??
+                  EdgeThicknessControl.kMin.round())
+              .clamp(EdgeThicknessControl.kMin.round(),
+                  EdgeThicknessControl.kMax.round())
+              .toInt();
       final supportsRemoteCanvasMargin =
           data['supportsRemoteCanvasMargin'] as bool;
       final remoteCanvasMargin = data['remoteCanvasMargin'] as double;
