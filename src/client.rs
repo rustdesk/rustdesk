@@ -1745,6 +1745,9 @@ pub struct LoginConfigHandler {
     pub direct: Option<bool>,
     pub received: bool,
     switch_uuid: Option<String>,
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    switch_back_allowed: bool,
     pub save_ab_password_to_recent: bool, // true: connected with ab password
     pub other_server: Option<(String, String, String)>,
     pub custom_fps: Arc<Mutex<Option<usize>>>,
@@ -1861,6 +1864,11 @@ impl LoginConfigHandler {
 
         self.direct = None;
         self.received = false;
+        #[cfg(feature = "flutter")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            self.switch_back_allowed = false;
+        }
         self.switch_uuid = switch_uuid;
         self.adapter_luid = adapter_luid;
         self.selected_windows_session_id = None;
@@ -1872,6 +1880,23 @@ impl LoginConfigHandler {
         let is_terminal_admin = conn_type == ConnType::TERMINAL
             && std::env::var("IS_TERMINAL_ADMIN").map_or(false, |v| v == "Y");
         self.is_terminal_admin = is_terminal_admin;
+    }
+
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn allow_switch_back_once(&mut self) {
+        self.switch_back_allowed = true;
+    }
+
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn consume_switch_back_permission(&mut self) -> bool {
+        if self.switch_back_allowed {
+            self.switch_back_allowed = false;
+            true
+        } else {
+            false
+        }
     }
 
     /// Check if the client should auto login.
@@ -3377,6 +3402,36 @@ pub fn handle_login_error(
     }
 }
 
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
+    let Ok(mut conn) = crate::ipc::connect(1000, "").await else {
+        return false;
+    };
+    let uuid = uuid.to_string();
+    if conn
+        .send(&crate::ipc::Data::SwitchSidesUuid(
+            uuid.clone(),
+            id.to_owned(),
+            None,
+        ))
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    match conn.next_timeout(1000).await {
+        Ok(Some(crate::ipc::Data::SwitchSidesUuid(
+            returned_uuid,
+            returned_id,
+            Some(true),
+        ))) => {
+            returned_uuid == uuid && returned_id == id
+        }
+        _ => false,
+    }
+}
+
 /// Handle hash message sent by peer.
 /// Hash will be used for login.
 ///
@@ -3397,12 +3452,22 @@ pub async fn handle_hash(
     // Take care of password application order
 
     // switch_uuid
-    let uuid = lc.write().unwrap().switch_uuid.take();
-    if let Some(uuid) = uuid {
-        if let Ok(uuid) = uuid::Uuid::from_str(&uuid) {
-            send_switch_login_request(lc.clone(), peer, uuid).await;
-            lc.write().unwrap().password_source = Default::default();
-            return;
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let uuid = lc.write().unwrap().switch_uuid.take();
+        if let Some(uuid) = uuid {
+            if let Ok(uuid) = uuid::Uuid::from_str(&uuid) {
+                let id = lc.read().unwrap().id.clone();
+                if !consume_local_switch_sides_uuid(&id, &uuid).await {
+                    log::warn!("Ignored untrusted switch_uuid");
+                } else {
+                    lc.write().unwrap().allow_switch_back_once();
+                    send_switch_login_request(lc.clone(), peer, uuid).await;
+                    lc.write().unwrap().password_source = Default::default();
+                    return;
+                }
+            }
         }
     }
     // last password

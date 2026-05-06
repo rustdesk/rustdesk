@@ -73,9 +73,15 @@ lazy_static::lazy_static! {
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
     pub static ref AUTHED_CONNS: Arc::<Mutex<Vec<AuthedConn>>> = Default::default();
     pub static ref CONTROL_PERMISSIONS_ARRAY: Arc::<Mutex<Vec<(i32, ControlPermissions)>>> = Default::default();
-    static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
     static ref WAKELOCK_KEEP_AWAKE_OPTION: Arc::<Mutex<Option<bool>>> = Default::default();
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
+    static ref PENDING_SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -775,6 +781,8 @@ impl Connection {
                                 log::error!("Failed to start portable service from cm: {:?}", e);
                             }
                         }
+                        #[cfg(feature = "flutter")]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         ipc::Data::SwitchSidesBack => {
                             let mut misc = Misc::new();
                             misc.set_switch_back(SwitchBack::default());
@@ -2579,6 +2587,7 @@ impl Connection {
             }
         } else if let Some(message::Union::SwitchSidesResponse(_s)) = msg.union {
             #[cfg(feature = "flutter")]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lr) = _s.lr.clone().take() {
                 self.handle_login_request_without_validation(&lr).await;
                 SWITCH_SIDES_UUID
@@ -3294,8 +3303,13 @@ impl Connection {
                         }
                     }
                     #[cfg(feature = "flutter")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::SwitchSidesRequest(s)) => {
                         if let Ok(uuid) = uuid::Uuid::from_slice(&s.uuid.to_vec()[..]) {
+                            crate::server::insert_pending_switch_sides_uuid(
+                                self.lr.my_id.clone(),
+                                uuid.clone(),
+                            );
                             crate::run_me(vec![
                                 "--connect",
                                 &self.lr.my_id,
@@ -4938,11 +4952,34 @@ impl Connection {
     }
 }
 
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
     SWITCH_SIDES_UUID
         .lock()
         .unwrap()
         .insert(id, (tokio::time::Instant::now(), uuid));
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn insert_pending_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
+    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
+    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
+    uuids.insert(id, (tokio::time::Instant::now(), uuid));
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn remove_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
+    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
+    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
+    if uuids.get(id).map(|(_, stored_uuid)| stored_uuid == uuid) == Some(true) {
+        uuids.remove(id);
+        true
+    } else {
+        false
+    }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
