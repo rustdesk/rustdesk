@@ -457,7 +457,8 @@ impl Client {
         };
         let udp_nat_port = udp.1.map(|x| *x.lock().unwrap()).unwrap_or(0);
         let punch_type = if udp_nat_port > 0 { "UDP" } else { "TCP" };
-        msg_out.set_punch_hole_request(PunchHoleRequest {
+        let socket_addr_v6 = ipv6.1.clone().unwrap_or_default();
+        let make_punch_hole_request = |force_relay| PunchHoleRequest {
             id: peer.to_owned(),
             token: token.to_owned(),
             nat_type: nat_type.into(),
@@ -465,14 +466,27 @@ impl Client {
             conn_type: conn_type.into(),
             version: crate::VERSION.to_owned(),
             udp_port: udp_nat_port as _,
-            force_relay: interface.is_force_relay(),
-            socket_addr_v6: ipv6.1.unwrap_or_default(),
+            force_relay,
+            socket_addr_v6: socket_addr_v6.clone(),
             ..Default::default()
-        });
-        for i in 1..=3 {
+        };
+        msg_out.set_punch_hole_request(make_punch_hole_request(interface.is_force_relay()));
+        for i in 1..=6 {
+            if i == 4 {
+                if interface.is_force_relay() || peer_addr.port() > 0 {
+                    break;
+                }
+                log::info!(
+                    "{} punch did not return a peer address, retrying via relay, id: {}",
+                    punch_type,
+                    peer
+                );
+                msg_out.set_punch_hole_request(make_punch_hole_request(true));
+            }
+            let attempt = if i <= 3 { i } else { i - 3 };
             log::info!(
                 "#{} {} punch attempt with {}, id: {}",
-                i,
+                attempt,
                 punch_type,
                 my_addr,
                 peer
@@ -480,7 +494,7 @@ impl Client {
             socket.send(&msg_out).await?;
             // below timeout should not bigger than hbbs's connection timeout.
             if let Some(msg_in) =
-                crate::get_next_nonkeyexchange_msg(&mut socket, Some(i * 3000)).await
+                crate::get_next_nonkeyexchange_msg(&mut socket, Some(attempt * 3000)).await
             {
                 match msg_in.union {
                     Some(rendezvous_message::Union::PunchHoleResponse(ph)) => {
