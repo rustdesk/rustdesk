@@ -37,11 +37,14 @@ class _DesktopKeyboardShortcutsPageState
 
   @override
   Widget build(BuildContext context) {
+    final foregroundColor =
+        AppBarTheme.of(context).titleTextStyle?.color ?? Colors.white;
     return Scaffold(
       appBar: AppBar(
         title: Text(translate('Keyboard Shortcuts')),
         actions: [
           TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: foregroundColor),
             onPressed: () =>
                 _bodyKey.currentState?.resetToDefaultsWithConfirm(),
             icon: const Icon(Icons.restore),

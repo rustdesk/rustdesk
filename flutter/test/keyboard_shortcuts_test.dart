@@ -58,6 +58,39 @@ void main() {
         ['primary', 'ctrl', 'alt', 'shift']);
   });
 
+  test('shortcutBindingMapsFrom ignores malformed bindings', () {
+    expect(shortcutBindingMapsFrom('not a list'), isEmpty);
+
+    final bindings = shortcutBindingMapsFrom([
+      {
+        'action': kShortcutActionScreenshot,
+        'mods': ['primary'],
+        'key': 'p',
+      },
+      'bad',
+      1,
+      {
+        'action': kShortcutActionToggleMute,
+        'mods': ['alt'],
+        'key': 's',
+      },
+    ]);
+
+    expect(bindings, hasLength(2));
+    expect(bindings.map((binding) => binding['action']), [
+      kShortcutActionScreenshot,
+      kShortcutActionToggleMute,
+    ]);
+  });
+
+  test('shortcutModSetFrom ignores malformed modifiers', () {
+    expect(shortcutModSetFrom('not a list'), isEmpty);
+    expect(shortcutModSetFrom(['primary', 1, 'alt', null, 'primary']), {
+      'primary',
+      'alt',
+    });
+  });
+
   test('non-desktop defaults exclude desktop-only and tab shortcuts', () {
     final defaults = [
       {
@@ -84,6 +117,11 @@ void main() {
         'action': kShortcutActionSwitchTabNext,
         'mods': ['primary', 'alt', 'shift'],
         'key': 'right_bracket',
+      },
+      {
+        'action': kShortcutActionToggleRelativeMouseMode,
+        'mods': ['primary', 'alt', 'shift'],
+        'key': 'g',
       },
     ];
 
@@ -158,6 +196,7 @@ void main() {
     final ids = idSet(groups);
     // Desktop-only actions are stripped.
     expect(ids, isNot(contains(kShortcutActionToggleFullscreen)));
+    expect(ids, isNot(contains(kShortcutActionToggleRelativeMouseMode)));
     expect(ids, isNot(contains(kShortcutActionScreenshot)));
     expect(ids, isNot(contains(kShortcutActionToggleToolbar)));
     expect(ids, isNot(contains(kShortcutActionCloseTab)));
