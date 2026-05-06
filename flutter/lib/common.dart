@@ -862,6 +862,7 @@ class OverlayDialogManager {
               color: Theme.of(context).brightness == Brightness.light
                   ? Colors.black12
                   : Colors.black45,
+              alignment: Alignment.center,
               child: StatefulBuilder(builder: (context, setState) {
                 return Listener(
                   onPointerUp: (_) => innerClicked = true,
