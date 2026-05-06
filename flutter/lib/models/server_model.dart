@@ -298,7 +298,7 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleAudio() async {
-    if (clients.isNotEmpty) {
+    if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
     if (!_audioOk && !await AndroidPermissionManager.check(kRecordAudio)) {
@@ -316,7 +316,7 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleFile() async {
-    if (clients.isNotEmpty) {
+    if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
     if (!_fileOk &&
@@ -345,7 +345,7 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleInput() async {
-    if (clients.isNotEmpty) {
+    if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
     if (_inputOk) {
@@ -549,10 +549,19 @@ class ServerModel with ChangeNotifier {
         if (index < 0) {
           _clients.add(client);
         } else {
+          if (_clients[index].authorized) {
+            _clients[index].privacyMode = client.privacyMode;
+            notifyListeners();
+            return;
+          }
           _clients[index].authorized = true;
+          _clients[index].privacyMode = client.privacyMode;
         }
       } else {
-        if (_clients.any((c) => c.id == client.id)) {
+        final index = _clients.indexWhere((c) => c.id == client.id);
+        if (index >= 0) {
+          _clients[index].privacyMode = client.privacyMode;
+          notifyListeners();
           return;
         }
         _clients.add(client);
@@ -818,6 +827,7 @@ class Client {
   bool restart = false;
   bool recording = false;
   bool blockInput = false;
+  bool privacyMode = false;
   bool disconnected = false;
   bool fromSwitch = false;
   bool inVoiceCall = false;
@@ -846,6 +856,7 @@ class Client {
     restart = json['restart'];
     recording = json['recording'];
     blockInput = json['block_input'];
+    privacyMode = json['privacy_mode'] ?? privacyMode;
     disconnected = json['disconnected'];
     fromSwitch = json['from_switch'];
     inVoiceCall = json['in_voice_call'];
@@ -870,6 +881,7 @@ class Client {
     data['restart'] = restart;
     data['recording'] = recording;
     data['block_input'] = blockInput;
+    data['privacy_mode'] = privacyMode;
     data['disconnected'] = disconnected;
     data['from_switch'] = fromSwitch;
     data['in_voice_call'] = inVoiceCall;

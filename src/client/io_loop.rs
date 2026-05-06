@@ -1797,6 +1797,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             Ok(Permission::BlockInput) => {
                                 self.handler.set_permission("block_input", p.enabled);
                             }
+                            Ok(Permission::PrivacyMode) => {
+                                self.handler.set_permission("privacy_mode", p.enabled);
+                            }
                             _ => {}
                         }
                     }
@@ -1920,9 +1923,23 @@ impl<T: InvokeUiSession> Remote<T> {
                             );
                         }
                     }
+                    #[cfg(feature = "flutter")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::SwitchBack(_)) => {
-                        #[cfg(feature = "flutter")]
-                        self.handler.switch_back(&self.handler.get_id());
+                        let allow_switch_back = self
+                            .handler
+                            .lc
+                            .write()
+                            .unwrap()
+                            .consume_switch_back_permission();
+                        if allow_switch_back {
+                            self.handler.switch_back(&self.handler.get_id());
+                        } else {
+                            log::warn!(
+                                "Ignored unsolicited SwitchBack from {}",
+                                self.handler.get_id()
+                            );
+                        }
                     }
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]

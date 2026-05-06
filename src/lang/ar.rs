@@ -743,5 +743,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "اسم العرض"),
         ("password-hidden-tip", "كلمة المرور مخفية"),
         ("preset-password-in-use-tip", "كلمة المرور المحددة مسبقًا قيد الاستخدام"),
+        ("Enable privacy mode", ""),
     ].iter().cloned().collect();
 }

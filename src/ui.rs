@@ -372,6 +372,11 @@ impl UI {
         is_installed()
     }
 
+    fn get_supported_privacy_mode_impls(&self) -> String {
+        serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
+            .unwrap_or_default()
+    }
+
     fn is_root(&self) -> bool {
         is_root()
     }
@@ -752,6 +757,7 @@ impl sciter::EventHandler for UI {
         fn get_icon();
         fn install_me(String, String);
         fn is_installed();
+        fn get_supported_privacy_mode_impls();
         fn is_root();
         fn is_release();
         fn set_socks(String, String, String);
