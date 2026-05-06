@@ -16,43 +16,16 @@ import 'package:get/get.dart';
 
 bool isEditOsPassword = false;
 
-/// Action IDs that `toolbarControls` is the sole registrar for. Each call to
-/// `toolbarControls` (e.g. opening the toolbar menu after a permission was
-/// revoked or a state changed) wipes these so a previously-registered closure
-/// can't outlive the menu entry that owns it. The for-loop at the bottom of
-/// `toolbarControls` then re-registers whichever entries are still present in
-/// the rebuilt menu list.
-///
-/// Actions registered elsewhere — `registerSessionShortcutActions` on desktop
-/// owns toggle_recording, fullscreen, switch_display, switch_tab, close_tab,
-/// toggle_toolbar — MUST NOT appear here, otherwise this list would clobber
-/// their registration on every menu rebuild.
-///
-/// `kShortcutActionToggleRecording` is platform-conditional (mobile-only —
-/// see the `!(isDesktop || isWeb)` guard in `toolbarControls`). It is handled
-/// separately in the unregister pass rather than appearing in this const list.
-const _kToolbarOwnedActionIds = <String>[
-  kShortcutActionSendCtrlAltDel,
-  kShortcutActionRestartRemote,
-  kShortcutActionInsertLock,
-  kShortcutActionToggleBlockInput,
-  kShortcutActionSwitchSides,
-  kShortcutActionRefresh,
-  kShortcutActionScreenshot,
-];
-
 class TTextMenu {
   final Widget child;
   final VoidCallback? onPressed;
   Widget? trailingIcon;
   bool divider;
-  final String? actionId;
   TTextMenu(
       {required this.child,
       required this.onPressed,
       this.trailingIcon,
-      this.divider = false,
-      this.actionId});
+      this.divider = false});
 
   Widget getChild() {
     if (trailingIcon != null) {
@@ -120,20 +93,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   final perms = ffiModel.permissions;
   final sessionId = ffi.sessionId;
   final isDefaultConn = ffi.connType == ConnType.defaultConn;
-
-  // Wipe everything `toolbarControls` could have registered last call so
-  // stale closures (e.g. for a menu entry whose permission has since been
-  // revoked) don't outlive the menu rebuild. See _kToolbarOwnedActionIds.
-  for (final actionId in _kToolbarOwnedActionIds) {
-    ffi.shortcutModel.unregister(actionId);
-  }
-  // toggle_recording is platform-conditional — toolbarControls only builds
-  // the menu entry on `!(isDesktop || isWeb)`. On desktop the registration
-  // is owned by `registerSessionShortcutActions` and must NOT be touched
-  // here. See the recording menu entry below.
-  if (!(isDesktop || isWeb)) {
-    ffi.shortcutModel.unregister(kShortcutActionToggleRecording);
-  }
 
   List<TTextMenu> v = [];
   // elevation
@@ -270,8 +229,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(
       TTextMenu(
           child: Text('${translate("Insert Ctrl + Alt + Del")}'),
-          onPressed: () => bind.sessionCtrlAltDel(sessionId: sessionId),
-          actionId: kShortcutActionSendCtrlAltDel),
+          onPressed: () => bind.sessionCtrlAltDel(sessionId: sessionId)),
     );
   }
   // restart
@@ -284,8 +242,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       TTextMenu(
           child: Text(translate('Restart remote device')),
           onPressed: () =>
-              showRestartRemoteDevice(pi, id, sessionId, ffi.dialogManager),
-          actionId: kShortcutActionRestartRemote),
+              showRestartRemoteDevice(pi, id, sessionId, ffi.dialogManager)),
     );
   }
   // insertLock
@@ -293,8 +250,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(
       TTextMenu(
           child: Text(translate('Insert Lock')),
-          onPressed: () => bind.sessionLockScreen(sessionId: sessionId),
-          actionId: kShortcutActionInsertLock),
+          onPressed: () => bind.sessionLockScreen(sessionId: sessionId)),
     );
   }
   // blockUserInput
@@ -312,8 +268,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
               sessionId: sessionId,
               value: '${blockInput.value ? 'un' : ''}block-input');
           blockInput.value = !blockInput.value;
-        },
-        actionId: kShortcutActionToggleBlockInput));
+        }));
   }
   // switchSides
   if (isDefaultConn &&
@@ -325,15 +280,13 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(TTextMenu(
         child: Text(translate('Switch Sides')),
         onPressed: () =>
-            showConfirmSwitchSidesDialog(sessionId, id, ffi.dialogManager),
-        actionId: kShortcutActionSwitchSides));
+            showConfirmSwitchSidesDialog(sessionId, id, ffi.dialogManager)));
   }
   // refresh
   if (pi.version.isNotEmpty) {
     v.add(TTextMenu(
       child: Text(translate('Refresh')),
       onPressed: () => sessionRefreshVideo(sessionId, pi),
-      actionId: kShortcutActionRefresh,
     ));
   }
   // record
@@ -355,8 +308,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
             )
           ],
         ),
-        onPressed: () => ffi.recordingModel.toggle(),
-        actionId: kShortcutActionToggleRecording));
+        onPressed: () => ffi.recordingModel.toggle()));
   }
 
   // to-do:
@@ -373,14 +325,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         onPressed: ffi.ffiModel.timerScreenshot != null
             ? null
             : () {
-                // Live cooldown check: the menu rebuilds onPressed=null
-                // whenever toolbarControls runs and finds timerScreenshot
-                // != null, but the keyboard-shortcut callback holds onto
-                // the originally-enabled closure across cooldown periods
-                // (toolbarControls only re-runs on menu open). Without
-                // this guard the second shortcut press during the 30s
-                // cooldown still fires sessionTakeScreenshot.
-                if (ffi.ffiModel.timerScreenshot != null) return;
                 if (pi.currentDisplay == kAllDisplayValue) {
                   msgBox(
                       sessionId,
@@ -398,7 +342,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
                   });
                 }
               },
-        actionId: kShortcutActionScreenshot,
       ));
     }
   }
@@ -408,28 +351,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       child: Text(translate('Copy Fingerprint')),
       onPressed: () => onCopyFingerprint(FingerprintState.find(id).value),
     ));
-  }
-  // Register tagged callbacks with the shortcut model so global keyboard
-  // shortcuts can dispatch the same actions as the toolbar menu items.
-  //
-  // For action IDs already cleared at the top of this function (i.e. those
-  // in [_kToolbarOwnedActionIds] plus the conditional toggle_recording),
-  // the `else` branch below is a redundant idempotent no-op — `unregister`
-  // just calls `Map.remove` on something already absent.
-  //
-  // The branch is kept as **defense in depth** for the case where a future
-  // contributor tags a menu item with an actionId that they forget to add
-  // to [_kToolbarOwnedActionIds]: without this `else`, the original
-  // "stale-closure-outlives-disabled-state" bug (e.g. Screenshot cooldown
-  // bypass) would silently come back for that new action only.
-  for (final menu in v) {
-    final actionId = menu.actionId;
-    if (actionId == null) continue;
-    if (menu.onPressed != null) {
-      ffi.shortcutModel.register(actionId, menu.onPressed!);
-    } else {
-      ffi.shortcutModel.unregister(actionId);
-    }
   }
   return v;
 }
