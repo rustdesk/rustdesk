@@ -941,6 +941,7 @@ class _DisplayMenu extends StatefulWidget {
 
 class _DisplayMenuState extends State<_DisplayMenu> {
   final RxInt _customPercent = 100.obs;
+  double? _remoteCanvasMarginPreview;
   late final ScreenAdjustor _screenAdjustor = ScreenAdjustor(
     id: widget.id,
     ffi: widget.ffi,
@@ -1132,7 +1133,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               .toInt();
       final supportsRemoteCanvasMargin =
           data['supportsRemoteCanvasMargin'] as bool;
-      final remoteCanvasMargin = data['remoteCanvasMargin'] as double;
+      final savedRemoteCanvasMargin = data['remoteCanvasMargin'] as double;
+      final remoteCanvasMargin =
+          (_remoteCanvasMarginPreview ?? savedRemoteCanvasMargin)
+              .clamp(0, kMaxRemoteCanvasMargin)
+              .toDouble();
       final hasVisibleControls = scrollVisible || supportsRemoteCanvasMargin;
 
       if (!hasVisibleControls) {
@@ -1158,7 +1163,16 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
       onChangeRemoteCanvasMargin(double? value) async {
         if (value == null) return;
+        _remoteCanvasMarginPreview =
+            value.clamp(0, kMaxRemoteCanvasMargin).toDouble();
+        state.setState(() {});
+      }
+
+      onChangeRemoteCanvasMarginEnd(double value) async {
+        _remoteCanvasMarginPreview =
+            value.clamp(0, kMaxRemoteCanvasMargin).toDouble();
         await widget.ffi.canvasModel.setRemoteCanvasMargin(value);
+        _remoteCanvasMarginPreview = null;
         state.setState(() {});
       }
 
@@ -1217,6 +1231,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                     min: 0,
                     max: kMaxRemoteCanvasMargin,
                     onChanged: onChangeRemoteCanvasMargin,
+                    onChangeEnd: onChangeRemoteCanvasMarginEnd,
                     colorScheme: colorScheme,
                   ),
                 ),
@@ -2796,6 +2811,7 @@ Widget _buildPointerTrackWidget(Widget child, FFI? ffi) {
 class EdgeThicknessControl extends StatelessWidget {
   final double value;
   final ValueChanged<double>? onChanged;
+  final ValueChanged<double>? onChangeEnd;
   final ColorScheme? colorScheme;
   final double min;
   final double max;
@@ -2805,6 +2821,7 @@ class EdgeThicknessControl extends StatelessWidget {
     Key? key,
     required this.value,
     this.onChanged,
+    this.onChangeEnd,
     this.colorScheme,
     this.min = kMin,
     this.max = kMax,
@@ -2843,6 +2860,7 @@ class EdgeThicknessControl extends StatelessWidget {
           semanticFormatterCallback: (double newValue) =>
               "${newValue.round()}$unit",
           onChanged: onChanged,
+          onChangeEnd: onChangeEnd,
         ),
       ),
     );

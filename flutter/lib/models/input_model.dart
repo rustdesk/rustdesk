@@ -73,9 +73,10 @@ class CanvasCoords {
     model.paddingY = (json['paddingY'] ?? 0).toDouble();
     model.scrollStyle =
         ScrollStyle.fromJson(json['scrollStyle'], ScrollStyle.scrollauto);
+    final sizeMap = json['size'];
     model.size = Size(
-      (json['size']['w'] ?? 0).toDouble(),
-      (json['size']['h'] ?? 0).toDouble(),
+      (sizeMap?['w'] ?? 0).toDouble(),
+      (sizeMap?['h'] ?? 0).toDouble(),
     );
     return model;
   }
