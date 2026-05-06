@@ -851,24 +851,26 @@ class OverlayDialogManager {
 
     dialog.entry = OverlayEntry(builder: (context) {
       bool innerClicked = false;
-      return Listener(
-          onPointerUp: (_) {
-            if (!innerClicked && clickMaskDismiss) {
-              close();
-            }
-            innerClicked = false;
-          },
-          child: Container(
-              color: Theme.of(context).brightness == Brightness.light
-                  ? Colors.black12
-                  : Colors.black45,
-              alignment: Alignment.center,
-              child: StatefulBuilder(builder: (context, setState) {
-                return Listener(
-                  onPointerUp: (_) => innerClicked = true,
-                  child: builder(setState, close, overlayState.context),
-                );
-              })));
+      return Positioned.fill(
+        child: Listener(
+            onPointerUp: (_) {
+              if (!innerClicked && clickMaskDismiss) {
+                close();
+              }
+              innerClicked = false;
+            },
+            child: Container(
+                color: Theme.of(context).brightness == Brightness.light
+                    ? Colors.black12
+                    : Colors.black45,
+                alignment: Alignment.center,
+                child: StatefulBuilder(builder: (context, setState) {
+                  return Listener(
+                    onPointerUp: (_) => innerClicked = true,
+                    child: builder(setState, close, overlayState.context),
+                  );
+                }))),
+      );
     });
     overlayState.insert(dialog.entry!);
     BackButtonInterceptor.add((stopDefaultButtonEvent, routeInfo) {
