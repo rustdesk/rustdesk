@@ -2196,13 +2196,20 @@ class CanvasModel with ChangeNotifier {
   Rect? get realRect => parent.target?.ffiModel.rect;
 
   double get remoteCanvasMargin {
-    if (!(isDesktop || isWebDesktop)) {
+    if (!supportsRemoteCanvasMargin) {
       return 0;
     }
     return _remoteCanvasMargin;
   }
 
+  bool get supportsRemoteCanvasMargin =>
+      (isDesktop || isWebDesktop) &&
+      parent.target?.connType == ConnType.defaultConn;
+
   Future<void> setRemoteCanvasMargin(double value) async {
+    if (!supportsRemoteCanvasMargin) {
+      return;
+    }
     final normalizedValue = value.clamp(0, 400).round();
     await bind.sessionSetFlutterOption(
         sessionId: sessionId,
@@ -2214,7 +2221,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   Future<void> initializeRemoteCanvasMargin() async {
-    if (_remoteCanvasMarginInitialized || !(isDesktop || isWebDesktop)) {
+    if (_remoteCanvasMarginInitialized || !supportsRemoteCanvasMargin) {
       return;
     }
     final sessionValue = await bind.sessionGetFlutterOption(
@@ -3284,6 +3291,8 @@ class CursorModel with ChangeNotifier {
     }
 
     if (dx == 0 && dy == 0) return;
+    final canvasDx = dx;
+    final canvasDy = dy;
 
     Point<double>? newPos;
     final rect = parent.target?.ffiModel.rect;
@@ -3301,17 +3310,23 @@ class CursorModel with ChangeNotifier {
         rect,
         buttons: kPrimaryButton);
     if (newPos == null) {
+      if (tryMoveCanvasX && canvasDx != 0) {
+        parent.target?.canvasModel.panX(-canvasDx * scale);
+      }
+      if (tryMoveCanvasY && canvasDy != 0) {
+        parent.target?.canvasModel.panY(-canvasDy * scale);
+      }
       return;
     }
     dx = newPos.x - _x;
     dy = newPos.y - _y;
     _x = newPos.x;
     _y = newPos.y;
-    if (tryMoveCanvasX && dx != 0) {
-      parent.target?.canvasModel.panX(-dx * scale);
+    if (tryMoveCanvasX && canvasDx != 0) {
+      parent.target?.canvasModel.panX(-canvasDx * scale);
     }
-    if (tryMoveCanvasY && dy != 0) {
-      parent.target?.canvasModel.panY(-dy * scale);
+    if (tryMoveCanvasY && canvasDy != 0) {
+      parent.target?.canvasModel.panY(-canvasDy * scale);
     }
 
     parent.target?.inputModel.moveMouse(_x, _y);

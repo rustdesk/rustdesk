@@ -1108,19 +1108,26 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           viewStyle == kRemoteViewStyleCustom;
       final scrollStyle =
           await bind.sessionGetScrollStyle(sessionId: ffi.sessionId) ?? '';
-      final edgeScrollEdgeThickness = await bind
-          .sessionGetEdgeScrollEdgeThickness(sessionId: ffi.sessionId);
+      final edgeScrollEdgeThickness = scrollVisible
+          ? await bind.sessionGetEdgeScrollEdgeThickness(
+              sessionId: ffi.sessionId)
+          : null;
       await widget.ffi.canvasModel.initializeRemoteCanvasMargin();
       return {
         'scrollVisible': scrollVisible,
         'scrollStyle': scrollStyle,
         'edgeScrollEdgeThickness': edgeScrollEdgeThickness,
+        'supportsRemoteCanvasMargin':
+            widget.ffi.canvasModel.supportsRemoteCanvasMargin,
         'remoteCanvasMargin': widget.ffi.canvasModel.remoteCanvasMargin,
       };
     }(), hasData: (data) {
       final scrollVisible = data['scrollVisible'] as bool;
       final groupValue = data['scrollStyle'] as String;
-      final edgeScrollEdgeThickness = data['edgeScrollEdgeThickness'] as int;
+      final edgeScrollEdgeThickness =
+          (data['edgeScrollEdgeThickness'] as int?) ?? 0;
+      final supportsRemoteCanvasMargin =
+          data['supportsRemoteCanvasMargin'] as bool;
       final remoteCanvasMargin = data['remoteCanvasMargin'] as double;
 
       onChangeScrollStyle(String? value) async {
@@ -1188,24 +1195,26 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                 )),
           ],
         ],
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              Expanded(child: Text(translate('canvas_margin'))),
-              SizedBox(
-                width: 160,
-                child: EdgeThicknessControl(
-                  value: remoteCanvasMargin,
-                  min: 0,
-                  max: 400,
-                  onChanged: onChangeRemoteCanvasMargin,
-                  colorScheme: colorScheme,
+        if (supportsRemoteCanvasMargin) ...[
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Expanded(child: Text(translate('canvas_margin'))),
+                SizedBox(
+                  width: 160,
+                  child: EdgeThicknessControl(
+                    value: remoteCanvasMargin,
+                    min: 0,
+                    max: 400,
+                    onChanged: onChangeRemoteCanvasMargin,
+                    colorScheme: colorScheme,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
         Divider(),
       ]);
     });
