@@ -7,7 +7,6 @@ import 'package:uuid/uuid.dart';
 import 'dart:html' as html;
 
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/common.dart' as common;
 
 final _privateConstructorUsedError = UnsupportedError(
     'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
@@ -931,21 +930,6 @@ class RustdeskImpl {
         ]));
   }
 
-  // Tell the JS-side matcher (flutter/web/js/src/shortcut_matcher.ts) to
-  // re-read its bindings from LocalStorage. Mirrors the native call which
-  // refreshes the Rust matcher's in-memory cache.
-  void mainReloadKeyboardShortcuts({dynamic hint}) {
-    js.context.callMethod('reloadShortcuts', []);
-  }
-
-  // Web has no Rust at runtime, so the defaults seed comes from the
-  // [kDefaultShortcutBindings] canonical in shortcut_constants.dart. Parity
-  // with Rust's `default_bindings()` is enforced by tests on both sides
-  // against `flutter/test/fixtures/default_keyboard_shortcuts.json`.
-  String mainGetDefaultKeyboardShortcuts({dynamic hint}) {
-    return jsonEncode(kDefaultShortcutBindings);
-  }
-
   String mainGetInputSource({dynamic hint}) {
     final inputSource =
         js.context.callMethod('getByName', ['option:local', 'input-source']);
@@ -1192,15 +1176,6 @@ class RustdeskImpl {
   }
 
   Future<void> mainInit({required String appDir, dynamic hint}) {
-    // JS -> Dart shortcut bridge. The matcher in flutter/web/js/src/
-    // shortcut_matcher.ts calls `window.onShortcutTriggered(actionId)` when a
-    // binding fires; route it to the active session's ShortcutModel.
-    // Web is single-window so `gFFI` is always the active session.
-    js.context['onShortcutTriggered'] = (dynamic action) {
-      if (action is String) {
-        common.gFFI.shortcutModel.onTriggered(action);
-      }
-    };
     return Future.value();
   }
 
