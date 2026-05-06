@@ -1,9 +1,9 @@
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _maxRemoteCanvasMargin = 400.0;
 const _nearEdgeThreshold = 3.0;
 
 // Minimal test fixtures for the pure canvas-margin math. These intentionally
@@ -25,11 +25,11 @@ class CanvasCoords {
 }
 
 double clampMargin(double value) {
-  return min(_maxRemoteCanvasMargin, max(0, value));
+  return min(kMaxRemoteCanvasMargin, max(0.0, value));
 }
 
 int normalizeMarginForStorage(double value) {
-  return value.clamp(0, _maxRemoteCanvasMargin).round();
+  return value.clamp(0, kMaxRemoteCanvasMargin).round();
 }
 
 Rect? computePaddedRect(Rect? realRect, double margin) {
@@ -142,11 +142,11 @@ void main() {
     test('clamps and normalizes margin values', () {
       expect(clampMargin(-10), 0);
       expect(clampMargin(50), 50);
-      expect(clampMargin(999), _maxRemoteCanvasMargin);
+      expect(clampMargin(999), kMaxRemoteCanvasMargin);
 
       expect(normalizeMarginForStorage(50.7), 51);
       expect(normalizeMarginForStorage(-5), 0);
-      expect(normalizeMarginForStorage(999), _maxRemoteCanvasMargin.toInt());
+      expect(normalizeMarginForStorage(999), kMaxRemoteCanvasMargin.toInt());
     });
 
     test('expands remote rect and derives display padding', () {

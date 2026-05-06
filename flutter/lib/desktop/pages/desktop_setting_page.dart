@@ -1813,7 +1813,7 @@ class _DisplayState extends State<_Display> {
 
   Widget remoteCanvasMargin(BuildContext context) {
     onChanged(double value) async {
-      final normalizedValue = value.clamp(0, 400).round();
+      final normalizedValue = value.clamp(0, kMaxRemoteCanvasMargin).round();
       await bind.mainSetUserDefaultOption(
           key: kOptionRemoteCanvasMargin, value: normalizedValue.toString());
       setState(() {});
@@ -1822,14 +1822,14 @@ class _DisplayState extends State<_Display> {
     final currentValue = (double.tryParse(bind.mainGetUserDefaultOption(
                 key: kOptionRemoteCanvasMargin)) ??
             0)
-        .clamp(0, 400)
+        .clamp(0, kMaxRemoteCanvasMargin)
         .toDouble();
 
     return _Card(title: 'canvas_margin', children: [
       EdgeThicknessControl(
         value: currentValue,
         min: 0,
-        max: 400,
+        max: kMaxRemoteCanvasMargin,
         onChanged: onChanged,
       ),
     ]);

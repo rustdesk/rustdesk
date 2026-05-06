@@ -1129,6 +1129,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       final supportsRemoteCanvasMargin =
           data['supportsRemoteCanvasMargin'] as bool;
       final remoteCanvasMargin = data['remoteCanvasMargin'] as double;
+      final hasVisibleControls = scrollVisible || supportsRemoteCanvasMargin;
+
+      if (!hasVisibleControls) {
+        return SizedBox.shrink();
+      }
 
       onChangeScrollStyle(String? value) async {
         if (value == null) return;
@@ -1206,7 +1211,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                   child: EdgeThicknessControl(
                     value: remoteCanvasMargin,
                     min: 0,
-                    max: 400,
+                    max: kMaxRemoteCanvasMargin,
                     onChanged: onChangeRemoteCanvasMargin,
                     colorScheme: colorScheme,
                   ),

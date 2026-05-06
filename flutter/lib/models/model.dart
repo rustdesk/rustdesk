@@ -2210,7 +2210,7 @@ class CanvasModel with ChangeNotifier {
     if (!supportsRemoteCanvasMargin) {
       return;
     }
-    final normalizedValue = value.clamp(0, 400).round();
+    final normalizedValue = value.clamp(0, kMaxRemoteCanvasMargin).round();
     await bind.sessionSetFlutterOption(
         sessionId: sessionId,
         k: kOptionRemoteCanvasMargin,
@@ -2231,7 +2231,9 @@ class CanvasModel with ChangeNotifier {
     final value =
         sessionValue?.isNotEmpty == true ? sessionValue : defaultValue;
     _remoteCanvasMargin =
-        (double.tryParse(value ?? '') ?? 0).clamp(0, 400).toDouble();
+        (double.tryParse(value ?? '') ?? 0)
+            .clamp(0, kMaxRemoteCanvasMargin)
+            .toDouble();
     _remoteCanvasMarginInitialized = true;
   }
 
@@ -3322,11 +3324,13 @@ class CursorModel with ChangeNotifier {
     dy = newPos.y - _y;
     _x = newPos.x;
     _y = newPos.y;
-    if (tryMoveCanvasX && canvasDx != 0) {
-      parent.target?.canvasModel.panX(-canvasDx * scale);
+    final panDx = dx != 0 ? dx : canvasDx;
+    final panDy = dy != 0 ? dy : canvasDy;
+    if (tryMoveCanvasX && panDx != 0) {
+      parent.target?.canvasModel.panX(-panDx * scale);
     }
-    if (tryMoveCanvasY && canvasDy != 0) {
-      parent.target?.canvasModel.panY(-canvasDy * scale);
+    if (tryMoveCanvasY && panDy != 0) {
+      parent.target?.canvasModel.panY(-panDy * scale);
     }
 
     parent.target?.inputModel.moveMouse(_x, _y);
