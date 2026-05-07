@@ -1576,7 +1576,8 @@ bool option2bool(String option, String value) {
   } else if (option.startsWith("allow-") ||
       option == kOptionStopService ||
       option == kOptionDirectServer ||
-      option == kOptionForceAlwaysRelay) {
+      option == kOptionForceAlwaysRelay ||
+      option == kOptionLocalActivityRecording) {
     res = value == "Y";
   } else {
     // "" is true

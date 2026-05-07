@@ -4642,6 +4642,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 
 [[package]]
+name = "local_recorder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hbb_common",
+ "openssl",
+ "scrap",
+ "time 0.3.36",
+ "uuid",
+ "webm",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7320,6 +7333,7 @@ dependencies = [
  "libpulse-binding",
  "libpulse-simple-binding",
  "libxdo-sys",
+ "local_recorder",
  "mac_address",
  "magnum-opus",
  "nix 0.29.0",

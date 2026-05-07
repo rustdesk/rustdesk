@@ -1491,6 +1491,22 @@ class RustdeskImpl {
     throw UnimplementedError("mainIsCanScreenRecording");
   }
 
+  String mainLocalActivityRecordingStart({dynamic hint}) {
+    return "error:unsupported-platform";
+  }
+
+  String mainLocalActivityRecordingStop({dynamic hint}) {
+    return "disabled";
+  }
+
+  String mainLocalActivityRecordingRetry({dynamic hint}) {
+    return "error:unsupported-platform";
+  }
+
+  String mainLocalActivityRecordingStatus({dynamic hint}) {
+    return "error:unsupported-platform";
+  }
+
   bool mainIsCanInputMonitoring({required bool prompt, dynamic hint}) {
     throw UnimplementedError("mainIsCanInputMonitoring");
   }

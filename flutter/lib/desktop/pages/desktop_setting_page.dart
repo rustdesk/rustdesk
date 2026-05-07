@@ -707,6 +707,51 @@ class _GeneralState extends State<_General> {
           _OptionCheckBox(context, 'Automatically record outgoing sessions',
               kOptionAllowAutoRecordOutgoing,
               isServer: false),
+        Builder(builder: (context) {
+          final status = bind.mainLocalActivityRecordingStatus();
+          final enabled = status == 'waiting' ||
+              status == 'recording' ||
+              status.startsWith('paused');
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CheckboxListTile(
+                value: enabled,
+                contentPadding: EdgeInsets.zero,
+                title: Text(translate('Local activity recording')),
+                subtitle: Text(_localActivityRecordingStatusText(status)),
+                onChanged: isOptionFixed(kOptionLocalActivityRecording)
+                    ? null
+                    : (value) async {
+                        if (value == true) {
+                          final confirmed = await _confirmLocalActivityRecording(context);
+                          if (!confirmed) return;
+                          await bind.mainSetLocalOption(
+                              key: kOptionLocalActivityRecording, value: 'Y');
+                          bind.mainLocalActivityRecordingStart();
+                        } else {
+                          bind.mainLocalActivityRecordingStop();
+                          await bind.mainSetLocalOption(
+                              key: kOptionLocalActivityRecording, value: 'N');
+                        }
+                        setState(() {});
+                      },
+              ),
+              if (status.startsWith('paused') || status.startsWith('error'))
+                Row(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () async {
+                        bind.mainLocalActivityRecordingRetry();
+                        setState(() {});
+                      },
+                      child: Text(translate('Retry')),
+                    ),
+                  ],
+                ).marginOnly(left: _kContentHMargin),
+            ],
+          );
+        }),
         if (showRootDir && !bind.isOutgoingOnly())
           Row(
             children: [
@@ -773,6 +818,53 @@ class _GeneralState extends State<_General> {
           ).marginOnly(left: _kContentHMargin),
       ]);
     });
+  }
+
+  String _localActivityRecordingStatusText(String status) {
+    if (status == 'recording') {
+      return translate('Recording local screen while local activity is detected.');
+    }
+    if (status == 'waiting') {
+      return translate('Enabled. Recording starts after local keyboard or mouse activity.');
+    }
+    if (status.startsWith('paused:permission-denied')) {
+      return translate('Paused. Grant screen recording permission, then retry.');
+    }
+    if (status.startsWith('paused:storage-error')) {
+      return translate('Paused. Check disk space or the recording folder, then retry.');
+    }
+    if (status.startsWith('paused:concurrent-remote-capture')) {
+      return translate('Paused during a remote session. Retry after the session ends.');
+    }
+    if (status.startsWith('error:unsupported-platform')) {
+      return translate('Local activity recording is not supported on this platform.');
+    }
+    if (status.startsWith('paused') || status.startsWith('error')) {
+      return translate('Recording is paused. Fix the issue, then retry.');
+    }
+    return translate('Off. No local screen recording will occur.');
+  }
+
+  Future<bool> _confirmLocalActivityRecording(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(translate('Enable local activity recording?')),
+        content: Text(translate(
+            '当检测到键盘或鼠标活动时，RustDesk将记录本地屏幕内容。输入内容未被存储。文件保留在此计算机上，使用保留限制，在此版本中不加密。')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(translate('Cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(translate('Enable')),
+          ),
+        ],
+      ),
+    );
+    return result == true;
   }
 
   Widget language() {

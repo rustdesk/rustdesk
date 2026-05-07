@@ -21,12 +21,14 @@ use hbb_common::{
     rendezvous_proto::ConnType,
     ResultType,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use local_recorder::{LocalRecorderConfig, LocalRecorderService, RecorderState, StatusReason};
 use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{
         atomic::{AtomicI32, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::{Duration, SystemTime},
 };
@@ -35,6 +37,8 @@ pub type SessionID = uuid::Uuid;
 
 lazy_static::lazy_static! {
     static ref TEXTURE_RENDER_KEY: Arc<AtomicI32> = Arc::new(AtomicI32::new(0));
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    static ref LOCAL_RECORDER_SERVICE: Mutex<Option<LocalRecorderService>> = Mutex::new(None);
 }
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
@@ -80,6 +84,7 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     {
         // core_main's init_log does not work for flutter since it is only applied to its load_library in main.c
         hbb_common::init_log(false, "flutter_ffi");
+        start_local_activity_recording_if_enabled();
     }
 }
 
@@ -309,6 +314,121 @@ pub fn session_get_is_recording(session_id: SessionID) -> SyncReturn<bool> {
         SyncReturn(session.is_recording())
     } else {
         SyncReturn(false)
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn start_local_activity_recording_if_enabled() {
+    if LocalConfig::get_option(config::keys::OPTION_LOCAL_ACTIVITY_RECORDING) == "Y" {
+        let _ = main_local_activity_recording_start();
+    }
+}
+
+pub fn main_local_activity_recording_start() -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let mut service = match LOCAL_RECORDER_SERVICE.lock() {
+            Ok(service) => service,
+            Err(_) => return SyncReturn("error:local recorder state is unavailable".to_owned()),
+        };
+        let config = match local_activity_recording_config() {
+            Ok(config) => config,
+            Err(err) => return SyncReturn(format!("error:{err}")),
+        };
+        let recorder = service.get_or_insert_with(|| LocalRecorderService::new(config));
+        match recorder.start() {
+            Ok(()) => SyncReturn(local_recorder_status(recorder)),
+            Err(err) => SyncReturn(format!("error:{err}")),
+        }
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        SyncReturn("error:unsupported-platform".to_owned())
+    }
+}
+
+pub fn main_local_activity_recording_stop() -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let mut service = match LOCAL_RECORDER_SERVICE.lock() {
+            Ok(service) => service,
+            Err(_) => return SyncReturn("error:local recorder state is unavailable".to_owned()),
+        };
+        if let Some(recorder) = service.as_ref() {
+            if let Err(err) = recorder.stop() {
+                return SyncReturn(format!("error:{err}"));
+            }
+        }
+        *service = None;
+        SyncReturn("disabled".to_owned())
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        SyncReturn("disabled".to_owned())
+    }
+}
+
+pub fn main_local_activity_recording_retry() -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        main_local_activity_recording_start()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        SyncReturn("error:unsupported-platform".to_owned())
+    }
+}
+
+pub fn main_local_activity_recording_status() -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let service = match LOCAL_RECORDER_SERVICE.lock() {
+            Ok(service) => service,
+            Err(_) => return SyncReturn("error:local recorder state is unavailable".to_owned()),
+        };
+        let status = service
+            .as_ref()
+            .map(local_recorder_status)
+            .unwrap_or_else(|| "disabled".to_owned());
+        SyncReturn(status)
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        SyncReturn("error:unsupported-platform".to_owned())
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn local_activity_recording_config() -> ResultType<LocalRecorderConfig> {
+    let output_dir = PathBuf::from(ui_interface::video_save_directory(false));
+    LocalRecorderConfig::builder()
+        .output_dir(output_dir)
+        .build()
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn local_recorder_status(recorder: &LocalRecorderService) -> String {
+    match recorder.state() {
+        RecorderState::Stopped => "disabled".to_owned(),
+        RecorderState::Idle => "waiting".to_owned(),
+        RecorderState::Recording if recorder.driver_active() => "recording".to_owned(),
+        RecorderState::Recording => "error:capture-error".to_owned(),
+        RecorderState::Paused => recorder
+            .status_reason()
+            .map(|reason| format!("paused:{}", local_recorder_status_reason_name(reason)))
+            .unwrap_or_else(|| "paused".to_owned()),
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn local_recorder_status_reason_name(reason: StatusReason) -> &'static str {
+    match reason {
+        StatusReason::PermissionDenied => "permission-denied",
+        StatusReason::UnsupportedPlatform => "unsupported-platform",
+        StatusReason::StorageError => "storage-error",
+        StatusReason::CaptureError => "capture-error",
+        StatusReason::EncoderError => "encoder-error",
+        StatusReason::ConcurrentRemoteCapture => "concurrent-remote-capture",
     }
 }
 
