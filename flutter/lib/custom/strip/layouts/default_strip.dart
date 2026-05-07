@@ -33,19 +33,20 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '🖥', keyName: '', type: KeyType.displaySwitch, widthFactor: 0.7),
         ],
       ),
-      // Row 2: chat + macros + ⌫ + Tab (left)  |  ⇞ + ⇟ + arrow cluster (right)
+      // Row 2: displays + ⌫ + Tab (left)  |  ⇞ + ⇟ + macros + arrow cluster (right)
       StripRow(
         left: [
-          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7, height: 48),
-          KeyDef(label: '⚡', keyName: '', type: KeyType.macroOpener, height: 48),
+          KeyDef(label: '🖥', keyName: '', type: KeyType.displaySwitch, widthFactor: 0.7, height: 48),
           KeyDef(label: '⌫', keyName: 'backspace', type: KeyType.regular, widthFactor: 1.2, height: 48),
           KeyDef(label: '⌦', keyName: 'delete', type: KeyType.regular, widthFactor: 1.2, height: 48),
           KeyDef(label: 'Tab', keyName: 'tab', type: KeyType.regular, widthFactor: 1.2, height: 48),
           KeyDef(label: '⎵', keyName: 'space', type: KeyType.regular, widthFactor: 1.5, height: 48),
         ],
         right: [
+          KeyDef(label: '⊞', keyName: '', type: KeyType.nextDisplay, widthFactor: 0.9, height: 48),
           KeyDef(label: '⇞', keyName: 'pageup', type: KeyType.regular, height: 48),
           KeyDef(label: '⇟', keyName: 'pagedown', type: KeyType.regular, height: 48),
+          KeyDef(label: '⚡', keyName: '', type: KeyType.macroOpener, height: 48),
           KeyDef(label: '←', keyName: 'left', type: KeyType.regular, height: 48),
           KeyDef(label: '↓', keyName: 'down', type: KeyType.regular, height: 48),
           KeyDef(label: '↑', keyName: 'up', type: KeyType.regular, height: 48),

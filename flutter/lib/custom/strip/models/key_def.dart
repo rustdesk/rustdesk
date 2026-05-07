@@ -8,6 +8,10 @@ enum KeyType {
   disconnect,
   chatToggle,
   displaySwitch,
+  zoomFit,
+  mouseModeToggle,
+  clipboardPaste,
+  nextDisplay,
 }
 
 class KeyDef {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
@@ -69,10 +70,17 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onKeyboardVisibilityChanged(bool visible) {
-    // Mirror the save/restore logic that KeyHelpTools normally performs so that
-    // the user's zoom level and canvas position are preserved across keyboard
-    // show/hide even though KeyHelpTools is suppressed in this screen.
-    gFFI.cursorModel.keyHelpToolsVisibilityChanged(null, visible);
+    // RemoteSessionScreen positions the canvas via Positioned(bottom: canvasBottom),
+    // so the layout already reserves space for the keyboard without resizing the
+    // canvas model. We save/restore the offset directly to preserve zoom level
+    // without calling mobileFocusCanvasCursor(), which would call updateSize() with
+    // the keyboard viewInsets and cause an unwanted zoom-out.
+    if (visible) {
+      gFFI.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
+      gFFI.canvasModel.isMobileCanvasChanged = false;
+    } else {
+      gFFI.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
+    }
   }
 
   void _onKeyboardTap() {
@@ -97,6 +105,60 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
 
   void _onDisplaySwitch() {
     showOptions(context, widget.id, gFFI.dialogManager);
+  }
+
+  void _onNextDisplay() {
+    final pi = gFFI.ffiModel.pi;
+    final count = pi.displays.length;
+    if (count <= 1) return;
+    final next = (pi.currentDisplay + 1) % count;
+    openMonitorInTheSameTab(next, gFFI, pi);
+  }
+
+  void _onZoomFit() {
+    // Scale the remote canvas so its height exactly fills the canvas area
+    // (from screen top to the top of the power strip / keyboard).
+    final displayHeight = gFFI.canvasModel.getDisplayHeight();
+    if (displayHeight <= 0) return;
+    final mq = MediaQuery.of(context);
+    final keyboardHeight = mq.viewInsets.bottom;
+    final stripBottom = keyboardHeight > 0 ? keyboardHeight : mq.viewPadding.bottom;
+    final canvasHeight = mq.size.height - mq.viewPadding.top - stripBottom - _stripHeight;
+    if (canvasHeight <= 0) return;
+    final targetScale = canvasHeight / displayHeight;
+    final center = Offset(mq.size.width / 2, canvasHeight / 2);
+    // updateScale takes a multiplier; divide target by current to get delta.
+    final delta = targetScale / gFFI.canvasModel.scale;
+    gFFI.canvasModel.updateScale(delta, center);
+    gFFI.canvasModel.isMobileCanvasChanged = true;
+  }
+
+  void _onMouseModeToggle() {
+    gFFI.ffiModel.toggleTouchMode();
+  }
+
+  Future<void> _onClipboardPaste() async {
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text;
+    if (text != null && text.isNotEmpty) {
+      await _bridge.typeString(text);
+    }
+  }
+
+  void _onMacrosTap() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _MacroSheet(
+        bridge: _bridge,
+        onZoomFit: _onZoomFit,
+        onMouseModeToggle: _onMouseModeToggle,
+        onClipboardPaste: _onClipboardPaste,
+      ),
+    );
   }
 
   @override
@@ -158,6 +220,10 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
                 onDisconnect: _onDisconnect,
                 onChatToggle: _onChatToggle,
                 onDisplaySwitch: _onDisplaySwitch,
+                onZoomFit: _onZoomFit,
+                onMouseModeToggle: _onMouseModeToggle,
+                onClipboardPaste: _onClipboardPaste,
+                onNextDisplay: _onNextDisplay,
               ),
             ),
           ),
@@ -204,10 +270,161 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         onTwoFingerScroll: _onTwoFingerScroll,
       );
 
-  void _onMacrosTap() {
-    // Macro bottom sheet — Phase 3b
+}
+
+// ─── Macro sheet ─────────────────────────────────────────────────────────────
+
+class _MacroSheet extends StatefulWidget {
+  final InputBridge bridge;
+  final VoidCallback onZoomFit;
+  final VoidCallback onMouseModeToggle;
+  final VoidCallback onClipboardPaste;
+  const _MacroSheet({
+    required this.bridge,
+    required this.onZoomFit,
+    required this.onMouseModeToggle,
+    required this.onClipboardPaste,
+  });
+
+  @override
+  State<_MacroSheet> createState() => _MacroSheetState();
+}
+
+class _MacroSheetState extends State<_MacroSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final touchMode = gFFI.ffiModel.touchMode;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Macros',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MacroButton(
+                  label: '⌘⇧V',
+                  tooltip: 'Paste (Cmd+Shift+V)',
+                  onTap: () => widget.bridge.tapKey('v', modifiers: {'meta', 'shift'}),
+                ),
+                _MacroButton(
+                  label: '⌘⇧[',
+                  tooltip: '1Password (Cmd+Shift+[)',
+                  onTap: () => widget.bridge.tapKey('[', modifiers: {'meta', 'shift'}),
+                ),
+                _MacroButton(
+                  label: '⌘⇥',
+                  tooltip: 'App Switcher (Cmd+Tab)',
+                  onTap: () => widget.bridge.tapKey('tab', modifiers: {'meta'}),
+                ),
+                _MacroButton(
+                  label: '⌘N',
+                  tooltip: 'New Window (Cmd+N)',
+                  onTap: () => widget.bridge.tapKey('n', modifiers: {'meta'}),
+                ),
+                _MacroButton(
+                  label: '⇱',
+                  tooltip: 'Home',
+                  onTap: () => widget.bridge.tapKey('home'),
+                ),
+                _MacroButton(
+                  label: '⇲',
+                  tooltip: 'End',
+                  onTap: () => widget.bridge.tapKey('end'),
+                ),
+                _MacroButton(
+                  label: '⌘⇧2',
+                  tooltip: 'Screenshot (Cmd+Shift+2)',
+                  onTap: () => widget.bridge.tapKey('2', modifiers: {'meta', 'shift'}),
+                ),
+                _MacroButton(
+                  label: touchMode ? '🖱' : '👆',
+                  tooltip: touchMode ? 'Switch to Mouse mode' : 'Switch to Touch mode',
+                  onTap: () {
+                    widget.onMouseModeToggle();
+                    setState(() {});
+                  },
+                ),
+                _MacroButton(
+                  label: '⤢',
+                  tooltip: 'Zoom to fit height',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    widget.onZoomFit();
+                  },
+                ),
+                _MacroButton(
+                  label: '📋→',
+                  tooltip: 'Paste iPhone clipboard to remote',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    widget.onClipboardPaste();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
+
+class _MacroButton extends StatelessWidget {
+  final String label;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _MacroButton({
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: const Color(0xFF2A2A3E),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            onTap();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Measure height ───────────────────────────────────────────────────────────
 
 // Reports its child's rendered height whenever the child's size changes,
 // including when the child rebuilds internally (e.g. PowerStrip collapsing).

@@ -136,6 +136,17 @@ class ImagePainter extends CustomPainter {
     }
     final dx = isCursor ? (x / kCursorScaleFactor).toInt().toDouble() : x.toInt().toDouble();
     final dy = isCursor ? (y / kCursorScaleFactor).toInt().toDouble() : y.toInt().toDouble();
+    if (isCursor) {
+      // Draw black outline behind the white cursor for visibility on light backgrounds.
+      final outlinePaint = Paint()
+        ..colorFilter =
+            const ColorFilter.mode(Color(0xFF000000), BlendMode.srcATop);
+      for (final offset in const [
+        Offset(-1, -1), Offset(1, -1), Offset(-1, 1), Offset(1, 1),
+      ]) {
+        canvas.drawImage(image!, Offset(dx + offset.dx, dy + offset.dy), outlinePaint);
+      }
+    }
     canvas.drawImage(image!, Offset(dx, dy), paint);
   }
 

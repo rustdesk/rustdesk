@@ -31,6 +31,7 @@ const _kKeyAliases = <String, String>{
   'cmd': 'Meta',
   'command': 'Meta',
   'win': 'Meta',
+  '[': 'VK_LBRACKET',
 };
 
 String _resolveKeyName(String name) =>

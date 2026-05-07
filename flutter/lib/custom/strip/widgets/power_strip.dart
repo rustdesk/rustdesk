@@ -18,6 +18,10 @@ class PowerStrip extends StatefulWidget {
   final VoidCallback onDisconnect;
   final VoidCallback onChatToggle;
   final VoidCallback onDisplaySwitch;
+  final VoidCallback onZoomFit;
+  final VoidCallback onMouseModeToggle;
+  final VoidCallback onClipboardPaste;
+  final VoidCallback onNextDisplay;
   final bool leftHanded;
 
   const PowerStrip({
@@ -29,6 +33,10 @@ class PowerStrip extends StatefulWidget {
     required this.onDisconnect,
     required this.onChatToggle,
     required this.onDisplaySwitch,
+    required this.onZoomFit,
+    required this.onMouseModeToggle,
+    required this.onClipboardPaste,
+    required this.onNextDisplay,
     this.leftHanded = false,
   });
 
@@ -99,7 +107,7 @@ class _PowerStripState extends State<PowerStrip> {
   }
 
   Widget _wrapScaled(KeyDef k, double scale) {
-    if (k.type == KeyType.displaySwitch) {
+    if (k.type == KeyType.displaySwitch || k.type == KeyType.nextDisplay) {
       return Obx(() {
         if (gFFI.ffiModel.pi.displays.length <= 1) return const SizedBox.shrink();
         return _keyCell(k, scale);
@@ -143,6 +151,14 @@ class _PowerStripState extends State<PowerStrip> {
         widget.onChatToggle();
       case KeyType.displaySwitch:
         widget.onDisplaySwitch();
+      case KeyType.zoomFit:
+        widget.onZoomFit();
+      case KeyType.mouseModeToggle:
+        widget.onMouseModeToggle();
+      case KeyType.clipboardPaste:
+        widget.onClipboardPaste();
+      case KeyType.nextDisplay:
+        widget.onNextDisplay();
       case KeyType.regular:
         // Regular keys go through onPressStart / onPressEnd in KeyCell so the
         // held modifier (if any) stays down until the in-flight tap finishes.
