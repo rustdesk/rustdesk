@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:get/get.dart';
 
 import '../../input/input_bridge.dart';
 import '../../theme/tokens.dart';
@@ -98,9 +99,16 @@ class _PowerStripState extends State<PowerStrip> {
   }
 
   Widget _wrapScaled(KeyDef k, double scale) {
-    if (k.type == KeyType.displaySwitch && gFFI.ffiModel.pi.displays.length <= 1) {
-      return const SizedBox.shrink();
+    if (k.type == KeyType.displaySwitch) {
+      return Obx(() {
+        if (gFFI.ffiModel.pi.displays.length <= 1) return const SizedBox.shrink();
+        return _keyCell(k, scale);
+      });
     }
+    return _keyCell(k, scale);
+  }
+
+  Widget _keyCell(KeyDef k, double scale) {
     final scaled = scale < 1.0 ? k.copyWith(widthFactor: k.widthFactor * scale) : k;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 2 * scale),
