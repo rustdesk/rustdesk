@@ -73,9 +73,15 @@ lazy_static::lazy_static! {
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
     pub static ref AUTHED_CONNS: Arc::<Mutex<Vec<AuthedConn>>> = Default::default();
     pub static ref CONTROL_PERMISSIONS_ARRAY: Arc::<Mutex<Vec<(i32, ControlPermissions)>>> = Default::default();
-    static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
     static ref WAKELOCK_KEEP_AWAKE_OPTION: Arc::<Mutex<Option<bool>>> = Default::default();
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
+    static ref PENDING_SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -241,6 +247,7 @@ pub struct Connection {
     restart: bool,
     recording: bool,
     block_input: bool,
+    privacy_mode: bool,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
@@ -431,6 +438,7 @@ impl Connection {
             restart: Self::permission(keys::OPTION_ENABLE_REMOTE_RESTART, &control_permissions),
             recording: Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &control_permissions),
             block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
+            privacy_mode: Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &control_permissions),
             control_permissions,
             last_test_delay: None,
             network_delay: 0,
@@ -526,6 +534,9 @@ impl Connection {
         }
         if !conn.block_input {
             conn.send_permission(Permission::BlockInput, false).await;
+        }
+        if !conn.privacy_mode {
+            conn.send_permission(Permission::PrivacyMode, false).await;
         }
         let mut test_delay_timer =
             crate::rustdesk_interval(time::interval_at(Instant::now(), TEST_DELAY_TIMEOUT));
@@ -674,6 +685,46 @@ impl Connection {
                             } else if &name == "block_input" {
                                 conn.block_input = enabled;
                                 conn.send_permission(Permission::BlockInput, enabled).await;
+                            } else if &name == "privacy_mode" {
+                                // Keep permission state and runtime state consistent:
+                                // when revoking the permission, try to leave privacy mode first.
+                                // Otherwise we could end up in an inconsistent state where
+                                // permission looks disabled while privacy mode is still active.
+                                if !enabled && privacy_mode::is_in_privacy_mode() {
+                                    if let Some(conn_id) = privacy_mode::get_privacy_mode_conn_id() {
+                                        if conn_id == conn.inner.id() {
+                                            let impl_key =
+                                                privacy_mode::get_cur_impl_key().unwrap_or_default();
+                                            let turn_off_res =
+                                                privacy_mode::turn_off_privacy(conn_id, None);
+                                            match turn_off_res {
+                                                Some(Ok(_)) => {
+                                                    let msg_out = crate::common::make_privacy_mode_msg(
+                                                        back_notification::PrivacyModeState::PrvOffByPeer,
+                                                        impl_key.clone(),
+                                                    );
+                                                    conn.send(msg_out).await;
+                                                }
+                                                _ => {
+                                                    let msg_out = Self::turn_off_privacy_result_to_msg(
+                                                        turn_off_res,
+                                                        impl_key,
+                                                    );
+                                                    conn.send(msg_out).await;
+                                                    // Turn-off failed, so revert CM's optimistic toggle
+                                                    // and keep the previous permission value.
+                                                    conn.send_to_cm(ipc::Data::SwitchPermission {
+                                                        name: "privacy_mode".to_owned(),
+                                                        enabled: conn.privacy_mode,
+                                                    });
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                conn.privacy_mode = enabled;
+                                conn.send_permission(Permission::PrivacyMode, enabled).await;
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
@@ -730,6 +781,8 @@ impl Connection {
                                 log::error!("Failed to start portable service from cm: {:?}", e);
                             }
                         }
+                        #[cfg(feature = "flutter")]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         ipc::Data::SwitchSidesBack => {
                             let mut misc = Misc::new();
                             misc.set_switch_back(SwitchBack::default());
@@ -978,7 +1031,7 @@ impl Connection {
 
         if let Some(video_privacy_conn_id) = privacy_mode::get_privacy_mode_conn_id() {
             if video_privacy_conn_id == id {
-                let _ = Self::turn_off_privacy_to_msg(id);
+                let _ = Self::turn_off_privacy_to_msg(id, String::new());
             }
         }
         #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
@@ -1900,6 +1953,7 @@ impl Connection {
             restart: self.restart,
             recording: self.recording,
             block_input: self.block_input,
+            privacy_mode: self.privacy_mode,
             from_switch: self.from_switch,
         });
     }
@@ -2175,6 +2229,7 @@ impl Connection {
                 keys::OPTION_ENABLE_REMOTE_RESTART => Some(Permission::restart),
                 keys::OPTION_ENABLE_RECORD_SESSION => Some(Permission::recording),
                 keys::OPTION_ENABLE_BLOCK_INPUT => Some(Permission::block_input),
+                keys::OPTION_ENABLE_PRIVACY_MODE => Some(Permission::privacy_mode),
                 _ => None,
             };
             if let Some(permission) = permission {
@@ -2532,6 +2587,7 @@ impl Connection {
             }
         } else if let Some(message::Union::SwitchSidesResponse(_s)) = msg.union {
             #[cfg(feature = "flutter")]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lr) = _s.lr.clone().take() {
                 self.handle_login_request_without_validation(&lr).await;
                 SWITCH_SIDES_UUID
@@ -3247,8 +3303,13 @@ impl Connection {
                         }
                     }
                     #[cfg(feature = "flutter")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::SwitchSidesRequest(s)) => {
                         if let Ok(uuid) = uuid::Uuid::from_slice(&s.uuid.to_vec()[..]) {
+                            crate::server::insert_pending_switch_sides_uuid(
+                                self.lr.my_id.clone(),
+                                uuid.clone(),
+                            );
                             crate::run_me(vec![
                                 "--connect",
                                 &self.lr.my_id,
@@ -4145,6 +4206,15 @@ impl Connection {
     }
 
     async fn turn_on_privacy(&mut self, impl_key: String) {
+        if !self.is_authed_remote_conn() || !self.privacy_mode {
+            let msg_out = crate::common::make_privacy_mode_msg(
+                back_notification::PrivacyModeState::PrvOnFailedDenied,
+                impl_key,
+            );
+            self.send(msg_out).await;
+            return;
+        }
+
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
                 back_notification::PrivacyModeState::PrvNotSupported,
@@ -4186,7 +4256,7 @@ impl Connection {
                                 "Check privacy mode failed: {}, turn off privacy mode.",
                                 &err_msg
                             );
-                            let _ = Self::turn_off_privacy_to_msg(self.inner.id);
+                            let _ = Self::turn_off_privacy_to_msg(self.inner.id, String::new());
                             crate::common::make_privacy_mode_msg_with_details(
                                 back_notification::PrivacyModeState::PrvOnFailed,
                                 err_msg,
@@ -4205,6 +4275,7 @@ impl Connection {
                     if privacy_mode::is_in_privacy_mode() {
                         let _ = Self::turn_off_privacy_to_msg(
                             privacy_mode::INVALID_PRIVACY_MODE_CONN_ID,
+                            String::new(),
                         );
                     }
                     crate::common::make_privacy_mode_msg_with_details(
@@ -4232,14 +4303,23 @@ impl Connection {
                 impl_key,
             )
         } else {
-            Self::turn_off_privacy_to_msg(self.inner.id)
+            Self::turn_off_privacy_to_msg(self.inner.id, impl_key)
         };
         self.send(msg_out).await;
     }
 
-    pub fn turn_off_privacy_to_msg(_conn_id: i32) -> Message {
-        let impl_key = "".to_owned();
-        match privacy_mode::turn_off_privacy(_conn_id, None) {
+    pub fn turn_off_privacy_to_msg(_conn_id: i32, impl_key: String) -> Message {
+        Self::turn_off_privacy_result_to_msg(
+            privacy_mode::turn_off_privacy(_conn_id, None),
+            impl_key,
+        )
+    }
+
+    fn turn_off_privacy_result_to_msg(
+        turn_off_res: Option<hbb_common::ResultType<()>>,
+        impl_key: String,
+    ) -> Message {
+        match turn_off_res {
             Some(Ok(_)) => crate::common::make_privacy_mode_msg(
                 back_notification::PrivacyModeState::PrvOffSucceeded,
                 impl_key,
@@ -4872,11 +4952,34 @@ impl Connection {
     }
 }
 
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
     SWITCH_SIDES_UUID
         .lock()
         .unwrap()
         .insert(id, (tokio::time::Instant::now(), uuid));
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn insert_pending_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
+    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
+    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
+    uuids.insert(id, (tokio::time::Instant::now(), uuid));
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn remove_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
+    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
+    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
+    if uuids.get(id).map(|(_, stored_uuid)| stored_uuid == uuid) == Some(true) {
+        uuids.remove(id);
+        true
+    } else {
+        false
+    }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
