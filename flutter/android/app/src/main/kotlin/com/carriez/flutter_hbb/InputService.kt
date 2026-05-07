@@ -91,6 +91,11 @@ class InputService : AccessibilityService() {
 
     private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
+    // Just HOME. Caller handles the actual wake lock.
+    internal fun goHome() {
+        performGlobalAction(GLOBAL_ACTION_HOME)
+    }
+
     @RequiresApi(Build.VERSION_CODES.N)
     fun onMouseInput(mask: Int, _x: Int, _y: Int) {
         val x = max(0, _x)
