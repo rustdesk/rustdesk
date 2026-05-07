@@ -196,6 +196,25 @@ class _TerminalPageState extends State<TerminalPage>
             focusNode: _terminalFocusNode,
             // Note: autofocus is not used here because focus is managed manually
             // via _onTabStateChanged() to handle tab switching properly.
+            onKeyEvent: (node, event) {
+              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+              final ctrl = HardwareKeyboard.instance.isControlPressed;
+              final shift = HardwareKeyboard.instance.isShiftPressed;
+              final isV = event.logicalKey == LogicalKeyboardKey.keyV;
+              if (ctrl && shift && isV) {
+                Clipboard.getData('text/plain').then((data) {
+                  final text = data?.text;
+                  if (text != null && mounted) {
+                    _terminalModel.terminal.paste(text);
+                  }
+                });
+                return KeyEventResult.handled;
+              } else if (ctrl && isV) {
+                _terminalModel.sendVirtualKey('\x16');
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
             backgroundOpacity: 0.7,
             padding: _calculatePadding(heightPx),
             onSecondaryTapDown: (details, offset) async {
