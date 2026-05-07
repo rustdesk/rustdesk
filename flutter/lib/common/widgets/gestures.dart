@@ -7,7 +7,6 @@ enum GestureState {
   none,
   oneFingerPan,
   twoFingerScale,
-  threeFingerVerticalDrag
 }
 
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
@@ -32,11 +31,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureScaleUpdateCallback? onTwoFingerScaleUpdate;
   GestureScaleEndCallback? onTwoFingerScaleEnd;
 
-  // threeFingerVerticalDrag
-  GestureDragStartCallback? onThreeFingerVerticalDragStart;
-  GestureDragUpdateCallback? onThreeFingerVerticalDragUpdate;
-  GestureDragEndCallback? onThreeFingerVerticalDragEnd;
-
   var _currentState = GestureState.none;
   Timer? _debounceTimer;
 
@@ -50,14 +44,9 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
       } else if (d.pointerCount == 2 &&
           _currentState != GestureState.twoFingerScale) {
         onTwoFingerStartDebounce(d);
-      } else if (d.pointerCount == 3 &&
-          _currentState != GestureState.threeFingerVerticalDrag) {
-        _currentState = GestureState.threeFingerVerticalDrag;
-        if (onThreeFingerVerticalDragStart != null) {
-          onThreeFingerVerticalDragStart!(
-              DragStartDetails(globalPosition: d.localFocalPoint));
-        }
-        debugPrint("start threeFingerScale");
+      } else if (d.pointerCount >= 3) {
+        // On iPad, 3 fingers are used for system gestures (e.g., app switcher,
+        // undo/redo, copy/paste). Let the system handle them.
       }
       if (_currentState != GestureState.none) {
         switch (_currentState) {
@@ -69,11 +58,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
           case GestureState.twoFingerScale:
             if (onTwoFingerScaleUpdate != null) {
               onTwoFingerScaleUpdate!(d);
-            }
-            break;
-          case GestureState.threeFingerVerticalDrag:
-            if (onThreeFingerVerticalDragUpdate != null) {
-              onThreeFingerVerticalDragUpdate!(_getDragUpdateDetails(d));
             }
             break;
           default:
@@ -103,12 +87,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
             // Otherwise, the next `onTwoFingerScaleUpdate()` will handle a wrong `focalPoint`.
             _currentState = GestureState.none;
             return;
-          }
-          break;
-        case GestureState.threeFingerVerticalDrag:
-          debugPrint("ThreeFingerState.vertical onEnd");
-          if (onThreeFingerVerticalDragEnd != null) {
-            onThreeFingerVerticalDragEnd!(_getDragEndDetails(d));
           }
           break;
         default:
@@ -151,15 +129,8 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
       }
     }
 
-    if (_currentState == GestureState.threeFingerVerticalDrag) {
-      _debounceTimer = Timer(Duration(milliseconds: 200), () {
-        start(d);
-        debugPrint("debounce start twoFingerScale");
-      });
-    } else {
-      start(d);
-      debugPrint("start twoFingerScale");
-    }
+    start(d);
+    debugPrint("start twoFingerScale");
   }
 
   DragUpdateDetails _getDragUpdateDetails(ScaleUpdateDetails d) =>
@@ -182,9 +153,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         break;
       case GestureState.twoFingerScale:
         // Reset scale state if needed, currently self-contained
-        break;
-      case GestureState.threeFingerVerticalDrag:
-        // Reset drag state if needed, currently self-contained
         break;
       default:
         break;
@@ -742,7 +710,6 @@ RawGestureDetector getMixinGestureDetector({
   GestureDragCancelCallback? onOneFingerPanCancel,
   GestureScaleUpdateCallback? onTwoFingerScaleUpdate,
   GestureScaleEndCallback? onTwoFingerScaleEnd,
-  GestureDragUpdateCallback? onThreeFingerVerticalDragUpdate,
 }) {
   return RawGestureDetector(
       child: child,
@@ -790,8 +757,7 @@ RawGestureDetector getMixinGestureDetector({
             ..onOneFingerPanEnd = onOneFingerPanEnd
             ..onOneFingerPanCancel = onOneFingerPanCancel
             ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
-            ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
-            ..onThreeFingerVerticalDragUpdate = onThreeFingerVerticalDragUpdate;
+            ..onTwoFingerScaleEnd = onTwoFingerScaleEnd;
         }),
       });
 }

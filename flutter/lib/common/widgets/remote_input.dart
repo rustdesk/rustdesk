@@ -446,13 +446,23 @@ class _RawTouchGestureDetectorRegionState
   }
 
   // scale + pan event
+  // Tracks whether the current 2-finger gesture is a pinch (zoom) or a pan (scroll).
+  // Once classified, the mode is "sticky" for the duration of the gesture to avoid
+  // flickering between zoom and scroll.
+  bool _isPinching = false;
+  bool _gestureClassified = false;
+  // Threshold to distinguish pinch from pan. The scale must deviate beyond this
+  // value from 1.0 before the gesture is classified as a pinch.
+  static const double _pinchThreshold = 0.04;
+
   onTwoFingerScaleStart(ScaleStartDetails d) {
     _lastTapDownDetails = null;
+    _isPinching = false;
+    _gestureClassified = false;
     if (isNotTouchBasedDevice()) {
       return;
     }
     if (isSpecialHoldDragActive) {
-      // Initialize the last focal point to calculate deltas manually.
       _lastSpecialHoldDragFocalPoint = d.focalPoint;
     }
   }
@@ -462,9 +472,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
 
-    // If in special drag mode, perform a pan instead of a scale.
     if (isSpecialHoldDragActive) {
-      // Calculate delta manually to avoid the jumpy behavior.
       final delta = d.focalPoint - _lastSpecialHoldDragFocalPoint;
       _lastSpecialHoldDragFocalPoint = d.focalPoint;
       await ffi.cursorModel.updatePan(delta * 2.0, d.focalPoint, handleTouch);
@@ -484,11 +492,33 @@ class _RawTouchGestureDetectorRegionState
                     .toJson()));
       }
     } else {
-      // mobile
-      ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
-      _scale = d.scale;
-      ffi.canvasModel.panX(d.focalPointDelta.dx);
-      ffi.canvasModel.panY(d.focalPointDelta.dy);
+      // mobile: distinguish pinch (zoom) from pan (scroll)
+      if (!_gestureClassified) {
+        if ((d.scale - 1.0).abs() > _pinchThreshold) {
+          _isPinching = true;
+          _gestureClassified = true;
+        } else if (d.focalPointDelta.dy.abs() > 3.0) {
+          // Clear vertical movement indicates a scroll intent.
+          _gestureClassified = true;
+        }
+      }
+
+      if (_isPinching) {
+        ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
+        _scale = d.scale;
+        ffi.canvasModel.panX(d.focalPointDelta.dx);
+        ffi.canvasModel.panY(d.focalPointDelta.dy);
+      } else {
+        // 2-finger pan: treat as scroll (mouse wheel)
+        _mouseScrollIntegral += d.focalPointDelta.dy / 4;
+        if (_mouseScrollIntegral > 1) {
+          inputModel.scroll(1);
+          _mouseScrollIntegral = 0;
+        } else if (_mouseScrollIntegral < -1) {
+          inputModel.scroll(-1);
+          _mouseScrollIntegral = 0;
+        }
+      }
     }
   }
 
@@ -505,27 +535,13 @@ class _RawTouchGestureDetectorRegionState
     } else {
       // mobile
       _scale = 1;
-      // No idea why we need to set the view style to "" here.
-      // bind.sessionSetViewStyle(sessionId: sessionId, value: "");
     }
-    if (!isSpecialHoldDragActive) {
+    if (!isSpecialHoldDragActive && _isPinching) {
       await inputModel.sendMouse('up', MouseButtons.left);
     }
   }
 
   get onHoldDragCancel => null;
-  get onThreeFingerVerticalDragUpdate => ffi.ffiModel.isPeerAndroid
-      ? null
-      : (d) {
-          _mouseScrollIntegral += d.delta.dy / 4;
-          if (_mouseScrollIntegral > 1) {
-            inputModel.scroll(1);
-            _mouseScrollIntegral = 0;
-          } else if (_mouseScrollIntegral < -1) {
-            inputModel.scroll(-1);
-            _mouseScrollIntegral = 0;
-          }
-        };
 
   makeGestures(BuildContext context) {
     return <Type, GestureRecognizerFactory>{
@@ -593,8 +609,7 @@ class _RawTouchGestureDetectorRegionState
           ..onOneFingerPanCancel = onOneFingerPanCancel
           ..onTwoFingerScaleStart = onTwoFingerScaleStart
           ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
-          ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
-          ..onThreeFingerVerticalDragUpdate = onThreeFingerVerticalDragUpdate;
+          ..onTwoFingerScaleEnd = onTwoFingerScaleEnd;
       }),
     };
   }
