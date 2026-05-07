@@ -592,13 +592,13 @@ class _DesktopTabState extends State<DesktopTab>
   }
 
   Widget _buildBar() {
+    final isIncomingHomePage = bind.isIncomingOnly() && isInHomePage();
     return Row(
       children: [
         Expanded(
             child: GestureDetector(
                 // custom double tap handler
-                onTap: !(bind.isIncomingOnly() && isInHomePage()) &&
-                        showMaximize
+                onTap: !isIncomingHomePage && showMaximize
                     ? () {
                         final current = DateTime.now().millisecondsSinceEpoch;
                         final elapsed = current - _lastClickTime;
@@ -609,7 +609,7 @@ class _DesktopTabState extends State<DesktopTab>
                               .then((value) => stateGlobal.setMaximized(value));
                         }
                       }
-                    : null,
+                    : (isIncomingHomePage ? () {} : null), // Keep tap recognizer for Windows touch.
                 onPanStart: (_) => startDragging(isMainWindow),
                 onPanCancel: () {
                   // We want to disable dragging of the tab area in the tab bar.
