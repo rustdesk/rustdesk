@@ -1,11 +1,13 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use std::time::SystemTime;
 #[cfg(feature = "capture")]
 use std::time::Instant;
+#[cfg(feature = "capture")]
+use std::time::SystemTime;
 
 #[cfg(feature = "capture")]
 use scrap::codec::{EncoderApi, EncoderCfg};
@@ -17,6 +19,10 @@ use scrap::{Capturer, Display, TraitCapturer, STRIDE_ALIGN};
 use crate::LocalRecorderConfig;
 #[cfg(feature = "capture")]
 use crate::{SegmentPlanner, StorageManager, WebmSegmentWriter};
+
+type CaptureReady = mpsc::SyncSender<Result<(), String>>;
+
+type CaptureLoop = fn(&AtomicBool, LocalRecorderConfig, CaptureReady) -> hbb_common::ResultType<()>;
 
 pub struct CaptureDriver {
     running: Arc<AtomicBool>,
@@ -57,6 +63,14 @@ impl CaptureWorker {
         driver: &CaptureDriver,
         config: LocalRecorderConfig,
     ) -> hbb_common::ResultType<()> {
+        Self::start_with_loop(driver, config, run_capture_loop)
+    }
+
+    fn start_with_loop(
+        driver: &CaptureDriver,
+        config: LocalRecorderConfig,
+        capture_loop: CaptureLoop,
+    ) -> hbb_common::ResultType<()> {
         let mut slot = driver
             .handle
             .lock()
@@ -70,13 +84,31 @@ impl CaptureWorker {
         driver.running.store(true, Ordering::SeqCst);
 
         let running = driver.running.clone();
+        let (ready_tx, ready_rx) = mpsc::sync_channel(1);
         *slot = Some(thread::spawn(move || {
-            if let Err(err) = run_capture_loop(&running, config) {
+            let result = capture_loop(&running, config, ready_tx);
+            if let Err(err) = result {
                 hbb_common::log::warn!("local activity recording stopped: {err}");
             }
             running.store(false, Ordering::SeqCst);
         }));
-        Ok(())
+
+        let ready_result = ready_rx.recv_timeout(Duration::from_secs(5));
+        let init_error = match ready_result {
+            Ok(Ok(())) => return Ok(()),
+            Ok(Err(err)) => err,
+            Err(mpsc::RecvTimeoutError::Timeout) => "capture initialization timed out".to_owned(),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                "capture initialization ended without status".to_owned()
+            }
+        };
+        driver.running.store(false, Ordering::SeqCst);
+        let handle = slot.take();
+        drop(slot);
+        if let Some(handle) = handle {
+            let _ = handle.join();
+        }
+        anyhow::bail!(init_error)
     }
 
     pub fn stop(driver: &CaptureDriver) {
@@ -85,30 +117,69 @@ impl CaptureWorker {
     }
 }
 
-#[cfg(feature = "capture")]
 fn run_capture_loop(
     running: &AtomicBool,
     config: LocalRecorderConfig,
+    ready: CaptureReady,
 ) -> hbb_common::ResultType<()> {
-    let display = Display::primary().or_else(|_| {
-        Display::all()?
-            .into_iter()
-            .next()
-            .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
-    })?;
-    let width = display.width() as u32;
-    let height = display.height() as u32;
-    let mut capturer = Capturer::new(display)?;
-    let mut encoder = VpxEncoder::new(
-        EncoderCfg::VPX(VpxEncoderConfig {
-            width,
-            height,
-            quality: 1.0,
-            codec: VpxVideoCodecId::VP8,
-            keyframe_interval: Some(240),
-        }),
-        false,
-    )?;
+    run_capture_loop_inner(running, config, ready)
+}
+
+#[cfg(feature = "capture")]
+fn run_capture_loop_inner(
+    running: &AtomicBool,
+    config: LocalRecorderConfig,
+    ready: CaptureReady,
+) -> hbb_common::ResultType<()> {
+    let init_result: hbb_common::ResultType<_> = (|| {
+        hbb_common::log::debug!("local recorder: opening display");
+        let display = Display::primary().or_else(|e| {
+            hbb_common::log::warn!("local recorder: Display::primary failed ({e}), trying all");
+            Display::all()?
+                .into_iter()
+                .next()
+                .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
+        })?;
+        let width = display.width() as u32;
+        let height = display.height() as u32;
+        hbb_common::log::debug!("local recorder: creating capturer {width}x{height}");
+        let capturer = Capturer::new(display).map_err(|e| {
+            hbb_common::log::warn!("local recorder: Capturer::new failed: {e}");
+            e
+        })?;
+        hbb_common::log::debug!("local recorder: creating VP8 encoder");
+        let encoder = VpxEncoder::new(
+            EncoderCfg::VPX(VpxEncoderConfig {
+                width,
+                height,
+                quality: 1.0,
+                codec: VpxVideoCodecId::VP8,
+                keyframe_interval: Some(240),
+            }),
+            false,
+        )
+        .map_err(|e| {
+            hbb_common::log::warn!("local recorder: VpxEncoder::new failed: {e}");
+            e
+        })?;
+        hbb_common::log::debug!("local recorder: init OK");
+        Ok((capturer, encoder, width, height))
+    })();
+
+    let (mut capturer, mut encoder, width, height) = match init_result {
+        Ok(v) => {
+            let _ = ready.send(Ok(()));
+            v
+        }
+        Err(err) => {
+            hbb_common::log::warn!(
+                "local activity recorder: capture init failed: {err}"
+            );
+            let _ = ready.send(Err(err.to_string()));
+            return Err(err);
+        }
+    };
+
     let yuvfmt = encoder.yuvfmt();
     let storage = StorageManager::new(config.output_dir())?;
     let mut planner = SegmentPlanner::new(config.segment_duration());
@@ -180,12 +251,92 @@ fn finalize_segment(
 }
 
 #[cfg(not(feature = "capture"))]
-fn run_capture_loop(
+fn run_capture_loop_inner(
     running: &AtomicBool,
     _config: LocalRecorderConfig,
+    ready: CaptureReady,
 ) -> hbb_common::ResultType<()> {
+    let _ = ready.send(Ok(()));
     while running.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_millis(100));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn failing_capture_loop(
+        _running: &AtomicBool,
+        _config: LocalRecorderConfig,
+        ready: CaptureReady,
+    ) -> hbb_common::ResultType<()> {
+        let _ = ready.send(Err("capture initialization failed".to_owned()));
+        anyhow::bail!("capture initialization failed")
+    }
+
+    fn silent_capture_loop(
+        _running: &AtomicBool,
+        _config: LocalRecorderConfig,
+        _ready: CaptureReady,
+    ) -> hbb_common::ResultType<()> {
+        Ok(())
+    }
+
+    fn ready_capture_loop(
+        running: &AtomicBool,
+        _config: LocalRecorderConfig,
+        ready: CaptureReady,
+    ) -> hbb_common::ResultType<()> {
+        let _ = ready.send(Ok(()));
+        while running.load(Ordering::SeqCst) {
+            thread::sleep(Duration::from_millis(1));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn start_succeeds_after_capture_initialization() {
+        let driver = CaptureDriver::new();
+
+        let result = CaptureWorker::start_with_loop(
+            &driver,
+            LocalRecorderConfig::default(),
+            ready_capture_loop,
+        );
+
+        assert!(result.is_ok());
+        assert!(driver.running());
+        CaptureWorker::stop(&driver);
+        assert!(!driver.running());
+    }
+
+    #[test]
+    fn start_reports_missing_initialization_signal() {
+        let driver = CaptureDriver::new();
+
+        let result = CaptureWorker::start_with_loop(
+            &driver,
+            LocalRecorderConfig::default(),
+            silent_capture_loop,
+        );
+
+        assert!(result.is_err());
+        assert!(!driver.running());
+    }
+
+    #[test]
+    fn start_reports_capture_initialization_failure() {
+        let driver = CaptureDriver::new();
+
+        let result = CaptureWorker::start_with_loop(
+            &driver,
+            LocalRecorderConfig::default(),
+            failing_capture_loop,
+        );
+
+        assert!(result.is_err());
+        assert!(!driver.running());
+    }
 }

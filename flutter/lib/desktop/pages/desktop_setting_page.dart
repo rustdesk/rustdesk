@@ -712,43 +712,44 @@ class _GeneralState extends State<_General> {
           final enabled = status == 'waiting' ||
               status == 'recording' ||
               status.startsWith('paused');
+          final disabled = isOptionFixed(kOptionLocalActivityRecording);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CheckboxListTile(
-                value: enabled,
-                contentPadding: EdgeInsets.zero,
-                title: Text(translate('Local activity recording')),
-                subtitle: Text(_localActivityRecordingStatusText(status)),
-                onChanged: isOptionFixed(kOptionLocalActivityRecording)
+              GestureDetector(
+                onTap: disabled
                     ? null
-                    : (value) async {
-                        if (value == true) {
-                          final confirmed = await _confirmLocalActivityRecording(context);
-                          if (!confirmed) return;
-                          await bind.mainSetLocalOption(
-                              key: kOptionLocalActivityRecording, value: 'Y');
-                          bind.mainLocalActivityRecordingStart();
-                        } else {
-                          bind.mainLocalActivityRecordingStop();
-                          await bind.mainSetLocalOption(
-                              key: kOptionLocalActivityRecording, value: 'N');
-                        }
-                        setState(() {});
+                    : () async {
+                        await _setLocalActivityRecording(context, !enabled);
                       },
-              ),
-              if (status.startsWith('paused') || status.startsWith('error'))
-                Row(
+                child: Row(
                   children: [
-                    ElevatedButton(
-                      onPressed: () async {
-                        bind.mainLocalActivityRecordingRetry();
-                        setState(() {});
-                      },
-                      child: Text(translate('Retry')),
+                    Checkbox(
+                      value: enabled,
+                      onChanged: disabled
+                          ? null
+                          : (value) async {
+                              await _setLocalActivityRecording(
+                                  context, value == true);
+                            },
+                    ).marginOnly(right: 5),
+                    Expanded(
+                      child: Text(
+                        translate('Local activity recording'),
+                        style: TextStyle(
+                            color: disabledTextColor(context, !disabled)),
+                      ),
                     ),
                   ],
-                ).marginOnly(left: _kContentHMargin),
+                ).marginOnly(left: _kCheckBoxLeftMargin),
+              ),
+              Text(_localActivityRecordingStatusText(status))
+                  .marginOnly(left: _kContentHMargin),
+              if (status.startsWith('paused') || status.startsWith('error'))
+                _Button('Retry', () {
+                  bind.mainLocalActivityRecordingRetry();
+                  setState(() {});
+                }),
             ],
           );
         }),
@@ -820,24 +821,46 @@ class _GeneralState extends State<_General> {
     });
   }
 
+  Future<void> _setLocalActivityRecording(
+      BuildContext context, bool enabled) async {
+    if (enabled) {
+      final confirmed = await _confirmLocalActivityRecording(context);
+      if (!confirmed) return;
+      await bind.mainSetLocalOption(
+          key: kOptionLocalActivityRecording, value: 'Y');
+      bind.mainLocalActivityRecordingStart();
+    } else {
+      bind.mainLocalActivityRecordingStop();
+      await bind.mainSetLocalOption(
+          key: kOptionLocalActivityRecording, value: 'N');
+    }
+    setState(() {});
+  }
+
   String _localActivityRecordingStatusText(String status) {
     if (status == 'recording') {
-      return translate('Recording local screen while local activity is detected.');
+      return translate(
+          'Recording local screen while local activity is detected.');
     }
     if (status == 'waiting') {
-      return translate('Enabled. Recording starts after local keyboard or mouse activity.');
+      return translate(
+          'Enabled. Recording starts after local keyboard or mouse activity.');
     }
     if (status.startsWith('paused:permission-denied')) {
-      return translate('Paused. Grant screen recording permission, then retry.');
+      return translate(
+          'Paused. Grant screen recording permission, then retry.');
     }
     if (status.startsWith('paused:storage-error')) {
-      return translate('Paused. Check disk space or the recording folder, then retry.');
+      return translate(
+          'Paused. Check disk space or the recording folder, then retry.');
     }
     if (status.startsWith('paused:concurrent-remote-capture')) {
-      return translate('Paused during a remote session. Retry after the session ends.');
+      return translate(
+          'Paused during a remote session. Retry after the session ends.');
     }
     if (status.startsWith('error:unsupported-platform')) {
-      return translate('Local activity recording is not supported on this platform.');
+      return translate(
+          'Local activity recording is not supported on this platform.');
     }
     if (status.startsWith('paused') || status.startsWith('error')) {
       return translate('Recording is paused. Fix the issue, then retry.');
@@ -850,8 +873,7 @@ class _GeneralState extends State<_General> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(translate('Enable local activity recording?')),
-        content: Text(translate(
-            '当检测到键盘或鼠标活动时，RustDesk将记录本地屏幕内容。输入内容未被存储。文件保留在此计算机上，使用保留限制，在此版本中不加密。')),
+        content: Text(translate('Local activity recording privacy notice')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -890,6 +912,7 @@ class _GeneralState extends State<_General> {
         initialKey: currentKey,
         onChanged: (key) async {
           await bind.mainSetLocalOption(key: kCommConfKeyLang, value: key);
+          refreshConfiguredLang();
           if (isWeb) reloadCurrentWindow();
           if (!isWeb) reloadAllWindows();
           if (!isWeb) bind.mainChangeLanguage(lang: key);

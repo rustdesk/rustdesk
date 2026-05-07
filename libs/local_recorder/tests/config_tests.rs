@@ -60,7 +60,10 @@ fn storage_manager_allocates_timestamp_segment_paths() {
 
     let paths = storage.segment_paths_for_period(start, end).unwrap();
 
-    assert_eq!(temp.join("20240101-000000-010000.webm.tmp"), paths.temporary);
+    assert_eq!(
+        temp.join("20240101-000000-010000.webm.tmp"),
+        paths.temporary
+    );
     assert_eq!(temp.join("20240101-000000-010000.webm"), paths.complete);
 }
 

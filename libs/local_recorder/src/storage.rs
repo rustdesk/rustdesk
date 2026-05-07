@@ -154,7 +154,10 @@ impl StorageManager {
     }
 }
 
-fn format_timestamp(time: SystemTime, format: &[FormatItem<'static>]) -> hbb_common::ResultType<String> {
+fn format_timestamp(
+    time: SystemTime,
+    format: &[FormatItem<'static>],
+) -> hbb_common::ResultType<String> {
     let datetime: OffsetDateTime = time.into();
     Ok(datetime.format(format)?)
 }

@@ -9,22 +9,35 @@ fn config() -> LocalRecorderConfig {
 }
 
 #[test]
-fn start_enters_recording_without_creating_segments() {
+fn start_enters_idle_without_creating_segments() {
     let service = LocalRecorderService::new(config());
 
     assert_eq!(RecorderState::Stopped, service.state());
 
     service.start().unwrap();
 
-    assert_eq!(RecorderState::Recording, service.state());
+    assert_eq!(RecorderState::Idle, service.state());
     assert_eq!(0, service.completed_segments());
 }
 
 #[test]
-fn start_enters_recording_and_starts_driver() {
+fn start_enters_idle_without_starting_driver() {
     let service = LocalRecorderService::new(config());
 
     service.start().unwrap();
+
+    assert_eq!(RecorderState::Idle, service.state());
+    assert!(!service.driver_active());
+}
+
+#[test]
+fn activity_transitions_idle_to_recording_and_starts_driver() {
+    let start = Instant::now();
+    let service = LocalRecorderService::new(config());
+
+    service.start().unwrap();
+    service.record_activity(start);
+    service.tick(start + Duration::from_secs(1)).unwrap();
 
     assert_eq!(RecorderState::Recording, service.state());
     assert!(service.driver_active());
@@ -32,39 +45,31 @@ fn start_enters_recording_and_starts_driver() {
 }
 
 #[test]
-fn activity_transitions_idle_to_recording() {
+fn idle_timeout_stops_driver_finalizes_segment_and_returns_to_idle() {
     let start = Instant::now();
     let service = LocalRecorderService::new(config());
 
     service.start().unwrap();
     service.record_activity(start);
     service.tick(start + Duration::from_secs(1)).unwrap();
+    assert!(service.driver_active());
 
-    assert_eq!(RecorderState::Recording, service.state());
-}
-
-#[test]
-fn idle_timeout_finalizes_segment_and_returns_to_idle() {
-    let start = Instant::now();
-    let service = LocalRecorderService::new(config());
-
-    service.start().unwrap();
-    service.record_activity(start);
-    service.tick(start + Duration::from_secs(1)).unwrap();
     service.tick(start + Duration::from_secs(36)).unwrap();
 
     assert_eq!(RecorderState::Idle, service.state());
     assert_eq!(1, service.completed_segments());
+    assert!(!service.driver_active());
 }
 
 #[test]
-fn repeated_start_is_idempotent() {
+fn repeated_start_is_idempotent_while_waiting() {
     let service = LocalRecorderService::new(config());
 
     service.start().unwrap();
     service.start().unwrap();
 
-    assert_eq!(RecorderState::Recording, service.state());
+    assert_eq!(RecorderState::Idle, service.state());
+    assert!(!service.driver_active());
 }
 
 #[test]
@@ -107,6 +112,8 @@ fn start_enforces_storage_cap_before_recording() {
 
     service.start().unwrap();
 
+    assert_eq!(RecorderState::Idle, service.state());
+    assert!(!service.driver_active());
     assert!(!temp.join("a.webm").exists());
     assert!(temp.join("b.webm").exists());
 }

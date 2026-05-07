@@ -54,8 +54,10 @@ AppDir:
     - libva-drm2
     - libva-x11-2
     - libgstreamer-plugins-base1.0-0
+    - gstreamer1.0-plugins-base
     - gstreamer1.0-pipewire
     - libpipewire-0.2-1
+    - pipewire
     - libwayland-client0
     - libwayland-cursor0
     - libwayland-egl1
@@ -72,7 +74,7 @@ AppDir:
   after_bundle: |
     set -eu
     pipewire_deb=$(ls appimage-build/apt/archives/libpipewire-0.2-1_*_amd64.deb 2>/dev/null | head -n 1 || true)
-    if [ -n "$pipewire_deb" ] && [ ! -f "$TARGET_APPDIR/usr/lib/x86_64-linux-gnu/libpipewire-0.2.so.1.207.0" ]; then
+    if [ -n "$pipewire_deb" ] && [ ! -e "$TARGET_APPDIR/usr/lib/x86_64-linux-gnu/libpipewire-0.2.so.1" ]; then
       tmpdir=$(mktemp -d)
       dpkg-deb -x "$pipewire_deb" "$tmpdir"
       cp -a "$tmpdir"/usr/lib/x86_64-linux-gnu/libpipewire-0.2.so.1.* "$TARGET_APPDIR/usr/lib/x86_64-linux-gnu/"
@@ -93,6 +95,11 @@ AppDir:
       APPDIR_LIBRARY_PATH: /lib64:/usr/lib/x86_64-linux-gnu:$APPDIR/lib/x86_64-linux-gnu:$APPDIR/lib/x86_64-linux-gnu/security:$APPDIR/lib/systemd:$APPDIR/usr/lib/x86_64-linux-gnu:$APPDIR/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules:$APPDIR/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/printbackends:$APPDIR/usr/lib/x86_64-linux-gnu/krb5/plugins/preauth:$APPDIR/usr/lib/x86_64-linux-gnu/libcanberra-0.30:$APPDIR/usr/lib/x86_64-linux-gnu/pulseaudio:$APPDIR/usr/lib/x86_64-linux-gnu/sasl2:$APPDIR/usr/lib/x86_64-linux-gnu/vdpau:$APPDIR/usr/share/rustdesk/lib:$APPDIR/lib/x86_64
       GST_PLUGIN_PATH: /lib64/gstreamer-1.0:/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0
       GST_PLUGIN_SYSTEM_PATH: /lib64/gstreamer-1.0:/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0
+      GST_REGISTRY: $APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0/registry.bin
+      GST_REGISTRY_UPDATE: "no"
+      SPA_PLUGIN_DIR: $APPDIR/usr/lib/x86_64-linux-gnu/spa
+      SPA_PLUGIN_PATH: $APPDIR/usr/lib/x86_64-linux-gnu/spa
+      PIPEWIRE_MODULE_DIR: $APPDIR/usr/lib/x86_64-linux-gnu/pipewire-0.2
   test:
     fedora-30:
       image: appimagecrafters/tests-env:fedora-30

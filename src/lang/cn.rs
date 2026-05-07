@@ -743,5 +743,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "显示名称"),
         ("password-hidden-tip", "永久密码已设置（已隐藏）"),
         ("preset-password-in-use-tip", "当前使用预设密码"),
+        ("Local activity recording", "本地活动录制"),
+        ("Recording local screen while local activity is detected.", "检测到本地活动时正在录制本地屏幕。"),
+        ("Enabled. Recording starts after local keyboard or mouse activity.", "已启用。检测到本地键盘或鼠标活动后开始录制。"),
+        ("Paused. Grant screen recording permission, then retry.", "已暂停。授予屏幕录制权限后重试。"),
+        ("Paused. Check disk space or the recording folder, then retry.", "已暂停。请检查磁盘空间或录制文件夹后重试。"),
+        ("Paused during a remote session. Retry after the session ends.", "远程会话期间已暂停。请在会话结束后重试。"),
+        ("Local activity recording is not supported on this platform.", "当前平台不支持本地活动录制。"),
+        ("Recording is paused. Fix the issue, then retry.", "录制已暂停。请修复问题后重试。"),
+        ("Off. No local screen recording will occur.", "已关闭。不会录制本地屏幕。"),
+        ("Enable local activity recording?", "启用本地活动录制？"),
+        ("Local activity recording privacy notice", "当检测到键盘或鼠标活动时，RustDesk 将记录本地屏幕内容。输入内容不会被存储。文件保留在此计算机上，使用保留限制，在此版本中不加密。"),
     ].iter().cloned().collect();
 }

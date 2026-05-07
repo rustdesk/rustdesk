@@ -78,7 +78,9 @@ fn webm_writer_finalizes_to_timestamp_path() {
 
     let mut writer = WebmSegmentWriter::new(paths.clone(), 16, 16).unwrap();
     writer.write_encoded_frame(b"key", 0, true).unwrap();
-    let complete = writer.finalize_to(timestamp_paths.complete.clone()).unwrap();
+    let complete = writer
+        .finalize_to(timestamp_paths.complete.clone())
+        .unwrap();
 
     assert_eq!(timestamp_paths.complete, complete);
     assert!(!paths.temporary.exists());

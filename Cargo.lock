@@ -4647,11 +4647,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hbb_common",
+ "libc",
  "openssl",
  "scrap",
  "time 0.3.36",
  "uuid",
  "webm",
+ "winapi 0.3.9",
 ]
 
 [[package]]

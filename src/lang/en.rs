@@ -274,5 +274,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "Keep screen awake during incoming sessions"),
         ("password-hidden-tip", "Permanent password is set (hidden)."),
         ("preset-password-in-use-tip", "Preset password is currently in use."),
+        ("Local activity recording", "Local activity recording"),
+        ("Recording local screen while local activity is detected.", "Recording local screen while local activity is detected."),
+        ("Enabled. Recording starts after local keyboard or mouse activity.", "Enabled. Recording starts after local keyboard or mouse activity."),
+        ("Paused. Grant screen recording permission, then retry.", "Paused. Grant screen recording permission, then retry."),
+        ("Paused. Check disk space or the recording folder, then retry.", "Paused. Check disk space or the recording folder, then retry."),
+        ("Paused during a remote session. Retry after the session ends.", "Paused during a remote session. Retry after the session ends."),
+        ("Local activity recording is not supported on this platform.", "Local activity recording is not supported on this platform."),
+        ("Recording is paused. Fix the issue, then retry.", "Recording is paused. Fix the issue, then retry."),
+        ("Off. No local screen recording will occur.", "Off. No local screen recording will occur."),
+        ("Enable local activity recording?", "Enable local activity recording?"),
+        ("Local activity recording privacy notice", "RustDesk will record the local screen when keyboard or mouse activity is detected. Typed content is not stored. Files remain on this computer, use retention limits, and are not encrypted in this version."),
     ].iter().cloned().collect();
 }

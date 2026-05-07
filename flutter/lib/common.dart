@@ -1559,11 +1559,19 @@ Future<void> initGlobalFFI() async {
   Get.put<FFI>(_globalFFI, permanent: true);
 }
 
+String? _configuredLang;
+
+void refreshConfiguredLang() {
+  _configuredLang = bind.mainGetLocalOption(key: kCommConfKeyLang);
+}
+
 String translate(String name) {
   if (name.startsWith('Failed to') && name.contains(': ')) {
     return name.split(': ').map((x) => translate(x)).join(': ');
   }
-  return platformFFI.translate(name, localeName);
+  _configuredLang ??= bind.mainGetLocalOption(key: kCommConfKeyLang);
+  final lang = _configuredLang!;
+  return platformFFI.translate(name, lang.isEmpty ? localeName : lang);
 }
 
 // This function must be kept the same as the one in rust and sciter code.
