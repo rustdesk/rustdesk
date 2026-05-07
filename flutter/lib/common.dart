@@ -716,6 +716,17 @@ closeConnection({String? id}) {
       stateGlobal.isInMainPage = true;
     } else {
       final controller = Get.find<DesktopTabController>();
+      if (controller.tabType == DesktopTabType.terminal &&
+          controller.onCloseWindow != null) {
+        // Terminal windows are scoped to one peer. The optional id passed to
+        // closeConnection() is that peer id, not a terminal tab key
+        // (${peerId}_${terminalId}). Closing from terminal dialogs should close
+        // the peer's whole terminal window, including all terminal tabs.
+        unawaited(controller.onCloseWindow!().catchError((e, _) {
+          debugPrint('[closeConnection] Failed to close terminal window: $e');
+        }));
+        return;
+      }
       controller.closeBy(id);
     }
   }
@@ -4179,8 +4190,7 @@ Widget? buildAvatarWidget({
       width: size,
       height: size,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) =>
-          fallback ?? SizedBox.shrink(),
+      errorBuilder: (_, __, ___) => fallback ?? SizedBox.shrink(),
     ),
   );
 }

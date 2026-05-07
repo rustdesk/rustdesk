@@ -1135,6 +1135,10 @@ impl InvokeUiSession for FlutterHandler {
                     ("message", json!(&opened.message)),
                     ("pid", json!(opened.pid)),
                     ("service_id", json!(&opened.service_id)),
+                    (
+                        "replay_terminal_output",
+                        json!(opened.replay_terminal_output),
+                    ),
                 ];
                 if !opened.persistent_sessions.is_empty() {
                     event_data.push(("persistent_sessions", json!(opened.persistent_sessions)));
