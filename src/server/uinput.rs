@@ -925,14 +925,18 @@ pub mod service {
             return true;
         }
         let peer_uid = ipc::peer_uid_from_fd(stream.as_raw_fd());
-        let active_uid = ipc::active_uid();
+        let active_uid = crate::platform::linux::get_active_userid_fresh()
+            .trim()
+            .parse::<u32>()
+            .ok();
         let authorized =
             peer_uid.is_some_and(|uid| ipc::is_allowed_service_peer_uid(uid, active_uid));
         if !authorized {
             crate::ipc::log_rejected_uinput_connection(postfix, peer_uid, active_uid);
             return false;
         }
-        if let Err(err) = ipc::ensure_peer_executable_matches_current_by_fd(stream.as_raw_fd(), postfix)
+        if let Err(err) =
+            ipc::ensure_peer_executable_matches_current_by_fd(stream.as_raw_fd(), postfix)
         {
             log::warn!(
                 "Rejected connection on protected uinput ipc channel due to executable mismatch: postfix={}, err={}",

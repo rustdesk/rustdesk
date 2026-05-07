@@ -684,7 +684,7 @@ pub(crate) fn authorize_windows_portable_service_ipc_connection(
     let (authorized, peer_pid, peer_session_id, peer_is_system) =
         stream.portable_service_authorization_status_for_session(expected_session_id);
     if !authorized {
-        // Don't use `peer_pid.is_some() && peer_is_system.is_none() && peer_is_system.is_none();` here.
+        // Don't use `peer_pid.is_some() && peer_session_id.is_none() && peer_is_system.is_none();` here.
         let identity_unavailable = peer_pid.is_some() && peer_is_system.is_none();
         if identity_unavailable {
             // In portable-service startup, resolving SYSTEM peer identity may fail on some hosts.

@@ -763,7 +763,9 @@ mod tests {
         let ipc_path = parent_dir.join("ipc");
 
         let res = super::ensure_secure_ipc_parent_dir(ipc_path.to_string_lossy().as_ref(), "");
-        assert_eq!(res.unwrap(), false);
+        // Restrictive umask can make mkdir create a stricter initial mode. In that case
+        // ensure_secure_ipc_parent_dir repairs it with fchmod and may request a scrub.
+        res.unwrap();
 
         let md = std::fs::metadata(&parent_dir).unwrap();
         assert!(md.is_dir());

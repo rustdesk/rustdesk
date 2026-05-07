@@ -911,6 +911,12 @@ pub fn get_active_userid() -> String {
     get_values_of_seat0(&[1])[0].clone()
 }
 
+#[inline]
+/// Returns the active uid from a fresh seat0 lookup, bypassing the service-loop cache.
+pub fn get_active_userid_fresh() -> String {
+    get_values_of_seat0(&[1])[0].clone()
+}
+
 fn get_cm() -> bool {
     // We use `CMD_PS` instead of `ps` to suppress some audit messages on some systems.
     if let Ok(output) = Command::new(CMD_PS.as_str()).args(vec!["aux"]).output() {
