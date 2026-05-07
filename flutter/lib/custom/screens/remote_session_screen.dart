@@ -13,6 +13,10 @@ import '../settings/settings_store.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
 
+// Full-screen overlay state for this session, overrides the constrained
+// BlockableOverlay set by RemotePage.applyFfi so dialogs span the screen.
+class _FullScreenOverlayState extends OverlayKeyState {}
+
 class RemoteSessionScreen extends StatefulWidget {
   final String id;
   final String? password;
@@ -38,6 +42,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   bool _chatOpen = false;
   double _stripHeight = 0;
   late final StreamSubscription<bool> _kbVisibilitySub;
+  final _fullScreenOverlayState = _FullScreenOverlayState();
 
   @override
   void initState() {
@@ -46,6 +51,13 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     _kbVisibilitySub = KeyboardVisibilityController()
         .onChange
         .listen(_onKeyboardVisibilityChanged);
+    // Override dialogManager's overlay after RemotePage.applyFfi() runs.
+    // RemotePage binds gFFI.dialogManager to BlockableOverlay (constrained to
+    // Positioned canvas area). We replace it with a full-screen overlay so
+    // dialogs like the password prompt render centered over the whole screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      gFFI.dialogManager.setOverlayState(_fullScreenOverlayState);
+    });
   }
 
   @override
@@ -165,6 +177,12 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         Positioned.fill(
           top: safeAreaTop,
           child: IgnorePointer(child: CursorPaint(widget.id)),
+        ),
+
+        // Layer 5: full-screen dialog overlay, keyed to _fullScreenOverlayState.
+        // Dialogs (password prompt, etc.) inserted here span the entire screen.
+        Positioned.fill(
+          child: Overlay(key: _fullScreenOverlayState.key, initialEntries: const []),
         ),
       ],
     );
