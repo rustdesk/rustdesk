@@ -986,6 +986,7 @@ impl Client {
         std::thread::spawn(move || {
             let mut handler = ClientClipboardHandler {
                 ctx: None,
+                last_sent_clipboard_sig: None,
                 #[cfg(not(feature = "flutter"))]
                 client_clip_ctx: _client_clip_ctx,
             };
@@ -1007,7 +1008,12 @@ impl Client {
                         log::error!("Clipboard listener stopped with error: {}", err);
                         break;
                     }
-                    Err(RecvTimeoutError::Timeout) => {}
+                    Err(RecvTimeoutError::Timeout) => {
+                        #[cfg(target_os = "linux")]
+                        if !crate::platform::linux::is_x11() {
+                            handler.check_clipboard();
+                        }
+                    }
                     Err(RecvTimeoutError::Disconnected) => {
                         log::error!("Clipboard listener disconnected");
                         break;
@@ -1070,12 +1076,25 @@ impl ClipboardState {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 struct ClientClipboardHandler {
     ctx: Option<crate::clipboard::ClipboardContext>,
+    last_sent_clipboard_sig: Option<Vec<u8>>,
     #[cfg(not(feature = "flutter"))]
     client_clip_ctx: Option<ClientClipboardContext>,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl ClientClipboardHandler {
+    fn should_send_msg(&mut self, msg: &Message) -> bool {
+        use hbb_common::protobuf::Message as _;
+        let Ok(sig) = msg.write_to_bytes() else {
+            return true;
+        };
+        if self.last_sent_clipboard_sig.as_ref() == Some(&sig) {
+            return false;
+        }
+        self.last_sent_clipboard_sig = Some(sig);
+        true
+    }
+
     fn is_text_required(&self) -> bool {
         #[cfg(feature = "flutter")]
         {
@@ -1132,7 +1151,7 @@ impl ClientClipboardHandler {
             }
 
             if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
-                if self.is_text_required() {
+                if self.is_text_required() && self.should_send_msg(&msg) {
                     self.send_msg(msg, false);
                 }
             }
