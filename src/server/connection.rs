@@ -75,6 +75,10 @@ lazy_static::lazy_static! {
     pub static ref CONTROL_PERMISSIONS_ARRAY: Arc::<Mutex<Vec<(i32, ControlPermissions)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
     static ref WAKELOCK_KEEP_AWAKE_OPTION: Arc::<Mutex<Option<bool>>> = Default::default();
+    // Last-active display set per remote peer id. Restored on next login from
+    // the same peer so that auto-reconnect resumes on the previously selected
+    // display (iOS does not re-issue its display selection on auto-reconnect).
+    static ref LAST_VIEW_BY_PEER: Arc::<Mutex<HashMap<String, Vec<usize>>>> = Default::default();
 }
 
 #[cfg(feature = "flutter")]
@@ -298,6 +302,14 @@ pub struct Connection {
     file_remove_log_control: FileRemoveLogControl,
     last_supported_encoding: Option<SupportedEncoding>,
     services_subed: bool,
+    // Buffered SwitchDisplay (from early arrival) and pending display set to
+    // restore after services are subscribed. Together these fix the iOS
+    // auto-reconnect "waiting for image" hang when the prior session was on
+    // a non-primary display: iOS does not re-issue its display selection on
+    // auto-reconnect, so the host must restore the previously-active display
+    // set itself based on remembered per-peer state.
+    pending_display_switch: Option<usize>,
+    pending_display_set: Option<Vec<usize>>,
     delayed_read_dir: Option<(String, bool)>,
     #[cfg(target_os = "macos")]
     retina: Retina,
@@ -488,6 +500,8 @@ impl Connection {
             file_remove_log_control: FileRemoveLogControl::new(id),
             last_supported_encoding: None,
             services_subed: false,
+            pending_display_switch: None,
+            pending_display_set: None,
             delayed_read_dir: None,
             #[cfg(target_os = "macos")]
             retina: Retina::default(),
@@ -1741,6 +1755,14 @@ impl Connection {
                         self.retina.set_displays(&displays);
                     }
                     pi.displays = displays;
+                    // Clamp against the just-built `pi.displays` in case
+                    // self.display_idx was pre-set in handle_login_request_without_validation
+                    // from a snapshot that has since become stale (a monitor
+                    // unplugged in the brief window between login validation
+                    // and PeerInfo emit).
+                    if self.display_idx >= pi.displays.len() {
+                        self.display_idx = *display_service::PRIMARY_DISPLAY_IDX;
+                    }
                     pi.current_display = self.display_idx as _;
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     {
@@ -1798,6 +1820,8 @@ impl Connection {
         } else if sub_service {
             if !wait_session_id_confirm {
                 self.try_sub_monitor_services();
+                self.apply_pending_display_switch().await;
+                self.apply_pending_display_set().await;
             }
         }
         true
@@ -2266,6 +2290,33 @@ impl Connection {
 
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
+        // Clear any prior pending state in case this Connection handles re-login.
+        self.pending_display_set = None;
+        self.pending_display_switch = None;
+        // Restore previously-active display set for this peer so auto-reconnect
+        // resumes on the prior display. Only kicks in when the prior set is
+        // non-empty and isn't just the primary (no behaviour change for the
+        // common case). lr.my_id uniquely identifies the remote peer across
+        // reconnections.
+        if !lr.my_id.is_empty() {
+            if let Some(prev_set) = LAST_VIEW_BY_PEER.lock().unwrap().get(&lr.my_id).cloned() {
+                let primary = *display_service::PRIMARY_DISPLAY_IDX;
+                let valid = Self::validate_display_set(&prev_set, &lr.my_id);
+                if !valid.is_empty() && valid != vec![primary] {
+                    log::info!(
+                        "Will restore previously viewed displays {:?} for peer {} after services subscribed",
+                        valid, lr.my_id
+                    );
+                    // Pre-set display_idx so the PeerInfo response carries the
+                    // restored display index, keeping the iOS UI's expected
+                    // display in sync with the frames we'll soon emit.
+                    if valid.len() == 1 {
+                        self.display_idx = valid[0];
+                    }
+                    self.pending_display_set = Some(valid);
+                }
+            }
+        }
         self.peer_argb = crate::str2color(&format!("{}{}", &lr.my_id, &lr.my_platform), 0xff);
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
@@ -3368,6 +3419,8 @@ impl Connection {
                                 self.try_sub_camera_displays();
                             } else if !self.terminal {
                                 self.try_sub_monitor_services();
+                                self.apply_pending_display_switch().await;
+                                self.apply_pending_display_set().await;
                             }
                         }
                     }
@@ -3700,6 +3753,24 @@ impl Connection {
 
     async fn handle_switch_display(&mut self, s: SwitchDisplay) {
         let display_idx = s.display as usize;
+        if !self.services_subed {
+            // Defer until try_sub_monitor_services() registers this connection
+            // as a subscriber. Otherwise switch_display_to() calls
+            // server.subscribe() for a connection the server doesn't yet know,
+            // the subscription is silently lost, and the client (notably iOS
+            // on auto-reconnect to a non-primary display) hangs waiting for
+            // frames that never arrive.
+            log::info!(
+                "Deferring SwitchDisplay({}) until video services subscribed",
+                display_idx
+            );
+            // An explicit client-side display selection should win over any
+            // login-time auto-restore — clear the restore queue so it cannot
+            // overwrite this newer choice.
+            self.pending_display_set = None;
+            self.pending_display_switch = Some(display_idx);
+            return;
+        }
         if self.display_idx != display_idx {
             if let Some(server) = self.server.upgrade() {
                 self.switch_display_to(display_idx, server.clone());
@@ -3737,6 +3808,60 @@ impl Connection {
         }
     }
 
+    async fn apply_pending_display_switch(&mut self) {
+        if let Some(display_idx) = self.pending_display_switch.take() {
+            log::info!(
+                "Applying deferred SwitchDisplay({}) after services subscribed",
+                display_idx
+            );
+            let s = SwitchDisplay {
+                display: display_idx as i32,
+                ..Default::default()
+            };
+            // Safe re-entry: at this call site `services_subed` is true, so
+            // handle_switch_display's defer branch (`!self.services_subed`)
+            // is guaranteed to be skipped — no infinite re-deferral loop.
+            self.handle_switch_display(s).await;
+        }
+    }
+
+    async fn apply_pending_display_set(&mut self) {
+        if let Some(set) = self.pending_display_set.take() {
+            // Re-validate against current monitor topology: this method can
+            // fire well after handle_login_request_without_validation (e.g.,
+            // after SelectedSid in multi-user-session-confirm flows), so the
+            // set we validated at login time may have gone stale if a monitor
+            // was unplugged or the display config changed in the interim.
+            let valid = Self::validate_display_set(&set, &self.lr.my_id);
+            if valid.is_empty() {
+                return;
+            }
+            log::info!(
+                "Restoring previously viewed display set {:?} after services subscribed",
+                valid
+            );
+            self.capture_displays(&[], &[], &valid).await;
+        }
+    }
+
+    /// Drop any indices in `set` that no longer correspond to a currently-present
+    /// display. If display enumeration fails, returns an empty Vec (and logs)
+    /// rather than trusting stored indices — restoring an out-of-range index
+    /// would push a bad current_display into PeerInfo and start a capturer for
+    /// a non-existent display.
+    fn validate_display_set(set: &[usize], peer_id: &str) -> Vec<usize> {
+        match display_service::try_get_displays() {
+            Ok(ds) => set.iter().copied().filter(|idx| *idx < ds.len()).collect(),
+            Err(err) => {
+                log::warn!(
+                    "Skipping display restore for peer {} because display enumeration failed: {}",
+                    peer_id, err
+                );
+                Vec::new()
+            }
+        }
+    }
+
     fn switch_display_to(&mut self, display_idx: usize, server: Arc<RwLock<Server>>) {
         let new_service_name = video_service::get_service_name(self.video_source(), display_idx);
         let old_service_name =
@@ -3757,6 +3882,15 @@ impl Connection {
         }
         lock.subscribe(&new_service_name, self.inner.clone(), true);
         self.display_idx = display_idx;
+        // Persist for auto-reconnect restoration (older-client SwitchDisplay
+        // path). Camera-mode indices are not persisted: they're meaningless for
+        // a future monitor session and would confuse the restore path.
+        if !self.lr.my_id.is_empty() && matches!(self.video_source(), VideoSource::Monitor) {
+            LAST_VIEW_BY_PEER
+                .lock()
+                .unwrap()
+                .insert(self.lr.my_id.clone(), vec![display_idx]);
+        }
     }
 
     #[cfg(windows)]
@@ -3813,6 +3947,24 @@ impl Connection {
                 );
             }
             drop(lock);
+        }
+        // Persist the current view for this peer so a future auto-reconnect
+        // can restore it. We persist only when:
+        // - `set` is non-empty (the canonical "view this exact set" call;
+        //   add/sub updates are partial),
+        // - the video source is the monitor (camera-mode display indices are
+        //   meaningless in a future monitor session and would only confuse the
+        //   restore path), and
+        // - the peer has a non-empty id we can key by.
+        if !set.is_empty()
+            && !self.lr.my_id.is_empty()
+            && matches!(video_source, VideoSource::Monitor)
+        {
+            LAST_VIEW_BY_PEER
+                .lock()
+                .unwrap()
+                .insert(self.lr.my_id.clone(), set.to_vec());
+            log::info!("Persisted view {:?} for peer {}", set, self.lr.my_id);
         }
     }
 
