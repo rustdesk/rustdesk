@@ -13,6 +13,9 @@ class SettingsStore extends ChangeNotifier {
       double.tryParse(_read('scroll_sensitivity') ?? '') ?? 1.0;
   bool get scrollInverted => _read('scroll_inverted') == '1';
   bool get chatStartMaximized => _read('chat_start_maximized') == '1';
+  double get macroBarTopOffset =>
+      double.tryParse(_read('macro_bar_top') ?? '') ?? 120.0;
+  bool get macroBarCollapsed => _read('macro_bar_collapsed') == '1';
 
   Future<void> setServer({
     required String idServer,
@@ -39,6 +42,12 @@ class SettingsStore extends ChangeNotifier {
 
   Future<void> setScrollInverted(bool value) =>
       _write('scroll_inverted', value ? '1' : '0');
+
+  Future<void> setMacroBarTopOffset(double value) =>
+      _write('macro_bar_top', value.toStringAsFixed(1));
+
+  Future<void> setMacroBarCollapsed(bool value) =>
+      _write('macro_bar_collapsed', value ? '1' : '0');
 
   String? _read(String key) {
     final v = bind.mainGetLocalOption(key: '$_ns$key');

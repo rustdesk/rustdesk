@@ -10,6 +10,7 @@ import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import '../chat/terminal_chat_overlay.dart';
 import '../input/input_bridge.dart';
 import '../input/text_field_bridge.dart';
+import '../overlay/floating_macro_bar.dart';
 import '../settings/settings_store.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
@@ -248,6 +249,15 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         Positioned.fill(
           top: safeAreaTop,
           child: IgnorePointer(child: CursorPaint(widget.id)),
+        ),
+
+        // Layer 4.5: floating vertical macro bar — draggable along the right edge.
+        // Independent of the power strip; persists position and collapsed state.
+        FloatingMacroBar(
+          bridge: _bridge,
+          onZoomFit: _onZoomFit,
+          onMouseModeToggle: _onMouseModeToggle,
+          onClipboardPaste: _onClipboardPaste,
         ),
 
         // Layer 5: full-screen dialog overlay, keyed to _fullScreenOverlayState.
