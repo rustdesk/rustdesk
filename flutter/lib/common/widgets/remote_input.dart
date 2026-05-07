@@ -514,7 +514,7 @@ class _RawTouchGestureDetectorRegionState
   }
 
   get onHoldDragCancel => null;
-  get onThreeFingerVerticalDragUpdate => ffi.ffiModel.isPeerAndroid
+  get onScrollVerticalDragUpdate => ffi.ffiModel.isPeerAndroid
       ? null
       : (d) {
           _mouseScrollIntegral += d.delta.dy / 4;
@@ -526,6 +526,8 @@ class _RawTouchGestureDetectorRegionState
             _mouseScrollIntegral = 0;
           }
         };
+
+  get onThreeFingerVerticalDragUpdate => onScrollVerticalDragUpdate;
 
   makeGestures(BuildContext context) {
     return <Type, GestureRecognizerFactory>{
@@ -594,7 +596,12 @@ class _RawTouchGestureDetectorRegionState
           ..onTwoFingerScaleStart = onTwoFingerScaleStart
           ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
           ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
-          ..onThreeFingerVerticalDragUpdate = onThreeFingerVerticalDragUpdate;
+          // Two-finger vertical drag: primary scroll for Android devices where
+          // the OS (e.g. MIUI on Xiaomi) intercepts three-finger gestures.
+          ..onTwoFingerVerticalDragUpdate = onScrollVerticalDragUpdate
+          // Three-finger vertical drag: kept for devices where the OS does not
+          // intercept three-finger gestures.
+          ..onThreeFingerVerticalDragUpdate = onScrollVerticalDragUpdate;
       }),
     };
   }
