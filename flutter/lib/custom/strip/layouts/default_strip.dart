@@ -30,6 +30,7 @@ StripLayout stripLayoutForPlatform(String platform) {
         right: [
           KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle, widthFactor: 0.7),
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
+          KeyDef(label: '🖥', keyName: '', type: KeyType.displaySwitch, widthFactor: 0.7),
         ],
       ),
       // Row 2: chat + macros + ⌫ + Tab (left)  |  ⇞ + ⇟ + arrow cluster (right)

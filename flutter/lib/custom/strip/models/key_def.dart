@@ -7,6 +7,7 @@ enum KeyType {
   stripToggle,
   disconnect,
   chatToggle,
+  displaySwitch,
 }
 
 class KeyDef {

@@ -16,6 +16,7 @@ class PowerStrip extends StatefulWidget {
   final VoidCallback onKeyboardTap;
   final VoidCallback onDisconnect;
   final VoidCallback onChatToggle;
+  final VoidCallback onDisplaySwitch;
   final bool leftHanded;
 
   const PowerStrip({
@@ -26,6 +27,7 @@ class PowerStrip extends StatefulWidget {
     required this.onKeyboardTap,
     required this.onDisconnect,
     required this.onChatToggle,
+    required this.onDisplaySwitch,
     this.leftHanded = false,
   });
 
@@ -96,6 +98,9 @@ class _PowerStripState extends State<PowerStrip> {
   }
 
   Widget _wrapScaled(KeyDef k, double scale) {
+    if (k.type == KeyType.displaySwitch && gFFI.ffiModel.pi.displays.length <= 1) {
+      return const SizedBox.shrink();
+    }
     final scaled = scale < 1.0 ? k.copyWith(widthFactor: k.widthFactor * scale) : k;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 2 * scale),
@@ -128,6 +133,8 @@ class _PowerStripState extends State<PowerStrip> {
         widget.onDisconnect();
       case KeyType.chatToggle:
         widget.onChatToggle();
+      case KeyType.displaySwitch:
+        widget.onDisplaySwitch();
       case KeyType.regular:
         // Regular keys go through onPressStart / onPressEnd in KeyCell so the
         // held modifier (if any) stays down until the in-flight tap finishes.

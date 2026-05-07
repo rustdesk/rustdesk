@@ -95,6 +95,10 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     setState(() => _chatOpen = !_chatOpen);
   }
 
+  void _onDisplaySwitch() {
+    showOptions(context, widget.id, gFFI.dialogManager);
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -153,6 +157,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
                 onKeyboardTap: _onKeyboardTap,
                 onDisconnect: _onDisconnect,
                 onChatToggle: _onChatToggle,
+                onDisplaySwitch: _onDisplaySwitch,
               ),
             ),
           ),
