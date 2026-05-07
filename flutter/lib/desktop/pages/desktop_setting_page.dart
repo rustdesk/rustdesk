@@ -1747,6 +1747,7 @@ class _DisplayState extends State<_Display> {
     return ListView(controller: scrollController, children: [
       viewStyle(context),
       scrollStyle(context),
+      remoteCanvasMargin(context),
       imageQuality(context),
       codec(context),
       if (isDesktop) trackpadSpeed(context),
@@ -1821,6 +1822,30 @@ class _DisplayState extends State<_Display> {
                   : onEdgeScrollEdgeThicknessChanged,
             )),
       ],
+    ]);
+  }
+
+  Widget remoteCanvasMargin(BuildContext context) {
+    onChanged(double value) async {
+      final normalizedValue = value.clamp(0, kMaxRemoteCanvasMargin).round();
+      await bind.mainSetUserDefaultOption(
+          key: kOptionRemoteCanvasMargin, value: normalizedValue.toString());
+      setState(() {});
+    }
+
+    final currentValue = (double.tryParse(bind.mainGetUserDefaultOption(
+                key: kOptionRemoteCanvasMargin)) ??
+            0)
+        .clamp(0, kMaxRemoteCanvasMargin)
+        .toDouble();
+
+    return _Card(title: 'canvas_margin', children: [
+      EdgeThicknessControl(
+        value: currentValue,
+        min: 0,
+        max: kMaxRemoteCanvasMargin,
+        onChanged: onChanged,
+      ),
     ]);
   }
 
