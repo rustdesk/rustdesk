@@ -15,5 +15,11 @@ uuid = { version = "1.3", features = ["v4"] }
 webm = { git = "https://github.com/rustdesk-org/rust-webm" }
 time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
 
+# libc provides dlopen/dlsym on Linux for runtime X11 idle detection.
 [target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
 openssl = { version = "0.10", features = ["vendored"] }
+
+# winapi for GetLastInputInfo / GetTickCount on Windows.
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "sysinfoapi"] }

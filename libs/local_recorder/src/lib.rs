@@ -1,4 +1,4 @@
-mod activity;
+pub(crate) mod activity;
 mod capture;
 mod service;
 mod storage;
@@ -7,7 +7,7 @@ mod writer;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-pub use activity::{ActivityTracker, IdleSource};
+pub use activity::{platform_idle_duration, ActivityTracker, IdleSource};
 pub use capture::{CaptureDriver, CaptureWorker};
 pub use service::{LocalRecorderService, RecorderState, StatusReason};
 pub use storage::{SegmentPaths, StorageManager};
