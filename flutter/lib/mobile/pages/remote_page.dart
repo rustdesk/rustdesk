@@ -157,6 +157,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     }
   }
 
+  // Tracks the composing range from the previous onChanged call.
+  // Comparing against the previous composing range lets us detect when
+  // characters transition from composing → committed, even when the iOS
+  // IME hasn't fully cleared the composing range yet.
+  TextRange _lastComposing = TextRange.empty;
+
   // For client side
   // When swithing from other app to this app, try to sync clipboard.
   void trySyncClipboard() {
@@ -214,52 +220,56 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void _handleIOSSoftKeyboardInput(String newValue) {
-    var oldValue = _value;
-    _value = newValue;
-    var i = newValue.length - 1;
-    for (; i >= 0 && newValue[i] != '1'; --i) {}
-    var j = oldValue.length - 1;
-    for (; j >= 0 && oldValue[j] != '1'; --j) {}
-    if (i < j) j = i;
-    var subNewValue = newValue.substring(j + 1);
-    var subOldValue = oldValue.substring(j + 1);
+    final composing = _textController.value.composing;
 
-    // get common prefix of subNewValue and subOldValue
-    var common = 0;
-    for (;
-        common < subOldValue.length &&
-            common < subNewValue.length &&
-            subNewValue[common] == subOldValue[common];
-        ++common) {}
-
-    // get newStr from subNewValue
-    var newStr = "";
-    if (subNewValue.length > common) {
-      newStr = subNewValue.substring(common);
-    }
-
-    // Set the value to the old value and early return if is still composing. (1 && 2)
-    // 1. The composing range is valid
-    // 2. The new string is shorter than the composing range.
-    if (_textController.value.isComposingRangeValid) {
-      final composingLength = _textController.value.composing.end -
-          _textController.value.composing.start;
-      if (composingLength > newStr.length) {
-        _value = oldValue;
-        return;
+    // Flutter bug on iOS: after IME commits Chinese characters, the composing
+    // range stays valid instead of resetting to (-1,-1), covering the committed
+    // characters. Workaround: if the composing range contains only non-Latin
+    // characters (CJK), it's actually committed text, not real composing.
+    // Real pinyin composing always contains Latin letters (a-z).
+    var effectiveComposing = composing;
+    if (composing.isValid) {
+      final composingText = newValue.substring(composing.start, composing.end);
+      if (!RegExp(r'[a-zA-Z]').hasMatch(composingText)) {
+        effectiveComposing = TextRange.empty;
       }
     }
 
-    // Delete the different part in the old value.
-    for (i = 0; i < subOldValue.length - common; ++i) {
+    // Strip composing ranges from both old and new text.
+    final oldCommitted = _lastComposing.isValid
+        ? _value.substring(0, _lastComposing.start) +
+            _value.substring(_lastComposing.end)
+        : _value;
+
+    final newCommitted = effectiveComposing.isValid
+        ? newValue.substring(0, effectiveComposing.start) +
+            newValue.substring(effectiveComposing.end)
+        : newValue;
+
+    _value = newValue;
+    _lastComposing = effectiveComposing;
+
+    if (newCommitted == oldCommitted) return;
+
+    var common = 0;
+    for (;
+        common < oldCommitted.length &&
+            common < newCommitted.length &&
+            oldCommitted[common] == newCommitted[common];
+        ++common) {}
+
+    final toDelete = oldCommitted.length - common;
+    for (var k = 0; k < toDelete; ++k) {
       inputModel.inputKey('VK_BACK');
     }
 
-    // Input the new string.
-    if (newStr.length > 1) {
-      bind.sessionInputString(sessionId: sessionId, value: newStr);
-    } else {
-      inputChar(newStr);
+    final newStr = newCommitted.substring(common);
+    if (newStr.isNotEmpty) {
+      if (newStr.length > 1) {
+        bind.sessionInputString(sessionId: sessionId, value: newStr);
+      } else {
+        inputChar(newStr);
+      }
     }
   }
 
@@ -326,6 +336,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
+    _lastComposing = TextRange.empty;
     _textController.text = _value;
     setState(() => _showEdit = false);
     _timer?.cancel();
