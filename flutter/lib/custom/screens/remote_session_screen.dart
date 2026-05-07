@@ -316,6 +316,16 @@ class _MacroSheetState extends State<_MacroSheet> {
               runSpacing: 8,
               children: [
                 _MacroButton(
+                  label: '⌃V',
+                  tooltip: 'Paste (Ctrl+V)',
+                  onTap: () => widget.bridge.tapKey('v', modifiers: {'ctrl'}),
+                ),
+                _MacroButton(
+                  label: '⌘V',
+                  tooltip: 'Paste (Cmd+V)',
+                  onTap: () => widget.bridge.tapKey('v', modifiers: {'meta'}),
+                ),
+                _MacroButton(
                   label: '⌘⇧V',
                   tooltip: 'Paste (Cmd+Shift+V)',
                   onTap: () => widget.bridge.tapKey('v', modifiers: {'meta', 'shift'}),
