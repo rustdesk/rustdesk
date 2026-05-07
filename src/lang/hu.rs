@@ -743,6 +743,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "Kijelző név"),
         ("password-hidden-tip", "Állandó jelszó lett beállítva (rejtett)."),
         ("preset-password-in-use-tip", "Jelenleg az alapértelmezett jelszót használja."),
-        ("Enable privacy mode", ""),
+        ("Enable privacy mode", "Adatvédelmi mód aktiválása"),
     ].iter().cloned().collect();
 }
