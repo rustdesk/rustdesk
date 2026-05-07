@@ -7,7 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:html' as html;
 
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/common.dart' as common;
+import 'package:flutter_hbb/models/shortcut_model.dart';
 
 final _privateConstructorUsedError = UnsupportedError(
     'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
@@ -1195,10 +1195,11 @@ class RustdeskImpl {
     // JS -> Dart shortcut bridge. The matcher in flutter/web/js/src/
     // shortcut_matcher.ts calls `window.onShortcutTriggered(actionId)` when a
     // binding fires; route it to the active session's ShortcutModel.
-    // Web is single-window so `gFFI` is always the active session.
+    // Web uses a JS-side connection, so the event does not arrive through the
+    // native session event stream.
     js.context['onShortcutTriggered'] = (dynamic action) {
       if (action is String) {
-        common.gFFI.shortcutModel.onTriggered(action);
+        ShortcutModel.onWebTriggered(action);
       }
     };
     return Future.value();

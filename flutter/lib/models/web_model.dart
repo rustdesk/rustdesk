@@ -126,6 +126,7 @@ class PlatformFFI {
       gFFI.dialogManager.dismissAll();
       closeConnection();
     };
+    await _ffiBind.mainInit(appDir: '');
     context.callMethod('init');
     version = getByName('version');
     window.onContextMenu.listen((event) {

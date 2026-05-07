@@ -26,6 +26,8 @@ typedef ShortcutCallback = FutureOr<void> Function();
 /// via [onTriggered], which runs whatever callback the toolbar / menu
 /// builders previously registered for that action id.
 class ShortcutModel {
+  static WeakReference<ShortcutModel>? _activeWebModel;
+
   final WeakReference<FFI> parent;
   final Map<String, ShortcutCallback> _callbacks = {};
 
@@ -35,6 +37,7 @@ class ShortcutModel {
   /// matched shortcut fires.
   void register(String actionId, ShortcutCallback callback) {
     _callbacks[actionId] = callback;
+    _activeWebModel = WeakReference(this);
   }
 
   void unregister(String actionId) {
@@ -43,6 +46,18 @@ class ShortcutModel {
 
   void clear() {
     _callbacks.clear();
+    if (identical(_activeWebModel?.target, this)) {
+      _activeWebModel = null;
+    }
+  }
+
+  static void onWebTriggered(String actionId) {
+    final model = _activeWebModel?.target;
+    if (model != null) {
+      model.onTriggered(actionId);
+    } else {
+      debugPrint('shortcut_triggered: no active web shortcut model');
+    }
   }
 
   /// Called by the session event listener when a `shortcut_triggered` event

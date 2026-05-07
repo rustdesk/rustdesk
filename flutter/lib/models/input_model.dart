@@ -15,7 +15,9 @@ import 'package:get/get.dart';
 
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../models/shortcut_model.dart';
 import '../../models/state_model.dart';
+import '../common/widgets/keyboard_shortcuts/shortcut_utils.dart';
 import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
@@ -826,6 +828,9 @@ class InputModel {
         return KeyEventResult.ignored;
       }
     }
+    if (_tryDispatchWebFlutterShortcut(e)) {
+      return KeyEventResult.handled;
+    }
     if (isWindows || isLinux) {
       // Ignore meta keys. Because flutter window will loose focus if meta key is pressed.
       if (e.physicalKey == PhysicalKeyboardKey.metaLeft ||
@@ -918,6 +923,53 @@ class InputModel {
     }
 
     return KeyEventResult.handled;
+  }
+
+  bool _tryDispatchWebFlutterShortcut(KeyEvent e) {
+    if (!isWeb || !isInputSourceFlutter) return false;
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
+    if (!ShortcutModel.isEnabled() || ShortcutModel.isPassThrough()) {
+      return false;
+    }
+    final keyName = logicalKeyName(e.logicalKey);
+    if (keyName == null) return false;
+    final mods = canonicalShortcutModsForSave(_webFlutterShortcutMods());
+    final action = _matchWebFlutterShortcut(keyName, mods);
+    if (action == null) return false;
+    if (e is KeyDownEvent) {
+      parent.target?.shortcutModel.onTriggered(action);
+    }
+    return true;
+  }
+
+  Set<String> _webFlutterShortcutMods() {
+    final keyboard = HardwareKeyboard.instance;
+    final mods = <String>{};
+    if (isMacOS || isIOS || isWebOnMacOs) {
+      if (keyboard.isMetaPressed) mods.add('primary');
+      if (keyboard.isControlPressed) mods.add('ctrl');
+    } else if (keyboard.isControlPressed) {
+      mods.add('primary');
+    }
+    if (keyboard.isAltPressed) mods.add('alt');
+    if (keyboard.isShiftPressed) mods.add('shift');
+    return mods;
+  }
+
+  String? _matchWebFlutterShortcut(String keyName, List<String> mods) {
+    for (final binding in ShortcutModel.readBindings()) {
+      final action = binding['action'];
+      final key = binding['key'];
+      final bindingMods =
+          canonicalShortcutModsForSave(shortcutModSetFrom(binding['mods']));
+      if (action is String &&
+          key == keyName &&
+          bindingMods.isNotEmpty &&
+          listEquals(bindingMods, mods)) {
+        return action;
+      }
+    }
+    return null;
   }
 
   /// Send Key Event
