@@ -1948,6 +1948,69 @@ pub fn run_cmds_privileged(cmds: &str) -> bool {
     crate::platform::gtk_sudo::run(vec![cmds]).is_ok()
 }
 
+/// Check whether the systemd service unit file is installed, or trigger installation.
+///
+/// - `prompt=false`: Returns `true` if the unit file exists in systemd's search paths.
+/// - `prompt=true`: Spawns a background thread that copies the unit file into
+///   `/etc/systemd/system/`, reloads systemd, enables and starts the service.
+///   Always returns `false` immediately (async, mirrors macOS behavior).
+pub fn is_installed_daemon(prompt: bool) -> bool {
+    let app_name = crate::get_app_name().to_lowercase();
+    let unit_name = format!("{app_name}.service");
+
+    if !prompt {
+        return std::path::Path::new(&format!("/etc/systemd/system/{unit_name}")).exists()
+            || std::path::Path::new(&format!("/usr/lib/systemd/system/{unit_name}")).exists();
+    }
+
+    // prompt=true: install the unit file in a background thread
+    std::thread::spawn(move || {
+        if let Err(e) = install_systemd_unit(&app_name, &unit_name) {
+            log::error!("Failed to install systemd unit: {}", e);
+        }
+    });
+    false
+}
+
+/// Copy the systemd unit file to `/etc/systemd/system/`, reload, enable, and start.
+fn install_systemd_unit(app_name: &str, unit_name: &str) -> ResultType<()> {
+    // Try to read the unit file from the package-installed path first
+    let pkg_path = format!("/usr/share/{app_name}/files/systemd/{unit_name}");
+    let unit_contents = if std::path::Path::new(&pkg_path).exists() {
+        std::fs::read_to_string(&pkg_path)?
+    } else {
+        // Fall back to the embedded copy
+        include_str!("../../res/rustdesk.service").to_string()
+    };
+
+    // Fix pkill path to be absolute if /usr/bin/pkill exists
+    let unit_contents = if std::path::Path::new("/usr/bin/pkill").exists() {
+        unit_contents.replace("ExecStop=pkill ", "ExecStop=/usr/bin/pkill ")
+    } else {
+        unit_contents
+    };
+
+    // Write to a temp file, then use privileged copy
+    let tmp_path = format!("/tmp/.{unit_name}.tmp");
+    std::fs::write(&tmp_path, &unit_contents)?;
+
+    let dst = format!("/etc/systemd/system/{unit_name}");
+    let tmp_quoted = shell_quote(&tmp_path);
+    let dst_quoted = shell_quote(&dst);
+
+    let success = run_cmds_privileged(&format!(
+        "cp -f {tmp_quoted} {dst_quoted}; rm -f {tmp_quoted}; systemctl daemon-reload; systemctl enable {app_name}; systemctl start {app_name};"
+    ));
+
+    // Clean up temp file in case privileged command failed before removing it
+    std::fs::remove_file(&tmp_path).ok();
+
+    if !success {
+        bail!("Privileged command failed or was cancelled");
+    }
+    Ok(())
+}
+
 /// Spawn the current executable after a delay.
 ///
 /// # Security
@@ -2012,9 +2075,17 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
     let cp = switch_service(true);
     let app_name = crate::get_app_name().to_lowercase();
+    let unit_file = format!("/etc/systemd/system/{app_name}.service");
+    // Remove admin-installed unit file (not package-owned /usr/lib/systemd/system/)
+    let rm_unit = if std::path::Path::new(&unit_file).exists() {
+        let quoted = shell_quote(&unit_file);
+        format!("rm -f {quoted}; systemctl daemon-reload;")
+    } else {
+        String::new()
+    };
     // systemctl kill rustdesk --tray, execute cp first
     if !run_cmds_privileged(&format!(
-        "{cp} systemctl disable {app_name}; systemctl stop {app_name};"
+        "{cp} systemctl disable {app_name}; systemctl stop {app_name}; {rm_unit}"
     )) {
         Config::set_option("stop-service".into(), "".into());
         return true;
@@ -2034,7 +2105,15 @@ pub fn install_service() -> bool {
     log::info!("Installing service...");
     let cp = switch_service(false);
     let app_name = crate::get_app_name().to_lowercase();
-    if !run_cmds_privileged(&format!(
+    // If the unit file isn't installed yet, install it first
+    if !is_installed_daemon(false) {
+        let unit_name = format!("{app_name}.service");
+        if let Err(e) = install_systemd_unit(&app_name, &unit_name) {
+            log::error!("Failed to install systemd unit during service install: {}", e);
+            Config::set_option("stop-service".into(), "Y".into());
+            return true;
+        }
+    } else if !run_cmds_privileged(&format!(
         "{cp} systemctl enable {app_name}; systemctl start {app_name};"
     )) {
         Config::set_option("stop-service".into(), "Y".into());

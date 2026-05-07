@@ -48,6 +48,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   var watchIsProcessTrust = false;
   var watchIsInputMonitoring = false;
   var watchIsCanRecordAudio = false;
+  var watchIsInstalledDaemon = false;
   Timer? _updateTimer;
   bool isCardClosed = false;
 
@@ -518,6 +519,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         return Container();
       }
       final LinuxCards = <Widget>[];
+      if (bind.mainIsInstalled() &&
+          !bind.mainIsInstalledDaemon(prompt: false)) {
+        LinuxCards.add(buildInstallCard(
+            "", "install_daemon_tip", "Install", () async {
+          bind.mainIsInstalledDaemon(prompt: true);
+          watchIsInstalledDaemon = true;
+        }, marginTop: LinuxCards.isEmpty ? 20.0 : 5.0));
+      }
       if (bind.isSelinuxEnforcing()) {
         // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
         final keyShowSelinuxHelpTip = "show-selinux-help-tip";
@@ -728,6 +737,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           // Monitoring may not take effect until the process is restarted.
           // rustDeskWinManager.call(
           //     WindowType.RemoteDesktop, kWindowDisableGrabKeyboard, '');
+          setState(() {});
+        }
+      }
+      if (watchIsInstalledDaemon) {
+        if (bind.mainIsInstalledDaemon(prompt: false)) {
+          watchIsInstalledDaemon = false;
           setState(() {});
         }
       }
