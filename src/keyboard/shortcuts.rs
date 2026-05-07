@@ -360,7 +360,11 @@ pub fn match_event(event: &rdev::Event) -> Option<String> {
 ///   which Flutter session id the keystroke was meant for, so route to the
 ///   globally-current session via `flutter::get_cur_session_id()`.
 #[cfg(feature = "flutter")]
-pub fn try_dispatch(session_id: Option<&hbb_common::SessionID>, event: &rdev::Event) -> bool {
+pub fn try_dispatch(
+    session_id: Option<&hbb_common::SessionID>,
+    event: &rdev::Event,
+    keyboard_mode: &str,
+) -> bool {
     let Some(action_id) = match_event(event) else {
         return false;
     };
@@ -372,6 +376,7 @@ pub fn try_dispatch(session_id: Option<&hbb_common::SessionID>, event: &rdev::Ev
             &resolved
         }
     };
+    crate::keyboard::release_remote_keys(keyboard_mode);
     crate::flutter::push_session_event(sid, "shortcut_triggered", vec![("action", &action_id)]);
     true
 }

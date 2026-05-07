@@ -344,7 +344,7 @@ pub mod client {
         // `flutter::get_cur_session_id()` — the rdev grab loop is process-wide
         // and has no per-event session context to thread.
         #[cfg(feature = "flutter")]
-        if crate::keyboard::shortcuts::try_dispatch(None, event) {
+        if crate::keyboard::shortcuts::try_dispatch(None, event, keyboard_mode) {
             return;
         }
 
@@ -371,7 +371,7 @@ pub mod client {
         // through, so dispatch targets the exact tab the keystroke originated
         // from — no dependency on the global focus tracker.
         #[cfg(feature = "flutter")]
-        if crate::keyboard::shortcuts::try_dispatch(Some(&session_id), event) {
+        if crate::keyboard::shortcuts::try_dispatch(Some(&session_id), event, keyboard_mode) {
             return;
         }
         #[cfg(not(feature = "flutter"))]
