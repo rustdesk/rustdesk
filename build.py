@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import subprocess
 import pathlib
 import platform
 import zipfile
@@ -39,7 +40,10 @@ def get_deb_extra_depends() -> str:
     return ""
 
 def system2(cmd):
-    exit_code = os.system(cmd)
+    if isinstance(cmd, list):
+        exit_code = subprocess.call(cmd)
+    else:
+        exit_code = subprocess.call(cmd, shell=True)
     if exit_code != 0:
         sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
@@ -615,13 +619,13 @@ def main():
                     'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
                 system2(
                     'cp res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
-                os.system('mkdir -p tmpdeb/etc/rustdesk/')
-                os.system('cp -a res/startwm.sh tmpdeb/etc/rustdesk/')
-                os.system('mkdir -p tmpdeb/etc/X11/rustdesk/')
-                os.system('cp res/xorg.conf tmpdeb/etc/X11/rustdesk/')
-                os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
-                os.system('mkdir -p tmpdeb/etc/pam.d/')
-                os.system('cp pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
+                system2('mkdir -p tmpdeb/etc/rustdesk/')
+                system2('cp -a res/startwm.sh tmpdeb/etc/rustdesk/')
+                system2('mkdir -p tmpdeb/etc/X11/rustdesk/')
+                system2('cp res/xorg.conf tmpdeb/etc/X11/rustdesk/')
+                system2('cp -a DEBIAN/* tmpdeb/DEBIAN/')
+                system2('mkdir -p tmpdeb/etc/pam.d/')
+                system2('cp pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
                 system2('strip tmpdeb/usr/bin/rustdesk')
                 system2('mkdir -p tmpdeb/usr/share/rustdesk')
                 system2('mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/share/rustdesk/')
