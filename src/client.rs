@@ -1541,11 +1541,21 @@ pub struct VideoHandler {
     decoder: Decoder,
     pub rgb: ImageRgb,
     pub texture: ImageTexture,
-    recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
+    record_tx: Option<std::sync::mpsc::SyncSender<RecordTask>>,
+    record_send_err_logged: bool,
+    record_drop_logged: bool,
     _display: usize, // useful for debug
     fail_counter: usize,
     first_frame: bool,
+}
+
+enum RecordTask {
+    Frame {
+        frame: video_frame::Union,
+        w: usize,
+        h: usize,
+    },
 }
 
 impl VideoHandler {
@@ -1573,8 +1583,10 @@ impl VideoHandler {
             decoder: Decoder::new(format, luid),
             rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),
             texture: Default::default(),
-            recorder: Default::default(),
             record: false,
+            record_tx: None,
+            record_send_err_logged: false,
+            record_drop_logged: false,
             _display,
             fail_counter: 0,
             first_frame: true,
@@ -1585,7 +1597,7 @@ impl VideoHandler {
     #[inline]
     pub fn handle_frame(
         &mut self,
-        vf: VideoFrame,
+        mut vf: VideoFrame,
         pixelbuffer: &mut bool,
         chroma: &mut Option<Chroma>,
     ) -> ResultType<bool> {
@@ -1593,46 +1605,69 @@ impl VideoHandler {
         if format != self.decoder.format() {
             self.reset(Some(format));
         }
-        match &vf.union {
-            Some(frame) => {
-                let res = self.decoder.handle_video_frame(
-                    frame,
-                    &mut self.rgb,
-                    &mut self.texture,
-                    pixelbuffer,
-                    chroma,
-                );
-                if res.as_ref().is_ok_and(|x| *x) {
-                    self.fail_counter = 0;
-                } else {
-                    if self.fail_counter < usize::MAX {
-                        if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
-                            log::error!("decode first frame failed");
-                            self.fail_counter = MAX_DECODE_FAIL_COUNTER;
-                        } else {
-                            self.fail_counter += 1;
+        let Some(frame) = vf.union.as_ref() else {
+            return Ok(false);
+        };
+        let res = {
+            self.decoder.handle_video_frame(
+                frame,
+                &mut self.rgb,
+                &mut self.texture,
+                pixelbuffer,
+                chroma,
+            )
+        };
+        let decode_ok = res.as_ref().is_ok_and(|x| *x);
+        if decode_ok {
+            self.fail_counter = 0;
+        } else if self.fail_counter < usize::MAX {
+            if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
+                log::error!("decode first frame failed");
+                self.fail_counter = MAX_DECODE_FAIL_COUNTER;
+            } else {
+                self.fail_counter += 1;
+            }
+            log::error!(
+                "Failed to handle video frame, fail counter: {}",
+                self.fail_counter
+            );
+        }
+        self.first_frame = false;
+        if decode_ok && self.record {
+            let (w, h) = if *pixelbuffer {
+                (self.rgb.w, self.rgb.h)
+            } else {
+                (self.texture.w, self.texture.h)
+            };
+            if let Some(tx) = self.record_tx.as_ref() {
+                use std::sync::mpsc::TrySendError;
+                if let Some(frame) = vf.union.take() {
+                    match tx.try_send(RecordTask::Frame { frame, w, h }) {
+                        Ok(()) => {}
+                        Err(TrySendError::Full(_task)) => {
+                            // Drop frames if recorder can't keep up (e.g. slow network share).
+                            if !self.record_drop_logged {
+                                self.record_drop_logged = true;
+                                log::warn!(
+                                    "recording is falling behind; dropping frames to keep rendering responsive"
+                                );
+                            }
                         }
-                        log::error!(
-                            "Failed to handle video frame, fail counter: {}",
-                            self.fail_counter
-                        );
+                        Err(TrySendError::Disconnected(_task)) => {
+                            if !self.record_send_err_logged {
+                                self.record_send_err_logged = true;
+                                log::warn!(
+                                    "recording worker disconnected, stop recording frames"
+                                );
+                            }
+                            self.record = false;
+                            self.record_tx = None;
+                        }
                     }
                 }
-                self.first_frame = false;
-                if self.record {
-                    self.recorder.lock().unwrap().as_mut().map(|r| {
-                        let (w, h) = if *pixelbuffer {
-                            (self.rgb.w, self.rgb.h)
-                        } else {
-                            (self.texture.w, self.texture.h)
-                        };
-                        r.write_frame(frame, w, h).ok();
-                    });
-                }
-                res
             }
-            _ => Ok(false),
         }
+        res
     }
 
     /// Reset the decoder, change format if it is Some
@@ -1653,20 +1688,40 @@ impl VideoHandler {
     /// Start or stop screen record.
     pub fn record_screen(&mut self, start: bool, id: String, display_idx: usize, camera: bool) {
         self.record = false;
+        self.record_tx = None;
+        self.record_send_err_logged = false;
+        self.record_drop_logged = false;
         if start {
-            self.recorder = Recorder::new(RecorderContext {
+            let (tx, rx) = std::sync::mpsc::sync_channel::<RecordTask>(120);
+            let ctx = RecorderContext {
                 server: false,
                 id,
                 dir: crate::ui_interface::video_save_directory(false),
                 display_idx,
                 camera,
                 tx: None,
-            })
-            .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
-        } else {
-            self.recorder = Default::default();
+            };
+            std::thread::spawn(move || {
+                let mut recorder = match Recorder::new(ctx) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("failed to create recorder: {e}");
+                        return;
+                    }
+                };
+                while let Ok(task) = rx.recv() {
+                    match task {
+                        RecordTask::Frame { frame, w, h } => {
+                            if let Err(e) = recorder.write_frame(&frame, w, h) {
+                                log::error!("recording write_frame failed: {e}");
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+            self.record_tx = Some(tx);
         }
-
         self.record = start;
     }
 }
