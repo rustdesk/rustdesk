@@ -95,6 +95,14 @@ pub fn try_close_session() {
     }
 }
 
+pub fn force_close_dead_session() {
+    if let Ok(mut rdp_info) = RDP_SESSION_INFO.lock() {
+        *rdp_info = None;
+        clear_wayland_displays_cache();
+        HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
+    }
+}
+
 pub struct RdpSessionInfo {
     pub conn: Arc<SyncConnection>,
     pub streams: Vec<PwStreamInfo>,
@@ -144,6 +152,17 @@ impl std::fmt::Display for GStreamerError {
 }
 
 impl Error for GStreamerError {}
+
+#[derive(Debug)]
+pub struct SessionRevokedError;
+
+impl std::fmt::Display for SessionRevokedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SESSION_REVOKED")
+    }
+}
+
+impl Error for SessionRevokedError {}
 
 #[derive(Clone)]
 pub struct PipeWireCapturable {
@@ -306,7 +325,17 @@ impl PipeWireRecorder {
             "[gstreamer] Setting pipeline {} to PLAYING state...",
             capturable.fd.as_raw_fd()
         );
-        pipeline.set_state(gst::State::Playing)?;
+        if let Err(e) = pipeline.set_state(gst::State::Playing) {
+            let _ = pipeline.set_state(gst::State::Null);
+
+            if is_server_running() {
+                warn!("[gstreamer] Failed to set PLAYING state: {:?}", e);
+                return Err(hbb_common::anyhow::Error::msg(format!("GStreamer pipeline failed to start: {:?}", e)));
+            } else {
+                warn!("[gstreamer] Failed to set PLAYING state, session was likely revoked: {:?}", e);
+                return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
+            }
+        }
 
         // If `is_server_running()` is false, it means using remote_desktop_portal,
         // which does not use multiple streams, so no need to wait for state change.
@@ -323,9 +352,15 @@ impl PipeWireRecorder {
                 }
                 (result, state, pending) => {
                     warn!(
-                    "[gstreamer] Pipeline {} state change incomplete: result={:?}, state={:?}, pending={:?}",
-                    capturable.fd.as_raw_fd(), result, state, pending
-                );
+                        "[gstreamer] Pipeline {} state change incomplete: result={:?}, state={:?}, pending={:?}",
+                        capturable.fd.as_raw_fd(), result, state, pending
+                    );
+
+                    if let Err(_) = result {
+                        warn!("[gstreamer] Async pipeline error detected. Session was likely terminated.");
+                        let _ = pipeline.set_state(gst::State::Null);
+                        return Err(hbb_common::anyhow::Error::new(SessionRevokedError));
+                    }
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(150));
