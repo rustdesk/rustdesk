@@ -828,6 +828,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               description: Text(ShortcutModel.isEnabled()
                   ? translate('On')
                   : translate('Off')),
+              trailing: Icon(Icons.arrow_forward_ios),
               onPressed: (context) {
                 Navigator.push(
                     context,
@@ -1371,4 +1372,3 @@ SettingsTile _getPopupDialogRadioEntry({
     ),
   );
 }
-
