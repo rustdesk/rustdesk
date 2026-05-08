@@ -14,7 +14,7 @@ class SettingsStore extends ChangeNotifier {
   bool get scrollInverted => _read('scroll_inverted') == '1';
   bool get chatStartMaximized => _read('chat_start_maximized') == '1';
   double get macroBarTopOffset =>
-      double.tryParse(_read('macro_bar_top') ?? '') ?? 120.0;
+      double.tryParse(_read('macro_bar_top') ?? '') ?? 0.0;
   bool get macroBarCollapsed => _read('macro_bar_collapsed') == '1';
 
   Future<void> setServer({

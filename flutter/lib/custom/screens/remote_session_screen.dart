@@ -251,10 +251,11 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
           child: IgnorePointer(child: CursorPaint(widget.id)),
         ),
 
-        // Layer 4.5: floating vertical macro bar — draggable along the right edge.
-        // Independent of the power strip; persists position and collapsed state.
+        // Layer 4.5: floating vertical macro bar — anchored just above the strip,
+        // expands upward. Draggable vertically; position and collapsed state persist.
         FloatingMacroBar(
           bridge: _bridge,
+          stripTop: canvasBottom,
           onZoomFit: _onZoomFit,
           onMouseModeToggle: _onMouseModeToggle,
           onClipboardPaste: _onClipboardPaste,

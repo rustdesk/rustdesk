@@ -19,6 +19,9 @@ const _kRightInset = 8.0;
 
 class FloatingMacroBar extends StatefulWidget {
   final InputBridge bridge;
+  // Bottom of the canvas area (top of the power strip). The bar is anchored
+  // just above this value so it sits flush above the custom keyboard strip.
+  final double stripTop;
   final VoidCallback onZoomFit;
   final VoidCallback onMouseModeToggle;
   final VoidCallback onClipboardPaste;
@@ -26,6 +29,7 @@ class FloatingMacroBar extends StatefulWidget {
   const FloatingMacroBar({
     super.key,
     required this.bridge,
+    required this.stripTop,
     required this.onZoomFit,
     required this.onMouseModeToggle,
     required this.onClipboardPaste,
@@ -37,9 +41,9 @@ class FloatingMacroBar extends StatefulWidget {
 
 class _FloatingMacroBarState extends State<FloatingMacroBar>
     with SingleTickerProviderStateMixin {
-  // Top offset from the top of the safe area. Loaded from settings, defaults
-  // to 120 so the bar starts below the status bar with some breathing room.
-  late double _top;
+  // Extra upward offset above the strip (0 = flush against the strip top).
+  // Positive values move the handle further up the screen.
+  late double _above;
   bool _collapsed = false;
 
   late final AnimationController _animCtl;
@@ -48,7 +52,7 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
   @override
   void initState() {
     super.initState();
-    _top = settingsStore.macroBarTopOffset;
+    _above = settingsStore.macroBarTopOffset;
     _collapsed = settingsStore.macroBarCollapsed;
 
     _animCtl = AnimationController(
@@ -76,46 +80,52 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
     settingsStore.setMacroBarCollapsed(_collapsed);
   }
 
-  void _onDrag(DragUpdateDetails d, double screenH, double safeTop) {
+  void _onDrag(DragUpdateDetails d, double screenH) {
     setState(() {
-      _top = (_top + d.delta.dy).clamp(0.0, screenH - safeTop - _kBtnSize);
+      // Dragging up (negative dy) increases _above; clamp so handle stays on screen.
+      _above = (_above - d.delta.dy).clamp(0.0, screenH - widget.stripTop - _kTabSize);
     });
   }
 
   void _onDragEnd(DragEndDetails _) {
-    settingsStore.setMacroBarTopOffset(_top);
+    settingsStore.setMacroBarTopOffset(_above);
   }
 
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final safeTop = mq.viewPadding.top;
     final safeRight = mq.viewPadding.right;
     final screenH = mq.size.height;
 
+    // Bottom of the handle = top of the strip + _above extra offset.
+    final handleBottom = widget.stripTop + _above;
+
     return Positioned(
-      top: safeTop + _top,
+      bottom: handleBottom,
       right: safeRight + _kRightInset,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
+        // Buttons grow upward above the handle.
+        verticalDirection: VerticalDirection.up,
         children: [
           // ── Drag handle / collapse tab ──────────────────────────────────
           GestureDetector(
             onTap: _toggleCollapse,
-            onVerticalDragUpdate: (d) => _onDrag(d, screenH, safeTop),
+            onVerticalDragUpdate: (d) => _onDrag(d, screenH),
             onVerticalDragEnd: _onDragEnd,
             child: _Handle(collapsed: _collapsed),
           ),
 
           const SizedBox(height: _kGap),
 
-          // ── Expandable button column ────────────────────────────────────
+          // ── Expandable button column — grows upward ─────────────────────
           SizeTransition(
             sizeFactor: _expandAnim,
-            axisAlignment: -1,
+            axisAlignment: 1, // anchor to bottom so it expands upward
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              verticalDirection: VerticalDirection.up,
               children: _buildButtons(),
             ),
           ),
@@ -127,27 +137,27 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
   List<Widget> _buildButtons() {
     final b = widget.bridge;
     return [
-      _Btn(label: '⌃V',  tooltip: 'Ctrl+V',            onTap: () => b.tapKey('v', modifiers: {'ctrl'})),
+      _Btn(label: '⌃V',  tooltip: 'Ctrl+V',                  onTap: () => b.tapKey('v', modifiers: {'ctrl'})),
       _gap(),
-      _Btn(label: '⌘V',  tooltip: 'Cmd+V',             onTap: () => b.tapKey('v', modifiers: {'meta'})),
+      _Btn(label: '⌘V',  tooltip: 'Cmd+V',                   onTap: () => b.tapKey('v', modifiers: {'meta'})),
       _gap(),
-      _Btn(label: '⌘⇧V', tooltip: 'Cmd+Shift+V',       onTap: () => b.tapKey('v', modifiers: {'meta', 'shift'})),
+      _Btn(label: '⌘⇧V', tooltip: 'Cmd+Shift+V',             onTap: () => b.tapKey('v', modifiers: {'meta', 'shift'})),
       _gap(),
-      _Btn(label: '⌘⇧[', tooltip: '1Password',         onTap: () => b.tapKey('[', modifiers: {'meta', 'shift'})),
+      _Btn(label: '⌘⇧[', tooltip: '1Password',               onTap: () => b.tapKey('[', modifiers: {'meta', 'shift'})),
       _gap(),
-      _Btn(label: '⌘⇥',  tooltip: 'App Switcher',      onTap: () => b.tapKey('tab', modifiers: {'meta'})),
+      _Btn(label: '⌘⇥',  tooltip: 'App Switcher',            onTap: () => b.tapKey('tab', modifiers: {'meta'})),
       _gap(),
-      _Btn(label: '⌘N',  tooltip: 'New Window',         onTap: () => b.tapKey('n', modifiers: {'meta'})),
+      _Btn(label: '⌘N',  tooltip: 'New Window',               onTap: () => b.tapKey('n', modifiers: {'meta'})),
       _gap(),
-      _Btn(label: '⇱',   tooltip: 'Home',               onTap: () => b.tapKey('home')),
+      _Btn(label: '⇱',   tooltip: 'Home',                     onTap: () => b.tapKey('home')),
       _gap(),
-      _Btn(label: '⇲',   tooltip: 'End',                onTap: () => b.tapKey('end')),
+      _Btn(label: '⇲',   tooltip: 'End',                      onTap: () => b.tapKey('end')),
       _gap(),
-      _Btn(label: '⌘⇧2', tooltip: 'Screenshot',        onTap: () => b.tapKey('2', modifiers: {'meta', 'shift'})),
+      _Btn(label: '⌘⇧2', tooltip: 'Screenshot',              onTap: () => b.tapKey('2', modifiers: {'meta', 'shift'})),
       _gap(),
-      _Btn(label: '⤢',   tooltip: 'Zoom to fit height', onTap: () { widget.onZoomFit(); _toggleCollapse(); }),
+      _Btn(label: '⤢',   tooltip: 'Zoom to fit height',       onTap: () { widget.onZoomFit(); _toggleCollapse(); }),
       _gap(),
-      _Btn(label: '📋→', tooltip: 'Paste iPhone clipboard', onTap: () { widget.onClipboardPaste(); _toggleCollapse(); }),
+      _Btn(label: '📋→', tooltip: 'Paste iPhone clipboard',   onTap: () { widget.onClipboardPaste(); _toggleCollapse(); }),
       _gap(),
       _Btn(
         tooltip: 'Toggle mouse/touch mode',
@@ -192,7 +202,6 @@ class _Handle extends StatelessWidget {
 
 class _Btn extends StatelessWidget {
   final String? label;
-  // Optional builder for labels that depend on reactive state (e.g. touch mode).
   final String Function()? labelBuilder;
   final String tooltip;
   final VoidCallback onTap;
