@@ -95,10 +95,14 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final safeRight = mq.viewPadding.right;
+    final safeTop = mq.viewPadding.top;
     final screenH = mq.size.height;
 
     // Bottom of the handle = top of the strip + _above extra offset.
     final handleBottom = widget.stripTop + _above;
+
+    // Maximum height the button list can occupy before it would clip off-screen.
+    final maxButtonsHeight = screenH - handleBottom - _kTabSize - _kGap - safeTop;
 
     return Positioned(
       bottom: handleBottom,
@@ -123,10 +127,16 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
           SizeTransition(
             sizeFactor: _expandAnim,
             axisAlignment: 1, // anchor to bottom so it expands upward
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              verticalDirection: VerticalDirection.up,
-              children: _buildButtons(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxButtonsHeight.clamp(0.0, double.infinity)),
+              child: SingleChildScrollView(
+                reverse: true, // scroll origin at bottom so top buttons scroll into view
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  verticalDirection: VerticalDirection.up,
+                  children: _buildButtons(),
+                ),
+              ),
             ),
           ),
         ],
@@ -152,6 +162,10 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
       _Btn(label: '⇱',   tooltip: 'Home',                     onTap: () => b.tapKey('home')),
       _gap(),
       _Btn(label: '⇲',   tooltip: 'End',                      onTap: () => b.tapKey('end')),
+      _gap(),
+      _Btn(label: '⌥↵',  tooltip: 'Option+Enter',             onTap: () => b.tapKey('return', modifiers: {'alt'})),
+      _gap(),
+      _Btn(label: 'F12', tooltip: 'F12',                       onTap: () => b.tapKey('f12')),
       _gap(),
       _Btn(label: '⌘⇧2', tooltip: 'Screenshot',              onTap: () => b.tapKey('2', modifiers: {'meta', 'shift'})),
       _gap(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../common.dart';
+import '../mobile/pages/settings_page.dart';
 import 'screens/connect_screen.dart';
 import 'screens/session_list_screen.dart';
 import 'theme/app_theme.dart';
@@ -41,9 +42,12 @@ class _Shell extends StatefulWidget {
 class _ShellState extends State<_Shell> {
   int _index = 0;
 
-  static const _screens = [
-    ConnectScreen(),
-    SessionListScreen(),
+  final _settingsPage = SettingsPage();
+
+  late final List<Widget> _screens = [
+    const ConnectScreen(),
+    const SessionListScreen(),
+    _settingsPage,
   ];
 
   @override
@@ -66,6 +70,11 @@ class _ShellState extends State<_Shell> {
             icon: Icon(Icons.devices_outlined),
             selectedIcon: Icon(Icons.devices),
             label: 'Sessions',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),

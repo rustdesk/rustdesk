@@ -367,6 +367,16 @@ class _MacroSheetState extends State<_MacroSheet> {
                   onTap: () => widget.bridge.tapKey('end'),
                 ),
                 _MacroButton(
+                  label: '⌥↵',
+                  tooltip: 'Option+Enter',
+                  onTap: () => widget.bridge.tapKey('return', modifiers: {'alt'}),
+                ),
+                _MacroButton(
+                  label: 'F12',
+                  tooltip: 'F12',
+                  onTap: () => widget.bridge.tapKey('f12'),
+                ),
+                _MacroButton(
                   label: '⌘⇧2',
                   tooltip: 'Screenshot (Cmd+Shift+2)',
                   onTap: () => widget.bridge.tapKey('2', modifiers: {'meta', 'shift'}),
