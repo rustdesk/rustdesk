@@ -30,7 +30,6 @@ StripLayout stripLayoutForPlatform(String platform) {
         right: [
           KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle, widthFactor: 0.7),
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
-          KeyDef(label: '🖥', keyName: '', type: KeyType.displaySwitch, widthFactor: 0.7),
         ],
       ),
       // Row 2: displays + ⌫ + Tab (left)  |  ⇞ + ⇟ + macros + arrow cluster (right)
@@ -44,6 +43,7 @@ StripLayout stripLayoutForPlatform(String platform) {
         ],
         right: [
           KeyDef(label: '⊞', keyName: '', type: KeyType.nextDisplay, widthFactor: 0.9, height: 48),
+          KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7, height: 48),
           KeyDef(label: '⇞', keyName: 'pageup', type: KeyType.regular, height: 48),
           KeyDef(label: '⇟', keyName: 'pagedown', type: KeyType.regular, height: 48),
           KeyDef(label: '⚡', keyName: '', type: KeyType.macroOpener, height: 48),

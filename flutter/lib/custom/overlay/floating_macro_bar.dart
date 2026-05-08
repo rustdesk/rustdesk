@@ -16,6 +16,8 @@ const _kTabSize = 36.0;
 const _kGap = 6.0;
 // Right-edge inset from screen edge.
 const _kRightInset = 8.0;
+// Width of horizontal submenu buttons.
+const _kSubBtnSize = 48.0;
 
 class FloatingMacroBar extends StatefulWidget {
   final InputBridge bridge;
@@ -45,6 +47,7 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
   // Positive values move the handle further up the screen.
   late double _above;
   bool _collapsed = false;
+  bool _rectOpen = false;
 
   late final AnimationController _animCtl;
   late final Animation<double> _expandAnim;
@@ -71,7 +74,10 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
 
   void _toggleCollapse() {
     HapticFeedback.lightImpact();
-    setState(() => _collapsed = !_collapsed);
+    setState(() {
+      _collapsed = !_collapsed;
+      if (_collapsed) _rectOpen = false;
+    });
     if (_collapsed) {
       _animCtl.reverse();
     } else {
@@ -107,37 +113,50 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
     return Positioned(
       bottom: handleBottom,
       right: safeRight + _kRightInset,
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
-        // Buttons grow upward above the handle.
-        verticalDirection: VerticalDirection.up,
         children: [
-          // ── Drag handle / collapse tab ──────────────────────────────────
-          GestureDetector(
-            onTap: _toggleCollapse,
-            onVerticalDragUpdate: (d) => _onDrag(d, screenH),
-            onVerticalDragEnd: _onDragEnd,
-            child: _Handle(collapsed: _collapsed),
-          ),
+          // ── Rectangle corner submenu — slides in to the left ───────────────
+          if (_rectOpen) ...[
+            _RectSubmenu(bridge: widget.bridge),
+            const SizedBox(width: _kGap),
+          ],
 
-          const SizedBox(height: _kGap),
+          // ── Vertical macro bar ─────────────────────────────────────────────
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            // Buttons grow upward above the handle.
+            verticalDirection: VerticalDirection.up,
+            children: [
+              // ── Drag handle / collapse tab ────────────────────────────────
+              GestureDetector(
+                onTap: _toggleCollapse,
+                onVerticalDragUpdate: (d) => _onDrag(d, screenH),
+                onVerticalDragEnd: _onDragEnd,
+                child: _Handle(collapsed: _collapsed),
+              ),
 
-          // ── Expandable button column — grows upward ─────────────────────
-          SizeTransition(
-            sizeFactor: _expandAnim,
-            axisAlignment: 1, // anchor to bottom so it expands upward
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxButtonsHeight.clamp(0.0, double.infinity)),
-              child: SingleChildScrollView(
-                reverse: true, // scroll origin at bottom so top buttons scroll into view
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  verticalDirection: VerticalDirection.up,
-                  children: _buildButtons(),
+              const SizedBox(height: _kGap),
+
+              // ── Expandable button column — grows upward ───────────────────
+              SizeTransition(
+                sizeFactor: _expandAnim,
+                axisAlignment: 1, // anchor to bottom so it expands upward
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxButtonsHeight.clamp(0.0, double.infinity)),
+                  child: SingleChildScrollView(
+                    reverse: true, // scroll origin at bottom so top buttons scroll into view
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      verticalDirection: VerticalDirection.up,
+                      children: _buildButtons(),
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -155,6 +174,8 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
       _gap(),
       _Btn(label: '⌘⇧[', tooltip: '1Password',               onTap: () => b.tapKey('[', modifiers: {'meta', 'shift'})),
       _gap(),
+      _Btn(label: '⌘⎵',  tooltip: 'Spotlight (Cmd+Space)',    onTap: () => b.tapKey('space', modifiers: {'meta'})),
+      _gap(),
       _Btn(label: '⌘⇥',  tooltip: 'App Switcher',            onTap: () => b.tapKey('tab', modifiers: {'meta'})),
       _gap(),
       _Btn(label: '⌘N',  tooltip: 'New Window',               onTap: () => b.tapKey('n', modifiers: {'meta'})),
@@ -165,7 +186,32 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
       _gap(),
       _Btn(label: '⌥↵',  tooltip: 'Option+Enter',             onTap: () => b.tapKey('return', modifiers: {'alt'})),
       _gap(),
-      _Btn(label: 'F12', tooltip: 'F12',                       onTap: () => b.tapKey('f12')),
+      _Btn(label: 'F12', tooltip: 'F12',                      onTap: () => b.tapKey('f12')),
+      _gap(),
+      // ── Rectangle window manager ──────────────────────────────────────────
+      _Btn(
+        label: '⤢↑',
+        tooltip: 'Rectangle: Maximize',
+        onTap: () => b.tapKey('up', modifiers: {'ctrl', 'alt', 'meta'}),
+      ),
+      _gap(),
+      _Btn(
+        label: '⤢←',
+        tooltip: 'Rectangle: Left Half',
+        onTap: () => b.tapKey('left', modifiers: {'meta', 'alt'}),
+      ),
+      _gap(),
+      _Btn(
+        label: '⤢→',
+        tooltip: 'Rectangle: Right Half',
+        onTap: () => b.tapKey('right', modifiers: {'meta', 'alt'}),
+      ),
+      _gap(),
+      _Btn(
+        label: '▭',
+        tooltip: 'Rectangle: Corners',
+        onTap: () => setState(() => _rectOpen = !_rectOpen),
+      ),
       _gap(),
       _Btn(label: '⌘⇧2', tooltip: 'Screenshot',              onTap: () => b.tapKey('2', modifiers: {'meta', 'shift'})),
       _gap(),
@@ -182,6 +228,67 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
   }
 
   Widget _gap() => const SizedBox(height: _kGap);
+}
+
+// ── Rectangle corner submenu (horizontal row to the left of the bar) ──────────
+
+class _RectSubmenu extends StatelessWidget {
+  final InputBridge bridge;
+  const _RectSubmenu({required this.bridge});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _SubBtn(label: '↖', tooltip: 'Top Left (Ctrl+Alt+U)',    onTap: () => bridge.tapKey('u', modifiers: {'ctrl', 'alt'})),
+        const SizedBox(width: _kGap),
+        _SubBtn(label: '↗', tooltip: 'Top Right (Ctrl+Alt+I)',   onTap: () => bridge.tapKey('i', modifiers: {'ctrl', 'alt'})),
+        const SizedBox(width: _kGap),
+        _SubBtn(label: '↙', tooltip: 'Bottom Left (Ctrl+Alt+J)', onTap: () => bridge.tapKey('j', modifiers: {'ctrl', 'alt'})),
+        const SizedBox(width: _kGap),
+        _SubBtn(label: '↘', tooltip: 'Bottom Right (Ctrl+Alt+K)',onTap: () => bridge.tapKey('k', modifiers: {'ctrl', 'alt'})),
+      ],
+    );
+  }
+}
+
+class _SubBtn extends StatelessWidget {
+  final String label;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _SubBtn({required this.label, required this.tooltip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      preferBelow: false,
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        child: Container(
+          width: _kSubBtnSize,
+          height: _kSubBtnSize,
+          decoration: BoxDecoration(
+            color: AppTokens.colorBgSurface,
+            borderRadius: BorderRadius.circular(AppTokens.radiusKey),
+            boxShadow: const [
+              BoxShadow(blurRadius: 4, color: Colors.black26, offset: Offset(0, 1)),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: AppTokens.fontKey.copyWith(color: AppTokens.colorTextHigh),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ── Drag handle ────────────────────────────────────────────────────────────────
