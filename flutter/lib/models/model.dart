@@ -991,6 +991,7 @@ class FfiModel with ChangeNotifier {
         duration: duration,
         clickClose: true,
         allowClick: true,
+        backgroundColor: Colors.black54,
       );
     } else {
       if (type.contains('error')) {
