@@ -103,6 +103,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _isUsingPublicServer = false;
   var _allowAskForNoteAtEndOfConnection = false;
   var _preventSleepWhileConnected = true;
+  var _keepAwakeIdleTimeout = 'never';
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -145,6 +146,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         mainGetLocalBoolOptionSync(kOptionAllowAskForNoteAtEndOfConnection);
     _preventSleepWhileConnected =
         mainGetLocalBoolOptionSync(kOptionKeepAwakeDuringOutgoingSessions);
+    final rawIdleTimeout = bind.mainGetLocalOption(key: kOptionKeepAwakeIdleTimeout);
+    _keepAwakeIdleTimeout = rawIdleTimeout.isEmpty ? 'never' : rawIdleTimeout;
     _showTerminalExtraKeys =
         mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
   }
@@ -862,6 +865,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 });
               },
             ),
+          if (!incomingOnly && _preventSleepWhileConnected)
+            SettingsTile(
+              title: Text(translate('Lock screen after idle')),
+              trailing: _buildIdleTimeoutDropdown(),
+            ),
         ]),
         if (isAndroid)
           SettingsSection(title: Text(translate('Hardware Codec')), tiles: [
@@ -1024,6 +1032,43 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               }));
             })
       ],
+    );
+  }
+
+  static const _idleTimeoutOptions = [
+    ('never', 'Never (keep screen on)'),
+    ('30s', 'After 30 seconds'),
+    ('1m', 'After 1 minute'),
+    ('5m', 'After 5 minutes'),
+    ('15m', 'After 15 minutes'),
+    ('30m', 'After 30 minutes'),
+    ('custom', 'Custom...'),
+  ];
+
+  Widget _buildIdleTimeoutDropdown() {
+    final isCustom = _keepAwakeIdleTimeout.startsWith('custom:');
+    final dropdownValue = isCustom ? 'custom' : _keepAwakeIdleTimeout;
+    return DropdownButton<String>(
+      value: _idleTimeoutOptions.any((o) => o.$1 == dropdownValue)
+          ? dropdownValue
+          : 'never',
+      underline: const SizedBox(),
+      items: _idleTimeoutOptions
+          .map((o) => DropdownMenuItem(value: o.$1, child: Text(translate(o.$2))))
+          .toList(),
+      onChanged: (v) async {
+        if (v == null) return;
+        if (v == 'custom') {
+          final result =
+              await changeKeepAwakeCustomTimeout(_keepAwakeIdleTimeout);
+          if (result == null) return;
+          await bind.mainSetLocalOption(key: kOptionKeepAwakeIdleTimeout, value: result);
+          setState(() => _keepAwakeIdleTimeout = result);
+        } else {
+          await bind.mainSetLocalOption(key: kOptionKeepAwakeIdleTimeout, value: v);
+          setState(() => _keepAwakeIdleTimeout = v);
+        }
+      },
     );
   }
 }
