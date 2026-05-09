@@ -203,6 +203,7 @@ const String kOptionKeepScreenOn = "keep-screen-on";
 
 const String kOptionKeepAwakeDuringIncomingSessions = "keep-awake-during-incoming-sessions";
 const String kOptionKeepAwakeDuringOutgoingSessions = "keep-awake-during-outgoing-sessions";
+const String kOptionKeepAwakeIdleTimeout = "keep-awake-idle-timeout";
 
 const String kOptionShowMobileAction = "showMobileActions";
 
