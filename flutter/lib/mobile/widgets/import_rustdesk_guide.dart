@@ -34,16 +34,16 @@ class _ImportRustdeskGuideModalState
           'Navigate to:\n\nOn My iPhone → RustDesk\n\nYou should see files like RustDesk2.toml, RustDesk.toml, and a "peers" folder. This is the folder to export.',
     ),
     _GuideSlide(
-      icon: Icons.share,
-      title: 'Save the Folder',
+      icon: Icons.content_copy,
+      title: 'Move the Files into Tabby',
       body:
-          'Long-press the "RustDesk" folder, then tap Share → Save to Files.\n\nSave it somewhere easy to find, such as iCloud Drive or On My iPhone.',
+          'You need these items from the RustDesk folder:\n\n• RustDesk2.toml — your server settings\n• peers folder — your saved device connections\n\nPick whichever option works for you:\n\nOption A — Copy & Paste\nLong-press the items, tap Copy, then go to On My iPhone → Tabby and paste them there.\n\nOption B — Share → Save to Files\nLong-press the "RustDesk" folder, tap Share → Save to Files, and save it into On My iPhone → Tabby.',
     ),
     _GuideSlide(
       icon: Icons.check_circle_outline,
       title: 'You\'re Ready',
       body:
-          'Go back to Tabby Settings and tap "Import from RustDesk" to select the RustDesk folder you just saved.',
+          'Go back to Tabby Settings and tap "Import from RustDesk", then select the Tabby folder (or the RustDesk subfolder inside it) where the files now live.',
     ),
   ];
 
