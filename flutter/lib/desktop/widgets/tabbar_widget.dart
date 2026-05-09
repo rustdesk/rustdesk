@@ -99,6 +99,7 @@ class DesktopTabController {
   /// index, key
   Function(int, String)? onRemoved;
   Function(String)? onSelected;
+  Future<void> Function()? onCloseWindow;
 
   DesktopTabController(
       {required this.tabType, this.onRemoved, this.onSelected});

@@ -285,7 +285,14 @@ pub enum Data {
     Empty,
     Disconnected,
     DataPortableService(DataPortableService),
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     SwitchSidesRequest(String),
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    SwitchSidesUuid(String, String, Option<bool>),
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     SwitchSidesBack,
     UrlLink(String),
     VoiceCallIncoming,
@@ -771,12 +778,27 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::TestRendezvousServer => {
             crate::test_rendezvous_server();
         }
+        #[cfg(feature = "flutter")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Data::SwitchSidesRequest(id) => {
             let uuid = uuid::Uuid::new_v4();
             crate::server::insert_switch_sides_uuid(id, uuid.clone());
             allow_err!(
                 stream
                     .send(&Data::SwitchSidesRequest(uuid.to_string()))
+                    .await
+            );
+        }
+        #[cfg(feature = "flutter")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        Data::SwitchSidesUuid(uuid, id, None) => {
+            let allowed = uuid
+                .parse::<uuid::Uuid>()
+                .map(|uuid| crate::server::remove_pending_switch_sides_uuid(&id, &uuid))
+                .unwrap_or(false);
+            allow_err!(
+                stream
+                    .send(&Data::SwitchSidesUuid(uuid, id, Some(allowed)))
                     .await
             );
         }

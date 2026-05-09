@@ -464,7 +464,7 @@ pub fn has_active_clients() -> bool {
 
 #[inline]
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn switch_back(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchSidesBack));
