@@ -39,12 +39,14 @@ jobs:
 
       - name: Clean build environment
         run: |
-          cd flutter/android
+          cd android
           chmod +x gradlew
           ./gradlew clean
           cd ..
+          cd flutter
           flutter clean
           rm -rf pubspec.lock
+          cd ..
 
       - name: Get Flutter dependencies
         run: |
