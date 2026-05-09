@@ -1345,6 +1345,9 @@ pub fn main_get_uuid() -> String {
 }
 
 pub fn main_get_easy_access_device_auth() -> String {
+    const EASY_ACCESS_MANAGERS_DEVICE_AUTH_DOMAIN: &str = "easy_access.managers";
+    const EASY_ACCESS_MANAGERS_DEVICE_AUTH_VERSION: u32 = 1;
+
     let id = get_id();
     let uuid = hbb_common::get_uuid();
     if id.is_empty() || uuid.is_empty() {
@@ -1368,14 +1371,20 @@ pub fn main_get_easy_access_device_auth() -> String {
     let Ok(device_box_sk) = ed25519::to_curve25519_sk(&device_sign_sk) else {
         return String::new();
     };
+    let plaintext = serde_json::json!({
+        "domain": EASY_ACCESS_MANAGERS_DEVICE_AUTH_DOMAIN,
+        "v": EASY_ACCESS_MANAGERS_DEVICE_AUTH_VERSION,
+        "uuid": BASE64_STANDARD.encode(&uuid),
+    })
+    .to_string();
     let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&uuid, &nonce, &server_box_pk, &device_box_sk);
+    let ciphertext = box_::seal(plaintext.as_bytes(), &nonce, &server_box_pk, &device_box_sk);
     let mut proof = Vec::with_capacity(box_::NONCEBYTES + ciphertext.len());
     proof.extend_from_slice(nonce.as_ref());
     proof.extend_from_slice(&ciphertext);
     serde_json::json!({
         "id": id,
-        "ciphertext": BASE64_STANDARD.encode(proof),
+        "proof": BASE64_STANDARD.encode(proof),
     })
     .to_string()
 }

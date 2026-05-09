@@ -1124,6 +1124,29 @@ pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
     format!("{}/api/audit/{}", url, typ)
 }
 
+fn url_requires_strict_transport(url: &reqwest::Url) -> bool {
+    url.path().starts_with("/api/easy_access/")
+}
+
+fn validate_strict_transport_url(url: &str) -> ResultType<()> {
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return Ok(());
+    };
+    if !url_requires_strict_transport(&parsed) {
+        return Ok(());
+    }
+    if !cfg!(debug_assertions) && parsed.scheme() != "https" {
+        bail!("strict HTTPS URL must use https://");
+    }
+    Ok(())
+}
+
+fn url_allows_danger_accept_invalid_cert(url: &str) -> bool {
+    reqwest::Url::parse(url)
+        .map(|url| !url_requires_strict_transport(&url))
+        .unwrap_or(true)
+}
+
 /// Check if we should use raw TCP proxy for API calls.
 /// Returns true if USE_RAW_TCP_FOR_API builtin option is "Y", WebSocket is off,
 /// and the target URL belongs to the configured non-public API host.
@@ -1146,9 +1169,16 @@ fn should_use_tcp_proxy_for_api_url(url: &str, api_url: &str) -> bool {
         return false;
     }
 
-    let target_host = url::Url::parse(url)
-        .ok()
-        .and_then(|parsed| parsed.host_str().map(|host| host.to_ascii_lowercase()));
+    let Ok(target_url) = url::Url::parse(url) else {
+        return false;
+    };
+    if url_requires_strict_transport(&target_url) {
+        return false;
+    }
+
+    let target_host = target_url
+        .host_str()
+        .map(|host| host.to_ascii_lowercase());
     let api_host = url::Url::parse(api_url)
         .ok()
         .and_then(|parsed| parsed.host_str().map(|host| host.to_ascii_lowercase()));
@@ -1328,10 +1358,16 @@ fn parse_json_header_entries(header: &str) -> ResultType<Vec<HeaderEntry>> {
 
 /// Returns (status_code, body_text). Separating status so the wrapper can decide on fallback.
 async fn post_request_http(url: &str, body: &str, header: &str) -> ResultType<(u16, String)> {
+    validate_strict_transport_url(&url)?;
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
-    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let allow_danger_accept_invalid_cert = url_allows_danger_accept_invalid_cert(&url);
+    let danger_accept_invalid_cert = if allow_danger_accept_invalid_cert {
+        get_cached_tls_accept_invalid_cert(tls_url)
+    } else {
+        Some(false)
+    };
     let response = post_request_(
         url,
         tls_url,
@@ -1340,6 +1376,7 @@ async fn post_request_http(url: &str, body: &str, header: &str) -> ResultType<(u
         tls_type,
         danger_accept_invalid_cert,
         danger_accept_invalid_cert,
+        allow_danger_accept_invalid_cert,
     )
     .await?;
     let status = response.status().as_u16();
@@ -1415,6 +1452,7 @@ async fn post_request_(
     tls_type: Option<TlsType>,
     danger_accept_invalid_cert: Option<bool>,
     original_danger_accept_invalid_cert: Option<bool>,
+    allow_danger_accept_invalid_cert: bool,
 ) -> ResultType<reqwest::Response> {
     let mut req = create_http_client_async(
         tls_type.unwrap_or(TlsType::Rustls),
@@ -1454,7 +1492,10 @@ async fn post_request_(
                 Ok(resp)
             }
             Err(e) => {
-                if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
+                if allow_danger_accept_invalid_cert
+                    && (tls_type.is_none() || danger_accept_invalid_cert.is_none())
+                    && e.is_request()
+                {
                     if danger_accept_invalid_cert.is_none() {
                         log::warn!(
                             "HTTP request failed: {:?}, try again, danger accept invalid cert",
@@ -1468,6 +1509,7 @@ async fn post_request_(
                             tls_type,
                             Some(true),
                             original_danger_accept_invalid_cert,
+                            allow_danger_accept_invalid_cert,
                         )
                         .await
                     } else {
@@ -1480,6 +1522,7 @@ async fn post_request_(
                             Some(TlsType::NativeTls),
                             original_danger_accept_invalid_cert,
                             original_danger_accept_invalid_cert,
+                            allow_danger_accept_invalid_cert,
                         )
                         .await
                     }
@@ -1506,6 +1549,7 @@ async fn get_http_response_async(
     tls_type: Option<TlsType>,
     danger_accept_invalid_cert: Option<bool>,
     original_danger_accept_invalid_cert: Option<bool>,
+    allow_danger_accept_invalid_cert: bool,
 ) -> ResultType<reqwest::Response> {
     let http_client = create_http_client_async(
         tls_type.unwrap_or(TlsType::Rustls),
@@ -1561,7 +1605,10 @@ async fn get_http_response_async(
                 Ok(resp)
             }
             Err(e) => {
-                if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
+                if allow_danger_accept_invalid_cert
+                    && (tls_type.is_none() || danger_accept_invalid_cert.is_none())
+                    && e.is_request()
+                {
                     if danger_accept_invalid_cert.is_none() {
                         log::warn!(
                             "HTTP request failed: {:?}, try again, danger accept invalid cert",
@@ -1576,6 +1623,7 @@ async fn get_http_response_async(
                             tls_type,
                             Some(true),
                             original_danger_accept_invalid_cert,
+                            allow_danger_accept_invalid_cert,
                         )
                         .await
                     } else {
@@ -1589,6 +1637,7 @@ async fn get_http_response_async(
                             Some(TlsType::NativeTls),
                             original_danger_accept_invalid_cert,
                             original_danger_accept_invalid_cert,
+                            allow_danger_accept_invalid_cert,
                         )
                         .await
                     }
@@ -1608,10 +1657,16 @@ async fn http_request_http(
     body: Option<String>,
     header: &str,
 ) -> ResultType<(u16, String)> {
+    validate_strict_transport_url(&url)?;
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
-    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let allow_danger_accept_invalid_cert = url_allows_danger_accept_invalid_cert(&url);
+    let danger_accept_invalid_cert = if allow_danger_accept_invalid_cert {
+        get_cached_tls_accept_invalid_cert(tls_url)
+    } else {
+        Some(false)
+    };
     let response = get_http_response_async(
         url,
         tls_url,
@@ -1621,6 +1676,7 @@ async fn http_request_http(
         tls_type,
         danger_accept_invalid_cert,
         danger_accept_invalid_cert,
+        allow_danger_accept_invalid_cert,
     )
     .await?;
     // Serialize response headers
@@ -2811,6 +2867,14 @@ mod tests {
         assert!(!should_use_tcp_proxy_for_api_url(
             "not a url",
             "https://admin.example.com"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "https://admin.example.com/api/easy_access/grant",
+            "https://admin.example.com"
+        ));
+        assert!(!should_use_tcp_proxy_for_api_url(
+            "http://admin.example.com/api/easy_access/grant",
+            "http://admin.example.com"
         ));
     }
 

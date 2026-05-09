@@ -98,6 +98,7 @@ pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
+const EASY_ACCESS_GRANT_ID_LEN: usize = 32;
 
 #[cfg(target_os = "linux")]
 pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
@@ -2840,8 +2841,14 @@ impl LoginConfigHandler {
             }
         };
         let grant_id = match crate::decode64(&response.grant_id) {
-            Ok(grant_id) if !grant_id.is_empty() => grant_id,
-            Ok(_) => return None,
+            Ok(grant_id) if grant_id.len() == EASY_ACCESS_GRANT_ID_LEN => grant_id,
+            Ok(grant_id) => {
+                log::warn!(
+                    "Easy access grant id has invalid length: {}",
+                    grant_id.len()
+                );
+                return None;
+            }
             Err(err) => {
                 log::warn!("Easy access grant id invalid: {}", err);
                 return None;
