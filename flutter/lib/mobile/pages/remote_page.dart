@@ -88,6 +88,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
   var _showEdit = false; // use soft keyboard
+  int? _idleTimeoutSeconds; // cached at connect time to avoid FFI on every input event
 
   InputModel get inputModel => gFFI.inputModel;
   SessionID get sessionId => gFFI.sessionId;
@@ -116,6 +117,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
+    _idleTimeoutSeconds = WakelockManager.parseIdleTimeoutSeconds();
     WakelockManager.enable(_uniqueKey);
     _resetIdleTimer();
     _physicalFocusNode.requestFocus();
@@ -176,6 +178,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void _resetIdleTimer() {
+    if (_idleTimeoutSeconds == null) return;
     WakelockManager.startIdleTimer(() {
       WakelockManager.disable(_uniqueKey);
     });
