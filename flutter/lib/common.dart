@@ -3765,7 +3765,7 @@ Widget loadLogo() {
 }
 
 Widget loadIcon(double size) {
-  return Image.asset('assets/tabby-icon.png',
+  return Image.asset('assets/tabby-icon-nobg.png',
       width: size,
       height: size,
       errorBuilder: (ctx, error, stackTrace) => SvgPicture.asset(
