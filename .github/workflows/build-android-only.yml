@@ -37,17 +37,6 @@ jobs:
         with:
           ndk-version: r26c
 
-      - name: Clean build environment
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew clean
-          cd ..
-          cd flutter
-          flutter clean
-          rm -rf pubspec.lock
-          cd ..
-
       - name: Get Flutter dependencies
         run: |
           cd flutter
