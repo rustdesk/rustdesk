@@ -31,19 +31,19 @@ class _ImportRustdeskGuideModalState
       icon: Icons.phone_iphone,
       title: 'Find the RustDesk Folder',
       body:
-          'Navigate to:\n\nOn My iPhone → RustDesk → data\n\nThis folder contains your saved connections and settings.',
+          'Navigate to:\n\nOn My iPhone → RustDesk\n\nYou should see files like RustDesk2.toml, RustDesk.toml, and a "peers" folder. This is the folder to export.',
     ),
     _GuideSlide(
       icon: Icons.share,
       title: 'Save the Folder',
       body:
-          'Long-press the "data" folder, then tap Share → Save to Files.\n\nSave it somewhere easy to find, such as iCloud Drive or On My iPhone.',
+          'Long-press the "RustDesk" folder, then tap Share → Save to Files.\n\nSave it somewhere easy to find, such as iCloud Drive or On My iPhone.',
     ),
     _GuideSlide(
       icon: Icons.check_circle_outline,
       title: 'You\'re Ready',
       body:
-          'Go back to Tabby Settings and tap "Import from RustDesk" to select the folder you just saved.',
+          'Go back to Tabby Settings and tap "Import from RustDesk" to select the RustDesk folder you just saved.',
     ),
   ];
 

@@ -8,7 +8,7 @@ import 'import_conflict_dialog.dart';
 Future<void> runImportFromRustdesk(BuildContext context) async {
   // 1. Pick the RustDesk data/ folder
   final folder = await FilePicker.platform.getDirectoryPath(
-    dialogTitle: translate('Select RustDesk data folder'),
+    dialogTitle: translate('Select RustDesk folder'),
   );
   if (folder == null) return; // user cancelled
 
