@@ -18,6 +18,8 @@ import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
+import '../widgets/import_rustdesk.dart';
+import '../widgets/import_rustdesk_guide.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
 
@@ -711,6 +713,16 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ],
           ),
         SettingsSection(title: Text(translate("Settings")), tiles: [
+          SettingsTile(
+            title: Text(translate('Import from RustDesk')),
+            leading: const Icon(Icons.download),
+            onPressed: (context) => runImportFromRustdesk(context),
+          ),
+          SettingsTile(
+            title: Text(translate('How to export from RustDesk')),
+            leading: const Icon(Icons.help_outline),
+            onPressed: (context) => showImportRustdeskGuide(context),
+          ),
           if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(
                 title: Text(translate('ID/Relay Server')),
