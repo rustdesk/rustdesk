@@ -76,7 +76,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: AppTokens.spaceXl),
-              const Icon(Icons.pets, size: 56, color: AppTokens.colorTextMid),
+              loadIcon(72),
               const SizedBox(height: AppTokens.spaceLg),
               Text(
                 'Tabby',
