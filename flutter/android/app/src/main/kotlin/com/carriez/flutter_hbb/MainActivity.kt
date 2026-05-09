@@ -127,7 +127,6 @@ class MainActivity : FlutterActivity() {
 
     private fun initFlutterChannel(flutterMethodChannel: MethodChannel) {
         flutterMethodChannel.setMethodCallHandler { call, result ->
-            // make sure result will be invoked, otherwise flutter will await forever
             when (call.method) {
                 "init_service" -> {
                     Intent(activity, MainService::class.java).also {
@@ -171,14 +170,6 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
-                START_ACTION -> {
-                    if (call.arguments is String) {
-                        startAction(context, call.arguments as String)
-                        result.success(true)
-                    } else {
-                        result.success(false)
-                    }
-                }
                 "check_video_permission" -> {
                     mainService?.let {
                         result.success(it.checkMediaPermission())
@@ -217,55 +208,16 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "enable_soft_keyboard" -> {
-                    // https://blog.csdn.net/hanye2020/article/details/105553780
                     if (call.arguments as Boolean) {
                         window.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
                     } else {
                         window.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
                     }
                     result.success(true)
-
                 }
                 "try_sync_clipboard" -> {
                     rdClipboardManager?.syncClipboard(true)
                     result.success(true)
-                }
-                GET_START_ON_BOOT_OPT -> {
-                    val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
-                    result.success(prefs.getBoolean(KEY_START_ON_BOOT_OPT, false))
-                }
-                SET_START_ON_BOOT_OPT -> {
-                    if (call.arguments is Boolean) {
-                        val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
-                        val edit = prefs.edit()
-                        edit.putBoolean(KEY_START_ON_BOOT_OPT, call.arguments as Boolean)
-                        edit.apply()
-                        result.success(true)
-                    } else {
-                        result.success(false)
-                    }
-                }
-                SYNC_APP_DIR_CONFIG_PATH -> {
-                    if (call.arguments is String) {
-                        val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
-                        val edit = prefs.edit()
-                        edit.putString(KEY_APP_DIR_CONFIG_PATH, call.arguments as String)
-                        edit.apply()
-                        result.success(true)
-                    } else {
-                        result.success(false)
-                    }
-                }
-                GET_VALUE -> {
-                    if (call.arguments is String) {
-                        if (call.arguments == KEY_IS_SUPPORT_VOICE_CALL) {
-                            result.success(isSupportVoiceCall())
-                        } else {
-                            result.error("-1", "No such key", null)
-                        }
-                    } else {
-                        result.success(null)
-                    }
                 }
                 "on_voice_call_started" -> {
                     onVoiceCallStarted()
@@ -300,8 +252,6 @@ class MainActivity : FlutterActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 hw = codec.isHardwareAccelerated
             } else {
-                // https://chromium.googlesource.com/external/webrtc/+/HEAD/sdk/android/src/java/org/webrtc/MediaCodecUtils.java#29
-                // https://chromium.googlesource.com/external/webrtc/+/master/sdk/android/api/org/webrtc/HardwareVideoEncoderFactory.java#229
                 if (listOf("OMX.google.", "OMX.SEC.", "c2.android").any { codec.name.startsWith(it, true) }) {
                     hw = false
                 } else if (listOf("c2.qti", "OMX.qcom.video", "OMX.Exynos", "OMX.hisi", "OMX.MTK", "OMX.Intel", "OMX.Nvidia").any { codec.name.startsWith(it, true) }) {
@@ -314,7 +264,7 @@ class MainActivity : FlutterActivity() {
             codecObject.put("hw", hw)
             var mime_type = ""
             codec.supportedTypes.forEach { type ->
-                if (listOf("video/avc", "video/hevc").contains(type)) { // "video/x-vnd.on2.vp8", "video/x-vnd.on2.vp9", "video/av01"
+                if (listOf("video/avc", "video/hevc").contains(type)) {
                     mime_type = type;
                 }
             }
@@ -322,7 +272,6 @@ class MainActivity : FlutterActivity() {
                 codecObject.put("mime_type", mime_type)
                 val caps = codec.getCapabilitiesForType(mime_type)
                 if (codec.isEncoder) {
-                    // Encoder's max_height and max_width are interchangeable
                     if (!caps.videoCapabilities.isSizeSupported(w,h) && !caps.videoCapabilities.isSizeSupported(h,w)) {
                         return@forEach
                     }
@@ -368,7 +317,6 @@ class MainActivity : FlutterActivity() {
             ok = audioRecordHandle.onVoiceCallStarted(null)
         }
         if (!ok) {
-            // Rarely happens, So we just add log and msgbox here.
             Log.e(logTag, "onVoiceCallStarted fail")
             flutterMethodChannel?.invokeMethod("msgbox", mapOf(
                 "type" to "custom-nook-nocancel-hasclose-error",
@@ -388,7 +336,6 @@ class MainActivity : FlutterActivity() {
             ok = audioRecordHandle.onVoiceCallClosed(null)
         }
         if (!ok) {
-            // Rarely happens, So we just add log and msgbox here.
             Log.e(logTag, "onVoiceCallClosed fail")
             flutterMethodChannel?.invokeMethod("msgbox", mapOf(
                 "type" to "custom-nook-nocancel-hasclose-error",
