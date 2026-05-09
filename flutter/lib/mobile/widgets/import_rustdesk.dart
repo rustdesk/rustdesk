@@ -68,6 +68,7 @@ Future<void> runImportFromRustdesk(BuildContext context) async {
   }
 
   // 5. Write peers
+  if (!context.mounted) return;
   int importedPeers = 0;
 
   for (final peer in newPeers) {
@@ -87,13 +88,19 @@ Future<void> runImportFromRustdesk(BuildContext context) async {
   bool importedServer = false;
   final idServer = serverConfig['id_server'] as String? ?? '';
   if (idServer.isNotEmpty) {
-    final sc = ServerConfig(
-      idServer: idServer,
-      relayServer: serverConfig['relay_server'] as String? ?? '',
-      apiServer: serverConfig['api_server'] as String? ?? '',
-      key: serverConfig['key'] as String? ?? '',
-    );
-    importedServer = await setServerConfig(null, null, sc);
+    final serverError = await bind.mainTestIfValidServer(
+        server: idServer, testWithProxy: true);
+    if (serverError.isNotEmpty) {
+      showToast('${translate('ID Server')}: $serverError');
+    } else {
+      final sc = ServerConfig(
+        idServer: idServer,
+        relayServer: serverConfig['relay_server'] as String? ?? '',
+        apiServer: serverConfig['api_server'] as String? ?? '',
+        key: serverConfig['key'] as String? ?? '',
+      );
+      importedServer = await setServerConfig(null, null, sc);
+    }
   }
 
   // 7. Show result toast
