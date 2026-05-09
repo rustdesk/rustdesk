@@ -1795,6 +1795,59 @@ pub fn main_remove_peer(id: String) {
     PeerConfig::remove(&id);
 }
 
+pub fn main_import_rustdesk_data(folder: String) -> String {
+    use hbb_common::config::import_rustdesk_server_config;
+    use std::path::Path;
+
+    let folder_path = Path::new(&folder);
+
+    let config2_path = folder_path.join("RustDesk2.toml");
+    let (id_server, relay_server, api_server, key) = if config2_path.exists() {
+        import_rustdesk_server_config(&config2_path)
+    } else {
+        Default::default()
+    };
+    let server_config = serde_json::json!({
+        "id_server": id_server,
+        "relay_server": relay_server,
+        "api_server": api_server,
+        "key": key,
+    });
+
+    let peers_dir = folder_path.join("peers");
+    let mut peers: Vec<serde_json::Value> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&peers_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                continue;
+            }
+            if let Some((id, config)) = PeerConfig::load_from_path(&path) {
+                peers.push(serde_json::json!({
+                    "id": id,
+                    "username": config.info.username,
+                    "hostname": config.info.hostname,
+                    "platform": config.info.platform,
+                }));
+            }
+        }
+    }
+
+    serde_json::json!({
+        "server_config": server_config,
+        "peers": peers,
+    })
+    .to_string()
+}
+
+pub fn main_import_peer(id: String, username: String, hostname: String, platform: String) {
+    let mut config = PeerConfig::load(&id);
+    config.info.username = username;
+    config.info.hostname = hostname;
+    config.info.platform = platform;
+    config.store(&id);
+}
+
 pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
 }
