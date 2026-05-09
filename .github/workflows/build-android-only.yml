@@ -31,19 +31,38 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi
-
+    
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26c
 
-      - name: Build Android APK
+      - name: Clean build environment
+        run: |
+          cd flutter/android
+          chmod +x gradlew
+          ./gradlew clean
+          cd ..
+          flutter clean
+          rm -rf pubspec.lock
+
+      - name: Get Flutter dependencies
         run: |
           cd flutter
           flutter pub get
+
+      - name: Setup NDK environment
+        run: |
+          echo "ANDROID_NDK=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+
+      - name: Build Android APK
+        run: |
+          cd flutter
           flutter build apk --release --split-per-abi
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
