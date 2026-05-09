@@ -380,6 +380,62 @@ Future<String> changeAutoDisconnectTimeout(String old) async {
   return controller.text;
 }
 
+Future<String?> changeKeepAwakeCustomTimeout(String current) async {
+  // current is either empty or "custom:<seconds>"
+  final initialMinutes = current.startsWith('custom:')
+      ? ((int.tryParse(current.substring(7)) ?? 0) ~/ 60).toString()
+      : '';
+  final controller = TextEditingController(text: initialMinutes);
+  String? result;
+  await gFFI.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text(translate("Timeout in minutes")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8.0),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  maxLines: null,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: '30',
+                    isCollapsed: true,
+                    suffix: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.clear, size: 16),
+                      onPressed: () => controller.clear(),
+                    ),
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d{1,4}$')),
+                  ],
+                  controller: controller,
+                  autofocus: true,
+                ).workaroundFreezeLinuxMint(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: () {
+          final mins = int.tryParse(controller.text);
+          if (mins != null && mins > 0) {
+            result = 'custom:${mins * 60}';
+          }
+          close();
+        }),
+      ],
+      onCancel: close,
+    );
+  });
+  return result;
+}
+
 class DialogTextField extends StatelessWidget {
   final String title;
   final String? hintText;

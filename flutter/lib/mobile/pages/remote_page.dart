@@ -117,6 +117,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     WakelockManager.enable(_uniqueKey);
+    _resetIdleTimer();
     _physicalFocusNode.requestFocus();
     gFFI.inputModel.listenToMouse(true);
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
@@ -155,6 +156,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
+    WakelockManager.cancelIdleTimer();
     WakelockManager.disable(_uniqueKey);
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
@@ -168,7 +170,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       trySyncClipboard();
+      WakelockManager.enable(_uniqueKey);
+      _resetIdleTimer();
     }
+  }
+
+  void _resetIdleTimer() {
+    WakelockManager.startIdleTimer(() {
+      WakelockManager.disable(_uniqueKey);
+    });
   }
 
   // For client side
@@ -445,11 +455,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                 color: MyTheme.canvasColor,
                                 child: inputModel.isPhysicalMouse.value
                                     ? getBodyForMobile()
-                                    : RawTouchGestureDetectorRegion(
-                                        child: getBodyForMobile(),
-                                        ffi: gFFI,
-                                        onTwoFingerScroll:
-                                            widget.onTwoFingerScroll,
+                                    : Listener(
+                                        onPointerDown: (_) => _resetIdleTimer(),
+                                        child: RawTouchGestureDetectorRegion(
+                                          child: getBodyForMobile(),
+                                          ffi: gFFI,
+                                          onTwoFingerScroll:
+                                              widget.onTwoFingerScroll,
+                                        ),
                                       ),
                               );
                             }),
@@ -473,7 +486,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           ? RawKeyFocusScope(
               focusNode: _physicalFocusNode,
               inputModel: inputModel,
-              child: child)
+              child: KeyboardListener(
+                focusNode: FocusNode(canRequestFocus: false),
+                onKeyEvent: (_) => _resetIdleTimer(),
+                child: child,
+              ))
           : child,
     );
   }
