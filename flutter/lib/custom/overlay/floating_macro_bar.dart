@@ -166,6 +166,8 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
   List<Widget> _buildButtons() {
     final b = widget.bridge;
     return [
+      _Btn(label: 'git\ncmt', tooltip: 'git commit',           onTap: () => b.typeString('git commit\n')),
+      _gap(),
       _Btn(label: '⌃V',  tooltip: 'Ctrl+V',                  onTap: () => b.tapKey('v', modifiers: {'ctrl'})),
       _gap(),
       _Btn(label: '⌘V',  tooltip: 'Cmd+V',                   onTap: () => b.tapKey('v', modifiers: {'meta'})),
