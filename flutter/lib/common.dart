@@ -2719,6 +2719,43 @@ class WakelockManager {
   // calling disable() when not enabled.
   // See: https://github.com/fluttercommunity/wakelock_plus/blob/0c74e5bbc6aefac57b6c96bb7ef987705ed559ec/wakelock_plus/lib/src/wakelock_plus_linux_plugin.dart#L48
   static bool _enabled = false;
+  static Timer? _idleTimer;
+
+  /// Returns the configured idle timeout in seconds, or null if "never".
+  static int? parseIdleTimeoutSeconds() {
+    final raw = bind.mainGetLocalOption(key: kOptionKeepAwakeIdleTimeout);
+    switch (raw) {
+      case '30s':
+        return 30;
+      case '1m':
+        return 60;
+      case '5m':
+        return 300;
+      case '15m':
+        return 900;
+      case '30m':
+        return 1800;
+      default:
+        if (raw.startsWith('custom:')) {
+          return int.tryParse(raw.substring(7));
+        }
+        return null; // "never" or empty
+    }
+  }
+
+  /// Starts (or restarts) the idle timer. Calls [onTimeout] when it fires.
+  static void startIdleTimer(VoidCallback onTimeout) {
+    _idleTimer?.cancel();
+    final seconds = parseIdleTimeoutSeconds();
+    if (seconds == null) return;
+    _idleTimer = Timer(Duration(seconds: seconds), onTimeout);
+  }
+
+  /// Cancels any running idle timer.
+  static void cancelIdleTimer() {
+    _idleTimer?.cancel();
+    _idleTimer = null;
+  }
 
   static void enable(UniqueKey key, {bool isServer = false}) {
     // Check if we should keep awake during outgoing sessions
