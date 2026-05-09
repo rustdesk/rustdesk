@@ -1797,9 +1797,8 @@ pub fn main_remove_peer(id: String) {
 
 pub fn main_import_rustdesk_data(folder: String) -> String {
     use hbb_common::config::import_rustdesk_server_config;
-    use std::path::Path;
 
-    let folder_path = Path::new(&folder);
+    let folder_path = std::path::PathBuf::from(&folder);
 
     let config2_path = folder_path.join("RustDesk2.toml");
     let (id_server, relay_server, api_server, key) = if config2_path.exists() {
