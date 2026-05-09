@@ -12,6 +12,7 @@ enum KeyType {
   mouseModeToggle,
   clipboardPaste,
   nextDisplay,
+  typeString,
 }
 
 class KeyDef {
@@ -20,6 +21,7 @@ class KeyDef {
   final KeyType type;
   final double widthFactor;
   final double? height;
+  final String? keyString;
 
   const KeyDef({
     required this.label,
@@ -27,6 +29,7 @@ class KeyDef {
     required this.type,
     this.widthFactor = 1.0,
     this.height,
+    this.keyString,
   });
 
   KeyDef copyWith({double? widthFactor}) => KeyDef(
@@ -35,6 +38,7 @@ class KeyDef {
         type: type,
         widthFactor: widthFactor ?? this.widthFactor,
         height: height,
+        keyString: keyString,
       );
 }
 
