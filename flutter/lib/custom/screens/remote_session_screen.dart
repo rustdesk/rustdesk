@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
+import 'package:flutter_hbb/models/model.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 
 import '../chat/terminal_chat_overlay.dart';
@@ -20,6 +22,7 @@ class _FullScreenOverlayState extends OverlayKeyState {}
 
 class RemoteSessionScreen extends StatefulWidget {
   final String id;
+  final FFI ffi;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
@@ -27,6 +30,7 @@ class RemoteSessionScreen extends StatefulWidget {
   const RemoteSessionScreen({
     super.key,
     required this.id,
+    required this.ffi,
     this.password,
     this.isSharedPassword,
     this.forceRelay,
@@ -49,7 +53,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   @override
   void initState() {
     super.initState();
-    _bridge = InputBridge(gFFI.sessionId);
+    _bridge = InputBridge(widget.ffi.sessionId);
     _kbVisibilitySub = KeyboardVisibilityController()
         .onChange
         .listen(_onKeyboardVisibilityChanged);
@@ -58,7 +62,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     // Positioned canvas area). We replace it with a full-screen overlay so
     // dialogs like the password prompt render centered over the whole screen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      gFFI.dialogManager.setOverlayState(_fullScreenOverlayState);
+      widget.ffi.dialogManager.setOverlayState(_fullScreenOverlayState);
     });
   }
 
@@ -77,12 +81,12 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     // without calling mobileFocusCanvasCursor(), which would call updateSize() with
     // the keyboard viewInsets and cause an unwanted zoom-out.
     if (visible) {
-      gFFI.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
-      gFFI.canvasModel.isMobileCanvasChanged = false;
+      widget.ffi.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
+      widget.ffi.canvasModel.isMobileCanvasChanged = false;
       final mq = MediaQuery.of(context);
       setState(() => _kbPanOffset = mq.viewInsets.bottom * 0.4);
     } else {
-      gFFI.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
+      widget.ffi.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
       setState(() => _kbPanOffset = 0);
     }
   }
@@ -100,7 +104,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onDisconnect() {
-    clientClose(gFFI.sessionId, gFFI);
+    clientClose(widget.ffi.sessionId, widget.ffi);
   }
 
   void _onChatToggle() {
@@ -108,21 +112,21 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onDisplaySwitch() {
-    showOptions(context, widget.id, gFFI.dialogManager);
+    showOptions(context, widget.id, widget.ffi.dialogManager);
   }
 
   void _onNextDisplay() {
-    final pi = gFFI.ffiModel.pi;
+    final pi = widget.ffi.ffiModel.pi;
     final count = pi.displays.length;
     if (count <= 1) return;
     final next = (pi.currentDisplay + 1) % count;
-    openMonitorInTheSameTab(next, gFFI, pi);
+    openMonitorInTheSameTab(next, widget.ffi, pi);
   }
 
   void _onZoomFit() {
     // Scale the remote canvas so its height exactly fills the canvas area
     // (from screen top to the top of the power strip / keyboard).
-    final displayHeight = gFFI.canvasModel.getDisplayHeight();
+    final displayHeight = widget.ffi.canvasModel.getDisplayHeight();
     if (displayHeight <= 0) return;
     final mq = MediaQuery.of(context);
     final keyboardHeight = mq.viewInsets.bottom;
@@ -132,13 +136,13 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     final targetScale = canvasHeight / displayHeight;
     final center = Offset(mq.size.width / 2, canvasHeight / 2);
     // updateScale takes a multiplier; divide target by current to get delta.
-    final delta = targetScale / gFFI.canvasModel.scale;
-    gFFI.canvasModel.updateScale(delta, center);
-    gFFI.canvasModel.isMobileCanvasChanged = true;
+    final delta = targetScale / widget.ffi.canvasModel.scale;
+    widget.ffi.canvasModel.updateScale(delta, center);
+    widget.ffi.canvasModel.isMobileCanvasChanged = true;
   }
 
   void _onMouseModeToggle() {
-    gFFI.ffiModel.toggleTouchMode();
+    widget.ffi.ffiModel.toggleTouchMode();
   }
 
   Future<void> _onClipboardPaste() async {
@@ -158,6 +162,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
       ),
       builder: (ctx) => _MacroSheet(
         bridge: _bridge,
+        ffi: widget.ffi,
         onZoomFit: _onZoomFit,
         onMouseModeToggle: _onMouseModeToggle,
         onClipboardPaste: _onClipboardPaste,
@@ -277,8 +282,17 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     );
   }
 
-  Widget _remoteCanvas() => RemotePage(
+  Widget _remoteCanvas() {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: widget.ffi.ffiModel),
+        ChangeNotifierProvider.value(value: widget.ffi.imageModel),
+        ChangeNotifierProvider.value(value: widget.ffi.cursorModel),
+        ChangeNotifierProvider.value(value: widget.ffi.canvasModel),
+      ],
+      child: RemotePage(
         id: widget.id,
+        ffi: widget.ffi,
         password: widget.password,
         isSharedPassword: widget.isSharedPassword,
         forceRelay: widget.forceRelay,
@@ -286,7 +300,9 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         hideBottomBar: true,
         hideCursorPaint: true,
         onTwoFingerScroll: _onTwoFingerScroll,
-      );
+      ),
+    );
+  }
 
 }
 
@@ -294,11 +310,13 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
 
 class _MacroSheet extends StatefulWidget {
   final InputBridge bridge;
+  final FFI ffi;
   final VoidCallback onZoomFit;
   final VoidCallback onMouseModeToggle;
   final VoidCallback onClipboardPaste;
   const _MacroSheet({
     required this.bridge,
+    required this.ffi,
     required this.onZoomFit,
     required this.onMouseModeToggle,
     required this.onClipboardPaste,
@@ -311,7 +329,7 @@ class _MacroSheet extends StatefulWidget {
 class _MacroSheetState extends State<_MacroSheet> {
   @override
   Widget build(BuildContext context) {
-    final touchMode = gFFI.ffiModel.touchMode;
+    final touchMode = widget.ffi.ffiModel.touchMode;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

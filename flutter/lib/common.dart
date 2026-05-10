@@ -2677,6 +2677,7 @@ connect(BuildContext context, String id,
           MaterialPageRoute(
             builder: (BuildContext context) => RemoteSessionScreen(
                 id: id,
+                ffi: gFFI,
                 password: password,
                 isSharedPassword: isSharedPassword,
                 forceRelay: forceRelay),

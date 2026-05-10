@@ -54,6 +54,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
       MaterialPageRoute(
         builder: (_) => RemoteSessionScreen(
           id: id,
+          ffi: gFFI,
           password: pw.isEmpty ? null : pw,
           forceRelay: forceRelay,
         ),
