@@ -11,7 +11,6 @@ import '../chat/terminal_chat_overlay.dart';
 import '../input/input_bridge.dart';
 import '../input/text_field_bridge.dart';
 import '../overlay/floating_macro_bar.dart';
-import '../settings/settings_store.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
 
@@ -237,7 +236,6 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
             bottom: 0,
             child: TerminalChatOverlay(
               inputBridge: _bridge,
-              startMaximized: settingsStore.chatStartMaximized,
               onClose: _onChatToggle,
             ),
           ),

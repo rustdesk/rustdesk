@@ -2,18 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../input/input_bridge.dart';
-import '../settings/settings_store.dart';
 import '../theme/tokens.dart';
 
 class TerminalChatOverlay extends StatefulWidget {
   final InputBridge inputBridge;
-  final bool startMaximized;
   final VoidCallback onClose;
 
   const TerminalChatOverlay({
     super.key,
     required this.inputBridge,
-    required this.startMaximized,
     required this.onClose,
   });
 
@@ -21,29 +18,20 @@ class TerminalChatOverlay extends StatefulWidget {
   State<TerminalChatOverlay> createState() => _TerminalChatOverlayState();
 }
 
-class _TerminalChatOverlayState extends State<TerminalChatOverlay>
-    with SingleTickerProviderStateMixin {
+class _TerminalChatOverlayState extends State<TerminalChatOverlay> {
   final _textController = TextEditingController();
-  final _scrollController = ScrollController();
   final _focusNode = FocusNode();
-  final _commands = <String>[];
-  bool _maximized = false;
   bool _sending = false;
-
-  // Partial height: enough for ~4 command rows + input bar.
-  static const _partialHeightFraction = 0.45;
 
   @override
   void initState() {
     super.initState();
-    _maximized = widget.startMaximized;
     WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
   }
 
   @override
   void dispose() {
     _textController.dispose();
-    _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -51,87 +39,20 @@ class _TerminalChatOverlayState extends State<TerminalChatOverlay>
   Future<void> _send() async {
     final text = _textController.text;
     if (text.isEmpty || _sending) return;
-    setState(() {
-      _sending = true;
-      _commands.add(text);
-      _textController.clear();
-    });
-    // Scroll to bottom after adding the command.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    setState(() => _sending = true);
     await widget.inputBridge.typeString(text);
     await widget.inputBridge.tapKey('return');
-    if (mounted) setState(() => _sending = false);
-  }
-
-  void _toggleMaximize() {
-    final newVal = !_maximized;
-    if (newVal && !settingsStore.chatStartMaximized) {
-      // First time maximizing — ask if they want to remember the choice.
-      _showRememberDialog(newVal);
-    } else {
-      setState(() => _maximized = newVal);
+    if (mounted) {
+      _textController.clear();
+      widget.onClose();
     }
-  }
-
-  void _showRememberDialog(bool newMaximized) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTokens.colorBgSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-        ),
-        title: Text(
-          'Always open maximized?',
-          style: AppTokens.fontKey.copyWith(color: AppTokens.colorTextHigh),
-        ),
-        content: Text(
-          'Start the chat panel maximized every time you open it?',
-          style: AppTokens.fontBody.copyWith(color: AppTokens.colorTextMid),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              setState(() => _maximized = newMaximized);
-            },
-            child: Text('Just this once',
-                style: AppTokens.fontKeySmall
-                    .copyWith(color: AppTokens.colorTextMid)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTokens.colorPrimary,
-            ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              settingsStore.setChatStartMaximized(true);
-              setState(() => _maximized = newMaximized);
-            },
-            child: Text('Always',
-                style: AppTokens.fontKeySmall
-                    .copyWith(color: AppTokens.colorTextHigh)),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final screenHeight = mq.size.height;
-    final overlayHeight = _maximized
-        ? screenHeight
-        : screenHeight * _partialHeightFraction;
+    final keyboardHeight = mq.viewInsets.bottom;
+    final overlayHeight = mq.size.height - mq.viewPadding.top - keyboardHeight;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
@@ -146,22 +67,20 @@ class _TerminalChatOverlayState extends State<TerminalChatOverlay>
       ),
       child: Column(
         children: [
-          _Header(
-            maximized: _maximized,
-            onMaximize: _toggleMaximize,
-            onClose: widget.onClose,
+          SafeArea(
+            bottom: false,
+            child: _Header(onClose: widget.onClose),
           ),
           const Divider(height: 1, color: Color(0xFF2D3748)),
-          Expanded(child: _CommandHistory(
-            commands: _commands,
-            scrollController: _scrollController,
-          )),
+          Expanded(
+            child: _TextArea(
+              controller: _textController,
+              focusNode: _focusNode,
+            ),
+          ),
           _InputBar(
-            controller: _textController,
-            focusNode: _focusNode,
             sending: _sending,
             onSend: _send,
-            onReturn: () => widget.inputBridge.tapKey('return'),
           ),
         ],
       ),
@@ -170,15 +89,9 @@ class _TerminalChatOverlayState extends State<TerminalChatOverlay>
 }
 
 class _Header extends StatelessWidget {
-  final bool maximized;
-  final VoidCallback onMaximize;
   final VoidCallback onClose;
 
-  const _Header({
-    required this.maximized,
-    required this.onMaximize,
-    required this.onClose,
-  });
+  const _Header({required this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -197,17 +110,123 @@ class _Header extends StatelessWidget {
           ),
           const Spacer(),
           _IconBtn(
-            icon: maximized ? Icons.unfold_less : Icons.unfold_more,
-            tooltip: maximized ? 'Partial view' : 'Maximize',
-            onTap: onMaximize,
-          ),
-          const SizedBox(width: AppTokens.spaceXs),
-          _IconBtn(
             icon: Icons.close,
-            tooltip: 'Close chat',
+            tooltip: 'Close',
             onTap: onClose,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TextArea extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+
+  const _TextArea({required this.controller, required this.focusNode});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.spaceLg,
+        vertical: AppTokens.spaceSm,
+      ),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 14,
+          color: AppTokens.colorTextHigh,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Type a command…',
+          hintStyle: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 14,
+            color: AppTokens.colorTextMid.withValues(alpha: 0.5),
+          ),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
+        ),
+        maxLines: null,
+        expands: true,
+        textAlignVertical: TextAlignVertical.top,
+        keyboardType: TextInputType.multiline,
+        textInputAction: TextInputAction.newline,
+      ),
+    );
+  }
+}
+
+class _InputBar extends StatelessWidget {
+  final bool sending;
+  final VoidCallback onSend;
+
+  const _InputBar({required this.sending, required this.onSend});
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        AppTokens.spaceMd,
+        AppTokens.spaceSm,
+        AppTokens.spaceMd,
+        AppTokens.spaceSm + mq.viewPadding.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: AppTokens.colorBgSurface,
+        border: Border(top: BorderSide(color: Color(0xFF2D3748))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          _SendButton(sending: sending, onSend: onSend),
+        ],
+      ),
+    );
+  }
+}
+
+class _SendButton extends StatelessWidget {
+  final bool sending;
+  final VoidCallback onSend;
+
+  const _SendButton({required this.sending, required this.onSend});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: sending ? null : () {
+        HapticFeedback.lightImpact();
+        onSend();
+      },
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 150),
+        opacity: sending ? 0.4 : 1.0,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppTokens.colorPrimary,
+            borderRadius: BorderRadius.circular(AppTokens.radiusKey),
+          ),
+          child: sending
+              ? const Center(
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              : const Icon(Icons.send, size: 16, color: Colors.white),
+        ),
       ),
     );
   }
@@ -260,197 +279,6 @@ class _IconBtn extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppTokens.radiusKey),
           ),
           child: Icon(icon, size: 16, color: AppTokens.colorTextMid),
-        ),
-      ),
-    );
-  }
-}
-
-class _CommandHistory extends StatelessWidget {
-  final List<String> commands;
-  final ScrollController scrollController;
-
-  const _CommandHistory({required this.commands, required this.scrollController});
-
-  @override
-  Widget build(BuildContext context) {
-    if (commands.isEmpty) {
-      return Center(
-        child: Text(
-          'Type a command and press Send',
-          style: AppTokens.fontBody.copyWith(color: AppTokens.colorTextMid),
-        ),
-      );
-    }
-    return ListView.builder(
-      controller: scrollController,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTokens.spaceLg,
-        vertical: AppTokens.spaceSm,
-      ),
-      itemCount: commands.length,
-      itemBuilder: (_, i) => _CommandRow(text: commands[i], index: i),
-    );
-  }
-}
-
-class _CommandRow extends StatelessWidget {
-  final String text;
-  final int index;
-
-  const _CommandRow({required this.text, required this.index});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${(index + 1).toString().padLeft(2)} ',
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 12,
-              color: Color(0xFF4A5568),
-            ),
-          ),
-          Text(
-            '\$ ',
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 13,
-              color: Color(0xFF68D391),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 13,
-                color: Color(0xFFE2E8F0),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InputBar extends StatelessWidget {
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool sending;
-  final VoidCallback onSend;
-  final VoidCallback onReturn;
-
-  const _InputBar({
-    required this.controller,
-    required this.focusNode,
-    required this.sending,
-    required this.onSend,
-    required this.onReturn,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        AppTokens.spaceMd,
-        AppTokens.spaceSm,
-        AppTokens.spaceMd,
-        AppTokens.spaceSm + mq.viewInsets.bottom,
-      ),
-      decoration: const BoxDecoration(
-        color: AppTokens.colorBgSurface,
-        border: Border(top: BorderSide(color: Color(0xFF2D3748))),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            '\$',
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 15,
-              color: Color(0xFF68D391),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(width: AppTokens.spaceSm),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                color: AppTokens.colorTextHigh,
-              ),
-              decoration: InputDecoration(
-                hintText: 'command...',
-                hintStyle: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 14,
-                  color: AppTokens.colorTextMid.withValues(alpha: 0.5),
-                ),
-                isDense: true,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 6),
-              ),
-              minLines: 1,
-              maxLines: 4,
-              textInputAction: TextInputAction.newline,
-              onSubmitted: (_) => onReturn(),
-            ),
-          ),
-          const SizedBox(width: AppTokens.spaceSm),
-          _SendButton(sending: sending, onSend: onSend),
-        ],
-      ),
-    );
-  }
-}
-
-class _SendButton extends StatelessWidget {
-  final bool sending;
-  final VoidCallback onSend;
-
-  const _SendButton({required this.sending, required this.onSend});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: sending ? null : () {
-        HapticFeedback.lightImpact();
-        onSend();
-      },
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 150),
-        opacity: sending ? 0.4 : 1.0,
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppTokens.colorPrimary,
-            borderRadius: BorderRadius.circular(AppTokens.radiusKey),
-          ),
-          child: sending
-              ? const Center(
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  ),
-                )
-              : const Icon(Icons.send, size: 16, color: Colors.white),
         ),
       ),
     );
