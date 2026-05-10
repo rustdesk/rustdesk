@@ -34,6 +34,7 @@ import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'mobile/pages/view_camera_page.dart';
+import 'custom/screens/remote_session_screen.dart';
 import 'mobile/pages/terminal_page.dart';
 import 'desktop/pages/remote_page.dart' as desktop_remote;
 import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
@@ -2674,7 +2675,7 @@ connect(BuildContext context, String id,
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (BuildContext context) => RemotePage(
+            builder: (BuildContext context) => RemoteSessionScreen(
                 id: id,
                 password: password,
                 isSharedPassword: isSharedPassword,
