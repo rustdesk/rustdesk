@@ -55,7 +55,6 @@ import 'package:flutter_hbb/native/custom_cursor.dart'
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
-final _constSessionId = Uuid().v4obj();
 
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
@@ -3718,7 +3717,7 @@ class FFI {
   Map<int, TerminalModel> get terminalModels => _terminalModels;
 
   FFI(SessionID? sId) {
-    sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
+    sessionId = sId ?? Uuid().v4obj();
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));
     cursorModel = CursorModel(WeakReference(this));
