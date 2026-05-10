@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../mobile/widgets/dialog.dart' show showServerSettings;
+import '../../models/model.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
+import '../session/session_registry.dart';
 import '../theme/tokens.dart';
 import 'remote_session_screen.dart';
 
@@ -43,18 +45,30 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   void _onConnect([String? peerId]) async {
+    final registry = SessionRegistry.instance;
+    if (registry.isFull) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 5 sessions reached. Close one first.')),
+      );
+      return;
+    }
     final rawId = peerId ?? _idController.id;
     if (rawId.isEmpty) return;
     final pw = _passwordController.text.trim();
     final id = await bind.mainHandleRelayId(id: rawId);
     final forceRelay = id != rawId;
     if (!mounted) return;
+
+    final sessionFfi = FFI(null);
+    registry.register(sessionFfi, id);
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => RemoteSessionScreen(
           id: id,
-          ffi: gFFI, // TODO(Task 5): replace with per-session FFI from SessionRegistry
+          ffi: sessionFfi,
           password: pw.isEmpty ? null : pw,
           forceRelay: forceRelay,
         ),
