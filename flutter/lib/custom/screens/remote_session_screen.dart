@@ -15,6 +15,9 @@ import '../input/text_field_bridge.dart';
 import '../overlay/floating_macro_bar.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
+import 'package:flutter_hbb/custom/screens/connect_screen.dart';
+import 'package:flutter_hbb/custom/session/session_registry.dart';
+import 'package:flutter_hbb/custom/session/session_switcher_sheet.dart';
 
 // Full-screen overlay state for this session, overrides the constrained
 // BlockableOverlay set by RemotePage.applyFfi so dialogs span the screen.
@@ -103,8 +106,101 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     _bridge.scroll(dx.round(), dy.round());
   }
 
-  void _onDisconnect() {
-    clientClose(widget.ffi.sessionId, widget.ffi);
+  void _onDisconnect() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('Disconnect', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Close connection to ${widget.id}?',
+          style: const TextStyle(color: Color(0xFF94A3B8)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Disconnect', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _doDisconnect();
+  }
+
+  void _doDisconnect() {
+    final registry = SessionRegistry.instance;
+    registry.unregister(widget.ffi.sessionId);
+    widget.ffi.close();
+
+    if (!mounted) return;
+    if (registry.isEmpty) {
+      Navigator.popUntil(context, ModalRoute.withName('/'));
+      return;
+    }
+    final nextEntry = registry.findById(registry.activeSessionId!);
+    if (nextEntry == null) {
+      Navigator.popUntil(context, ModalRoute.withName('/'));
+      return;
+    }
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => RemoteSessionScreen(
+          id: nextEntry.peerId,
+          ffi: nextEntry.ffi,
+        ),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
+
+  void _onSessionSwitch(SessionID targetSessionId) {
+    final registry = SessionRegistry.instance;
+    final entry = registry.findById(targetSessionId);
+    if (entry == null) return;
+    registry.setActive(targetSessionId);
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => RemoteSessionScreen(
+          id: entry.peerId,
+          ffi: entry.ffi,
+        ),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
+
+  void _onAddSession() {
+    if (SessionRegistry.instance.isFull) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 5 sessions reached.')),
+      );
+      return;
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectScreen()));
+  }
+
+  void _onSessionsTap() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SessionSwitcherSheet(
+        activeSessionId: widget.ffi.sessionId,
+        onSwitch: _onSessionSwitch,
+        onAddSession: _onAddSession,
+      ),
+    );
   }
 
   void _onChatToggle() {
