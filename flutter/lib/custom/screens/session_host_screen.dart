@@ -99,7 +99,9 @@ class _SessionHostScreenState extends State<SessionHostScreen> {
 
     final activeIndex = ids.indexOf(_activePeerId).clamp(0, ids.length - 1);
 
-    return IndexedStack(
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: IndexedStack(
       index: activeIndex,
       children: ids.map((id) {
         final info = SessionRegistry.instance.get(id)!;
@@ -120,6 +122,7 @@ class _SessionHostScreenState extends State<SessionHostScreen> {
           onSwitchSession: _switchSession,
         );
       }).toList(),
+      ),
     );
   }
 }
