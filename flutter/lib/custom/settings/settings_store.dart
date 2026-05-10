@@ -16,6 +16,9 @@ class SettingsStore extends ChangeNotifier {
   double get macroBarTopOffset =>
       double.tryParse(_read('macro_bar_top') ?? '') ?? 0.0;
   bool get macroBarCollapsed => _read('macro_bar_collapsed') == '1';
+  // Default true: preserves shipped behavior; users can opt out from Settings.
+  bool get rememberLastDisplay => _read('remember_last_display') != '0';
+  bool get rememberLastZoom => _read('remember_last_zoom') != '0';
 
   Future<void> setServer({
     required String idServer,
@@ -48,6 +51,12 @@ class SettingsStore extends ChangeNotifier {
 
   Future<void> setMacroBarCollapsed(bool value) =>
       _write('macro_bar_collapsed', value ? '1' : '0');
+
+  Future<void> setRememberLastDisplay(bool value) =>
+      _write('remember_last_display', value ? '1' : '0');
+
+  Future<void> setRememberLastZoom(bool value) =>
+      _write('remember_last_zoom', value ? '1' : '0');
 
   String? _read(String key) {
     final v = bind.mainGetLocalOption(key: '$_ns$key');

@@ -20,6 +20,7 @@ import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
 import '../widgets/import_rustdesk.dart';
 import '../widgets/import_rustdesk_guide.dart';
+import '../../custom/settings/settings_store.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
 
@@ -686,6 +687,31 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     final settings = SettingsList(
       sections: [
         customClientSection,
+        SettingsSection(
+          title: Text('Tabby'),
+          tiles: [
+            SettingsTile.switchTile(
+              title: Text('Remember last screen'),
+              description:
+                  Text('Reopen the same display on the next session.'),
+              initialValue: settingsStore.rememberLastDisplay,
+              onToggle: (v) async {
+                await settingsStore.setRememberLastDisplay(v);
+                setState(() {});
+              },
+            ),
+            SettingsTile.switchTile(
+              title: Text('Remember last zoom'),
+              description: Text(
+                  'Restore the zoom level from the previous session when display dimensions match.'),
+              initialValue: settingsStore.rememberLastZoom,
+              onToggle: (v) async {
+                await settingsStore.setRememberLastZoom(v);
+                setState(() {});
+              },
+            ),
+          ],
+        ),
         if (!bind.isDisableAccount())
           SettingsSection(
             title: Text(translate('Account')),

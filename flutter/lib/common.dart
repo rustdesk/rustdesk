@@ -29,6 +29,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
 import '../consts.dart';
+import 'custom/settings/settings_store.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
@@ -3401,11 +3402,13 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
   ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id,
       updateCursorPos: updateCursorPos);
   // Persist user's display choice so it can be restored next session.
-  bind.sessionPeerOption(
-    sessionId: ffi.sessionId,
-    name: kOptionLastDisplay,
-    value: i.toString(),
-  );
+  if (settingsStore.rememberLastDisplay) {
+    bind.sessionPeerOption(
+      sessionId: ffi.sessionId,
+      name: kOptionLastDisplay,
+      value: i.toString(),
+    );
+  }
 }
 
 // Open new tab or window to show this monitor.

@@ -41,6 +41,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:vector_math/vector_math.dart' show Vector2;
 
 import '../common.dart';
+import '../custom/settings/settings_store.dart';
 import '../utils/image.dart' as img;
 import '../common/widgets/dialog.dart';
 import 'input_model.dart';
@@ -1431,6 +1432,7 @@ class FfiModel with ChangeNotifier {
   // (e.g. monitor unplugged), so the host's primary stays in use.
   _tryRestoreLastDisplay(String peerId) async {
     if (parent.target?.connType != ConnType.defaultConn) return;
+    if (!settingsStore.rememberLastDisplay) return;
     if (_pi.displays.length <= 1) return;
     final saved = await bind.sessionGetOption(
         sessionId: sessionId, arg: kOptionLastDisplay);
@@ -2679,6 +2681,62 @@ class CanvasModel with ChangeNotifier {
     _timerMobileRestoreCanvasOffset?.cancel();
     _offsetBeforeMobileSoftKeyboard = null;
     _scaleBeforeMobileSoftKeyboard = null;
+  }
+
+  // Persist current zoom level (per peer + display + display dimensions) so
+  // it can be restored next session. Called from RemotePage.dispose() and on
+  // app lifecycle paused. Silent no-op if disabled or no display info yet.
+  Future<void> saveLastZoom() async {
+    if (!settingsStore.rememberLastZoom) return;
+    final pi = parent.target?.ffiModel.pi;
+    if (pi == null || pi.displays.isEmpty) return;
+    final displayIdx = pi.currentDisplay;
+    if (displayIdx < 0 || displayIdx >= pi.displays.length) return;
+    final d = pi.displays[displayIdx];
+    final payload = jsonEncode({
+      'd': displayIdx,
+      'w': d.width,
+      'h': d.height,
+      's': _scale,
+    });
+    await bind.sessionPeerOption(
+      sessionId: sessionId,
+      name: kOptionLastZoom,
+      value: payload,
+    );
+  }
+
+  // Restore zoom saved by saveLastZoom(). Only applies when the saved display
+  // index matches the current one and dimensions are unchanged — otherwise
+  // the saved scale would mean something different visually.
+  Future<void> tryRestoreLastZoom() async {
+    if (!settingsStore.rememberLastZoom) return;
+    final pi = parent.target?.ffiModel.pi;
+    if (pi == null || pi.displays.isEmpty) return;
+    final saved = await bind.sessionGetOption(
+        sessionId: sessionId, arg: kOptionLastZoom);
+    if (saved == null || saved.isEmpty) return;
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(saved) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    final displayIdx = data['d'] as int?;
+    final w = data['w'] as int?;
+    final h = data['h'] as int?;
+    final s = (data['s'] as num?)?.toDouble();
+    if (displayIdx == null || w == null || h == null || s == null) return;
+    if (displayIdx != pi.currentDisplay) return;
+    if (displayIdx < 0 || displayIdx >= pi.displays.length) return;
+    final d = pi.displays[displayIdx];
+    if (d.width != w || d.height != h) return;
+    if (parent.target?.imageModel.image == null) return;
+    final delta = s / _scale;
+    if ((delta - 1.0).abs() < 0.001) return;
+    final center = Offset(_size.width / 2, _size.height / 2);
+    updateScale(delta, center);
+    if (isMobile) isMobileCanvasChanged = true;
   }
 
   updateScrollPercent() {

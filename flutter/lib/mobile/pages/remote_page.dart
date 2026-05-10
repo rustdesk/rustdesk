@@ -136,12 +136,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       }
       _disableAndroidSoftKeyboard(
           isKeyboardVisible: keyboardVisibilityController.isVisible);
+      gFFI.canvasModel.tryRestoreLastZoom();
     });
     WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   Future<void> dispose() async {
+    // Snapshot zoom before tearing down the FFI / image model below.
+    await gFFI.canvasModel.saveLastZoom();
     WidgetsBinding.instance.removeObserver(this);
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
@@ -174,6 +177,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       trySyncClipboard();
       WakelockManager.enable(_uniqueKey);
       _resetIdleTimer();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // Covers screen lock and app backgrounded — page may not be disposed.
+      gFFI.canvasModel.saveLastZoom();
     }
   }
 
