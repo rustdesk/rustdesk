@@ -30,6 +30,7 @@ import 'package:window_size/window_size.dart' as window_size;
 
 import '../consts.dart';
 import 'custom/settings/settings_store.dart';
+import 'custom/session/session_registry.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
@@ -709,6 +710,25 @@ closeConnection({String? id}) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: SystemUiOverlay.values);
       gFFI.chatModel.hideChatOverlay();
+
+      final registry = SessionRegistry.instance;
+      if (registry.isNotEmpty && registry.activeSessionId != null) {
+        final nextEntry = registry.findById(registry.activeSessionId!);
+        if (nextEntry != null) {
+          Navigator.pushReplacement(
+            globalKey.currentContext!,
+            PageRouteBuilder(
+              pageBuilder: (_, __, ___) => RemoteSessionScreen(
+                id: nextEntry.peerId,
+                ffi: nextEntry.ffi,
+              ),
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+            ),
+          );
+          return;
+        }
+      }
       Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
       stateGlobal.isInMainPage = true;
     }();
@@ -2672,12 +2692,21 @@ connect(BuildContext context, String id,
           ),
         );
       } else {
+        final registry = SessionRegistry.instance;
+        if (registry.isFull) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Maximum 5 sessions reached.')),
+          );
+          return;
+        }
+        final sessionFfi = FFI(null);
+        registry.register(sessionFfi, id);
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (BuildContext context) => RemoteSessionScreen(
                 id: id,
-                ffi: gFFI, // TODO(Task 5): replace with per-session FFI from SessionRegistry
+                ffi: sessionFfi,
                 password: password,
                 isSharedPassword: isSharedPassword,
                 forceRelay: forceRelay),
