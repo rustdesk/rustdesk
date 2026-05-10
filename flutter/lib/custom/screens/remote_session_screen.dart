@@ -42,6 +42,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   final _kbFocusNode = FocusNode();
   bool _chatOpen = false;
   double _stripHeight = 0;
+  double _kbPanOffset = 0;
   late final StreamSubscription<bool> _kbVisibilitySub;
   final _fullScreenOverlayState = _FullScreenOverlayState();
 
@@ -78,8 +79,11 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     if (visible) {
       gFFI.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
       gFFI.canvasModel.isMobileCanvasChanged = false;
+      final mq = MediaQuery.of(context);
+      setState(() => _kbPanOffset = mq.viewInsets.bottom * 0.4);
     } else {
       gFFI.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
+      setState(() => _kbPanOffset = 0);
     }
   }
 
@@ -164,14 +168,13 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final keyboardHeight = mq.viewInsets.bottom;
-    final stripBottom = keyboardHeight > 0 ? keyboardHeight : mq.viewPadding.bottom;
+    final safeBottom = mq.viewPadding.bottom;
+    final stripBottom = safeBottom;
 
-    // Canvas bottom: reserve space for the strip (and keyboard when open) so
-    // the remote screen is never occluded by the strip or system keyboard.
+    // Canvas bottom: reserve space for the strip only; keyboard handled by pan.
     final canvasBottom = _chatOpen
         ? mq.size.height * (1 - 0.55)
-        : stripBottom + _stripHeight;
+        : safeBottom + _stripHeight;
 
     // CursorPaint coordinates are relative to SafeArea (status bar excluded).
     // Offset it back down by the top padding so it aligns with the full-screen Stack.
@@ -188,7 +191,12 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
           left: 0,
           right: 0,
           bottom: canvasBottom,
-          child: _remoteCanvas(),
+          child: AnimatedSlide(
+            offset: Offset(0, -_kbPanOffset / (mq.size.height - canvasBottom)),
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+            child: _remoteCanvas(),
+          ),
         ),
 
         // Layer 1: hidden 1×1 TextField for iOS keyboard input.
