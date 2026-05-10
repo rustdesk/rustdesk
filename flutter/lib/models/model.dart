@@ -1421,7 +1421,26 @@ class FfiModel with ChangeNotifier {
 
     if (!isCache) {
       tryUseAllMyDisplaysForTheRemoteSession(peerId);
+      _tryRestoreLastDisplay(peerId);
     }
+  }
+
+  // Restore the display the user was on at the end of the previous session.
+  // Saved per-peer via kOptionLastDisplay in openMonitorInTheSameTab().
+  // Falls back silently if the saved index no longer maps to a real display
+  // (e.g. monitor unplugged), so the host's primary stays in use.
+  _tryRestoreLastDisplay(String peerId) async {
+    if (parent.target?.connType != ConnType.defaultConn) return;
+    if (_pi.displays.length <= 1) return;
+    final saved = await bind.sessionGetOption(
+        sessionId: sessionId, arg: kOptionLastDisplay);
+    if (saved == null || saved.isEmpty) return;
+    final idx = int.tryParse(saved);
+    if (idx == null) return;
+    if (idx == _pi.currentDisplay) return;
+    if (idx != kAllDisplayValue &&
+        (idx < 0 || idx >= _pi.displays.length)) return;
+    openMonitorInTheSameTab(idx, parent.target!, _pi);
   }
 
   checkDesktopKeyboardMode() async {
