@@ -1,0 +1,35 @@
+name: Build Android Only
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Build Android APK
+        run: |
+          cd flutter
+          flutter pub get
+          flutter build apk --release --split-per-abi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-android
+          path: flutter/build/app/outputs/flutter-apk/*.apk
