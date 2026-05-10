@@ -169,7 +169,8 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final safeBottom = mq.viewPadding.bottom;
-    final stripBottom = safeBottom;
+    final keyboardHeight = mq.viewInsets.bottom;
+    final stripBottom = keyboardHeight > 0 ? keyboardHeight : safeBottom;
 
     // Canvas bottom: reserve space for the strip only; keyboard handled by pan.
     final canvasBottom = _chatOpen
