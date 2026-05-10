@@ -262,7 +262,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         // expands upward. Draggable vertically; position and collapsed state persist.
         FloatingMacroBar(
           bridge: _bridge,
-          stripTop: canvasBottom,
+          stripTop: stripBottom + _stripHeight,
           onZoomFit: _onZoomFit,
           onMouseModeToggle: _onMouseModeToggle,
           onClipboardPaste: _onClipboardPaste,
