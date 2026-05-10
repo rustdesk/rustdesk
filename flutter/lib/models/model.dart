@@ -3718,7 +3718,7 @@ class FFI {
   Map<int, TerminalModel> get terminalModels => _terminalModels;
 
   FFI(SessionID? sId) {
-    sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
+    sessionId = sId ?? Uuid().v4obj();
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));
     cursorModel = CursorModel(WeakReference(this));

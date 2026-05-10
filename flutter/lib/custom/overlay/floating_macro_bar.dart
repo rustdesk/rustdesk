@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/model.dart';
 
 import '../input/input_bridge.dart';
 import '../settings/settings_store.dart';
@@ -21,6 +21,7 @@ const _kSubBtnSize = 48.0;
 
 class FloatingMacroBar extends StatefulWidget {
   final InputBridge bridge;
+  final FfiModel ffiModel;
   // Bottom of the canvas area (top of the power strip). The bar is anchored
   // just above this value so it sits flush above the custom keyboard strip.
   final double stripTop;
@@ -31,6 +32,7 @@ class FloatingMacroBar extends StatefulWidget {
   const FloatingMacroBar({
     super.key,
     required this.bridge,
+    required this.ffiModel,
     required this.stripTop,
     required this.onZoomFit,
     required this.onMouseModeToggle,
@@ -223,7 +225,7 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
       _gap(),
       _Btn(
         tooltip: 'Toggle mouse/touch mode',
-        labelBuilder: () => gFFI.ffiModel.touchMode ? '🖱' : '👆',
+        labelBuilder: () => widget.ffiModel.touchMode ? '🖱' : '👆',
         onTap: widget.onMouseModeToggle,
       ),
     ];

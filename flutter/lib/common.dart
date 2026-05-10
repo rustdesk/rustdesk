@@ -25,6 +25,7 @@ import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'custom/screens/session_registry.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -705,6 +706,17 @@ String formatDurationToTime(Duration duration) {
 closeConnection({String? id}) {
   if (isAndroid || isIOS) {
     () async {
+      // Remove from registry if tracked; only pop to root when no sessions remain.
+      if (id != null) {
+        SessionRegistry.instance.removeSession(id);
+        if (SessionRegistry.instance.count > 0) {
+          // SessionHostScreen is still on the nav stack and will show the
+          // remaining session via its registry listener.
+          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+              overlays: SystemUiOverlay.values);
+          return;
+        }
+      }
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: SystemUiOverlay.values);
       gFFI.chatModel.hideChatOverlay();
@@ -2767,9 +2779,7 @@ class WakelockManager {
         return; // Don't enable wakelock if user disabled keep awake
       }
     }
-    if (isDesktop) {
-      _enabledKeys.add(key);
-    }
+    _enabledKeys.add(key);
     if (!_enabled) {
       _enabled = true;
       WakelockPlus.enable();
@@ -2777,11 +2787,9 @@ class WakelockManager {
   }
 
   static void disable(UniqueKey key) {
-    if (isDesktop) {
-      _enabledKeys.remove(key);
-      if (_enabledKeys.isNotEmpty) {
-        return;
-      }
+    _enabledKeys.remove(key);
+    if (_enabledKeys.isNotEmpty) {
+      return;
     }
     if (_enabled) {
       WakelockPlus.disable();

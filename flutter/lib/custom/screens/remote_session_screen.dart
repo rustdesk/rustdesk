@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 
 import '../chat/terminal_chat_overlay.dart';
@@ -13,6 +14,7 @@ import '../input/text_field_bridge.dart';
 import '../overlay/floating_macro_bar.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
+import 'session_registry.dart';
 
 // Full-screen overlay state for this session, overrides the constrained
 // BlockableOverlay set by RemotePage.applyFfi so dialogs span the screen.
@@ -23,6 +25,10 @@ class RemoteSessionScreen extends StatefulWidget {
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
+  final VoidCallback? onSessionClosed;
+  final VoidCallback? onActivated;
+  final VoidCallback? onDeactivated;
+  final void Function(String peerId)? onSwitchSession;
 
   const RemoteSessionScreen({
     super.key,
@@ -30,6 +36,10 @@ class RemoteSessionScreen extends StatefulWidget {
     this.password,
     this.isSharedPassword,
     this.forceRelay,
+    this.onSessionClosed,
+    this.onActivated,
+    this.onDeactivated,
+    this.onSwitchSession,
   });
 
   @override
@@ -37,6 +47,7 @@ class RemoteSessionScreen extends StatefulWidget {
 }
 
 class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
+  late FFI _ffi;
   late final InputBridge _bridge;
   final _modCtl = ModifierController();
   final _kbFocusNode = FocusNode();
@@ -49,16 +60,23 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   @override
   void initState() {
     super.initState();
-    _bridge = InputBridge(gFFI.sessionId);
+    _ffi = SessionRegistry.instance.addSession(
+          peerId: widget.id,
+          password: widget.password,
+          isSharedPassword: widget.isSharedPassword,
+          forceRelay: widget.forceRelay,
+        ) ??
+        gFFI;
+    _bridge = InputBridge(_ffi.sessionId);
     _kbVisibilitySub = KeyboardVisibilityController()
         .onChange
         .listen(_onKeyboardVisibilityChanged);
     // Override dialogManager's overlay after RemotePage.applyFfi() runs.
-    // RemotePage binds gFFI.dialogManager to BlockableOverlay (constrained to
+    // RemotePage binds _ffi.dialogManager to BlockableOverlay (constrained to
     // Positioned canvas area). We replace it with a full-screen overlay so
     // dialogs like the password prompt render centered over the whole screen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      gFFI.dialogManager.setOverlayState(_fullScreenOverlayState);
+      _ffi.dialogManager.setOverlayState(_fullScreenOverlayState);
     });
   }
 
@@ -77,12 +95,12 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     // without calling mobileFocusCanvasCursor(), which would call updateSize() with
     // the keyboard viewInsets and cause an unwanted zoom-out.
     if (visible) {
-      gFFI.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
-      gFFI.canvasModel.isMobileCanvasChanged = false;
+      _ffi.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
+      _ffi.canvasModel.isMobileCanvasChanged = false;
       final mq = MediaQuery.of(context);
       setState(() => _kbPanOffset = mq.viewInsets.bottom * 0.4);
     } else {
-      gFFI.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
+      _ffi.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
       setState(() => _kbPanOffset = 0);
     }
   }
@@ -100,7 +118,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onDisconnect() {
-    clientClose(gFFI.sessionId, gFFI);
+    clientClose(_ffi.sessionId, _ffi);
   }
 
   void _onChatToggle() {
@@ -108,21 +126,21 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onDisplaySwitch() {
-    showOptions(context, widget.id, gFFI.dialogManager);
+    showOptions(context, widget.id, _ffi.dialogManager, _ffi);
   }
 
   void _onNextDisplay() {
-    final pi = gFFI.ffiModel.pi;
+    final pi = _ffi.ffiModel.pi;
     final count = pi.displays.length;
     if (count <= 1) return;
     final next = (pi.currentDisplay + 1) % count;
-    openMonitorInTheSameTab(next, gFFI, pi);
+    openMonitorInTheSameTab(next, _ffi, pi);
   }
 
   void _onZoomFit() {
     // Scale the remote canvas so its height exactly fills the canvas area
     // (from screen top to the top of the power strip / keyboard).
-    final displayHeight = gFFI.canvasModel.getDisplayHeight();
+    final displayHeight = _ffi.canvasModel.getDisplayHeight();
     if (displayHeight <= 0) return;
     final mq = MediaQuery.of(context);
     final keyboardHeight = mq.viewInsets.bottom;
@@ -132,13 +150,13 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     final targetScale = canvasHeight / displayHeight;
     final center = Offset(mq.size.width / 2, canvasHeight / 2);
     // updateScale takes a multiplier; divide target by current to get delta.
-    final delta = targetScale / gFFI.canvasModel.scale;
-    gFFI.canvasModel.updateScale(delta, center);
-    gFFI.canvasModel.isMobileCanvasChanged = true;
+    final delta = targetScale / _ffi.canvasModel.scale;
+    _ffi.canvasModel.updateScale(delta, center);
+    _ffi.canvasModel.isMobileCanvasChanged = true;
   }
 
   void _onMouseModeToggle() {
-    gFFI.ffiModel.toggleTouchMode();
+    _ffi.ffiModel.toggleTouchMode();
   }
 
   Future<void> _onClipboardPaste() async {
@@ -161,6 +179,23 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         onZoomFit: _onZoomFit,
         onMouseModeToggle: _onMouseModeToggle,
         onClipboardPaste: _onClipboardPaste,
+      ),
+    );
+  }
+
+  void _onSessionsTap() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _SessionPickerSheet(
+        currentPeerId: widget.id,
+        onSwitch: (peerId) {
+          Navigator.pop(ctx);
+          widget.onSwitchSession?.call(peerId);
+        },
       ),
     );
   }
@@ -223,6 +258,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
               child: PowerStrip(
                 inputBridge: _bridge,
                 modifierController: _modCtl,
+                ffiModel: _ffi.ffiModel,
                 onMacrosTap: _onMacrosTap,
                 onKeyboardTap: _onKeyboardTap,
                 onDisconnect: _onDisconnect,
@@ -261,10 +297,27 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         // expands upward. Draggable vertically; position and collapsed state persist.
         FloatingMacroBar(
           bridge: _bridge,
+          ffiModel: _ffi.ffiModel,
           stripTop: canvasBottom,
           onZoomFit: _onZoomFit,
           onMouseModeToggle: _onMouseModeToggle,
           onClipboardPaste: _onClipboardPaste,
+        ),
+
+        // Layer 4.6: session switcher badge — top-left, shown when > 1 session.
+        ListenableBuilder(
+          listenable: SessionRegistry.instance,
+          builder: (context, _) {
+            if (SessionRegistry.instance.count <= 1) return const SizedBox.shrink();
+            return Positioned(
+              top: safeAreaTop + 8,
+              left: 8,
+              child: GestureDetector(
+                onTap: _onSessionsTap,
+                child: _SessionBadge(count: SessionRegistry.instance.count),
+              ),
+            );
+          },
         ),
 
         // Layer 5: full-screen dialog overlay, keyed to _fullScreenOverlayState.
@@ -278,6 +331,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
 
   Widget _remoteCanvas() => RemotePage(
         id: widget.id,
+        ffi: _ffi,
         password: widget.password,
         isSharedPassword: widget.isSharedPassword,
         forceRelay: widget.forceRelay,
@@ -286,7 +340,150 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         hideCursorPaint: true,
         onTwoFingerScroll: _onTwoFingerScroll,
       );
+}
 
+// ─── Session badge ────────────────────────────────────────────────────────────
+
+class _SessionBadge extends StatelessWidget {
+  final int count;
+  const _SessionBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.layers, color: Colors.white, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            '$count',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Session picker sheet ─────────────────────────────────────────────────────
+
+class _SessionPickerSheet extends StatelessWidget {
+  final String currentPeerId;
+  final void Function(String peerId) onSwitch;
+
+  const _SessionPickerSheet({
+    required this.currentPeerId,
+    required this.onSwitch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: SessionRegistry.instance,
+      builder: (context, _) {
+        final peerIds = SessionRegistry.instance.peerIds;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sessions (${peerIds.length}/${SessionRegistry.kMaxSessions})',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...peerIds.map((id) => _SessionTile(
+                      peerId: id,
+                      isActive: id == currentPeerId,
+                      onSwitch: () => onSwitch(id),
+                      onClose: () => SessionRegistry.instance.closeSession(id),
+                    )),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SessionTile extends StatelessWidget {
+  final String peerId;
+  final bool isActive;
+  final VoidCallback onSwitch;
+  final VoidCallback onClose;
+
+  const _SessionTile({
+    required this.peerId,
+    required this.isActive,
+    required this.onSwitch,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Material(
+        color: isActive ? const Color(0xFF2A2A5E) : const Color(0xFF2A2A3E),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: isActive ? null : onSwitch,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isActive ? Colors.greenAccent : Colors.grey,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    peerId,
+                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isActive)
+                  const Text(
+                    'active',
+                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onClose,
+                  child: const Icon(Icons.close, color: Colors.white54, size: 18),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ─── Macro sheet ─────────────────────────────────────────────────────────────
@@ -310,6 +507,8 @@ class _MacroSheet extends StatefulWidget {
 class _MacroSheetState extends State<_MacroSheet> {
   @override
   Widget build(BuildContext context) {
+    // touchMode read from global gFFI for macro sheet — acceptable since
+    // _MacroSheet is opened from within the active session's RemoteSessionScreen.
     final touchMode = gFFI.ffiModel.touchMode;
     return SafeArea(
       child: Padding(
