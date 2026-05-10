@@ -160,7 +160,10 @@ class _PowerStripState extends State<PowerStrip> {
       case KeyType.nextDisplay:
         widget.onNextDisplay();
       case KeyType.typeString:
-        if (k.keyString != null) widget.inputBridge.typeString(k.keyString!);
+        if (k.keyString != null) {
+          widget.inputBridge.typeString(k.keyString!);
+          if (k.sendEnter) widget.inputBridge.tapKey('return');
+        }
       case KeyType.regular:
         // Regular keys go through onPressStart / onPressEnd in KeyCell so the
         // held modifier (if any) stays down until the in-flight tap finishes.

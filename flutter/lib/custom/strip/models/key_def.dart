@@ -22,6 +22,7 @@ class KeyDef {
   final double widthFactor;
   final double? height;
   final String? keyString;
+  final bool sendEnter;
 
   const KeyDef({
     required this.label,
@@ -30,6 +31,7 @@ class KeyDef {
     this.widthFactor = 1.0,
     this.height,
     this.keyString,
+    this.sendEnter = false,
   });
 
   KeyDef copyWith({double? widthFactor}) => KeyDef(
@@ -39,6 +41,7 @@ class KeyDef {
         widthFactor: widthFactor ?? this.widthFactor,
         height: height,
         keyString: keyString,
+        sendEnter: sendEnter,
       );
 }
 
