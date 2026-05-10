@@ -1,6 +1,7 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/model.dart';
-import 'package:uuid/uuid.dart';
 
 const kMaxSessions = 5;
 
@@ -23,8 +24,8 @@ class SessionRegistry extends ChangeNotifier {
   bool get isNotEmpty => !isEmpty;
   bool get isFull => _entries.length >= kMaxSessions;
 
-  UuidValue? _activeSessionId;
-  UuidValue? get activeSessionId => _activeSessionId;
+  SessionID? _activeSessionId;
+  SessionID? get activeSessionId => _activeSessionId;
 
   void register(FFI ffi, String peerId, {String? peerAlias}) {
     if (isFull) throw StateError('Cannot register more than $kMaxSessions simultaneous sessions');
@@ -33,34 +34,28 @@ class SessionRegistry extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setActive(UuidValue sessionId) {
+  void setActive(SessionID sessionId) {
+    assert(_entries.any((e) => e.ffi.sessionId == sessionId),
+        'setActive: session $sessionId is not registered');
     if (_activeSessionId != sessionId) {
       _activeSessionId = sessionId;
       notifyListeners();
     }
   }
 
-  void unregister(UuidValue sessionId) {
+  void unregister(SessionID sessionId) {
+    final before = _entries.length;
     _entries.removeWhere((e) => e.ffi.sessionId == sessionId);
+    if (_entries.length == before) return;
     if (_activeSessionId == sessionId) {
       _activeSessionId = _entries.isNotEmpty ? _entries.last.ffi.sessionId : null;
     }
     notifyListeners();
   }
 
-  SessionEntry? findById(UuidValue sessionId) {
-    try {
-      return _entries.firstWhere((e) => e.ffi.sessionId == sessionId);
-    } catch (_) {
-      return null;
-    }
-  }
+  SessionEntry? findById(SessionID sessionId) =>
+      _entries.firstWhereOrNull((e) => e.ffi.sessionId == sessionId);
 
-  SessionEntry? findByPeerId(String peerId) {
-    try {
-      return _entries.firstWhere((e) => e.peerId == peerId);
-    } catch (_) {
-      return null;
-    }
-  }
+  SessionEntry? findByPeerId(String peerId) =>
+      _entries.firstWhereOrNull((e) => e.peerId == peerId);
 }
