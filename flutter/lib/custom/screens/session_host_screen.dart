@@ -31,6 +31,12 @@ class _SessionHostScreenState extends State<SessionHostScreen> {
   void initState() {
     super.initState();
     _activePeerId = widget.initialPeerId;
+    SessionRegistry.instance.addSession(
+      peerId: widget.initialPeerId,
+      password: widget.password,
+      isSharedPassword: widget.isSharedPassword,
+      forceRelay: widget.forceRelay,
+    );
     SessionRegistry.instance.addListener(_onRegistryChanged);
   }
 
