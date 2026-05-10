@@ -72,13 +72,6 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     _kbVisibilitySub = KeyboardVisibilityController()
         .onChange
         .listen(_onKeyboardVisibilityChanged);
-    // Override dialogManager's overlay after RemotePage.applyFfi() runs.
-    // RemotePage binds _ffi.dialogManager to BlockableOverlay (constrained to
-    // Positioned canvas area). We replace it with a full-screen overlay so
-    // dialogs like the password prompt render centered over the whole screen.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ffi.dialogManager.setOverlayState(_fullScreenOverlayState);
-    });
   }
 
   @override
@@ -347,6 +340,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
           hideBottomBar: true,
           hideCursorPaint: true,
           onTwoFingerScroll: _onTwoFingerScroll,
+          overlayKeyState: _fullScreenOverlayState,
         ),
       );
 }

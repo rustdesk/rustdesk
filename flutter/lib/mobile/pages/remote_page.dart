@@ -51,7 +51,8 @@ class RemotePage extends StatefulWidget {
       this.hideBottomBar = false,
       this.hideCursorPaint = false,
       this.onTwoFingerScroll,
-      this.ffi})
+      this.ffi,
+      this.overlayKeyState})
       : super(key: key);
 
   final String id;
@@ -70,6 +71,9 @@ class RemotePage extends StatefulWidget {
   // Tabby: two-finger pan (no pinch) routes here instead of panning the
   // local canvas. Forwarded to RawTouchGestureDetectorRegion.
   final void Function(double dx, double dy)? onTwoFingerScroll;
+  // Tabby: when set, the dialog manager uses this overlay instead of the
+  // BlockableOverlay so dialogs render full-screen from the start.
+  final OverlayKeyState? overlayKeyState;
 
   @override
   State<RemotePage> createState() => _RemotePageState(id);
@@ -109,6 +113,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     super.initState();
     _ffi.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
     _ffi.dialogManager.loadMobileActionsOverlayVisible();
+    if (widget.overlayKeyState != null) {
+      _ffi.dialogManager.setOverlayState(widget.overlayKeyState!);
+    }
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     _ffi.start(
       widget.id,
@@ -132,6 +139,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _ffi.chatModel
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
     _blockableOverlayState.applyFfi(_ffi);
+    // Restore caller-supplied overlay after applyFfi overwrites it.
+    if (widget.overlayKeyState != null) {
+      _ffi.dialogManager.setOverlayState(widget.overlayKeyState!);
+    }
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       _ffi.recordingModel
           .updateStatus(bind.sessionGetIsRecording(sessionId: _ffi.sessionId));
