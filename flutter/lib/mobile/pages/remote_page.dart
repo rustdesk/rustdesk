@@ -31,11 +31,11 @@ final initText = '1' * 1024;
 // When connecting a physical keyboard, `KeyEvent.physicalKey.usbHidUsage` are wrong is using Microsoft SwiftKey keyboard.
 // https://github.com/flutter/flutter/issues/159384
 // https://github.com/flutter/flutter/issues/159383
-void _disableAndroidSoftKeyboard({bool? isKeyboardVisible, FFI? ffi}) {
+void _disableAndroidSoftKeyboard({bool? isKeyboardVisible}) {
   if (isAndroid) {
     if (isKeyboardVisible != true) {
       // `enable_soft_keyboard` will be set to `true` when clicking the keyboard icon, in `openKeyboard()`.
-      (ffi ?? gFFI).invokeMethod("enable_soft_keyboard", false);
+      gFFI.invokeMethod("enable_soft_keyboard", false);
     }
   }
 }
@@ -50,17 +50,13 @@ class RemotePage extends StatefulWidget {
       this.hideKeyHelpTools = false,
       this.hideBottomBar = false,
       this.hideCursorPaint = false,
-      this.onTwoFingerScroll,
-      this.ffi,
-      this.overlayKeyState})
+      this.onTwoFingerScroll})
       : super(key: key);
 
   final String id;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
-  // Per-session FFI instance; falls back to gFFI when null (single-session path).
-  final FFI? ffi;
   // Tabby: when wrapped by RemoteSessionScreen the PowerStrip replaces these
   // legacy panels, so callers can suppress them.
   final bool hideKeyHelpTools;
@@ -71,9 +67,6 @@ class RemotePage extends StatefulWidget {
   // Tabby: two-finger pan (no pinch) routes here instead of panning the
   // local canvas. Forwarded to RawTouchGestureDetectorRegion.
   final void Function(double dx, double dy)? onTwoFingerScroll;
-  // Tabby: when set, the dialog manager uses this overlay instead of the
-  // BlockableOverlay so dialogs render full-screen from the start.
-  final OverlayKeyState? overlayKeyState;
 
   @override
   State<RemotePage> createState() => _RemotePageState(id);
@@ -97,27 +90,23 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   var _showEdit = false; // use soft keyboard
   int? _idleTimeoutSeconds; // cached at connect time to avoid FFI on every input event
 
-  FFI get _ffi => widget.ffi ?? gFFI;
-  InputModel get inputModel => _ffi.inputModel;
-  SessionID get sessionId => _ffi.sessionId;
+  InputModel get inputModel => gFFI.inputModel;
+  SessionID get sessionId => gFFI.sessionId;
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
 
   _RemotePageState(String id) {
     initSharedStates(id);
+    gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
+    gFFI.dialogManager.loadMobileActionsOverlayVisible();
   }
 
   @override
   void initState() {
     super.initState();
-    _ffi.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
-    _ffi.dialogManager.loadMobileActionsOverlayVisible();
-    if (widget.overlayKeyState != null) {
-      _ffi.dialogManager.setOverlayState(widget.overlayKeyState!);
-    }
-    _ffi.ffiModel.updateEventListener(sessionId, widget.id);
-    _ffi.start(
+    gFFI.ffiModel.updateEventListener(sessionId, widget.id);
+    gFFI.start(
       widget.id,
       password: widget.password,
       isSharedPassword: widget.isSharedPassword,
@@ -125,34 +114,29 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-      _ffi.dialogManager
+      gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     _idleTimeoutSeconds = WakelockManager.parseIdleTimeoutSeconds();
     WakelockManager.enable(_uniqueKey);
     _resetIdleTimer();
     _physicalFocusNode.requestFocus();
-    _ffi.inputModel.listenToMouse(true);
-    _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
+    gFFI.inputModel.listenToMouse(true);
+    gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     keyboardSubscription =
         keyboardVisibilityController.onChange.listen(onSoftKeyboardChanged);
-    _ffi.chatModel
+    gFFI.chatModel
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
-    _blockableOverlayState.applyFfi(_ffi);
-    // Restore caller-supplied overlay after applyFfi overwrites it.
-    if (widget.overlayKeyState != null) {
-      _ffi.dialogManager.setOverlayState(widget.overlayKeyState!);
-    }
-    _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
-      _ffi.recordingModel
-          .updateStatus(bind.sessionGetIsRecording(sessionId: _ffi.sessionId));
-      if (_ffi.recordingModel.start) {
+    _blockableOverlayState.applyFfi(gFFI);
+    gFFI.imageModel.addCallbackOnFirstImage((String peerId) {
+      gFFI.recordingModel
+          .updateStatus(bind.sessionGetIsRecording(sessionId: gFFI.sessionId));
+      if (gFFI.recordingModel.start) {
         showToast(translate('Automatically record outgoing sessions'));
       }
       _disableAndroidSoftKeyboard(
-          isKeyboardVisible: keyboardVisibilityController.isVisible,
-          ffi: _ffi);
-      _ffi.canvasModel.tryRestoreLastZoom();
+          isKeyboardVisible: keyboardVisibilityController.isVisible);
+      gFFI.canvasModel.tryRestoreLastZoom();
     });
     WidgetsBinding.instance.addObserver(this);
   }
@@ -160,21 +144,21 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   Future<void> dispose() async {
     // Snapshot zoom before tearing down the FFI / image model below.
-    await _ffi.canvasModel.saveLastZoom();
+    await gFFI.canvasModel.saveLastZoom();
     WidgetsBinding.instance.removeObserver(this);
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
-    _ffi.dialogManager.hideMobileActionsOverlay(store: false);
-    _ffi.inputModel.listenToMouse(false);
-    _ffi.imageModel.disposeImage();
-    _ffi.cursorModel.disposeImages();
-    await _ffi.invokeMethod("enable_soft_keyboard", true);
+    gFFI.dialogManager.hideMobileActionsOverlay(store: false);
+    gFFI.inputModel.listenToMouse(false);
+    gFFI.imageModel.disposeImage();
+    gFFI.cursorModel.disposeImages();
+    await gFFI.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
-    await _ffi.close();
+    await gFFI.close();
     _timer?.cancel();
     _iosKeyboardWorkaroundTimer?.cancel();
-    _ffi.dialogManager.dismissAll();
+    gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     WakelockManager.cancelIdleTimer();
@@ -184,7 +168,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // `on_voice_call_closed` should be called when the connection is ended.
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.
     // Only one client is considered here for now.
-    _ffi.chatModel.onVoiceCallClosed("End connetion");
+    gFFI.chatModel.onVoiceCallClosed("End connetion");
   }
 
   @override
@@ -196,7 +180,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       // Covers screen lock and app backgrounded — page may not be disposed.
-      _ffi.canvasModel.saveLastZoom();
+      gFFI.canvasModel.saveLastZoom();
     }
   }
 
@@ -210,7 +194,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   // For client side
   // When swithing from other app to this app, try to sync clipboard.
   void trySyncClipboard() {
-    _ffi.invokeMethod("try_sync_clipboard");
+    gFFI.invokeMethod("try_sync_clipboard");
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.
@@ -230,9 +214,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (!visible) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       // [pi.version.isNotEmpty] -> check ready or not, avoid login without soft-keyboard
-      if (_ffi.chatModel.chatWindowOverlayEntry == null &&
-          _ffi.ffiModel.pi.version.isNotEmpty) {
-        _ffi.invokeMethod("enable_soft_keyboard", false);
+      if (gFFI.chatModel.chatWindowOverlayEntry == null &&
+          gFFI.ffiModel.pi.version.isNotEmpty) {
+        gFFI.invokeMethod("enable_soft_keyboard", false);
       }
 
       // Workaround for iOS: physical keyboard input fails after virtual keyboard is hidden
@@ -373,7 +357,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void openKeyboard() {
-    _ffi.invokeMethod("enable_soft_keyboard", true);
+    gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
     _textController.text = _value;
@@ -396,7 +380,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       ? getGestureHelp()
       : (_showBar &&
               !widget.hideBottomBar &&
-              _ffi.ffiModel.pi.displays.isNotEmpty
+              gFFI.ffiModel.pi.displays.isNotEmpty
           ? getBottomAppBar()
           : Offstage());
 
@@ -408,7 +392,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
     return WillPopScope(
       onWillPop: () async {
-        clientClose(sessionId, _ffi);
+        clientClose(sessionId, gFFI);
         return false;
       },
       child: Scaffold(
@@ -432,7 +416,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                     setState(() {
                       if (keyboardIsVisible) {
                         _showEdit = false;
-                        _ffi.invokeMethod("enable_soft_keyboard", false);
+                        gFFI.invokeMethod("enable_soft_keyboard", false);
                         _mobileFocusNode.unfocus();
                         _physicalFocusNode.requestFocus();
                       } else if (_showGestureHelp) {
@@ -445,15 +429,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           bottomNavigationBar: Obx(() => Stack(
                 alignment: Alignment.bottomCenter,
                 children: [
-                  _ffi.ffiModel.pi.isSet.isTrue &&
-                          _ffi.ffiModel.waitForFirstImage.isTrue
+                  gFFI.ffiModel.pi.isSet.isTrue &&
+                          gFFI.ffiModel.waitForFirstImage.isTrue
                       ? emptyOverlay(MyTheme.canvasColor)
                       : () {
-                          _ffi.ffiModel.tryShowAndroidActionsOverlay();
+                          gFFI.ffiModel.tryShowAndroidActionsOverlay();
                           return Offstage();
                         }(),
                   _bottomWidget(),
-                  _ffi.ffiModel.pi.isSet.isFalse
+                  gFFI.ffiModel.pi.isSet.isFalse
                       ? emptyOverlay(MyTheme.canvasColor)
                       : Offstage(),
                 ],
@@ -471,10 +455,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                 OrientationBuilder(builder: (ctx, orientation) {
                               if (_currentOrientation != orientation) {
                                 Timer(const Duration(milliseconds: 200), () {
-                                  _ffi.dialogManager
-                                      .resetMobileActionsOverlay(ffi: _ffi);
+                                  gFFI.dialogManager
+                                      .resetMobileActionsOverlay(ffi: gFFI);
                                   _currentOrientation = orientation;
-                                  _ffi.canvasModel.updateViewStyle();
+                                  gFFI.canvasModel.updateViewStyle();
                                 });
                               }
                               return Container(
@@ -485,7 +469,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                         onPointerDown: (_) => _resetIdleTimer(),
                                         child: RawTouchGestureDetectorRegion(
                                           child: getBodyForMobile(),
-                                          ffi: _ffi,
+                                          ffi: gFFI,
                                           onTwoFingerScroll:
                                               widget.onTwoFingerScroll,
                                         ),
@@ -508,7 +492,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       inputModel: inputModel,
       // Disable RawKeyFocusScope before the connecting is established.
       // The "Delete" key on the soft keyboard may be grabbed when inputting the password dialog.
-      child: _ffi.ffiModel.pi.isSet.isTrue
+      child: gFFI.ffiModel.pi.isSet.isTrue
           ? RawKeyFocusScope(
               focusNode: _physicalFocusNode,
               inputModel: inputModel,
@@ -536,7 +520,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       color: Colors.white,
                       icon: Icon(Icons.clear),
                       onPressed: () {
-                        clientClose(sessionId, _ffi);
+                        clientClose(sessionId, gFFI);
                       },
                     ),
                     IconButton(
@@ -544,13 +528,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       icon: Icon(Icons.tv),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showOptions(context, widget.id, _ffi.dialogManager, _ffi);
+                        showOptions(context, widget.id, gFFI.dialogManager);
                       },
                     )
                   ] +
                   (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
                       ? []
-                      : _ffi.ffiModel.isPeerAndroid
+                      : gFFI.ffiModel.isPeerAndroid
                           ? [
                               IconButton(
                                   color: Colors.white,
@@ -559,8 +543,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                               IconButton(
                                 color: Colors.white,
                                 icon: const Icon(Icons.build),
-                                onPressed: () => _ffi.dialogManager
-                                    .toggleMobileActionsOverlay(ffi: _ffi),
+                                onPressed: () => gFFI.dialogManager
+                                    .toggleMobileActionsOverlay(ffi: gFFI),
                               )
                             ]
                           : [
@@ -570,7 +554,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                   onPressed: openKeyboard),
                               IconButton(
                                 color: Colors.white,
-                                icon: Icon(_ffi.ffiModel.touchMode
+                                icon: Icon(gFFI.ffiModel.touchMode
                                     ? Icons.touch_app
                                     : Icons.mouse),
                                 onPressed: () => setState(
@@ -581,7 +565,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       ? []
                       : <Widget>[
                           futureBuilder(
-                              future: _ffi.invokeMethod(
+                              future: gFFI.invokeMethod(
                                   "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
                               hasData: (isSupportVoiceCall) => IconButton(
                                     color: Colors.white,
@@ -609,7 +593,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           Obx(() => IconButton(
                 color: Colors.white,
                 icon: Icon(Icons.expand_more),
-                onPressed: _ffi.ffiModel.waitForFirstImage.isTrue
+                onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
                     ? null
                     : () {
                         setState(() => _showBar = !_showBar);
@@ -621,9 +605,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   bool get showCursorPaint =>
-      !_ffi.ffiModel.isPeerAndroid &&
-      !_ffi.canvasModel.cursorEmbedded &&
-      !_ffi.inputModel.relativeMouseMode.value;
+      !gFFI.ffiModel.isPeerAndroid &&
+      !gFFI.canvasModel.cursorEmbedded &&
+      !gFFI.inputModel.relativeMouseMode.value;
 
   Widget getBodyForMobile() {
     final keyboardIsVisible = keyboardVisibilityController.isVisible;
@@ -631,17 +615,16 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         color: MyTheme.canvasColor,
         child: Stack(children: () {
           final paints = [
-            ImagePaint(ffiModel: _ffi.ffiModel),
+            ImagePaint(ffiModel: gFFI.ffiModel),
             Positioned(
               top: 10,
               right: 10,
-              child: QualityMonitor(_ffi.qualityMonitorModel),
+              child: QualityMonitor(gFFI.qualityMonitorModel),
             ),
             if (!widget.hideKeyHelpTools)
               KeyHelpTools(
                   keyboardIsVisible: keyboardIsVisible,
-                  showGestureHelp: _showGestureHelp,
-                  ffi: _ffi),
+                  showGestureHelp: _showGestureHelp),
             SizedBox(
               width: 0,
               height: 0,
@@ -676,13 +659,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           if (showCursorPaint && !widget.hideCursorPaint) {
             paints.add(CursorPaint(widget.id));
           }
-          if (_ffi.ffiModel.touchMode) {
+          if (gFFI.ffiModel.touchMode) {
             paints.add(FloatingMouse(
-              ffi: _ffi,
+              ffi: gFFI,
             ));
           } else {
             paints.add(FloatingMouseWidgets(
-              ffi: _ffi,
+              ffi: gFFI,
             ));
           }
           return paints;
@@ -704,36 +687,36 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   List<TTextMenu> _getMobileActionMenus() {
-    if (_ffi.ffiModel.pi.platform != kPeerPlatformAndroid ||
-        !_ffi.ffiModel.keyboard) {
+    if (gFFI.ffiModel.pi.platform != kPeerPlatformAndroid ||
+        !gFFI.ffiModel.keyboard) {
       return [];
     }
-    final enabled = versionCmp(_ffi.ffiModel.pi.version, '1.2.7') >= 0;
+    final enabled = versionCmp(gFFI.ffiModel.pi.version, '1.2.7') >= 0;
     if (!enabled) return [];
     return [
       TTextMenu(
         child: Text(translate('Back')),
-        onPressed: () => _ffi.inputModel.onMobileBack(),
+        onPressed: () => gFFI.inputModel.onMobileBack(),
       ),
       TTextMenu(
         child: Text(translate('Home')),
-        onPressed: () => _ffi.inputModel.onMobileHome(),
+        onPressed: () => gFFI.inputModel.onMobileHome(),
       ),
       TTextMenu(
         child: Text(translate('Apps')),
-        onPressed: () => _ffi.inputModel.onMobileApps(),
+        onPressed: () => gFFI.inputModel.onMobileApps(),
       ),
       TTextMenu(
         child: Text(translate('Volume up')),
-        onPressed: () => _ffi.inputModel.onMobileVolumeUp(),
+        onPressed: () => gFFI.inputModel.onMobileVolumeUp(),
       ),
       TTextMenu(
         child: Text(translate('Volume down')),
-        onPressed: () => _ffi.inputModel.onMobileVolumeDown(),
+        onPressed: () => gFFI.inputModel.onMobileVolumeDown(),
       ),
       TTextMenu(
         child: Text(translate('Power')),
-        onPressed: () => _ffi.inputModel.onMobilePower(),
+        onPressed: () => gFFI.inputModel.onMobilePower(),
       ),
     ];
   }
@@ -743,7 +726,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final x = 120.0;
     final y = size.height;
     final mobileActionMenus = _getMobileActionMenus();
-    final menus = toolbarControls(context, id, _ffi);
+    final menus = toolbarControls(context, id, gFFI);
 
     final List<PopupMenuEntry<int>> more = [
       ...mobileActionMenus
@@ -779,8 +762,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   onPressedTextChat(String id) {
-    _ffi.chatModel.changeCurrentKey(MessageKey(id, ChatModel.clientModeID));
-    _ffi.chatModel.toggleChatOverlay();
+    gFFI.chatModel.changeCurrentKey(MessageKey(id, ChatModel.clientModeID));
+    gFFI.chatModel.toggleChatOverlay();
   }
 
   showChatOptions(String id) async {
@@ -806,7 +789,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final isInVoice = [
       VoiceCallStatus.waitingForResponse,
       VoiceCallStatus.connected
-    ].contains(_ffi.chatModel.voiceCallStatus.value);
+    ].contains(gFFI.chatModel.voiceCallStatus.value);
     final menus = [
       makeTextMenu('Text chat', Icon(Icons.message, color: MyTheme.accent),
           () => onPressedTextChat(widget.id)),
@@ -857,14 +840,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             controller: ScrollController(),
             padding: EdgeInsets.symmetric(vertical: 10),
             child: GestureHelp(
-              touchMode: _ffi.ffiModel.touchMode,
+              touchMode: gFFI.ffiModel.touchMode,
               onTouchModeChange: (t) {
-                _ffi.ffiModel.toggleTouchMode();
-                final v = _ffi.ffiModel.touchMode ? 'Y' : 'N';
+                gFFI.ffiModel.toggleTouchMode();
+                final v = gFFI.ffiModel.touchMode ? 'Y' : 'N';
                 bind.mainSetLocalOption(key: kOptionTouchMode, value: v);
               },
-              virtualMouseMode: _ffi.ffiModel.virtualMouseMode,
-              inputModel: _ffi.inputModel,
+              virtualMouseMode: gFFI.ffiModel.virtualMouseMode,
+              inputModel: gFFI.inputModel,
             )));
   }
 
@@ -891,13 +874,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 class KeyHelpTools extends StatefulWidget {
   final bool keyboardIsVisible;
   final bool showGestureHelp;
-  final FFI? ffi;
 
   /// need to show by external request, etc [keyboardIsVisible] or [changeTouchMode]
   bool get requestShow => keyboardIsVisible || showGestureHelp;
 
   KeyHelpTools(
-      {required this.keyboardIsVisible, required this.showGestureHelp, this.ffi});
+      {required this.keyboardIsVisible, required this.showGestureHelp});
 
   @override
   State<KeyHelpTools> createState() => _KeyHelpToolsState();
@@ -910,8 +892,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
   final _keyboardVisibilityController = KeyboardVisibilityController();
   final _key = GlobalKey();
 
-  FFI get _ffi => widget.ffi ?? gFFI;
-  InputModel get inputModel => _ffi.inputModel;
+  InputModel get inputModel => gFFI.inputModel;
 
   Widget wrap(String text, void Function() onPressed,
       {bool? active, IconData? icon}) {
@@ -942,7 +923,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
     if (renderObject is RenderBox) {
       final size = renderObject.size;
       Offset pos = renderObject.localToGlobal(Offset.zero);
-      _ffi.cursorModel.keyHelpToolsVisibilityChanged(
+      gFFI.cursorModel.keyHelpToolsVisibilityChanged(
           Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height),
           widget.keyboardIsVisible);
     }
@@ -956,13 +937,13 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         inputModel.command;
 
     if (!_pin && !hasModifierOn && !widget.requestShow) {
-      _ffi.cursorModel
+      gFFI.cursorModel
           .keyHelpToolsVisibilityChanged(null, widget.keyboardIsVisible);
       return Offstage();
     }
     final size = MediaQuery.of(context).size;
 
-    final pi = _ffi.ffiModel.pi;
+    final pi = gFFI.ffiModel.pi;
     final isMac = pi.platform == kPeerPlatformMacOS;
     final isWin = pi.platform == kPeerPlatformWindows;
     final isLinux = pi.platform == kPeerPlatformLinux;
@@ -1082,13 +1063,13 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         inputModel.inputKey('VK_RIGHT');
       }, icon: Icons.keyboard_arrow_right),
       wrap(isMac ? 'Cmd+C' : 'Ctrl+C', () {
-        sendPrompt(isMac, 'VK_C', _ffi);
+        sendPrompt(isMac, 'VK_C');
       }),
       wrap(isMac ? 'Cmd+V' : 'Ctrl+V', () {
-        sendPrompt(isMac, 'VK_V', _ffi);
+        sendPrompt(isMac, 'VK_V');
       }),
       wrap(isMac ? 'Cmd+S' : 'Ctrl+S', () {
-        sendPrompt(isMac, 'VK_S', _ffi);
+        sendPrompt(isMac, 'VK_S');
       }),
     ];
     final space = size.width > 320 ? 4.0 : 2.0;
@@ -1188,11 +1169,11 @@ class CursorPaint extends StatelessWidget {
   }
 }
 
-void showOptions(BuildContext context, String id,
-    OverlayDialogManager dialogManager, FFI ffi) async {
+void showOptions(
+    BuildContext context, String id, OverlayDialogManager dialogManager) async {
   var displays = <Widget>[];
-  final pi = ffi.ffiModel.pi;
-  final image = ffi.ffiModel.getConnectionImageText();
+  final pi = gFFI.ffiModel.pi;
+  final image = gFFI.ffiModel.getConnectionImageText();
   if (image != null) {
     displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
   }
@@ -1211,8 +1192,8 @@ void showOptions(BuildContext context, String id,
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            openMonitorInTheSameTab(i, ffi, pi);
-            ffi.dialogManager.dismissAll();
+            openMonitorInTheSameTab(i, gFFI, pi);
+            gFFI.dialogManager.dismissAll();
           },
           child: Ink(
               width: 40,
@@ -1241,20 +1222,20 @@ void showOptions(BuildContext context, String id,
   }
 
   List<TRadioMenu<String>> viewStyleRadios =
-      await toolbarViewStyle(context, id, ffi);
+      await toolbarViewStyle(context, id, gFFI);
   List<TRadioMenu<String>> imageQualityRadios =
-      await toolbarImageQuality(context, id, ffi);
-  List<TRadioMenu<String>> codecRadios = await toolbarCodec(context, id, ffi);
-  List<TToggleMenu> cursorToggles = await toolbarCursor(context, id, ffi);
+      await toolbarImageQuality(context, id, gFFI);
+  List<TRadioMenu<String>> codecRadios = await toolbarCodec(context, id, gFFI);
+  List<TToggleMenu> cursorToggles = await toolbarCursor(context, id, gFFI);
   List<TToggleMenu> displayToggles =
-      await toolbarDisplayToggle(context, id, ffi);
+      await toolbarDisplayToggle(context, id, gFFI);
 
   List<TToggleMenu> privacyModeList = [];
   // privacy mode
   final privacyModeState = PrivacyModeState.find(id);
-  if ((ffi.ffiModel.pi.features.privacyMode && ffi.ffiModel.keyboard) ||
+  if ((gFFI.ffiModel.pi.features.privacyMode && gFFI.ffiModel.keyboard) ||
       privacyModeState.isNotEmpty) {
-    privacyModeList = toolbarPrivacyMode(privacyModeState, context, id, ffi);
+    privacyModeList = toolbarPrivacyMode(privacyModeState, context, id, gFFI);
     if (privacyModeList.length == 1) {
       displayToggles.add(privacyModeList[0]);
     }
@@ -1469,18 +1450,18 @@ TTextMenu? getResolutionMenu(FFI ffi, String id) {
   );
 }
 
-void sendPrompt(bool isMac, String key, FFI ffi) {
-  final old = isMac ? ffi.inputModel.command : ffi.inputModel.ctrl;
+void sendPrompt(bool isMac, String key) {
+  final old = isMac ? gFFI.inputModel.command : gFFI.inputModel.ctrl;
   if (isMac) {
-    ffi.inputModel.command = true;
+    gFFI.inputModel.command = true;
   } else {
-    ffi.inputModel.ctrl = true;
+    gFFI.inputModel.ctrl = true;
   }
-  ffi.inputModel.inputKey(key);
+  gFFI.inputModel.inputKey(key);
   if (isMac) {
-    ffi.inputModel.command = old;
+    gFFI.inputModel.command = old;
   } else {
-    ffi.inputModel.ctrl = old;
+    gFFI.inputModel.ctrl = old;
   }
 }
 

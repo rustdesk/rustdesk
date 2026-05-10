@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
 
 import '../../input/input_bridge.dart';
@@ -13,7 +13,6 @@ import 'key_cell.dart';
 class PowerStrip extends StatefulWidget {
   final InputBridge inputBridge;
   final ModifierController modifierController;
-  final FfiModel ffiModel;
   final VoidCallback onMacrosTap;
   final VoidCallback onKeyboardTap;
   final VoidCallback onDisconnect;
@@ -29,7 +28,6 @@ class PowerStrip extends StatefulWidget {
     super.key,
     required this.inputBridge,
     required this.modifierController,
-    required this.ffiModel,
     required this.onMacrosTap,
     required this.onKeyboardTap,
     required this.onDisconnect,
@@ -52,8 +50,8 @@ class _PowerStripState extends State<PowerStrip> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.ffiModel,
-      builder: (context, _) => _buildStrip(widget.ffiModel.pi.platform),
+      listenable: gFFI.ffiModel,
+      builder: (context, _) => _buildStrip(gFFI.ffiModel.pi.platform),
     );
   }
 
@@ -111,7 +109,7 @@ class _PowerStripState extends State<PowerStrip> {
   Widget _wrapScaled(KeyDef k, double scale) {
     if (k.type == KeyType.displaySwitch || k.type == KeyType.nextDisplay) {
       return Obx(() {
-        if (widget.ffiModel.pi.displays.length <= 1) return const SizedBox.shrink();
+        if (gFFI.ffiModel.pi.displays.length <= 1) return const SizedBox.shrink();
         return _keyCell(k, scale);
       });
     }

@@ -6,8 +6,7 @@ import '../../mobile/widgets/dialog.dart' show showServerSettings;
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import '../theme/tokens.dart';
-import 'session_host_screen.dart';
-import 'session_registry.dart';
+import 'remote_session_screen.dart';
 
 class ConnectScreen extends StatefulWidget {
   const ConnectScreen({super.key});
@@ -50,39 +49,16 @@ class _ConnectScreenState extends State<ConnectScreen> {
     final id = await bind.mainHandleRelayId(id: rawId);
     final forceRelay = id != rawId;
     if (!mounted) return;
-
-    // Already connected to this peer — do nothing; SessionHostScreen shows it.
-    if (SessionRegistry.instance.contains(id)) return;
-
-    if (SessionRegistry.instance.count >= SessionRegistry.kMaxSessions) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-            'Maximum ${SessionRegistry.kMaxSessions} sessions reached'),
-      ));
-      return;
-    }
-
-    if (SessionRegistry.instance.count == 0) {
-      // First session: push SessionHostScreen which will host all future ones.
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => SessionHostScreen(
-            initialPeerId: id,
-            password: pw.isEmpty ? null : pw,
-            forceRelay: forceRelay,
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RemoteSessionScreen(
+          id: id,
+          password: pw.isEmpty ? null : pw,
+          forceRelay: forceRelay,
         ),
-      );
-    } else {
-      // Additional session: add to registry; SessionHostScreen reacts via listener.
-      SessionRegistry.instance.addSession(
-        peerId: id,
-        password: pw.isEmpty ? null : pw,
-        isSharedPassword: null,
-        forceRelay: forceRelay,
-      );
-    }
+      ),
+    );
   }
 
   @override
