@@ -6,6 +6,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 
 import '../chat/terminal_chat_overlay.dart';
@@ -329,16 +330,24 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     );
   }
 
-  Widget _remoteCanvas() => RemotePage(
-        id: widget.id,
-        ffi: _ffi,
-        password: widget.password,
-        isSharedPassword: widget.isSharedPassword,
-        forceRelay: widget.forceRelay,
-        hideKeyHelpTools: true,
-        hideBottomBar: true,
-        hideCursorPaint: true,
-        onTwoFingerScroll: _onTwoFingerScroll,
+  Widget _remoteCanvas() => MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: _ffi.ffiModel),
+          ChangeNotifierProvider.value(value: _ffi.imageModel),
+          ChangeNotifierProvider.value(value: _ffi.cursorModel),
+          ChangeNotifierProvider.value(value: _ffi.canvasModel),
+        ],
+        child: RemotePage(
+          id: widget.id,
+          ffi: _ffi,
+          password: widget.password,
+          isSharedPassword: widget.isSharedPassword,
+          forceRelay: widget.forceRelay,
+          hideKeyHelpTools: true,
+          hideBottomBar: true,
+          hideCursorPaint: true,
+          onTwoFingerScroll: _onTwoFingerScroll,
+        ),
       );
 }
 
