@@ -58,7 +58,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         .onChange
         .listen(_onKeyboardVisibilityChanged);
     // Override dialogManager's overlay after RemotePage.applyFfi() runs.
-    // RemotePage binds gFFI.dialogManager to BlockableOverlay (constrained to
+    // RemotePage binds ffi.dialogManager to BlockableOverlay (constrained to
     // Positioned canvas area). We replace it with a full-screen overlay so
     // dialogs like the password prompt render centered over the whole screen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
