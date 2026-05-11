@@ -472,7 +472,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                         onPointerDown: (_) => _resetIdleTimer(),
                                         child: RawTouchGestureDetectorRegion(
                                           child: getBodyForMobile(),
-                                          ffi: gFFI,
+                                          ffi: _ffi,
                                           onTwoFingerScroll:
                                               widget.onTwoFingerScroll,
                                         ),
