@@ -510,13 +510,12 @@ class _RawTouchGestureDetectorRegionState
       }
 
       // Tabby: race two thresholds, lock to whichever crosses first.
-      // Pan distance commits within 2-3 frames of a real drag, so it
-      // wins long before scale-change drift can cross — even with wide
-      // finger spacing where iOS multi-touch smoothing reports more
-      // scale jitter. Pre-lock frames are absorbed (no canvas pan, no
-      // remote scroll) so a misclassified frame cannot leak through.
-      const pinchThreshold = 0.10;
-      const scrollThreshold = 12.0;
+      // Pinch threshold is low (0.04) so scale wins quickly; scroll
+      // threshold is high (20px) so incidental finger drift during a
+      // pinch doesn't mis-classify as scroll. Pre-lock frames are
+      // absorbed so a misclassified frame cannot leak through.
+      const pinchThreshold = 0.04;
+      const scrollThreshold = 20.0;
       _twoFingerPanAccum += d.focalPointDelta.distance;
       final scaleAccum = (d.scale - 1.0).abs();
 
