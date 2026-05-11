@@ -469,6 +469,10 @@ impl Client {
             socket_addr_v6: ipv6.1.unwrap_or_default(),
             ..Default::default()
         });
+        // Sub-second first attempt mitigates the dominant connect-time tail caused
+        // by single-packet loss on the rendezvous round trip. Cumulative cap stays
+        // under hbbs's connection timeout.
+        const PUNCH_HOLE_TIMEOUTS_MS: [u64; 3] = [800, 2000, 4000];
         for i in 1..=3 {
             log::info!(
                 "#{} {} punch attempt with {}, id: {}",
@@ -480,7 +484,8 @@ impl Client {
             socket.send(&msg_out).await?;
             // below timeout should not bigger than hbbs's connection timeout.
             if let Some(msg_in) =
-                crate::get_next_nonkeyexchange_msg(&mut socket, Some(i * 3000)).await
+                crate::get_next_nonkeyexchange_msg(&mut socket, Some(PUNCH_HOLE_TIMEOUTS_MS[i - 1]))
+                    .await
             {
                 match msg_in.union {
                     Some(rendezvous_message::Union::PunchHoleResponse(ph)) => {
