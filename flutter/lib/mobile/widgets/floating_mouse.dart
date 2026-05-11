@@ -198,6 +198,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
 
   Offset _position = Offset.zero;
   bool _isInitialized = false;
+  Size _layoutSize = Size.zero;
   double _baseMouseScale = 1.0;
   double _mouseScale = 1.0;
   bool _isExpanded = true;
@@ -274,7 +275,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
 
   void _resetPosition() {
     setState(() {
-      final size = MediaQuery.of(context).size;
+      final size = _layoutSize != Size.zero ? _layoutSize : MediaQuery.of(context).size;
       _position = Offset(
         (size.width - _baseMouseWidth * _mouseScale) / 2,
         (size.height - _baseMouseHeight * _mouseScale) / 2,
@@ -362,7 +363,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
   void _onMoveUpdateDelta(Offset delta) {
     _resetCollapseTimer();
     final context = this.context;
-    final size = MediaQuery.of(context).size;
+    final size = _layoutSize != Size.zero ? _layoutSize : MediaQuery.of(context).size;
     Offset newPosition = _position + delta;
     double minX = 0;
     double minY = 0;
@@ -584,13 +585,7 @@ class _FloatingMouseState extends State<FloatingMouse> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isInitialized) {
-      return const Offstage();
-    }
     final virtualMouseMode = _virtualMouseMode;
-    if (!virtualMouseMode.showVirtualMouse) {
-      return const Offstage();
-    }
     _baseMouseScale = virtualMouseMode.virtualMouseScale;
     if (_isExpanded) {
       _mouseScale = _baseMouseScale;
@@ -598,6 +593,24 @@ class _FloatingMouseState extends State<FloatingMouse> {
       final minMouseScale = (_baseMouseScale * 0.3);
       _mouseScale = minMouseScale;
     }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final newSize = Size(constraints.maxWidth, constraints.maxHeight);
+        if (newSize != _layoutSize && newSize != Size.zero) {
+          _layoutSize = newSize;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _resetPosition();
+          });
+        }
+        if (!_isInitialized || !virtualMouseMode.showVirtualMouse) {
+          return const Offstage();
+        }
+        return _buildListener();
+      },
+    );
+  }
+
+  Widget _buildListener() {
     return Listener(
       onPointerDown: _isExpanded ? _handlePointerDown : null,
       onPointerMove: _handlePointerMove,
