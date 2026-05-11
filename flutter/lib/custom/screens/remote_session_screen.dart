@@ -358,7 +358,16 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
         // IgnorePointer so the full-screen overlay doesn't absorb taps/drags.
         Positioned.fill(
           top: safeAreaTop,
-          child: IgnorePointer(child: CursorPaint(widget.id)),
+          child: IgnorePointer(
+            child: MultiProvider(
+              providers: [
+                ChangeNotifierProvider.value(value: widget.ffi.cursorModel),
+                ChangeNotifierProvider.value(value: widget.ffi.canvasModel),
+                ChangeNotifierProvider.value(value: widget.ffi.ffiModel),
+              ],
+              child: CursorPaint(widget.id),
+            ),
+          ),
         ),
 
         // Layer 4.5: floating vertical macro bar — anchored just above the strip,
