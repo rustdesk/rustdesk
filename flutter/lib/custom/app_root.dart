@@ -5,6 +5,7 @@ import '../common.dart';
 import '../mobile/pages/settings_page.dart';
 import 'screens/connect_screen.dart';
 import 'screens/session_list_screen.dart';
+import 'session/session_registry.dart';
 import 'theme/app_theme.dart';
 import 'theme/tokens.dart';
 
@@ -21,12 +22,16 @@ class AppRoot extends StatelessWidget {
         ChangeNotifierProvider.value(value: gFFI.cursorModel),
         ChangeNotifierProvider.value(value: gFFI.canvasModel),
         ChangeNotifierProvider.value(value: gFFI.peerTabModel),
+        ChangeNotifierProvider.value(value: SessionRegistry.instance),
       ],
       child: MaterialApp(
         title: 'Tabby',
         theme: AppTheme.dark,
         navigatorKey: globalKey,
-        home: const _Shell(),
+        initialRoute: '/',
+        routes: {
+          '/': (_) => const _Shell(),
+        },
       ),
     );
   }
