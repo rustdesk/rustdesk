@@ -48,8 +48,9 @@ class KeyDef {
 
 class StripRow {
   final List<KeyDef> left;
+  final List<KeyDef> middle;
   final List<KeyDef> right;
-  const StripRow({required this.left, required this.right});
+  const StripRow({required this.left, this.middle = const [], required this.right});
 }
 
 class StripLayout {
@@ -58,7 +59,7 @@ class StripLayout {
 
   StripLayout mirrored() => StripLayout(
         rows: rows
-            .map((r) => StripRow(left: r.right, right: r.left))
+            .map((r) => StripRow(left: r.right, middle: r.middle.reversed.toList(), right: r.left))
             .toList(),
       );
 }

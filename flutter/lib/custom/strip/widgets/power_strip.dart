@@ -92,13 +92,16 @@ class _PowerStripState extends State<PowerStrip> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 double leftW = row.left.fold(0.0, (s, k) => s + kKeyBaseWidth * k.widthFactor + 4);
+                double middleW = row.middle.fold(0.0, (s, k) => s + kKeyBaseWidth * k.widthFactor + 4);
                 double rightW = row.right.fold(0.0, (s, k) => s + kKeyBaseWidth * k.widthFactor + 4);
-                double totalW = leftW + rightW;
+                double totalW = leftW + middleW + rightW;
                 double available = constraints.maxWidth;
                 double scale = totalW > available ? available / totalW : 1.0;
                 return Row(
                   children: [
                     ...row.left.map((k) => _wrapScaled(k, scale)),
+                    const Spacer(),
+                    ...row.middle.map((k) => _wrapScaled(k, scale)),
                     const Spacer(),
                     ...row.right.map((k) => _wrapScaled(k, scale)),
                   ],

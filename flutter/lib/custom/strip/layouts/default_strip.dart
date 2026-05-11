@@ -16,25 +16,23 @@ StripLayout stripLayoutForPlatform(String platform) {
 
   return StripLayout(
     rows: [
-      // Row 1: disconnect + Esc + Alt + Shift + Ctrl + Cmd + Enter (left)  |  strip-toggle + ⌨ (right)
+      // Row 1: disconnect + ⇧ + Ctrl + Esc + Cmd + Alt (left)  |  ▲▼ + Y + ⌨ (right)
       StripRow(
         left: [
           KeyDef(label: '✕', keyName: '', type: KeyType.disconnect, widthFactor: 0.7),
-          KeyDef(label: 'Esc', keyName: 'escape', type: KeyType.regular),
-          altDef,
           shiftDef,
           ctrlDef,
+          KeyDef(label: 'Esc', keyName: 'escape', type: KeyType.regular),
           cmdDef,
-          KeyDef(label: '⏎', keyName: 'return', type: KeyType.regular),
+          altDef,
         ],
         right: [
-          KeyDef(label: '⧉', keyName: '', type: KeyType.sessionSwitch, widthFactor: 0.7),
           KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle, widthFactor: 0.7),
           KeyDef(label: 'Y', keyName: '', type: KeyType.typeString, widthFactor: 0.7, keyString: 'yes', sendEnter: true),
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
         ],
       ),
-      // Row 2: displays + ⌫ + Tab (left)  |  ⇞ + ⇟ + macros + arrow cluster (right)
+      // Row 2: 🖥 + ⌫ + ⌦ + Tab + ⎵ (left)  |  ⏎ + ⧉ (middle)  |  ⊞ + 💬 + ⇞ + ⇟ + ⚡ + arrows (right)
       StripRow(
         left: [
           KeyDef(label: '🖥', keyName: '', type: KeyType.displaySwitch, widthFactor: 0.7, height: 48),
@@ -42,6 +40,10 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '⌦', keyName: 'delete', type: KeyType.regular, widthFactor: 1.2, height: 48),
           KeyDef(label: 'Tab', keyName: 'tab', type: KeyType.regular, widthFactor: 1.2, height: 48),
           KeyDef(label: '⎵', keyName: 'space', type: KeyType.regular, widthFactor: 1.5, height: 48),
+        ],
+        middle: [
+          KeyDef(label: '⏎', keyName: 'return', type: KeyType.regular, height: 48),
+          KeyDef(label: '⧉', keyName: '', type: KeyType.sessionSwitch, widthFactor: 0.7, height: 48),
         ],
         right: [
           KeyDef(label: '⊞', keyName: '', type: KeyType.nextDisplay, widthFactor: 0.9, height: 48),
