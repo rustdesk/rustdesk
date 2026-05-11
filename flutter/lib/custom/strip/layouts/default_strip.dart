@@ -28,6 +28,7 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '⏎', keyName: 'return', type: KeyType.regular),
         ],
         right: [
+          KeyDef(label: '⧉', keyName: '', type: KeyType.sessionSwitch, widthFactor: 0.7),
           KeyDef(label: '▲▼', keyName: '', type: KeyType.stripToggle, widthFactor: 0.7),
           KeyDef(label: 'Y', keyName: '', type: KeyType.typeString, widthFactor: 0.7, keyString: 'yes', sendEnter: true),
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),

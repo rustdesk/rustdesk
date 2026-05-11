@@ -13,6 +13,7 @@ enum KeyType {
   clipboardPaste,
   nextDisplay,
   typeString,
+  sessionSwitch,
 }
 
 class KeyDef {

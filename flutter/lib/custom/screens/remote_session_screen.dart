@@ -334,6 +334,8 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
                 onMouseModeToggle: _onMouseModeToggle,
                 onClipboardPaste: _onClipboardPaste,
                 onNextDisplay: _onNextDisplay,
+                ffi: widget.ffi,
+                onSessionsTap: _onSessionsTap,
               ),
             ),
           ),

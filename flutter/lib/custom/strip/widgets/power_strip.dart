@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:get/get.dart';
 
 import '../../input/input_bridge.dart';
@@ -23,6 +24,8 @@ class PowerStrip extends StatefulWidget {
   final VoidCallback onClipboardPaste;
   final VoidCallback onNextDisplay;
   final bool leftHanded;
+  final FFI ffi;
+  final VoidCallback? onSessionsTap;
 
   const PowerStrip({
     super.key,
@@ -37,6 +40,8 @@ class PowerStrip extends StatefulWidget {
     required this.onMouseModeToggle,
     required this.onClipboardPaste,
     required this.onNextDisplay,
+    required this.ffi,
+    this.onSessionsTap,
     this.leftHanded = false,
   });
 
@@ -50,8 +55,8 @@ class _PowerStripState extends State<PowerStrip> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: gFFI.ffiModel,
-      builder: (context, _) => _buildStrip(gFFI.ffiModel.pi.platform),
+      listenable: widget.ffi.ffiModel,
+      builder: (context, _) => _buildStrip(widget.ffi.ffiModel.pi.platform),
     );
   }
 
@@ -109,9 +114,12 @@ class _PowerStripState extends State<PowerStrip> {
   Widget _wrapScaled(KeyDef k, double scale) {
     if (k.type == KeyType.displaySwitch || k.type == KeyType.nextDisplay) {
       return Obx(() {
-        if (gFFI.ffiModel.pi.displays.length <= 1) return const SizedBox.shrink();
+        if (widget.ffi.ffiModel.pi.displays.length <= 1) return const SizedBox.shrink();
         return _keyCell(k, scale);
       });
+    }
+    if (k.type == KeyType.sessionSwitch) {
+      if (widget.onSessionsTap == null) return const SizedBox.shrink();
     }
     return _keyCell(k, scale);
   }
@@ -164,6 +172,8 @@ class _PowerStripState extends State<PowerStrip> {
           widget.inputBridge.typeString(k.keyString!);
           if (k.sendEnter) widget.inputBridge.tapKey('return');
         }
+      case KeyType.sessionSwitch:
+        widget.onSessionsTap?.call();
       case KeyType.regular:
         // Regular keys go through onPressStart / onPressEnd in KeyCell so the
         // held modifier (if any) stays down until the in-flight tap finishes.
