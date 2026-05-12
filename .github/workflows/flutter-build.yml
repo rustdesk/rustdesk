@@ -61,6 +61,7 @@ jobs:
       target_version: Windows10
     strategy:
       fail-fast: false
+    secrets: inherit
 
   build-for-windows-flutter:
     name: ${{ matrix.job.target }}
