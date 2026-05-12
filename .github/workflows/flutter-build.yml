@@ -89,8 +89,11 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+        
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -310,8 +313,11 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+        
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Install LLVM and Clang
         uses: rustdesk-org/install-llvm-action-32bit@master
@@ -460,8 +466,11 @@ jobs:
           brew install nasm yasm
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+        
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -585,8 +594,11 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+        
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
@@ -898,8 +910,11 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -1170,8 +1185,11 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -1335,8 +1353,11 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Set Swap Space
         if: ${{ matrix.job.arch == 'x86_64' }}
@@ -1665,8 +1686,11 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Modify vcpkg.json for armv7
         if: matrix.job.vcpkg-triplet == 'arm-linux'
@@ -1867,8 +1891,11 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -1940,8 +1967,11 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -2001,8 +2031,11 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+        
+      - name: Setup Git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Prepare env
         run: |
