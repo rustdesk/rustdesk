@@ -107,8 +107,11 @@ jobs:
 
     - name: Checkout source code
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
+        
+    - name: Setup Git for private submodules
+      run: |
+        git config --global url."https://${{ secrets.SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+        git submodule update --init --recursive
 
     - name: Install prerequisites
       shell: bash
