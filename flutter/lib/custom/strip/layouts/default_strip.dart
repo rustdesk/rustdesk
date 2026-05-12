@@ -16,12 +16,13 @@ StripLayout stripLayoutForPlatform(String platform) {
 
   return StripLayout(
     rows: [
-      // Row 1: disconnect + ⇧ + Ctrl + Esc + Cmd + Alt (left)  |  ▲▼ + Y + ⌨ (right)
+      // Row 1: disconnect + ⇧ + Ctrl + ⏎ + Esc + Cmd + Alt (left)  |  ▲▼ + Y + ⌨ (right)
       StripRow(
         left: [
           KeyDef(label: '✕', keyName: '', type: KeyType.disconnect, widthFactor: 0.7),
           shiftDef,
           ctrlDef,
+          KeyDef(label: '⏎', keyName: 'return', type: KeyType.regular),
           KeyDef(label: 'Esc', keyName: 'escape', type: KeyType.regular),
           cmdDef,
           altDef,
@@ -32,7 +33,7 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
         ],
       ),
-      // Row 2: 🖥 + ⌫ + ⌦ + Tab + ⎵ (left)  |  ⏎ + ⧉ (middle)  |  ⊞ + 💬 + ⇞ + ⇟ + ⚡ + arrows (right)
+      // Row 2: 🖥 + ⌫ + ⌦ + Tab + ⎵ (left)  |  ⧉ (middle)  |  ⊞ + 💬 + ⇱ + ⇲ + ⚡ + arrows (right)
       StripRow(
         left: [
           KeyDef(label: '🖥', keyName: '', type: KeyType.displaySwitch, widthFactor: 0.7, height: 48),
@@ -42,14 +43,13 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '⎵', keyName: 'space', type: KeyType.regular, widthFactor: 1.5, height: 48),
         ],
         middle: [
-          KeyDef(label: '⏎', keyName: 'return', type: KeyType.regular, height: 48),
           KeyDef(label: '⧉', keyName: '', type: KeyType.sessionSwitch, widthFactor: 0.7, height: 48),
         ],
         right: [
           KeyDef(label: '⊞', keyName: '', type: KeyType.nextDisplay, widthFactor: 0.9, height: 48),
           KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7, height: 48),
-          KeyDef(label: '⇞', keyName: 'pageup', type: KeyType.regular, height: 48),
-          KeyDef(label: '⇟', keyName: 'pagedown', type: KeyType.regular, height: 48),
+          KeyDef(label: '⇱', keyName: 'home', type: KeyType.regular, height: 48),
+          KeyDef(label: '⇲', keyName: 'end', type: KeyType.regular, height: 48),
           KeyDef(label: '⚡', keyName: '', type: KeyType.macroOpener, height: 48),
           KeyDef(label: '←', keyName: 'left', type: KeyType.regular, height: 48),
           KeyDef(label: '↓', keyName: 'down', type: KeyType.regular, height: 48),

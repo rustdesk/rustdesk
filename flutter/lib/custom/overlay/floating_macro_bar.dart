@@ -178,13 +178,21 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
       _gap(),
       _Btn(label: '⌘⎵',  tooltip: 'Spotlight (Cmd+Space)',    onTap: () => b.tapKey('space', modifiers: {'meta'})),
       _gap(),
+      _Btn(label: 'Tg',   tooltip: 'Open Telegram',            onTap: () async {
+        await b.tapKey('space', modifiers: {'meta'});
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await b.typeString('telegram');
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await b.tapKey('return');
+      }),
+      _gap(),
       _Btn(label: '⌘⇥',  tooltip: 'App Switcher',            onTap: () => b.tapKey('tab', modifiers: {'meta'})),
       _gap(),
       _Btn(label: '⌘N',  tooltip: 'New Window',               onTap: () => b.tapKey('n', modifiers: {'meta'})),
       _gap(),
-      _Btn(label: '⇱',   tooltip: 'Home',                     onTap: () => b.tapKey('home')),
+      _Btn(label: '⇞',   tooltip: 'Page Up',                  onTap: () => b.tapKey('pageup')),
       _gap(),
-      _Btn(label: '⇲',   tooltip: 'End',                      onTap: () => b.tapKey('end')),
+      _Btn(label: '⇟',   tooltip: 'Page Down',                onTap: () => b.tapKey('pagedown')),
       _gap(),
       _Btn(label: '⌥↵',  tooltip: 'Option+Enter',             onTap: () => b.tapKey('return', modifiers: {'alt'})),
       _gap(),
