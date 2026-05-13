@@ -14,6 +14,7 @@ enum KeyType {
   nextDisplay,
   typeString,
   sessionSwitch,
+  fileSend,
 }
 
 class KeyDef {
