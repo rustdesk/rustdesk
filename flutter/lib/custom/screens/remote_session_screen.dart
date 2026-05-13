@@ -246,7 +246,8 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     final mq = MediaQuery.of(context);
     final keyboardHeight = mq.viewInsets.bottom;
     final stripBottom = keyboardHeight > 0 ? keyboardHeight : mq.viewPadding.bottom;
-    final canvasHeight = mq.size.height - mq.viewPadding.top - stripBottom - _stripHeight;
+    final chatBarHeight = _chatState == _ChatState.partial ? _partialBarHeight : 0.0;
+    final canvasHeight = mq.size.height - mq.viewPadding.top - stripBottom - _stripHeight - chatBarHeight;
     if (canvasHeight <= 0) return;
     final targetScale = canvasHeight / displayHeight;
     final center = Offset(mq.size.width / 2, canvasHeight / 2);
