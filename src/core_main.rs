@@ -679,10 +679,20 @@ pub fn core_main() -> Option<Vec<String>> {
                             "OK" => {
                                 if let Some(ref new_id) = new_id {
                                     if *new_id != local_id {
-                                        let _ = crate::ipc::set_config("id", new_id.clone());
+                                        if let Err(err) =
+                                            crate::ipc::set_config("id", new_id.clone())
+                                        {
+                                            println!(
+                                                "Failed to persist deployed id locally: {}",
+                                                err
+                                            );
+                                            std::process::exit(1);
+                                        }
                                     }
                                 }
-                                let _ = crate::ipc::notify_deployed();
+                                if let Err(err) = crate::ipc::notify_deployed() {
+                                    log::warn!("Failed to notify deployed state: {}", err);
+                                }
                                 println!("Device deployed.");
                             }
                             "NOT_ENABLED" => {

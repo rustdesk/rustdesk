@@ -302,7 +302,7 @@ impl RendezvousMediator {
                     }
                     Ok(register_pk_response::Result::NOT_DEPLOYED) => {
                         if !NEEDS_DEPLOY.load(Ordering::SeqCst) {
-                            log::warn!("Server requires deployment. Run `rustdesk --deploy <api_token>` on this device.");
+                            log::warn!("Server requires deployment. Run `rustdesk --deploy --token <api_token>` on this device.");
                         }
                         NEEDS_DEPLOY.store(true, Ordering::SeqCst);
                         // Clear key_confirmed so the UI reflects the truth: this device is
@@ -699,7 +699,7 @@ impl RendezvousMediator {
         // Throttle register_pk when the device is awaiting deployment: server
         // already told us we're not in its db; sending more often than every
         // DEPLOY_RETRY_INTERVAL ms is wasted traffic until the operator runs
-        // `rustdesk --deploy`.
+        // `rustdesk --deploy --token <api_token>`.
         if NEEDS_DEPLOY.load(Ordering::SeqCst) {
             let mut last = LAST_NOT_DEPLOYED_REGISTER.lock().await;
             if let Some(t) = *last {
