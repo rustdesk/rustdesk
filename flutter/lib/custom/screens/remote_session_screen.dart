@@ -9,7 +9,9 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 
-import '../chat/terminal_chat_overlay.dart';
+import '../chat/claude_session_indicator.dart';
+import '../chat/terminal_chat_overlay.dart' show TerminalChatPartialBar, TerminalChatMaxView;
+import '../theme/tokens.dart';
 import '../input/input_bridge.dart';
 import '../input/text_field_bridge.dart';
 import '../overlay/floating_macro_bar.dart';
@@ -22,6 +24,8 @@ import 'package:flutter_hbb/custom/session/session_switcher_sheet.dart';
 // Full-screen overlay state for this session, overrides the constrained
 // BlockableOverlay set by RemotePage.applyFfi so dialogs span the screen.
 class _FullScreenOverlayState extends OverlayKeyState {}
+
+enum _ChatState { closed, partial, max }
 
 class RemoteSessionScreen extends StatefulWidget {
   final String id;
@@ -44,11 +48,16 @@ class RemoteSessionScreen extends StatefulWidget {
 }
 
 class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
+  // Fallback Listenable used when terminalModels[0] is null, so AnimatedBuilder
+  // always has a valid notifier without needing a null check at build time.
+  static final _nullNotifier = ChangeNotifier();
+
   late final InputBridge _bridge;
   final _modCtl = ModifierController();
   final _kbFocusNode = FocusNode();
-  bool _chatOpen = false;
+  _ChatState _chatState = _ChatState.closed;
   double _stripHeight = 0;
+  double _partialBarHeight = 0;
   double _kbPanOffset = 0;
   late final StreamSubscription<bool> _kbVisibilitySub;
   final _fullScreenOverlayState = _FullScreenOverlayState();
@@ -204,7 +213,17 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onChatToggle() {
-    setState(() => _chatOpen = !_chatOpen);
+    setState(() => _chatState = _chatState == _ChatState.closed
+        ? _ChatState.partial
+        : _ChatState.closed);
+  }
+
+  void _onChatMaximize() {
+    setState(() => _chatState = _ChatState.max);
+  }
+
+  void _onChatMinimize() {
+    setState(() => _chatState = _ChatState.partial);
   }
 
   void _onDisplaySwitch() {
@@ -274,9 +293,11 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     final stripBottom = keyboardHeight > 0 ? keyboardHeight : safeBottom;
 
     // Canvas bottom: reserve space for the strip only; keyboard handled by pan.
-    final canvasBottom = _chatOpen
-        ? mq.size.height * (1 - 0.55)
-        : safeBottom + _stripHeight;
+    final canvasBottom = switch (_chatState) {
+      _ChatState.closed  => safeBottom + _stripHeight,
+      _ChatState.partial => stripBottom + _stripHeight + _partialBarHeight,
+      _ChatState.max     => mq.size.height - mq.viewPadding.top,
+    };
 
     // CursorPaint coordinates are relative to SafeArea (status bar excluded).
     // Offset it back down by the top padding so it aligns with the full-screen Stack.
@@ -312,8 +333,8 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
           ),
         ),
 
-        // Layer 2: power strip — anchored above keyboard / home indicator.
-        if (!_chatOpen)
+        // Layer 2: power strip — hidden only in max chat state.
+        if (_chatState != _ChatState.max)
           Positioned(
             left: 0,
             right: 0,
@@ -340,17 +361,55 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
             ),
           ),
 
-        // Layer 3: terminal chat overlay — slides up from bottom when open.
-        if (_chatOpen)
+        // Layer 3a: partial chat bar — slim input above the strip.
+        if (_chatState == _ChatState.partial)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: stripBottom + _stripHeight,
+            child: _MeasureHeight(
+              onChange: (h) {
+                if (h != _partialBarHeight) setState(() => _partialBarHeight = h);
+              },
+              child: TerminalChatPartialBar(
+                inputBridge: _bridge,
+                onMaximize: _onChatMaximize,
+                onClose: _onChatToggle,
+              ),
+            ),
+          ),
+
+        // Layer 3b: max chat view — fills screen above keyboard.
+        if (_chatState == _ChatState.max)
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
-            child: TerminalChatOverlay(
+            child: TerminalChatMaxView(
               inputBridge: _bridge,
+              terminal: widget.ffi.terminalModels[0]?.terminal,
+              terminalTitle: widget.ffi.terminalModels[0]?.terminalTitle ?? '',
+              onMinimize: _onChatMinimize,
               onClose: _onChatToggle,
             ),
           ),
+
+        // Layer 3c: Claude session indicator — top-left corner dot.
+        Positioned(
+          top: safeAreaTop + AppTokens.spaceSm,
+          left: AppTokens.spaceMd,
+          child: AnimatedBuilder(
+            animation: widget.ffi.terminalModels[0] ?? _nullNotifier,
+            builder: (_, __) {
+              final model = widget.ffi.terminalModels[0];
+              return ClaudeSessionIndicator(
+                terminal: model?.terminal,
+                terminalTitle: model?.terminalTitle ?? '',
+                terminalOpened: model?.terminalOpened ?? false,
+              );
+            },
+          ),
+        ),
 
         // Layer 4: cursor overlay — unconstrained so it can cross the
         // canvas/strip boundary without being clipped.

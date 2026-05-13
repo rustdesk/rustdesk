@@ -23,6 +23,8 @@ class TerminalModel with ChangeNotifier {
 
   bool _disposed = false;
 
+  String terminalTitle = '';
+
   final _inputBuffer = <String>[];
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
@@ -72,6 +74,7 @@ class TerminalModel with ChangeNotifier {
 
     // Setup terminal callbacks
     terminal.onOutput = _handleInput;
+    terminal.onTitleChange = (title) => terminalTitle = title;
 
     terminal.onResize = (w, h, pw, ph) async {
       // Validate all dimensions before using them

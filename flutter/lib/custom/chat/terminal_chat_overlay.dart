@@ -1,24 +1,137 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:xterm/xterm.dart';
 
 import '../input/input_bridge.dart';
 import '../theme/tokens.dart';
 
-class TerminalChatOverlay extends StatefulWidget {
+// ─── Partial bar ─────────────────────────────────────────────────────────────
+
+class TerminalChatPartialBar extends StatefulWidget {
   final InputBridge inputBridge;
+  final VoidCallback onMaximize;
   final VoidCallback onClose;
 
-  const TerminalChatOverlay({
+  const TerminalChatPartialBar({
     super.key,
     required this.inputBridge,
+    required this.onMaximize,
     required this.onClose,
   });
 
   @override
-  State<TerminalChatOverlay> createState() => _TerminalChatOverlayState();
+  State<TerminalChatPartialBar> createState() => _TerminalChatPartialBarState();
 }
 
-class _TerminalChatOverlayState extends State<TerminalChatOverlay> {
+class _TerminalChatPartialBarState extends State<TerminalChatPartialBar> {
+  final _textController = TextEditingController();
+  final _focusNode = FocusNode();
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final text = _textController.text;
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    await widget.inputBridge.typeString(text);
+    await widget.inputBridge.tapKey('return');
+    if (mounted) {
+      _textController.clear();
+      widget.onClose();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTokens.colorBgSurface,
+        boxShadow: [
+          BoxShadow(blurRadius: 8, color: Colors.black38, offset: Offset(0, -2)),
+        ],
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTokens.radiusSheet)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.spaceMd,
+        vertical: AppTokens.spaceSm,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _textController,
+              focusNode: _focusNode,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                color: AppTokens.colorTextHigh,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Type a command…',
+                hintStyle: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  color: AppTokens.colorTextMid.withValues(alpha: 0.5),
+                ),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                isDense: true,
+              ),
+              maxLines: 1,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => _send(),
+            ),
+          ),
+          const SizedBox(width: AppTokens.spaceSm),
+          _IconBtn(
+            icon: Icons.open_in_full,
+            tooltip: 'Maximize',
+            onTap: widget.onMaximize,
+          ),
+          const SizedBox(width: AppTokens.spaceXs),
+          _SendButton(sending: _sending, onSend: _send),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Max view ─────────────────────────────────────────────────────────────────
+
+class TerminalChatMaxView extends StatefulWidget {
+  final InputBridge inputBridge;
+  final Terminal? terminal;
+  final String terminalTitle;
+  final VoidCallback onMinimize;
+  final VoidCallback onClose;
+
+  const TerminalChatMaxView({
+    super.key,
+    required this.inputBridge,
+    required this.terminal,
+    required this.terminalTitle,
+    required this.onMinimize,
+    required this.onClose,
+  });
+
+  @override
+  State<TerminalChatMaxView> createState() => _TerminalChatMaxViewState();
+}
+
+class _TerminalChatMaxViewState extends State<TerminalChatMaxView> {
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
   bool _sending = false;
@@ -69,7 +182,12 @@ class _TerminalChatOverlayState extends State<TerminalChatOverlay> {
         children: [
           SafeArea(
             bottom: false,
-            child: _Header(onClose: widget.onClose),
+            child: _Header(onMinimize: widget.onMinimize, onClose: widget.onClose),
+          ),
+          const Divider(height: 1, color: Color(0xFF2D3748)),
+          _TerminalContext(
+            terminal: widget.terminal,
+            terminalTitle: widget.terminalTitle,
           ),
           const Divider(height: 1, color: Color(0xFF2D3748)),
           Expanded(
@@ -78,20 +196,227 @@ class _TerminalChatOverlayState extends State<TerminalChatOverlay> {
               focusNode: _focusNode,
             ),
           ),
-          _InputBar(
-            sending: _sending,
-            onSend: _send,
-          ),
+          _InputBar(sending: _sending, onSend: _send),
         ],
       ),
     );
   }
 }
 
+// ─── Terminal context panel ───────────────────────────────────────────────────
+
+class _TerminalContext extends StatelessWidget {
+  final Terminal? terminal;
+  final String terminalTitle;
+
+  const _TerminalContext({required this.terminal, required this.terminalTitle});
+
+  bool get _isClaudeCode => terminalTitle.contains('⚡');
+
+  @override
+  Widget build(BuildContext context) {
+    final t = terminal;
+    if (t == null) {
+      return _placeholder();
+    }
+    if (_isClaudeCode) {
+      return _ClaudeCodeContext(terminal: t);
+    }
+    return _LastLinesContext(terminal: t);
+  }
+
+  Widget _placeholder() {
+    return Container(
+      color: AppTokens.colorBgSurface,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.spaceLg,
+        vertical: AppTokens.spaceMd,
+      ),
+      child: const Text(
+        '—',
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: AppTokens.colorTextMid,
+        ),
+      ),
+    );
+  }
+}
+
+// Extracts the last Claude Code response by scanning buffer backwards for
+// the second prompt line (> or ❯), then collects lines between prompts.
+class _ClaudeCodeContext extends StatelessWidget {
+  final Terminal terminal;
+
+  const _ClaudeCodeContext({required this.terminal});
+
+  static bool _isPromptLine(String line) {
+    final t = line.trimLeft();
+    return t.startsWith('> ') || t.startsWith('❯ ') || t == '>' || t == '❯';
+  }
+
+  static String _lineText(Terminal t, int absoluteRow) {
+    final buf = t.buffer;
+    if (absoluteRow < 0 || absoluteRow >= buf.lines.length) return '';
+    final line = buf.lines[absoluteRow];
+    final sb = StringBuffer();
+    for (int col = 0; col < t.viewWidth; col++) {
+      final cp = line.getCodePoint(col);
+      if (cp == 0) break;
+      sb.writeCharCode(cp);
+    }
+    return sb.toString().trimRight();
+  }
+
+  String _extractLastResponse() {
+    final buf = terminal.buffer;
+    final cursorAbs = buf.absoluteCursorY;
+    int promptsFound = 0;
+    int responseEnd = cursorAbs;
+    int responseStart = -1;
+
+    for (int r = cursorAbs; r >= 0; r--) {
+      final text = _lineText(terminal, r);
+      if (_isPromptLine(text)) {
+        promptsFound++;
+        if (promptsFound == 1) {
+          // First prompt found — response ends just above here
+          responseEnd = r - 1;
+        } else {
+          // Second prompt found — response starts just below here
+          responseStart = r + 1;
+          break;
+        }
+      }
+    }
+
+    if (responseStart < 0 || responseEnd < responseStart) {
+      // Fallback: grab last 10 lines above cursor
+      responseStart = (cursorAbs - 10).clamp(0, cursorAbs);
+      responseEnd = cursorAbs - 1;
+    }
+
+    final lines = <String>[];
+    for (int r = responseStart; r <= responseEnd; r++) {
+      lines.add(_lineText(terminal, r));
+    }
+    // Trim leading/trailing blank lines
+    while (lines.isNotEmpty && lines.first.isEmpty) { lines.removeAt(0); }
+    while (lines.isNotEmpty && lines.last.isEmpty) { lines.removeLast(); }
+    return lines.join('\n');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = _extractLastResponse();
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.38,
+      ),
+      child: Container(
+        width: double.infinity,
+        color: AppTokens.colorBgSurface,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppTokens.spaceLg,
+          vertical: AppTokens.spaceMd,
+        ),
+        child: text.isEmpty
+            ? const Text(
+                '—',
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  color: AppTokens.colorTextMid,
+                ),
+              )
+            : Scrollbar(
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    text,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      color: AppTokens.colorTextHigh,
+                    ),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+// Shows last 2 non-empty terminal lines for normal (non-Claude-Code) sessions.
+class _LastLinesContext extends StatelessWidget {
+  final Terminal terminal;
+
+  const _LastLinesContext({required this.terminal});
+
+  List<String> _lastLines() {
+    final buf = terminal.buffer;
+    final cursorAbs = buf.absoluteCursorY;
+    final result = <String>[];
+    for (int r = cursorAbs; r >= 0 && result.length < 2; r--) {
+      final line = buf.lines[r];
+      final sb = StringBuffer();
+      for (int col = 0; col < terminal.viewWidth; col++) {
+        final cp = line.getCodePoint(col);
+        if (cp == 0) break;
+        sb.writeCharCode(cp);
+      }
+      final text = sb.toString().trimRight();
+      if (text.isNotEmpty) result.insert(0, text);
+    }
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = _lastLines();
+    return Container(
+      width: double.infinity,
+      color: AppTokens.colorBgSurface,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.spaceLg,
+        vertical: AppTokens.spaceMd,
+      ),
+      child: lines.isEmpty
+          ? const Text(
+              '—',
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                color: AppTokens.colorTextMid,
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: lines
+                  .map((l) => Text(
+                        l,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                          color: AppTokens.colorTextMid,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ))
+                  .toList(),
+            ),
+    );
+  }
+}
+
+// ─── Shared sub-widgets ───────────────────────────────────────────────────────
+
 class _Header extends StatelessWidget {
+  final VoidCallback onMinimize;
   final VoidCallback onClose;
 
-  const _Header({required this.onClose});
+  const _Header({required this.onMinimize, required this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +434,12 @@ class _Header extends StatelessWidget {
             style: AppTokens.fontKeySmall.copyWith(color: AppTokens.colorTextMid),
           ),
           const Spacer(),
+          _IconBtn(
+            icon: Icons.close_fullscreen,
+            tooltip: 'Minimize',
+            onTap: onMinimize,
+          ),
+          const SizedBox(width: AppTokens.spaceXs),
           _IconBtn(
             icon: Icons.close,
             tooltip: 'Close',
