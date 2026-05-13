@@ -212,12 +212,16 @@ impl UI {
         update_temporary_password()
     }
 
-    fn permanent_password(&self) -> String {
-        permanent_password()
+    fn set_permanent_password(&self, password: String) {
+        let _ = set_permanent_password_with_result(password);
     }
 
-    fn set_permanent_password(&self, password: String) {
-        set_permanent_password(password);
+    fn is_local_permanent_password_set(&self) -> bool {
+        is_local_permanent_password_set()
+    }
+
+    fn is_permanent_password_set(&self) -> bool {
+        is_permanent_password_set()
     }
 
     fn get_remote_id(&mut self) -> String {
@@ -366,6 +370,11 @@ impl UI {
 
     fn is_installed(&self) -> bool {
         is_installed()
+    }
+
+    fn get_supported_privacy_mode_impls(&self) -> String {
+        serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
+            .unwrap_or_default()
     }
 
     fn is_root(&self) -> bool {
@@ -726,8 +735,9 @@ impl sciter::EventHandler for UI {
         fn get_id();
         fn temporary_password();
         fn update_temporary_password();
-        fn permanent_password();
         fn set_permanent_password(String);
+        fn is_local_permanent_password_set();
+        fn is_permanent_password_set();
         fn get_remote_id();
         fn set_remote_id(String);
         fn closing(i32, i32, i32, i32);
@@ -747,6 +757,7 @@ impl sciter::EventHandler for UI {
         fn get_icon();
         fn install_me(String, String);
         fn is_installed();
+        fn get_supported_privacy_mode_impls();
         fn is_root();
         fn is_release();
         fn set_socks(String, String, String);

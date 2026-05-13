@@ -72,6 +72,11 @@ button.button:hover, button.outline:hover {
   border-color: color(hover-border);
 }
 
+button:disabled,
+button:disabled:hover {
+  opacity: 0.3;
+}
+
 button.link {
   background: none !important;
   border: none;

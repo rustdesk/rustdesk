@@ -376,7 +376,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
 
     toolbarItems.add(Obx(() {
-      if (PrivacyModeState.find(widget.id).isEmpty &&
+      if ((PrivacyModeState.find(widget.id).isEmpty ||
+              allowDisplaySwitchInPrivacyMode(pi)) &&
           pi.displaysCount.value > 1) {
         return _MonitorMenu(
             id: widget.id,
@@ -996,10 +997,10 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         toggles(),
       ];
       // privacy mode
+      final privacyModeState = PrivacyModeState.find(id);
       if (ffi.connType == ConnType.defaultConn &&
-          ffiModel.keyboard &&
-          pi.features.privacyMode) {
-        final privacyModeState = PrivacyModeState.find(id);
+          (pi.features.privacyMode || privacyModeState.isNotEmpty) &&
+          (ffiModel.keyboard || privacyModeState.isNotEmpty)) {
         final privacyModeList =
             toolbarPrivacyMode(privacyModeState, context, id, ffi);
         if (privacyModeList.length == 1) {

@@ -12,7 +12,7 @@
 			</Component>
 		</DirectoryRef>
 
-		<CustomAction Id="RemoveInstallFolder.SetParam" Return="check" Property="RemoveInstallFolder" Value="[INSTALLFOLDER_INNER]" />
+		<CustomAction Id="RemoveRuntimeGeneratedFiles.SetParam" Return="check" Property="RemoveRuntimeGeneratedFiles" Value="[INSTALLFOLDER_INNER]" />
 		<CustomAction Id="AddFirewallRules.SetParam" Return="check" Property="AddFirewallRules" Value="1[INSTALLFOLDER_INNER]$(var.Product).exe" />
 		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER_INNER]$(var.Product).exe" />
 		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER_INNER]$(var.Product).exe&quot; --service" />
@@ -77,21 +77,21 @@
 
 			<Custom Action="AddRegSoftwareSASGeneration" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)"/>
 
-			<Custom Action="RemoveInstallFolder" Before="RemoveFiles"/>
-			<Custom Action="RemoveInstallFolder.SetParam" Before="RemoveInstallFolder"/>
-			<Custom Action="TryStopDeleteService" Before="RemoveInstallFolder.SetParam" />
+			<Custom Action="RemoveRuntimeGeneratedFiles" Before="RemoveFiles" Condition="Installed AND (REMOVE=&quot;ALL&quot; OR UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="RemoveRuntimeGeneratedFiles.SetParam" Before="RemoveRuntimeGeneratedFiles" Condition="Installed AND (REMOVE=&quot;ALL&quot; OR UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="TryStopDeleteService" Before="RemoveRuntimeGeneratedFiles.SetParam" />
 			<Custom Action="TryStopDeleteService.SetParam" Before="TryStopDeleteService" />
 
 			<Custom Action="RemoveFirewallRules" Before="RemoveFiles"/>
 			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFirewallRules"/>
 
-			<Custom Action="UninstallPrinter" Before="RemoveInstallFolder" Condition="VersionNT &gt;= 603" />
+			<Custom Action="UninstallPrinter" Before="RemoveRuntimeGeneratedFiles" Condition="VersionNT &gt;= 603" />
 
-			<Custom Action="TerminateProcesses" Before="RemoveInstallFolder"/>
+			<Custom Action="TerminateProcesses" Before="RemoveRuntimeGeneratedFiles"/>
 			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>
-			<Custom Action="TerminateBrokers" Before="RemoveInstallFolder"/>
+			<Custom Action="TerminateBrokers" Before="RemoveRuntimeGeneratedFiles"/>
 			<Custom Action="TerminateBrokers.SetParam" Before="TerminateBrokers"/>
-			<Custom Action="RemoveAmyuniIdd" Before="RemoveInstallFolder"/>
+			<Custom Action="RemoveAmyuniIdd" Before="RemoveRuntimeGeneratedFiles"/>
 			<Custom Action="RemoveAmyuniIdd.SetParam" Before="RemoveAmyuniIdd"/>
 		</InstallExecuteSequence>
 

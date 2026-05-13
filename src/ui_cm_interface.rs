@@ -12,7 +12,10 @@ use hbb_common::fs::serialize_transfer_job;
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 use hbb_common::{
     allow_err, bail,
-    config::{keys::OPTION_FILE_TRANSFER_MAX_FILES, Config},
+    config::{
+        keys::{OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW, OPTION_FILE_TRANSFER_MAX_FILES},
+        option2bool, Config,
+    },
     fs::{self, get_string, is_write_need_confirmation, new_send_confirm, DigestCheckResult},
     log,
     message_proto::*,
@@ -25,10 +28,7 @@ use hbb_common::{
     ResultType,
 };
 #[cfg(target_os = "windows")]
-use hbb_common::{
-    config::{keys::*, option2bool},
-    tokio::sync::Mutex as TokioMutex,
-};
+use hbb_common::{config::keys::*, tokio::sync::Mutex as TokioMutex};
 use serde_derive::Serialize;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use std::iter::FromIterator;
@@ -143,6 +143,7 @@ pub struct Client {
     pub restart: bool,
     pub recording: bool,
     pub block_input: bool,
+    pub privacy_mode: bool,
     pub from_switch: bool,
     pub in_voice_call: bool,
     pub incoming_voice_call: bool,
@@ -230,6 +231,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         restart: bool,
         recording: bool,
         block_input: bool,
+        privacy_mode: bool,
         from_switch: bool,
         #[cfg(not(any(target_os = "ios")))] tx: mpsc::UnboundedSender<Data>,
     ) {
@@ -251,6 +253,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             restart,
             recording,
             block_input,
+            privacy_mode,
             from_switch,
             #[cfg(not(any(target_os = "ios")))]
             tx,
@@ -392,6 +395,23 @@ pub fn send_chat(id: i32, text: String) {
 #[inline]
 #[cfg(not(any(target_os = "ios")))]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
+    #[cfg(target_os = "android")]
+    let is_keyboard_permission = name == "keyboard";
+    #[cfg(not(target_os = "android"))]
+    let is_keyboard_permission = false;
+    if !option2bool(
+        OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+        &crate::get_builtin_option(OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+    ) && !is_keyboard_permission
+    {
+        log::info!(
+            "blocked cm switch_permission by policy, conn_id={}, permission={}, enabled={}",
+            id,
+            name,
+            enabled
+        );
+        return;
+    }
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
     };
@@ -400,6 +420,19 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
 #[inline]
 #[cfg(target_os = "android")]
 pub fn switch_permission_all(name: String, enabled: bool) {
+    if name != "keyboard"
+        && !option2bool(
+            OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+        )
+    {
+        log::info!(
+            "blocked cm switch_permission_all by policy, permission={}, enabled={}",
+            name,
+            enabled
+        );
+        return;
+    }
     for (_, client) in CLIENTS.read().unwrap().iter() {
         allow_err!(client.tx.send(Data::SwitchPermission {
             name: name.clone(),
@@ -423,8 +456,15 @@ pub fn get_clients_length() -> usize {
 }
 
 #[inline]
+#[cfg(target_os = "android")]
+pub fn has_active_clients() -> bool {
+    let clients = CLIENTS.read().unwrap();
+    clients.values().any(|c| !c.disconnected)
+}
+
+#[inline]
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn switch_back(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchSidesBack));
@@ -503,9 +543,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
+                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, privacy_mode, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, privacy_mode, from_switch, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(target_os = "windows")]
                                     {
@@ -532,6 +572,26 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 Data::ChatMessage { text } => {
                                     self.cm.new_message(self.conn_id, text);
+                                }
+                                Data::SwitchPermission { name, enabled } => {
+                                    // Keep this branch scoped to privacy mode rollback.
+                                    // Other CM permission toggles are updated optimistically by the UI itself.
+                                    // The backend currently sends SwitchPermission back to CM only when
+                                    // privacy-mode turn-off fails and the UI state must be restored.
+                                    if name == "privacy_mode" {
+                                        let client = {
+                                            let mut clients = CLIENTS.write().unwrap();
+                                            clients.get_mut(&self.conn_id).map(|c| {
+                                                c.privacy_mode = enabled;
+                                                c.clone()
+                                            })
+                                        };
+                                        if let Some(client) = client {
+                                            // This reuses add_connection(), and cm.tis only selectively updates
+                                            // existing rows (authorized/privacy_mode) for this fallback path.
+                                            self.cm.ui_handler.add_connection(&client);
+                                        }
+                                    }
                                 }
                                 Data::FS(mut fs) => {
                                     if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
@@ -835,6 +895,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 restart,
                 recording,
                 block_input,
+                privacy_mode,
                 from_switch,
                 ..
             }) => {
@@ -856,6 +917,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     restart,
                     recording,
                     block_input,
+                    privacy_mode,
                     from_switch,
                     tx.clone(),
                 );
@@ -941,15 +1003,6 @@ async fn handle_fs(
             total_size,
             conn_id,
         } => {
-            // Validate file names to prevent path traversal attacks.
-            // This must be done BEFORE any path operations to ensure attackers cannot
-            // escape the target directory using names like "../../malicious.txt"
-            if let Err(e) = validate_transfer_file_names(&files) {
-                log::warn!("Path traversal attempt detected for {}: {}", path, e);
-                send_raw(fs::new_error(id, e, file_num), tx);
-                return;
-            }
-
             // Convert files to FileEntry
             let file_entries: Vec<FileEntry> = files
                 .drain(..)
@@ -970,9 +1023,13 @@ async fn handle_fs(
                 file_num,
                 false,
                 false,
-                file_entries,
                 overwrite_detection,
             );
+            if let Err(e) = job.set_files(file_entries) {
+                log::warn!("Reject unsafe transfer file list for {}: {}", path, e);
+                send_raw(fs::new_error(id, e, file_num), tx);
+                return;
+            }
             job.total_size = total_size;
             job.conn_id = conn_id;
             write_jobs.push(job);
@@ -1158,73 +1215,6 @@ async fn handle_fs(
         }
         _ => {}
     }
-}
-
-/// Validates that a file name does not contain path traversal sequences.
-/// This prevents attackers from escaping the base directory by using names like
-/// "../../../etc/passwd" or "..\\..\\Windows\\System32\\malicious.dll".
-#[cfg(not(any(target_os = "ios")))]
-fn validate_file_name_no_traversal(name: &str) -> ResultType<()> {
-    // Check for null bytes which could cause path truncation in some APIs
-    if name.bytes().any(|b| b == 0) {
-        bail!("file name contains null bytes");
-    }
-
-    // Check for path traversal patterns
-    // We check for both Unix and Windows path separators
-    if name
-        .split(|c| c == '/' || c == '\\')
-        .filter(|s| !s.is_empty())
-        .any(|component| component == "..")
-    {
-        bail!("path traversal detected in file name");
-    }
-
-    // On Windows, also check for drive letters (e.g., "C:")
-    #[cfg(windows)]
-    {
-        if name.len() >= 2 {
-            let bytes = name.as_bytes();
-            if bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-                bail!("absolute path detected in file name");
-            }
-        }
-    }
-
-    // Check for names starting with path separator:
-    // - Unix absolute paths (e.g., "/etc/passwd")
-    // - Windows UNC paths (e.g., "\\server\share")
-    if name.starts_with('/') || name.starts_with('\\') {
-        bail!("absolute path detected in file name");
-    }
-
-    Ok(())
-}
-
-#[inline]
-fn is_single_file_with_empty_name(files: &[(String, u64)]) -> bool {
-    files.len() == 1 && files.first().map_or(false, |f| f.0.is_empty())
-}
-
-/// Validates all file names in a transfer request to prevent path traversal attacks.
-/// Returns an error if any file name contains dangerous path components.
-#[cfg(not(any(target_os = "ios")))]
-fn validate_transfer_file_names(files: &[(String, u64)]) -> ResultType<()> {
-    if is_single_file_with_empty_name(files) {
-        // Allow empty name for single file.
-        // The full path is provided in the `path` parameter for single file transfers.
-        return Ok(());
-    }
-
-    for (name, _) in files {
-        // In multi-file transfers, empty names are not allowed.
-        // Each file must have a valid name to construct the destination path.
-        if name.is_empty() {
-            bail!("empty file name in multi-file transfer");
-        }
-        validate_file_name_no_traversal(name)?;
-    }
-    Ok(())
 }
 
 /// Start a read job in CM for file transfer from server to client (Windows only).
@@ -1601,16 +1591,7 @@ async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
 #[cfg(not(any(target_os = "ios")))]
 async fn rename_file(path: String, new_name: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
-        spawn_blocking(move || {
-            // Rename target must not be empty
-            if new_name.is_empty() {
-                bail!("new file name cannot be empty");
-            }
-            // Validate that new_name doesn't contain path traversal
-            validate_file_name_no_traversal(&new_name)?;
-            fs::rename_file(&path, &new_name)
-        })
-        .await,
+        spawn_blocking(move || fs::rename_file(&path, &new_name)).await,
         id,
         0,
         tx,
@@ -1771,42 +1752,6 @@ mod tests {
             }
             let _ = fs::remove_dir_all(&dir);
         });
-    }
-
-    #[test]
-    #[cfg(not(any(target_os = "ios")))]
-    fn validate_file_name_security() {
-        // Null byte injection
-        assert!(super::validate_file_name_no_traversal("file\0.txt").is_err());
-        assert!(super::validate_file_name_no_traversal("test\0").is_err());
-
-        // Path traversal
-        assert!(super::validate_file_name_no_traversal("../etc/passwd").is_err());
-        assert!(super::validate_file_name_no_traversal("foo/../bar").is_err());
-        assert!(super::validate_file_name_no_traversal("..").is_err());
-
-        // Absolute paths
-        assert!(super::validate_file_name_no_traversal("/etc/passwd").is_err());
-        assert!(super::validate_file_name_no_traversal("\\Windows").is_err());
-        #[cfg(windows)]
-        assert!(super::validate_file_name_no_traversal("C:\\Windows").is_err());
-
-        // Valid paths
-        assert!(super::validate_file_name_no_traversal("file.txt").is_ok());
-        assert!(super::validate_file_name_no_traversal("subdir/file.txt").is_ok());
-        assert!(super::validate_file_name_no_traversal("").is_ok());
-    }
-
-    #[test]
-    #[cfg(not(any(target_os = "ios")))]
-    fn validate_transfer_file_names_security() {
-        assert!(super::validate_transfer_file_names(&[("file.txt".into(), 100)]).is_ok());
-        assert!(super::validate_transfer_file_names(&[("".into(), 100)]).is_ok());
-        assert!(
-            super::validate_transfer_file_names(&[("".into(), 100), ("file.txt".into(), 100)])
-                .is_err()
-        );
-        assert!(super::validate_transfer_file_names(&[("../passwd".into(), 100)]).is_err());
     }
 
     /// Tests that symlink creation works on this platform.

@@ -54,9 +54,22 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let mut event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
-    let quit_i = MenuItem::new(translate("Stop service".to_owned()), true, None);
+    let hide_stop_service = crate::ui_interface::get_builtin_option(
+        hbb_common::config::keys::OPTION_HIDE_STOP_SERVICE,
+    ) == "Y";
+    // The tray icon is only shown when the service is running, so we don't need to check
+    // the `stop-service` option here.
+    let quit_i = if !hide_stop_service {
+        Some(MenuItem::new(translate("Stop service".to_owned()), true, None))
+    } else {
+        None
+    };
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
-    tray_menu.append_items(&[&open_i, &quit_i]).ok();
+    if let Some(quit_i) = &quit_i {
+        tray_menu.append_items(&[&open_i, quit_i]).ok();
+    } else {
+        tray_menu.append_items(&[&open_i]).ok();
+    }
     let tooltip = |count: usize| {
         if count == 0 {
             format!(
@@ -155,15 +168,19 @@ fn make_tray() -> hbb_common::ResultType<()> {
         }
 
         if let Ok(event) = menu_channel.try_recv() {
-            if event.id == quit_i.id() {
-                /* failed in windows, seems no permission to check system process
-                if !crate::check_process("--server", false) {
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-                */
-                if !crate::platform::uninstall_service(false, false) {
-                    *control_flow = ControlFlow::Exit;
+            if let Some(quit_i) = &quit_i {
+                if event.id == quit_i.id() {
+                    /* failed in windows, seems no permission to check system process
+                    if !crate::check_process("--server", false) {
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                    */
+                    if !crate::platform::uninstall_service(false, false) {
+                        *control_flow = ControlFlow::Exit;
+                    }
+                } else if event.id == open_i.id() {
+                    open_func();
                 }
             } else if event.id == open_i.id() {
                 open_func();

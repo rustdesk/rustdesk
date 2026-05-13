@@ -31,7 +31,7 @@ class RawKeyFocusScope extends StatelessWidget {
     // https://github.com/flutter/flutter/issues/154053
     final useRawKeyEvents = isLinux && !isWeb;
     // FIXME: On Windows, `AltGr` will generate `Alt` and `Control` key events,
-    // while `Alt` and `Control` are seperated key events for en-US input method.
+    // while `Alt` and `Control` are separated key events for en-US input method.
     return FocusScope(
         autofocus: true,
         child: Focus(
@@ -532,7 +532,9 @@ class _RawTouchGestureDetectorRegionState
       // Official
       TapGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-              () => TapGestureRecognizer(), (instance) {
+              () => TapGestureRecognizer(
+                    supportedDevices: kTouchBasedDeviceKinds,
+                  ), (instance) {
         instance
           ..onTapDown = onTapDown
           ..onTapUp = onTapUp
@@ -540,14 +542,18 @@ class _RawTouchGestureDetectorRegionState
       }),
       DoubleTapGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
-              () => DoubleTapGestureRecognizer(), (instance) {
+              () => DoubleTapGestureRecognizer(
+                    supportedDevices: kTouchBasedDeviceKinds,
+                  ), (instance) {
         instance
           ..onDoubleTapDown = onDoubleTapDown
           ..onDoubleTap = onDoubleTap;
       }),
       LongPressGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-              () => LongPressGestureRecognizer(), (instance) {
+              () => LongPressGestureRecognizer(
+                    supportedDevices: kTouchBasedDeviceKinds,
+                  ), (instance) {
         instance
           ..onLongPressDown = onLongPressDown
           ..onLongPressUp = onLongPressUp
@@ -557,7 +563,9 @@ class _RawTouchGestureDetectorRegionState
       // Customized
       HoldTapMoveGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<HoldTapMoveGestureRecognizer>(
-              () => HoldTapMoveGestureRecognizer(),
+              () => HoldTapMoveGestureRecognizer(
+                    supportedDevices: kTouchBasedDeviceKinds,
+                  ),
               (instance) => instance
                 ..onHoldDragStart = onHoldDragStart
                 ..onHoldDragUpdate = onHoldDragUpdate
@@ -565,14 +573,18 @@ class _RawTouchGestureDetectorRegionState
                 ..onHoldDragEnd = onHoldDragEnd),
       DoubleFinerTapGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<DoubleFinerTapGestureRecognizer>(
-              () => DoubleFinerTapGestureRecognizer(), (instance) {
+              () => DoubleFinerTapGestureRecognizer(
+                    supportedDevices: kTouchBasedDeviceKinds,
+                  ), (instance) {
         instance
           ..onDoubleFinerTap = onDoubleFinerTap
           ..onDoubleFinerTapDown = onDoubleFinerTapDown;
       }),
       CustomTouchGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<CustomTouchGestureRecognizer>(
-              () => CustomTouchGestureRecognizer(), (instance) {
+              () => CustomTouchGestureRecognizer(
+                    supportedDevices: kTouchBasedDeviceKinds,
+                  ), (instance) {
         instance.onOneFingerPanStart =
             (DragStartDetails d) => onOneFingerPanStart(context, d);
         instance
