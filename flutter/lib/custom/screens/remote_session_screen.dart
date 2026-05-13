@@ -17,6 +17,7 @@ import '../input/text_field_bridge.dart';
 import '../overlay/floating_macro_bar.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
+import '../widgets/file_send_sheet.dart';
 import 'package:flutter_hbb/custom/screens/connect_screen.dart';
 import 'package:flutter_hbb/custom/session/session_registry.dart';
 import 'package:flutter_hbb/custom/session/session_switcher_sheet.dart';
@@ -296,6 +297,18 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     );
   }
 
+  void _onFileSend() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => FileSendSheet(ffi: widget.ffi),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -366,6 +379,7 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
                 onMouseModeToggle: _onMouseModeToggle,
                 onClipboardPaste: _onClipboardPaste,
                 onNextDisplay: _onNextDisplay,
+                onFileSend: _onFileSend,
                 ffi: widget.ffi,
                 onSessionsTap: _onSessionsTap,
               ),

@@ -101,7 +101,7 @@ class _FileSendSheetState extends State<FileSendSheet> {
     Navigator.of(context).pop();
   }
 
-  void _retryFailed(List<JobProgress> jobs) {
+  Future<void> _retryFailed(List<JobProgress> jobs) async {
     final failedFiles = <PlatformFile>[];
     for (var i = 0; i < _jobIds.length; i++) {
       final job = jobs.firstWhereOrNull((j) => j.id == _jobIds[i]);
@@ -110,7 +110,7 @@ class _FileSendSheetState extends State<FileSendSheet> {
       }
     }
     if (failedFiles.isNotEmpty) {
-      _startTransfer(failedFiles);
+      await _startTransfer(failedFiles);
     }
   }
 
@@ -361,9 +361,9 @@ class _FileSendSheetState extends State<FileSendSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHandle(),
-        const Text(
-          'Sending File',
-          style: TextStyle(
+        Text(
+          'Sending ${_files.length == 1 ? 'File' : 'Files'}',
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: Color(0xFFE2E8F0),
@@ -562,13 +562,20 @@ class _FileSendSheetState extends State<FileSendSheet> {
                 ],
                 if (_accordionExpanded) ...[
                   const SizedBox(height: 12),
-                  ...List.generate(_files.length, (i) {
-                    final file = _files[i];
-                    final jobId = i < _jobIds.length ? _jobIds[i] : -1;
-                    final job =
-                        jobs.firstWhereOrNull((j) => j.id == jobId);
-                    return _buildFileRow(file, job);
-                  }),
+                  const Divider(color: Color(0xFF3A3A3C), height: 1),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 240,
+                    child: ListView.builder(
+                      itemCount: _files.length,
+                      padding: EdgeInsets.zero,
+                      itemBuilder: (_, i) {
+                        final jobId = i < _jobIds.length ? _jobIds[i] : -1;
+                        final job = jobs.firstWhereOrNull((j) => j.id == jobId);
+                        return _buildFileRow(_files[i], job);
+                      },
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -674,12 +681,12 @@ class _FileSendSheetState extends State<FileSendSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHandle(),
-        const Text(
-          'File(s) Sent',
-          style: TextStyle(
+        Text(
+          '${_files.length == 1 ? 'File' : 'Files'} Sent',
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w700,
-            color: Color(0xFFE2E8F0),
+            color: Colors.white,
           ),
         ),
         const SizedBox(height: 4),
