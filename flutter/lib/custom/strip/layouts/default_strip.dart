@@ -46,6 +46,7 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '⧉', keyName: '', type: KeyType.sessionSwitch, widthFactor: 0.7, height: 48),
         ],
         right: [
+          KeyDef(label: '📎', keyName: '', type: KeyType.fileSend, widthFactor: 0.7, height: 48),
           KeyDef(label: '⊞', keyName: '', type: KeyType.nextDisplay, widthFactor: 0.9, height: 48),
           KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7, height: 48),
           KeyDef(label: '⇱', keyName: 'home', type: KeyType.regular, height: 48),

@@ -382,7 +382,6 @@ class _FileSendSheetState extends State<FileSendSheet> {
           _buildMultiFileSending(
               matchedJobs, totalFinished, totalSize, totalPercent, speed),
         const SizedBox(height: 16),
-        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           height: 48,
@@ -782,7 +781,6 @@ class _FileSendSheetState extends State<FileSendSheet> {
             ),
           ),
         ],
-        const SizedBox(height: 8),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,

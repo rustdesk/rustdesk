@@ -23,6 +23,7 @@ class PowerStrip extends StatefulWidget {
   final VoidCallback onMouseModeToggle;
   final VoidCallback onClipboardPaste;
   final VoidCallback onNextDisplay;
+  final VoidCallback onFileSend;
   final bool leftHanded;
   final FFI ffi;
   final VoidCallback? onSessionsTap;
@@ -40,6 +41,7 @@ class PowerStrip extends StatefulWidget {
     required this.onMouseModeToggle,
     required this.onClipboardPaste,
     required this.onNextDisplay,
+    required this.onFileSend,
     required this.ffi,
     this.onSessionsTap,
     this.leftHanded = false,
@@ -170,6 +172,8 @@ class _PowerStripState extends State<PowerStrip> {
         widget.onClipboardPaste();
       case KeyType.nextDisplay:
         widget.onNextDisplay();
+      case KeyType.fileSend:
+        widget.onFileSend();
       case KeyType.typeString:
         if (k.keyString != null) {
           widget.inputBridge.typeString(k.keyString!);
