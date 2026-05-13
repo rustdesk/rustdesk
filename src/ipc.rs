@@ -312,6 +312,7 @@ pub enum Data {
     ClipboardNonFile(Option<(String, Vec<ClipboardNonFile>)>),
     PrivacyModeState((i32, PrivacyModeState, String)),
     TestRendezvousServer,
+    Deployed,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Keyboard(DataKeyboard),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -928,6 +929,10 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         Data::TestRendezvousServer => {
             crate::test_rendezvous_server();
+        }
+        Data::Deployed => {
+            crate::rendezvous_mediator::NEEDS_DEPLOY.store(false, Ordering::SeqCst);
+            crate::rendezvous_mediator::RendezvousMediator::restart();
         }
         #[cfg(feature = "flutter")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1734,6 +1739,13 @@ pub fn get_proxy_status() -> bool {
 pub async fn test_rendezvous_server() -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(&Data::TestRendezvousServer).await?;
+    Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn notify_deployed() -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::Deployed).await?;
     Ok(())
 }
 

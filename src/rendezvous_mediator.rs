@@ -41,6 +41,12 @@ lazy_static::lazy_static! {
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
 static SENT_REGISTER_PK: AtomicBool = AtomicBool::new(false);
+pub static NEEDS_DEPLOY: AtomicBool = AtomicBool::new(false);
+// register_pk retry interval (ms) when device is awaiting deployment
+const DEPLOY_RETRY_INTERVAL: i64 = 30_000;
+lazy_static::lazy_static! {
+    static ref LAST_NOT_DEPLOYED_REGISTER: Mutex<Option<Instant>> = Mutex::new(None);
+}
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
@@ -289,9 +295,21 @@ impl RendezvousMediator {
                         Config::set_key_confirmed(true);
                         Config::set_host_key_confirmed(&self.host_prefix, true);
                         *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
+                        NEEDS_DEPLOY.store(false, Ordering::SeqCst);
                     }
                     Ok(register_pk_response::Result::UUID_MISMATCH) => {
                         self.handle_uuid_mismatch(sink).await?;
+                    }
+                    Ok(register_pk_response::Result::NOT_DEPLOYED) => {
+                        if !NEEDS_DEPLOY.load(Ordering::SeqCst) {
+                            log::warn!("Server requires deployment. Run `rustdesk --deploy <api_token>` on this device.");
+                        }
+                        NEEDS_DEPLOY.store(true, Ordering::SeqCst);
+                        // Clear key_confirmed so the UI reflects the truth: this device is
+                        // not currently registered. Covers the case where an online device
+                        // was deleted by an admin while running.
+                        Config::set_key_confirmed(false);
+                        Config::set_host_key_confirmed(&self.host_prefix, false);
                     }
                     _ => {
                         log::error!("unknown RegisterPkResponse");
@@ -678,6 +696,21 @@ impl RendezvousMediator {
     }
 
     async fn register_pk(&mut self, socket: Sink<'_>) -> ResultType<()> {
+        // Throttle register_pk when the device is awaiting deployment: server
+        // already told us we're not in its db; sending more often than every
+        // DEPLOY_RETRY_INTERVAL ms is wasted traffic until the operator runs
+        // `rustdesk --deploy`.
+        if NEEDS_DEPLOY.load(Ordering::SeqCst) {
+            let mut last = LAST_NOT_DEPLOYED_REGISTER.lock().await;
+            if let Some(t) = *last {
+                if (t.elapsed().as_millis() as i64) < DEPLOY_RETRY_INTERVAL {
+                    return Ok(());
+                }
+            }
+            *last = Some(Instant::now());
+        } else {
+            *LAST_NOT_DEPLOYED_REGISTER.lock().await = None;
+        }
         let mut msg_out = Message::new();
         let pk = Config::get_key_pair().1;
         let uuid = hbb_common::get_uuid();
