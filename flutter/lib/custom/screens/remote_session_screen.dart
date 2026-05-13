@@ -61,6 +61,8 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   double _kbPanOffset = 0;
   late final StreamSubscription<bool> _kbVisibilitySub;
   final _fullScreenOverlayState = _FullScreenOverlayState();
+  double _scrollAccumX = 0;
+  double _scrollAccumY = 0;
 
   @override
   void initState() {
@@ -112,7 +114,15 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onTwoFingerScroll(double dx, double dy) {
-    _bridge.scroll(dx.round(), dy.round());
+    _scrollAccumX += dx;
+    _scrollAccumY += dy;
+    final ix = _scrollAccumX.truncate();
+    final iy = _scrollAccumY.truncate();
+    if (ix != 0 || iy != 0) {
+      _bridge.scroll(ix, iy);
+      _scrollAccumX -= ix;
+      _scrollAccumY -= iy;
+    }
   }
 
   void _onDisconnect() async {
