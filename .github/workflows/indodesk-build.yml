@@ -1,0 +1,92 @@
+name: Build IndoDesk
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  APP_NAME: indodesk
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: 'stable'
+
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg $env:VCPKG_INSTALLATION_ROOT
+          $env:VCPKG_INSTALLATION_ROOT\bootstrap-vcpkg.bat
+          $env:VCPKG_INSTALLATION_ROOT\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+        env:
+          VCPKG_INSTALLATION_ROOT: C:\vcpkg
+
+      - name: Build Flutter Windows
+        run: |
+          flutter pub get
+          flutter build windows --release
+        working-directory: flutter
+        env:
+          VCPKG_ROOT: C:\vcpkg
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IndoDesk-Windows
+          path: flutter/build/windows/x64/runner/Release/
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: |
+          brew install nasm yasm cmake pkg-config
+          vcpkg install libvpx libyuv opus aom
+        env:
+          VCPKG_ROOT: /usr/local/share/vcpkg
+
+      - name: Build Flutter macOS
+        run: |
+          flutter pub get
+          flutter build macos --release
+        working-directory: flutter
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IndoDesk-macOS
+          path: flutter/build/macos/Build/Products/Release/
