@@ -211,14 +211,7 @@ pub fn use_texture_render() -> bool {
 
 #[inline]
 pub fn is_option_fixed(key: &str) -> bool {
-    matches!(
-        key,
-        config::keys::OPTION_ACCESS_MODE
-            | config::keys::OPTION_APPROVE_MODE
-            | config::keys::OPTION_ALLOW_NUMERNIC_ONE_TIME_PASSWORD
-            | config::keys::OPTION_DIRECT_SERVER
-    )
-    || config::OVERWRITE_DISPLAY_SETTINGS
+    config::OVERWRITE_DISPLAY_SETTINGS
         .read()
         .unwrap()
         .contains_key(key)

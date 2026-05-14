@@ -1236,8 +1236,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget more(BuildContext context) {
     bool enabled = !locked;
-    final hideNetwork =
-        bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
     return _Card(title: 'Security', children: [
       shareRdp(context, enabled),
       _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
@@ -1248,14 +1246,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       _OptionCheckBox(context, 'keep-awake-during-incoming-sessions-label',
           kOptionKeepAwakeDuringIncomingSessions,
           reverse: false, enabled: enabled),
-      if (!hideNetwork && !bind.isIncomingOnly())
-        _OptionCheckBox(context, 'Enable UDP hole punching',
-            kOptionEnableUdpPunch,
-            isServer: false),
-      if (!hideNetwork && !bind.isIncomingOnly())
-        _OptionCheckBox(context, 'Enable IPv6 P2P connection',
-            kOptionEnableIpv6Punch,
-            isServer: false),
       if (bind.mainIsInstalled())
         _OptionCheckBox(context, 'allow-only-conn-window-open-tip',
             'allow-only-conn-window-open',
@@ -1292,12 +1282,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   }
 
   List<Widget> directIp(BuildContext context) {
-    final hideNetwork =
-        bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
-    if (hideNetwork) {
-      return [];
-    }
-
     TextEditingController controller = TextEditingController();
     update(bool v) => setState(() {});
     RxBool applyEnabled = false.obs;
@@ -1582,8 +1566,6 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   }
 
   Widget network(BuildContext context) {
-    final hideNetwork =
-        bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
     final hideServer =
         bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
     final hideProxy =
@@ -1591,7 +1573,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     final hideWebSocket = isWeb ||
         bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y';
 
-    if (hideNetwork && hideServer && hideProxy && hideWebSocket) {
+    if (hideServer && hideProxy && hideWebSocket) {
       return Offstage();
     }
 
@@ -1699,7 +1681,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                     'Use WebSocket',
                     '${translate('websocket_tip')}\n\n${translate('server-oss-not-support-tip')}',
                     kOptionAllowWebSocket),
-              if (!isWeb && !hideNetwork)
+              if (!isWeb)
                 futureBuilder(
                   future: bind.mainIsUsingPublicServer(),
                   hasData: (isUsingPublicServer) {

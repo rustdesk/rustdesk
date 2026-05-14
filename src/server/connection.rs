@@ -2161,7 +2161,7 @@ impl Connection {
         state.failures = 0;
     }
 
-    fn validate_password(&mut self, _allow_permanent_password: bool) -> bool {
+    fn validate_password(&mut self, allow_permanent_password: bool) -> bool {
         if password::temporary_enabled() {
             let password = password::temporary_password();
             if self.validate_password_plain(&password) {
@@ -2174,13 +2174,19 @@ impl Connection {
                 return true;
             }
         }
-        if password::permanent_enabled() {
+        if password::permanent_enabled() || allow_permanent_password {
+            let print_fallback = || {
+                if allow_permanent_password && !password::permanent_enabled() {
+                    log::info!("Permanent password accepted via logon-screen fallback");
+                }
+            };
             // Since hashed storage uses a prefix-based encoding, a hard plaintext that
             // happens to look like hashed storage could be mis-detected. Validate local storage
             // and hard/preset plaintext via separate paths to avoid that ambiguity.
             let (local_storage, _) = Config::get_local_permanent_password_storage_and_salt();
             if !local_storage.is_empty() {
                 if self.validate_password_storage(&local_storage) {
+                    print_fallback();
                     return true;
                 }
             } else {
@@ -2191,6 +2197,7 @@ impl Connection {
                     .cloned()
                     .unwrap_or_default();
                 if !hard.is_empty() && self.validate_password_plain(&hard) {
+                    print_fallback();
                     return true;
                 }
             }
