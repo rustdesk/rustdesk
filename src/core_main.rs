@@ -647,12 +647,6 @@ pub fn core_main() -> Option<Vec<String>> {
                     }
                 };
                 let new_id = get_value("--id");
-                if let Some(ref id) = new_id {
-                    if !hbb_common::is_valid_custom_id(id) {
-                        println!("Invalid id format.");
-                        std::process::exit(5);
-                    }
-                }
                 let local_id = crate::ipc::get_id();
                 let id_to_deploy = new_id.clone().unwrap_or_else(|| local_id.clone());
                 let uuid = crate::encode64(hbb_common::get_uuid());
