@@ -520,7 +520,6 @@ class _MacroSheet extends StatefulWidget {
 class _MacroSheetState extends State<_MacroSheet> {
   @override
   Widget build(BuildContext context) {
-    final touchMode = widget.ffi.ffiModel.touchMode;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -598,11 +597,18 @@ class _MacroSheetState extends State<_MacroSheet> {
                   onTap: () => widget.bridge.tapKey('2', modifiers: {'meta', 'shift'}),
                 ),
                 _MacroButton(
-                  label: touchMode ? '🖱' : '👆',
-                  tooltip: touchMode ? 'Switch to Mouse mode' : 'Switch to Touch mode',
-                  onTap: () {
-                    widget.onMouseModeToggle();
-                    setState(() {});
+                  label: '🐁',
+                  tooltip: 'Input mode',
+                  onTap: () async {
+                    final current = widget.ffi.ffiModel.touchMode;
+                    final switched = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => _InputModeDialog(touchMode: current),
+                    );
+                    if (switched != null && switched != current) {
+                      widget.onMouseModeToggle();
+                      setState(() {});
+                    }
                   },
                 ),
                 _MacroButton(
@@ -626,6 +632,66 @@ class _MacroSheetState extends State<_MacroSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _InputModeDialog extends StatefulWidget {
+  final bool touchMode;
+  const _InputModeDialog({required this.touchMode});
+
+  @override
+  State<_InputModeDialog> createState() => _InputModeDialogState();
+}
+
+class _InputModeDialogState extends State<_InputModeDialog> {
+  late bool _touchMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _touchMode = widget.touchMode;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1E1E2E),
+      title: const Text('Input Mode', style: TextStyle(color: Colors.white)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RadioListTile<bool>(
+            value: false,
+            groupValue: _touchMode,
+            onChanged: (v) => setState(() => _touchMode = v!),
+            activeColor: const Color(0xFF0A84FF),
+            title: const Text('Mouse mode', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+            subtitle: const Text('Tap moves the remote cursor to where you tapped. Best for precise clicking.',
+                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
+          ),
+          RadioListTile<bool>(
+            value: true,
+            groupValue: _touchMode,
+            onChanged: (v) => setState(() => _touchMode = v!),
+            activeColor: const Color(0xFF0A84FF),
+            title: const Text('Touch mode', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+            subtitle: const Text('Drag moves the cursor relatively, like a trackpad. Long-press = right click.',
+                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(_touchMode),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0A84FF)),
+          child: const Text('Apply', style: TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }
