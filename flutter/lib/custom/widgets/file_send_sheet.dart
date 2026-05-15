@@ -50,6 +50,99 @@ class _FileSendSheetState extends State<FileSendSheet> {
     super.dispose();
   }
 
+  // ── Picker entry point ───────────────────────────────────────────────────
+
+  Future<void> _pickAndSend() async {
+    debugPrint('[FileSend] pickFiles: starting');
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    } catch (e, st) {
+      debugPrint('[FileSend] pickFiles threw: $e\n$st');
+      if (mounted) {
+        _showErrorDialog(
+          'Couldn\'t open file picker',
+          'iOS returned an error while opening the file browser.\n\n$e',
+        );
+      }
+      return;
+    }
+
+    if (result == null) {
+      debugPrint('[FileSend] pickFiles: user cancelled (null result)');
+      return;
+    }
+
+    debugPrint(
+        '[FileSend] pickFiles returned ${result.files.length} file(s)');
+    for (final f in result.files) {
+      debugPrint(
+          '[FileSend]   name=${f.name} path=${f.path} size=${f.size}');
+    }
+
+    if (result.files.isEmpty) {
+      if (mounted) {
+        _showErrorDialog(
+          'No files selected',
+          'iOS returned an empty selection. This usually means the file '
+              'couldn\'t be copied out of its source app (Files, iCloud Drive, '
+              'or a third-party provider). Try copying the file to On My '
+              'iPhone → Tabby first, then picking it again.',
+        );
+      }
+      return;
+    }
+
+    final invalid = result.files.where((f) => f.path == null).toList();
+    if (invalid.isNotEmpty) {
+      debugPrint(
+          '[FileSend] ${invalid.length} file(s) had null path; aborting');
+      if (mounted) {
+        _showErrorDialog(
+          'Selected file is unavailable',
+          'iOS didn\'t provide a local path for: '
+              '${invalid.map((f) => f.name).join(", ")}\n\n'
+              'The file may be in iCloud and not yet downloaded, or stored '
+              'in a provider that doesn\'t expose a path. Open it in the '
+              'Files app first to download, then try again.',
+        );
+      }
+      return;
+    }
+
+    await _startTransfer(result.files);
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFFE2E8F0),
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Color(0xFF2563EB)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Transfer initiation ──────────────────────────────────────────────────
 
   Future<void> _startTransfer(List<PlatformFile> files) async {
@@ -57,9 +150,13 @@ class _FileSendSheetState extends State<FileSendSheet> {
     final remoteHome = remoteCtrl.homePath;
     final isRemoteWindows = remoteCtrl.options.value.isWindows;
 
+    debugPrint('[FileSend] _startTransfer: ${files.length} file(s), '
+        'remoteHome="$remoteHome", isRemoteWindows=$isRemoteWindows');
+
     if (remoteHome.isEmpty) {
       // Remote home not yet known — first remote directory listing populates it
       // via receiveFileDir/initDirAndHome.
+      debugPrint('[FileSend] aborting: remoteHome empty');
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Connecting to remote file system… try again in a moment.'),
         duration: Duration(seconds: 2),
@@ -321,15 +418,7 @@ class _FileSendSheetState extends State<FileSendSheet> {
           child: ElevatedButton(
             onPressed: _pathController.text.trim().isEmpty
                 ? null
-                : () async {
-                    final result =
-                        await FilePicker.platform.pickFiles(
-                      allowMultiple: true,
-                    );
-                    if (result != null && result.files.isNotEmpty) {
-                      await _startTransfer(result.files);
-                    }
-                  },
+                : _pickAndSend,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2563EB),
               disabledBackgroundColor: const Color(0xFF334155),
