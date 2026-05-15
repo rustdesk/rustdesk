@@ -53,10 +53,23 @@ class _FileSendSheetState extends State<FileSendSheet> {
   // ── Transfer initiation ──────────────────────────────────────────────────
 
   Future<void> _startTransfer(List<PlatformFile> files) async {
-    final homeDir = await bind.mainGetHomeDir();
+    final remoteCtrl = widget.ffi.fileModel.remoteController;
+    final remoteHome = remoteCtrl.homePath;
+    final isRemoteWindows = remoteCtrl.options.value.isWindows;
+
+    if (remoteHome.isEmpty) {
+      // Remote home not yet known — first remote directory listing populates it
+      // via receiveFileDir/initDirAndHome.
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Connecting to remote file system… try again in a moment.'),
+        duration: Duration(seconds: 2),
+      ));
+      return;
+    }
+
     final rawDest = _pathController.text.trim();
-    final dest = rawDest.startsWith('~')
-        ? rawDest.replaceFirst('~', homeDir)
+    final destDir = rawDest.startsWith('~')
+        ? rawDest.replaceFirst('~', remoteHome)
         : rawDest;
 
     final ids = <int>[];
@@ -77,7 +90,7 @@ class _FileSendSheetState extends State<FileSendSheet> {
         sessionId: widget.ffi.sessionId,
         actId: jobId,
         path: file.path!,
-        to: dest,
+        to: PathUtil.join(destDir, entry.name, isRemoteWindows),
         fileNum: 0,
         includeHidden: false,
         isRemote: false,
@@ -88,7 +101,7 @@ class _FileSendSheetState extends State<FileSendSheet> {
     setState(() {
       _files = files;
       _jobIds = ids;
-      _destination = dest;
+      _destination = destDir;
       _sheetState = _SheetState.sending;
       _accordionExpanded = false;
     });
