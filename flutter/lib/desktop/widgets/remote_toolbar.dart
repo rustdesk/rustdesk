@@ -346,8 +346,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       );
       return Align(
         alignment: FractionalOffset(_fractionX.value, 0),
-        child: Offstage(
-          offstage: _dragging.isTrue,
+        child: Visibility(
+          visible: _dragging.isFalse,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
           child: Material(
             elevation: _ToolbarTheme.elevation,
             shadowColor: MyTheme.color(context).shadow,
