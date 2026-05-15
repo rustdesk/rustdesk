@@ -354,16 +354,25 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarEdge);
       final fracStr = await bind.sessionGetOption(
           sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarFraction);
-      if (fracStr != null && fracStr.isNotEmpty) {
-        _edge.value = _parseToolbarEdge(edgeStr);
-        _fraction.value = double.tryParse(fracStr) ?? 0.5;
-      } else {
-        // Backward compat: fall back to the pre-edge horizontal position.
-        final legacy = await bind.sessionGetOption(
-            sessionId: widget.ffi.sessionId, arg: 'remote-menubar-drag-x');
-        _edge.value = _ToolbarEdge.top;
-        _fraction.value = double.tryParse(legacy ?? '0.5') ?? 0.5;
-      }
+      // Backward compat: legacy horizontal-only position.
+      final legacy = await bind.sessionGetOption(
+          sessionId: widget.ffi.sessionId, arg: 'remote-menubar-drag-x');
+      // Parse edge independently so a partial write of frac doesn't reset it.
+      _edge.value = _parseToolbarEdge(edgeStr);
+      final rawFraction = (fracStr != null && fracStr.isNotEmpty)
+          ? fracStr
+          : ((legacy != null && legacy.isNotEmpty) ? legacy : '0.5');
+      // Clamp to the saved drag-bound contract so a corrupted or out-of-range
+      // saved value can't bypass it until the user drags again.
+      final dragLeft = double.tryParse(
+              bind.mainGetLocalOption(key: kOptionRemoteMenubarDragLeft)) ??
+          0.0;
+      final dragRight = double.tryParse(
+              bind.mainGetLocalOption(key: kOptionRemoteMenubarDragRight)) ??
+          1.0;
+      _fraction.value = (double.tryParse(rawFraction) ?? 0.5)
+          .clamp(dragLeft, dragRight)
+          .toDouble();
       // Initialize toolbar states (collapse, hide) from session options
       widget.state.init(widget.ffi.sessionId);
     });
