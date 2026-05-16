@@ -1977,6 +1977,7 @@ jobs:
             flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
             # package
             pushd com.rustdesk.RustDesk
+            jq -e 'any(.modules[]?; type == "object" and .name == "rustdesk")' com.rustdesk.RustDesk.json > /dev/null
             jq '
               .["finish-args"] = (
                 (.["finish-args"] // []) +
@@ -1993,6 +1994,7 @@ jobs:
                 }
               ]
             ' com.rustdesk.RustDesk.json > com.rustdesk.RustDesk.local.json
+            jq -e 'any(.modules[]?; type == "object" and .name == "rustdesk" and any(.sources[]?; .type == "file" and .path == "rustdesk.deb"))' com.rustdesk.RustDesk.local.json > /dev/null
             flatpak-builder --user --install-deps-from=flathub -y --force-clean --repo=repo ./build ./com.rustdesk.RustDesk.local.json
             flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak com.rustdesk.RustDesk
 
