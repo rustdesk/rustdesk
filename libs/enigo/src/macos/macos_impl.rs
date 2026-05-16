@@ -621,29 +621,24 @@ impl Enigo {
 
     #[inline]
     fn map_key_board(&mut self, ch: char) -> CGKeyCode {
-        // no idea why below char not working with shift, https://github.com/rustdesk/rustdesk/issues/406#issuecomment-1145157327
-        // seems related to numpad char
-        if ch == '-' || ch == '=' || ch == '.' || ch == '/' || (ch >= '0' && ch <= '9') {
-            // Fallback to JIS if current keyboard layout is JIS
-            unsafe {
-                let (keyboard, _layout) = get_layout();
-                if !keyboard.is_null() {
-                    let name_ref = TISGetInputSourceProperty(keyboard, kTISPropertyInputSourceID);
-                    if !name_ref.is_null() {
-                        if let Some(name) = get_string(name_ref as _) {
-                            if name.contains("JIS") {
-                                CFRelease(keyboard);
-                                return self.map_key_board_jis(ch);
-                            }
+        // Check if current layout is JIS for any character
+        unsafe {
+            let (keyboard, _layout) = get_layout();
+            if !keyboard.is_null() {
+                let name_ref = TISGetInputSourceProperty(keyboard, kTISPropertyInputSourceID);
+                if !name_ref.is_null() {
+                    if let Some(name) = get_string(name_ref as _) {
+                        if name.contains("JIS") {
+                            CFRelease(keyboard);
+                            return self.map_key_board_jis(ch);
                         }
                     }
-                    CFRelease(keyboard);
                 }
+                CFRelease(keyboard);
             }
-
-            // fallback ANSI
-            return self.map_key_board_en(ch);
         }
+
+        // Dynamic layout mapping
         let mut code = u16::MAX;
         unsafe {
             let (keyboard, layout) = get_layout();
@@ -669,6 +664,8 @@ impl Enigo {
         if code != u16::MAX {
             return code;
         }
+
+        // fallback ANSI
         self.map_key_board_en(ch)
     }
 
