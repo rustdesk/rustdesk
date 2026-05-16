@@ -625,16 +625,19 @@ impl Enigo {
         unsafe {
             let (keyboard, _layout) = get_layout();
             if !keyboard.is_null() {
+                let mut jis_code = u16::MAX;
                 let name_ref = TISGetInputSourceProperty(keyboard, kTISPropertyInputSourceID);
                 if !name_ref.is_null() {
                     if let Some(name) = get_string(name_ref as _) {
                         if name.contains("JIS") {
-                            CFRelease(keyboard);
-                            return self.map_key_board_jis(ch);
+                            jis_code = self.map_key_board_jis(ch);
                         }
                     }
                 }
                 CFRelease(keyboard);
+                if jis_code != u16::MAX {
+                    return jis_code;
+                }
             }
         }
 
@@ -774,7 +777,7 @@ impl Enigo {
             '/' => kVK_ANSI_Slash,
             '`' => kVK_ANSI_Grave,
             '"' => kVK_ANSI_2,
-            _ => self.map_key_board_en(ch),
+            _ => u16::MAX,
         }
     }
 
