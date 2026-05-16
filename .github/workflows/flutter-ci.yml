@@ -15,7 +15,7 @@ on:
       - "README.md"
       - "res/**"
       - "appimage/**"
-      - "flatpak/**"
+      - "com.rustdesk.RustDesk/**"
 
 jobs:
   run-ci:
