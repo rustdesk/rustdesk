@@ -48,6 +48,24 @@ lazy_static::lazy_static! {
     static ref LAST_NOT_DEPLOYED_REGISTER: Mutex<Option<Instant>> = Mutex::new(None);
 }
 
+// Single source of truth for the "awaiting deployment" backoff. The server has
+// already told us this device is not in its db; until the operator runs
+// `rustdesk --deploy --token <api_token>` there is no point re-running the
+// register path more often than DEPLOY_RETRY_INTERVAL. Gating in the timer
+// loops (rather than only inside register_pk) also avoids the
+// last_register_sent / fails / latency / UDP-rebind churn the loop would
+// otherwise spin on while no response ever comes back.
+async fn deploy_register_throttled() -> bool {
+    if !NEEDS_DEPLOY.load(Ordering::SeqCst) {
+        return false;
+    }
+    LAST_NOT_DEPLOYED_REGISTER
+        .lock()
+        .await
+        .map(|t| (t.elapsed().as_millis() as i64) < DEPLOY_RETRY_INTERVAL)
+        .unwrap_or(false)
+}
+
 #[derive(Clone)]
 pub struct RendezvousMediator {
     addr: TargetAddr<'static>,
@@ -231,6 +249,14 @@ impl RendezvousMediator {
                 _ = timer.tick() => {
                     if SHOULD_EXIT.load(Ordering::SeqCst) {
                         break;
+                    }
+                    // The server already told us this device is not deployed. Skip
+                    // the whole register / fails / latency / UDP-rebind path until
+                    // DEPLOY_RETRY_INTERVAL elapses, otherwise the loop spins every
+                    // few seconds (log spam + misapplied network-recovery rebind)
+                    // until the operator runs `rustdesk --deploy`.
+                    if deploy_register_throttled().await {
+                        continue;
                     }
                     let now = Some(Instant::now());
                     let expired = last_register_resp.map(|x| x.elapsed().as_millis() as i64 >= REG_INTERVAL).unwrap_or(true);
