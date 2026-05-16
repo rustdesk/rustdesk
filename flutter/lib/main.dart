@@ -288,13 +288,19 @@ void runMultiWindow(
 
 void runConnectionManagerScreen() async {
   await initEnv(kAppTypeConnectionManager);
+
+  final hide = option2bool(
+    'allow-hide-cm',
+    await bind.mainGetOption(key: 'allow-hide-cm'),
+  );
+  gFFI.serverModel.hideCm = hide;
+
   _runApp(
     '',
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
-  final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
-  gFFI.serverModel.hideCm = hide;
+
   if (hide) {
     await hideCmWindow(isStartup: true);
   } else {

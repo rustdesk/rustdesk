@@ -1227,8 +1227,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             if (usePassword && !isChangePermanentPasswordDisabled())
               _SubButton('Set permanent password', setPasswordDialog,
                   permEnabled && !locked),
-            // if (usePassword)
-            //   hide_cm(!locked).marginOnly(left: _kContentHSubMargin - 6),
+            if (usePassword)
+              hide_cm(!locked).marginOnly(left: _kContentHSubMargin - 6),
             if (usePassword) radios[2],
           ]);
         })));
@@ -1406,6 +1406,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           final enableHideCm = model.approveMode == 'password' &&
               model.verificationMethod == kUsePermanentPassword;
           onHideCmChanged(bool? b) {
+            model.setHideCm(b);
             if (b != null) {
               bind.mainSetOption(
                   key: 'allow-hide-cm', value: bool2option('allow-hide-cm', b));
