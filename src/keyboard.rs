@@ -1250,6 +1250,25 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec
         .unwrap_or_default()
 }
 
+pub const KB_LAYOUT_TYPE_UNKNOWN: &str = "Unknown";
+pub const KB_LAYOUT_TYPE_ANSI: &str = "ANSI";
+pub const KB_LAYOUT_TYPE_ISO: &str = "ISO";
+pub const KB_LAYOUT_TYPE_JIS: &str = "JIS";
+const KB_LAYOUT_TYPE_NOT_ISO: &str = "Not ISO";
+
+fn local_macos_keyboard_type() -> KeyboardType {
+    match hbb_common::config::LocalConfig::get_kb_layout_type().as_str() {
+        KB_LAYOUT_TYPE_ISO => KeyboardType::KeyboardTypeIso,
+        KB_LAYOUT_TYPE_JIS => KeyboardType::KeyboardTypeJis,
+        KB_LAYOUT_TYPE_ANSI | KB_LAYOUT_TYPE_NOT_ISO => KeyboardType::KeyboardTypeAnsi,
+        _ => KeyboardType::KeyboardTypeUnknown,
+    }
+}
+
+fn is_local_macos_iso_keyboard() -> bool {
+    hbb_common::config::LocalConfig::get_kb_layout_type() == KB_LAYOUT_TYPE_ISO
+}
+
 fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
     match event.event_type {
         EventType::KeyPress(..) => {
@@ -1272,7 +1291,8 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
             event.position_code
         }
         OS_LOWER_MACOS => {
-            if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
+            key_event.keyboard_type = local_macos_keyboard_type().into();
+            if is_local_macos_iso_keyboard() {
                 rdev::win_scancode_to_macos_iso_code(event.position_code)?
             } else {
                 rdev::win_scancode_to_macos_code(event.position_code)?
@@ -1284,7 +1304,10 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
     #[cfg(target_os = "macos")]
     let keycode = match _peer {
         OS_LOWER_WINDOWS => rdev::macos_code_to_win_scancode(event.platform_code as _)?,
-        OS_LOWER_MACOS => event.platform_code as _,
+        OS_LOWER_MACOS => {
+            key_event.keyboard_type = local_macos_keyboard_type().into();
+            event.platform_code as _
+        }
         OS_LOWER_ANDROID => rdev::macos_code_to_android_key_code(event.platform_code as _)?,
         _ => rdev::macos_code_to_linux_code(event.platform_code as _)?,
     };
@@ -1292,7 +1315,8 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
     let keycode = match _peer {
         OS_LOWER_WINDOWS => rdev::linux_code_to_win_scancode(event.position_code as _)?,
         OS_LOWER_MACOS => {
-            if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
+            key_event.keyboard_type = local_macos_keyboard_type().into();
+            if is_local_macos_iso_keyboard() {
                 rdev::linux_code_to_macos_iso_code(event.position_code as _)?
             } else {
                 rdev::linux_code_to_macos_code(event.position_code as _)?
@@ -1306,7 +1330,8 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
         OS_LOWER_WINDOWS => rdev::usb_hid_code_to_win_scancode(event.usb_hid as _)?,
         OS_LOWER_LINUX => rdev::usb_hid_code_to_linux_code(event.usb_hid as _)?,
         OS_LOWER_MACOS => {
-            if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
+            key_event.keyboard_type = local_macos_keyboard_type().into();
+            if is_local_macos_iso_keyboard() {
                 rdev::usb_hid_code_to_macos_iso_code(event.usb_hid as _)?
             } else {
                 rdev::usb_hid_code_to_macos_code(event.usb_hid as _)?

@@ -559,12 +559,13 @@ lazy_static::lazy_static! {
 #[cfg(target_os = "macos")]
 struct VirtualInputState {
     virtual_input: VirtualInput,
+    keyboard_type: rdev::MacKeyboardType,
     capslock_down: bool,
 }
 
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
-    fn new() -> Option<Self> {
+    fn new(keyboard_type: rdev::MacKeyboardType) -> Option<Self> {
         VirtualInput::new(
             CGEventSourceStateID::CombinedSessionState,
             // Note: `CGEventTapLocation::Session` will be affected by the mouse events.
@@ -583,7 +584,8 @@ impl VirtualInputState {
             CGEventTapLocation::Session,
         )
         .map(|virtual_input| Self {
-            virtual_input,
+            virtual_input: virtual_input.with_keyboard_type(keyboard_type),
+            keyboard_type,
             capslock_down: false,
         })
         .ok()
@@ -599,6 +601,16 @@ impl VirtualInputState {
 static mut VIRTUAL_INPUT_MTX: Mutex<()> = Mutex::new(());
 #[cfg(target_os = "macos")]
 static mut VIRTUAL_INPUT_STATE: Option<VirtualInputState> = None;
+
+#[cfg(target_os = "macos")]
+fn mac_keyboard_type(keyboard_type: KeyboardType) -> rdev::MacKeyboardType {
+    match keyboard_type {
+        KeyboardType::KeyboardTypeAnsi => rdev::MacKeyboardType::Ansi,
+        KeyboardType::KeyboardTypeIso => rdev::MacKeyboardType::Iso,
+        KeyboardType::KeyboardTypeJis => rdev::MacKeyboardType::Jis,
+        _ => rdev::MacKeyboardType::Current,
+    }
+}
 
 // First call set_uinput() will create keyboard and mouse clients.
 // The clients are ipc connections that must live shorter than tokio runtime.
@@ -1361,7 +1373,7 @@ pub fn handle_key(evt: &KeyEvent) {
 fn reset_input() {
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        VIRTUAL_INPUT_STATE = VirtualInputState::new();
+        VIRTUAL_INPUT_STATE = VirtualInputState::new(rdev::MacKeyboardType::Current);
     }
 }
 
@@ -1392,6 +1404,24 @@ fn sim_rdev_rawkey_position(code: KeyCode, keydown: bool) {
     simulate_(&event_type);
 }
 
+#[cfg(target_os = "macos")]
+fn sim_rdev_rawkey_position_with_keyboard_type(
+    code: KeyCode,
+    keydown: bool,
+    keyboard_type: KeyboardType,
+) {
+    let rawkey = RawKey::MacVirtualKeycode(code);
+
+    record_pressed_key(KeysDown::RdevKey(rawkey), keydown);
+
+    let event_type = if keydown {
+        EventType::KeyPress(RdevKey::RawKey(rawkey))
+    } else {
+        EventType::KeyRelease(RdevKey::RawKey(rawkey))
+    };
+    simulate_with_keyboard_type(&event_type, mac_keyboard_type(keyboard_type));
+}
+
 #[cfg(target_os = "windows")]
 fn sim_rdev_rawkey_virtual(code: u32, keydown: bool) {
     let rawkey = RawKey::WinVirtualKeycode(code);
@@ -1411,6 +1441,24 @@ fn simulate_(event_type: &EventType) {
         let _lock = VIRTUAL_INPUT_MTX.lock();
         if let Some(input) = VIRTUAL_INPUT_STATE.as_ref() {
             let _ = input.simulate(&event_type);
+        }
+    }
+}
+
+#[inline]
+#[cfg(target_os = "macos")]
+fn simulate_with_keyboard_type(event_type: &EventType, keyboard_type: rdev::MacKeyboardType) {
+    unsafe {
+        let _lock = VIRTUAL_INPUT_MTX.lock();
+        let reset_input = VIRTUAL_INPUT_STATE
+            .as_ref()
+            .map(|input| input.keyboard_type != keyboard_type)
+            .unwrap_or(true);
+        if reset_input {
+            VIRTUAL_INPUT_STATE = VirtualInputState::new(keyboard_type);
+        }
+        if let Some(input) = VIRTUAL_INPUT_STATE.as_ref() {
+            let _ = input.simulate(event_type);
         }
     }
 }
@@ -1477,6 +1525,15 @@ fn map_keyboard_mode(evt: &KeyEvent) {
         return;
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        sim_rdev_rawkey_position_with_keyboard_type(
+            evt.chr() as _,
+            evt.down,
+            evt.keyboard_type.enum_value_or(KeyboardType::KeyboardTypeUnknown),
+        );
+    }
+    #[cfg(not(target_os = "macos"))]
     sim_rdev_rawkey_position(evt.chr() as _, evt.down);
 }
 
