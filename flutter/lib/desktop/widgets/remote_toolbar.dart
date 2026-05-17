@@ -2751,9 +2751,15 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     }
   }
 
-  // Pixels closer to a non-current edge required before the preview switches.
-  // Stops the preview from flickering between two edges near a corner.
-  static const double _switchHysteresisPx = 50.0;
+  // Cursor must come within this many pixels of a non-current edge before
+  // the dock will switch to that edge. Pure "nearest edge wins" made the
+  // horizontal slide too easy to turn into a high-impact orientation change
+  // by accident — see PR #15051 review feedback.
+  static const double _edgeActivationPx = 32.0;
+  // Once an alternate edge is being previewed, the cursor has to move this
+  // far back out before the preview reverts. Hysteresis stops the preview
+  // from flickering at the activation-zone boundary.
+  static const double _edgeExitPx = 64.0;
 
   void _updatePreview(Offset cursor) {
     final mediaSize = MediaQueryData.fromView(View.of(context)).size;
@@ -2770,15 +2776,23 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       }
     }
 
-    final current = widget.previewEdge.value;
-    _ToolbarEdge winner = current ?? _ToolbarEdge.top;
-    double best = double.infinity;
+    final currentDock = widget.edge.value;
+    final previewed = widget.previewEdge.value;
+
+    // The currently-docked edge is always a candidate: a drag that stays
+    // away from the screen edges just slides the toolbar along its current
+    // edge (preserves the prior horizontal-slide behavior). A different
+    // edge only becomes a candidate when the cursor enters its activation
+    // zone, with hysteresis so a cursor hovering at the boundary doesn't
+    // flicker the preview.
+    _ToolbarEdge winner = currentDock;
+    double bestDist = rawDist(currentDock);
     for (final e in _ToolbarEdge.values) {
-      // Give the currently-previewed edge a head start so the user has to
-      // commit a real movement to switch — otherwise corners flicker.
-      final biased = e == current ? rawDist(e) - _switchHysteresisPx : rawDist(e);
-      if (biased < best) {
-        best = biased;
+      if (e == currentDock) continue;
+      final threshold = e == previewed ? _edgeExitPx : _edgeActivationPx;
+      final d = rawDist(e);
+      if (d < threshold && d < bestDist) {
+        bestDist = d;
         winner = e;
       }
     }
