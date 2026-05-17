@@ -9,7 +9,6 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 
-import '../chat/claude_session_indicator.dart';
 import '../chat/terminal_chat_overlay.dart' show TerminalChatPartialBar, TerminalChatMaxView;
 import '../theme/tokens.dart';
 import '../input/input_bridge.dart';
@@ -49,10 +48,6 @@ class RemoteSessionScreen extends StatefulWidget {
 }
 
 class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
-  // Fallback Listenable used when terminalModels[0] is null, so AnimatedBuilder
-  // always has a valid notifier without needing a null check at build time.
-  static final _nullNotifier = ChangeNotifier();
-
   late final InputBridge _bridge;
   final _modCtl = ModifierController();
   final _kbFocusNode = FocusNode();
@@ -418,23 +413,6 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
               onClose: _onChatToggle,
             ),
           ),
-
-        // Layer 3c: Claude session indicator — top-left corner dot.
-        Positioned(
-          top: safeAreaTop + AppTokens.spaceSm,
-          left: AppTokens.spaceMd,
-          child: AnimatedBuilder(
-            animation: widget.ffi.terminalModels[0] ?? _nullNotifier,
-            builder: (_, __) {
-              final model = widget.ffi.terminalModels[0];
-              return ClaudeSessionIndicator(
-                terminal: model?.terminal,
-                terminalTitle: model?.terminalTitle ?? '',
-                terminalOpened: model?.terminalOpened ?? false,
-              );
-            },
-          ),
-        ),
 
         // Layer 4: cursor overlay — unconstrained so it can cross the
         // canvas/strip boundary without being clipped.
