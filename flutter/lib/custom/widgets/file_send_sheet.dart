@@ -45,6 +45,21 @@ class _FileSendSheetState extends State<FileSendSheet> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // In Tabby's remote-desktop session, fileModel.onReady() is gated on
+    // ConnType.fileTransfer and never runs, so the remote home path stays
+    // empty. Kick off a remote directory listing now — the response flows
+    // through receiveFileDir → initDirAndHome and populates homePath while
+    // the user picks a destination.
+    final remoteCtrl = widget.ffi.fileModel.remoteController;
+    if (remoteCtrl.homePath.isEmpty) {
+      debugPrint('[FileSend] priming remote home via openDirectory("")');
+      remoteCtrl.openDirectory('');
+    }
+  }
+
+  @override
   void dispose() {
     _pathController.dispose();
     super.dispose();
@@ -147,20 +162,36 @@ class _FileSendSheetState extends State<FileSendSheet> {
 
   Future<void> _startTransfer(List<PlatformFile> files) async {
     final remoteCtrl = widget.ffi.fileModel.remoteController;
-    final remoteHome = remoteCtrl.homePath;
+    var remoteHome = remoteCtrl.homePath;
     final isRemoteWindows = remoteCtrl.options.value.isWindows;
 
     debugPrint('[FileSend] _startTransfer: ${files.length} file(s), '
         'remoteHome="$remoteHome", isRemoteWindows=$isRemoteWindows');
 
+    // If the prime kicked off in initState hasn't returned yet, retry it and
+    // poll briefly. fetchDirectory has its own 2s internal timeout.
     if (remoteHome.isEmpty) {
-      // Remote home not yet known — first remote directory listing populates it
-      // via receiveFileDir/initDirAndHome.
-      debugPrint('[FileSend] aborting: remoteHome empty');
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Connecting to remote file system… try again in a moment.'),
-        duration: Duration(seconds: 2),
-      ));
+      debugPrint('[FileSend] remoteHome empty; re-priming and waiting');
+      remoteCtrl.openDirectory('');
+      final deadline =
+          DateTime.now().add(const Duration(milliseconds: 3000));
+      while (DateTime.now().isBefore(deadline) && remoteCtrl.homePath.isEmpty) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      remoteHome = remoteCtrl.homePath;
+      debugPrint('[FileSend] after wait: remoteHome="$remoteHome"');
+    }
+
+    if (remoteHome.isEmpty) {
+      debugPrint('[FileSend] aborting: remoteHome still empty after wait');
+      if (mounted) {
+        _showErrorDialog(
+          'Remote file system unavailable',
+          'Couldn\'t reach the remote machine\'s file system. The remote '
+              'side may not have granted file-transfer permission, or the '
+              'connection may be unstable. Try again in a moment.',
+        );
+      }
       return;
     }
 
