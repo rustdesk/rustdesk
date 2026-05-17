@@ -104,6 +104,9 @@ portable-pty = { git = "https://github.com/rustdesk-org/wezterm", branch = "rust
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
+[patch."https://github.com/rustdesk-org/rdev"]
+rdev = { git = "https://github.com/fufesou/rdev", rev = "154c76278d4ab27a3dce5739a3d4af1a9e42f0e4" }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = [
     "winuser",

@@ -14,13 +14,25 @@ const double _kImageBoarderWidth = 4.0;
 const double _kImagePaddingWidth = 4.0;
 const Color _kImageBorderColor = Color.fromARGB(125, 202, 247, 2);
 const double _kBorderRadius = 6.0;
+const String _kKBLayoutTypeUnknown = 'Unknown';
+const String _kKBLayoutTypeANSI = 'ANSI';
 const String _kKBLayoutTypeISO = 'ISO';
+const String _kKBLayoutTypeJIS = 'JIS';
 const String _kKBLayoutTypeNotISO = 'Not ISO';
 
 const _kKBLayoutImageMap = {
+  _kKBLayoutTypeUnknown: 'kb_layout_not_iso',
+  _kKBLayoutTypeANSI: 'kb_layout_not_iso',
   _kKBLayoutTypeISO: 'kb_layout_iso',
-  _kKBLayoutTypeNotISO: 'kb_layout_not_iso',
+  _kKBLayoutTypeJIS: 'kb_layout_not_iso',
 };
+
+const _kKBLayoutTypes = [
+  _kKBLayoutTypeUnknown,
+  _kKBLayoutTypeANSI,
+  _kKBLayoutTypeISO,
+  _kKBLayoutTypeJIS,
+];
 
 class _KBImage extends StatelessWidget {
   final String kbLayoutType;
@@ -142,24 +154,18 @@ class KBLayoutTypeChooser extends StatelessWidget {
       width: width,
       height: height,
       child: Center(
-        child: Row(
-          children: [
-            _KBChooser(
-              kbLayoutType: _kKBLayoutTypeISO,
-              imageWidth: imageWidth,
-              chosenType: chosenType,
-              cb: cb,
-            ),
-            VerticalDivider(
-              width: dividerWidth * 2,
-            ),
-            _KBChooser(
-              kbLayoutType: _kKBLayoutTypeNotISO,
-              imageWidth: imageWidth,
-              chosenType: chosenType,
-              cb: cb,
-            ),
-          ],
+        child: Wrap(
+          children: _kKBLayoutTypes
+              .map((kbLayoutType) => SizedBox(
+                    width: imageWidth,
+                    child: _KBChooser(
+                      kbLayoutType: kbLayoutType,
+                      imageWidth: imageWidth,
+                      chosenType: chosenType,
+                      cb: cb,
+                    ),
+                  ))
+              .toList(),
         ),
       ),
     );
@@ -178,6 +184,8 @@ String getLocalPlatformForKBLayoutType(String peerPlatform) {
     localPlatform = kPeerPlatformWindows;
   } else if (isLinux) {
     localPlatform = kPeerPlatformLinux;
+  } else if (isMacOS) {
+    localPlatform = kPeerPlatformMacOS;
   } else if (isWebOnWindows || isWebOnLinux) {
     localPlatform = kPeerPlatformWebDesktop;
   }
@@ -193,8 +201,11 @@ showKBLayoutTypeChooserIfNeeded(
     return;
   }
   KBLayoutType.value = bind.getLocalKbLayoutType();
-  if (KBLayoutType.value == _kKBLayoutTypeISO ||
-      KBLayoutType.value == _kKBLayoutTypeNotISO) {
+  if (KBLayoutType.value == _kKBLayoutTypeNotISO) {
+    await bind.setLocalKbLayoutType(kbLayoutType: _kKBLayoutTypeANSI);
+    KBLayoutType.value = bind.getLocalKbLayoutType();
+  }
+  if (_kKBLayoutTypes.contains(KBLayoutType.value)) {
     return;
   }
   showKBLayoutTypeChooser(localPlatform, dialogManager);
@@ -211,7 +222,7 @@ showKBLayoutTypeChooser(
       content: KBLayoutTypeChooser(
           chosenType: KBLayoutType,
           width: 360,
-          height: 200,
+          height: 320,
           dividerWidth: 4.0,
           cb: (String v) async {
             await bind.setLocalKbLayoutType(kbLayoutType: v);

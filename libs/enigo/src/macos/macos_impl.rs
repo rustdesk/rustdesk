@@ -234,10 +234,7 @@ impl MouseControllable for Enigo {
         // Use saturating_sub to prevent negative thresholds on very small displays
         let right = (display_width as i32).saturating_sub(margin);
         let bottom = (display_height as i32).saturating_sub(margin);
-        let near_edge = new_x < margin
-            || new_x > right
-            || new_y < margin
-            || new_y > bottom;
+        let near_edge = new_x < margin || new_x > right || new_y < margin || new_y > bottom;
 
         if near_edge {
             // Reset cursor to screen center to allow continuous movement
@@ -510,9 +507,7 @@ impl Enigo {
 
         let dest = CGPoint::new(x as f64, y as f64);
         if let Some(src) = self.event_source.as_ref() {
-            if let Ok(event) =
-                CGEvent::new_mouse_event(src.clone(), event_type, dest, button)
-            {
+            if let Ok(event) = CGEvent::new_mouse_event(src.clone(), event_type, dest, button) {
                 // Set delta fields for relative mouse movement
                 // This is essential for Pointer Lock API in browsers
                 if let Some((dx, dy)) = delta {
@@ -626,11 +621,27 @@ impl Enigo {
 
     #[inline]
     fn map_key_board(&mut self, ch: char) -> CGKeyCode {
-        // no idea why below char not working with shift, https://github.com/rustdesk/rustdesk/issues/406#issuecomment-1145157327
-        // seems related to numpad char
-        if ch == '-' || ch == '=' || ch == '.' || ch == '/' || (ch >= '0' && ch <= '9') {
-            return self.map_key_board_en(ch);
+        // Check if current layout is JIS for any character
+        unsafe {
+            let (keyboard, _layout) = get_layout();
+            if !keyboard.is_null() {
+                let mut jis_code = u16::MAX;
+                let name_ref = TISGetInputSourceProperty(keyboard, kTISPropertyInputSourceID);
+                if !name_ref.is_null() {
+                    if let Some(name) = get_string(name_ref as _) {
+                        if name.contains("JIS") {
+                            jis_code = self.map_key_board_jis(ch);
+                        }
+                    }
+                }
+                CFRelease(keyboard);
+                if jis_code != u16::MAX {
+                    return jis_code;
+                }
+            }
         }
+
+        // Dynamic layout mapping
         let mut code = u16::MAX;
         unsafe {
             let (keyboard, layout) = get_layout();
@@ -656,6 +667,8 @@ impl Enigo {
         if code != u16::MAX {
             return code;
         }
+
+        // fallback ANSI
         self.map_key_board_en(ch)
     }
 
@@ -709,6 +722,61 @@ impl Enigo {
             '.' => kVK_ANSI_Period,
             '/' => kVK_ANSI_Slash,
             '`' => kVK_ANSI_Grave,
+            _ => u16::MAX,
+        }
+    }
+
+    #[inline]
+    fn map_key_board_jis(&mut self, ch: char) -> CGKeyCode {
+        match ch {
+            'a' => kVK_ANSI_A,
+            'b' => kVK_ANSI_B,
+            'c' => kVK_ANSI_C,
+            'd' => kVK_ANSI_D,
+            'e' => kVK_ANSI_E,
+            'f' => kVK_ANSI_F,
+            'g' => kVK_ANSI_G,
+            'h' => kVK_ANSI_H,
+            'i' => kVK_ANSI_I,
+            'j' => kVK_ANSI_J,
+            'k' => kVK_ANSI_K,
+            'l' => kVK_ANSI_L,
+            'm' => kVK_ANSI_M,
+            'n' => kVK_ANSI_N,
+            'o' => kVK_ANSI_O,
+            'p' => kVK_ANSI_P,
+            'q' => kVK_ANSI_Q,
+            'r' => kVK_ANSI_R,
+            's' => kVK_ANSI_S,
+            't' => kVK_ANSI_T,
+            'u' => kVK_ANSI_U,
+            'v' => kVK_ANSI_V,
+            'w' => kVK_ANSI_W,
+            'x' => kVK_ANSI_X,
+            'y' => kVK_ANSI_Y,
+            'z' => kVK_ANSI_Z,
+            '0' => kVK_ANSI_0,
+            '1' => kVK_ANSI_1,
+            '2' => kVK_ANSI_2,
+            '3' => kVK_ANSI_3,
+            '4' => kVK_ANSI_4,
+            '5' => kVK_ANSI_5,
+            '6' => kVK_ANSI_6,
+            '7' => kVK_ANSI_7,
+            '8' => kVK_ANSI_8,
+            '9' => kVK_ANSI_9,
+            '-' => kVK_ANSI_Minus,
+            '=' => kVK_ANSI_Equal,
+            '\\' => kVK_ANSI_Backslash,
+            '@' => kVK_ANSI_Quote,
+            ':' => kVK_ANSI_Semicolon,
+            ';' => kVK_ANSI_Semicolon,
+            '*' => kVK_ANSI_Quote,
+            ',' => kVK_ANSI_Comma,
+            '.' => kVK_ANSI_Period,
+            '/' => kVK_ANSI_Slash,
+            '`' => kVK_ANSI_Grave,
+            '"' => kVK_ANSI_2,
             _ => u16::MAX,
         }
     }
