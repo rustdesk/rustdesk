@@ -474,14 +474,15 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn save_image_quality(&self, value: String) {
+        let prev_image_quality = self.lc.read().unwrap().image_quality.clone();
         let msg = self.lc.write().unwrap().save_image_quality(value.clone());
         if let Some(msg) = msg {
             self.send(Data::Message(msg));
         }
-        if value != "custom" {
-            let last_auto_fps = self.lc.read().unwrap().last_auto_fps;
-            if last_auto_fps.unwrap_or(usize::MAX) >= 30 {
-                // non custom quality use 30 fps
+        // When switching from custom to non-custom, reset fps to 30 if it was different
+        if prev_image_quality == "custom" && value != "custom" {
+            let last_send_fps = self.lc.read().unwrap().last_send_fps;
+            if last_send_fps.unwrap_or(usize::MAX) != 30 {
                 let msg = self.lc.write().unwrap().set_custom_fps(30, false);
                 self.send(Data::Message(msg));
             }

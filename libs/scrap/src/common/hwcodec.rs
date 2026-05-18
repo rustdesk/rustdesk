@@ -1,5 +1,7 @@
 use crate::{
-    codec::{base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg},
+    codec::{
+        base_bitrate, codec_thread_num, enable_hwcodec_option, qp_for_ratio, EncoderApi, EncoderCfg,
+    },
     convert::*,
     CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
@@ -7,14 +9,13 @@ use hbb_common::{
     anyhow::{anyhow, bail, Context},
     bytes::Bytes,
     log,
-    message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
+    message_proto::{EncodedVideoFrame, EncodedVideoFrames, ImageQuality, VideoFrame},
     serde_derive::{Deserialize, Serialize},
     serde_json, ResultType,
 };
 use hwcodec::{
     common::{
         DataFormat, HwcodecErrno,
-        Quality::{self, *},
         RateControl::{self, *},
     },
     ffmpeg::AVPixelFormat,
@@ -28,8 +29,11 @@ use hwcodec::{
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_FPS: i32 = 30;
 const DEFAULT_GOP: i32 = i32::MAX;
-const DEFAULT_HW_QUALITY: Quality = Quality_Default;
 pub const ERR_HEVC_POC: i32 = HwcodecErrno::HWCODEC_ERR_HEVC_COULD_NOT_FIND_POC as i32;
+// AMF native encoder VBR may look blurry during initialization and when the first frame appears. It requires careful configuration and thorough testing before use.
+pub const RC_BITRATE_MODE: RateControl = RateControl::RC_CBR;
+// AMD encoders produce worse image quality at low bitrates, multiply to compensate
+pub const AMD_BITRATE_MULTIPLIER: f32 = 1.5;
 
 crate::generate_call_macro!(call_yuv, false);
 
@@ -46,6 +50,7 @@ pub struct HwRamEncoderConfig {
     pub width: usize,
     pub height: usize,
     pub quality: f32,
+    pub image_quality: ImageQuality,
     pub keyframe_interval: Option<usize>,
 }
 
@@ -54,7 +59,11 @@ pub struct HwRamEncoder {
     pub format: DataFormat,
     pub pixfmt: AVPixelFormat,
     bitrate: u32, //kbs
+    qp: i32,
+    qp_min: i32,
+    qp_max: i32,
     config: HwRamEncoderConfig,
+    rc: RateControl,
 }
 
 impl EncoderApi for HwRamEncoder {
@@ -64,11 +73,12 @@ impl EncoderApi for HwRamEncoder {
     {
         match cfg {
             EncoderCfg::HWRAM(config) => {
-                let rc = Self::rate_control(&config);
+                let rc = Self::rate_control(&config.name, config.image_quality);
                 let mut bitrate =
                     Self::bitrate(&config.name, config.width, config.height, config.quality);
                 bitrate = Self::check_bitrate_range(&config, bitrate);
                 let gop = config.keyframe_interval.unwrap_or(DEFAULT_GOP as _) as i32;
+                let (qp, qp_min, qp_max) = qp_for_ratio(config.quality);
                 let ctx = EncodeContext {
                     name: config.name.clone(),
                     mc_name: config.mc_name.clone(),
@@ -79,10 +89,10 @@ impl EncoderApi for HwRamEncoder {
                     kbs: bitrate as i32,
                     fps: DEFAULT_FPS,
                     gop,
-                    quality: DEFAULT_HW_QUALITY,
                     rc,
-                    q: -1,
-                    thread_count: codec_thread_num(16) as _, // ffmpeg's thread_count is used for cpu
+                    qp,
+                    qp_min,
+                    qp_max,
                 };
                 let format = match Encoder::format_from_name(config.name.clone()) {
                     Ok(format) => format,
@@ -99,7 +109,11 @@ impl EncoderApi for HwRamEncoder {
                         format,
                         pixfmt: ctx.pixfmt,
                         bitrate,
+                        qp,
+                        qp_min,
+                        qp_max,
                         config,
+                        rc,
                     }),
                     Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
@@ -179,15 +193,34 @@ impl EncoderApi for HwRamEncoder {
         );
         if bitrate > 0 {
             bitrate = Self::check_bitrate_range(&self.config, bitrate);
-            self.encoder.set_bitrate(bitrate as _).ok();
-            self.bitrate = bitrate;
+            if bitrate != self.bitrate {
+                self.encoder.set_bitrate(bitrate as _).ok();
+                self.bitrate = bitrate;
+            }
         }
         self.config.quality = ratio;
+        let (qp, qp_min, qp_max) = qp_for_ratio(ratio);
+        if qp != self.qp || qp_min != self.qp_min || qp_max != self.qp_max {
+            self.encoder.set_qp(qp, qp_min, qp_max).ok();
+            self.qp = qp;
+            self.qp_min = qp_min;
+            self.qp_max = qp_max;
+        }
         Ok(())
     }
 
-    fn bitrate(&self) -> u32 {
-        self.bitrate
+    fn rc_state(&self) -> crate::codec::RcState {
+        crate::codec::RcState {
+            bitrate: self.bitrate,
+            qp: self.qp,
+            qp_min: self.qp_min,
+            qp_max: self.qp_max,
+            qp_mode: self.rc == RC_CQP,
+        }
+    }
+
+    fn rc_changed(&self, image_quality: ImageQuality) -> bool {
+        Self::rate_control(&self.config.name, image_quality) != self.rc
     }
 
     fn support_changing_quality(&self) -> bool {
@@ -240,43 +273,54 @@ impl HwRamEncoder {
         }
     }
 
-    fn rate_control(_config: &HwRamEncoderConfig) -> RateControl {
+    fn rate_control(name: &str, image_quality: ImageQuality) -> RateControl {
         #[cfg(target_os = "android")]
-        if _config.name.contains("mediacodec") {
+        if name.contains("mediacodec") {
             return RC_VBR;
         }
-        RC_CBR
+        // In balanced mode, CQP makes VS Code Inline Blame appear blurry, so CQP is only enabled at the highest quality level.
+        if image_quality == ImageQuality::Best
+            && ["qsv", "nvenc", "amf"].iter().any(|&x| name.contains(x))
+        {
+            return RC_CQP;
+        }
+        if name.contains("qsv") {
+            return RC_VBR;
+        }
+        RC_BITRATE_MODE
     }
 
     pub fn bitrate(name: &str, width: usize, height: usize, ratio: f32) -> u32 {
-        Self::calc_bitrate(width, height, ratio, name.contains("h264"))
+        let multiplier = if name.contains("amf") {
+            AMD_BITRATE_MULTIPLIER
+        } else {
+            1.0
+        };
+        Self::calc_bitrate(width, height, ratio, name.contains("h264"), multiplier)
     }
 
-    pub fn calc_bitrate(width: usize, height: usize, ratio: f32, h264: bool) -> u32 {
-        let base = base_bitrate(width as _, height as _) as f32 * ratio;
-        let threshold = 2000.0;
-        let decay_rate = 0.001; // 1000 * 0.001 = 1
+    pub fn calc_bitrate(
+        width: usize,
+        height: usize,
+        ratio: f32,
+        h264: bool,
+        multiplier: f32,
+    ) -> u32 {
+        let base = base_bitrate(width as _, height as _) as f32;
+        // Monotonically increasing formula: factor = 1.0 + C / (1.0 + base / scale)
+        // d(bitrate)/d(base) = 1 + C/(1+base/scale)² > 0, always positive
+        // Hardware encoder needs higher bitrate for better fluency and quality
+        let scale = 2000.0;
         let factor: f32 = if cfg!(target_os = "android") {
             // https://stackoverflow.com/questions/26110337/what-are-valid-bit-rates-to-set-for-mediacodec?rq=3
-            if base > threshold {
-                1.0 + 4.0 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                5.0
-            }
+            1.0 + 6.0 / (1.0 + base / scale)
         } else if h264 {
-            if base > threshold {
-                1.0 + 1.0 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                2.0
-            }
+            1.0 + 1.8 / (1.0 + base / scale)
         } else {
-            if base > threshold {
-                1.0 + 0.5 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                1.5
-            }
+            1.0 + 1.2 / (1.0 + base / scale)
         };
-        (base * factor) as u32
+        // ratio is multiplied at the end for linear scaling with quality settings
+        (base * factor * ratio * multiplier) as u32
     }
 
     pub fn check_bitrate_range(_config: &HwRamEncoderConfig, bitrate: u32) -> u32 {
@@ -680,6 +724,7 @@ impl HwCodecConfig {
 pub fn check_available_hwcodec() -> String {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     hwcodec::common::setup_parent_death_signal();
+    let (qp, qp_min, qp_max) = crate::codec::qp_for_ratio(crate::codec::Quality::default().ratio());
     let ctx = EncodeContext {
         name: String::from(""),
         mc_name: None,
@@ -690,10 +735,10 @@ pub fn check_available_hwcodec() -> String {
         kbs: 1000,
         fps: DEFAULT_FPS,
         gop: DEFAULT_GOP,
-        quality: DEFAULT_HW_QUALITY,
-        rc: RC_CBR,
-        q: -1,
-        thread_count: 4,
+        rc: RC_BITRATE_MODE,
+        qp,
+        qp_min,
+        qp_max,
     };
     #[cfg(feature = "vram")]
     let vram = crate::vram::check_available_vram();

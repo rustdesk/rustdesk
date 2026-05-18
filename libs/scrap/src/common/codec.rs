@@ -32,7 +32,7 @@ use hbb_common::{
     lazy_static, log,
     message_proto::{
         supported_decoding::PreferCodec, video_frame, Chroma, CodecAbility, EncodedVideoFrames,
-        SupportedDecoding, SupportedEncoding, VideoFrame,
+        ImageQuality, SupportedDecoding, SupportedEncoding, VideoFrame,
     },
     sysinfo::System,
     ResultType,
@@ -46,6 +46,15 @@ lazy_static::lazy_static! {
 }
 
 pub const ENCODE_NEED_SWITCH: &'static str = "ENCODE_NEED_SWITCH";
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RcState {
+    pub bitrate: u32,
+    pub qp: i32,
+    pub qp_min: i32,
+    pub qp_max: i32,
+    pub qp_mode: bool,
+}
 
 #[derive(Debug, Clone)]
 pub enum EncoderCfg {
@@ -71,9 +80,11 @@ pub trait EncoderApi {
 
     fn set_quality(&mut self, ratio: f32) -> ResultType<()>;
 
-    fn bitrate(&self) -> u32;
+    fn rc_state(&self) -> RcState;
 
     fn support_changing_quality(&self) -> bool;
+
+    fn rc_changed(&self, image_quality: ImageQuality) -> bool;
 
     fn latency_free(&self) -> bool;
 
@@ -891,8 +902,79 @@ pub fn allow_d3d_render() -> bool {
 }
 
 pub const BR_BEST: f32 = 1.5;
-pub const BR_BALANCED: f32 = 0.67;
+// Changed from 0.67 to 1.0 to increase default encoder bitrate
+// This provides better quality separation between Best/Balanced/Speed modes
+pub const BR_BALANCED: f32 = 1.0;
 pub const BR_SPEED: f32 = 0.5;
+
+// Piecewise linear interpolation of QP over the ratio range.
+// Working QP range: 18-44. Although H.264/HEVC uses 0-51 and VPX/AOM uses 0-63,
+// we use the same model for all encoders — the 18-44 range provides a good
+// perceptual quality spread and the encoder's own min/max quantizer settings
+// handle the actual codec-specific mapping.
+// Anchors: at_max (lowest ratio) → at_speed → at_balanced → at_best → at_min (highest ratio).
+// Ratio above 2.0 is clamped to 2.0 (already at QP_MIN=18, no further improvement).
+fn interpolate_qp(
+    ratio: f32,
+    at_min: i32,
+    at_best: i32,
+    at_balanced: i32,
+    at_speed: i32,
+    at_max: i32,
+) -> i32 {
+    const QP_RATIO_MIN: f32 = 0.2;
+    const QP_RATIO_MAX: f32 = 2.0;
+    const QP_MIN: i32 = 18;
+    const QP_MAX: i32 = 44;
+
+    let r = ratio.clamp(QP_RATIO_MIN, QP_RATIO_MAX);
+    let qp = if r <= BR_SPEED {
+        let t = (r - QP_RATIO_MIN) / (BR_SPEED - QP_RATIO_MIN);
+        at_max as f32 - (at_max - at_speed) as f32 * t
+    } else if r <= BR_BALANCED {
+        let t = (r - BR_SPEED) / (BR_BALANCED - BR_SPEED);
+        at_speed as f32 - (at_speed - at_balanced) as f32 * t
+    } else if r <= BR_BEST {
+        let t = (r - BR_BALANCED) / (BR_BEST - BR_BALANCED);
+        at_balanced as f32 - (at_balanced - at_best) as f32 * t
+    } else {
+        // BR_BEST(1.5) ~ QP_RATIO_MAX(2.0): continue decreasing QP toward at_min
+        let t = (r - BR_BEST) / (QP_RATIO_MAX - BR_BEST);
+        at_best as f32 - (at_best - at_min) as f32 * t
+    };
+    (qp.round() as i32).clamp(QP_MIN, QP_MAX)
+}
+
+// Map bitrate ratio to (qp, qmin, qmax) for QP-driven encoders (working range 18-44).
+// Used by all encoder backends (hwcodec, VPX, VRAM). Lower QP means better quality.
+// Ratio above 2.0 is treated as 2.0.
+pub fn qp_for_ratio(ratio: f32) -> (i32, i32, i32) {
+    //                          at_min  at_best  at_balanced  at_speed  at_max
+    let qp = interpolate_qp(ratio, 18, 22, 28, 34, 44);
+    let qmin = interpolate_qp(ratio, 18, 18, 22, 28, 38);
+    let qmax = interpolate_qp(ratio, 22, 28, 34, 40, 44);
+    (qp, qmin, qmax)
+}
+
+// Reverse lookup: find the ratio that produces the given target QP.
+// Since qp_for_ratio is monotonically decreasing (higher ratio → lower QP),
+// we use binary search within [ratio_min, ratio_max].
+pub fn ratio_for_qp(target_qp: i32, ratio_min: f32, ratio_max: f32) -> f32 {
+    let mut lo = ratio_min;
+    let mut hi = ratio_max;
+    for _ in 0..12 {
+        let mid = (lo + hi) / 2.0;
+        let (qp, _, _) = qp_for_ratio(mid);
+        if qp == target_qp {
+            return mid;
+        } else if qp > target_qp {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    (lo + hi) / 2.0
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Quality {
@@ -1154,4 +1236,176 @@ pub fn test_av1() {
             );
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_qp_for_ratio_monotonic() {
+        // Higher ratio should produce lower or equal QP (better quality)
+        let mut prev_qp = i32::MAX;
+        let mut prev_qmin = i32::MAX;
+        let mut prev_qmax = i32::MAX;
+        for i in 1..=200 {
+            let ratio = i as f32 * 0.1;
+            let (qp, qmin, qmax) = qp_for_ratio(ratio);
+            assert!(
+                qp <= prev_qp,
+                "qp not monotonic at ratio {}: {} > {}",
+                ratio,
+                qp,
+                prev_qp
+            );
+            assert!(
+                qmin <= prev_qmin,
+                "qmin not monotonic at ratio {}: {} > {}",
+                ratio,
+                qmin,
+                prev_qmin
+            );
+            assert!(
+                qmax <= prev_qmax,
+                "qmax not monotonic at ratio {}: {} > {}",
+                ratio,
+                qmax,
+                prev_qmax
+            );
+            assert!(
+                qmin <= qp,
+                "qmin > qp at ratio {}: {} > {}",
+                ratio,
+                qmin,
+                qp
+            );
+            assert!(
+                qp <= qmax,
+                "qp > qmax at ratio {}: {} > {}",
+                ratio,
+                qp,
+                qmax
+            );
+            prev_qp = qp;
+            prev_qmin = qmin;
+            prev_qmax = qmax;
+        }
+    }
+
+    #[test]
+    fn test_qp_for_ratio_known_values() {
+        let (qp, qmin, qmax) = qp_for_ratio(BR_SPEED);
+        assert_eq!(qp, 34);
+        assert_eq!(qmin, 28);
+        assert_eq!(qmax, 40);
+
+        let (qp, qmin, qmax) = qp_for_ratio(BR_BALANCED);
+        assert_eq!(qp, 28);
+        assert_eq!(qmin, 22);
+        assert_eq!(qmax, 34);
+
+        let (qp, qmin, qmax) = qp_for_ratio(BR_BEST);
+        assert_eq!(qp, 22);
+        assert_eq!(qmin, 18);
+        assert_eq!(qmax, 28);
+    }
+
+    #[test]
+    fn test_qp_for_ratio_boundary() {
+        // Very low ratio (clamped to 0.2)
+        let (qp, qmin, qmax) = qp_for_ratio(0.0);
+        assert_eq!(qp, 44);
+        assert_eq!(qmin, 38);
+        assert_eq!(qmax, 44);
+
+        // Very high ratio (clamped to 2.0) — same as ratio=2.0
+        let (qp, qmin, qmax) = qp_for_ratio(100.0);
+        assert_eq!(qp, 18);
+        assert_eq!(qmin, 18);
+        assert_eq!(qmax, 22);
+
+        // Ratio=2.0 should give QP_MIN
+        let (qp2, qmin2, qmax2) = qp_for_ratio(2.0);
+        assert_eq!((qp, qmin, qmax), (qp2, qmin2, qmax2));
+    }
+
+    #[test]
+    fn test_ratio_for_qp_roundtrip() {
+        for target_qp in 18..=44 {
+            let ratio = ratio_for_qp(target_qp, 0.2, 2.0);
+            let (qp, _, _) = qp_for_ratio(ratio);
+            assert!(
+                (qp - target_qp).abs() <= 1,
+                "roundtrip failed for target_qp={}, ratio={}, got qp={}",
+                target_qp,
+                ratio,
+                qp
+            );
+        }
+    }
+
+    #[test]
+    fn test_ratio_for_qp_boundary() {
+        let ratio = ratio_for_qp(28, 0.5, 1.5);
+        let (qp, _, _) = qp_for_ratio(ratio);
+        assert!(
+            (qp - 28).abs() <= 1,
+            "expected qp near 28, got qp={} at ratio={}",
+            qp,
+            ratio
+        );
+
+        // target_qp lower than anything in range should return near ratio_max
+        let ratio = ratio_for_qp(18, 0.2, 2.0);
+        assert!(ratio > 1.5, "expected high ratio for low qp, got {}", ratio);
+
+        // target_qp higher than anything in range should return near ratio_min
+        let ratio = ratio_for_qp(44, 0.2, 2.0);
+        assert!(ratio < 0.5, "expected low ratio for high qp, got {}", ratio);
+    }
+
+    #[test]
+    fn test_ratio_for_qp_monotonic() {
+        let mut prev_ratio = f32::MAX;
+        for qp in 18..=44 {
+            let ratio = ratio_for_qp(qp, 0.2, 2.0);
+            assert!(
+                ratio < prev_ratio,
+                "ratio not monotonic at qp={}: {} >= {}",
+                qp,
+                ratio,
+                prev_ratio
+            );
+            prev_ratio = ratio;
+        }
+    }
+
+    #[test]
+    fn test_ratio_for_qp_max_iterations() {
+        let mut max_iters = 0u32;
+        for target_qp in 18..=44 {
+            let mut lo = 0.2f32;
+            let mut hi = 2.0f32;
+            for i in 1..=32u32 {
+                let mid = (lo + hi) / 2.0;
+                let (qp, _, _) = qp_for_ratio(mid);
+                if qp == target_qp {
+                    if i > max_iters {
+                        max_iters = i;
+                    }
+                    break;
+                } else if qp > target_qp {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+        }
+        println!("max iterations needed: {}", max_iters);
+        assert!(
+            max_iters <= 12,
+            "needed {} iterations, expected <= 12",
+            max_iters
+        );
+    }
 }
