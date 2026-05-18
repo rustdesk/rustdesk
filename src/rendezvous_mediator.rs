@@ -40,10 +40,6 @@ use crate::{
 type Message = RendezvousMessage;
 type RendezvousSender = mpsc::UnboundedSender<Message>;
 
-fn webrtc_ice_key(peer_id: &str, session_key: &str) -> String {
-    format!("{}\n{}", peer_id, session_key)
-}
-
 fn connection_meta(
     control_permissions: Option<ControlPermissions>,
     controlled_context: Option<ControlledContext>,
@@ -423,17 +419,12 @@ impl RendezvousMediator {
                 });
             }
             Some(rendezvous_message::Union::IceCandidate(ice)) => {
-                if ice.to_id != Config::get_id() {
-                    return Ok(());
-                }
-                let key = webrtc_ice_key(&ice.from_id, &ice.session_key);
-                let tx = WEBRTC_ICE_TXS.lock().await.get(&key).cloned();
+                let tx = WEBRTC_ICE_TXS.lock().await.get(&ice.session_key).cloned();
                 if let Some(tx) = tx {
                     let _ = tx.send(ice.candidate);
                 } else {
                     log::debug!(
-                        "dropping ICE candidate for unknown WebRTC session from {} key {}",
-                        ice.from_id,
+                        "dropping ICE candidate for unknown WebRTC session key {}",
                         ice.session_key
                     );
                 }
@@ -693,26 +684,22 @@ impl RendezvousMediator {
     async fn spawn_webrtc_answerer(
         &self,
         ph: &PunchHole,
+        force_relay: bool,
         server: ServerPtr,
         peer_addr: SocketAddr,
         meta: ConnectionMeta,
     ) -> ResultType<String> {
-        if ph.requester_id.is_empty() {
-            log::warn!("WebRTC offer missing requester_id; falling back to existing transports");
-            return Ok(String::new());
-        }
-
         let mut stream =
-            WebRTCStream::new(&ph.webrtc_sdp_offer, ph.force_relay, CONNECT_TIMEOUT).await?;
+            WebRTCStream::new(&ph.webrtc_sdp_offer, force_relay, CONNECT_TIMEOUT).await?;
         let answer = stream.get_local_endpoint().await?;
         let session_key = stream.session_key().to_owned();
-        let peer_id = ph.requester_id.clone();
+        let return_route = ph.socket_addr.clone();
 
         let (remote_ice_tx, mut remote_ice_rx) = mpsc::unbounded_channel::<String>();
         WEBRTC_ICE_TXS
             .lock()
             .await
-            .insert(webrtc_ice_key(&peer_id, &session_key), remote_ice_tx);
+            .insert(session_key.clone(), remote_ice_tx);
 
         let stream_for_remote_ice = stream.clone();
         tokio::spawn(async move {
@@ -726,15 +713,13 @@ impl RendezvousMediator {
 
         if let Some(mut local_ice_rx) = stream.take_local_ice_rx() {
             let sender = self.rz_sender.clone();
-            let my_id = Config::get_id();
-            let target_id = peer_id.clone();
+            let socket_addr = return_route.clone();
             let session_key_for_ice = session_key.clone();
             tokio::spawn(async move {
                 while let Some(candidate) = local_ice_rx.recv().await {
                     let mut msg = Message::new();
                     msg.set_ice_candidate(IceCandidate {
-                        from_id: my_id.clone(),
-                        to_id: target_id.clone(),
+                        socket_addr: socket_addr.clone(),
                         session_key: session_key_for_ice.clone(),
                         candidate,
                         ..Default::default()
@@ -744,17 +729,13 @@ impl RendezvousMediator {
             });
         }
 
-        let peer_id_for_cleanup = peer_id.clone();
         let session_key_for_cleanup = session_key.clone();
         tokio::spawn(async move {
             let result = stream.wait_connected(CONNECT_TIMEOUT).await;
             WEBRTC_ICE_TXS
                 .lock()
                 .await
-                .remove(&webrtc_ice_key(
-                    &peer_id_for_cleanup,
-                    &session_key_for_cleanup,
-                ));
+                .remove(&session_key_for_cleanup);
             if let Err(err) = result {
                 log::warn!("webrtc wait_connected failed: {}", err);
                 return;
@@ -791,7 +772,7 @@ impl RendezvousMediator {
             ph.controlled_context.clone().into_option(),
         );
         let webrtc_sdp_answer = if !ph.webrtc_sdp_offer.is_empty() {
-            self.spawn_webrtc_answerer(&ph, server.clone(), peer_addr, meta.clone())
+            self.spawn_webrtc_answerer(&ph, relay, server.clone(), peer_addr, meta.clone())
                 .await
                 .unwrap_or_else(|err| {
                     log::warn!("failed to create WebRTC answer: {}", err);

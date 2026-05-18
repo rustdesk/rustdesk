@@ -386,6 +386,10 @@ impl Client {
         }
     }
 
+    fn is_expected_webrtc_ice_candidate(ice: &IceCandidate, session_key: &str) -> bool {
+        !session_key.is_empty() && ice.session_key == session_key && !ice.candidate.is_empty()
+    }
+
     fn spawn_webrtc_ice_bridge(
         mut socket: Stream,
         mut local_ice_rx: Option<UnboundedReceiver<String>>,
@@ -394,7 +398,6 @@ impl Client {
         session_key: String,
     ) -> oneshot::Sender<()> {
         let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
-        let my_id = Config::get_id();
         tokio::spawn(async move {
             loop {
                 match stop_rx.try_recv() {
@@ -408,8 +411,7 @@ impl Client {
                             Ok(candidate) => {
                                 let mut msg = RendezvousMessage::new();
                                 msg.set_ice_candidate(IceCandidate {
-                                    from_id: my_id.clone(),
-                                    to_id: peer.clone(),
+                                    id: peer.clone(),
                                     session_key: session_key.clone(),
                                     candidate,
                                     ..Default::default()
@@ -432,10 +434,7 @@ impl Client {
                     crate::get_next_nonkeyexchange_msg(&mut socket, Some(100)).await
                 {
                     if let Some(rendezvous_message::Union::IceCandidate(ice)) = msg_in.union {
-                        if ice.from_id == peer
-                            && ice.to_id == my_id
-                            && ice.session_key == session_key
-                        {
+                        if Self::is_expected_webrtc_ice_candidate(&ice, &session_key) {
                             if let Err(err) = webrtc.add_remote_ice_candidate(&ice.candidate).await
                             {
                                 log::warn!("failed to add WebRTC ICE candidate: {}", err);
@@ -566,7 +565,7 @@ impl Client {
             .unwrap_or_default();
         let mut webrtc_sdp_answer = String::new();
         let mut pending_webrtc_ice = Vec::<String>::new();
-        for i in 1..=3 {
+        'punch_attempts: for i in 1..=3 {
             log::info!(
                 "#{} {} punch attempt with {}, id: {}",
                 i,
@@ -576,9 +575,20 @@ impl Client {
             );
             socket.send(&msg_out).await?;
             // below timeout should not bigger than hbbs's connection timeout.
-            if let Some(msg_in) =
-                crate::get_next_nonkeyexchange_msg(&mut socket, Some(i * 3000)).await
-            {
+            let attempt_deadline = Instant::now() + Duration::from_millis((i * 3000) as u64);
+            loop {
+                let remaining = attempt_deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    break;
+                }
+                let timeout_ms = remaining
+                    .as_millis()
+                    .clamp(1, u64::MAX as u128) as u64;
+                let Some(msg_in) =
+                    crate::get_next_nonkeyexchange_msg(&mut socket, Some(timeout_ms)).await
+                else {
+                    break;
+                };
                 match msg_in.union {
                     Some(rendezvous_message::Union::PunchHoleResponse(ph)) => {
                         if ph.socket_addr.is_empty() {
@@ -626,7 +636,7 @@ impl Client {
                                 }
                             }
                             log::info!("{} Hole Punched {} = {}", punch_type, peer, peer_addr);
-                            break;
+                            break 'punch_attempts;
                         }
                     }
                     Some(rendezvous_message::Union::RelayResponse(rr)) => {
@@ -724,17 +734,12 @@ impl Client {
                         ));
                     }
                     Some(rendezvous_message::Union::IceCandidate(ice)) => {
-                        if !webrtc_session_key.is_empty()
-                            && ice.from_id == peer
-                            && ice.to_id == Config::get_id()
-                            && ice.session_key == webrtc_session_key
-                        {
+                        if Self::is_expected_webrtc_ice_candidate(&ice, &webrtc_session_key) {
                             pending_webrtc_ice.push(ice.candidate);
                         } else {
                             log::debug!(
-                                "dropping ICE candidate for unexpected WebRTC session from {} key {}",
-                                ice.from_id,
-                                ice.session_key
+                                "dropping ICE candidate for unexpected WebRTC session key {}",
+                                ice.session_key,
                             );
                         }
                     }
@@ -4383,7 +4388,21 @@ pub mod peer_online {
 
     #[cfg(test)]
     mod tests {
+        use crate::client::Client;
+        use hbb_common::rendezvous_proto::IceCandidate;
         use hbb_common::tokio;
+
+        #[test]
+        fn accepts_webrtc_ice_by_session_key_only() {
+            let ice = IceCandidate {
+                session_key: "session-a".to_owned(),
+                candidate: "candidate-json".to_owned(),
+                ..Default::default()
+            };
+
+            assert!(Client::is_expected_webrtc_ice_candidate(&ice, "session-a"));
+            assert!(!Client::is_expected_webrtc_ice_candidate(&ice, "session-b"));
+        }
 
         #[tokio::test]
         async fn test_query_onlines() {
