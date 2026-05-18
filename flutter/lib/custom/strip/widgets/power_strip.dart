@@ -53,6 +53,88 @@ class PowerStrip extends StatefulWidget {
 
 class _PowerStripState extends State<PowerStrip> {
   bool _collapsed = false;
+  final Map<String, GlobalKey> _cellKeys = {};
+  OverlayEntry? _cmdPopup;
+
+  @override
+  void dispose() {
+    _dismissCmdPopup();
+    super.dispose();
+  }
+
+  GlobalKey _cellKey(String keyName) =>
+      _cellKeys.putIfAbsent(keyName, GlobalKey.new);
+
+  void _dismissCmdPopup() {
+    _cmdPopup?.remove();
+    _cmdPopup = null;
+  }
+
+  void _showCmdPopup(KeyDef k) {
+    _dismissCmdPopup();
+    final ctx = _cellKey(k.keyName).currentContext;
+    if (ctx == null) return;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    const popupW = 44.0;
+    const popupH = 36.0;
+    const gap = 6.0;
+    final left = origin.dx + (size.width - popupW) / 2;
+    final top = origin.dy - popupH - gap;
+
+    _cmdPopup = OverlayEntry(
+      builder: (ctx) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _dismissCmdPopup,
+            ),
+          ),
+          Positioned(
+            left: left,
+            top: top,
+            child: Material(
+              color: Colors.transparent,
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  widget.inputBridge
+                      .tapKey('v', modifiers: {'meta'});
+                  _dismissCmdPopup();
+                },
+                child: Container(
+                  width: popupW,
+                  height: popupH,
+                  decoration: BoxDecoration(
+                    color: AppTokens.colorPrimary,
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusKey),
+                    boxShadow: const [
+                      BoxShadow(
+                        blurRadius: 6,
+                        color: Colors.black38,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'V',
+                    style: AppTokens.fontKey
+                        .copyWith(color: Colors.white, fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_cmdPopup!);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -131,19 +213,21 @@ class _PowerStripState extends State<PowerStrip> {
 
   Widget _keyCell(KeyDef k, double scale) {
     final scaled = scale < 1.0 ? k.copyWith(widthFactor: k.widthFactor * scale) : k;
+    final cell = KeyCell(
+      keyDef: scaled,
+      modifierController: widget.modifierController,
+      onTap: () => _handle(k),
+      onPressStart: k.type == KeyType.regular
+          ? () => _onRegularPressStart(k)
+          : null,
+      onPressEnd: k.type == KeyType.regular
+          ? () => _onRegularPressEnd(k)
+          : null,
+    );
+    final isCmdMod = k.type == KeyType.modifier && k.keyName == 'meta';
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 2 * scale),
-      child: KeyCell(
-        keyDef: scaled,
-        modifierController: widget.modifierController,
-        onTap: () => _handle(k),
-        onPressStart: k.type == KeyType.regular
-            ? () => _onRegularPressStart(k)
-            : null,
-        onPressEnd: k.type == KeyType.regular
-            ? () => _onRegularPressEnd(k)
-            : null,
-      ),
+      child: isCmdMod ? KeyedSubtree(key: _cellKey(k.keyName), child: cell) : cell,
     );
   }
 
@@ -152,6 +236,7 @@ class _PowerStripState extends State<PowerStrip> {
     switch (k.type) {
       case KeyType.modifier:
         widget.modifierController.cycleTap(k.keyName);
+        if (k.keyName == 'meta') _showCmdPopup(k);
       case KeyType.macroOpener:
         widget.onMacrosTap();
       case KeyType.keyboardToggle:
