@@ -88,7 +88,7 @@ jobs:
       if: runner.os == 'Linux'
       # jlumbroso/free-disk-space@main is used in .github\workflows\flutter-build.yml
       # But pinning to a specific version to avoid unexpected issues is preferred.
-      uses: jlumbroso/free-disk-space@v1.3.1
+      uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
       with:
         tool-cache: false
         android: true
@@ -145,7 +145,7 @@ jobs:
         esac
 
     - name: Setup vcpkg with Github Actions binary cache
-      uses: lukka/run-vcpkg@v11
+      uses: lukka/run-vcpkg@7d259227a1fb6471a0253dd5ab7419835228f7d7 # v11
       with:
         vcpkgDirectory: /opt/artifacts/vcpkg
         vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
@@ -156,7 +156,7 @@ jobs:
       shell: bash
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@v1
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
       with:
         toolchain: stable
         targets: ${{ matrix.job.target }}
@@ -172,10 +172,10 @@ jobs:
         cargo -V
         rustc -V
 
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
     - name: Build
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
       with:
         use-cross: ${{ matrix.job.use-cross }}
         command: build
@@ -243,7 +243,7 @@ jobs:
         echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_OUTPUT
 
     - name: Run tests
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
       with:
         use-cross: ${{ matrix.job.use-cross }}
         command: test
