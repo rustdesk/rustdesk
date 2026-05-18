@@ -18,9 +18,10 @@ on:
 # in this file!
 
 env:
-  SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
-  RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
-  MAC_RUST_VERSION: "1.81" # 1.81 is requred for macos, because of https://github.com/yury/cidre requires 1.81
+  SCITER_RUST_VERSION: "1.94.0" # use current stable; webm 2.2.0 relies on 2024-edition let-chains stabilized after 1.85
+  SCITER_X86_NIGHTLY_RUST_VERSION: "nightly" # dyn_x86 still has a stale #![feature(abi_thiscall)] attribute, so this one job must stay on nightly until upstream removes it
+  RUST_VERSION: "1.94.0" # use current stable; webm 2.2.0 relies on 2024-edition let-chains stabilized after 1.85
+  MAC_RUST_VERSION: "1.94.0" # keep >=1.81 for cidre; current stable also satisfies the newer webm floor
   CARGO_NDK_VERSION: "3.1.2"
   SCITER_ARMV7_CMAKE_VERSION: "3.29.7"
   SCITER_NASM_DEBVERSION: "2.15.05-1"
@@ -321,7 +322,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: nightly-2023-10-13-${{ matrix.job.target }} # must use nightly here, because of abi_thiscall feature required
+          toolchain: ${{ env.SCITER_X86_NIGHTLY_RUST_VERSION }}-${{ matrix.job.target }} # dyn_x86 still declares #![feature(abi_thiscall)] even though thiscall itself is stable
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 

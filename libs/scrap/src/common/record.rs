@@ -16,7 +16,7 @@ use std::{
     sync::mpsc::Sender,
     time::Instant,
 };
-use webm::mux::{self, Segment, Track, VideoTrack, Writer};
+use webm::mux::{self, Segment, SegmentBuilder, VideoTrack};
 
 const MIN_SECS: u64 = 1;
 
@@ -272,7 +272,7 @@ impl Recorder {
 
 struct WebmRecorder {
     vt: VideoTrack,
-    webm: Option<Segment<Writer<File>>>,
+    webm: Option<Segment<File>>,
     ctx: RecorderContext,
     ctx2: RecorderContext2,
     key: bool,
@@ -292,29 +292,30 @@ impl RecorderApi for WebmRecorder {
             Err(ref e) if e.kind() == io::ErrorKind::AlreadyExists => File::create(&ctx2.filename)?,
             Err(e) => return Err(e.into()),
         };
-        let mut webm = match mux::Segment::new(mux::Writer::new(out)) {
-            Some(v) => v,
-            None => bail!("Failed to create webm mux"),
-        };
-        let vt = webm.add_video_track(
-            ctx2.width as _,
-            ctx2.height as _,
-            None,
-            if ctx2.format == CodecFormat::VP9 {
-                mux::VideoCodecId::VP9
-            } else if ctx2.format == CodecFormat::VP8 {
-                mux::VideoCodecId::VP8
-            } else {
-                mux::VideoCodecId::AV1
-            },
-        );
+        let builder = SegmentBuilder::new(mux::Writer::new(out))
+            .map_err(|e| io::Error::other(format!("Failed to create webm mux builder: {e}")))?;
+        let (mut builder, vt) = builder
+            .add_video_track(
+                ctx2.width as _,
+                ctx2.height as _,
+                if ctx2.format == CodecFormat::VP9 {
+                    mux::VideoCodecId::VP9
+                } else if ctx2.format == CodecFormat::VP8 {
+                    mux::VideoCodecId::VP8
+                } else {
+                    mux::VideoCodecId::AV1
+                },
+                None,
+            )
+            .map_err(|e| io::Error::other(format!("Failed to add webm video track: {e}")))?;
         if ctx2.format == CodecFormat::AV1 {
             // [129, 8, 12, 0] in 3.6.0, but zero works
             let codec_private = vec![0, 0, 0, 0];
-            if !webm.set_codec_private(vt.track_number(), &codec_private) {
-                bail!("Failed to set codec private");
-            }
+            builder = builder
+                .set_codec_private(vt, &codec_private)
+                .map_err(|e| io::Error::other(format!("Failed to set webm codec private: {e}")))?;
         }
+        let webm = builder.build();
         Ok(WebmRecorder {
             vt,
             webm: Some(webm),
@@ -331,9 +332,11 @@ impl RecorderApi for WebmRecorder {
             self.key = true;
         }
         if self.key {
-            let ok = self
-                .vt
-                .add_frame(&frame.data, frame.pts as u64 * 1_000_000, frame.key);
+            let vt = self.vt;
+            let ok = self.webm.as_mut().map_or(false, |webm| {
+                webm.add_frame(vt, &frame.data, frame.pts as u64 * 1_000_000, frame.key)
+                    .is_ok()
+            });
             if ok {
                 self.written = true;
             }
@@ -346,7 +349,7 @@ impl RecorderApi for WebmRecorder {
 
 impl Drop for WebmRecorder {
     fn drop(&mut self) {
-        let _ = std::mem::replace(&mut self.webm, None).map_or(false, |webm| webm.finalize(None));
+        let _ = std::mem::replace(&mut self.webm, None).map(|webm| webm.finalize(None));
         let mut state = RecordState::WriteTail;
         if !self.written || self.start.elapsed().as_secs() < MIN_SECS {
             std::fs::remove_file(&self.ctx2.filename).ok();

@@ -86,15 +86,18 @@ fn main() -> io::Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    let mut webm =
-        mux::Segment::new(mux::Writer::new(out)).expect("Could not initialize the multiplexer.");
+    let builder = mux::SegmentBuilder::new(mux::Writer::new(out))
+        .expect("Could not initialize the multiplexer.");
 
     let (vpx_codec, mux_codec) = match args.flag_codec {
         Codec::Vp8 => (vpx_encode::VpxVideoCodecId::VP8, mux::VideoCodecId::VP8),
         Codec::Vp9 => (vpx_encode::VpxVideoCodecId::VP9, mux::VideoCodecId::VP9),
     };
 
-    let mut vt = webm.add_video_track(width, height, None, mux_codec);
+    let (builder, vt) = builder
+        .add_video_track(width, height, mux_codec, None)
+        .expect("Could not add video track.");
+    let mut webm = builder.build();
 
     // Setup the encoder.
     let quality = args.flag_quality;
@@ -142,7 +145,8 @@ fn main() -> io::Result<()> {
             let ms = time.as_secs() * 1000 + time.subsec_millis() as u64;
             frame.to(vpx.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
             for frame in vpx.encode(ms as i64, &yuv, STRIDE_ALIGN).unwrap() {
-                vt.add_frame(frame.data, frame.pts as u64 * 1_000_000, frame.key);
+                webm.add_frame(vt, frame.data, frame.pts as u64 * 1_000_000, frame.key)
+                    .expect("Could not add frame.");
             }
         }
 
