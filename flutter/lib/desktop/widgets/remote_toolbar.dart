@@ -324,6 +324,12 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   // (collapsed handle vs expanded toolbar). Updated after every layout pass.
   final _toolbarSize = Rxn<Size>();
   final _toolbarKey = GlobalKey(debugLabel: 'remote_toolbar_root');
+  // When false (default), the toolbar stays on the top edge and the drag
+  // handle just slides it horizontally — preserving long-standing UX while
+  // still fixing the bug where dragging only moved the handle. When true,
+  // the user has opted into multi-edge docking with nearest-edge snap.
+  // Read once on init; takes effect on next session.
+  final _multiEdgeEnabled = false.obs;
 
   int get windowId => stateGlobal.windowId;
 
@@ -350,15 +356,25 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final edgeStr = await bind.sessionGetOption(
-          sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarEdge);
+      // Use the canonical helper so the option's documented default semantics
+      // apply (allow-* prefix => default false). Keeping it raw-string would
+      // diverge from how _OptionCheckBox displays the same key.
+      _multiEdgeEnabled.value =
+          mainGetLocalBoolOptionSync(kOptionAllowMultiEdgeToolbarDock);
       final fracStr = await bind.sessionGetOption(
           sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarFraction);
       // Backward compat: legacy horizontal-only position.
       final legacy = await bind.sessionGetOption(
           sessionId: widget.ffi.sessionId, arg: 'remote-menubar-drag-x');
-      // Parse edge independently so a partial write of frac doesn't reset it.
-      _edge.value = _parseToolbarEdge(edgeStr);
+      // Only honour a saved edge when the user has opted into multi-edge
+      // docking. Without the opt-in, the toolbar stays on the top edge.
+      if (_multiEdgeEnabled.value) {
+        final edgeStr = await bind.sessionGetOption(
+            sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarEdge);
+        _edge.value = _parseToolbarEdge(edgeStr);
+      } else {
+        _edge.value = _ToolbarEdge.top;
+      }
       final rawFraction = (fracStr != null && fracStr.isNotEmpty)
           ? fracStr
           : ((legacy != null && legacy.isNotEmpty) ? legacy : '0.5');
@@ -512,6 +528,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             previewEdge: _previewEdge,
             previewFraction: _previewFraction,
             isHorizontal: isHorizontal,
+            multiEdgeEnabled: _multiEdgeEnabled.value,
             toolbarState: widget.state,
             setFullscreen: _setFullscreen,
             setMinimize: _minimize,
@@ -2695,6 +2712,10 @@ class _DraggableShowHide extends StatefulWidget {
   final Rxn<_ToolbarEdge> previewEdge;
   final Rxn<double> previewFraction;
   final bool isHorizontal;
+  // Whether multi-edge docking is enabled for this session (toggled in
+  // Settings -> Other). When false, the drag handle slides the toolbar
+  // horizontally on the top edge and never switches edges.
+  final bool multiEdgeEnabled;
   final RxBool dragging;
   final ToolbarState toolbarState;
   final BorderRadius borderRadius;
@@ -2711,6 +2732,7 @@ class _DraggableShowHide extends StatefulWidget {
     required this.previewEdge,
     required this.previewFraction,
     required this.isHorizontal,
+    required this.multiEdgeEnabled,
     required this.dragging,
     required this.toolbarState,
     required this.setFullscreen,
@@ -2751,15 +2773,9 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     }
   }
 
-  // Cursor must come within this many pixels of a non-current edge before
-  // the dock will switch to that edge. Pure "nearest edge wins" made the
-  // horizontal slide too easy to turn into a high-impact orientation change
-  // by accident — see PR #15051 review feedback.
-  static const double _edgeActivationPx = 32.0;
-  // Once an alternate edge is being previewed, the cursor has to move this
-  // far back out before the preview reverts. Hysteresis stops the preview
-  // from flickering at the activation-zone boundary.
-  static const double _edgeExitPx = 64.0;
+  // Bias applied to the currently-previewed edge so a drag hovering between
+  // two edges doesn't flicker. Only relevant when multi-edge is enabled.
+  static const double _switchHysteresisPx = 50.0;
 
   void _updatePreview(Offset cursor) {
     final mediaSize = MediaQueryData.fromView(View.of(context)).size;
@@ -2777,25 +2793,24 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     }
 
     final currentDock = widget.edge.value;
-    final previewed = widget.previewEdge.value;
-
-    // The currently-docked edge is always a candidate: a drag that stays
-    // away from the screen edges just slides the toolbar along its current
-    // edge (preserves the prior horizontal-slide behavior). A different
-    // edge only becomes a candidate when the cursor enters its activation
-    // zone, with hysteresis so a cursor hovering at the boundary doesn't
-    // flicker the preview.
     _ToolbarEdge winner = currentDock;
-    double bestDist = rawDist(currentDock);
-    for (final e in _ToolbarEdge.values) {
-      if (e == currentDock) continue;
-      final threshold = e == previewed ? _edgeExitPx : _edgeActivationPx;
-      final d = rawDist(e);
-      if (d < threshold && d < bestDist) {
-        bestDist = d;
-        winner = e;
+    if (widget.multiEdgeEnabled) {
+      // Opt-in mode: nearest edge wins (with hysteresis on the currently-
+      // previewed edge to stop corner flicker).
+      final previewed = widget.previewEdge.value;
+      double best = double.infinity;
+      for (final e in _ToolbarEdge.values) {
+        final biased = e == previewed
+            ? rawDist(e) - _switchHysteresisPx
+            : rawDist(e);
+        if (biased < best) {
+          best = biased;
+          winner = e;
+        }
       }
     }
+    // else: multi-edge disabled — winner stays on the current (top) edge
+    // and only the fraction updates, i.e. a pure horizontal slide.
     widget.previewEdge.value = winner;
 
     double frac;
@@ -2818,11 +2833,16 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     if (newEdge == null || frac == null) return;
     widget.edge.value = newEdge;
     widget.fraction.value = frac;
-    bind.sessionPeerOption(
-      sessionId: widget.sessionId,
-      name: kOptionRemoteMenubarEdge,
-      value: _toolbarEdgeToString(newEdge),
-    );
+    // Only persist the edge when multi-edge docking is opted in. In default
+    // mode the edge is always top, so writing it back would be noise — and
+    // we want toggling the setting off to feel like a clean revert.
+    if (widget.multiEdgeEnabled) {
+      bind.sessionPeerOption(
+        sessionId: widget.sessionId,
+        name: kOptionRemoteMenubarEdge,
+        value: _toolbarEdgeToString(newEdge),
+      );
+    }
     bind.sessionPeerOption(
       sessionId: widget.sessionId,
       name: kOptionRemoteMenubarFraction,
@@ -2838,8 +2858,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
 
   Widget _buildDraggable(BuildContext context) {
     return Draggable(
-      // No axis lock: the user can drop anywhere and we snap to the nearest
-      // window edge.
+      // When multi-edge docking is off the toolbar stays on the top edge,
+      // so lock the feedback to horizontal motion — otherwise the handle
+      // floats away from the top while dragging and the toolbar looks
+      // unmoored. When multi-edge is on we need 2D drag for snap-to-edge.
+      axis: widget.multiEdgeEnabled ? null : Axis.horizontal,
       child: Icon(
         widget.isHorizontal ? Icons.drag_indicator : Icons.drag_handle,
         size: 20,

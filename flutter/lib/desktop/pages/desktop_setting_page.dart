@@ -488,6 +488,13 @@ class _GeneralState extends State<_General> {
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,
             isServer: false),
+      if (!isWeb && !bind.isIncomingOnly())
+        _OptionCheckBox(
+          context,
+          'Allow docking remote toolbar to any window edge',
+          kOptionAllowMultiEdgeToolbarDock,
+          isServer: false,
+        ),
       _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
       if (!isWeb) wallpaper(),
       if (!isWeb && !bind.isIncomingOnly()) ...[
