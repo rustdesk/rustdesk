@@ -199,6 +199,20 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        // Root CLI management commands must talk to the user `--server` main IPC.
+        // Example: `sudo rustdesk --option custom-rendezvous-server` should query the
+        // user's IPC instead of root's `/tmp/<app>-0/ipc`; `connect()` still limits this
+        // routing to empty-postfix main IPC only.
+        let _user_main_ipc_scope = if crate::platform::is_installed()
+            && is_root()
+            && is_user_main_ipc_scope_cli_command(&args)
+        {
+            Some(crate::ipc::UserMainIpcScope::new())
+        } else {
+            None
+        };
+
         #[cfg(windows)]
         {
             use crate::platform;
@@ -936,6 +950,57 @@ fn is_root() -> bool {
     }
     #[allow(unreachable_code)]
     crate::platform::is_root()
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
+    matches!(
+        args.first().map(String::as_str),
+        Some("--password")
+            | Some("--set-unlock-pin")
+            | Some("--get-id")
+            | Some("--set-id")
+            | Some("--config")
+            | Some("--option")
+            | Some("--assign")
+            | Some("--deploy")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn user_main_ipc_scope_cli_command_matches_management_commands_only() {
+        for command in [
+            "--password",
+            "--set-unlock-pin",
+            "--get-id",
+            "--set-id",
+            "--config",
+            "--option",
+            "--assign",
+            "--deploy",
+        ] {
+            assert!(is_user_main_ipc_scope_cli_command(&args(&[command])));
+        }
+
+        for command in [
+            "--service",
+            "--server",
+            "--tray",
+            "--cm",
+            "--check-hwcodec-config",
+            "--connect",
+        ] {
+            assert!(!is_user_main_ipc_scope_cli_command(&args(&[command])));
+        }
+    }
 }
 
 /// Check if the executable is a Quick Support version.
