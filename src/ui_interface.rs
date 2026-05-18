@@ -697,7 +697,9 @@ pub fn is_can_screen_recording(_prompt: bool) -> bool {
 pub fn is_installed_daemon(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_installed_daemon(_prompt);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    return crate::platform::linux::is_installed_daemon(_prompt);
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     return true;
 }
 
