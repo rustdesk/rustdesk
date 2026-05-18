@@ -33,7 +33,7 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '⌨', keyName: '', type: KeyType.keyboardToggle, widthFactor: 0.7),
         ],
       ),
-      // Row 2: 🖥 + ⌫ + ⌦ + Tab + ⎵ (left)  |  ⧉ (middle)  |  ⊞ + 💬 + ⇱ + ⇲ + ⚡ + arrows (right)
+      // Row 2: 🖥 + ⌫ + ⌦ + Tab + ⎵ (left)  |  ⧉ (middle)  |  ⊞ + 💬 + pUp + pDn + ⚡ + arrows (right)
       StripRow(
         left: [
           KeyDef(label: '🖥', keyName: '', type: KeyType.displaySwitch, widthFactor: 0.7, height: 48),
@@ -49,8 +49,8 @@ StripLayout stripLayoutForPlatform(String platform) {
           KeyDef(label: '📎', keyName: '', type: KeyType.fileSend, widthFactor: 0.7, height: 48),
           KeyDef(label: '⊞', keyName: '', type: KeyType.nextDisplay, widthFactor: 0.9, height: 48),
           KeyDef(label: '💬', keyName: '', type: KeyType.chatToggle, widthFactor: 0.7, height: 48),
-          KeyDef(label: '⇱', keyName: 'home', type: KeyType.regular, height: 48),
-          KeyDef(label: '⇲', keyName: 'end', type: KeyType.regular, height: 48),
+          KeyDef(label: 'pUp', keyName: 'pageup', type: KeyType.regular, height: 48),
+          KeyDef(label: 'pDn', keyName: 'pagedown', type: KeyType.regular, height: 48),
           KeyDef(label: '⚡', keyName: '', type: KeyType.macroOpener, height: 48),
           KeyDef(label: '←', keyName: 'left', type: KeyType.regular, height: 48),
           KeyDef(label: '↓', keyName: 'down', type: KeyType.regular, height: 48),

@@ -110,10 +110,13 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onTwoFingerScroll(double dx, double dy) {
+    // Round (not truncate) the accumulator: small per-frame deltas like
+    // 0.6 px would otherwise floor to 0 forever and the scroll would feel
+    // dead. Rounding lets a steady sub-pixel drag fire every other frame.
     _scrollAccumX += dx;
     _scrollAccumY += dy;
-    final ix = _scrollAccumX.truncate();
-    final iy = _scrollAccumY.truncate();
+    final ix = _scrollAccumX.round();
+    final iy = _scrollAccumY.round();
     if (ix != 0 || iy != 0) {
       _bridge.scroll(ix, iy);
       _scrollAccumX -= ix;
