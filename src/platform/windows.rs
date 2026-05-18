@@ -614,6 +614,7 @@ fn authorize_service_scoped_ipc_connection(
             peer_session_id,
             expected_active_session_id,
             peer_is_system,
+            None,
         );
         return false;
     }
