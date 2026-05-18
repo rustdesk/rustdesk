@@ -985,6 +985,7 @@ mod tests {
             "--config",
             "--option",
             "--assign",
+            "--deploy",
         ] {
             assert!(is_user_main_ipc_scope_cli_command(&args(&[command])));
         }
