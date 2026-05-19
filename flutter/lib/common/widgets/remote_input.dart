@@ -510,13 +510,13 @@ class _RawTouchGestureDetectorRegionState
       }
 
       // Tabby: race two thresholds, lock to whichever crosses first.
-      // Pinch wins early on scale (0.08) because even a clean pinch
-      // produces some focal-point drift as fingers spread. Scroll
-      // needs 12px of pan to lock — enough to outrun pinch's
-      // incidental drift but still well under what a deliberate pan
-      // produces in the first few frames.
-      const pinchThreshold = 0.08;
-      const scrollThreshold = 12.0;
+      // Far-apart fingers wobble independently, producing scale-ratio
+      // noise that used to hijack scroll into pinch. Pinch threshold
+      // raised to 0.12 so noise alone won't cross it; scroll threshold
+      // lowered to 8px so parallel motion locks quickly even when
+      // fingers are widely spaced.
+      const pinchThreshold = 0.12;
+      const scrollThreshold = 8.0;
       _twoFingerPanAccum += d.focalPointDelta.distance;
       final scaleAccum = (d.scale - 1.0).abs();
 
@@ -531,9 +531,9 @@ class _RawTouchGestureDetectorRegionState
       if (_twoFingerScrollLocked) {
         // macOS trackpad natural-scroll: finger up moves the content up
         // (page scrolls down). macOS wheel convention is positive y =
-        // scroll up, so invert finger delta. The 0.3 factor damps raw
+        // scroll up, so invert finger delta. The 0.2 factor damps raw
         // pixel deltas — without it scrolling feels unusably fast.
-        const scrollSpeed = 0.3;
+        const scrollSpeed = 0.2;
         widget.onTwoFingerScroll!(
           -d.focalPointDelta.dx * scrollSpeed,
           -d.focalPointDelta.dy * scrollSpeed,
