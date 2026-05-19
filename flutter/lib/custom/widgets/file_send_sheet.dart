@@ -1,3 +1,31 @@
+// ⚠️ PARKED — do not wire this back into the UI without reading this comment.
+//
+// This sheet was the in-session "Send File" UI launched from the PowerStrip.
+// It never worked end-to-end on any peer.
+//
+// Root cause is architectural, not in this file. RustDesk's server requires
+// a login_request with Union::FileTransfer to set self.file_transfer = Some
+// (see src/server/connection.rs handle_login_request_without_validation).
+// Without that, file-send messages arrive at the host but no worker is
+// dispatched to handle them — the call returns cleanly on the client side
+// while the host silently drops the request. No progress events ever fire.
+//
+// Tabby remote-desktop sessions are opened with isFileTransfer=false, so
+// every sessionSendFiles call from inside the active session falls into
+// this dead zone. The destination-picker logic, the homePath bypass, and
+// the in-app debug log here are all correct — the protocol just doesn't
+// route to us.
+//
+// The PowerStrip "send file" button now navigates to the standard
+// FileManagerPage instead, which opens a dedicated isFileTransfer session
+// via gFFI.start(). That tears down the remote-desktop view (gFFI is a
+// singleton), but it's the only way to actually transfer a file today.
+//
+// To revive this sheet you'd need either:
+//   1. A parallel FFI instance with its own sessionId and per-session
+//      event routing at the platform layer (native_model.dart) — non-trivial.
+//   2. An upstream RustDesk protocol change to allow file-transfer on a
+//      defaultConn session — outside Tabby's control.
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';

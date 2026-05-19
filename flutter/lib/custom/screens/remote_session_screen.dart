@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
@@ -16,7 +17,6 @@ import '../input/text_field_bridge.dart';
 import '../overlay/floating_macro_bar.dart';
 import '../strip/models/modifier_state.dart';
 import '../strip/widgets/power_strip.dart';
-import '../widgets/file_send_sheet.dart';
 import 'package:flutter_hbb/custom/screens/connect_screen.dart';
 import 'package:flutter_hbb/custom/session/session_registry.dart';
 import 'package:flutter_hbb/custom/session/session_switcher_sheet.dart';
@@ -296,14 +296,22 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onFileSend() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    // Send-file uses RustDesk's File Manager flow, which requires a
+    // dedicated isFileTransfer session. gFFI is a singleton, so opening
+    // File Manager tears down the current remote-desktop session and
+    // re-logs in for file transfer. See FileSendSheet for the parked
+    // in-session sheet we tried; it never worked because the host drops
+    // file-transfer messages on a defaultConn session.
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FileManagerPage(
+          id: widget.id,
+          password: widget.password,
+          isSharedPassword: widget.isSharedPassword,
+          forceRelay: widget.forceRelay,
+        ),
       ),
-      builder: (ctx) => FileSendSheet(ffi: widget.ffi),
     );
   }
 
