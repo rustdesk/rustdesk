@@ -302,7 +302,14 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     // re-logs in for file transfer. See FileSendSheet for the parked
     // in-session sheet we tried; it never worked because the host drops
     // file-transfer messages on a defaultConn session.
-    Navigator.push(
+    //
+    // We use pushReplacement (not push) because FileManagerPage.dispose
+    // calls gFFI.close() — if RemoteSessionScreen remained below in the
+    // route stack, popping File Manager would land on a broken
+    // "Connecting…" overlay forever. Replacing means closing File Manager
+    // lands the user on whatever route was below this screen (typically
+    // the connect screen), where they can re-tap their peer to resume.
+    Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (_) => FileManagerPage(
