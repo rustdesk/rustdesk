@@ -36,6 +36,23 @@ class _FileSendSheetState extends State<FileSendSheet> {
   String _destination = '~';
   bool _accordionExpanded = false;
 
+  // In-app debug log — accumulates step-by-step events so we can diagnose
+  // TestFlight builds without console access.
+  final List<String> _debugLog = [];
+  bool _debugExpanded = false;
+
+  void _log(String msg) {
+    final ts = DateTime.now();
+    final stamp =
+        '${ts.minute.toString().padLeft(2, '0')}:${ts.second.toString().padLeft(2, '0')}.${ts.millisecond.toString().padLeft(3, '0')}';
+    debugPrint('[FileSend] $msg');
+    if (!mounted) {
+      _debugLog.add('$stamp  $msg');
+      return;
+    }
+    setState(() => _debugLog.add('$stamp  $msg'));
+  }
+
   static const _chips = [
     ('🏠', 'Home', '~'),
     ('🖥', 'Desktop', '~/Desktop'),
@@ -53,8 +70,9 @@ class _FileSendSheetState extends State<FileSendSheet> {
     // through receiveFileDir → initDirAndHome and populates homePath while
     // the user picks a destination.
     final remoteCtrl = widget.ffi.fileModel.remoteController;
+    _log('initState: remoteHome="${remoteCtrl.homePath}"');
     if (remoteCtrl.homePath.isEmpty) {
-      debugPrint('[FileSend] priming remote home via openDirectory("")');
+      _log('priming remote home via openDirectory("")');
       remoteCtrl.openDirectory('');
     }
   }
@@ -68,12 +86,13 @@ class _FileSendSheetState extends State<FileSendSheet> {
   // ── Picker entry point ───────────────────────────────────────────────────
 
   Future<void> _pickAndSend() async {
-    debugPrint('[FileSend] pickFiles: starting');
+    _log('pickFiles: starting (dest="${_pathController.text}")');
     FilePickerResult? result;
     try {
       result = await FilePicker.platform.pickFiles(allowMultiple: true);
     } catch (e, st) {
-      debugPrint('[FileSend] pickFiles threw: $e\n$st');
+      _log('pickFiles threw: $e');
+      debugPrint('[FileSend] stack: $st');
       if (mounted) {
         _showErrorDialog(
           'Couldn\'t open file picker',
@@ -84,15 +103,13 @@ class _FileSendSheetState extends State<FileSendSheet> {
     }
 
     if (result == null) {
-      debugPrint('[FileSend] pickFiles: user cancelled (null result)');
+      _log('pickFiles: user cancelled');
       return;
     }
 
-    debugPrint(
-        '[FileSend] pickFiles returned ${result.files.length} file(s)');
+    _log('pickFiles returned ${result.files.length} file(s)');
     for (final f in result.files) {
-      debugPrint(
-          '[FileSend]   name=${f.name} path=${f.path} size=${f.size}');
+      _log('  name=${f.name} size=${f.size} path=${f.path != null ? "ok" : "NULL"}');
     }
 
     if (result.files.isEmpty) {
@@ -110,8 +127,7 @@ class _FileSendSheetState extends State<FileSendSheet> {
 
     final invalid = result.files.where((f) => f.path == null).toList();
     if (invalid.isNotEmpty) {
-      debugPrint(
-          '[FileSend] ${invalid.length} file(s) had null path; aborting');
+      _log('${invalid.length} file(s) had null path; aborting');
       if (mounted) {
         _showErrorDialog(
           'Selected file is unavailable',
@@ -162,43 +178,53 @@ class _FileSendSheetState extends State<FileSendSheet> {
 
   Future<void> _startTransfer(List<PlatformFile> files) async {
     final remoteCtrl = widget.ffi.fileModel.remoteController;
-    var remoteHome = remoteCtrl.homePath;
     final isRemoteWindows = remoteCtrl.options.value.isWindows;
-
-    debugPrint('[FileSend] _startTransfer: ${files.length} file(s), '
-        'remoteHome="$remoteHome", isRemoteWindows=$isRemoteWindows');
-
-    // If the prime kicked off in initState hasn't returned yet, retry it and
-    // poll briefly. fetchDirectory has its own 2s internal timeout.
-    if (remoteHome.isEmpty) {
-      debugPrint('[FileSend] remoteHome empty; re-priming and waiting');
-      remoteCtrl.openDirectory('');
-      final deadline =
-          DateTime.now().add(const Duration(milliseconds: 3000));
-      while (DateTime.now().isBefore(deadline) && remoteCtrl.homePath.isEmpty) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      remoteHome = remoteCtrl.homePath;
-      debugPrint('[FileSend] after wait: remoteHome="$remoteHome"');
-    }
-
-    if (remoteHome.isEmpty) {
-      debugPrint('[FileSend] aborting: remoteHome still empty after wait');
-      if (mounted) {
-        _showErrorDialog(
-          'Remote file system unavailable',
-          'Couldn\'t reach the remote machine\'s file system. The remote '
-              'side may not have granted file-transfer permission, or the '
-              'connection may be unstable. Try again in a moment.',
-        );
-      }
-      return;
-    }
-
     final rawDest = _pathController.text.trim();
-    final destDir = rawDest.startsWith('~')
-        ? rawDest.replaceFirst('~', remoteHome)
-        : rawDest;
+    _log('_startTransfer: ${files.length} file(s), '
+        'rawDest="$rawDest", isRemoteWindows=$isRemoteWindows');
+
+    // Only the ~-prefixed destinations require remoteHome. Absolute paths
+    // like /tmp send straight through.
+    String destDir;
+    if (rawDest.startsWith('~')) {
+      var remoteHome = remoteCtrl.homePath;
+      _log('~ destination; remoteHome="$remoteHome"');
+
+      // If the prime kicked off in initState hasn't returned yet, retry it and
+      // poll briefly. fetchDirectory has its own 2s internal timeout.
+      if (remoteHome.isEmpty) {
+        _log('remoteHome empty; re-priming and waiting up to 3s');
+        remoteCtrl.openDirectory('');
+        final deadline =
+            DateTime.now().add(const Duration(milliseconds: 3000));
+        while (
+            DateTime.now().isBefore(deadline) && remoteCtrl.homePath.isEmpty) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        remoteHome = remoteCtrl.homePath;
+        _log('after wait: remoteHome="$remoteHome"');
+      }
+
+      if (remoteHome.isEmpty) {
+        _log('aborting: remoteHome still empty');
+        if (mounted) {
+          _showErrorDialog(
+            'Remote home directory unavailable',
+            'Couldn\'t resolve the remote machine\'s home directory. Try '
+                'sending to an absolute path like /tmp, or try again in a '
+                'moment.',
+          );
+        }
+        return;
+      }
+
+      destDir = rawDest.replaceFirst('~', remoteHome);
+    } else {
+      destDir = rawDest;
+      _log('absolute destination; skipping remoteHome lookup');
+    }
+
+    _log('resolved destDir="$destDir"');
 
     final ids = <int>[];
     for (final file in files) {
@@ -214,11 +240,13 @@ class _FileSendSheetState extends State<FileSendSheet> {
           widget.ffi.fileModel.jobController.addTransferJob(entry, false);
       ids.add(jobId);
 
+      final to = PathUtil.join(destDir, entry.name, isRemoteWindows);
+      _log('sessionSendFiles jobId=$jobId to="$to" size=${entry.size}');
       await bind.sessionSendFiles(
         sessionId: widget.ffi.sessionId,
         actId: jobId,
         path: file.path!,
-        to: PathUtil.join(destDir, entry.name, isRemoteWindows),
+        to: to,
         fileNum: 0,
         includeHidden: false,
         isRemote: false,
@@ -226,6 +254,7 @@ class _FileSendSheetState extends State<FileSendSheet> {
       );
     }
 
+    _log('all sessionSendFiles dispatched; entering sending state');
     setState(() {
       _files = files;
       _jobIds = ids;
@@ -300,6 +329,88 @@ class _FileSendSheetState extends State<FileSendSheet> {
         decoration: BoxDecoration(
           color: Colors.grey[600],
           borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDebugLog() {
+    if (_debugLog.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF334155), width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: () =>
+                  setState(() => _debugExpanded = !_debugExpanded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    Text(
+                      'DEBUG LOG (${_debugLog.length})',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF94A3B8),
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_debugExpanded)
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          _debugLog.clear();
+                          _debugExpanded = false;
+                        }),
+                        child: const Padding(
+                          padding: EdgeInsets.only(right: 12),
+                          child: Text(
+                            'CLEAR',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFEF4444),
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Text(
+                      _debugExpanded ? '▼' : '▶',
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF94A3B8)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_debugExpanded)
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                child: SingleChildScrollView(
+                  reverse: true,
+                  child: SelectableText(
+                    _debugLog.join('\n'),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      color: Color(0xFFCBD5E1),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -958,14 +1069,24 @@ class _FileSendSheetState extends State<FileSendSheet> {
           16,
           MediaQuery.of(context).viewInsets.bottom + 16,
         ),
-        child: _sheetState == _SheetState.destinationPicker
-            ? _buildDestinationPicker()
-            : Obx(() {
-                final jobs = widget.ffi.fileModel.jobController.jobTable;
-                return _sheetState == _SheetState.sending
-                    ? _buildSending(jobs)
-                    : _buildDone(jobs);
-              }),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _sheetState == _SheetState.destinationPicker
+                  ? _buildDestinationPicker()
+                  : Obx(() {
+                      final jobs =
+                          widget.ffi.fileModel.jobController.jobTable;
+                      return _sheetState == _SheetState.sending
+                          ? _buildSending(jobs)
+                          : _buildDone(jobs);
+                    }),
+              _buildDebugLog(),
+            ],
+          ),
+        ),
       ),
     );
   }
