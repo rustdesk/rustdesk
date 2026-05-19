@@ -55,6 +55,7 @@ class _PowerStripState extends State<PowerStrip> {
   bool _collapsed = false;
   final Map<String, GlobalKey> _cellKeys = {};
   OverlayEntry? _cmdPopup;
+  String? _cmdPopupModifier;
 
   @override
   void initState() {
@@ -70,8 +71,10 @@ class _PowerStripState extends State<PowerStrip> {
   }
 
   void _onModifierChanged() {
+    final mod = _cmdPopupModifier;
     if (_cmdPopup != null &&
-        widget.modifierController.modeFor('meta') == ModifierMode.off) {
+        mod != null &&
+        widget.modifierController.modeFor(mod) == ModifierMode.off) {
       _dismissCmdPopup();
     }
   }
@@ -82,6 +85,7 @@ class _PowerStripState extends State<PowerStrip> {
   void _dismissCmdPopup() {
     _cmdPopup?.remove();
     _cmdPopup = null;
+    _cmdPopupModifier = null;
   }
 
   void _showCmdPopup(KeyDef k) {
@@ -94,9 +98,16 @@ class _PowerStripState extends State<PowerStrip> {
     final size = box.size;
     const popupW = 44.0;
     const popupH = 36.0;
+    const popupGap = 6.0;
     const gap = 6.0;
-    final left = origin.dx + (size.width - popupW) / 2;
+    final labels = k.keyName == 'meta'
+        ? const [('C', 'c'), ('V', 'v')]
+        : const [('V', 'v')];
+    final totalW = popupW * labels.length + popupGap * (labels.length - 1);
+    final left = origin.dx + (size.width - totalW) / 2;
     final top = origin.dy - popupH - gap;
+    final modifier = k.keyName;
+    _cmdPopupModifier = modifier;
 
     _cmdPopup = OverlayEntry(
       builder: (ctx) => Stack(
@@ -106,35 +117,20 @@ class _PowerStripState extends State<PowerStrip> {
             top: top,
             child: Material(
               color: Colors.transparent,
-              child: GestureDetector(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  widget.inputBridge
-                      .tapKey('v', modifiers: {'meta'});
-                  _dismissCmdPopup();
-                },
-                child: Container(
-                  width: popupW,
-                  height: popupH,
-                  decoration: BoxDecoration(
-                    color: AppTokens.colorPrimary,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusKey),
-                    boxShadow: const [
-                      BoxShadow(
-                        blurRadius: 6,
-                        color: Colors.black38,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'V',
-                    style: AppTokens.fontKey
-                        .copyWith(color: Colors.white, fontSize: 14),
-                  ),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < labels.length; i++) ...[
+                    if (i > 0) const SizedBox(width: popupGap),
+                    _cmdPopupButton(
+                      labels[i].$1,
+                      labels[i].$2,
+                      modifier,
+                      popupW,
+                      popupH,
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -142,6 +138,42 @@ class _PowerStripState extends State<PowerStrip> {
       ),
     );
     Overlay.of(context, rootOverlay: true).insert(_cmdPopup!);
+  }
+
+  Widget _cmdPopupButton(
+      String label, String keyName, String modifier, double w, double h) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        widget.inputBridge.tapKey(keyName, modifiers: {modifier});
+        while (widget.modifierController.modeFor(modifier) !=
+            ModifierMode.off) {
+          widget.modifierController.cycleTap(modifier);
+        }
+        _dismissCmdPopup();
+      },
+      child: Container(
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          color: AppTokens.colorPrimary,
+          borderRadius: BorderRadius.circular(AppTokens.radiusKey),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 6,
+              color: Colors.black38,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style:
+              AppTokens.fontKey.copyWith(color: Colors.white, fontSize: 14),
+        ),
+      ),
+    );
   }
 
   @override
@@ -232,10 +264,11 @@ class _PowerStripState extends State<PowerStrip> {
           ? () => _onRegularPressEnd(k)
           : null,
     );
-    final isCmdMod = k.type == KeyType.modifier && k.keyName == 'meta';
+    final hasPopup = k.type == KeyType.modifier &&
+        (k.keyName == 'meta' || k.keyName == 'control');
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 2 * scale),
-      child: isCmdMod ? KeyedSubtree(key: _cellKey(k.keyName), child: cell) : cell,
+      child: hasPopup ? KeyedSubtree(key: _cellKey(k.keyName), child: cell) : cell,
     );
   }
 
@@ -244,8 +277,8 @@ class _PowerStripState extends State<PowerStrip> {
     switch (k.type) {
       case KeyType.modifier:
         widget.modifierController.cycleTap(k.keyName);
-        if (k.keyName == 'meta' &&
-            widget.modifierController.modeFor('meta') != ModifierMode.off) {
+        if ((k.keyName == 'meta' || k.keyName == 'control') &&
+            widget.modifierController.modeFor(k.keyName) != ModifierMode.off) {
           _showCmdPopup(k);
         }
       case KeyType.macroOpener:

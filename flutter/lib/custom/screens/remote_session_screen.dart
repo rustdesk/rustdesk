@@ -93,8 +93,10 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     if (visible) {
       widget.ffi.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
       widget.ffi.canvasModel.isMobileCanvasChanged = false;
-      final mq = MediaQuery.of(context);
-      setState(() => _kbPanOffset = mq.viewInsets.bottom * 0.4);
+      // Canvas-bottom already clears the keyboard (canvasBottom uses
+      // stripBottom which equals keyboardHeight when the keyboard is open),
+      // so no additional pan is needed.
+      setState(() => _kbPanOffset = 0);
     } else {
       widget.ffi.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
       setState(() => _kbPanOffset = 0);
@@ -329,9 +331,11 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     final keyboardHeight = mq.viewInsets.bottom;
     final stripBottom = keyboardHeight > 0 ? keyboardHeight : safeBottom;
 
-    // Canvas bottom: reserve space for the strip only; keyboard handled by pan.
+    // Canvas bottom: always leave a strip-sized gap above the keyboard (or
+    // safe area when the keyboard is closed). When row 2 is visible the
+    // strip is taller, so the gap doubles automatically via _stripHeight.
     final canvasBottom = switch (_chatState) {
-      _ChatState.closed  => safeBottom + _stripHeight,
+      _ChatState.closed  => stripBottom + _stripHeight,
       _ChatState.partial => stripBottom + _stripHeight + _partialBarHeight,
       _ChatState.max     => mq.size.height - mq.viewPadding.top,
     };
