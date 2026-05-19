@@ -57,9 +57,23 @@ class _PowerStripState extends State<PowerStrip> {
   OverlayEntry? _cmdPopup;
 
   @override
+  void initState() {
+    super.initState();
+    widget.modifierController.addListener(_onModifierChanged);
+  }
+
+  @override
   void dispose() {
+    widget.modifierController.removeListener(_onModifierChanged);
     _dismissCmdPopup();
     super.dispose();
+  }
+
+  void _onModifierChanged() {
+    if (_cmdPopup != null &&
+        widget.modifierController.modeFor('meta') == ModifierMode.off) {
+      _dismissCmdPopup();
+    }
   }
 
   GlobalKey _cellKey(String keyName) =>
@@ -230,12 +244,9 @@ class _PowerStripState extends State<PowerStrip> {
     switch (k.type) {
       case KeyType.modifier:
         widget.modifierController.cycleTap(k.keyName);
-        if (k.keyName == 'meta') {
-          if (widget.modifierController.modeFor('meta') == ModifierMode.off) {
-            _dismissCmdPopup();
-          } else {
-            _showCmdPopup(k);
-          }
+        if (k.keyName == 'meta' &&
+            widget.modifierController.modeFor('meta') != ModifierMode.off) {
+          _showCmdPopup(k);
         }
       case KeyType.macroOpener:
         widget.onMacrosTap();
