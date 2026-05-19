@@ -529,10 +529,10 @@ class _RawTouchGestureDetectorRegionState
       }
 
       if (_twoFingerScrollLocked) {
-        // iOS natural-scroll: finger up should scroll content up on the
-        // remote. macOS wheel convention is positive y = scroll up, so
-        // invert the finger delta. The 0.3 factor damps raw pixel
-        // deltas — without it scrolling feels unusably fast.
+        // macOS trackpad natural-scroll: finger up moves the content up
+        // (page scrolls down). macOS wheel convention is positive y =
+        // scroll up, so invert finger delta. The 0.3 factor damps raw
+        // pixel deltas — without it scrolling feels unusably fast.
         const scrollSpeed = 0.3;
         widget.onTwoFingerScroll!(
           -d.focalPointDelta.dx * scrollSpeed,
