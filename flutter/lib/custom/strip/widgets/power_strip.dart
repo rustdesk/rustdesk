@@ -87,12 +87,6 @@ class _PowerStripState extends State<PowerStrip> {
     _cmdPopup = OverlayEntry(
       builder: (ctx) => Stack(
         children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: _dismissCmdPopup,
-            ),
-          ),
           Positioned(
             left: left,
             top: top,
@@ -236,7 +230,13 @@ class _PowerStripState extends State<PowerStrip> {
     switch (k.type) {
       case KeyType.modifier:
         widget.modifierController.cycleTap(k.keyName);
-        if (k.keyName == 'meta') _showCmdPopup(k);
+        if (k.keyName == 'meta') {
+          if (widget.modifierController.modeFor('meta') == ModifierMode.off) {
+            _dismissCmdPopup();
+          } else {
+            _showCmdPopup(k);
+          }
+        }
       case KeyType.macroOpener:
         widget.onMacrosTap();
       case KeyType.keyboardToggle:
