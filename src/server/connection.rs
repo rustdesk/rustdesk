@@ -32,7 +32,7 @@ use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
     config::{self, keys, Config, TrustedDevice},
     config::{
-        decode_permanent_password_h1_from_storage,
+        decode_permanent_password_h1_from_storage, decode_preset_password_h1_from_storage,
         local_permanent_password_storage_is_usable_for_auth,
         preset_permanent_password_storage_is_usable_for_auth,
     },
@@ -2118,7 +2118,7 @@ impl Connection {
         if salt.is_empty() {
             return self.validate_password_plain(storage);
         }
-        let Some(h1) = decode_permanent_password_h1_from_storage(storage) else {
+        let Some(h1) = decode_preset_password_h1_from_storage(storage) else {
             return false;
         };
         self.verify_h1(&h1[..])
