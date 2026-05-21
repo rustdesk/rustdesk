@@ -28,6 +28,70 @@ import './kb_layout_type_chooser.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
+enum _ToolbarEdge { top, right, bottom, left }
+
+_ToolbarEdge _parseToolbarEdge(String? s) {
+  switch (s) {
+    case 'right':
+      return _ToolbarEdge.right;
+    case 'bottom':
+      return _ToolbarEdge.bottom;
+    case 'left':
+      return _ToolbarEdge.left;
+    default:
+      return _ToolbarEdge.top;
+  }
+}
+
+String _toolbarEdgeToString(_ToolbarEdge e) {
+  switch (e) {
+    case _ToolbarEdge.top:
+      return 'top';
+    case _ToolbarEdge.right:
+      return 'right';
+    case _ToolbarEdge.bottom:
+      return 'bottom';
+    case _ToolbarEdge.left:
+      return 'left';
+  }
+}
+
+bool _isHorizontalEdge(_ToolbarEdge e) =>
+    e == _ToolbarEdge.top || e == _ToolbarEdge.bottom;
+
+// Returns the alignment for the wrapper Align that positions the entire
+// toolbar against the given edge at the given fraction along that edge.
+// Alignment uses [-1, 1] coordinates (0 = center).
+Alignment _alignmentForEdge(_ToolbarEdge edge, double fraction) {
+  final f = fraction * 2 - 1;
+  switch (edge) {
+    case _ToolbarEdge.top:
+      return Alignment(f, -1);
+    case _ToolbarEdge.bottom:
+      return Alignment(f, 1);
+    case _ToolbarEdge.left:
+      return Alignment(-1, f);
+    case _ToolbarEdge.right:
+      return Alignment(1, f);
+  }
+}
+
+// The drag handle hangs off the side of the toolbar facing away from the
+// docked edge, so the icons themselves sit flush against that edge.
+BorderRadius _collapseHandleBorderRadius(_ToolbarEdge edge) {
+  const r = Radius.circular(5);
+  switch (edge) {
+    case _ToolbarEdge.top:
+      return const BorderRadius.vertical(bottom: r);
+    case _ToolbarEdge.bottom:
+      return const BorderRadius.vertical(top: r);
+    case _ToolbarEdge.left:
+      return const BorderRadius.horizontal(right: r);
+    case _ToolbarEdge.right:
+      return const BorderRadius.horizontal(left: r);
+  }
+}
+
 class ToolbarState {
   late RxBool _pin;
 
@@ -250,8 +314,22 @@ class RemoteToolbar extends StatefulWidget {
 class _RemoteToolbarState extends State<RemoteToolbar> {
   late Debouncer<int> _debouncerHide;
   bool _isCursorOverImage = false;
-  final _fractionX = 0.5.obs;
+  final _fraction = 0.5.obs;
+  final _edge = _ToolbarEdge.top.obs;
   final _dragging = false.obs;
+  // Live drag preview: where the toolbar would dock if the user dropped now.
+  final _previewEdge = Rxn<_ToolbarEdge>();
+  final _previewFraction = Rxn<double>();
+  // Measured size of the live toolbar, so the preview ghost matches reality
+  // (collapsed handle vs expanded toolbar). Updated after every layout pass.
+  final _toolbarSize = Rxn<Size>();
+  final _toolbarKey = GlobalKey(debugLabel: 'remote_toolbar_root');
+  // When false (default), the toolbar stays on the top edge and the drag
+  // handle just slides it horizontally — preserving long-standing UX while
+  // still fixing the bug where dragging only moved the handle. When true,
+  // the user has opted into multi-edge docking with nearest-edge snap.
+  // Read once on init; takes effect on next session.
+  final _multiEdgeEnabled = false.obs;
 
   int get windowId => stateGlobal.windowId;
 
@@ -278,11 +356,39 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _fractionX.value = double.tryParse(await bind.sessionGetOption(
-                  sessionId: widget.ffi.sessionId,
-                  arg: 'remote-menubar-drag-x') ??
-              '0.5') ??
-          0.5;
+      // Use the canonical helper so the option's documented default semantics
+      // apply (allow-* prefix => default false). Keeping it raw-string would
+      // diverge from how _OptionCheckBox displays the same key.
+      _multiEdgeEnabled.value =
+          mainGetLocalBoolOptionSync(kOptionAllowMultiEdgeToolbarDock);
+      final fracStr = await bind.sessionGetOption(
+          sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarFraction);
+      // Backward compat: legacy horizontal-only position.
+      final legacy = await bind.sessionGetOption(
+          sessionId: widget.ffi.sessionId, arg: 'remote-menubar-drag-x');
+      // Only honour a saved edge when the user has opted into multi-edge
+      // docking. Without the opt-in, the toolbar stays on the top edge.
+      if (_multiEdgeEnabled.value) {
+        final edgeStr = await bind.sessionGetOption(
+            sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarEdge);
+        _edge.value = _parseToolbarEdge(edgeStr);
+      } else {
+        _edge.value = _ToolbarEdge.top;
+      }
+      final rawFraction = (fracStr != null && fracStr.isNotEmpty)
+          ? fracStr
+          : ((legacy != null && legacy.isNotEmpty) ? legacy : '0.5');
+      // Clamp to the saved drag-bound contract so a corrupted or out-of-range
+      // saved value can't bypass it until the user drags again.
+      final dragLeft = double.tryParse(
+              bind.mainGetLocalOption(key: kOptionRemoteMenubarDragLeft)) ??
+          0.0;
+      final dragRight = double.tryParse(
+              bind.mainGetLocalOption(key: kOptionRemoteMenubarDragRight)) ??
+          1.0;
+      _fraction.value = (double.tryParse(rawFraction) ?? 0.5)
+          .clamp(dragLeft, dragRight)
+          .toDouble();
       // Initialize toolbar states (collapse, hide) from session options
       widget.state.init(widget.ffi.sessionId);
     });
@@ -327,48 +433,114 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       if (hide.value) {
         return const SizedBox.shrink();
       }
-      return Align(
-        alignment: Alignment.topCenter,
-        child: collapse.isFalse
-            ? _buildToolbar(context)
-            : _buildDraggableCollapse(context),
+      final edge = _edge.value;
+      final isHorizontal = _isHorizontalEdge(edge);
+
+      // Measure the live toolbar after every layout so the preview ghost can
+      // match its actual footprint (collapsed handle vs expanded toolbar).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ro = _toolbarKey.currentContext?.findRenderObject();
+        if (ro is RenderBox && ro.hasSize) {
+          final s = ro.size;
+          if (_toolbarSize.value != s) _toolbarSize.value = s;
+        }
+      });
+
+      final toolbar = Align(
+        alignment: _alignmentForEdge(edge, _fraction.value),
+        child: KeyedSubtree(
+          key: _toolbarKey,
+          child: collapse.isFalse
+              ? _buildToolbar(context, edge, isHorizontal)
+              : _buildDraggableCollapse(context, edge, isHorizontal),
+        ),
+      );
+
+      // Always return the Stack — even when not dragging — so the toolbar's
+      // position in the Element tree stays stable. Wrapping/unwrapping it
+      // mid-drag was killing the Draggable's gesture state.
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          IgnorePointer(
+            child: Obx(() {
+              final pe = _previewEdge.value;
+              final pf = _previewFraction.value;
+              if (!_dragging.isTrue || pe == null || pf == null) {
+                return const SizedBox.shrink();
+              }
+              return _buildDragPreview(context, pe, pf, _toolbarSize.value);
+            }),
+          ),
+          toolbar,
+        ],
       );
     });
   }
 
-  Widget _buildDraggableCollapse(BuildContext context) {
+  Widget _buildDragPreview(BuildContext context, _ToolbarEdge edge,
+      double fraction, Size? measured) {
+    final isHorizontal = _isHorizontalEdge(edge);
+    final color = Theme.of(context).colorScheme.primary;
+    // Use the measured live toolbar size so collapsed vs expanded looks
+    // right. The current orientation may differ from the preview orientation
+    // (e.g. dragging a top-docked toolbar toward the left edge), so swap the
+    // long/short axes when previewing a different orientation.
+    final fallback = measured ??
+        (isHorizontal ? const Size(360, 40) : const Size(40, 360));
+    final long = fallback.longestSide;
+    final short = fallback.shortestSide;
+    final w = isHorizontal ? long : short;
+    final h = isHorizontal ? short : long;
+    return Align(
+      alignment: _alignmentForEdge(edge, fraction),
+      child: Container(
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withOpacity(0.55), width: 1.5),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDraggableCollapse(
+      BuildContext context, _ToolbarEdge edge, bool isHorizontal) {
     return Obx(() {
       if (collapse.isFalse && _dragging.isFalse) {
         triggerAutoHide();
       }
-      final borderRadius = BorderRadius.vertical(
-        bottom: Radius.circular(5),
-      );
-      return Align(
-        alignment: FractionalOffset(_fractionX.value, 0),
-        child: Offstage(
-          offstage: _dragging.isTrue,
-          child: Material(
-            elevation: _ToolbarTheme.elevation,
-            shadowColor: MyTheme.color(context).shadow,
+      final borderRadius = _collapseHandleBorderRadius(edge);
+      return Offstage(
+        offstage: _dragging.isTrue,
+        child: Material(
+          elevation: _ToolbarTheme.elevation,
+          shadowColor: MyTheme.color(context).shadow,
+          borderRadius: borderRadius,
+          child: _DraggableShowHide(
+            id: widget.id,
+            sessionId: widget.ffi.sessionId,
+            dragging: _dragging,
+            fraction: _fraction,
+            edge: _edge,
+            previewEdge: _previewEdge,
+            previewFraction: _previewFraction,
+            isHorizontal: isHorizontal,
+            multiEdgeEnabled: _multiEdgeEnabled.value,
+            toolbarState: widget.state,
+            setFullscreen: _setFullscreen,
+            setMinimize: _minimize,
             borderRadius: borderRadius,
-            child: _DraggableShowHide(
-              id: widget.id,
-              sessionId: widget.ffi.sessionId,
-              dragging: _dragging,
-              fractionX: _fractionX,
-              toolbarState: widget.state,
-              setFullscreen: _setFullscreen,
-              setMinimize: _minimize,
-              borderRadius: borderRadius,
-            ),
           ),
         ),
       );
     });
   }
 
-  Widget _buildToolbar(BuildContext context) {
+  Widget _buildToolbar(
+      BuildContext context, _ToolbarEdge edge, bool isHorizontal) {
     final List<Widget> toolbarItems = [];
     toolbarItems.add(_PinMenu(state: widget.state));
     if (!isWebDesktop) {
@@ -407,37 +579,53 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          elevation: _ToolbarTheme.elevation,
-          shadowColor: MyTheme.color(context).shadow,
-          borderRadius: toolbarBorderRadius,
-          color: Theme.of(context)
-              .menuBarTheme
-              .style
-              ?.backgroundColor
-              ?.resolve(MaterialState.values.toSet()),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Theme(
-              data: themeData(),
-              child: _ToolbarTheme.borderWrapper(
-                  context,
-                  Row(
-                    children: [
-                      SizedBox(width: _ToolbarTheme.buttonHMargin * 2),
-                      ...toolbarItems,
-                      SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
-                    ],
-                  ),
-                  toolbarBorderRadius),
-            ),
-          ),
+    // innerAxis: how the toolbar icons themselves flow.
+    // outerAxis: how the toolbar block and the handle stack against each other
+    // (perpendicular to the dock edge, so the handle hangs off the interior face).
+    final innerAxis = isHorizontal ? Axis.horizontal : Axis.vertical;
+    final outerAxis = isHorizontal ? Axis.vertical : Axis.horizontal;
+    final spacer = isHorizontal
+        ? SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
+        : SizedBox(height: _ToolbarTheme.buttonHMargin * 2);
+    final toolbarMaterial = Material(
+      elevation: _ToolbarTheme.elevation,
+      shadowColor: MyTheme.color(context).shadow,
+      borderRadius: toolbarBorderRadius,
+      color: Theme.of(context)
+          .menuBarTheme
+          .style
+          ?.backgroundColor
+          ?.resolve(MaterialState.values.toSet()),
+      child: SingleChildScrollView(
+        scrollDirection: innerAxis,
+        child: Theme(
+          data: themeData(),
+          child: _ToolbarTheme.borderWrapper(
+              context,
+              Flex(
+                direction: innerAxis,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  spacer,
+                  ...toolbarItems,
+                  spacer,
+                ],
+              ),
+              toolbarBorderRadius),
         ),
-        _buildDraggableCollapse(context),
-      ],
+      ),
+    );
+    final handle = _buildDraggableCollapse(context, edge, isHorizontal);
+    // The handle hangs off the interior face of the toolbar (away from the
+    // docked edge), centered along that face by the Flex's default cross-axis
+    // alignment, so the icons themselves sit flush against the docked edge.
+    final children = (edge == _ToolbarEdge.top || edge == _ToolbarEdge.left)
+        ? [toolbarMaterial, handle]
+        : [handle, toolbarMaterial];
+    return Flex(
+      direction: outerAxis,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
     );
   }
 
@@ -2519,7 +2707,15 @@ class RdoMenuButton<T> extends StatelessWidget {
 class _DraggableShowHide extends StatefulWidget {
   final String id;
   final SessionID sessionId;
-  final RxDouble fractionX;
+  final RxDouble fraction;
+  final Rx<_ToolbarEdge> edge;
+  final Rxn<_ToolbarEdge> previewEdge;
+  final Rxn<double> previewFraction;
+  final bool isHorizontal;
+  // Whether multi-edge docking is enabled for this session (toggled in
+  // Settings -> Other). When false, the drag handle slides the toolbar
+  // horizontally on the top edge and never switches edges.
+  final bool multiEdgeEnabled;
   final RxBool dragging;
   final ToolbarState toolbarState;
   final BorderRadius borderRadius;
@@ -2531,7 +2727,12 @@ class _DraggableShowHide extends StatefulWidget {
     Key? key,
     required this.id,
     required this.sessionId,
-    required this.fractionX,
+    required this.fraction,
+    required this.edge,
+    required this.previewEdge,
+    required this.previewFraction,
+    required this.isHorizontal,
+    required this.multiEdgeEnabled,
     required this.dragging,
     required this.toolbarState,
     required this.setFullscreen,
@@ -2544,7 +2745,6 @@ class _DraggableShowHide extends StatefulWidget {
 }
 
 class _DraggableShowHideState extends State<_DraggableShowHide> {
-  Offset position = Offset.zero;
   Size size = Size.zero;
   double left = 0.0;
   double right = 1.0;
@@ -2573,41 +2773,119 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     }
   }
 
+  // Bias applied to the currently-previewed edge so a drag hovering between
+  // two edges doesn't flicker. Only relevant when multi-edge is enabled.
+  static const double _switchHysteresisPx = 50.0;
+
+  void _updatePreview(Offset cursor) {
+    final mediaSize = MediaQueryData.fromView(View.of(context)).size;
+    double rawDist(_ToolbarEdge e) {
+      switch (e) {
+        case _ToolbarEdge.top:
+          return cursor.dy;
+        case _ToolbarEdge.bottom:
+          return mediaSize.height - cursor.dy;
+        case _ToolbarEdge.left:
+          return cursor.dx;
+        case _ToolbarEdge.right:
+          return mediaSize.width - cursor.dx;
+      }
+    }
+
+    final currentDock = widget.edge.value;
+    _ToolbarEdge winner = currentDock;
+    if (widget.multiEdgeEnabled) {
+      // Opt-in mode: nearest edge wins (with hysteresis on the currently-
+      // previewed edge to stop corner flicker).
+      final previewed = widget.previewEdge.value;
+      double best = double.infinity;
+      for (final e in _ToolbarEdge.values) {
+        final biased = e == previewed
+            ? rawDist(e) - _switchHysteresisPx
+            : rawDist(e);
+        if (biased < best) {
+          best = biased;
+          winner = e;
+        }
+      }
+    }
+    // else: multi-edge disabled — winner stays on the current (top) edge
+    // and only the fraction updates, i.e. a pure horizontal slide.
+    widget.previewEdge.value = winner;
+
+    double frac;
+    if (winner == _ToolbarEdge.top || winner == _ToolbarEdge.bottom) {
+      frac = mediaSize.width <= 0 ? 0.5 : cursor.dx / mediaSize.width;
+    } else {
+      frac = mediaSize.height <= 0 ? 0.5 : cursor.dy / mediaSize.height;
+    }
+    if (frac < left) frac = left;
+    if (frac > right) frac = right;
+    widget.previewFraction.value = frac;
+  }
+
+  void _commitPreview() {
+    final newEdge = widget.previewEdge.value;
+    final frac = widget.previewFraction.value;
+    widget.previewEdge.value = null;
+    widget.previewFraction.value = null;
+    widget.dragging.value = false;
+    if (newEdge == null || frac == null) return;
+    widget.edge.value = newEdge;
+    widget.fraction.value = frac;
+    // Only persist the edge when multi-edge docking is opted in. In default
+    // mode the edge is always top, so writing it back would be noise — and
+    // we want toggling the setting off to feel like a clean revert.
+    if (widget.multiEdgeEnabled) {
+      bind.sessionPeerOption(
+        sessionId: widget.sessionId,
+        name: kOptionRemoteMenubarEdge,
+        value: _toolbarEdgeToString(newEdge),
+      );
+    }
+    bind.sessionPeerOption(
+      sessionId: widget.sessionId,
+      name: kOptionRemoteMenubarFraction,
+      value: frac.toString(),
+    );
+  }
+
+  void _cancelPreview() {
+    widget.previewEdge.value = null;
+    widget.previewFraction.value = null;
+    widget.dragging.value = false;
+  }
+
   Widget _buildDraggable(BuildContext context) {
     return Draggable(
-      axis: Axis.horizontal,
+      // When multi-edge docking is off the toolbar stays on the top edge,
+      // so lock the feedback to horizontal motion — otherwise the handle
+      // floats away from the top while dragging and the toolbar looks
+      // unmoored. When multi-edge is on we need 2D drag for snap-to-edge.
+      axis: widget.multiEdgeEnabled ? null : Axis.horizontal,
       child: Icon(
-        Icons.drag_indicator,
+        widget.isHorizontal ? Icons.drag_indicator : Icons.drag_handle,
         size: 20,
         color: MyTheme.color(context).drag_indicator,
       ),
       feedback: widget,
-      onDragStarted: (() {
+      onDragStarted: () {
         final RenderObject? renderObj = context.findRenderObject();
         if (renderObj != null) {
           final RenderBox renderBox = renderObj as RenderBox;
           size = renderBox.size;
-          position = renderBox.localToGlobal(Offset.zero);
         }
         widget.dragging.value = true;
-      }),
-      onDragEnd: (details) {
-        final mediaSize = MediaQueryData.fromView(View.of(context)).size;
-        widget.fractionX.value +=
-            (details.offset.dx - position.dx) / (mediaSize.width - size.width);
-        if (widget.fractionX.value < left) {
-          widget.fractionX.value = left;
-        }
-        if (widget.fractionX.value > right) {
-          widget.fractionX.value = right;
-        }
-        bind.sessionPeerOption(
-          sessionId: widget.sessionId,
-          name: 'remote-menubar-drag-x',
-          value: widget.fractionX.value.toString(),
-        );
-        widget.dragging.value = false;
+        // Seed the preview at the current docked edge/fraction so something
+        // shows the instant the drag begins, before the first onDragUpdate.
+        widget.previewEdge.value = widget.edge.value;
+        widget.previewFraction.value = widget.fraction.value;
       },
+      onDragUpdate: (details) {
+        _updatePreview(details.globalPosition);
+      },
+      onDragEnd: (_) => _commitPreview(),
+      onDraggableCanceled: (_, __) => _cancelPreview(),
     );
   }
 
@@ -2637,7 +2915,9 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       );
     }
 
-    final child = Row(
+    final axis = widget.isHorizontal ? Axis.horizontal : Axis.vertical;
+    final child = Flex(
+      direction: axis,
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildDraggable(context),
@@ -2720,7 +3000,8 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
           borderRadius: widget.borderRadius,
         ),
         child: SizedBox(
-          height: 20,
+          height: widget.isHorizontal ? 20 : null,
+          width: widget.isHorizontal ? null : 20,
           child: child,
         ),
       ),
