@@ -284,7 +284,6 @@ jobs:
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
-    if: false
     runs-on: ${{ matrix.job.os }}
     # Temporarily disable this action due to additional test is needed.
     # if: false
@@ -434,8 +433,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   build-rustdesk-ios:
-    if: false
-    # if: ${{ inputs.upload-artifact }}
+    if: ${{ inputs.upload-artifact }}
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -556,7 +554,6 @@ jobs:
 
   build-for-macOS:
     name: ${{ matrix.job.target }}
-    if: false
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
     strategy:
@@ -819,7 +816,6 @@ jobs:
   build-rustdesk-android:
     needs: [generate-bridge]
     name: build rustdesk android apk ${{ matrix.job.target }}
-    if: false
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -1112,8 +1108,7 @@ jobs:
   build-rustdesk-android-universal:
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
-    if: false
-    # if: ${{ inputs.upload-artifact }}
+    if: ${{ inputs.upload-artifact }}
     runs-on: ubuntu-24.04
     env:
       reltype: release
@@ -1297,7 +1292,6 @@ jobs:
   build-rustdesk-linux:
     needs: [generate-bridge]
     name: build rustdesk linux ${{ matrix.job.target }}
-    if: false
     runs-on: ${{ matrix.job.on }}
     strategy:
       fail-fast: false
@@ -1635,7 +1629,6 @@ jobs:
   build-rustdesk-linux-sciter:
     # if: ${{ inputs.upload-artifact }}
     runs-on: ${{ matrix.job.on }}
-    if: false
     name: build-rustdesk-linux-sciter ${{ matrix.job.target }}
     strategy:
       fail-fast: false
@@ -1863,9 +1856,8 @@ jobs:
   build-appimage:
     name: Build appimage ${{ matrix.job.target }}
     needs: [build-rustdesk-linux]
-    if: false
     runs-on: ubuntu-22.04
-    # if: ${{ inputs.upload-artifact }}
+    if: ${{ inputs.upload-artifact }}
     strategy:
       fail-fast: false
       matrix:
@@ -1917,8 +1909,7 @@ jobs:
       - build-rustdesk-linux
       - build-rustdesk-linux-sciter
     runs-on: ${{ matrix.job.on }}
-    if: false
-   #  if: ${{ inputs.upload-artifact }}
+    if: ${{ inputs.upload-artifact }}
     strategy:
       fail-fast: false
       matrix:
@@ -1998,7 +1989,6 @@ jobs:
             flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak
 
   build-rustdesk-web:
-    if: False
     name: build-rustdesk-web
     runs-on: ubuntu-22.04
     permissions:
