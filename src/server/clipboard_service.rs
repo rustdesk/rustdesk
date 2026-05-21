@@ -26,6 +26,8 @@ use std::{
 };
 #[cfg(windows)]
 use tokio::runtime::Runtime;
+#[cfg(not(target_os = "android"))]
+use hbb_common::protobuf::Message as _;
 
 #[cfg(target_os = "android")]
 static CLIPBOARD_SERVICE_OK: AtomicBool = AtomicBool::new(false);
@@ -33,6 +35,7 @@ static CLIPBOARD_SERVICE_OK: AtomicBool = AtomicBool::new(false);
 #[cfg(not(target_os = "android"))]
 struct Handler {
     ctx: Option<ClipboardContext>,
+    last_clipboard_sig: Option<Vec<u8>>,
     #[cfg(target_os = "windows")]
     stream: Option<ipc::ConnectionTmpl<parity_tokio_ipc::ConnectionClient>>,
     #[cfg(target_os = "windows")]
@@ -71,6 +74,7 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     clipboard_listener::subscribe(sp.name(), tx_cb_result)?;
     let mut handler = Handler {
         ctx,
+        last_clipboard_sig: None,
         #[cfg(target_os = "windows")]
         stream: None,
         #[cfg(target_os = "windows")]
@@ -86,7 +90,9 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
                     continue;
                 }
                 if let Some(msg) = handler.get_clipboard_msg() {
-                    sp.send(msg);
+                    if handler.should_send_clipboard_msg(&msg) {
+                        sp.send(msg);
+                    }
                 }
             }
             Ok(CallbackResult::Stop) => {
@@ -96,7 +102,16 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
             Ok(CallbackResult::StopWithError(err)) => {
                 bail!("Clipboard listener stopped with error: {}", err);
             }
-            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Timeout) => {
+                #[cfg(target_os = "linux")]
+                if !crate::platform::linux::is_x11() && sp.name() == NAME {
+                    if let Some(msg) = handler.get_clipboard_msg() {
+                        if handler.should_send_clipboard_msg(&msg) {
+                            sp.send(msg);
+                        }
+                    }
+                }
+            }
             Err(RecvTimeoutError::Disconnected) => {
                 log::error!("Clipboard listener disconnected");
                 break;
@@ -111,6 +126,17 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
 
 #[cfg(not(target_os = "android"))]
 impl Handler {
+    fn should_send_clipboard_msg(&mut self, msg: &Message) -> bool {
+        let Ok(sig) = msg.write_to_bytes() else {
+            return true;
+        };
+        if self.last_clipboard_sig.as_ref() == Some(&sig) {
+            return false;
+        }
+        self.last_clipboard_sig = Some(sig);
+        true
+    }
+
     #[cfg(feature = "unix-file-copy-paste")]
     fn check_clipboard_file(&mut self) {
         if let Some(urls) = check_clipboard_files(&mut self.ctx, ClipboardSide::Host, false) {
