@@ -778,7 +778,6 @@ jobs:
       - build-for-macOS
       - build-for-windows-flutter
       - build-for-windows-sciter
-      if: false
     runs-on: ubuntu-latest
     if: ${{ inputs.upload-artifact }}
     steps:
