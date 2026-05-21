@@ -647,8 +647,7 @@ pub fn set_permanent_password_with_result(password: String) -> bool {
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        config::Config::set_permanent_password(&password);
-        return true;
+        return config::Config::set_permanent_password(&password);
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {

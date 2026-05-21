@@ -839,15 +839,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                         "N".to_owned()
                     });
                 } else if name == "permanent-password-is-preset" {
-                    let hard = config::HARD_SETTINGS
-                        .read()
-                        .unwrap()
-                        .get("password")
-                        .cloned()
-                        .unwrap_or_default();
-                    let is_preset =
-                        !hard.is_empty() && Config::matches_permanent_password_plain(&hard);
-                    value = Some(if is_preset {
+                    value = Some(if Config::is_using_preset_password() {
                         "Y".to_owned()
                     } else {
                         "N".to_owned()
@@ -898,7 +890,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                         log::warn!("Changing permanent password is disabled");
                         updated = false;
                     } else {
-                        Config::set_permanent_password(&value);
+                        updated = Config::set_permanent_password(&value);
                     }
                     // Explicitly ACK/NACK permanent-password writes. This allows UIs/FFI to
                     // distinguish "accepted by daemon" vs "IPC send succeeded" without
