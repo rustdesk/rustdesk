@@ -45,6 +45,44 @@ ndk-context = "0.1"
 repng = "0.2"
 docopt = "1.1"
 quest = "0.3"
+criterion = { package = "codspeed-criterion-compat", version = "4" }
+crossbeam-queue = "0.3"
+
+[[bench]]
+name = "convert"
+harness = false
+
+[[bench]]
+name = "yuv_to_rgb"
+harness = false
+
+[[bench]]
+name = "codec_encode"
+harness = false
+
+[[bench]]
+name = "codec_decode"
+harness = false
+
+[[bench]]
+name = "protobuf"
+harness = false
+
+[[bench]]
+name = "mutex_contention"
+harness = false
+
+[[bench]]
+name = "video_queue"
+harness = false
+
+[[bench]]
+name = "pipeline_encode"
+harness = false
+
+[[bench]]
+name = "pipeline_decode"
+harness = false
 
 [build-dependencies]
 target_build_utils = "0.3"
