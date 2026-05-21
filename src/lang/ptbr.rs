@@ -740,9 +740,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-outgoing-sessions-label", "Manter tela ativa durante sessões de saída"),
         ("keep-awake-during-incoming-sessions-label", "Manter tela ativa durante sessões de entrada"),
         ("Continue with {}", "Continuar com {}"),
-        ("Display Name", ""),
-        ("password-hidden-tip", ""),
-        ("preset-password-in-use-tip", ""),
-        ("Enable privacy mode", ""),
+        ("Display Name", "Nome de Exibição"),
+        ("password-hidden-tip", "A senha permanente está definida como (oculta)."),
+        ("preset-password-in-use-tip", "A senha predefinida está sendo usada."),
+        ("Enable privacy mode", "Habilitar modo de privacidade"),
     ].iter().cloned().collect();
 }
