@@ -1324,11 +1324,22 @@ pub fn session_add(
 
     // to-do: check the same id session.
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        if session.lc.read().unwrap().conn_type != conn_type {
+        // Mobile reuses one constant session_id for the entire app lifetime
+        // (_constSessionId in flutter/lib/models/model.dart). When a prior
+        // connection wedges silently — typically after Android Doze pauses the
+        // io_loop long enough that no error path fires and session_close is
+        // never called — the entry stays in SESSIONS. Detect that here and
+        // clean it up so the new session_add can succeed instead of bailing,
+        // which would leave the user stuck on a "Connecting..." spinner with
+        // no error surfaced (the Flutter side ignores sessionAddSync's return).
+        if session.connection_round_state.lock().unwrap().is_disconnected() {
+            sessions::remove_session_by_session_id(&session_id);
+        } else if session.lc.read().unwrap().conn_type != conn_type {
             bail!("same session id is found with different conn type?");
+        } else {
+            // The same session is added before?
+            bail!("same session id is found");
         }
-        // The same session is added before?
-        bail!("same session id is found");
     }
 
     LocalConfig::set_remote_id(&id);

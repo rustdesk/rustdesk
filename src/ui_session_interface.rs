@@ -128,6 +128,10 @@ impl ConnectionRoundState {
             true
         }
     }
+
+    pub fn is_disconnected(&self) -> bool {
+        matches!(self.state, ConnectionState::Disconnected)
+    }
 }
 
 impl Default for ConnectionRoundState {
