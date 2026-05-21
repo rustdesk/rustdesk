@@ -445,6 +445,12 @@ class InputModel {
   bool _pointerMovedAfterEnter = false;
   bool _pointerInsideImage = false;
 
+  /// True while the Android soft keyboard editor is active.
+  /// When set, key events are ignored so they flow through to the
+  /// hidden TextFormField's onChanged handler instead of being
+  /// processed here with potentially incorrect physicalKey data.
+  bool androidSoftKeyboardActive = false;
+
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
@@ -819,6 +825,29 @@ class InputModel {
   KeyEventResult handleKeyEvent(KeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
+    // When the Android soft keyboard is active, avoid processing key events
+    // through the normal input pipeline because physicalKey data from the
+    // soft keyboard is unreliable (Flutter issue #157771) and can corrupt
+    // subsequent input, causing every keypress to repeat a single character.
+    //
+    // Return `handled` (not `ignored`) so Android keeps sending key-repeat
+    // events for held keys and the TextFormField does not consume sentinel
+    // buffer characters.
+    //
+    // For Backspace and Enter, send them directly using the reliable logical
+    // key data. This is required because for some IMEs (ko/zh/ja) returning
+    // `handled` prevents the IME from processing the key through onChanged.
+    if (isAndroid && androidSoftKeyboardActive) {
+      if (e is KeyDownEvent || e is KeyRepeatEvent) {
+        if (e.logicalKey == LogicalKeyboardKey.backspace) {
+          inputKey('VK_BACK', press: true);
+        } else if (e.logicalKey == LogicalKeyboardKey.enter ||
+            e.logicalKey == LogicalKeyboardKey.numpadEnter) {
+          inputKey('VK_RETURN', press: true);
+        }
+      }
+      return KeyEventResult.handled;
+    }
     if (!isInputSourceFlutter) {
       if (isDesktop) {
         return KeyEventResult.handled;

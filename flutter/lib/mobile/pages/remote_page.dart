@@ -177,6 +177,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       );
 
   void onSoftKeyboardChanged(bool visible) {
+    inputModel.androidSoftKeyboardActive = visible;
     if (!visible) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       // [pi.version.isNotEmpty] -> check ready or not, avoid login without soft-keyboard
@@ -276,8 +277,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (newValue.length == oldValue.length) {
       // ?
     } else if (newValue.length < oldValue.length) {
-      final char = 'VK_BACK';
-      inputModel.inputKey(char);
+      // Send exactly one VK_BACK per onChanged callback regardless of how many
+      // characters the IME removed (Samsung accelerates held-delete).  The
+      // IME's own callback frequency provides a steady, controllable repeat
+      // rate instead of runaway exponential deletion.
+      inputModel.inputKey('VK_BACK');
     } else {
       final content = newValue.substring(oldValue.length);
       if (content.length > 1) {
