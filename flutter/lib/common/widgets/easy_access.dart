@@ -50,13 +50,32 @@ List<Map<String, dynamic>> mergeEasyAccessEntriesByName(
 
 Future<List<Map<String, dynamic>>> fetchEasyAccessManagers() async {
   try {
-    final authBody = await bind.mainGetEasyAccessDeviceAuth();
-    if (authBody.isEmpty) {
+    final url = await bind.mainGetApiServer();
+    final id = await bind.mainGetMyId();
+    if (url.isEmpty || id.isEmpty) {
       return [];
     }
 
-    final url = await bind.mainGetApiServer();
-    if (url.isEmpty) {
+    final challengeResponse = await http.post(
+      Uri.parse('$url/api/easy_access/managers/challenge'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'id': id}),
+    );
+    if (challengeResponse.statusCode != 200) {
+      return [];
+    }
+    final challengeBody = jsonDecode(challengeResponse.body);
+    if (challengeBody is! Map) {
+      return [];
+    }
+    final challenge = (challengeBody['challenge'] ?? '').toString();
+    if (challenge.isEmpty) {
+      return [];
+    }
+
+    final authBody =
+        await bind.mainGetEasyAccessDeviceAuth(challenge: challenge);
+    if (authBody.isEmpty) {
       return [];
     }
 

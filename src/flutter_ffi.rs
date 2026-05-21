@@ -1344,13 +1344,13 @@ pub fn main_get_uuid() -> String {
     get_uuid()
 }
 
-pub fn main_get_easy_access_device_auth() -> String {
+pub fn main_get_easy_access_device_auth(challenge: String) -> String {
     const EASY_ACCESS_MANAGERS_DEVICE_AUTH_DOMAIN: &str = "easy_access.managers";
     const EASY_ACCESS_MANAGERS_DEVICE_AUTH_VERSION: u32 = 1;
 
     let id = get_id();
     let uuid = hbb_common::get_uuid();
-    if id.is_empty() || uuid.is_empty() {
+    if id.is_empty() || uuid.is_empty() || challenge.is_empty() {
         return String::new();
     }
 
@@ -1375,6 +1375,7 @@ pub fn main_get_easy_access_device_auth() -> String {
         "domain": EASY_ACCESS_MANAGERS_DEVICE_AUTH_DOMAIN,
         "v": EASY_ACCESS_MANAGERS_DEVICE_AUTH_VERSION,
         "uuid": BASE64_STANDARD.encode(&uuid),
+        "challenge": challenge,
     })
     .to_string();
     let nonce = box_::gen_nonce();

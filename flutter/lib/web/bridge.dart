@@ -956,7 +956,8 @@ class RustdeskImpl {
     return Future(() => js.context.callMethod('getByName', ['uuid']));
   }
 
-  Future<String> mainGetEasyAccessDeviceAuth({dynamic hint}) {
+  Future<String> mainGetEasyAccessDeviceAuth(
+      {required String challenge, dynamic hint}) {
     return Future.value('');
   }
 
