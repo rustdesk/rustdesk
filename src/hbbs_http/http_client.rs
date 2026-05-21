@@ -120,20 +120,38 @@ pub fn get_url_for_tls<'a>(url: &'a str, proxy_conf: &'a Option<Socks5Server>) -
     url
 }
 
-pub fn create_http_client_with_url(url: &str) -> SyncClient {
+fn resolve_danger_accept_invalid_cert(
+    force_strict_tls: bool,
+    cached_danger_accept_invalid_cert: Option<bool>,
+) -> Option<bool> {
+    if force_strict_tls {
+        Some(false)
+    } else {
+        cached_danger_accept_invalid_cert
+    }
+}
+
+/// Creates a sync HTTP client for `url`.
+///
+/// Set `force_strict_tls` to `true` for security-critical requests that must
+/// reject invalid certificates and ignore the cached certificate policy.
+pub fn create_http_client_with_url(url: &str, force_strict_tls: bool) -> SyncClient {
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
     let is_tls_type_cached = tls_type.is_some();
     let tls_type = tls_type.unwrap_or(TlsType::Rustls);
-    let tls_danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let danger_accept_invalid_cert = resolve_danger_accept_invalid_cert(
+        force_strict_tls,
+        get_cached_tls_accept_invalid_cert(tls_url),
+    );
     create_http_client_with_url_(
         url,
         tls_url,
         tls_type,
         is_tls_type_cached,
-        tls_danger_accept_invalid_cert,
-        tls_danger_accept_invalid_cert,
+        danger_accept_invalid_cert,
+        danger_accept_invalid_cert,
     )
 }
 
@@ -229,13 +247,20 @@ fn create_http_client_with_url_(
     client
 }
 
-pub async fn create_http_client_async_with_url(url: &str) -> AsyncClient {
+/// Creates an async HTTP client for `url`.
+///
+/// Set `force_strict_tls` to `true` for security-critical requests that must
+/// reject invalid certificates and ignore the cached certificate policy.
+pub async fn create_http_client_async_with_url(url: &str, force_strict_tls: bool) -> AsyncClient {
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
     let is_tls_type_cached = tls_type.is_some();
     let tls_type = tls_type.unwrap_or(TlsType::Rustls);
-    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let danger_accept_invalid_cert = resolve_danger_accept_invalid_cert(
+        force_strict_tls,
+        get_cached_tls_accept_invalid_cert(tls_url),
+    );
     create_http_client_async_with_url_(
         url,
         tls_url,
@@ -333,4 +358,35 @@ async fn create_http_client_async_with_url_(
         );
     }
     client
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn force_strict_tls_overrides_cached_cert_policy() {
+        assert_eq!(resolve_danger_accept_invalid_cert(true, None), Some(false));
+        assert_eq!(
+            resolve_danger_accept_invalid_cert(true, Some(false)),
+            Some(false)
+        );
+        assert_eq!(
+            resolve_danger_accept_invalid_cert(true, Some(true)),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn non_strict_tls_uses_cached_cert_policy() {
+        assert_eq!(resolve_danger_accept_invalid_cert(false, None), None);
+        assert_eq!(
+            resolve_danger_accept_invalid_cert(false, Some(false)),
+            Some(false)
+        );
+        assert_eq!(
+            resolve_danger_accept_invalid_cert(false, Some(true)),
+            Some(true)
+        );
+    }
 }

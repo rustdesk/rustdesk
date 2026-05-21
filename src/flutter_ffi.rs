@@ -2874,6 +2874,24 @@ pub fn main_get_common_sync(key: String) -> SyncReturn<String> {
     SyncReturn(main_get_common(key))
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn push_update_me_error(error: String) {
+    let data = HashMap::from([("name", "update-me".to_owned()), ("error", error)]);
+    let _res = flutter::push_global_event(
+        flutter::APP_TYPE_MAIN,
+        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn push_update_me_ready() {
+    let data = HashMap::from([("name", "update-me-ready".to_owned())]);
+    let _res = flutter::push_global_event(
+        flutter::APP_TYPE_MAIN,
+        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+    );
+}
+
 pub fn main_set_common(_key: String, _value: String) {
     #[cfg(target_os = "windows")]
     if _key == "install-printer" && crate::platform::is_win_10_or_greater() {
@@ -2914,14 +2932,27 @@ pub fn main_set_common(_key: String, _value: String) {
             let download_url = _value.clone();
             let event_key = "download-new-version".to_owned();
             let data = if let Some(download_file) = get_download_file_from_url(&download_url) {
-                std::fs::remove_file(&download_file).ok();
-                match crate::hbbs_http::downloader::download_file(
-                    download_url,
-                    Some(PathBuf::from(download_file)),
-                    Some(Duration::from_secs(3)),
-                ) {
-                    Ok(id) => HashMap::from([("name", event_key), ("id", id)]),
-                    Err(e) => HashMap::from([("name", event_key), ("error", e.to_string())]),
+                match crate::updater::download_file_expected_sha256(&download_url) {
+                    Ok(_) => {
+                        std::fs::remove_file(&download_file).ok();
+                        match crate::hbbs_http::downloader::download_file(
+                            download_url,
+                            Some(PathBuf::from(download_file)),
+                            Some(Duration::from_secs(3)),
+                        ) {
+                            Ok(id) => HashMap::from([("name", event_key), ("id", id)]),
+                            Err(e) => {
+                                HashMap::from([("name", event_key), ("error", e.to_string())])
+                            }
+                        }
+                    }
+                    Err(e) => HashMap::from([
+                        ("name", event_key),
+                        (
+                            "error",
+                            format!("Failed to get new version file SHA256, {}", e),
+                        ),
+                    ]),
                 }
             } else {
                 HashMap::from([
@@ -2942,32 +2973,41 @@ pub fn main_set_common(_key: String, _value: String) {
                 if let Some(f) = new_version_file.to_str() {
                     // 1.4.0 does not support "--update"
                     // But we can assume that the new version supports it.
-
                     #[cfg(any(target_os = "windows", target_os = "macos"))]
-                    match crate::platform::update_to(f) {
+                    let expected_sha256 =
+                        match crate::updater::download_file_expected_sha256(&_value) {
+                            Ok(expected_sha256) => expected_sha256,
+                            Err(e) => {
+                                let error = format!("Failed to get new version file SHA256, {}", e);
+                                log::error!("{}", error);
+                                push_update_me_error(error);
+                                crate::updater::clear_download_file_expected_sha256(&_value);
+                                fs::remove_file(f).ok();
+                                return;
+                            }
+                        };
+
+                    #[cfg(target_os = "windows")]
+                    let update_res = crate::platform::update_to_verified(f, &expected_sha256);
+                    #[cfg(target_os = "macos")]
+                    let update_res = crate::platform::macos::update_to_verified_dmg(
+                        f,
+                        &expected_sha256,
+                        Some(push_update_me_ready),
+                    );
+                    #[cfg(any(target_os = "windows", target_os = "macos"))]
+                    match update_res {
                         Ok(_) => {
                             log::info!("Update process is launched successfully!");
                         }
                         Err(e) => {
-                            log::error!("Failed to update to new version, {}", e);
+                            let error = format!("Failed to update to new version, {}", e);
+                            log::error!("{}", error);
+                            push_update_me_error(error);
+                            crate::updater::clear_download_file_expected_sha256(&_value);
                             fs::remove_file(f).ok();
                         }
                     }
-                }
-            }
-        } else if _key == "extract-update-dmg" {
-            #[cfg(target_os = "macos")]
-            {
-                if let Some(new_version_file) = get_download_file_from_url(&_value) {
-                    if let Some(f) = new_version_file.to_str() {
-                        crate::platform::macos::extract_update_dmg(f);
-                    } else {
-                        // unreachable!()
-                        log::error!("Failed to get the new version file path");
-                    }
-                } else {
-                    // unreachable!()
-                    log::error!("Failed to get the new version file from url: {}", _value);
                 }
             }
         }

@@ -18,6 +18,9 @@ lazy_static! {
     static ref DOWNLOADERS: Mutex<HashMap<String, Downloader>> = Default::default();
 }
 
+const DOWNLOAD_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// This struct is used to return the download data to the caller.
 /// The caller should check if the file is downloaded successfully and remove the job from the map.
 /// If the file is not downloaded successfully, the `data` field will be empty.
@@ -69,7 +72,11 @@ pub fn download_file(
     if let Some(p) = stale_path {
         if p.exists() {
             if let Err(e) = std::fs::remove_file(&p) {
-                log::warn!("Failed to remove stale download file {}: {}", p.display(), e);
+                log::warn!(
+                    "Failed to remove stale download file {}: {}",
+                    p.display(),
+                    e
+                );
             }
         }
     }
@@ -108,7 +115,11 @@ pub fn download_file(
     if let Some(p) = stale_path_after_check {
         if p.exists() {
             if let Err(e) = std::fs::remove_file(&p) {
-                log::warn!("Failed to remove stale download file {}: {}", p.display(), e);
+                log::warn!(
+                    "Failed to remove stale download file {}: {}",
+                    p.display(),
+                    e
+                );
             }
         }
     }
@@ -167,16 +178,24 @@ async fn do_download(
     auto_del_dur: Option<Duration>,
     mut rx_cancel: UnboundedReceiver<()>,
 ) -> ResultType<bool> {
-    let client = create_http_client_async_with_url(&url).await;
+    let client = match tokio::time::timeout(
+        DOWNLOAD_REQUEST_TIMEOUT,
+        create_http_client_async_with_url(&url, true),
+    )
+    .await
+    {
+        Ok(client) => client,
+        Err(_) => bail!("Timed out while creating download HTTP client"),
+    };
 
     let mut is_all_downloaded = false;
     tokio::select! {
         _ = rx_cancel.recv() => {
             return Ok(is_all_downloaded);
         }
-        head_resp = client.head(&url).send() => {
+        head_resp = tokio::time::timeout(DOWNLOAD_REQUEST_TIMEOUT, client.head(&url).send()) => {
             match head_resp {
-                Ok(resp) => {
+                Ok(Ok(resp)) => {
                     if resp.status().is_success() {
                         let total_size = resp
                             .headers()
@@ -193,9 +212,10 @@ async fn do_download(
                         bail!("Failed to get content length: {}", resp.status());
                     }
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     return Err(e.into());
                 }
+                Err(_) => bail!("Timed out while getting download file size"),
             }
         }
     }
@@ -205,8 +225,12 @@ async fn do_download(
         _ = rx_cancel.recv() => {
             return Ok(is_all_downloaded);
         }
-        resp = client.get(url).send() => {
-            response = resp?;
+        resp = tokio::time::timeout(DOWNLOAD_REQUEST_TIMEOUT, client.get(&url).send()) => {
+            match resp {
+                Ok(Ok(resp)) => response = resp,
+                Ok(Err(e)) => return Err(e.into()),
+                Err(_) => bail!("Timed out while starting download"),
+            }
         }
     }
 
@@ -220,9 +244,9 @@ async fn do_download(
             _ = rx_cancel.recv() => {
                 break;
             }
-            chunk = response.chunk() => {
+            chunk = tokio::time::timeout(DOWNLOAD_READ_TIMEOUT, response.chunk()) => {
                 match chunk {
-                    Ok(Some(chunk)) => {
+                    Ok(Ok(Some(chunk))) => {
                         match dest {
                             Some(ref mut f) => {
                                 f.write_all(&chunk).await?;
@@ -239,14 +263,15 @@ async fn do_download(
                             }
                         }
                     }
-                    Ok(None) => {
+                    Ok(Ok(None)) => {
                         is_all_downloaded = true;
                         break;
                     },
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         log::error!("Download {} failed: {}", id, e);
                         return Err(e.into());
                     }
+                    Err(_) => bail!("Timed out while reading download data"),
                 }
             }
         }
@@ -306,4 +331,15 @@ pub fn cancel(id: &str) {
 
 pub fn remove(id: &str) {
     let _ = DOWNLOADERS.lock().unwrap().remove(id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn download_timeouts_are_bounded() {
+        assert_eq!(DOWNLOAD_REQUEST_TIMEOUT, Duration::from_secs(30));
+        assert_eq!(DOWNLOAD_READ_TIMEOUT, Duration::from_secs(60));
+    }
 }
