@@ -34,6 +34,10 @@ class DesktopHomePage extends StatefulWidget {
 }
 
 const borderColor = Color(0xFF2F65BA);
+// 联系方式配置（请根据实际情况修改）
+const String _contactPhone = "+852 23889095";   // 替换为您的电话
+const String _whatsappUrl = "https://wa.me/85269994200"; // 替换为您的WhatsApp链接
+const String _whatsappNumber = "+852 69994200"; // 显示的号码
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
@@ -65,12 +69,72 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildLeftPane(context),
-        if (!isIncomingOnly) const VerticalDivider(width: 1),
-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+        // 删除右侧分隔线和右侧面板
+        //if (!isIncomingOnly) const VerticalDivider(width: 1),
+        //if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
       ],
     ));
   }
+  
+Widget _buildContactInfo(BuildContext context) {
+  final textColor = Theme.of(context).textTheme.titleLarge?.color;
+  return Container(
+    margin: const EdgeInsets.only(top: 20, bottom: 16, left: 20, right: 16),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.background,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "聯絡我們",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: textColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () {
+            launchUrl(Uri.parse("tel:${_contactPhone.replaceAll(RegExp(r'[^\d+]'), '')}"));
+          },
+          child: Row(
+            children: [
+              const Icon(Icons.phone, size: 18, color: Colors.green),
+              const SizedBox(width: 8),
+              Text(
+                _contactPhone,
+                style: TextStyle(fontSize: 13, color: textColor?.withOpacity(0.8)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: () {
+            launchUrl(Uri.parse(_whatsappUrl));
+          },
+          child: Row(
+            children: [
+              const Icon(Icons.chat, size: 18, color: Color(0xFF25D366)), // WhatsApp绿色
+              const SizedBox(width: 8),
+              Text(
+                "WhatsApp: $_whatsappNumber",
+                style: TextStyle(fontSize: 13, color: textColor?.withOpacity(0.8)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
+  
   Widget _buildBlock({required Widget child}) {
     return buildRemoteBlock(
         block: _block, mask: true, use: canBeBlocked, child: child);
@@ -113,7 +177,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       ),
       buildPluginEntry(),
     ];
-    if (isIncomingOnly) {
+    //if (isIncomingOnly) {
       children.addAll([
         Divider(),
         OnlineStatusWidget(
@@ -126,7 +190,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           },
         ).marginOnly(bottom: 6, right: 6)
       ]);
-    }
+    //}
+    //添加这一行：联系方式始终显示在最底部
+    children.add(_buildContactInfo(context));
+  }
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
