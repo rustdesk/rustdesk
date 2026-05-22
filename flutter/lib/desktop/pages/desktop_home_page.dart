@@ -177,7 +177,7 @@ Widget _buildContactInfo(BuildContext context) {
       ),
       buildPluginEntry(),
     ];
-    //if (isIncomingOnly) {
+    if (isIncomingOnly) {
       children.addAll([
         Divider(),
         OnlineStatusWidget(
@@ -190,7 +190,7 @@ Widget _buildContactInfo(BuildContext context) {
           },
         ).marginOnly(bottom: 6, right: 6)
       ]);
-    //}
+    }
     //添加这一行：联系方式始终显示在最底部
     children.add(_buildContactInfo(context));
   }
