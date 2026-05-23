@@ -167,6 +167,46 @@ BorderRadius _collapseHandleBorderRadius(_ToolbarEdge edge) {
   }
 }
 
+class _ToolbarDockingOptions {
+  _ToolbarDockingOptions({
+    required this.edge,
+    required this.fraction,
+    required this.multiEdgeEnabled,
+  });
+
+  _ToolbarEdge edge;
+  double fraction;
+  bool multiEdgeEnabled;
+}
+
+final _toolbarDockingOptionsBySession = <String, _ToolbarDockingOptions>{};
+
+String _toolbarDockingCacheKey(SessionID sessionId) => sessionId.toString();
+
+_ToolbarDockingOptions? _cachedToolbarDockingOptions(SessionID sessionId) =>
+    _toolbarDockingOptionsBySession[_toolbarDockingCacheKey(sessionId)];
+
+void _cacheToolbarDockingOptions({
+  required SessionID sessionId,
+  required _ToolbarEdge edge,
+  required double fraction,
+  required bool multiEdgeEnabled,
+}) {
+  final key = _toolbarDockingCacheKey(sessionId);
+  final cached = _toolbarDockingOptionsBySession[key];
+  if (cached == null) {
+    _toolbarDockingOptionsBySession[key] = _ToolbarDockingOptions(
+      edge: edge,
+      fraction: fraction,
+      multiEdgeEnabled: multiEdgeEnabled,
+    );
+    return;
+  }
+  cached.edge = edge;
+  cached.fraction = fraction;
+  cached.multiEdgeEnabled = multiEdgeEnabled;
+}
+
 class ToolbarState {
   late RxBool _pin;
 
@@ -405,6 +445,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   // the user has opted into multi-edge docking with nearest-edge snap.
   // Kept in sync after settings-triggered rebuilds.
   final _multiEdgeEnabled = false.obs;
+  final _dockingOptionsInitialized = false.obs;
   bool _pendingDockingOptionSync = false;
   int _dockingOptionSyncSerial = 0;
 
@@ -440,32 +481,43 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     // diverge from how _OptionCheckBox displays the same key.
     final multiEdgeEnabled =
         mainGetLocalBoolOptionSync(kOptionAllowMultiEdgeToolbarDock);
-    final wasMultiEdgeEnabled = _multiEdgeEnabled.value;
-    if (!force && wasMultiEdgeEnabled == multiEdgeEnabled) return;
+    final cached = _cachedToolbarDockingOptions(widget.ffi.sessionId);
+    if (cached == null && pi.isSet.isFalse) {
+      return;
+    }
+    final hadDockingOptions = cached != null;
+    final wasMultiEdgeEnabled =
+        cached?.multiEdgeEnabled ?? _multiEdgeEnabled.value;
+    if (!force &&
+        hadDockingOptions &&
+        wasMultiEdgeEnabled == multiEdgeEnabled) {
+      _pendingDockingOptionSync = false;
+      return;
+    }
 
     final savedFraction = await bind.sessionGetOption(
         sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarFraction);
     // Backward compat: legacy horizontal-only position.
     final legacyFraction = await bind.sessionGetOption(
         sessionId: widget.ffi.sessionId, arg: _legacyRemoteMenubarDragX);
-    if (syncSerial != _dockingOptionSyncSerial) return;
+    if (!mounted || syncSerial != _dockingOptionSyncSerial) return;
 
     var nextEdge = _edge.value;
     var savedFractionForNextEdge = savedFraction;
     var keepCurrentPosition = false;
     if (!multiEdgeEnabled) {
       nextEdge = _ToolbarEdge.top;
-    } else if (force || wasMultiEdgeEnabled) {
+    } else if (force || wasMultiEdgeEnabled || cached == null) {
       final edgeStr = await bind.sessionGetOption(
           sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarEdge);
-      if (syncSerial != _dockingOptionSyncSerial) return;
+      if (!mounted || syncSerial != _dockingOptionSyncSerial) return;
       nextEdge = _parseToolbarEdge(edgeStr);
     } else {
       // The setting changed from top-only to multi-edge while this toolbar is
       // already visible. Keep its current position instead of jumping to the
       // last saved multi-edge dock.
-      nextEdge = _ToolbarEdge.top;
-      savedFractionForNextEdge = _fraction.value.toString();
+      nextEdge = cached.edge;
+      savedFractionForNextEdge = cached.fraction.toString();
       keepCurrentPosition = true;
     }
 
@@ -486,12 +538,19 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     final nextFraction = (double.tryParse(rawFraction) ?? 0.5)
         .clamp(dragLeft, dragRight)
         .toDouble();
-    if (syncSerial != _dockingOptionSyncSerial) return;
+    if (!mounted || syncSerial != _dockingOptionSyncSerial) return;
     _edge.value = nextEdge;
     _fraction.value = nextFraction;
     _multiEdgeEnabled.value = multiEdgeEnabled;
+    _dockingOptionsInitialized.value = true;
+    _cacheToolbarDockingOptions(
+      sessionId: widget.ffi.sessionId,
+      edge: nextEdge,
+      fraction: nextFraction,
+      multiEdgeEnabled: multiEdgeEnabled,
+    );
     _pendingDockingOptionSync = false;
-    if (keepCurrentPosition) {
+    if (!multiEdgeEnabled || keepCurrentPosition) {
       bind.sessionPeerOption(
         sessionId: widget.ffi.sessionId,
         name: kOptionRemoteMenubarEdge,
@@ -516,8 +575,20 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   initState() {
     super.initState();
 
+    final cached = _cachedToolbarDockingOptions(widget.ffi.sessionId);
+    final multiEdgeEnabled =
+        mainGetLocalBoolOptionSync(kOptionAllowMultiEdgeToolbarDock);
+    final shouldResetToTop =
+        cached != null && cached.multiEdgeEnabled && !multiEdgeEnabled;
+    if (cached != null && !shouldResetToTop) {
+      _edge.value = cached.edge;
+      _fraction.value = cached.fraction;
+      _multiEdgeEnabled.value = multiEdgeEnabled;
+      _dockingOptionsInitialized.value = true;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _syncDockingOptions(force: true);
+      await _syncDockingOptions(force: cached == null || shouldResetToTop);
       // Initialize toolbar states (collapse, hide) from session options
       widget.state.init(widget.ffi.sessionId);
     });
@@ -554,16 +625,17 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   @override
   dispose() {
-    super.dispose();
-
+    ++_dockingOptionSyncSerial;
     widget.onEnterOrLeaveImageCleaner(identityHashCode(this));
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
       // Wait for initialization to complete to prevent flickering
-      if (!widget.state.initialized.value) {
+      if (!widget.state.initialized.value ||
+          !_dockingOptionsInitialized.value) {
         return const SizedBox.shrink();
       }
       // If toolbar is hidden, return empty widget
@@ -3023,27 +3095,30 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     if (newEdge == null || frac == null) return;
     widget.edge.value = newEdge;
     widget.fraction.value = frac;
-    // Only persist the edge when multi-edge docking is opted in. In default
-    // mode the edge is always top, so writing it back would be noise — and
-    // we want toggling the setting off to feel like a clean revert.
+    _cacheToolbarDockingOptions(
+      sessionId: widget.sessionId,
+      edge: newEdge,
+      fraction: frac,
+      multiEdgeEnabled: widget.multiEdgeEnabled,
+    );
+    bind.sessionPeerOption(
+      sessionId: widget.sessionId,
+      name: kOptionRemoteMenubarEdge,
+      value: _toolbarEdgeToString(newEdge),
+    );
+    bind.sessionPeerOption(
+      sessionId: widget.sessionId,
+      name: kOptionRemoteMenubarFraction,
+      value: frac.toString(),
+    );
     if (widget.multiEdgeEnabled) {
-      bind.sessionPeerOption(
-        sessionId: widget.sessionId,
-        name: kOptionRemoteMenubarEdge,
-        value: _toolbarEdgeToString(newEdge),
-      );
-      bind.sessionPeerOption(
-        sessionId: widget.sessionId,
-        name: kOptionRemoteMenubarFraction,
-        value: frac.toString(),
-      );
-    } else {
-      bind.sessionPeerOption(
-        sessionId: widget.sessionId,
-        name: _legacyRemoteMenubarDragX,
-        value: frac.toString(),
-      );
+      return;
     }
+    bind.sessionPeerOption(
+      sessionId: widget.sessionId,
+      name: _legacyRemoteMenubarDragX,
+      value: frac.toString(),
+    );
   }
 
   void _cancelPreview() {
