@@ -176,8 +176,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       buildPluginEntry(),
     ];
 
-    children.addAll([
-      Divider(),  // 去掉 const
+        children.add(Divider());
+    children.add(
       OnlineStatusWidget(
         onSvcStatusChanged: () {
           if (isInHomePage()) {
@@ -187,7 +187,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           }
         },
       ).marginOnly(bottom: 6, right: 6),
-    ]);
+    );
 
     children.add(_buildContactInfo(context));
 
