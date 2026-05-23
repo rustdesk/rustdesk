@@ -34,7 +34,6 @@ class DesktopHomePage extends StatefulWidget {
 }
 
 const borderColor = Color(0xFF2F65BA);
-// 联系方式配置
 const String _contactPhone = "+852 23889095";
 const String _whatsappUrl = "https://wa.me/85269994200";
 const String _whatsappNumber = "+852 69994200";
@@ -69,7 +68,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildLeftPane(context),
-        // 删除右侧面板
       ],
     ));
   }
@@ -178,9 +176,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       buildPluginEntry(),
     ];
 
-    // 添加服务状态控件
     children.addAll([
-      const Divider(),
+      Divider(),  // 去掉 const
       OnlineStatusWidget(
         onSvcStatusChanged: () {
           if (isInHomePage()) {
@@ -192,7 +189,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       ).marginOnly(bottom: 6, right: 6),
     ]);
 
-    // 添加联系方式
     children.add(_buildContactInfo(context));
 
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
