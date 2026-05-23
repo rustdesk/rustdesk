@@ -59,6 +59,81 @@ String _toolbarEdgeToString(_ToolbarEdge e) {
 bool _isHorizontalEdge(_ToolbarEdge e) =>
     e == _ToolbarEdge.top || e == _ToolbarEdge.bottom;
 
+const _legacyRemoteMenubarDragX = 'remote-menubar-drag-x';
+
+double _clampToolbarFraction(double fraction, double left, double right) {
+  if (fraction < left) fraction = left;
+  if (fraction > right) fraction = right;
+  return fraction;
+}
+
+Size _toolbarSizeForEdge(_ToolbarEdge edge, Size? measured) {
+  final isHorizontal = _isHorizontalEdge(edge);
+  final fallback = isHorizontal ? const Size(360, 40) : const Size(40, 360);
+  final size = measured ?? fallback;
+  final long = size.longestSide;
+  final short = size.shortestSide;
+  return Size(isHorizontal ? long : short, isHorizontal ? short : long);
+}
+
+Offset _toolbarOffsetForEdge({
+  required _ToolbarEdge edge,
+  required double fraction,
+  required Size parentSize,
+  required Size toolbarSize,
+}) {
+  final xTravel = parentSize.width - toolbarSize.width;
+  final yTravel = parentSize.height - toolbarSize.height;
+  switch (edge) {
+    case _ToolbarEdge.top:
+      return Offset(xTravel * fraction, 0);
+    case _ToolbarEdge.bottom:
+      return Offset(xTravel * fraction, yTravel);
+    case _ToolbarEdge.left:
+      return Offset(0, yTravel * fraction);
+    case _ToolbarEdge.right:
+      return Offset(xTravel, yTravel * fraction);
+  }
+}
+
+double _fractionForAlignedDrag({
+  required double cursor,
+  required double grabOffset,
+  required double parentExtent,
+  required double toolbarExtent,
+  required double left,
+  required double right,
+}) {
+  final travelExtent = parentExtent - toolbarExtent;
+  if (travelExtent <= 0) {
+    return _clampToolbarFraction(0.5, left, right);
+  }
+  return _clampToolbarFraction(
+      (cursor - grabOffset) / travelExtent, left, right);
+}
+
+String _toolbarRawFraction({
+  required bool multiEdgeEnabled,
+  required _ToolbarEdge edge,
+  required String? savedFraction,
+  required String? legacyFraction,
+}) {
+  if (!multiEdgeEnabled) {
+    return (legacyFraction != null && legacyFraction.isNotEmpty)
+        ? legacyFraction
+        : '0.5';
+  }
+  if (savedFraction != null && savedFraction.isNotEmpty) {
+    return savedFraction;
+  }
+  if (edge == _ToolbarEdge.top &&
+      legacyFraction != null &&
+      legacyFraction.isNotEmpty) {
+    return legacyFraction;
+  }
+  return '0.5';
+}
+
 // Returns the alignment for the wrapper Align that positions the entire
 // toolbar against the given edge at the given fraction along that edge.
 // Alignment uses [-1, 1] coordinates (0 = center).
@@ -361,11 +436,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       // diverge from how _OptionCheckBox displays the same key.
       _multiEdgeEnabled.value =
           mainGetLocalBoolOptionSync(kOptionAllowMultiEdgeToolbarDock);
-      final fracStr = await bind.sessionGetOption(
+      final savedFraction = await bind.sessionGetOption(
           sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarFraction);
       // Backward compat: legacy horizontal-only position.
-      final legacy = await bind.sessionGetOption(
-          sessionId: widget.ffi.sessionId, arg: 'remote-menubar-drag-x');
+      final legacyFraction = await bind.sessionGetOption(
+          sessionId: widget.ffi.sessionId, arg: _legacyRemoteMenubarDragX);
       // Only honour a saved edge when the user has opted into multi-edge
       // docking. Without the opt-in, the toolbar stays on the top edge.
       if (_multiEdgeEnabled.value) {
@@ -375,9 +450,12 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       } else {
         _edge.value = _ToolbarEdge.top;
       }
-      final rawFraction = (fracStr != null && fracStr.isNotEmpty)
-          ? fracStr
-          : ((legacy != null && legacy.isNotEmpty) ? legacy : '0.5');
+      final rawFraction = _toolbarRawFraction(
+        multiEdgeEnabled: _multiEdgeEnabled.value,
+        edge: _edge.value,
+        savedFraction: savedFraction,
+        legacyFraction: legacyFraction,
+      );
       // Clamp to the saved drag-bound contract so a corrupted or out-of-range
       // saved value can't bypass it until the user drags again.
       final dragLeft = double.tryParse(
@@ -439,6 +517,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       // Measure the live toolbar after every layout so the preview ghost can
       // match its actual footprint (collapsed handle vs expanded toolbar).
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_dragging.isTrue) return;
         final ro = _toolbarKey.currentContext?.findRenderObject();
         if (ro is RenderBox && ro.hasSize) {
           final s = ro.size;
@@ -480,23 +559,17 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   Widget _buildDragPreview(BuildContext context, _ToolbarEdge edge,
       double fraction, Size? measured) {
-    final isHorizontal = _isHorizontalEdge(edge);
     final color = Theme.of(context).colorScheme.primary;
     // Use the measured live toolbar size so collapsed vs expanded looks
     // right. The current orientation may differ from the preview orientation
     // (e.g. dragging a top-docked toolbar toward the left edge), so swap the
     // long/short axes when previewing a different orientation.
-    final fallback = measured ??
-        (isHorizontal ? const Size(360, 40) : const Size(40, 360));
-    final long = fallback.longestSide;
-    final short = fallback.shortestSide;
-    final w = isHorizontal ? long : short;
-    final h = isHorizontal ? short : long;
+    final previewSize = _toolbarSizeForEdge(edge, measured);
     return Align(
       alignment: _alignmentForEdge(edge, fraction),
       child: Container(
-        width: w,
-        height: h,
+        width: previewSize.width,
+        height: previewSize.height,
         decoration: BoxDecoration(
           color: color.withOpacity(0.10),
           borderRadius: BorderRadius.circular(6),
@@ -527,6 +600,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             edge: _edge,
             previewEdge: _previewEdge,
             previewFraction: _previewFraction,
+            toolbarSize: _toolbarSize,
             isHorizontal: isHorizontal,
             multiEdgeEnabled: _multiEdgeEnabled.value,
             toolbarState: widget.state,
@@ -2711,6 +2785,7 @@ class _DraggableShowHide extends StatefulWidget {
   final Rx<_ToolbarEdge> edge;
   final Rxn<_ToolbarEdge> previewEdge;
   final Rxn<double> previewFraction;
+  final Rxn<Size> toolbarSize;
   final bool isHorizontal;
   // Whether multi-edge docking is enabled for this session (toggled in
   // Settings -> Other). When false, the drag handle slides the toolbar
@@ -2731,6 +2806,7 @@ class _DraggableShowHide extends StatefulWidget {
     required this.edge,
     required this.previewEdge,
     required this.previewFraction,
+    required this.toolbarSize,
     required this.isHorizontal,
     required this.multiEdgeEnabled,
     required this.dragging,
@@ -2745,9 +2821,12 @@ class _DraggableShowHide extends StatefulWidget {
 }
 
 class _DraggableShowHideState extends State<_DraggableShowHide> {
-  Size size = Size.zero;
   double left = 0.0;
   double right = 1.0;
+  Offset? _lastPointerDown;
+  Offset? _dragGrabOffset;
+  double? _dragLongAxisGrabOffset;
+  Size? _dragToolbarSize;
 
   RxBool get collapse => widget.toolbarState.collapse;
 
@@ -2777,8 +2856,9 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
   // two edges doesn't flicker. Only relevant when multi-edge is enabled.
   static const double _switchHysteresisPx = 50.0;
 
-  void _updatePreview(Offset cursor) {
-    final mediaSize = MediaQueryData.fromView(View.of(context)).size;
+  _ToolbarEdge _nearestToolbarEdge(Offset cursor, Size mediaSize) {
+    if (!widget.multiEdgeEnabled) return widget.edge.value;
+
     double rawDist(_ToolbarEdge e) {
       switch (e) {
         case _ToolbarEdge.top:
@@ -2792,36 +2872,81 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       }
     }
 
-    final currentDock = widget.edge.value;
-    _ToolbarEdge winner = currentDock;
-    if (widget.multiEdgeEnabled) {
-      // Opt-in mode: nearest edge wins (with hysteresis on the currently-
-      // previewed edge to stop corner flicker).
-      final previewed = widget.previewEdge.value;
-      double best = double.infinity;
-      for (final e in _ToolbarEdge.values) {
-        final biased = e == previewed
-            ? rawDist(e) - _switchHysteresisPx
-            : rawDist(e);
-        if (biased < best) {
-          best = biased;
-          winner = e;
-        }
+    final previewed = widget.previewEdge.value;
+    var winner = widget.edge.value;
+    var best = double.infinity;
+    for (final e in _ToolbarEdge.values) {
+      final biased =
+          e == previewed ? rawDist(e) - _switchHysteresisPx : rawDist(e);
+      if (biased < best) {
+        best = biased;
+        winner = e;
       }
     }
-    // else: multi-edge disabled — winner stays on the current (top) edge
-    // and only the fraction updates, i.e. a pure horizontal slide.
+    return winner;
+  }
+
+  void _ensureDragGrabOffset(Offset cursor) {
+    if (_dragGrabOffset != null) return;
+    final mediaSize = MediaQueryData.fromView(View.of(context)).size;
+    final toolbarSize =
+        _toolbarSizeForEdge(widget.edge.value, widget.toolbarSize.value);
+    _dragToolbarSize = toolbarSize;
+    final toolbarOffset = _toolbarOffsetForEdge(
+      edge: widget.edge.value,
+      fraction: widget.fraction.value,
+      parentSize: mediaSize,
+      toolbarSize: toolbarSize,
+    );
+    _dragGrabOffset = cursor - toolbarOffset;
+    _dragLongAxisGrabOffset = _isHorizontalEdge(widget.edge.value)
+        ? _dragGrabOffset?.dx
+        : _dragGrabOffset?.dy;
+  }
+
+  double _dragGrabOffsetForEdge(_ToolbarEdge edge, Size toolbarSize) {
+    final offset = _dragLongAxisGrabOffset ?? 0;
+    final extent =
+        _isHorizontalEdge(edge) ? toolbarSize.width : toolbarSize.height;
+    return _clampToolbarFraction(offset, 0, extent);
+  }
+
+  void _updatePreview(Offset cursor) {
+    _ensureDragGrabOffset(cursor);
+    final mediaSize = MediaQueryData.fromView(View.of(context)).size;
+    final winner = _nearestToolbarEdge(cursor, mediaSize);
     widget.previewEdge.value = winner;
 
-    double frac;
+    final toolbarSize = _toolbarSizeForEdge(winner, _dragToolbarSize);
+    final grabOffset = _dragGrabOffsetForEdge(winner, toolbarSize);
+    final double frac;
     if (winner == _ToolbarEdge.top || winner == _ToolbarEdge.bottom) {
-      frac = mediaSize.width <= 0 ? 0.5 : cursor.dx / mediaSize.width;
+      frac = _fractionForAlignedDrag(
+        cursor: cursor.dx,
+        grabOffset: grabOffset,
+        parentExtent: mediaSize.width,
+        toolbarExtent: toolbarSize.width,
+        left: left,
+        right: right,
+      );
     } else {
-      frac = mediaSize.height <= 0 ? 0.5 : cursor.dy / mediaSize.height;
+      frac = _fractionForAlignedDrag(
+        cursor: cursor.dy,
+        grabOffset: grabOffset,
+        parentExtent: mediaSize.height,
+        toolbarExtent: toolbarSize.height,
+        left: left,
+        right: right,
+      );
     }
-    if (frac < left) frac = left;
-    if (frac > right) frac = right;
     widget.previewFraction.value = frac;
+  }
+
+  void _resetDragTracking() {
+    _lastPointerDown = null;
+    _dragGrabOffset = null;
+    _dragLongAxisGrabOffset = null;
+    _dragToolbarSize = null;
   }
 
   void _commitPreview() {
@@ -2830,6 +2955,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     widget.previewEdge.value = null;
     widget.previewFraction.value = null;
     widget.dragging.value = false;
+    _resetDragTracking();
     if (newEdge == null || frac == null) return;
     widget.edge.value = newEdge;
     widget.fraction.value = frac;
@@ -2842,50 +2968,59 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
         name: kOptionRemoteMenubarEdge,
         value: _toolbarEdgeToString(newEdge),
       );
+      bind.sessionPeerOption(
+        sessionId: widget.sessionId,
+        name: kOptionRemoteMenubarFraction,
+        value: frac.toString(),
+      );
+    } else {
+      bind.sessionPeerOption(
+        sessionId: widget.sessionId,
+        name: _legacyRemoteMenubarDragX,
+        value: frac.toString(),
+      );
     }
-    bind.sessionPeerOption(
-      sessionId: widget.sessionId,
-      name: kOptionRemoteMenubarFraction,
-      value: frac.toString(),
-    );
   }
 
   void _cancelPreview() {
     widget.previewEdge.value = null;
     widget.previewFraction.value = null;
     widget.dragging.value = false;
+    _resetDragTracking();
   }
 
   Widget _buildDraggable(BuildContext context) {
-    return Draggable(
-      // When multi-edge docking is off the toolbar stays on the top edge,
-      // so lock the feedback to horizontal motion — otherwise the handle
-      // floats away from the top while dragging and the toolbar looks
-      // unmoored. When multi-edge is on we need 2D drag for snap-to-edge.
-      axis: widget.multiEdgeEnabled ? null : Axis.horizontal,
-      child: Icon(
-        widget.isHorizontal ? Icons.drag_indicator : Icons.drag_handle,
-        size: 20,
-        color: MyTheme.color(context).drag_indicator,
+    return Listener(
+      onPointerDown: (event) => _lastPointerDown = event.position,
+      child: Draggable(
+        // When multi-edge docking is off the toolbar stays on the top edge,
+        // so lock the feedback to horizontal motion — otherwise the handle
+        // floats away from the top while dragging and the toolbar looks
+        // unmoored. When multi-edge is on we need 2D drag for snap-to-edge.
+        axis: widget.multiEdgeEnabled ? null : Axis.horizontal,
+        child: Icon(
+          widget.isHorizontal ? Icons.drag_indicator : Icons.drag_handle,
+          size: 20,
+          color: MyTheme.color(context).drag_indicator,
+        ),
+        feedback: widget,
+        onDragStarted: () {
+          final pointerDown = _lastPointerDown;
+          if (pointerDown != null) {
+            _ensureDragGrabOffset(pointerDown);
+          }
+          widget.dragging.value = true;
+          // Seed the preview at the current docked edge/fraction so something
+          // shows the instant the drag begins, before the first onDragUpdate.
+          widget.previewEdge.value = widget.edge.value;
+          widget.previewFraction.value = widget.fraction.value;
+        },
+        onDragUpdate: (details) {
+          _updatePreview(details.globalPosition);
+        },
+        onDragEnd: (_) => _commitPreview(),
+        onDraggableCanceled: (_, __) => _cancelPreview(),
       ),
-      feedback: widget,
-      onDragStarted: () {
-        final RenderObject? renderObj = context.findRenderObject();
-        if (renderObj != null) {
-          final RenderBox renderBox = renderObj as RenderBox;
-          size = renderBox.size;
-        }
-        widget.dragging.value = true;
-        // Seed the preview at the current docked edge/fraction so something
-        // shows the instant the drag begins, before the first onDragUpdate.
-        widget.previewEdge.value = widget.edge.value;
-        widget.previewFraction.value = widget.fraction.value;
-      },
-      onDragUpdate: (details) {
-        _updatePreview(details.globalPosition);
-      },
-      onDragEnd: (_) => _commitPreview(),
-      onDraggableCanceled: (_, __) => _cancelPreview(),
     );
   }
 
