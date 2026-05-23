@@ -30,11 +30,10 @@ use cidr_utils::cidr::IpCidr;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
-    config::{self, keys, Config, TrustedDevice},
     config::{
-        decode_permanent_password_h1_from_storage, decode_preset_password_h1_from_storage,
-        local_permanent_password_storage_is_usable_for_auth,
-        preset_permanent_password_storage_is_usable_for_auth,
+        self, decode_permanent_password_h1_from_storage, decode_preset_password_h1_from_storage,
+        keys, local_permanent_password_storage_is_usable_for_auth,
+        preset_permanent_password_storage_is_usable_for_auth, Config, TrustedDevice,
     },
     fs::{self, can_enable_overwrite_detection, JobType},
     futures::{SinkExt, StreamExt},
