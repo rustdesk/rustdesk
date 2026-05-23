@@ -33,10 +33,10 @@ class DesktopHomePage extends StatefulWidget {
   State<DesktopHomePage> createState() => _DesktopHomePageState();
 }
 
-const borderColor = Color(0xFF2F65BA);
-const String _contactPhone = "+852 23889095";
-const String _whatsappUrl = "https://wa.me/85269994200";
-const String _whatsappNumber = "+852 69994200";
+final borderColor = Color(0xFF2F65BA);
+final String _contactPhone = "+852 23889095";
+final String _whatsappUrl = "https://wa.me/85269994200";
+final String _whatsappNumber = "+852 69994200";
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
@@ -75,8 +75,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget _buildContactInfo(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return Container(
-      margin: const EdgeInsets.only(top: 20, bottom: 16, left: 20, right: 16),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(top: 20, bottom: 16, left: 20, right: 16),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.background,
         borderRadius: BorderRadius.circular(8),
@@ -93,7 +93,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               color: textColor,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           InkWell(
             onTap: () {
               launchUrl(Uri.parse(
@@ -101,8 +101,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             },
             child: Row(
               children: [
-                const Icon(Icons.phone, size: 18, color: Colors.green),
-                const SizedBox(width: 8),
+                Icon(Icons.phone, size: 18, color: Colors.green),
+                SizedBox(width: 8),
                 Text(
                   _contactPhone,
                   style: TextStyle(
@@ -111,15 +111,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           InkWell(
             onTap: () {
               launchUrl(Uri.parse(_whatsappUrl));
             },
             child: Row(
               children: [
-                const Icon(Icons.chat, size: 18, color: Color(0xFF25D366)),
-                const SizedBox(width: 8),
+                Icon(Icons.chat, size: 18, color: Color(0xFF25D366)),
+                SizedBox(width: 8),
                 Text(
                   "WhatsApp: $_whatsappNumber",
                   style: TextStyle(
@@ -162,32 +162,31 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           if (data.hasData) {
             if (isIncomingOnly) {
               if (isInHomePage()) {
-                Future.delayed(const Duration(milliseconds: 300), () {
+                Future.delayed(Duration(milliseconds: 300), () {
                   _updateWindowSize();
                 });
               }
             }
             return data.data!;
           } else {
-            return const Offstage();
+            return Offstage();
           }
         },
       ),
       buildPluginEntry(),
     ];
 
-        children.add(Divider());
-    children.add(
-      OnlineStatusWidget(
-        onSvcStatusChanged: () {
-          if (isInHomePage()) {
-            Future.delayed(const Duration(milliseconds: 300), () {
-              _updateWindowSize();
-            });
-          }
-        },
-      ).marginOnly(bottom: 6, right: 6),
-    );
+    children.add(Divider());
+    final statusWidget = OnlineStatusWidget(
+      onSvcStatusChanged: () {
+        if (isInHomePage()) {
+          Future.delayed(Duration(milliseconds: 300), () {
+            _updateWindowSize();
+          });
+        }
+      },
+    ).marginOnly(bottom: 6, right: 6);
+    children.add(statusWidget);
 
     children.add(_buildContactInfo(context));
 
@@ -208,7 +207,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     children: children,
                   ),
                 ),
-                const Expanded(child: Container())
+                Expanded(child: Container())
               ],
             ),
             if (isOutgoingOnly)
@@ -254,7 +253,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
     return Container(
-      margin: const EdgeInsets.only(left: 20, right: 11),
+      margin: EdgeInsets.only(left: 20, right: 11),
       height: 57,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -262,11 +261,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         children: [
           Container(
             width: 2,
-            decoration: const BoxDecoration(color: MyTheme.accent),
+            decoration: BoxDecoration(color: MyTheme.accent),
           ).marginOnly(top: 5),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(left: 7),
+              padding: EdgeInsets.only(left: 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -300,11 +299,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       child: TextFormField(
                         controller: model.serverId,
                         readOnly: true,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.only(top: 10, bottom: 10),
                         ),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 22,
                         ),
                       ).workaroundFreezeLinuxMint(),
@@ -361,7 +360,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final showOneTime = model.approveMode != 'click' &&
         model.verificationMethod != kUsePermanentPassword;
     return Container(
-      margin: const EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
+      margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
@@ -369,11 +368,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           Container(
             width: 2,
             height: 52,
-            decoration: const BoxDecoration(color: MyTheme.accent),
+            decoration: BoxDecoration(color: MyTheme.accent),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(left: 7),
+              padding: EdgeInsets.only(left: 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -397,12 +396,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           child: TextFormField(
                             controller: model.serverPasswd,
                             readOnly: true,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               border: InputBorder.none,
                               contentPadding:
                                   EdgeInsets.only(top: 14, bottom: 10),
                             ),
-                            style: const TextStyle(fontSize: 15),
+                            style: TextStyle(fontSize: 15),
                           ).workaroundFreezeLinuxMint(),
                         ),
                       ),
@@ -417,7 +416,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   Icons.refresh,
                                   color: refreshHover.value
                                       ? textColor
-                                      : const Color(0xFFDDDDDD),
+                                      : Color(0xFFDDDDDD),
                                   size: 22,
                                 ))),
                           ),
@@ -432,7 +431,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                 Icons.edit,
                                 color: editHover.value
                                     ? textColor
-                                    : const Color(0xFFDDDDDD),
+                                    : Color(0xFFDDDDDD),
                                 size: 22,
                               ).marginOnly(right: 8, top: 4),
                             ),
@@ -456,7 +455,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final isOutgoingOnly = bind.isOutgoingOnly();
     return Padding(
       padding:
-          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
+          EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,7 +472,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 ),
             ],
           ),
-          const SizedBox(
+          SizedBox(
             height: 10.0,
           ),
           if (!isOutgoingOnly)
@@ -635,7 +634,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       String? closeOption}) {
     if (bind.mainGetBuildinOption(key: kOptionHideHelpCards) == 'Y' &&
         content != 'install_daemon_tip') {
-      return const SizedBox();
+      return SizedBox();
     }
     void closeCard() async {
       if (closeOption != null) {
@@ -663,11 +662,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
                 colors: [
-                  const Color.fromARGB(255, 226, 66, 188),
-                  const Color.fromARGB(255, 244, 114, 124),
+                  Color.fromARGB(255, 226, 66, 188),
+                  Color.fromARGB(255, 244, 114, 124),
                 ],
               )),
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -676,7 +675,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                               Center(
                                   child: Text(
                                 translate(title),
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 15),
@@ -687,7 +686,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         if (content.isNotEmpty)
                           Text(
                             translate(content),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 height: 1.5,
                                 color: Colors.white,
                                 fontWeight: FontWeight.normal,
@@ -721,7 +720,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                           await launchUrl(Uri.parse(link!)),
                                       child: Text(
                                         translate(help),
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             decoration:
                                                 TextDecoration.underline,
                                             color: Colors.white,
@@ -735,7 +734,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             top: 18,
             right: 0,
             child: IconButton(
-              icon: const Icon(
+              icon: Icon(
                 Icons.close,
                 color: Colors.white,
                 size: 20,
@@ -750,7 +749,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
-    _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
+    _updateTimer = periodic_immediate(Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       final error = await bind.mainGetError();
       if (systemError != error) {
@@ -1033,11 +1032,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         ],
       ),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 500),
+        constraints: BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(
+            SizedBox(
               height: 6.0,
             ),
             Row(
@@ -1067,7 +1066,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                 Expanded(child: PasswordStrengthIndicator(password: rxPass)),
               ],
             ).marginOnly(top: 2, bottom: 8),
-            const SizedBox(
+            SizedBox(
               height: 8.0,
             ),
             Row(
@@ -1098,11 +1097,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                   Expanded(
                       child: Text(
                     statusTip,
-                    style: const TextStyle(fontSize: 13, height: 1.1),
+                    style: TextStyle(fontSize: 13, height: 1.1),
                   ))
                 ],
               ).marginOnly(top: 6, bottom: 2),
-            const SizedBox(
+            SizedBox(
               height: 8.0,
             ),
             Obx(() => Wrap(
@@ -1115,12 +1114,12 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                           e.name,
                           style: TextStyle(
                               color: checked
-                                  ? const Color(0xFF0A9471)
-                                  : const Color.fromARGB(255, 198, 86, 157)),
+                                  ? Color(0xFF0A9471)
+                                  : Color.fromARGB(255, 198, 86, 157)),
                         ),
                         backgroundColor: checked
-                            ? const Color(0xFFD0F7ED)
-                            : const Color.fromARGB(255, 247, 205, 232));
+                            ? Color(0xFFD0F7ED)
+                            : Color.fromARGB(255, 247, 205, 232));
                   }).toList(),
                 ))
           ],
@@ -1129,13 +1128,13 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
       actions: (() {
         final cancelButton = dialogButton(
           "Cancel",
-          icon: const Icon(Icons.close_rounded),
+          icon: Icon(Icons.close_rounded),
           onPressed: close,
           isOutline: true,
         );
         final removeButton = dialogButton(
           "Remove",
-          icon: const Icon(Icons.delete_outline_rounded),
+          icon: Icon(Icons.delete_outline_rounded),
           onPressed: () async {
             setState(() {
               errMsg0 = "";
@@ -1156,7 +1155,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         );
         final okButton = dialogButton(
           "OK",
-          icon: const Icon(Icons.done_rounded),
+          icon: Icon(Icons.done_rounded),
           onPressed: canSubmit ? submit : null,
         );
         if (!isDesktop && !isWebDesktop && localPasswordSet) {
@@ -1170,9 +1169,9 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     cancelButton,
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     removeButton,
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     okButton,
                   ],
                 ),
