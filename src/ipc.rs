@@ -1542,11 +1542,6 @@ fn apply_permanent_password_storage_and_salt_payload(payload: Option<&str>) -> R
         bail!("Invalid permanent-password-storage-and-salt payload");
     };
 
-    if storage.is_empty() {
-        Config::set_permanent_password_storage_for_sync("", "")?;
-        return Ok(());
-    }
-
     Config::set_permanent_password_storage_for_sync(storage, salt)?;
     Ok(())
 }
