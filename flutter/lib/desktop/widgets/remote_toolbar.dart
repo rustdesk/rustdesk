@@ -112,6 +112,16 @@ double _fractionForAlignedDrag({
       (cursor - grabOffset) / travelExtent, left, right);
 }
 
+({double left, double right}) _fractionBoundsForEdge(
+  _ToolbarEdge edge,
+  double left,
+  double right,
+) {
+  return _isHorizontalEdge(edge)
+      ? (left: left, right: right)
+      : (left: 0, right: 1);
+}
+
 String _toolbarRawFraction({
   required bool multiEdgeEnabled,
   required _ToolbarEdge edge,
@@ -448,6 +458,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   final _dockingOptionsInitialized = false.obs;
   bool _pendingDockingOptionSync = false;
   int _dockingOptionSyncSerial = 0;
+  int _dragEpoch = 0;
 
   int get windowId => stateGlobal.windowId;
 
@@ -472,9 +483,10 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   Future<void> _syncDockingOptions({required bool force}) async {
     final syncSerial = ++_dockingOptionSyncSerial;
     if (_dragging.isTrue) {
-      _pendingDockingOptionSync = true;
+      _deferDockingOptionsSync();
       return;
     }
+    final dragEpoch = _dragEpoch;
 
     // Use the canonical helper so the option's documented default semantics
     // apply (allow-* prefix => default false). Keeping it raw-string would
@@ -535,10 +547,16 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     final dragRight = double.tryParse(
             bind.mainGetLocalOption(key: kOptionRemoteMenubarDragRight)) ??
         1.0;
+    final fractionBounds =
+        _fractionBoundsForEdge(nextEdge, dragLeft, dragRight);
     final nextFraction = (double.tryParse(rawFraction) ?? 0.5)
-        .clamp(dragLeft, dragRight)
+        .clamp(fractionBounds.left, fractionBounds.right)
         .toDouble();
     if (!mounted || syncSerial != _dockingOptionSyncSerial) return;
+    if (_dragging.isTrue || dragEpoch != _dragEpoch) {
+      _deferDockingOptionsSync();
+      return;
+    }
     _edge.value = nextEdge;
     _fraction.value = nextFraction;
     _multiEdgeEnabled.value = multiEdgeEnabled;
@@ -562,6 +580,17 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         value: nextFraction.toString(),
       );
     }
+  }
+
+  void _deferDockingOptionsSync() {
+    _pendingDockingOptionSync = true;
+    if (_dragging.isFalse) {
+      _syncDockingOptionsAfterDragIfNeeded();
+    }
+  }
+
+  void _markToolbarDragEpoch() {
+    ++_dragEpoch;
   }
 
   void _syncDockingOptionsAfterDragIfNeeded() {
@@ -732,6 +761,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             previewEdge: _previewEdge,
             previewFraction: _previewFraction,
             toolbarSize: _toolbarSize,
+            markDragEpoch: _markToolbarDragEpoch,
             syncDockingOptionsAfterDragIfNeeded:
                 _syncDockingOptionsAfterDragIfNeeded,
             isHorizontal: isHorizontal,
@@ -2919,6 +2949,7 @@ class _DraggableShowHide extends StatefulWidget {
   final Rxn<_ToolbarEdge> previewEdge;
   final Rxn<double> previewFraction;
   final Rxn<Size> toolbarSize;
+  final VoidCallback markDragEpoch;
   final VoidCallback syncDockingOptionsAfterDragIfNeeded;
   final bool isHorizontal;
   // Whether multi-edge docking is enabled for this session (toggled in
@@ -2941,6 +2972,7 @@ class _DraggableShowHide extends StatefulWidget {
     required this.previewEdge,
     required this.previewFraction,
     required this.toolbarSize,
+    required this.markDragEpoch,
     required this.syncDockingOptionsAfterDragIfNeeded,
     required this.isHorizontal,
     required this.multiEdgeEnabled,
@@ -3065,13 +3097,14 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
         right: right,
       );
     } else {
+      final fractionBounds = _fractionBoundsForEdge(winner, left, right);
       frac = _fractionForAlignedDrag(
         cursor: cursor.dy,
         grabOffset: grabOffset,
         parentExtent: mediaSize.height,
         toolbarExtent: toolbarSize.height,
-        left: left,
-        right: right,
+        left: fractionBounds.left,
+        right: fractionBounds.right,
       );
     }
     widget.previewFraction.value = frac;
@@ -3090,6 +3123,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     widget.previewEdge.value = null;
     widget.previewFraction.value = null;
     widget.dragging.value = false;
+    widget.markDragEpoch();
     _resetDragTracking();
     widget.syncDockingOptionsAfterDragIfNeeded();
     if (newEdge == null || frac == null) return;
@@ -3121,14 +3155,6 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     );
   }
 
-  void _cancelPreview() {
-    widget.previewEdge.value = null;
-    widget.previewFraction.value = null;
-    widget.dragging.value = false;
-    _resetDragTracking();
-    widget.syncDockingOptionsAfterDragIfNeeded();
-  }
-
   Widget _buildDraggable(BuildContext context) {
     return Listener(
       onPointerDown: (event) => _lastPointerDown = event.position,
@@ -3145,6 +3171,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
         ),
         feedback: widget,
         onDragStarted: () {
+          widget.markDragEpoch();
           final pointerDown = _lastPointerDown;
           if (pointerDown != null) {
             _ensureDragGrabOffset(pointerDown);
@@ -3159,7 +3186,6 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
           _updatePreview(details.globalPosition);
         },
         onDragEnd: (_) => _commitPreview(),
-        onDraggableCanceled: (_, __) => _cancelPreview(),
       ),
     );
   }
