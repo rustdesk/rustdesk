@@ -491,7 +491,7 @@ class _GeneralState extends State<_General> {
       if (!isWeb && !bind.isIncomingOnly())
         _OptionCheckBox(
           context,
-          'allow-remote-toolbar-docking-any-edge-tip',
+          'allow-remote-toolbar-docking-any-edge',
           kOptionAllowMultiEdgeToolbarDock,
           isServer: false,
           update: (_) {

@@ -744,6 +744,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("password-hidden-tip", "Parola este ascunsă din motive de securitate. Fă clic pe pictograma ochiului pentru a o afișa."),
         ("preset-password-in-use-tip", "Se folosește o parolă prestabilită. Se recomandă setarea unei parole personalizate pentru securitate sporită."),
         ("Enable privacy mode", ""),
-        ("allow-remote-toolbar-docking-any-edge-tip", ""),
+        ("allow-remote-toolbar-docking-any-edge", ""),
     ].iter().cloned().collect();
 }

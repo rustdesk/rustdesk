@@ -744,6 +744,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("password-hidden-tip", "Állandó jelszó lett beállítva (rejtett)."),
         ("preset-password-in-use-tip", "Jelenleg az alapértelmezett jelszót használja."),
         ("Enable privacy mode", "Adatvédelmi mód aktiválása"),
-        ("allow-remote-toolbar-docking-any-edge-tip", ""),
+        ("allow-remote-toolbar-docking-any-edge", ""),
     ].iter().cloned().collect();
 }
