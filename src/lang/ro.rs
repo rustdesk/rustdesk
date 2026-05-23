@@ -540,7 +540,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("auto_disconnect_option_tip", "Deconectează automat sesiunile de la distanță după o perioadă de inactivitate."),
         ("Connection failed due to inactivity", "Conexiunea a eșuat din cauza inactivității"),
         ("Check for software update on startup", "Verifică actualizări la pornire"),
-        ("upgrade_rustdesk_server_pro_{}_tip", "Versiunea serverului RustDesk Pro este mai mică decât {}. Te rugăm să o actualizezi."),
+        ("upgrade_rustdesk_server_pro_to_{}_tip", "Versiunea serverului RustDesk Pro este mai mică decât {}. Te rugăm să o actualizezi."),
         ("pull_group_failed_tip", "Sincronizarea grupului a eșuat. Verifică conexiunea la rețea sau autentifică-te din nou."),
         ("Filter by intersection", "Filtrează prin intersecție"),
         ("Remove wallpaper during incoming sessions", "Elimină imaginea de fundal în timpul sesiunilor primite"),
@@ -744,5 +744,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("password-hidden-tip", "Parola este ascunsă din motive de securitate. Fă clic pe pictograma ochiului pentru a o afișa."),
         ("preset-password-in-use-tip", "Se folosește o parolă prestabilită. Se recomandă setarea unei parole personalizate pentru securitate sporită."),
         ("Enable privacy mode", ""),
+        ("allow-remote-toolbar-docking-any-edge-tip", ""),
     ].iter().cloned().collect();
 }

@@ -654,6 +654,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accessible devices", "ലഭ്യമായ ഉപകരണങ്ങൾ"),
         ("upgrade_remote_rustdesk_client_to_{}_tip", "റിമോട്ട് പതിപ്പ് {} ലേക്ക് മാറ്റുക"),
         ("d3d_render_tip", "D3D റെൻഡറിംഗ് ഉപയോഗിക്കുക"),
+        ("Use D3D rendering", ""),
         ("Printer", "പ്രിന്റർ"),
         ("printer-os-requirement-tip", "പ്രിന്റിംഗിന് വിൻഡോസ് വേണം."),
         ("printer-requires-installed-{}-client-tip", "ഇതിന് {} ക്ലയന്റ് ഇൻസ്റ്റാൾ ചെയ്യണം."),
@@ -742,5 +743,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "ഡിസ്‌പ്ലേ പേര്"),
         ("password-hidden-tip", "സുരക്ഷയ്ക്കായി പാസ്‌വേഡ് മറച്ചിരിക്കുന്നു."),
         ("preset-password-in-use-tip", "പ്രീസെറ്റ് പാസ്‌വേഡ് ഉപയോഗത്തിലാണ്."),
+        ("Enable privacy mode", ""),
+        ("allow-remote-toolbar-docking-any-edge-tip", ""),
     ].iter().cloned().collect();
 }

@@ -403,8 +403,10 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   // handle just slides it horizontally — preserving long-standing UX while
   // still fixing the bug where dragging only moved the handle. When true,
   // the user has opted into multi-edge docking with nearest-edge snap.
-  // Read once on init; takes effect on next session.
+  // Kept in sync after settings-triggered rebuilds.
   final _multiEdgeEnabled = false.obs;
+  bool _pendingDockingOptionSync = false;
+  int _dockingOptionSyncSerial = 0;
 
   int get windowId => stateGlobal.windowId;
 
@@ -426,47 +428,96 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   void _minimize() async =>
       await WindowController.fromWindowId(windowId).minimize();
 
+  Future<void> _syncDockingOptions({required bool force}) async {
+    final syncSerial = ++_dockingOptionSyncSerial;
+    if (_dragging.isTrue) {
+      _pendingDockingOptionSync = true;
+      return;
+    }
+
+    // Use the canonical helper so the option's documented default semantics
+    // apply (allow-* prefix => default false). Keeping it raw-string would
+    // diverge from how _OptionCheckBox displays the same key.
+    final multiEdgeEnabled =
+        mainGetLocalBoolOptionSync(kOptionAllowMultiEdgeToolbarDock);
+    final wasMultiEdgeEnabled = _multiEdgeEnabled.value;
+    if (!force && wasMultiEdgeEnabled == multiEdgeEnabled) return;
+
+    final savedFraction = await bind.sessionGetOption(
+        sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarFraction);
+    // Backward compat: legacy horizontal-only position.
+    final legacyFraction = await bind.sessionGetOption(
+        sessionId: widget.ffi.sessionId, arg: _legacyRemoteMenubarDragX);
+    if (syncSerial != _dockingOptionSyncSerial) return;
+
+    var nextEdge = _edge.value;
+    var savedFractionForNextEdge = savedFraction;
+    var keepCurrentPosition = false;
+    if (!multiEdgeEnabled) {
+      nextEdge = _ToolbarEdge.top;
+    } else if (force || wasMultiEdgeEnabled) {
+      final edgeStr = await bind.sessionGetOption(
+          sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarEdge);
+      if (syncSerial != _dockingOptionSyncSerial) return;
+      nextEdge = _parseToolbarEdge(edgeStr);
+    } else {
+      // The setting changed from top-only to multi-edge while this toolbar is
+      // already visible. Keep its current position instead of jumping to the
+      // last saved multi-edge dock.
+      nextEdge = _ToolbarEdge.top;
+      savedFractionForNextEdge = _fraction.value.toString();
+      keepCurrentPosition = true;
+    }
+
+    final rawFraction = _toolbarRawFraction(
+      multiEdgeEnabled: multiEdgeEnabled,
+      edge: nextEdge,
+      savedFraction: savedFractionForNextEdge,
+      legacyFraction: legacyFraction,
+    );
+    // Clamp to the saved drag-bound contract so a corrupted or out-of-range
+    // saved value can't bypass it until the user drags again.
+    final dragLeft = double.tryParse(
+            bind.mainGetLocalOption(key: kOptionRemoteMenubarDragLeft)) ??
+        0.0;
+    final dragRight = double.tryParse(
+            bind.mainGetLocalOption(key: kOptionRemoteMenubarDragRight)) ??
+        1.0;
+    final nextFraction = (double.tryParse(rawFraction) ?? 0.5)
+        .clamp(dragLeft, dragRight)
+        .toDouble();
+    if (syncSerial != _dockingOptionSyncSerial) return;
+    _edge.value = nextEdge;
+    _fraction.value = nextFraction;
+    _multiEdgeEnabled.value = multiEdgeEnabled;
+    _pendingDockingOptionSync = false;
+    if (keepCurrentPosition) {
+      bind.sessionPeerOption(
+        sessionId: widget.ffi.sessionId,
+        name: kOptionRemoteMenubarEdge,
+        value: _toolbarEdgeToString(nextEdge),
+      );
+      bind.sessionPeerOption(
+        sessionId: widget.ffi.sessionId,
+        name: kOptionRemoteMenubarFraction,
+        value: nextFraction.toString(),
+      );
+    }
+  }
+
+  void _syncDockingOptionsAfterDragIfNeeded() {
+    if (!_pendingDockingOptionSync) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _syncDockingOptions(force: false);
+    });
+  }
+
   @override
   initState() {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Use the canonical helper so the option's documented default semantics
-      // apply (allow-* prefix => default false). Keeping it raw-string would
-      // diverge from how _OptionCheckBox displays the same key.
-      _multiEdgeEnabled.value =
-          mainGetLocalBoolOptionSync(kOptionAllowMultiEdgeToolbarDock);
-      final savedFraction = await bind.sessionGetOption(
-          sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarFraction);
-      // Backward compat: legacy horizontal-only position.
-      final legacyFraction = await bind.sessionGetOption(
-          sessionId: widget.ffi.sessionId, arg: _legacyRemoteMenubarDragX);
-      // Only honour a saved edge when the user has opted into multi-edge
-      // docking. Without the opt-in, the toolbar stays on the top edge.
-      if (_multiEdgeEnabled.value) {
-        final edgeStr = await bind.sessionGetOption(
-            sessionId: widget.ffi.sessionId, arg: kOptionRemoteMenubarEdge);
-        _edge.value = _parseToolbarEdge(edgeStr);
-      } else {
-        _edge.value = _ToolbarEdge.top;
-      }
-      final rawFraction = _toolbarRawFraction(
-        multiEdgeEnabled: _multiEdgeEnabled.value,
-        edge: _edge.value,
-        savedFraction: savedFraction,
-        legacyFraction: legacyFraction,
-      );
-      // Clamp to the saved drag-bound contract so a corrupted or out-of-range
-      // saved value can't bypass it until the user drags again.
-      final dragLeft = double.tryParse(
-              bind.mainGetLocalOption(key: kOptionRemoteMenubarDragLeft)) ??
-          0.0;
-      final dragRight = double.tryParse(
-              bind.mainGetLocalOption(key: kOptionRemoteMenubarDragRight)) ??
-          1.0;
-      _fraction.value = (double.tryParse(rawFraction) ?? 0.5)
-          .clamp(dragLeft, dragRight)
-          .toDouble();
+      await _syncDockingOptions(force: true);
       // Initialize toolbar states (collapse, hide) from session options
       widget.state.init(widget.ffi.sessionId);
     });
@@ -484,6 +535,14 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       } else {
         _isCursorOverImage = false;
       }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant RemoteToolbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _syncDockingOptions(force: false);
     });
   }
 
@@ -601,6 +660,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             previewEdge: _previewEdge,
             previewFraction: _previewFraction,
             toolbarSize: _toolbarSize,
+            syncDockingOptionsAfterDragIfNeeded:
+                _syncDockingOptionsAfterDragIfNeeded,
             isHorizontal: isHorizontal,
             multiEdgeEnabled: _multiEdgeEnabled.value,
             toolbarState: widget.state,
@@ -2786,6 +2847,7 @@ class _DraggableShowHide extends StatefulWidget {
   final Rxn<_ToolbarEdge> previewEdge;
   final Rxn<double> previewFraction;
   final Rxn<Size> toolbarSize;
+  final VoidCallback syncDockingOptionsAfterDragIfNeeded;
   final bool isHorizontal;
   // Whether multi-edge docking is enabled for this session (toggled in
   // Settings -> Other). When false, the drag handle slides the toolbar
@@ -2807,6 +2869,7 @@ class _DraggableShowHide extends StatefulWidget {
     required this.previewEdge,
     required this.previewFraction,
     required this.toolbarSize,
+    required this.syncDockingOptionsAfterDragIfNeeded,
     required this.isHorizontal,
     required this.multiEdgeEnabled,
     required this.dragging,
@@ -2956,6 +3019,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     widget.previewFraction.value = null;
     widget.dragging.value = false;
     _resetDragTracking();
+    widget.syncDockingOptionsAfterDragIfNeeded();
     if (newEdge == null || frac == null) return;
     widget.edge.value = newEdge;
     widget.fraction.value = frac;
@@ -2987,6 +3051,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
     widget.previewFraction.value = null;
     widget.dragging.value = false;
     _resetDragTracking();
+    widget.syncDockingOptionsAfterDragIfNeeded();
   }
 
   Widget _buildDraggable(BuildContext context) {

@@ -491,9 +491,12 @@ class _GeneralState extends State<_General> {
       if (!isWeb && !bind.isIncomingOnly())
         _OptionCheckBox(
           context,
-          'Allow docking remote toolbar to any window edge',
+          'allow-remote-toolbar-docking-any-edge-tip',
           kOptionAllowMultiEdgeToolbarDock,
           isServer: false,
+          update: (_) {
+            reloadAllWindows();
+          },
         ),
       _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
       if (!isWeb) wallpaper(),
