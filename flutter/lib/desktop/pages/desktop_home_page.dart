@@ -35,9 +35,9 @@ class DesktopHomePage extends StatefulWidget {
 
 const borderColor = Color(0xFF2F65BA);
 // 联系方式配置（请根据实际情况修改）
-const String _contactPhone = "+852 23889095";   // 替换为您的电话
-const String _whatsappUrl = "https://wa.me/85269994200"; // 替换为您的WhatsApp链接
-const String _whatsappNumber = "+852 69994200"; // 显示的号码
+const String _contactPhone = "+852 23889095";
+const String _whatsappUrl = "https://wa.me/85269994200";
+const String _whatsappNumber = "+852 69994200";
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
@@ -70,71 +70,73 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       children: [
         buildLeftPane(context),
         // 删除右侧分隔线和右侧面板
-        //if (!isIncomingOnly) const VerticalDivider(width: 1),
-        //if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+        // if (!isIncomingOnly) const VerticalDivider(width: 1),
+        // if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
       ],
     ));
   }
-  
-Widget _buildContactInfo(BuildContext context) {
-  final textColor = Theme.of(context).textTheme.titleLarge?.color;
-  return Container(
-    margin: const EdgeInsets.only(top: 20, bottom: 16, left: 20, right: 16),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.background,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: Colors.grey.withOpacity(0.2)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "聯絡我們",
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: textColor,
-          ),
-        ),
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: () {
-            launchUrl(Uri.parse("tel:${_contactPhone.replaceAll(RegExp(r'[^\d+]'), '')}"));
-          },
-          child: Row(
-            children: [
-              const Icon(Icons.phone, size: 18, color: Colors.green),
-              const SizedBox(width: 8),
-              Text(
-                _contactPhone,
-                style: TextStyle(fontSize: 13, color: textColor?.withOpacity(0.8)),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
-        InkWell(
-          onTap: () {
-            launchUrl(Uri.parse(_whatsappUrl));
-          },
-          child: Row(
-            children: [
-              const Icon(Icons.chat, size: 18, color: Color(0xFF25D366)), // WhatsApp绿色
-              const SizedBox(width: 8),
-              Text(
-                "WhatsApp: $_whatsappNumber",
-                style: TextStyle(fontSize: 13, color: textColor?.withOpacity(0.8)),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
 
-  
+  Widget _buildContactInfo(BuildContext context) {
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    return Container(
+      margin: const EdgeInsets.only(top: 20, bottom: 16, left: 20, right: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "聯絡我們",
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () {
+              launchUrl(Uri.parse(
+                  "tel:${_contactPhone.replaceAll(RegExp(r'[^\d+]'), '')}"));
+            },
+            child: Row(
+              children: [
+                const Icon(Icons.phone, size: 18, color: Colors.green),
+                const SizedBox(width: 8),
+                Text(
+                  _contactPhone,
+                  style: TextStyle(
+                      fontSize: 13, color: textColor?.withOpacity(0.8)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: () {
+              launchUrl(Uri.parse(_whatsappUrl));
+            },
+            child: Row(
+              children: [
+                const Icon(Icons.chat, size: 18, color: Color(0xFF25D366)),
+                const SizedBox(width: 8),
+                Text(
+                  "WhatsApp: $_whatsappNumber",
+                  style: TextStyle(
+                      fontSize: 13, color: textColor?.withOpacity(0.8)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBlock({required Widget child}) {
     return buildRemoteBlock(
         block: _block, mask: true, use: canBeBlocked, child: child);
@@ -177,23 +179,24 @@ Widget _buildContactInfo(BuildContext context) {
       ),
       buildPluginEntry(),
     ];
-    if (isIncomingOnly) {
-      children.addAll([
-        Divider(),
-        OnlineStatusWidget(
-          onSvcStatusChanged: () {
-            if (isInHomePage()) {
-              Future.delayed(Duration(milliseconds: 300), () {
-                _updateWindowSize();
-              });
-            }
-          },
-        ).marginOnly(bottom: 6, right: 6)
-      ]);
-    }
-    //添加这一行：联系方式始终显示在最底部
+
+    // 始终添加服务状态控件（原本在右侧面板底部）
+    children.addAll([
+      const Divider(),
+      OnlineStatusWidget(
+        onSvcStatusChanged: () {
+          if (isInHomePage()) {
+            Future.delayed(Duration(milliseconds: 300), () {
+              _updateWindowSize();
+            });
+          }
+        },
+      ).marginOnly(bottom: 6, right: 6),
+    ]);
+
+    // 添加联系方式（放在最底部）
     children.add(_buildContactInfo(context));
-  }
+
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
@@ -211,7 +214,7 @@ Widget _buildContactInfo(BuildContext context) {
                     children: children,
                   ),
                 ),
-                Expanded(child: Container())
+                const Expanded(child: Container())
               ],
             ),
             if (isOutgoingOnly)
@@ -307,7 +310,7 @@ Widget _buildContactInfo(BuildContext context) {
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.only(top: 10, bottom: 10),
                         ),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 22,
                         ),
                       ).workaroundFreezeLinuxMint(),
@@ -405,7 +408,7 @@ Widget _buildContactInfo(BuildContext context) {
                               contentPadding:
                                   EdgeInsets.only(top: 14, bottom: 10),
                             ),
-                            style: TextStyle(fontSize: 15),
+                            style: const TextStyle(fontSize: 15),
                           ).workaroundFreezeLinuxMint(),
                         ),
                       ),
@@ -420,7 +423,7 @@ Widget _buildContactInfo(BuildContext context) {
                                   Icons.refresh,
                                   color: refreshHover.value
                                       ? textColor
-                                      : Color(0xFFDDDDDD),
+                                      : const Color(0xFFDDDDDD),
                                   size: 22,
                                 ))),
                           ),
@@ -435,7 +438,7 @@ Widget _buildContactInfo(BuildContext context) {
                                 Icons.edit,
                                 color: editHover.value
                                     ? textColor
-                                    : Color(0xFFDDDDDD),
+                                    : const Color(0xFFDDDDDD),
                                 size: 22,
                               ).marginOnly(right: 8, top: 4),
                             ),
@@ -476,7 +479,7 @@ Widget _buildContactInfo(BuildContext context) {
                 ),
             ],
           ),
-          SizedBox(
+          const SizedBox(
             height: 10.0,
           ),
           if (!isOutgoingOnly)
@@ -677,11 +680,11 @@ Widget _buildContactInfo(BuildContext context) {
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
                 colors: [
-                  Color.fromARGB(255, 226, 66, 188),
-                  Color.fromARGB(255, 244, 114, 124),
+                  const Color.fromARGB(255, 226, 66, 188),
+                  const Color.fromARGB(255, 244, 114, 124),
                 ],
               )),
-              padding: EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,7 +693,7 @@ Widget _buildContactInfo(BuildContext context) {
                               Center(
                                   child: Text(
                                 translate(title),
-                                style: TextStyle(
+                                style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 15),
@@ -701,7 +704,7 @@ Widget _buildContactInfo(BuildContext context) {
                         if (content.isNotEmpty)
                           Text(
                             translate(content),
-                            style: TextStyle(
+                            style: const TextStyle(
                                 height: 1.5,
                                 color: Colors.white,
                                 fontWeight: FontWeight.normal,
@@ -735,7 +738,7 @@ Widget _buildContactInfo(BuildContext context) {
                                           await launchUrl(Uri.parse(link!)),
                                       child: Text(
                                         translate(help),
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                             decoration:
                                                 TextDecoration.underline,
                                             color: Colors.white,
@@ -749,7 +752,7 @@ Widget _buildContactInfo(BuildContext context) {
             top: 18,
             right: 0,
             child: IconButton(
-              icon: Icon(
+              icon: const Icon(
                 Icons.close,
                 color: Colors.white,
                 size: 20,
@@ -1057,8 +1060,8 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              height: showStatusTipOnMobile ? 0.0 : 6.0,
+            const SizedBox(
+              height: 6.0,
             ),
             Row(
               children: [
@@ -1086,9 +1089,9 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
               children: [
                 Expanded(child: PasswordStrengthIndicator(password: rxPass)),
               ],
-            ).marginOnly(top: 2, bottom: showStatusTipOnMobile ? 2 : 8),
-            SizedBox(
-              height: showStatusTipOnMobile ? 0.0 : 8.0,
+            ).marginOnly(top: 2, bottom: 8),
+            const SizedBox(
+              height: 8.0,
             ),
             Row(
               children: [
@@ -1122,11 +1125,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                   ))
                 ],
               ).marginOnly(top: 6, bottom: 2),
-            SizedBox(
-              height: showStatusTipOnMobile ? 0.0 : 8.0,
+            const SizedBox(
+              height: 8.0,
             ),
             Obx(() => Wrap(
-                  runSpacing: showStatusTipOnMobile ? 2.0 : 8.0,
+                  runSpacing: 8.0,
                   spacing: 4,
                   children: rules.map((e) {
                     var checked = e.validate(rxPass.value.trim());
@@ -1136,11 +1139,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                           style: TextStyle(
                               color: checked
                                   ? const Color(0xFF0A9471)
-                                  : Color.fromARGB(255, 198, 86, 157)),
+                                  : const Color.fromARGB(255, 198, 86, 157)),
                         ),
                         backgroundColor: checked
                             ? const Color(0xFFD0F7ED)
-                            : Color.fromARGB(255, 247, 205, 232));
+                            : const Color.fromARGB(255, 247, 205, 232));
                   }).toList(),
                 ))
           ],
@@ -1149,13 +1152,13 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
       actions: (() {
         final cancelButton = dialogButton(
           "Cancel",
-          icon: Icon(Icons.close_rounded),
+          icon: const Icon(Icons.close_rounded),
           onPressed: close,
           isOutline: true,
         );
         final removeButton = dialogButton(
           "Remove",
-          icon: Icon(Icons.delete_outline_rounded),
+          icon: const Icon(Icons.delete_outline_rounded),
           onPressed: () async {
             setState(() {
               errMsg0 = "";
@@ -1176,7 +1179,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         );
         final okButton = dialogButton(
           "OK",
-          icon: Icon(Icons.done_rounded),
+          icon: const Icon(Icons.done_rounded),
           onPressed: canSubmit ? submit : null,
         );
         if (!isDesktop && !isWebDesktop && localPasswordSet) {
