@@ -176,7 +176,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       buildPluginEntry(),
     ];
 
-    children.add(Divider());
+    // 使用 Container 代替 Divider 以避免 const 构造函数问题
+    children.add(Container(
+      height: 1,
+      color: Colors.grey.withOpacity(0.3),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+    ));
+
+    // 添加服务状态控件
     final statusWidget = OnlineStatusWidget(
       onSvcStatusChanged: () {
         if (isInHomePage()) {
@@ -188,6 +195,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     ).marginOnly(bottom: 6, right: 6);
     children.add(statusWidget);
 
+    // 添加联系方式
     children.add(_buildContactInfo(context));
 
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
