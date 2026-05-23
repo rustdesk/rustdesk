@@ -183,6 +183,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       margin: const EdgeInsets.symmetric(vertical: 8),
     ));
 
+    // 添加联系方式
+    children.add(_buildContactInfo(context));
+
     // 添加服务状态控件
     final statusWidget = OnlineStatusWidget(
       onSvcStatusChanged: () {
@@ -195,14 +198,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     ).marginOnly(bottom: 6, right: 6);
     children.add(statusWidget);
 
-    // 添加联系方式
-    children.add(_buildContactInfo(context));
-
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: isIncomingOnly ? 280.0 : 200.0,
+        width: isIncomingOnly ? 280.0 : 260.0,
         color: Theme.of(context).colorScheme.background,
         child: Stack(
           children: [
