@@ -34,9 +34,9 @@ class DesktopHomePage extends StatefulWidget {
 }
 
 final borderColor = Color(0xFF2F65BA);
-final String _contactPhone = "+852 23889095";
-final String _whatsappUrl = "https://wa.me/85269994200";
-final String _whatsappNumber = "+852 69994200";
+final String _contactPhone = "+123 12345678";
+final String _whatsappUrl = "https://wa.me/12312345678";
+final String _whatsappNumber = "+123 12345678";
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
