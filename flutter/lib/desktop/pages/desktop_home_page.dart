@@ -33,10 +33,11 @@ class DesktopHomePage extends StatefulWidget {
   State<DesktopHomePage> createState() => _DesktopHomePageState();
 }
 
-final borderColor = Color(0xFF2F65BA);
-final String _contactPhone = "+123 12345678";
-final String _whatsappUrl = "https://wa.me/12312345678";
-final String _whatsappNumber = "+123 12345678";
+const borderColor = Color(0xFF2F65BA);
+// 联系方式配置（请根据实际情况修改）
+const String _contactPhone = "+123 12345678";   // 您的电话
+const String _whatsappUrl = "https://wa.me/123456789"; // WhatsApp 链接
+const String _whatsappNumber = "+123 12345678"; // 显示的号码
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
@@ -68,75 +69,80 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildLeftPane(context),
+        if (!isIncomingOnly) const VerticalDivider(width: 1),
+        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
       ],
     ));
-  }
-
-  Widget _buildContactInfo(BuildContext context) {
-    final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    return Container(
-      margin: EdgeInsets.only(top: 20, bottom: 16, left: 20, right: 16),
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "聯絡我們",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: textColor,
-            ),
-          ),
-          SizedBox(height: 8),
-          InkWell(
-            onTap: () {
-              launchUrl(Uri.parse(
-                  "tel:${_contactPhone.replaceAll(RegExp(r'[^\d+]'), '')}"));
-            },
-            child: Row(
-              children: [
-                Icon(Icons.phone, size: 18, color: Colors.green),
-                SizedBox(width: 8),
-                Text(
-                  _contactPhone,
-                  style: TextStyle(
-                      fontSize: 13, color: textColor?.withOpacity(0.8)),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 6),
-          InkWell(
-            onTap: () {
-              launchUrl(Uri.parse(_whatsappUrl));
-            },
-            child: Row(
-              children: [
-                Icon(Icons.chat, size: 18, color: Color(0xFF25D366)),
-                SizedBox(width: 8),
-                Text(
-                  "WhatsApp: $_whatsappNumber",
-                  style: TextStyle(
-                      fontSize: 13, color: textColor?.withOpacity(0.8)),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildBlock({required Widget child}) {
     return buildRemoteBlock(
         block: _block, mask: true, use: canBeBlocked, child: child);
   }
+
+Widget _buildContactInfo(BuildContext context) {
+  final textColor = Theme.of(context).textTheme.titleLarge?.color;
+  return Container(
+    margin: const EdgeInsets.only(top: 20, bottom: 16, left: 20, right: 16),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.background,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "聯絡我們",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: textColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () {
+            launchUrl(Uri.parse(
+                "tel:${_contactPhone.replaceAll(RegExp(r'[^\d+]'), '')}"));
+          },
+          child: Row(
+            children: [
+              const Icon(Icons.phone, size: 18, color: Colors.green),
+              const SizedBox(width: 8),
+              Text(
+                _contactPhone,
+                style: TextStyle(
+                    fontSize: 13, color: textColor?.withOpacity(0.8)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: () {
+            launchUrl(Uri.parse(_whatsappUrl));
+          },
+          child: Row(
+            children: [
+              const Icon(Icons.chat, size: 18, color: Color(0xFF25D366)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "WhatsApp: $_whatsappNumber",
+                  style: TextStyle(
+                      fontSize: 13, color: textColor?.withOpacity(0.8)),
+                  softWrap: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
@@ -169,40 +175,33 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             }
             return data.data!;
           } else {
-            return Offstage();
+            return const Offstage();
           }
         },
       ),
       buildPluginEntry(),
     ];
-
-    // 使用 Container 代替 Divider 以避免 const 构造函数问题
-    children.add(Container(
-      height: 1,
-      color: Colors.grey.withOpacity(0.3),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-    ));
-
-    // 添加联系方式
+    if (isIncomingOnly) {
+      children.addAll([
+        Divider(),
+        OnlineStatusWidget(
+          onSvcStatusChanged: () {
+            if (isInHomePage()) {
+              Future.delayed(Duration(milliseconds: 300), () {
+                _updateWindowSize();
+              });
+            }
+          },
+        ).marginOnly(bottom: 6, right: 6)
+      ]);
+    }
+    // 添加联系方式（放在最底部）
     children.add(_buildContactInfo(context));
-
-    // 添加服务状态控件
-    final statusWidget = OnlineStatusWidget(
-      onSvcStatusChanged: () {
-        if (isInHomePage()) {
-          Future.delayed(Duration(milliseconds: 300), () {
-            _updateWindowSize();
-          });
-        }
-      },
-    ).marginOnly(bottom: 6, right: 6);
-    children.add(statusWidget);
-
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: isIncomingOnly ? 280.0 : 260.0,
+        width: isIncomingOnly ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
         child: Stack(
           children: [
@@ -261,7 +260,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
     return Container(
-      margin: EdgeInsets.only(left: 20, right: 11),
+      margin: const EdgeInsets.only(left: 20, right: 11),
       height: 57,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -269,11 +268,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         children: [
           Container(
             width: 2,
-            decoration: BoxDecoration(color: MyTheme.accent),
+            decoration: const BoxDecoration(color: MyTheme.accent),
           ).marginOnly(top: 5),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(left: 7),
+              padding: const EdgeInsets.only(left: 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -380,7 +379,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(left: 7),
+              padding: const EdgeInsets.only(left: 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -463,7 +462,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final isOutgoingOnly = bind.isOutgoingOnly();
     return Padding(
       padding:
-          EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
+          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -575,12 +574,22 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainIsInstalledDaemon(prompt: true);
         });
       }
+      //// Disable microphone configuration for macOS. We will request the permission when needed.
+      // else if ((await osxCanRecordAudio() !=
+      //     PermissionAuthorizeType.authorized)) {
+      //   return buildInstallCard("Permissions", "config_microphone", "Configure",
+      //       () async {
+      //     osxRequestAudio();
+      //     watchIsCanRecordAudio = true;
+      //   });
+      // }
     } else if (isLinux) {
       if (bind.isOutgoingOnly()) {
         return Container();
       }
       final LinuxCards = <Widget>[];
       if (bind.isSelinuxEnforcing()) {
+        // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
         final keyShowSelinuxHelpTip = "show-selinux-help-tip";
         if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
           LinuxCards.add(buildInstallCard(
@@ -622,6 +631,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         child: OutlinedButton(
           onPressed: () {
             SystemNavigator.pop(); // Close the application
+            // https://github.com/flutter/flutter/issues/66631
             if (isWindows) {
               exit(0);
             }
@@ -642,7 +652,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       String? closeOption}) {
     if (bind.mainGetBuildinOption(key: kOptionHideHelpCards) == 'Y' &&
         content != 'install_daemon_tip') {
-      return SizedBox();
+      return const SizedBox();
     }
     void closeCard() async {
       if (closeOption != null) {
@@ -757,7 +767,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
-    _updateTimer = periodic_immediate(Duration(seconds: 1), () async {
+    _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       final error = await bind.mainGetError();
       if (systemError != error) {
@@ -784,6 +794,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (watchIsInputMonitoring) {
         if (bind.mainIsCanInputMonitoring(prompt: false)) {
           watchIsInputMonitoring = false;
+          // Do not notify for now.
+          // Monitoring may not take effect until the process is restarted.
+          // rustDeskWinManager.call(
+          //     WindowType.RemoteDesktop, kWindowDisableGrabKeyboard, '');
           setState(() {});
         }
       }
@@ -825,6 +839,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       switch (methodName) {
         case kWindowBumpMouse: return true;
       }
+
       return false;
     }
 
@@ -978,6 +993,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     DigitValidationRule(),
     UppercaseValidationRule(),
     LowercaseValidationRule(),
+    // SpecialCharacterValidationRule(),
     MinCharactersValidationRule(8),
   ];
   final maxLength = bind.mainMaxEncryptLen();
@@ -1040,12 +1056,12 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         ],
       ),
       content: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 500),
+        constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              height: 6.0,
+              height: showStatusTipOnMobile ? 0.0 : 6.0,
             ),
             Row(
               children: [
@@ -1073,9 +1089,9 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
               children: [
                 Expanded(child: PasswordStrengthIndicator(password: rxPass)),
               ],
-            ).marginOnly(top: 2, bottom: 8),
+            ).marginOnly(top: 2, bottom: showStatusTipOnMobile ? 2 : 8),
             SizedBox(
-              height: 8.0,
+              height: showStatusTipOnMobile ? 0.0 : 8.0,
             ),
             Row(
               children: [
@@ -1105,15 +1121,15 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                   Expanded(
                       child: Text(
                     statusTip,
-                    style: TextStyle(fontSize: 13, height: 1.1),
+                    style: const TextStyle(fontSize: 13, height: 1.1),
                   ))
                 ],
               ).marginOnly(top: 6, bottom: 2),
             SizedBox(
-              height: 8.0,
+              height: showStatusTipOnMobile ? 0.0 : 8.0,
             ),
             Obx(() => Wrap(
-                  runSpacing: 8.0,
+                  runSpacing: showStatusTipOnMobile ? 2.0 : 8.0,
                   spacing: 4,
                   children: rules.map((e) {
                     var checked = e.validate(rxPass.value.trim());
@@ -1122,11 +1138,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                           e.name,
                           style: TextStyle(
                               color: checked
-                                  ? Color(0xFF0A9471)
+                                  ? const Color(0xFF0A9471)
                                   : Color.fromARGB(255, 198, 86, 157)),
                         ),
                         backgroundColor: checked
-                            ? Color(0xFFD0F7ED)
+                            ? const Color(0xFFD0F7ED)
                             : Color.fromARGB(255, 247, 205, 232));
                   }).toList(),
                 ))
@@ -1177,9 +1193,9 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     cancelButton,
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     removeButton,
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     okButton,
                   ],
                 ),
