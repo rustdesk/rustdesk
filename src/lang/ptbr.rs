@@ -675,7 +675,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Take screenshot", "Capturar de tela"),
         ("Taking screenshot", "Capturando tela"),
         ("screenshot-merged-screen-not-supported-tip", "Mesclar a captura de tela de múltiplos monitores não é suportada no momento. Por favor, alterne para um único monitor e tente novamente."),
-        ("screenshot-action-tip", "Por favor, selecione como seguir com a captura de tela."),
+        ("screenshot-action-tip", "Por favor, selecione como deseja continuar com a captura de tela."),
         ("Save as", "Salvar como"),
         ("Copy to clipboard", "Copiar para área de transferência"),
         ("Enable remote printer", "Habilitar impressora remota"),
