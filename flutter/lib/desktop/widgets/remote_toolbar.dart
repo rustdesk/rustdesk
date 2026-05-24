@@ -791,6 +791,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         return _MonitorMenu(
             id: widget.id,
             ffi: widget.ffi,
+            isHorizontal: isHorizontal,
             setRemoteState: widget.setRemoteState);
       } else {
         return Offstage();
@@ -941,11 +942,13 @@ class _MobileActionMenu extends StatelessWidget {
 class _MonitorMenu extends StatelessWidget {
   final String id;
   final FFI ffi;
+  final bool isHorizontal;
   final Function(VoidCallback) setRemoteState;
   const _MonitorMenu({
     Key? key,
     required this.id,
     required this.ffi,
+    required this.isHorizontal,
     required this.setRemoteState,
   }) : super(key: key);
 
@@ -955,20 +958,27 @@ class _MonitorMenu extends StatelessWidget {
   bool get supportIndividualWindows =>
       !isWeb && ffi.ffiModel.pi.isSupportMultiDisplay;
 
+  double get itemWidth =>
+      _ToolbarTheme.buttonSize + _ToolbarTheme.buttonHMargin * 2;
+
   @override
-  Widget build(BuildContext context) => showMonitorsToolbar
-      ? buildMultiMonitorMenu(context)
-      : Obx(() => buildMonitorMenu(context));
+  Widget build(BuildContext context) {
+    final child = showMonitorsToolbar
+        ? buildMultiMonitorMenu(context)
+        : Obx(() => buildMonitorMenu(context));
+    return isHorizontal ? child : SizedBox(width: itemWidth, child: child);
+  }
 
   Widget buildMonitorMenu(BuildContext context) {
     final width = SimpleWrapper<double>(0);
-    final monitorsIcon =
-        globalMonitorsWidget(width, Colors.white, Colors.black38);
+    final monitorsIcon = globalMonitorsWidget(
+        width, Colors.white, Colors.black38,
+        fitSquare: !isHorizontal);
     return _IconSubmenuButton(
         tooltip: 'Select Monitor',
         icon: monitorsIcon,
         ffi: ffi,
-        width: width.value,
+        width: isHorizontal ? width.value : _ToolbarTheme.buttonSize,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         menuStyle: MenuStyle(
@@ -978,7 +988,11 @@ class _MonitorMenu extends StatelessWidget {
   }
 
   Widget buildMultiMonitorMenu(BuildContext context) {
-    return Row(children: buildMonitorList(context, true));
+    return Flex(
+      direction: isHorizontal ? Axis.horizontal : Axis.vertical,
+      mainAxisSize: MainAxisSize.min,
+      children: buildMonitorList(context, true),
+    );
   }
 
   Widget buildMonitorSubmenuWidget(BuildContext context) {
@@ -1030,7 +1044,8 @@ class _MonitorMenu extends StatelessWidget {
           Widget? monitorsIcon;
           if (isAllMonitors) {
             monitorsIcon = globalMonitorsWidget(
-                width, Colors.white, _ToolbarTheme.blueColor);
+                width, Colors.white, _ToolbarTheme.blueColor,
+                fitSquare: isMulti && !isHorizontal);
           }
           return _IconMenuButton(
             tooltip: isMulti
@@ -1080,7 +1095,8 @@ class _MonitorMenu extends StatelessWidget {
   }
 
   globalMonitorsWidget(
-      SimpleWrapper<double> width, Color activeTextColor, Color activeBgColor) {
+      SimpleWrapper<double> width, Color activeTextColor, Color activeBgColor,
+      {bool fitSquare = false}) {
     getMonitors() {
       final pi = ffi.ffiModel.pi;
       RxInt display = CurrentDisplayState.find(id);
@@ -1089,9 +1105,13 @@ class _MonitorMenu extends StatelessWidget {
         return Offstage();
       }
 
-      final scale = _ToolbarTheme.buttonSize / rect.height * 0.75;
-      final startY = (_ToolbarTheme.buttonSize - rect.height * scale) * 0.5;
-      final startX = startY;
+      final scaleBase = fitSquare ? rect.longestSide : rect.height;
+      final scale = _ToolbarTheme.buttonSize / scaleBase * 0.75;
+      final height = rect.height * scale;
+      final scaledWidth = rect.width * scale;
+      final startY = (_ToolbarTheme.buttonSize - height) * 0.5;
+      final startX =
+          fitSquare ? (_ToolbarTheme.buttonSize - scaledWidth) * 0.5 : startY;
 
       final children = <Widget>[];
       for (var i = 0; i < pi.displays.length; i++) {
@@ -1130,10 +1150,12 @@ class _MonitorMenu extends StatelessWidget {
           ),
         ));
       }
-      width.value = rect.width * scale + startX * 2;
+      width.value = fitSquare
+          ? _ToolbarTheme.buttonSize
+          : rect.width * scale + startX * 2;
       return SizedBox(
         width: width.value,
-        height: rect.height * scale + startY * 2,
+        height: fitSquare ? _ToolbarTheme.buttonSize : height + startY * 2,
         child: Stack(
           children: children,
         ),
