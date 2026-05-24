@@ -744,5 +744,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("password-hidden-tip", "Le mot de passe permanent est défini (masqué)."),
         ("preset-password-in-use-tip", "Le mot de passe prédéfini est actuellement utilisé."),
         ("Enable privacy mode", "Activer le mode de confidentialité"),
+        ("allow-remote-toolbar-docking-any-edge", ""),
     ].iter().cloned().collect();
 }

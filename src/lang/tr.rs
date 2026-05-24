@@ -744,5 +744,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("password-hidden-tip", "Parola gizli"),
         ("preset-password-in-use-tip", "Önceden ayarlanmış parola kullanılıyor"),
         ("Enable privacy mode", "Gizlilik modunu etkinleştir"),
+        ("allow-remote-toolbar-docking-any-edge", ""),
     ].iter().cloned().collect();
 }

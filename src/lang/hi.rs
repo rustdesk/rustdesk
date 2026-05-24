@@ -654,6 +654,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accessible devices", "सुलभ डिवाइस"),
         ("upgrade_remote_rustdesk_client_to_{}_tip", "रिमोट RustDesk क्लाइंट को संस्करण {} में अपग्रेड करें"),
         ("d3d_render_tip", "D3D रेंडरिंग का उपयोग करें"),
+        ("Use D3D rendering", ""),
         ("Printer", "प्रिंटर"),
         ("printer-os-requirement-tip", "प्रिंटिंग के लिए Windows आवश्यक है।"),
         ("printer-requires-installed-{}-client-tip", "इसके लिए क्लाइंट साइड पर {} इंस्टॉल होना चाहिए।"),
@@ -742,5 +743,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "प्रदर्शित नाम"),
         ("password-hidden-tip", "पासवर्ड सुरक्षा के लिए छिपा हुआ है।"),
         ("preset-password-in-use-tip", "पूर्व-निर्धारित पासवर्ड उपयोग में है।"),
+        ("Enable privacy mode", ""),
+        ("allow-remote-toolbar-docking-any-edge", ""),
     ].iter().cloned().collect();
 }
