@@ -177,6 +177,31 @@ BorderRadius _collapseHandleBorderRadius(_ToolbarEdge edge) {
   }
 }
 
+int _monitorMenuQuarterTurns(_ToolbarEdge edge) {
+  switch (edge) {
+    case _ToolbarEdge.left:
+      return 1;
+    case _ToolbarEdge.right:
+      return 3;
+    case _ToolbarEdge.top:
+    case _ToolbarEdge.bottom:
+      return 0;
+  }
+}
+
+IconData _toolbarCollapseIcon(_ToolbarEdge edge, bool isCollapsed) {
+  switch (edge) {
+    case _ToolbarEdge.top:
+      return isCollapsed ? Icons.expand_more : Icons.expand_less;
+    case _ToolbarEdge.bottom:
+      return isCollapsed ? Icons.expand_less : Icons.expand_more;
+    case _ToolbarEdge.left:
+      return isCollapsed ? Icons.chevron_right : Icons.chevron_left;
+    case _ToolbarEdge.right:
+      return isCollapsed ? Icons.chevron_left : Icons.chevron_right;
+  }
+}
+
 class _ToolbarDockingOptions {
   _ToolbarDockingOptions({
     required this.edge,
@@ -791,7 +816,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         return _MonitorMenu(
             id: widget.id,
             ffi: widget.ffi,
-            isHorizontal: isHorizontal,
+            edge: edge,
             setRemoteState: widget.setRemoteState);
       } else {
         return Offstage();
@@ -942,13 +967,13 @@ class _MobileActionMenu extends StatelessWidget {
 class _MonitorMenu extends StatelessWidget {
   final String id;
   final FFI ffi;
-  final bool isHorizontal;
+  final _ToolbarEdge edge;
   final Function(VoidCallback) setRemoteState;
   const _MonitorMenu({
     Key? key,
     required this.id,
     required this.ffi,
-    required this.isHorizontal,
+    required this.edge,
     required this.setRemoteState,
   }) : super(key: key);
 
@@ -958,27 +983,28 @@ class _MonitorMenu extends StatelessWidget {
   bool get supportIndividualWindows =>
       !isWeb && ffi.ffiModel.pi.isSupportMultiDisplay;
 
-  double get itemWidth =>
-      _ToolbarTheme.buttonSize + _ToolbarTheme.buttonHMargin * 2;
-
   @override
   Widget build(BuildContext context) {
     final child = showMonitorsToolbar
         ? buildMultiMonitorMenu(context)
         : Obx(() => buildMonitorMenu(context));
-    return isHorizontal ? child : SizedBox(width: itemWidth, child: child);
+    final quarterTurns = _monitorMenuQuarterTurns(edge);
+    if (quarterTurns == 0) return child;
+    return RotatedBox(
+      quarterTurns: quarterTurns,
+      child: child,
+    );
   }
 
   Widget buildMonitorMenu(BuildContext context) {
     final width = SimpleWrapper<double>(0);
-    final monitorsIcon = globalMonitorsWidget(
-        width, Colors.white, Colors.black38,
-        fitSquare: !isHorizontal);
+    final monitorsIcon =
+        globalMonitorsWidget(width, Colors.white, Colors.black38);
     return _IconSubmenuButton(
         tooltip: 'Select Monitor',
         icon: monitorsIcon,
         ffi: ffi,
-        width: isHorizontal ? width.value : _ToolbarTheme.buttonSize,
+        width: width.value,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         menuStyle: MenuStyle(
@@ -988,11 +1014,7 @@ class _MonitorMenu extends StatelessWidget {
   }
 
   Widget buildMultiMonitorMenu(BuildContext context) {
-    return Flex(
-      direction: isHorizontal ? Axis.horizontal : Axis.vertical,
-      mainAxisSize: MainAxisSize.min,
-      children: buildMonitorList(context, true),
-    );
+    return Row(children: buildMonitorList(context, true));
   }
 
   Widget buildMonitorSubmenuWidget(BuildContext context) {
@@ -1044,8 +1066,7 @@ class _MonitorMenu extends StatelessWidget {
           Widget? monitorsIcon;
           if (isAllMonitors) {
             monitorsIcon = globalMonitorsWidget(
-                width, Colors.white, _ToolbarTheme.blueColor,
-                fitSquare: isMulti && !isHorizontal);
+                width, Colors.white, _ToolbarTheme.blueColor);
           }
           return _IconMenuButton(
             tooltip: isMulti
@@ -1095,8 +1116,7 @@ class _MonitorMenu extends StatelessWidget {
   }
 
   globalMonitorsWidget(
-      SimpleWrapper<double> width, Color activeTextColor, Color activeBgColor,
-      {bool fitSquare = false}) {
+      SimpleWrapper<double> width, Color activeTextColor, Color activeBgColor) {
     getMonitors() {
       final pi = ffi.ffiModel.pi;
       RxInt display = CurrentDisplayState.find(id);
@@ -1105,13 +1125,10 @@ class _MonitorMenu extends StatelessWidget {
         return Offstage();
       }
 
-      final scaleBase = fitSquare ? rect.longestSide : rect.height;
-      final scale = _ToolbarTheme.buttonSize / scaleBase * 0.75;
+      final scale = _ToolbarTheme.buttonSize / rect.height * 0.75;
       final height = rect.height * scale;
-      final scaledWidth = rect.width * scale;
       final startY = (_ToolbarTheme.buttonSize - height) * 0.5;
-      final startX =
-          fitSquare ? (_ToolbarTheme.buttonSize - scaledWidth) * 0.5 : startY;
+      final startX = startY;
 
       final children = <Widget>[];
       for (var i = 0; i < pi.displays.length; i++) {
@@ -1150,12 +1167,10 @@ class _MonitorMenu extends StatelessWidget {
           ),
         ));
       }
-      width.value = fitSquare
-          ? _ToolbarTheme.buttonSize
-          : rect.width * scale + startX * 2;
+      width.value = rect.width * scale + startX * 2;
       return SizedBox(
         width: width.value,
-        height: fitSquare ? _ToolbarTheme.buttonSize : height + startY * 2,
+        height: height + startY * 2,
         child: Stack(
           children: children,
         ),
@@ -3281,7 +3296,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
                 message: translate(
                     collapse.isFalse ? 'Hide Toolbar' : 'Show Toolbar'),
                 child: Icon(
-                  collapse.isFalse ? Icons.expand_less : Icons.expand_more,
+                  _toolbarCollapseIcon(widget.edge.value, collapse.isTrue),
                   size: iconSize,
                 ),
               ))),
