@@ -53,9 +53,14 @@ class PowerStrip extends StatefulWidget {
 
 class _PowerStripState extends State<PowerStrip> {
   bool _collapsed = false;
-  final Map<String, GlobalKey> _cellKeys = {};
+  final Map<String, LayerLink> _cellLinks = {};
   OverlayEntry? _cmdPopup;
   String? _cmdPopupModifier;
+
+  static const double _popupW = 44.0;
+  static const double _popupH = 36.0;
+  static const double _popupGap = 6.0;
+  static const double _popupAnchorGap = 6.0;
 
   @override
   void initState() {
@@ -79,8 +84,8 @@ class _PowerStripState extends State<PowerStrip> {
     }
   }
 
-  GlobalKey _cellKey(String keyName) =>
-      _cellKeys.putIfAbsent(keyName, GlobalKey.new);
+  LayerLink _cellLink(String keyName) =>
+      _cellLinks.putIfAbsent(keyName, LayerLink.new);
 
   void _dismissCmdPopup() {
     _cmdPopup?.remove();
@@ -88,67 +93,88 @@ class _PowerStripState extends State<PowerStrip> {
     _cmdPopupModifier = null;
   }
 
+  List<(String, String, Set<String>)> _popupLabelsFor(String modifier) {
+    // (display label, key name, modifiers to send with the tap)
+    if (modifier == 'meta') {
+      return const [
+        ('C', 'c', {'meta'}),
+        ('V', 'v', {'meta'}),
+        ('⇥', 'tab', {'meta'}),
+      ];
+    }
+    // control
+    return const [
+      ('◀', 'left', {'control'}),
+      ('V', 'v', {'control'}),
+      ('▶', 'right', {'control'}),
+    ];
+  }
+
   void _showCmdPopup(KeyDef k) {
     _dismissCmdPopup();
-    final ctx = _cellKey(k.keyName).currentContext;
-    if (ctx == null) return;
-    final box = ctx.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached) return;
-    final origin = box.localToGlobal(Offset.zero);
-    final size = box.size;
-    const popupW = 44.0;
-    const popupH = 36.0;
-    const popupGap = 6.0;
-    const gap = 6.0;
-    final labels = k.keyName == 'meta'
-        ? const [('C', 'c'), ('V', 'v')]
-        : const [('V', 'v')];
-    final totalW = popupW * labels.length + popupGap * (labels.length - 1);
-    final left = origin.dx + (size.width - totalW) / 2;
-    final top = origin.dy - popupH - gap;
     final modifier = k.keyName;
+    final link = _cellLink(modifier);
+    final labels = _popupLabelsFor(modifier);
+    final totalW = _popupW * labels.length + _popupGap * (labels.length - 1);
     _cmdPopupModifier = modifier;
 
     _cmdPopup = OverlayEntry(
-      builder: (ctx) => Stack(
-        children: [
-          Positioned(
-            left: left,
-            top: top,
-            child: Material(
-              color: Colors.transparent,
+      builder: (ctx) => Positioned(
+        left: 0,
+        top: 0,
+        child: CompositedTransformFollower(
+          link: link,
+          showWhenUnlinked: false,
+          // Anchor the popup's bottom-center to the cell's top-center,
+          // then lift by `_popupAnchorGap` for breathing room. Using the
+          // follower means the popup tracks the cell across collapse/
+          // expand and keyboard show/hide without recomputing positions.
+          targetAnchor: Alignment.topCenter,
+          followerAnchor: Alignment.bottomCenter,
+          offset: const Offset(0, -_popupAnchorGap),
+          child: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: totalW,
+              height: _popupH,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (var i = 0; i < labels.length; i++) ...[
-                    if (i > 0) const SizedBox(width: popupGap),
+                    if (i > 0) const SizedBox(width: _popupGap),
                     _cmdPopupButton(
                       labels[i].$1,
                       labels[i].$2,
+                      labels[i].$3,
                       modifier,
-                      popupW,
-                      popupH,
+                      _popupW,
+                      _popupH,
                     ),
                   ],
                 ],
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
     Overlay.of(context, rootOverlay: true).insert(_cmdPopup!);
   }
 
   Widget _cmdPopupButton(
-      String label, String keyName, String modifier, double w, double h) {
+      String label,
+      String keyName,
+      Set<String> tapModifiers,
+      String stripModifier,
+      double w,
+      double h) {
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
-        widget.inputBridge.tapKey(keyName, modifiers: {modifier});
-        while (widget.modifierController.modeFor(modifier) !=
+        widget.inputBridge.tapKey(keyName, modifiers: tapModifiers);
+        while (widget.modifierController.modeFor(stripModifier) !=
             ModifierMode.off) {
-          widget.modifierController.cycleTap(modifier);
+          widget.modifierController.cycleTap(stripModifier);
         }
         _dismissCmdPopup();
       },
@@ -268,7 +294,9 @@ class _PowerStripState extends State<PowerStrip> {
         (k.keyName == 'meta' || k.keyName == 'control');
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 2 * scale),
-      child: hasPopup ? KeyedSubtree(key: _cellKey(k.keyName), child: cell) : cell,
+      child: hasPopup
+          ? CompositedTransformTarget(link: _cellLink(k.keyName), child: cell)
+          : cell,
     );
   }
 
