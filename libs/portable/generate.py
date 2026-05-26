@@ -67,9 +67,9 @@ def write_app_metadata(output_folder: str):
 def build_portable(output_folder: str, target: str):
     os.chdir(output_folder)
     if target:
-        os.system("cargo build --release --target " + target)
+        os.system("cargo build --locked --release --target " + target)
     else:
-        os.system("cargo build --release")
+        os.system("cargo build --locked --release")
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe
