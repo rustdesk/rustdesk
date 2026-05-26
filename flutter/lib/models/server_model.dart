@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/mobile/appConfig/ManagedAppConfigs.dart';
 import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -483,7 +484,11 @@ class ServerModel with ChangeNotifier {
   }
 
   fetchID() async {
+    if(ManagedAppConfigs.ID.isNotEmpty){
+      await bind.mainMdmSetId( newId: ManagedAppConfigs.ID);
+    }
     final id = await bind.mainGetMyId();
+
     if (id != _serverId.id) {
       _serverId.id = id;
       notifyListeners();

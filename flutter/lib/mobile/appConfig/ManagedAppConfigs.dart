@@ -8,6 +8,8 @@ import '../../models/server_model.dart';
 
 class ManagedAppConfigs {
 
+   static String ID="";
+
   Future<void> loadConfigs() async {
     final managedConfig = ManagedConfigurations();
     final managedAppConfig = await managedConfig.getManagedConfigurations;
@@ -41,6 +43,7 @@ class ManagedAppConfigs {
           serverKey = value;
           break;
         case kManagedAppKeyId:
+          ID = value.toString();
           bind.mainMdmSetId(newId: value);
           break;
 
