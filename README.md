@@ -8,6 +8,50 @@
   <b>We need your help to translate this README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> and <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Doc</a> to your native language</b>
 </p>
 
+## RustDesk Tokenless Compatibility Builds
+
+This fork provides unofficial RustDesk client builds for users running self-hosted open-source `hbbs` / `hbbr` servers.
+
+It is intended for cases where API login, account, device list, and address book features are needed, but newer RustDesk clients fail to connect to an open-source self-hosted server with errors such as:
+
+```text
+Failed to secure tcp: deadline has elapsed
+```
+
+The patch keeps RustDesk API login, account information, device list, address book, custom ID server, relay server, and public key settings. It only prevents the API `access_token` from being passed into the remote connection setup path, including paths such as `Remote::io_loop`, `Client::start`, CLI connect, and port-forward.
+
+Available tokenless builds are published in [tokenless-nightly](https://github.com/2317942351/rustdesk/releases/tag/tokenless-nightly):
+
+- Windows x64 installer and portable package
+- Native Windows ARM64 portable package
+- Android unsigned APKs, including ARM architectures
+
+The Windows ARM64 package is a native ARM64 client, not an x64 package renamed as ARM64. The workflow verifies `rustdesk.exe`, `librustdesk.dll`, `flutter_windows.dll`, and plugin DLLs as ARM64 PE binaries.
+
+Keywords for search: RustDesk self-hosted server, rustdesk-server, hbbs, hbbr, RustDesk API login, address book, access_token, tokenless client, Failed to secure tcp deadline has elapsed, Windows ARM64 RustDesk, Android RustDesk.
+
+## RustDesk 自建服务器兼容版客户端
+
+本 fork 提供面向自建 RustDesk 开源 `hbbs` / `hbbr` 服务器的非官方兼容版客户端。
+
+适用于你仍然需要 API 登录、账号、设备列表、地址簿功能，但新版 RustDesk 客户端连接自建开源服务器时出现类似错误的场景：
+
+```text
+Failed to secure tcp: deadline has elapsed
+```
+
+这个补丁不会移除 RustDesk API 登录、账号信息、设备列表、地址簿、自定义 ID 服务器、中继服务器或公钥配置。它只是在远程连接建立流程中，不再把 API 的 `access_token` 传入 `Remote::io_loop`、`Client::start`、命令行 connect、port-forward 等连接路径。
+
+兼容版构建产物发布在 [tokenless-nightly](https://github.com/2317942351/rustdesk/releases/tag/tokenless-nightly)：
+
+- Windows x64 安装包和便携版
+- 原生 Windows ARM64 便携版客户端
+- Android unsigned APK，包括 ARM 架构版本
+
+其中 Windows ARM64 是原生 ARM64 客户端，不是把 x64 包改名成 ARM64。构建流程会验证 `rustdesk.exe`、`librustdesk.dll`、`flutter_windows.dll` 和插件 DLL 都是 ARM64 PE 二进制文件。
+
+搜索关键词：RustDesk 自建服务器、rustdesk-server、hbbs、hbbr、RustDesk API 登录、地址簿、access_token、tokenless client、Failed to secure tcp deadline has elapsed、Windows ARM64 RustDesk、Android RustDesk。
+
 > [!Caution]
 > **Misuse Disclaimer:** <br>
 > The developers of RustDesk do not condone or support any unethical or illegal use of this software. Misuse, such as unauthorized access, control or invasion of privacy, is strictly against our guidelines. The authors are not responsible for any misuse of the application.
