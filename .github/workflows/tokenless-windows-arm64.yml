@@ -69,6 +69,29 @@ jobs:
         with:
           version: ${{ env.LLVM_VERSION }}
 
+      - name: Install Windows ARM64 libclang
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $llvmRoot = "$env:RUNNER_TEMP\llvm-woa64"
+          $installer = "$env:RUNNER_TEMP\LLVM-${env:LLVM_VERSION}-woa64.exe"
+          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-${env:LLVM_VERSION}/LLVM-${env:LLVM_VERSION}-woa64.exe" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$llvmRoot") -Wait
+          $libclang = Join-Path $llvmRoot 'bin\libclang.dll'
+          if (-not (Test-Path -LiteralPath $libclang)) {
+            throw "ARM64 libclang.dll was not installed at $libclang"
+          }
+          $bytes = [System.IO.File]::ReadAllBytes($libclang)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          if ($machine -ne 0xaa64) {
+            throw ('Expected ARM64 libclang.dll, got PE machine 0x{0:X4}' -f $machine)
+          }
+          "LIBCLANG_PATH=$llvmRoot\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CLANG_PATH=$llvmRoot\bin\clang.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BINDGEN_EXTRA_CLANG_ARGS=--target=aarch64-pc-windows-msvc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "$llvmRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
@@ -105,6 +128,27 @@ jobs:
           fi
           ls -la "$VCPKG_ROOT/installed/arm64-windows-static/lib"
           test -f "$VCPKG_ROOT/installed/arm64-windows-static/lib/libsodium.lib"
+
+      - name: Add ARM64 vcpkg compatibility aliases
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = 'C:\vcpkg\installed\arm64-windows-static'
+          $alias = 'C:\vcpkg\installed\x64-windows-static'
+          if (-not (Test-Path -LiteralPath $target)) {
+            throw "Missing ARM64 vcpkg triplet directory: $target"
+          }
+          if (Test-Path -LiteralPath $alias) {
+            Remove-Item -LiteralPath $alias -Recurse -Force
+          }
+          try {
+            New-Item -ItemType Junction -Path $alias -Target $target | Out-Null
+          } catch {
+            New-Item -ItemType Directory -Path $alias -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $target 'include') -Destination $alias -Recurse -Force
+            Copy-Item -LiteralPath (Join-Path $target 'lib') -Destination $alias -Recurse -Force
+          }
+          Get-ChildItem -LiteralPath $alias | Select-Object FullName
 
       - name: Install Flutter with Windows ARM64 engine
         shell: pwsh
@@ -181,9 +225,16 @@ jobs:
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" arm64 || call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" arm64 || call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" arm64
           if errorlevel 1 exit /b %errorlevel%
+          set VCPKG_ROOT=C:\vcpkg
+          set VCPKG_INSTALLED_ROOT=C:\vcpkg\installed
+          set PATH=%LIBCLANG_PATH%;%PATH%
           set LIB=C:\vcpkg\installed\arm64-windows-static\lib;%LIB%
           set INCLUDE=C:\vcpkg\installed\arm64-windows-static\include;%INCLUDE%
           dir C:\vcpkg\installed\arm64-windows-static\lib\libsodium.lib
+          if errorlevel 1 exit /b %errorlevel%
+          dir "%LIBCLANG_PATH%\libclang.dll"
+          if errorlevel 1 exit /b %errorlevel%
+          dir C:\vcpkg\installed\x64-windows-static\lib\opus.lib
           if errorlevel 1 exit /b %errorlevel%
           cargo build --locked --features flutter --release --target aarch64-pc-windows-msvc --lib
           if errorlevel 1 exit /b %errorlevel%
