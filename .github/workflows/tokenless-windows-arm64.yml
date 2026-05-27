@@ -76,13 +76,24 @@ jobs:
           VCPKG_DEFAULT_HOST_TRIPLET: arm64-windows-static
         shell: bash
         run: |
-          if ! $VCPKG_ROOT/vcpkg install --triplet arm64-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+          cd "$RUNNER_TEMP"
+          if ! $VCPKG_ROOT/vcpkg install \
+            aom:arm64-windows-static \
+            libvpx:arm64-windows-static \
+            libyuv:arm64-windows-static \
+            opus:arm64-windows-static \
+            libsodium:arm64-windows-static \
+            --x-install-root="$VCPKG_ROOT/installed"; then
             find "${VCPKG_ROOT}/" -name "*.log" -print -exec cat {} \;
             exit 1
           fi
 
       - name: Build Rust library for ARM64
         shell: bash
+        env:
+          VCPKG_INSTALLED_ROOT: C:\vcpkg\installed
+          VCPKG_DEFAULT_TRIPLET: arm64-windows-static
+          VCPKG_DEFAULT_HOST_TRIPLET: arm64-windows-static
         run: |
           cargo build --locked --features flutter --release --target aarch64-pc-windows-msvc --lib
 
