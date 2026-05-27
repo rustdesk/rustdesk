@@ -150,12 +150,11 @@ jobs:
           $pub = $pub -replace 'google_fonts: \^[0-9.]+', 'google_fonts: ^8.1.0'
           Set-Content -LiteralPath $pubspec -Value $pub -Encoding UTF8
 
-          Get-ChildItem -Recurse -Path flutter\lib -Filter '*.dart' | ForEach-Object {
-            $dart = Get-Content -LiteralPath $_.FullName -Raw
-            $dart = $dart -replace 'DialogTheme\(', 'DialogThemeData('
-            $dart = $dart -replace 'TabBarTheme\(', 'TabBarThemeData('
-            Set-Content -LiteralPath $_.FullName -Value $dart -Encoding UTF8
-          }
+          $common = 'flutter\lib\common.dart'
+          $commonText = Get-Content -LiteralPath $common -Raw
+          $commonText = $commonText -creplace 'DialogTheme\(', 'DialogThemeData('
+          $commonText = $commonText -creplace 'TabBarTheme\(', 'TabBarThemeData('
+          Set-Content -LiteralPath $common -Value $commonText -Encoding UTF8
 
           New-Item -ItemType Directory -Force -Path .cargo | Out-Null
           @(
