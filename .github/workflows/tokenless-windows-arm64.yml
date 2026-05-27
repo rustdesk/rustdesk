@@ -2,6 +2,11 @@ name: Tokenless Windows ARM64
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_tag:
+        description: Release tag used for publishing release assets
+        required: false
+        default: tokenless-nightly
   push:
     branches: [tokenless-ci]
     paths:
@@ -10,7 +15,7 @@ on:
       - .github/workflows/tokenless-windows-arm64.yml
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 concurrency:
@@ -20,14 +25,18 @@ concurrency:
 env:
   RUST_VERSION: '1.75'
   LLVM_VERSION: '15.0.6'
-  FLUTTER_VERSION: '3.24.5'
+  FLUTTER_VERSION: '3.44.0'
   VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
   VERSION: '1.4.6-tokenless'
   VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
 
 jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
   build:
     name: windows-arm64-tokenless
+    needs: [generate-bridge]
     runs-on: windows-11-arm
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -48,6 +57,12 @@ jobs:
           grep -n "let token = String::new();" src/ui_session_interface.rs
           grep -n "let token = String::new();" src/main.rs
 
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@1a3da29f56261a1e1f937ec88f0856a9b8321d7e
         with:
@@ -62,7 +77,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
-          prefix-key: windows-11-arm-tokenless
+          prefix-key: windows-11-arm-tokenless-full
 
       - name: Setup vcpkg with GitHub Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
@@ -88,20 +103,148 @@ jobs:
             exit 1
           fi
 
-      - name: Build Rust library for ARM64
-        shell: bash
+      - name: Install Flutter with Windows ARM64 engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $flutterArchive = "$env:RUNNER_TEMP\flutter_windows_${env:FLUTTER_VERSION}-stable.zip"
+          $flutterRoot = "$env:RUNNER_TEMP\flutter"
+          Invoke-WebRequest -Uri "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_${env:FLUTTER_VERSION}-stable.zip" -OutFile $flutterArchive
+          Expand-Archive -Path $flutterArchive -DestinationPath $env:RUNNER_TEMP -Force
+          "$flutterRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Prepare ARM64 build patches
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter doctor -v
+          flutter config --enable-windows-desktop
+          flutter precache --windows
+          $engineRoot = Join-Path (Split-Path -Parent (Split-Path -Parent (Get-Command flutter).Source)) 'bin\cache\artifacts\engine'
+          Get-ChildItem -LiteralPath $engineRoot | Where-Object { $_.Name -like 'windows-arm64*' } | Format-Table -AutoSize
+          if (-not (Test-Path -LiteralPath (Join-Path $engineRoot 'windows-arm64-release'))) {
+            throw 'Flutter SDK does not contain windows-arm64-release engine artifacts'
+          }
+
+          $cmake = 'flutter\windows\CMakeLists.txt'
+          $text = Get-Content -LiteralPath $cmake -Raw
+          $replacement = @(
+            'if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")',
+            '  set(RUSTDESK_LIB "../../target/aarch64-pc-windows-msvc/${RUSTDESK_LIB_BUILD_TYPE}/librustdesk.dll")',
+            'else()',
+            '  set(RUSTDESK_LIB "../../target/${RUSTDESK_LIB_BUILD_TYPE}/librustdesk.dll")',
+            'endif()'
+          ) -join "`n"
+          $text = $text -replace 'set\(RUSTDESK_LIB "\.\./\.\./target/\$\{RUSTDESK_LIB_BUILD_TYPE\}/librustdesk\.dll"\)', $replacement
+          Set-Content -LiteralPath $cmake -Value $text -Encoding UTF8
+
+          $pubspec = 'flutter\pubspec.yaml'
+          $pub = Get-Content -LiteralPath $pubspec -Raw
+          $pub = $pub -replace 'extended_text: 14\.0\.0', 'extended_text: ^15.0.2'
+          $pub = $pub -replace 'google_fonts: \^[0-9.]+', 'google_fonts: ^8.1.0'
+          Set-Content -LiteralPath $pubspec -Value $pub -Encoding UTF8
+
+          Get-ChildItem -Recurse -Path flutter\lib -Filter '*.dart' | ForEach-Object {
+            $dart = Get-Content -LiteralPath $_.FullName -Raw
+            $dart = $dart -replace 'DialogTheme\(', 'DialogThemeData('
+            $dart = $dart -replace 'TabBarTheme\(', 'TabBarThemeData('
+            Set-Content -LiteralPath $_.FullName -Value $dart -Encoding UTF8
+          }
+
+          New-Item -ItemType Directory -Force -Path .cargo | Out-Null
+          @(
+            '[target.aarch64-pc-windows-msvc]',
+            'rustflags = ["-L", "native=C:\\vcpkg\\installed\\arm64-windows-static\\lib", "-l", "static=sodium"]'
+          ) | Set-Content -LiteralPath .cargo\config.toml -Encoding UTF8
+          Get-Content -LiteralPath .cargo\config.toml
+
+      - name: Build complete Windows ARM64 package
+        shell: cmd
         env:
+          VCPKG_ROOT: C:\vcpkg
           VCPKG_INSTALLED_ROOT: C:\vcpkg\installed
           VCPKG_DEFAULT_TRIPLET: arm64-windows-static
           VCPKG_DEFAULT_HOST_TRIPLET: arm64-windows-static
+          SODIUM_LIB_DIR: C:\vcpkg\installed\arm64-windows-static\lib
+          SODIUM_INCLUDE_DIR: C:\vcpkg\installed\arm64-windows-static\include
         run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" arm64 || call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" arm64 || call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" arm64
+          set LIB=C:\vcpkg\installed\arm64-windows-static\lib;%LIB%
+          set INCLUDE=C:\vcpkg\installed\arm64-windows-static\include;%INCLUDE%
           cargo build --locked --features flutter --release --target aarch64-pc-windows-msvc --lib
+          cd flutter
+          flutter pub get
+          flutter build windows --release
 
-      - name: Upload ARM64 Rust library
+      - name: Repair Flutter assets and verify ARM64 PE files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Resolve-Path -LiteralPath 'flutter\build\windows\arm64\runner\Release'
+          $flutterRoot = Split-Path -Parent (Split-Path -Parent (Get-Command flutter).Source)
+          $flutterAssets = Join-Path $release.Path 'data\flutter_assets'
+          $assetDir = Join-Path $flutterAssets 'assets'
+          $fontDir = Join-Path $flutterAssets 'fonts'
+          New-Item -ItemType Directory -Force -Path $assetDir, $fontDir | Out-Null
+          Copy-Item -LiteralPath 'flutter\assets\*' -Destination $assetDir -Recurse -Force
+          Copy-Item -LiteralPath (Join-Path $flutterRoot 'bin\cache\artifacts\material_fonts\materialicons-regular.otf') -Destination (Join-Path $fontDir 'MaterialIcons-Regular.otf') -Force
+
+          $files = @(
+            (Join-Path $release.Path 'rustdesk.exe'),
+            (Join-Path $release.Path 'librustdesk.dll'),
+            (Join-Path $release.Path 'flutter_windows.dll')
+          )
+          $files += Get-ChildItem -LiteralPath $release.Path -Filter '*.dll' -File | Select-Object -ExpandProperty FullName
+          $results = foreach ($file in ($files | Select-Object -Unique)) {
+            $bytes = [System.IO.File]::ReadAllBytes($file)
+            $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+            $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+            [pscustomobject]@{
+              Machine = ('0x{0:X4}' -f $machine)
+              Arch = if ($machine -eq 0xaa64) { 'ARM64' } elseif ($machine -eq 0x8664) { 'x64' } else { 'other' }
+              Path = $file
+            }
+          }
+          $results | Format-Table -AutoSize
+          if ($results | Where-Object { $_.Arch -ne 'ARM64' }) {
+            throw 'One or more PE files are not ARM64'
+          }
+
+          New-Item -ItemType Directory -Force -Path SignOutput | Out-Null
+          Compress-Archive -Path (Join-Path $release.Path '*') -DestinationPath "SignOutput\rustdesk-${env:VERSION}-windows-arm64-portable.zip" -Force
+          Get-FileHash "SignOutput\rustdesk-${env:VERSION}-windows-arm64-portable.zip" -Algorithm SHA256
+
+      - name: Upload ARM64 portable package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: rustdesk-tokenless-windows-arm64-rustlib
-          path: target/aarch64-pc-windows-msvc/release/*.dll
-          if-no-files-found: warn
+          name: rustdesk-tokenless-windows-arm64-portable
+          path: SignOutput/*
 
-
+      - name: Publish ARM64 package to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.inputs.upload_tag || 'tokenless-nightly' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+          $releaseTitle = "RustDesk Tokenless Nightly"
+          $releaseNotes = "Automated tokenless compatibility builds from tokenless-ci. Source commit: $env:GITHUB_SHA"
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title $releaseTitle --notes $releaseNotes
+            if ($LASTEXITCODE -ne 0) {
+              gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+              if ($LASTEXITCODE -ne 0) {
+                throw "Failed to create or find release $env:RELEASE_TAG"
+              }
+            }
+          }
+          Get-ChildItem -Path .\SignOutput -File | ForEach-Object {
+            gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY $_.FullName --clobber
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to upload $($_.FullName)"
+            }
+          }
