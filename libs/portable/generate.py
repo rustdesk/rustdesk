@@ -80,10 +80,9 @@ def build_portable(output_folder: str, target: str):
                 "Only alphanumeric characters, hyphens, underscores, dots, "
                 "and path separators (/ or \\) are allowed."
             )
-        subprocess.run(["cargo", "build", "--release", "--target", target], check=True)
+        subprocess.run(["cargo", "build", "--locked", "--release", "--target", target], check=True)
     else:
-        subprocess.run(["cargo", "build", "--release"], check=True)
-
+        subprocess.run(["cargo", "build", "--locked", "--release"], check=True)
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe
 

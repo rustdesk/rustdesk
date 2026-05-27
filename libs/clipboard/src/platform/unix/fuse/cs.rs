@@ -12,7 +12,7 @@
 //!
 //! For now, we transfer all file names with windows separators, UTF-16 encoded.
 //! *Need a way to transfer file names with '\' safely*.
-//! Maybe we can use URL encoded file names and '/' seperators as a new standard, while keep the support to old schemes.
+//! Maybe we can use URL encoded file names and '/' separators as a new standard, while keep the support to old schemes.
 //!
 //! # Note
 //! - all files on FS should be read only, and mark the owner to be the current user

@@ -27,25 +27,30 @@ class TerminalModel with ChangeNotifier {
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
   final _pendingOutputChunks = <String>[];
+  final _pendingOutputSuppressFlags = <bool>[];
   int _pendingOutputSize = 0;
   static const int _kMaxOutputBufferChars = 8 * 1024;
   // View ready state: true when terminal has valid dimensions, safe to write
   bool _terminalViewReady = false;
-
-  bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
+  bool _markViewReadyScheduled = false;
+  bool _suppressTerminalOutput = false;
+  bool _suppressNextTerminalDataOutput = false;
 
   void Function(int w, int h, int pw, int ph)? onResizeExternal;
 
   Future<void> _handleInput(String data) async {
-    // If we press the `Enter` button on Android,
-    // `data` can be '\r' or '\n' when using different keyboards.
-    // Android -> Windows. '\r' works, but '\n' does not. '\n' is just a newline.
-    // Android -> Linux. Both '\r' and '\n' work as expected (execute a command).
-    // So when we receive '\n', we may need to convert it to '\r' to ensure compatibility.
-    // Desktop -> Desktop works fine.
-    // Check if we are on mobile or web(mobile), and convert '\n' to '\r'.
+    // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
+    // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
+    // - Peer Windows: '\r' works, '\n' is just a newline.
+    // - Peer Linux: canonical-mode shells accept both, but raw-mode apps
+    //   (readline, prompt_toolkit, vim, TUI frameworks) expect '\r'.
+    // - Peer macOS: same as Linux, raw-mode apps expect '\r'
+    //   (https://github.com/rustdesk/rustdesk/issues/14907).
+    // So on mobile / web-mobile, always normalize a lone '\n' to '\r'.
+    // We deliberately do not touch multi-character payloads (e.g. pasted text)
+    // so embedded newlines in pasted content are preserved.
     final isMobileOrWebMobile = (isMobile || (isWeb && !isWebDesktop));
-    if (isMobileOrWebMobile && isPeerWindows && data == '\n') {
+    if (isMobileOrWebMobile && data == '\n') {
       data = '\r';
     }
     if (_terminalOpened) {
@@ -70,7 +75,10 @@ class TerminalModel with ChangeNotifier {
     terminalController = TerminalController();
 
     // Setup terminal callbacks
-    terminal.onOutput = _handleInput;
+    terminal.onOutput = (data) {
+      if (_suppressTerminalOutput) return;
+      _handleInput(data);
+    };
 
     terminal.onResize = (w, h, pw, ph) async {
       // Validate all dimensions before using them
@@ -84,7 +92,7 @@ class TerminalModel with ChangeNotifier {
         // Mark terminal view as ready and flush any buffered output on first valid resize.
         // Must be after onResizeExternal so the view layer has valid dimensions before flushing.
         if (!_terminalViewReady) {
-          _markViewReady();
+          _scheduleMarkViewReady();
         }
 
         if (_terminalOpened) {
@@ -110,14 +118,16 @@ class TerminalModel with ChangeNotifier {
   void onReady() {
     parent.dialogManager.dismissAll();
 
-    // Fire and forget - don't block onReady
-    openTerminal().catchError((e) {
+    // Fire and forget - don't block onReady. If the transport reconnects while
+    // this model is still open, re-send OpenTerminal so the remote service marks
+    // the persistent session active again and resumes output streaming.
+    openTerminal(force: _terminalOpened).catchError((e) {
       debugPrint('[TerminalModel] Error opening terminal: $e');
     });
   }
 
-  Future<void> openTerminal() async {
-    if (_terminalOpened) return;
+  Future<void> openTerminal({bool force = false}) async {
+    if (_terminalOpened && !force) return;
     // Request the remote side to open a terminal with default shell
     // The remote side will decide which shell to use based on its OS
 
@@ -275,9 +285,12 @@ class TerminalModel with ChangeNotifier {
     if (success) {
       _terminalOpened = true;
 
-      // On reconnect ("Reconnected to existing terminal"), server may replay recent output.
-      // If this TerminalView instance is reused (not rebuilt), duplicate lines can appear.
-      // We intentionally accept this tradeoff for now to keep logic simple.
+      // On reconnect, the server may replay recent output. That replay can include
+      // terminal queries like DSR/DA; xterm answers them through onOutput as
+      // "^[[1;1R^[[2;2R^[[>0;0;0c", which must not be sent back to the peer.
+      final replayTerminalOutput = evt['replay_terminal_output'];
+      _suppressNextTerminalDataOutput = replayTerminalOutput == true ||
+          message == 'Reconnected to existing terminal with pending output';
 
       // Fallback: if terminal view is not yet ready but already has valid
       // dimensions (e.g. layout completed before open response arrived),
@@ -285,7 +298,7 @@ class TerminalModel with ChangeNotifier {
       if (!_terminalViewReady &&
           terminal.viewWidth > 0 &&
           terminal.viewHeight > 0) {
-        _markViewReady();
+        _scheduleMarkViewReady();
       }
 
       // Process any buffered input
@@ -297,12 +310,16 @@ class TerminalModel with ChangeNotifier {
       });
 
       final persistentSessions =
-          evt['persistent_sessions'] as List<dynamic>? ?? [];
+          (evt['persistent_sessions'] as List<dynamic>? ?? [])
+              .whereType<int>()
+              .where((id) => !parent.terminalModels.containsKey(id))
+              .toList();
       if (kWindowId != null && persistentSessions.isNotEmpty) {
         DesktopMultiWindow.invokeMethod(
             kWindowId!,
             kWindowEventRestoreTerminalSessions,
             jsonEncode({
+              'peer_id': id,
               'persistent_sessions': persistentSessions,
             }));
       }
@@ -332,6 +349,8 @@ class TerminalModel with ChangeNotifier {
     final data = evt['data'];
 
     if (data != null) {
+      final suppressTerminalOutput = _suppressNextTerminalDataOutput;
+      _suppressNextTerminalDataOutput = false;
       try {
         String text = '';
         if (data is String) {
@@ -351,7 +370,7 @@ class TerminalModel with ChangeNotifier {
           return;
         }
 
-        _writeToTerminal(text);
+        _writeToTerminal(text, suppressTerminalOutput: suppressTerminalOutput);
       } catch (e) {
         debugPrint('[TerminalModel] Failed to process terminal data: $e');
       }
@@ -361,7 +380,10 @@ class TerminalModel with ChangeNotifier {
   /// Write text to terminal, buffering if the view is not yet ready.
   /// All terminal output should go through this method to avoid NaN errors
   /// from writing before the terminal view has valid layout dimensions.
-  void _writeToTerminal(String text) {
+  void _writeToTerminal(
+    String text, {
+    bool suppressTerminalOutput = false,
+  }) {
     if (!_terminalViewReady) {
       // If a single chunk exceeds the cap, keep only its tail.
       // Note: truncation may split a multi-byte ANSI escape sequence,
@@ -373,34 +395,73 @@ class TerminalModel with ChangeNotifier {
         _pendingOutputChunks
           ..clear()
           ..add(truncated);
+        _pendingOutputSuppressFlags
+          ..clear()
+          ..add(suppressTerminalOutput);
         _pendingOutputSize = truncated.length;
       } else {
         _pendingOutputChunks.add(text);
+        _pendingOutputSuppressFlags.add(suppressTerminalOutput);
         _pendingOutputSize += text.length;
         // Drop oldest chunks if exceeds limit (whole chunks to preserve ANSI sequences)
         while (_pendingOutputSize > _kMaxOutputBufferChars &&
             _pendingOutputChunks.length > 1) {
           final removed = _pendingOutputChunks.removeAt(0);
+          _pendingOutputSuppressFlags.removeAt(0);
           _pendingOutputSize -= removed.length;
         }
       }
       return;
     }
-    terminal.write(text);
+    _writeTerminalChunk(text, suppressTerminalOutput: suppressTerminalOutput);
   }
 
   void _flushOutputBuffer() {
     if (_pendingOutputChunks.isEmpty) return;
     debugPrint(
         '[TerminalModel] Flushing $_pendingOutputSize buffered chars (${_pendingOutputChunks.length} chunks)');
-    for (final chunk in _pendingOutputChunks) {
-      terminal.write(chunk);
+    for (var i = 0; i < _pendingOutputChunks.length; i++) {
+      _writeTerminalChunk(
+        _pendingOutputChunks[i],
+        suppressTerminalOutput: _pendingOutputSuppressFlags[i],
+      );
     }
     _pendingOutputChunks.clear();
+    _pendingOutputSuppressFlags.clear();
     _pendingOutputSize = 0;
   }
 
+  void _writeTerminalChunk(
+    String text, {
+    required bool suppressTerminalOutput,
+  }) {
+    if (!suppressTerminalOutput) {
+      terminal.write(text);
+      return;
+    }
+    final previous = _suppressTerminalOutput;
+    _suppressTerminalOutput = true;
+    try {
+      terminal.write(text);
+    } finally {
+      _suppressTerminalOutput = previous;
+    }
+  }
+
   /// Mark terminal view as ready and flush buffered output.
+  void _scheduleMarkViewReady() {
+    if (_disposed || _terminalViewReady || _markViewReadyScheduled) return;
+    _markViewReadyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _markViewReadyScheduled = false;
+      if (_disposed || _terminalViewReady) return;
+      if (terminal.viewWidth > 0 && terminal.viewHeight > 0) {
+        _markViewReady();
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   void _markViewReady() {
     if (_terminalViewReady) return;
     _terminalViewReady = true;
@@ -426,7 +487,10 @@ class TerminalModel with ChangeNotifier {
     // Clear buffers to free memory
     _inputBuffer.clear();
     _pendingOutputChunks.clear();
+    _pendingOutputSuppressFlags.clear();
     _pendingOutputSize = 0;
+    _markViewReadyScheduled = false;
+    _suppressNextTerminalDataOutput = false;
     // Terminal cleanup is handled server-side when service closes
     super.dispose();
   }
