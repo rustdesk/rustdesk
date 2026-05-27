@@ -8,6 +8,7 @@ use librustdesk::*;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 fn main() {
     if !common::global_init() {
+        eprintln!("Global initialization failed.");
         return;
     }
     common::test_rendezvous_server();
@@ -22,9 +23,6 @@ fn main() {
     feature = "flutter"
 )))]
 fn main() {
-    if !common::global_init() {
-        return;
-    }
     #[cfg(all(windows, not(feature = "inline")))]
     unsafe {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
@@ -83,7 +81,9 @@ fn main() {
         common::test_rendezvous_server();
         common::test_nat_type();
         let key = matches.value_of("key").unwrap_or("").to_owned();
-        let token = LocalConfig::get_option("access_token");
+        // Keep account/API login available, but do not use the API token for
+        // rendezvous/relay setup against open-source rustdesk-server.
+        let token = String::new();
         cli::start_one_port_forward(
             options[0].clone(),
             port,
@@ -96,7 +96,9 @@ fn main() {
         common::test_rendezvous_server();
         common::test_nat_type();
         let key = matches.value_of("key").unwrap_or("").to_owned();
-        let token = LocalConfig::get_option("access_token");
+        // Keep account/API login available, but do not use the API token for
+        // rendezvous/relay setup against open-source rustdesk-server.
+        let token = String::new();
         cli::connect_test(p, key, token);
     } else if let Some(p) = matches.value_of("server") {
         log::info!("id={}", hbb_common::config::Config::get_id());
@@ -104,3 +106,4 @@ fn main() {
     }
     common::global_clean();
 }
+

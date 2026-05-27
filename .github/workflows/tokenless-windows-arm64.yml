@@ -1,0 +1,117 @@
+name: Tokenless Windows ARM64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [tokenless-ci]
+    paths:
+      - src/ui_session_interface.rs
+      - src/main.rs
+      - .github/workflows/tokenless-windows-arm64.yml
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tokenless-windows-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_VERSION: '1.75'
+  LLVM_VERSION: '15.0.6'
+  FLUTTER_VERSION: '3.24.5'
+  VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
+  VERSION: '1.4.6-tokenless'
+  VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+
+jobs:
+  build:
+    name: windows-arm64-tokenless
+    runs-on: windows-11-arm
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+
+      - name: Verify tokenless patch is present
+        shell: bash
+        run: |
+          grep -n "let token = String::new();" src/ui_session_interface.rs
+          grep -n "let token = String::new();" src/main.rs
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@1a3da29f56261a1e1f937ec88f0856a9b8321d7e
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-pc-windows-msvc
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: windows-11-arm-tokenless
+
+      - name: Setup vcpkg with GitHub Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install ARM64 vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: arm64-windows-static
+        shell: bash
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --triplet arm64-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" -print -exec cat {} \;
+            exit 1
+          fi
+
+      - name: Build Rust library for ARM64
+        shell: bash
+        run: |
+          cargo build --locked --features flutter --release --target aarch64-pc-windows-msvc --lib
+
+      - name: Upload ARM64 Rust library
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustdesk-tokenless-windows-arm64-rustlib
+          path: target/aarch64-pc-windows-msvc/release/*.dll
+          if-no-files-found: warn
+
+      - name: Try Flutter Windows ARM64 package
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          flutter build windows --release
+          Get-ChildItem -Recurse -Filter rustdesk.exe .\flutter\build, .\build -ErrorAction SilentlyContinue
+
+      - name: Upload possible ARM64 Flutter outputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustdesk-tokenless-windows-arm64-possible-flutter-output
+          path: |
+            flutter/build/windows/**/runner/Release/**
+            build/windows/**/runner/Release/**
+          if-no-files-found: warn
