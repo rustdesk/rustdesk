@@ -53,12 +53,6 @@ jobs:
         with:
           version: ${{ env.LLVM_VERSION }}
 
-      - name: Install flutter
-        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
@@ -99,19 +93,4 @@ jobs:
           path: target/aarch64-pc-windows-msvc/release/*.dll
           if-no-files-found: warn
 
-      - name: Try Flutter Windows ARM64 package
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          flutter doctor -v
-          flutter build windows --release
-          Get-ChildItem -Recurse -Filter rustdesk.exe .\flutter\build, .\build -ErrorAction SilentlyContinue
 
-      - name: Upload possible ARM64 Flutter outputs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: rustdesk-tokenless-windows-arm64-possible-flutter-output
-          path: |
-            flutter/build/windows/**/runner/Release/**
-            build/windows/**/runner/Release/**
-          if-no-files-found: warn
