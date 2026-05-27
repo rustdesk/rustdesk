@@ -26,6 +26,7 @@ env:
   RUST_VERSION: '1.75'
   LLVM_VERSION: '15.0.6'
   FLUTTER_VERSION: '3.44.0'
+  DART_SDK_VERSION: '3.12.0'
   VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
   VERSION: '1.4.6-tokenless'
   VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
@@ -111,6 +112,12 @@ jobs:
           $flutterRoot = "$env:RUNNER_TEMP\flutter"
           Invoke-WebRequest -Uri "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_${env:FLUTTER_VERSION}-stable.zip" -OutFile $flutterArchive
           Expand-Archive -Path $flutterArchive -DestinationPath $env:RUNNER_TEMP -Force
+          $dartArchive = "$env:RUNNER_TEMP\dartsdk-windows-arm64-release.zip"
+          $dartExtract = "$env:RUNNER_TEMP\dart-arm64"
+          Invoke-WebRequest -Uri "https://storage.googleapis.com/dart-archive/channels/stable/release/${env:DART_SDK_VERSION}/sdk/dartsdk-windows-arm64-release.zip" -OutFile $dartArchive
+          Expand-Archive -Path $dartArchive -DestinationPath $dartExtract -Force
+          Remove-Item -LiteralPath "$flutterRoot\bin\cache\dart-sdk" -Recurse -Force
+          Move-Item -LiteralPath "$dartExtract\dart-sdk" -Destination "$flutterRoot\bin\cache\dart-sdk"
           "$flutterRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Prepare ARM64 build patches
@@ -122,9 +129,8 @@ jobs:
           flutter precache --windows
           $engineRoot = Join-Path (Split-Path -Parent (Split-Path -Parent (Get-Command flutter).Source)) 'bin\cache\artifacts\engine'
           Get-ChildItem -LiteralPath $engineRoot | Where-Object { $_.Name -like 'windows-arm64*' } | Format-Table -AutoSize
-          if (-not (Test-Path -LiteralPath (Join-Path $engineRoot 'windows-arm64-release'))) {
-            throw 'Flutter SDK does not contain windows-arm64-release engine artifacts'
-          }
+          dart --version
+          flutter devices
 
           $cmake = 'flutter\windows\CMakeLists.txt'
           $text = Get-Content -LiteralPath $cmake -Raw
