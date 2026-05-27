@@ -207,4 +207,9 @@ jobs:
             }
           }
           Get-ChildItem -Path .\SignOutput
-          gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY .\SignOutput\* --clobber
+          Get-ChildItem -Path .\SignOutput -File | ForEach-Object {
+            gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY $_.FullName --clobber
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to upload $($_.FullName)"
+            }
+          }
