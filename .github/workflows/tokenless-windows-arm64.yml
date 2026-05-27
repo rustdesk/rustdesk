@@ -179,14 +179,75 @@ jobs:
           set INCLUDE=C:\vcpkg\installed\arm64-windows-static\include;%INCLUDE%
           cargo build --locked --features flutter --release --target aarch64-pc-windows-msvc --lib
           cd flutter
-          flutter pub get
-          flutter build windows --release
+          call flutter pub get
+          call flutter build windows --release
 
       - name: Repair Flutter assets and verify ARM64 PE files
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $release = Resolve-Path -LiteralPath 'flutter\build\windows\arm64\runner\Release'
+          if (Test-Path -LiteralPath 'flutter\build\windows') {
+            Write-Host 'Flutter Windows build directories:'
+            Get-ChildItem -LiteralPath 'flutter\build\windows' -Recurse -Directory |
+              Select-Object -ExpandProperty FullName
+            Write-Host 'RustDesk executables found under flutter\build\windows:'
+            Get-ChildItem -LiteralPath 'flutter\build\windows' -Recurse -Filter rustdesk.exe -File |
+              Select-Object -ExpandProperty FullName
+          }
+
+          $preferred = 'flutter\build\windows\arm64\runner\Release'
+          $releaseCandidates = @()
+          if (Test-Path -LiteralPath $preferred) {
+            $releaseCandidates += (Resolve-Path -LiteralPath $preferred).Path
+          }
+          if (-not $releaseCandidates) {
+            $releaseCandidates = @(Get-ChildItem -LiteralPath 'flutter\build\windows' -Recurse -Directory -Filter Release -ErrorAction SilentlyContinue |
+              Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'rustdesk.exe') } |
+              Select-Object -ExpandProperty FullName)
+          }
+          if (-not $releaseCandidates) {
+            throw 'No Flutter Windows Release directory containing rustdesk.exe was produced'
+          }
+
+          function Get-PeInfo([string[]] $Path) {
+            foreach ($file in ($Path | Select-Object -Unique)) {
+              $resolved = Resolve-Path -LiteralPath $file -ErrorAction Stop
+              $bytes = [System.IO.File]::ReadAllBytes($resolved.Path)
+              if ($bytes.Length -lt 0x40) { throw "File too small to be a PE image: $($resolved.Path)" }
+              $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+              if ($peOffset -lt 0 -or $peOffset + 6 -ge $bytes.Length) { throw "Invalid PE header offset: $($resolved.Path)" }
+              $signature = [Text.Encoding]::ASCII.GetString($bytes, $peOffset, 4)
+              if ($signature -ne "PE$([char]0)$([char]0)") { throw "Missing PE signature: $($resolved.Path)" }
+              $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+              [pscustomobject]@{
+                Machine = ('0x{0:X4}' -f $machine)
+                Arch = if ($machine -eq 0xaa64) { 'ARM64' } elseif ($machine -eq 0x8664) { 'x64' } elseif ($machine -eq 0x014c) { 'x86' } else { 'other' }
+                Path = $resolved.Path
+              }
+            }
+          }
+
+          $selectedRelease = $null
+          foreach ($candidate in $releaseCandidates) {
+            Write-Host "Checking release candidate: $candidate"
+            $files = @(
+              (Join-Path $candidate 'rustdesk.exe'),
+              (Join-Path $candidate 'librustdesk.dll'),
+              (Join-Path $candidate 'flutter_windows.dll')
+            )
+            $files += Get-ChildItem -LiteralPath $candidate -Recurse -Filter '*.dll' -File | Select-Object -ExpandProperty FullName
+            $candidateResults = @(Get-PeInfo -Path $files)
+            $candidateResults | Format-Table -AutoSize
+            if (-not ($candidateResults | Where-Object { $_.Arch -ne 'ARM64' })) {
+              $selectedRelease = $candidate
+              break
+            }
+          }
+          if (-not $selectedRelease) {
+            throw 'No complete ARM64 Flutter release directory was produced'
+          }
+
+          $release = Resolve-Path -LiteralPath $selectedRelease
           $flutterRoot = Split-Path -Parent (Split-Path -Parent (Get-Command flutter).Source)
           $flutterAssets = Join-Path $release.Path 'data\flutter_assets'
           $assetDir = Join-Path $flutterAssets 'assets'
@@ -200,20 +261,27 @@ jobs:
             (Join-Path $release.Path 'librustdesk.dll'),
             (Join-Path $release.Path 'flutter_windows.dll')
           )
-          $files += Get-ChildItem -LiteralPath $release.Path -Filter '*.dll' -File | Select-Object -ExpandProperty FullName
-          $results = foreach ($file in ($files | Select-Object -Unique)) {
-            $bytes = [System.IO.File]::ReadAllBytes($file)
-            $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
-            $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
-            [pscustomobject]@{
-              Machine = ('0x{0:X4}' -f $machine)
-              Arch = if ($machine -eq 0xaa64) { 'ARM64' } elseif ($machine -eq 0x8664) { 'x64' } else { 'other' }
-              Path = $file
-            }
-          }
+          $files += Get-ChildItem -LiteralPath $release.Path -Recurse -Filter '*.dll' -File | Select-Object -ExpandProperty FullName
+          $results = @(Get-PeInfo -Path $files)
           $results | Format-Table -AutoSize
           if ($results | Where-Object { $_.Arch -ne 'ARM64' }) {
             throw 'One or more PE files are not ARM64'
+          }
+
+          $requiredAssets = @(
+            'fonts\MaterialIcons-Regular.otf',
+            'assets\tabbar.ttf',
+            'assets\peer_searchbar.ttf',
+            'assets\address_book.ttf',
+            'assets\device_group.ttf',
+            'assets\more.ttf',
+            'assets\gestures.ttf'
+          )
+          foreach ($asset in $requiredAssets) {
+            $assetPath = Join-Path $flutterAssets $asset
+            if (-not (Test-Path -LiteralPath $assetPath)) {
+              throw "Missing Flutter asset: $asset"
+            }
           }
 
           New-Item -ItemType Directory -Force -Path SignOutput | Out-Null
