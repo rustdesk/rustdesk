@@ -103,6 +103,8 @@ jobs:
             find "${VCPKG_ROOT}/" -name "*.log" -print -exec cat {} \;
             exit 1
           fi
+          ls -la "$VCPKG_ROOT/installed/arm64-windows-static/lib"
+          test -f "$VCPKG_ROOT/installed/arm64-windows-static/lib/libsodium.lib"
 
       - name: Install Flutter with Windows ARM64 engine
         shell: pwsh
@@ -136,13 +138,17 @@ jobs:
           $text = Get-Content -LiteralPath $cmake -Raw
           $replacement = @(
             'if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")',
-            '  set(RUSTDESK_LIB "../../target/aarch64-pc-windows-msvc/${RUSTDESK_LIB_BUILD_TYPE}/librustdesk.dll")',
+            '  set(RUSTDESK_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../../target/aarch64-pc-windows-msvc/${RUSTDESK_LIB_BUILD_TYPE}/librustdesk.dll")',
             'else()',
-            '  set(RUSTDESK_LIB "../../target/${RUSTDESK_LIB_BUILD_TYPE}/librustdesk.dll")',
+            '  set(RUSTDESK_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../../target/${RUSTDESK_LIB_BUILD_TYPE}/librustdesk.dll")',
             'endif()'
           ) -join "`n"
           $text = $text -replace 'set\(RUSTDESK_LIB "\.\./\.\./target/\$\{RUSTDESK_LIB_BUILD_TYPE\}/librustdesk\.dll"\)', $replacement
+          if ($text -notmatch 'aarch64-pc-windows-msvc') {
+            throw 'Failed to patch flutter/windows/CMakeLists.txt for ARM64 librustdesk.dll path'
+          }
           Set-Content -LiteralPath $cmake -Value $text -Encoding UTF8
+          Select-String -LiteralPath $cmake -Pattern 'RUSTDESK_LIB|aarch64-pc-windows-msvc|install\(FILES "\$\{RUSTDESK_LIB\}"' -Context 2,2
 
           $pubspec = 'flutter\pubspec.yaml'
           $pub = Get-Content -LiteralPath $pubspec -Raw
@@ -159,7 +165,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path .cargo | Out-Null
           @(
             '[target.aarch64-pc-windows-msvc]',
-            'rustflags = ["-L", "native=C:\\vcpkg\\installed\\arm64-windows-static\\lib", "-l", "static=sodium"]'
+            'rustflags = ["-C", "target-feature=+crt-static"]'
           ) | Set-Content -LiteralPath .cargo\config.toml -Encoding UTF8
           Get-Content -LiteralPath .cargo\config.toml
 
@@ -174,12 +180,20 @@ jobs:
           SODIUM_INCLUDE_DIR: C:\vcpkg\installed\arm64-windows-static\include
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" arm64 || call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" arm64 || call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" arm64
+          if errorlevel 1 exit /b %errorlevel%
           set LIB=C:\vcpkg\installed\arm64-windows-static\lib;%LIB%
           set INCLUDE=C:\vcpkg\installed\arm64-windows-static\include;%INCLUDE%
+          dir C:\vcpkg\installed\arm64-windows-static\lib\libsodium.lib
+          if errorlevel 1 exit /b %errorlevel%
           cargo build --locked --features flutter --release --target aarch64-pc-windows-msvc --lib
+          if errorlevel 1 exit /b %errorlevel%
+          dir target\aarch64-pc-windows-msvc\release\librustdesk.dll
+          if errorlevel 1 exit /b %errorlevel%
           cd flutter
           call flutter pub get
+          if errorlevel 1 exit /b %errorlevel%
           call flutter build windows --release
+          if errorlevel 1 exit /b %errorlevel%
 
       - name: Repair Flutter assets and verify ARM64 PE files
         shell: pwsh
