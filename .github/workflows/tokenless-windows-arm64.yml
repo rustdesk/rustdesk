@@ -317,7 +317,9 @@ jobs:
           $assetDir = Join-Path $flutterAssets 'assets'
           $fontDir = Join-Path $flutterAssets 'fonts'
           New-Item -ItemType Directory -Force -Path $assetDir, $fontDir | Out-Null
-          Copy-Item -LiteralPath 'flutter\assets\*' -Destination $assetDir -Recurse -Force
+          Get-ChildItem -LiteralPath 'flutter\assets' -Force | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $assetDir -Recurse -Force
+          }
           Copy-Item -LiteralPath (Join-Path $flutterRoot 'bin\cache\artifacts\material_fonts\materialicons-regular.otf') -Destination (Join-Path $fontDir 'MaterialIcons-Regular.otf') -Force
 
           $files = @(
