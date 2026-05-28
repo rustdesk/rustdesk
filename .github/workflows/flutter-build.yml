@@ -111,7 +111,7 @@ jobs:
           path: ./
 
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@1a3da29f56261a1e1f937ec88f0856a9b8321d7e # v1
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
         with:
           version: ${{ env.LLVM_VERSION }}
 
