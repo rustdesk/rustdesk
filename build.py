@@ -17,7 +17,8 @@ osx = platform.platform().startswith(
 hbb_name = 'rustdesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 if windows:
-    flutter_build_dir = 'build/windows/x64/runner/Release/'
+    win_arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x64'
+    flutter_build_dir = f'build/windows/{win_arch}/runner/Release/'
 elif osx:
     flutter_build_dir = 'build/macos/Build/Products/Release/'
 else:
@@ -506,6 +507,7 @@ def main():
                 'target\\release\\rustdesk.exe')
         else:
             print('Not signed')
+        os.makedirs(res_dir, exist_ok=True)
         system2(
             f'cp -rf target/release/RustDesk.exe {res_dir}')
         os.chdir('libs/portable')

@@ -21,6 +21,10 @@
       "host": false
     },
     {
+      "name": "libsodium",
+      "host": false
+    },
+    {
       "name": "oboe",
       "platform": "android"
     },
@@ -64,15 +68,15 @@
       "features": [
         {
           "name": "amf",
-          "platform": "((windows | linux) & static)"
+          "platform": "(((windows & !arm) | linux) & static)"
         },
         {
           "name": "nvcodec",
-          "platform": "((windows | linux) & static)"
+          "platform": "(((windows & !arm) | linux) & static)"
         },
         {
           "name": "qsv",
-          "platform": "(windows & static)"
+          "platform": "(windows & !arm & static)"
         }
       ],
       "platform": "((windows | (linux & !arm32) | osx) & static)"
