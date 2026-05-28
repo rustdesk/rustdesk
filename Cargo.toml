@@ -212,6 +212,10 @@ exclude = ["vdi/host", "examples/custom_plugin"]
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
 
+# TODO: revert once arm64-windows triplet support lands in rustdesk-org/magnum-opus (PR pending)
+[patch."https://github.com/rustdesk-org/magnum-opus"]
+magnum-opus = { git = "https://github.com/dennisameling/magnum-opus", rev = "99d26ccf01727ea7f49ddebebeb6c0a2d6b21fb8" }
+
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
 ProductName = "RustDesk"
