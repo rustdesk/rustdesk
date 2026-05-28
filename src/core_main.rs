@@ -432,7 +432,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--password" {
-            if config::is_disable_settings() {
+            if is_cli_setting_change_disabled() {
                 println!("Settings are disabled!");
                 return None;
             }
@@ -474,7 +474,7 @@ pub fn core_main() -> Option<Vec<String>> {
             println!("{}", crate::ipc::get_id());
             return None;
         } else if args[0] == "--set-id" {
-            if config::is_disable_settings() {
+            if is_cli_setting_change_disabled() {
                 println!("Settings are disabled!");
                 return None;
             }
@@ -521,7 +521,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--option" {
-            if config::is_disable_settings() {
+            if is_cli_setting_change_disabled() {
                 println!("Settings are disabled!");
                 return None;
             }
@@ -965,6 +965,14 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--assign")
             | Some("--deploy")
     )
+}
+
+#[inline]
+fn is_cli_setting_change_disabled() -> bool {
+    let option = config::keys::OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED;
+    let allow_command_line_settings =
+        config::option2bool(option, &crate::get_builtin_option(option));
+    config::is_disable_settings() && !allow_command_line_settings
 }
 
 #[cfg(test)]
