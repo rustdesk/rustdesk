@@ -22,7 +22,8 @@
     },
     {
       "name": "libsodium",
-      "host": false
+      "host": false,
+      "platform": "windows & arm64"
     },
     {
       "name": "oboe",

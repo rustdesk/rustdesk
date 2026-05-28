@@ -181,6 +181,13 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
+      - name: Set SODIUM_LIB_DIR (arm64)
+        # libsodium-sys ships no arm64 Windows prebuilt lib; point it at the vcpkg-built one
+        # (only for arm64 — leaving it unset lets x64 use the crate's bundled lib).
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        shell: bash
+        run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib" >> "$GITHUB_ENV"
+
       - name: Build rustdesk
         run: |
           # Windows: build RustDesk
