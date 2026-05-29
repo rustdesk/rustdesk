@@ -672,7 +672,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-printing-disallowed-text-tip", "As configurações do dispositivo controlado não permitem impressão remota."),
         ("save-settings-tip", "Salvar configurações"),
         ("dont-show-again-tip", "Não mostrar novamente"),
-        ("Take screenshot", "Capturar de tela"),
+        ("Take screenshot", "Capturar tela"),
         ("Taking screenshot", "Capturando tela"),
         ("screenshot-merged-screen-not-supported-tip", "Mesclar a captura de tela de múltiplos monitores não é suportada no momento. Por favor, alterne para um único monitor e tente novamente."),
         ("screenshot-action-tip", "Por favor, selecione como deseja continuar com a captura de tela."),
