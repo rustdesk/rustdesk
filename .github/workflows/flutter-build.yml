@@ -126,18 +126,39 @@ jobs:
       - name: Install flutter (arm64)
         # subosito/flutter-action can't install an arm64 Windows SDK: Flutter's release
         # manifest lists only x64 archives, so it would set up an x64 Dart and produce x64
-        # output on the arm64 runner. Fetch the official stable archive directly instead —
-        # on first run its bootstrap downloads a native arm64 Dart SDK + Windows engine,
-        # so `flutter build windows` emits real arm64 binaries (build/windows/arm64/...).
+        # output on the arm64 runner. Fetch the official stable archive directly instead.
         if: ${{ matrix.job.arch == 'aarch64' }}
         run: |
           $url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_${{ env.FLUTTER_VERSION }}-stable.zip"
           Invoke-WebRequest -Uri $url -OutFile flutter_windows.zip
           Expand-Archive -Path flutter_windows.zip -DestinationPath C:\
           Add-Content -Path $env:GITHUB_PATH -Value "C:\flutter\bin"
-          # Bootstrap the arm64 Dart SDK + engine artifacts so later steps reuse them.
+          # The archive bundles an x64 Dart SDK with a matching engine-dart-sdk.stamp, so
+          # Flutter's update_dart_sdk.ps1 short-circuits (stamp matches -> return) and keeps
+          # the x64 Dart. `flutter build windows` then targets the Dart VM's arch = x64, even
+          # on this arm64 host. Delete the bundled SDK + stamp to force a fresh bootstrap that
+          # downloads the native arm64 Dart (PROCESSOR_ARCHITECTURE=ARM64 on this runner).
+          Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          Remove-Item -Recurse -Force C:\flutter\bin\cache\dart-sdk -ErrorAction SilentlyContinue
+          Remove-Item -Force C:\flutter\bin\cache\engine-dart-sdk.stamp -ErrorAction SilentlyContinue
           & C:\flutter\bin\flutter.bat --version
+          # Confirm the Dart we ended up with is arm64 ("on windows_arm64"); fail loudly if not.
+          $dartVer = & C:\flutter\bin\dart.bat --version 2>&1 | Out-String
+          Write-Host $dartVer
+          if ($dartVer -notmatch "windows_arm64") {
+            Write-Error "Expected an arm64 Dart SDK but got: $dartVer"
+            exit 1
+          }
           & C:\flutter\bin\flutter.bat precache --windows
+          # Fail fast if precache pulled the wrong-arch Windows engine: an arm64 Dart should
+          # fetch windows-arm64 engine artifacts. Bailing here saves the ~25min Rust build.
+          $engineDir = "C:\flutter\bin\cache\artifacts\engine"
+          Write-Host "Engine artifacts present:"
+          Get-ChildItem $engineDir -Directory | Select-Object -ExpandProperty Name | Write-Host
+          if (-not (Test-Path "$engineDir\windows-arm64-release")) {
+            Write-Error "Expected windows-arm64-release engine artifacts but they are missing (wrong-arch SDK)."
+            exit 1
+          }
 
       # https://github.com/flutter/flutter/issues/155685
       # Only needed for x64: stock Flutter ships a native arm64 Windows engine.
