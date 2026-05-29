@@ -42,6 +42,8 @@ static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
 static SENT_REGISTER_PK: AtomicBool = AtomicBool::new(false);
 pub(crate) static NEEDS_DEPLOY: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "android")]
+static NOTIFIED_NEEDS_DEPLOY: AtomicBool = AtomicBool::new(false);
 // register_pk retry interval (ms) when device is awaiting deployment
 const DEPLOY_RETRY_INTERVAL: i64 = 30_000;
 lazy_static::lazy_static! {
@@ -64,6 +66,25 @@ async fn deploy_register_throttled() -> bool {
         .await
         .map(|t| (t.elapsed().as_millis() as i64) < DEPLOY_RETRY_INTERVAL)
         .unwrap_or(false)
+}
+
+#[cfg(target_os = "android")]
+fn notify_android_needs_deploy() {
+    if NOTIFIED_NEEDS_DEPLOY.load(Ordering::SeqCst) {
+        return;
+    }
+    let event = serde_json::json!({ "name": "android_needs_deploy" }).to_string();
+    if matches!(
+        crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, event),
+        Some(true)
+    ) {
+        NOTIFIED_NEEDS_DEPLOY.store(true, Ordering::SeqCst);
+    }
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn reset_needs_deploy_notification() {
+    NOTIFIED_NEEDS_DEPLOY.store(false, Ordering::SeqCst);
 }
 
 #[derive(Clone)]
@@ -322,6 +343,8 @@ impl RendezvousMediator {
                         Config::set_host_key_confirmed(&self.host_prefix, true);
                         *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
                         NEEDS_DEPLOY.store(false, Ordering::SeqCst);
+                        #[cfg(target_os = "android")]
+                        reset_needs_deploy_notification();
                     }
                     Ok(register_pk_response::Result::UUID_MISMATCH) => {
                         self.handle_uuid_mismatch(sink).await?;
@@ -336,6 +359,8 @@ impl RendezvousMediator {
                         // was deleted by an admin while running.
                         Config::set_key_confirmed(false);
                         Config::set_host_key_confirmed(&self.host_prefix, false);
+                        #[cfg(target_os = "android")]
+                        notify_android_needs_deploy();
                     }
                     _ => {
                         log::error!("unknown RegisterPkResponse");

@@ -745,5 +745,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", "પ્રીસેટ પાસવર્ડ વપરાશમાં છે."),
         ("Enable privacy mode", ""),
         ("allow-remote-toolbar-docking-any-edge", ""),
+        ("API Token", ""),
+        ("Deploy", ""),
+        ("Custom ID (optional)", ""),
+        ("server_requires_deployment_tip", ""),
     ].iter().cloned().collect();
 }

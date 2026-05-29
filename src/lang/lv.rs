@@ -745,5 +745,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", "Iepriekš iestatītā parole pašlaik tiek izmantota."),
         ("Enable privacy mode", "Iespējot privātuma režīmu"),
         ("allow-remote-toolbar-docking-any-edge", "Atļaut attālās rīkjoslas piestiprināšanu pie jebkuras loga malas"),
+        ("API Token", ""),
+        ("Deploy", ""),
+        ("Custom ID (optional)", ""),
+        ("server_requires_deployment_tip", ""),
     ].iter().cloned().collect();
 }

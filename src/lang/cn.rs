@@ -745,5 +745,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", "当前使用预设密码"),
         ("Enable privacy mode", "允许隐私模式"),
         ("allow-remote-toolbar-docking-any-edge", ""),
+        ("API Token", "API 令牌"),
+        ("Deploy", "部署"),
+        ("Custom ID (optional)", "自定义 ID（可选）"),
+        ("server_requires_deployment_tip", "服务器需要部署。是否部署此设备？"),
     ].iter().cloned().collect();
 }

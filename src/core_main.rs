@@ -661,72 +661,28 @@ pub fn core_main() -> Option<Vec<String>> {
                     }
                 };
                 let new_id = get_value("--id");
-                let local_id = crate::ipc::get_id();
-                let id_to_deploy = new_id.clone().unwrap_or_else(|| local_id.clone());
-                let uuid = crate::encode64(hbb_common::get_uuid());
-                let pk = crate::encode64(
-                    hbb_common::config::Config::get_key_pair().1,
-                );
-                let body = serde_json::json!({
-                    "id": id_to_deploy,
-                    "uuid": uuid,
-                    "pk": pk,
-                });
-                let header = "Authorization: Bearer ".to_owned() + &token;
-                let url = crate::ui_interface::get_api_server() + "/api/devices/deploy";
-                match crate::post_request_sync(url, body.to_string(), &header) {
-                    Err(err) => {
-                        println!("Request failed: {}", err);
-                        std::process::exit(1);
+                match crate::ui_interface::deploy_device(token, new_id) {
+                    crate::ui_interface::DeployResult::Ok => {
+                        println!("Device deployed.");
                     }
-                    Ok(text) => {
-                        let parsed: serde_json::Value =
-                            serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
-                        let result = parsed["result"].as_str().unwrap_or("");
-                        match result {
-                            "OK" => {
-                                if let Some(ref new_id) = new_id {
-                                    if *new_id != local_id {
-                                        if let Err(err) =
-                                            crate::ipc::set_config("id", new_id.clone())
-                                        {
-                                            println!(
-                                                "Failed to persist deployed id locally: {}",
-                                                err
-                                            );
-                                            std::process::exit(1);
-                                        }
-                                    }
-                                }
-                                if let Err(err) = crate::ipc::notify_deployed() {
-                                    log::warn!("Failed to notify deployed state: {}", err);
-                                }
-                                println!("Device deployed.");
-                            }
-                            "NOT_ENABLED" => {
-                                println!("Server does not require deployment.");
-                                std::process::exit(3);
-                            }
-                            "INVALID_INPUT" => {
-                                println!("Invalid input.");
-                                std::process::exit(5);
-                            }
-                            "ID_TAKEN" => {
-                                println!(
-                                    "Id `{}` is already used by another machine on the server.",
-                                    id_to_deploy
-                                );
-                                std::process::exit(6);
-                            }
-                            _ => {
-                                if text.is_empty() {
-                                    println!("Unknown response.");
-                                } else {
-                                    println!("{}", text);
-                                }
-                                std::process::exit(1);
-                            }
-                        }
+                    crate::ui_interface::DeployResult::NotEnabled => {
+                        println!("Server does not require deployment.");
+                        std::process::exit(3);
+                    }
+                    crate::ui_interface::DeployResult::InvalidInput => {
+                        println!("Invalid input.");
+                        std::process::exit(5);
+                    }
+                    crate::ui_interface::DeployResult::IdTaken(id) => {
+                        println!(
+                            "Id `{}` is already used by another machine on the server.",
+                            id
+                        );
+                        std::process::exit(6);
+                    }
+                    crate::ui_interface::DeployResult::Error(err) => {
+                        println!("{}", err);
+                        std::process::exit(1);
                     }
                 }
             } else {
