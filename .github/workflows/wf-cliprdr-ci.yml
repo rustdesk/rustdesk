@@ -49,25 +49,26 @@ jobs:
           New-Item -ItemType Directory -Force $testRoot | Out-Null
 
           $testSource = (($env:GITHUB_WORKSPACE -replace '\\', '/') + '/tests/test_invariant_wf_cliprdr.c')
-          @'
-cmake_minimum_required(VERSION 3.20)
-project(test_invariant_wf_cliprdr C)
-
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
-
-find_package(check CONFIG REQUIRED)
-
-add_executable(test_invariant_wf_cliprdr
-  "TEST_SOURCE"
-)
-
-target_link_libraries(test_invariant_wf_cliprdr PRIVATE
-  $<$<TARGET_EXISTS:Check::check>:Check::check>
-  $<$<NOT:$<TARGET_EXISTS:Check::check>>:Check::checkShared>
-)
-'@.Replace('TEST_SOURCE', $testSource) | Set-Content -NoNewline (Join-Path $testRoot 'CMakeLists.txt')
+          $cmakeLists = @(
+            'cmake_minimum_required(VERSION 3.20)'
+            'project(test_invariant_wf_cliprdr C)'
+            ''
+            'set(CMAKE_C_STANDARD 11)'
+            'set(CMAKE_C_STANDARD_REQUIRED ON)'
+            'set(CMAKE_C_EXTENSIONS OFF)'
+            ''
+            'find_package(check CONFIG REQUIRED)'
+            ''
+            'add_executable(test_invariant_wf_cliprdr'
+            '  "TEST_SOURCE"'
+            ')'
+            ''
+            'target_link_libraries(test_invariant_wf_cliprdr PRIVATE'
+            '  $<$<TARGET_EXISTS:Check::check>:Check::check>'
+            '  $<$<NOT:$<TARGET_EXISTS:Check::check>>:Check::checkShared>'
+            ')'
+          ) -join [Environment]::NewLine
+          $cmakeLists.Replace('TEST_SOURCE', $testSource) | Set-Content -NoNewline (Join-Path $testRoot 'CMakeLists.txt')
 
           cmake -S $testRoot -B (Join-Path $testRoot 'out') -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
           cmake --build (Join-Path $testRoot 'out') --config Release

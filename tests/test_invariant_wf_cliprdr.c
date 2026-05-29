@@ -3,6 +3,11 @@
 
 #include "../libs/clipboard/src/windows/wf_cliprdr.c"
 
+static BOOL wf_cliprdr_stream_count_within_limit(ULONG stream_count)
+{
+	return stream_count <= WF_CLIPRDR_MAX_STREAMS;
+}
+
 START_TEST(test_stream_count_within_limit_accepts_boundary_values)
 {
 	ck_assert_msg(wf_cliprdr_stream_count_within_limit(WF_CLIPRDR_MAX_STREAMS - 1),
