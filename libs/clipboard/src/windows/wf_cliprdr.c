@@ -39,6 +39,9 @@
 
 #define CLIPRDR_SVC_CHANNEL_NAME "cliprdr"
 
+/* Maximum number of clipboard streams accepted from a remote peer (integer overflow / DoS guard) */
+#define WF_CLIPRDR_MAX_STREAMS 16384
+
 /**
  * Clipboard Formats
  */
@@ -769,8 +772,13 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 
 		if (instance->m_nStreams > 0)
 		{
-			if (instance->m_nStreams > 16384)
+			if (instance->m_nStreams > WF_CLIPRDR_MAX_STREAMS)
+			{
+				GlobalFree(clipboard->hmem);
+				clipboard->hmem = NULL;
+				pMedium->hGlobal = NULL;
 				return E_UNEXPECTED;
+			}
 
 			if (!instance->m_pStream)
 			{
@@ -2172,7 +2180,11 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 	// `MAX_PATH` is long enough for the file name.
 	// So we just return FALSE if the file name is too long, which is not a normal case.
 	if ((wcslen(full_file_name) + 1) > MAX_PATH)
+	{
+		free(clipboard->file_names[clipboard->nFiles]);
+		clipboard->file_names[clipboard->nFiles] = NULL;
 		return FALSE;
+	}
 
 	wcsncpy_s(clipboard->file_names[clipboard->nFiles], MAX_PATH, full_file_name, wcslen(full_file_name) + 1);
 	/* add to descriptor array */

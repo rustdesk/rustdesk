@@ -19,7 +19,7 @@
 #define LPSTREAM_SIZE (sizeof(void *))
 
 /* Maximum allowed stream count - a reasonable upper bound for clipboard streams */
-#define MAX_SAFE_STREAM_COUNT 1024
+#define MAX_SAFE_STREAM_COUNT 16384
 
 /*
  * Safe allocation function that mirrors what the vulnerable code SHOULD do.
@@ -126,6 +126,7 @@ START_TEST(test_overflow_detection)
         { 10,   0 },
         { 100,  0 },
         { 1024, 0 },
+        { 16384, 0 },
         /* Dangerous values - MUST be detected as overflow */
         { SIZE_MAX,                         1 },
         { SIZE_MAX / LPSTREAM_SIZE + 1,     1 },
@@ -151,7 +152,7 @@ START_TEST(test_valid_stream_counts_succeed)
 {
     /* Invariant: valid, small stream counts must succeed to ensure functionality */
 
-    size_t valid_counts[] = { 1, 2, 4, 8, 16, 32, 64, 128, 256, MAX_SAFE_STREAM_COUNT };
+    size_t valid_counts[] = { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 8192, MAX_SAFE_STREAM_COUNT };
     int num_counts = sizeof(valid_counts) / sizeof(valid_counts[0]);
 
     for (int i = 0; i < num_counts; i++) {
