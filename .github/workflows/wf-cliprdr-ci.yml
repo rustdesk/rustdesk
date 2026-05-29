@@ -1,0 +1,48 @@
+name: wf-cliprdr CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "libs/clipboard/src/windows/**"
+      - "tests/test_invariant_wf_cliprdr.c"
+      - ".github/workflows/wf-cliprdr-ci.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "libs/clipboard/src/windows/**"
+      - "tests/test_invariant_wf_cliprdr.c"
+      - ".github/workflows/wf-cliprdr-ci.yml"
+
+jobs:
+  test:
+    name: wf_cliprdr invariant test
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: "msys2 {0}"
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-check
+            mingw-w64-x86_64-pkgconf
+
+      - name: Build test
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror \
+            tests/test_invariant_wf_cliprdr.c \
+            -o test_invariant_wf_cliprdr.exe \
+            $(pkg-config --cflags --libs check)
+
+      - name: Run test
+        run: ./test_invariant_wf_cliprdr.exe
