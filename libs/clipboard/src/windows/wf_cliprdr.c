@@ -767,17 +767,39 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		 * is the number of FILEDESCRIPTOR's */
 		// dsc = (FILEGROUPDESCRIPTOR *)GlobalLock(clipboard->hmem);
 		dsc = (FILEGROUPDESCRIPTORW *)GlobalLock(clipboard->hmem);
+		if (!dsc)
+		{
+			pMedium->hGlobal = NULL;
+			GlobalFree(clipboard->hmem);
+			clipboard->hmem = NULL;
+			return E_UNEXPECTED;
+		}
 		instance->m_nStreams = dsc->cItems;
-		GlobalUnlock(clipboard->hmem);
 
 		if (instance->m_nStreams > 0)
 		{
 			if (instance->m_nStreams > WF_CLIPRDR_MAX_STREAMS)
 			{
+				GlobalUnlock(clipboard->hmem);
 				GlobalFree(clipboard->hmem);
 				clipboard->hmem = NULL;
 				pMedium->hGlobal = NULL;
 				return E_UNEXPECTED;
+			}
+
+			/* Validate that hmem is large enough for the declared number of file descriptors */
+			{
+				SIZE_T hmem_size = GlobalSize(clipboard->hmem);
+				SIZE_T required_size = offsetof(FILEGROUPDESCRIPTORW, fgd) +
+				                       (SIZE_T)instance->m_nStreams * sizeof(FILEDESCRIPTORW);
+				if (hmem_size < required_size)
+				{
+					GlobalUnlock(clipboard->hmem);
+					GlobalFree(clipboard->hmem);
+					clipboard->hmem = NULL;
+					pMedium->hGlobal = NULL;
+					return E_UNEXPECTED;
+				}
 			}
 
 			if (!instance->m_pStream)
@@ -792,11 +814,15 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 							(IStream *)CliprdrStream_New(instance->m_connID, i, clipboard, &dsc->fgd[i]);
 
 						if (!instance->m_pStream[i])
+						{
+							GlobalUnlock(clipboard->hmem);
 							return E_OUTOFMEMORY;
+						}
 					}
 				}
 			}
 		}
+		GlobalUnlock(clipboard->hmem);
 
 		if (!instance->m_pStream)
 		{

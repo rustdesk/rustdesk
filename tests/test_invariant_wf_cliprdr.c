@@ -19,7 +19,7 @@
 #define LPSTREAM_SIZE (sizeof(void *))
 
 /* Maximum allowed stream count - a reasonable upper bound for clipboard streams */
-#define MAX_SAFE_STREAM_COUNT 1024
+#define MAX_SAFE_STREAM_COUNT 16384
 
 /*
  * Safe allocation function that mirrors what the vulnerable code SHOULD do.
