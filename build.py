@@ -411,7 +411,12 @@ def build_flutter_dmg(version, features):
     system2(
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
     os.chdir('flutter')
-    system2('flutter build macos --release')
+    # cargo builds a single-arch dylib for the host; restrict Xcode to the same arch
+    # so the universal-by-default ARCHS_STANDARD doesn't try to link a missing slice.
+    # FLUTTER_XCODE_* env vars are forwarded to xcodebuild as build settings.
+    mac_arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
+    system2(
+        f'FLUTTER_XCODE_ARCHS={mac_arch} FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES flutter build macos --release')
     system2('cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/')
     '''
     system2(
