@@ -15,6 +15,13 @@ on:
       - "tests/test_invariant_wf_cliprdr.c"
       - ".github/workflows/wf-cliprdr-ci.yml"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: wf_cliprdr invariant test
