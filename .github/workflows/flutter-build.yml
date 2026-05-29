@@ -116,44 +116,42 @@ jobs:
         with:
           version: ${{ env.LLVM_VERSION }}
 
-      - name: Install flutter (x64)
-        if: ${{ matrix.job.arch == 'x86_64' }}
+      - name: Install flutter
+        id: flutter
+        # subosito only ships an x64 Windows SDK (Flutter's release manifest lists x64 only),
+        # so it installs x64 on both arches. The arm64 runner re-bootstraps Dart to arm64 in
+        # the next step.
         uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225  # v2.12.0; https://github.com/subosito/flutter-action/issues/277
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
           architecture: x64
 
-      - name: Install flutter (arm64)
-        # subosito/flutter-action can't install an arm64 Windows SDK: Flutter's release
-        # manifest lists only x64 archives, so it would set up an x64 Dart and produce x64
-        # output on the arm64 runner. Fetch the official stable archive directly instead.
+      - name: Force arm64 Dart SDK + engine
+        # The x64 SDK subosito installs bundles an x64 Dart with a matching engine-dart-sdk.stamp,
+        # so update_dart_sdk.ps1 short-circuits (stamp matches -> return) and keeps x64 Dart;
+        # `flutter build windows` then targets the Dart VM's arch = x64, even on this arm64 host.
+        # On this native-arm64 runner (PROCESSOR_ARCHITECTURE=ARM64), deleting the stamp and
+        # re-running update_dart_sdk.ps1 pulls the arm64 Dart (available since Flutter 3.44.0).
+        # https://github.com/flutter/flutter/issues/186730#issuecomment-4573214964
         if: ${{ matrix.job.arch == 'aarch64' }}
         run: |
-          $url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_${{ env.FLUTTER_VERSION }}-stable.zip"
-          Invoke-WebRequest -Uri $url -OutFile flutter_windows.zip
-          Expand-Archive -Path flutter_windows.zip -DestinationPath C:\
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\flutter\bin"
-          # The archive bundles an x64 Dart SDK with a matching engine-dart-sdk.stamp, so
-          # Flutter's update_dart_sdk.ps1 short-circuits (stamp matches -> return) and keeps
-          # the x64 Dart. `flutter build windows` then targets the Dart VM's arch = x64, even
-          # on this arm64 host. Delete the bundled SDK + stamp to force a fresh bootstrap that
-          # downloads the native arm64 Dart (PROCESSOR_ARCHITECTURE=ARM64 on this runner).
+          $flutterRoot = "${{ steps.flutter.outputs.CACHE-PATH }}"
           Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
-          Remove-Item -Recurse -Force C:\flutter\bin\cache\dart-sdk -ErrorAction SilentlyContinue
-          Remove-Item -Force C:\flutter\bin\cache\engine-dart-sdk.stamp -ErrorAction SilentlyContinue
-          & C:\flutter\bin\flutter.bat --version
+          Write-Host "Flutter root: $flutterRoot"
+          Remove-Item -Force "$flutterRoot\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
+          & "$flutterRoot\bin\internal\update_dart_sdk.ps1"
           # Confirm the Dart we ended up with is arm64 ("on windows_arm64"); fail loudly if not.
-          $dartVer = & C:\flutter\bin\dart.bat --version 2>&1 | Out-String
+          $dartVer = & "$flutterRoot\bin\dart.bat" --version 2>&1 | Out-String
           Write-Host $dartVer
           if ($dartVer -notmatch "windows_arm64") {
             Write-Error "Expected an arm64 Dart SDK but got: $dartVer"
             exit 1
           }
-          & C:\flutter\bin\flutter.bat precache --windows
+          & "$flutterRoot\bin\flutter.bat" precache --windows
           # Fail fast if precache pulled the wrong-arch Windows engine: an arm64 Dart should
           # fetch windows-arm64 engine artifacts. Bailing here saves the ~25min Rust build.
-          $engineDir = "C:\flutter\bin\cache\artifacts\engine"
+          $engineDir = "$flutterRoot\bin\cache\artifacts\engine"
           Write-Host "Engine artifacts present:"
           Get-ChildItem $engineDir -Directory | Select-Object -ExpandProperty Name | Write-Host
           if (-not (Test-Path "$engineDir\windows-arm64-release")) {
