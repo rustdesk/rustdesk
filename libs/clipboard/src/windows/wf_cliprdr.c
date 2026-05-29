@@ -769,6 +769,9 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 
 		if (instance->m_nStreams > 0)
 		{
+			if (instance->m_nStreams > 16384)
+				return E_UNEXPECTED;
+
 			if (!instance->m_pStream)
 			{
 				instance->m_pStream = (LPSTREAM *)calloc(instance->m_nStreams, sizeof(LPSTREAM));
@@ -2161,7 +2164,7 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 		return FALSE;
 
 	/* add to name array */
-	clipboard->file_names[clipboard->nFiles] = (LPWSTR)malloc((size_t)MAX_PATH * sizeof(WCHAR));
+	clipboard->file_names[clipboard->nFiles] = (LPWSTR)calloc(MAX_PATH, sizeof(WCHAR));
 
 	if (!clipboard->file_names[clipboard->nFiles])
 		return FALSE;
