@@ -115,25 +115,44 @@ jobs:
         with:
           version: ${{ env.LLVM_VERSION }}
 
-      - name: Install flutter
+      - name: Install flutter (x64)
+        if: ${{ matrix.job.arch == 'x86_64' }}
         uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225  # v2.12.0; https://github.com/subosito/flutter-action/issues/277
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          # Flutter ships no separate arm64 Windows SDK; the x64 toolchain runs on the
-          # arm64 runner (x64 emulation) and still builds native arm64 binaries.
           architecture: x64
+
+      - name: Install flutter (arm64)
+        # subosito/flutter-action can't install an arm64 Windows SDK: Flutter's release
+        # manifest lists only x64 archives, so it would set up an x64 Dart and produce x64
+        # output on the arm64 runner. Fetch the official stable archive directly instead —
+        # on first run its bootstrap downloads a native arm64 Dart SDK + Windows engine,
+        # so `flutter build windows` emits real arm64 binaries (build/windows/arm64/...).
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        run: |
+          $url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_${{ env.FLUTTER_VERSION }}-stable.zip"
+          Invoke-WebRequest -Uri $url -OutFile flutter_windows.zip
+          Expand-Archive -Path flutter_windows.zip -DestinationPath C:\
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\flutter\bin"
+          # Bootstrap the arm64 Dart SDK + engine artifacts so later steps reuse them.
+          & C:\flutter\bin\flutter.bat --version
+          & C:\flutter\bin\flutter.bat precache --windows
 
       # https://github.com/flutter/flutter/issues/155685
       # Only needed for x64: stock Flutter ships a native arm64 Windows engine.
-      - name: Replace engine with rustdesk custom flutter engine
-        if: ${{ matrix.job.arch == 'x86_64' }}
-        run: |
-          flutter doctor -v
-          flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
-          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
-          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+      # TODO(arm64): the rustdesk/engine windows-x64-release.zip is built for an older
+      # Flutter (3.24-era); with FLUTTER_VERSION 3.44.0 it fails flutter_assemble (MSB8066).
+      # Disabled until a 3.44-compatible custom engine is published; stock 3.44 x64 engine
+      # is used instead. Re-enable once rustdesk/engine ships a matching build.
+      # - name: Replace engine with rustdesk custom flutter engine
+      #   if: ${{ matrix.job.arch == 'x86_64' }}
+      #   run: |
+      #     flutter doctor -v
+      #     flutter precache --windows
+      #     Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+      #     Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+      #     mv -Force windows-x64-release/* C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Patch flutter
         shell: bash
