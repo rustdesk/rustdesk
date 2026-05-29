@@ -80,7 +80,7 @@ jobs:
               arch: x86_64,
               flutter-arch: x64,
               vcpkg-triplet: x64-windows-static,
-              build-args: "--hwcodec --vram",
+              build-args: "--vram",
             }
           - {
               target: aarch64-pc-windows-msvc,
@@ -88,7 +88,8 @@ jobs:
               arch: aarch64,
               flutter-arch: arm64,
               vcpkg-triplet: arm64-windows-static,
-              # TODO(arm64): hwcodec/vram don't build on arm64 yet — investigate later
+              # vram is x86/x64-only (NVENC needs CUDA, Intel MediaSDK needs __rdtsc);
+              # no NV/Intel/AMD hardware exists on Windows-on-ARM, so vram stays disabled here.
               build-args: "",
             }
     steps:
@@ -231,7 +232,8 @@ jobs:
       - name: Build rustdesk
         run: |
           # Windows: build RustDesk
-          python3 .\build.py --portable --flutter --skip-portable-pack ${{ matrix.job.build-args }}
+          # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}
           mv ./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release ./rustdesk
 
           # Download usbmmidd_v2.zip and extract it to ./rustdesk
