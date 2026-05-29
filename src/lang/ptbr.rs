@@ -263,7 +263,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Canvas Zoom", "Zoom na tela"),
         ("Reset canvas", "Reiniciar tela"),
         ("No permission of file transfer", "Sem permissão para transferência de arquivo"),
-        ("Note", "Nota"),
+        ("Note", "Anotações"),
         ("Connection", "Conexão"),
         ("Share screen", "Compartilhar Tela"),
         ("Chat", "Chat"),
