@@ -40,7 +40,7 @@ jobs:
       - name: Install vcpkg dependency
         shell: pwsh
         run: |
-          & "$env:VCPKG_ROOT\vcpkg.exe" install check:x64-windows --x-install-root="$env:VCPKG_ROOT\installed"
+          & "$env:VCPKG_ROOT\vcpkg.exe" install check:x64-windows --classic --x-install-root="$env:VCPKG_ROOT\installed"
 
       - name: Build test
         shell: pwsh
