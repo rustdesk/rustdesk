@@ -3,6 +3,22 @@
 
 #include "../libs/clipboard/src/windows/wf_cliprdr.c"
 
+START_TEST(test_stream_count_within_limit_accepts_boundary_values)
+{
+	ck_assert_msg(wf_cliprdr_stream_count_within_limit(WF_CLIPRDR_MAX_STREAMS - 1),
+				  "stream count below the production limit should be accepted");
+	ck_assert_msg(wf_cliprdr_stream_count_within_limit(WF_CLIPRDR_MAX_STREAMS),
+				  "stream count at the production limit should be accepted");
+}
+END_TEST
+
+START_TEST(test_stream_count_within_limit_rejects_over_limit_value)
+{
+	ck_assert_msg(!wf_cliprdr_stream_count_within_limit(WF_CLIPRDR_MAX_STREAMS + 1),
+				  "stream count above the production limit should be rejected");
+}
+END_TEST
+
 Suite *security_suite(void)
 {
 	Suite *s;
