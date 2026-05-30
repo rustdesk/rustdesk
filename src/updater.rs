@@ -136,12 +136,16 @@ fn check_update(manually: bool) -> ResultType<()> {
         let version = download_url.split('/').last().unwrap_or_default();
         #[cfg(target_os = "windows")]
         let download_url = if cfg!(feature = "flutter") {
-            format!(
-                "{}/rustdesk-{}-x86_64.{}",
-                download_url,
-                version,
-                if update_msi { "msi" } else { "exe" }
-            )
+            let ext = if update_msi { "msi" } else { "exe" };
+            let template = crate::white_label::windows_download_url_template();
+            if template.is_empty() {
+                format!("{}/rustdesk-{}-x86_64.{}", download_url, version, ext)
+            } else {
+                template
+                    .replace("{base_url}", &download_url)
+                    .replace("{version}", version)
+                    .replace("{ext}", ext)
+            }
         } else {
             format!("{}/rustdesk-{}-x86-sciter.exe", download_url, version)
         };

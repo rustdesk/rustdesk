@@ -124,7 +124,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ? const SizedBox(height: 0)
         : InkWell(
             onTap: () async {
-              final url = 'https://rustdesk.com/download';
               // https://pub.dev/packages/url_launcher#configuration
               // https://developer.android.com/training/package-visibility/use-cases#open-urls-custom-tabs
               //
@@ -133,7 +132,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
               // 2. `<action android:name="android.support.customtabs.action.CustomTabsService" />` in AndroidManifest.xml
               //
               // But it is better to add the check.
-              await launchUrl(Uri.parse(url));
+              await launchUrl(Uri.parse(updateUrl));
             },
             child: Container(
                 alignment: AlignmentDirectional.center,

@@ -1,0 +1,21 @@
+{
+  "app_name": "AcmeDesk",
+  "bundle_id": "com.example.acmedesk",
+  "url_scheme": "acmedesk",
+  "company_name": "Acme Inc.",
+  "copyright": "Copyright (c) 2026 Acme Inc. All rights reserved.",
+  "icon": "branding/acmedesk.png",
+  "mac_icon": "branding/acmedesk-macos.png",
+  "ui_logo": "branding/acmedesk.svg",
+  "updates": {
+    "check_url": "https://updates.example.com/version/latest",
+    "windows_download_url_template": "{base_url}/acmedesk-{version}-x86_64.{ext}"
+  },
+  "default_settings": {
+    "custom-rendezvous-server": "rs.example.com",
+    "api-server": "https://rs.example.com"
+  },
+  "override_settings": {
+    "key": "replace-with-your-server-public-key"
+  }
+}
