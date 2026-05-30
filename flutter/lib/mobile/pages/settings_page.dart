@@ -1427,6 +1427,9 @@ void showDeployDialog() {
           TextField(
             controller: tokenController,
             decoration: InputDecoration(labelText: translate("API Token")),
+            obscureText: true,
+            enableSuggestions: false,
+            autocorrect: false,
             autofocus: true,
           ).workaroundFreezeLinuxMint(),
           TextField(
