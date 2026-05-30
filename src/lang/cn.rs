@@ -749,5 +749,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Deploy", "部署"),
         ("Custom ID (optional)", "自定义 ID（可选）"),
         ("server_requires_deployment_tip", "服务器需要部署。是否部署此设备？"),
+        ("Server does not require deployment.", "服务器不需要部署。")
     ].iter().cloned().collect();
 }
