@@ -128,6 +128,8 @@ dependency_overrides:
 flutter_icons:
   image_path: "../res/icon.png"
   remove_alpha_ios: true
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "../res/icon.png"
   android: true
   ios: true
   windows:

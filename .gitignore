@@ -17,6 +17,11 @@ cert.pfx
 *png
 *svg
 *jpg
+!branding/
+!branding/nabuxai.png
+!branding/nabuxai.svg
+!flutter/android/app/src/main/res/drawable-*/
+!flutter/android/app/src/main/res/drawable-*/ic_launcher_foreground.png
 sciter.dll
 **pdb
 src/bridge_generated.rs

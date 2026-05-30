@@ -63,6 +63,11 @@ def rust_pairs(value: Any, name: str) -> str:
     )
 
 
+def rust_array(value: Any, name: str) -> str:
+    pairs = rust_pairs(value, name)
+    return f"&[\n    {pairs},\n]" if pairs else "&[]"
+
+
 def write_generated_rust(config: dict[str, Any]) -> None:
     update = config.get("updates") or {}
     if not isinstance(update, dict):
@@ -71,12 +76,8 @@ def write_generated_rust(config: dict[str, Any]) -> None:
 pub const APP_NAME: &str = {rust_string(config["app_name"])};
 pub const UPDATE_CHECK_URL: &str = {rust_string(update.get("check_url", ""))};
 pub const WINDOWS_DOWNLOAD_URL_TEMPLATE: &str = {rust_string(update.get("windows_download_url_template", ""))};
-pub const DEFAULT_SETTINGS: &[(&str, &str)] = &[
-    {rust_pairs(config.get("default_settings"), "default_settings")}
-];
-pub const OVERRIDE_SETTINGS: &[(&str, &str)] = &[
-    {rust_pairs(config.get("override_settings"), "override_settings")}
-];
+pub const DEFAULT_SETTINGS: &[(&str, &str)] = {rust_array(config.get("default_settings"), "default_settings")};
+pub const OVERRIDE_SETTINGS: &[(&str, &str)] = {rust_array(config.get("override_settings"), "override_settings")};
 """
     (ROOT / "src/white_label_generated.rs").write_text(generated, encoding="utf-8")
 
@@ -103,9 +104,19 @@ def copy_icons(config: dict[str, Any], config_path: Path, generate_icons: bool) 
         fail(f"mac_icon does not exist: {mac_icon_path}")
     shutil.copyfile(mac_icon_path, ROOT / "res/mac-icon.png")
 
+    mac_icns = config.get("mac_icns")
+    if mac_icns:
+        mac_icns_path = (config_path.parent / mac_icns).resolve()
+        if not mac_icns_path.is_file():
+            fail(f"mac_icns does not exist: {mac_icns_path}")
+        shutil.copyfile(mac_icns_path, ROOT / "flutter/macos/Runner/AppIcon.icns")
+
     if generate_icons:
+        dart = shutil.which("dart")
+        if not dart:
+            fail("dart is required to generate platform icons")
         subprocess.run(
-            ["dart", "run", "flutter_launcher_icons"],
+            [dart, "run", "flutter_launcher_icons"],
             cwd=ROOT / "flutter",
             check=True,
         )

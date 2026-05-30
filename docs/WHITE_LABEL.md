@@ -13,7 +13,8 @@ validate a config without modifying the source tree.
 
 The script configures application metadata, platform IDs, URL schemes, launcher
 icons, an optional SVG `ui_logo`, default or forced server settings, and an
-optional update-check endpoint.
+optional update-check endpoint. For the legacy macOS runner, provide an optional
+`mac_icns` path to replace `flutter/macos/Runner/AppIcon.icns`.
 
 The update-check endpoint must accept the same POST request and return the same
 JSON response shape as the RustDesk version endpoint. For Windows, placeholders

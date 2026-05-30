@@ -1,0 +1,13 @@
+{
+  "app_name": "NabuxRemote",
+  "bundle_id": "com.nabuxai.nabuxremote",
+  "url_scheme": "nabuxremote",
+  "company_name": "Nabux AI",
+  "copyright": "Copyright (c) 2026 Nabux AI. All rights reserved.",
+  "icon": "branding/nabuxai.png",
+  "mac_icon": "branding/nabuxai.png",
+  "mac_icns": "branding/nabuxai.icns",
+  "ui_logo": "branding/nabuxai.svg",
+  "default_settings": {},
+  "override_settings": {}
+}

@@ -6,6 +6,7 @@
   "copyright": "Copyright (c) 2026 Acme Inc. All rights reserved.",
   "icon": "branding/acmedesk.png",
   "mac_icon": "branding/acmedesk-macos.png",
+  "mac_icns": "branding/acmedesk-macos.icns",
   "ui_logo": "branding/acmedesk.svg",
   "updates": {
     "check_url": "https://updates.example.com/version/latest",

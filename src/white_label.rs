@@ -18,7 +18,9 @@ pub fn apply() {
         .extend(to_owned_settings(generated::OVERRIDE_SETTINGS));
 }
 
-fn to_owned_settings(settings: &[(&str, &str)]) -> impl Iterator<Item = (String, String)> + '_ {
+fn to_owned_settings<'a>(
+    settings: &'a [(&'a str, &'a str)],
+) -> impl Iterator<Item = (String, String)> + 'a {
     settings
         .iter()
         .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
