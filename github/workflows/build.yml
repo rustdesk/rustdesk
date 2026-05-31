@@ -1,0 +1,54 @@
+无名，现在需要在 GitHub 上创建 Actions workflow 文件：
+1. 打开 https://github.com/dong94771157/rustdesk/tree/master/.github/workflows
+如果 .github/workflows 目录不存在，手动在路径上加 /new/master：
+•  打开 https://github.com/dong94771157/rustdesk
+•  点 Add file → Create new file
+•  路径填 .github/workflows/build.yml
+•  把下面的内容粘贴进去：
+name: Build RustDesk Client
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, main ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            target: x86_64-unknown-linux-gnu
+            artifact_name: rustdesk-linux-amd64
+          - os: windows-2019
+            target: x86_64-pc-windows-msvc
+            artifact_name: rustdesk-windows-amd64
+          - os: macos-12
+            target: x86_64-apple-darwin
+            artifact_name: rustdesk-macos-amd64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt
+- name: Build
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: target/${{ matrix.target }}/release/rustdesk*
