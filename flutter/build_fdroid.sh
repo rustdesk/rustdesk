@@ -460,6 +460,7 @@ build)
 		--target "${RUST_TARGET}" \
 		--bindgen \
 		build \
+		--locked \
 		--release \
 		--features "${RUSTDESK_FEATURES}"
 

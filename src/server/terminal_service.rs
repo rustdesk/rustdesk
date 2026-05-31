@@ -20,10 +20,11 @@ use std::{
 // Windows-specific imports from terminal_helper module
 #[cfg(target_os = "windows")]
 use super::terminal_helper::{
-    create_named_pipe_server, encode_helper_message, encode_resize_message,
-    is_helper_process_running, launch_terminal_helper_with_token, wait_for_pipe_connection,
-    HelperProcessGuard, OwnedHandle, SendableHandle, WinCloseHandle, WinTerminateProcess,
-    WinWaitForSingleObject, MSG_TYPE_DATA, PIPE_CONNECTION_TIMEOUT_MS, WIN_WAIT_OBJECT_0,
+    configure_utf8_shell_command, create_named_pipe_server, encode_helper_message,
+    encode_resize_message, is_helper_process_running, launch_terminal_helper_with_token,
+    wait_for_pipe_connection, HelperProcessGuard, OwnedHandle, SendableHandle, WinCloseHandle,
+    WinTerminateProcess, WinWaitForSingleObject, MSG_TYPE_DATA, PIPE_CONNECTION_TIMEOUT_MS,
+    WIN_WAIT_OBJECT_0,
 };
 
 const MAX_OUTPUT_BUFFER_SIZE: usize = 1024 * 1024; // 1MB per terminal
@@ -131,6 +132,26 @@ fn get_default_shell() -> String {
         // Final fallback to /bin/sh which should exist on all POSIX systems
         "/bin/sh".to_string()
     }
+}
+
+#[cfg(target_os = "macos")]
+fn locale_value_is_utf8(value: &str) -> bool {
+    let value = value.to_ascii_uppercase();
+    value.contains("UTF-8") || value.contains("UTF8")
+}
+
+#[cfg(target_os = "macos")]
+fn should_force_process_utf8_ctype() -> bool {
+    if let Ok(value) = std::env::var("LC_ALL") {
+        return !locale_value_is_utf8(&value);
+    }
+    if let Ok(value) = std::env::var("LC_CTYPE") {
+        return !locale_value_is_utf8(&value);
+    }
+    if let Ok(value) = std::env::var("LANG") {
+        return !locale_value_is_utf8(&value);
+    }
+    true
 }
 
 pub fn is_service_specified_user(service_id: &str) -> Option<bool> {
@@ -485,6 +506,17 @@ impl OutputBuffer {
                 } else {
                     self.total_size -= removed.len();
                 }
+                if self.lines.is_empty() {
+                    self.last_line_incomplete = false;
+                }
+            } else {
+                log::error!(
+                    "OutputBuffer trim invariant broken: total_size={}, lines_len=0",
+                    self.total_size
+                );
+                self.total_size = 0;
+                self.last_line_incomplete = false;
+                break;
             }
         }
     }
@@ -580,6 +612,12 @@ fn find_utf8_split_point(buf: &[u8]) -> usize {
     buf.len()
 }
 
+// Terminal output currently follows a UTF-8 text model end to end: the service
+// keeps replay buffers on UTF-8 boundaries, and Flutter decodes payload bytes as
+// UTF-8 before writing to xterm. This accumulator only prevents splitting a
+// trailing UTF-8 code point across PTY reads. Supporting non-UTF-8 terminals
+// would need a separate design covering remote encoding detection, Flutter
+// decoding, replay truncation, and input transcoding.
 #[derive(Default)]
 struct Utf8ChunkAccumulator {
     remainder: Vec<u8>,
@@ -1037,15 +1075,35 @@ impl TerminalServiceProxy {
         if let Some(session_arc) = service.sessions.get(&open.terminal_id) {
             // Reconnect to existing terminal
             let mut session = session_arc.lock().unwrap();
-            // Directly enter Active state with pending buffer for immediate streaming.
-            // Historical buffer is sent first by read_outputs(), then real-time data follows.
-            // No overlap: pending_buffer comes from output_buffer (pre-disconnect history),
-            // while received_data in read_outputs() comes from the channel (post-reconnect).
-            // During disconnect, the run loop (sp.ok()) exits so read_outputs() stops being
-            // called; output_buffer is not updated, and channel data may be lost if it fills up.
-            let buffer = session
+            // Directly enter Active state with pending replay for immediate streaming.
+            // The replay combines output_buffer history and the channel backlog that was
+            // already pending at reconnect time so the client can suppress stale xterm
+            // query answers without requiring a protobuf schema change.
+            // During disconnect, read_outputs() is not called; channel data can still be lost
+            // if output_rx fills before reconnect drains it.
+            let mut buffer = session
                 .output_buffer
                 .get_recent(DEFAULT_RECONNECT_BUFFER_BYTES);
+            let mut reconnect_backlog = Vec::new();
+            if let Some(output_rx) = &session.output_rx {
+                // Cap reconnect-time drain so a chatty PTY cannot keep OpenTerminal
+                // inside this loop indefinitely. Remaining output is drained by read_outputs().
+                for _ in 0..CHANNEL_BUFFER_SIZE {
+                    let Ok(data) = output_rx.try_recv() else {
+                        break;
+                    };
+                    reconnect_backlog.push(data);
+                }
+            }
+            let has_reconnect_backlog = !reconnect_backlog.is_empty();
+            for data in reconnect_backlog {
+                session.output_buffer.append(&data);
+            }
+            if has_reconnect_backlog {
+                buffer = session
+                    .output_buffer
+                    .get_recent(DEFAULT_RECONNECT_BUFFER_BYTES);
+            }
             let has_pending = !buffer.is_empty();
             session.state = SessionState::Active {
                 pending_buffer: if has_pending { Some(buffer) } else { None },
@@ -1059,9 +1117,14 @@ impl TerminalServiceProxy {
             let mut opened = TerminalOpened::new();
             opened.terminal_id = open.terminal_id;
             opened.success = true;
-            opened.message = "Reconnected to existing terminal".to_string();
+            opened.message = if has_pending {
+                "Reconnected to existing terminal with pending output".to_string()
+            } else {
+                "Reconnected to existing terminal".to_string()
+            };
             opened.pid = session.pid;
             opened.service_id = self.service_id.clone();
+            opened.replay_terminal_output = has_pending;
             if service.needs_session_sync {
                 if service.sessions.len() > 1 {
                     // No need to include the current terminal in the list.
@@ -1116,6 +1179,9 @@ impl TerminalServiceProxy {
         #[allow(unused_mut)]
         let mut cmd = CommandBuilder::new(&shell);
 
+        #[cfg(target_os = "windows")]
+        configure_utf8_shell_command(&shell, &mut cmd);
+
         // macOS-specific terminal configuration
         // 1. Use login shell (-l) to load user's shell profile (~/.zprofile, ~/.bash_profile)
         //    This ensures PATH includes Homebrew paths (/opt/homebrew/bin, /usr/local/bin)
@@ -1136,6 +1202,12 @@ impl TerminalServiceProxy {
             };
             cmd.env("TERM", term);
             log::debug!("Set TERM={} for macOS PTY", term);
+
+            if should_force_process_utf8_ctype() {
+                cmd.env_remove("LC_ALL");
+                cmd.env("LC_CTYPE", "en_US.UTF-8");
+                log::debug!("Set LC_CTYPE=en_US.UTF-8 for macOS PTY");
+            }
         }
 
         // Note: On Windows with user_token, we use helper mode (handle_open_with_helper)
@@ -1588,29 +1660,37 @@ impl TerminalServiceProxy {
         data: &TerminalData,
     ) -> Result<Option<TerminalResponse>> {
         if let Some(session_arc) = session {
-            let mut session = match session_arc.lock() {
-                Ok(guard) => guard,
-                Err(e) => {
-                    return Err(anyhow!(
-                        "Failed to lock terminal session {} for input handling: {}",
-                        data.terminal_id,
-                        e
-                    ));
+            let input = {
+                let mut session = match session_arc.lock() {
+                    Ok(guard) => guard,
+                    Err(e) => {
+                        return Err(anyhow!(
+                            "Failed to lock terminal session {} for input handling: {}",
+                            data.terminal_id,
+                            e
+                        ));
+                    }
+                };
+                session.update_activity();
+                if let Some(input_tx) = session.input_tx.clone() {
+                    // Encode data for helper mode or send raw for direct PTY mode
+                    #[cfg(target_os = "windows")]
+                    let msg = if session.is_helper_mode {
+                        encode_helper_message(MSG_TYPE_DATA, &data.data)
+                    } else {
+                        data.data.to_vec()
+                    };
+                    #[cfg(not(target_os = "windows"))]
+                    let msg = data.data.to_vec();
+
+                    Some((input_tx, msg))
+                } else {
+                    None
                 }
             };
-            session.update_activity();
-            if let Some(input_tx) = &session.input_tx {
-                // Encode data for helper mode or send raw for direct PTY mode
-                #[cfg(target_os = "windows")]
-                let msg = if session.is_helper_mode {
-                    encode_helper_message(MSG_TYPE_DATA, &data.data)
-                } else {
-                    data.data.to_vec()
-                };
-                #[cfg(not(target_os = "windows"))]
-                let msg = data.data.to_vec();
 
-                // Send data to writer thread
+            if let Some((input_tx, msg)) = input {
+                // Send outside the session lock; SyncSender::send can block when full.
                 if let Err(e) = input_tx.send(msg) {
                     log::error!(
                         "Failed to send data to terminal {}: {}",
@@ -1818,10 +1898,6 @@ impl TerminalServiceProxy {
                     }
                 }
 
-                if has_activity {
-                    session.update_activity();
-                }
-
                 // Update buffer (always buffer for reconnection support)
                 for data in &received_data {
                     session.output_buffer.append(data);
@@ -1831,7 +1907,7 @@ impl TerminalServiceProxy {
                 // Data is already buffered above and will be sent on next reconnection.
                 // Use a scoped block to limit the mutable borrow of session.state,
                 // so we can immutably borrow other session fields afterwards.
-                let sigwinch_action = {
+                let (replay_buffer, sigwinch_action) = {
                     let (pending_buffer, sigwinch) = match &mut session.state {
                         SessionState::Active {
                             pending_buffer,
@@ -1840,19 +1916,12 @@ impl TerminalServiceProxy {
                         _ => continue,
                     };
 
-                    // Send pending buffer response first (set on reconnection in handle_open).
-                    // This ensures historical buffer is sent before any real-time data.
-                    if let Some(buffer) = pending_buffer.take() {
-                        if !buffer.is_empty() {
-                            responses
-                                .push(Self::create_terminal_data_response(terminal_id, buffer));
-                        }
-                    }
+                    let replay_buffer = pending_buffer.take();
 
                     // Two-phase SIGWINCH: see SigwinchPhase doc comments for rationale.
                     // Each phase is a single PTY resize, spaced ~30ms apart by the polling
                     // interval, ensuring the TUI app sees a real size change on each signal.
-                    match sigwinch {
+                    let sigwinch_action = match sigwinch {
                         SigwinchPhase::TempResize { retries } => {
                             if *retries == 0 {
                                 log::warn!(
@@ -1880,8 +1949,19 @@ impl TerminalServiceProxy {
                             }
                         }
                         SigwinchPhase::Idle => None,
-                    }
+                    };
+                    (replay_buffer, sigwinch_action)
                 };
+
+                if let Some(buffer) = replay_buffer {
+                    if !buffer.is_empty() {
+                        responses.push(Self::create_terminal_data_response(terminal_id, buffer));
+                    }
+                }
+
+                if has_activity {
+                    session.update_activity();
+                }
 
                 // Execute SIGWINCH resize outside the mutable borrow scope of session.state.
                 if let Some(action) = sigwinch_action {

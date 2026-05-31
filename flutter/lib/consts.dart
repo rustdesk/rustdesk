@@ -144,6 +144,10 @@ const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
 const String kOptionCodecPreference = "codec-preference";
 const String kOptionRemoteMenubarDragLeft = "remote-menubar-drag-left";
 const String kOptionRemoteMenubarDragRight = "remote-menubar-drag-right";
+const String kOptionRemoteMenubarEdge = "remote-menubar-edge";
+const String kOptionRemoteMenubarFraction = "remote-menubar-frac";
+const String kOptionAllowMultiEdgeToolbarDock =
+    "allow-multi-edge-toolbar-dock";
 const String kOptionHideAbTagsPanel = "hideAbTagsPanel";
 const String kOptionRemoteMenubarState = "remoteMenubarState";
 const String kOptionPeerSorting = "peer-sorting";

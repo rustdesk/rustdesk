@@ -276,12 +276,21 @@ impl PipeWireRecorder {
         // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
         src.set_property("always-copy", &true)?;
 
+        // COSMIC/Wayland fix: insert videoconvert between pipewiresrc and appsink.
+        // xdg-desktop-portal-cosmic's modifier negotiation fails when the downstream
+        // format set is too narrow (appsink only accepts BGRx/RGBx), producing
+        // "no more output formats" / not-negotiated (-4). videoconvert accepts any
+        // system-memory video/x-raw format, widening negotiation so the portal can
+        // settle on a format it can deliver via its SHM path.
+        let convert = gst::ElementFactory::make("videoconvert", None)?;
+
         let sink = gst::ElementFactory::make("appsink", None)?;
         sink.set_property("drop", &true)?;
         sink.set_property("max-buffers", &1u32)?;
 
-        pipeline.add_many(&[&src, &sink])?;
-        src.link(&sink)?;
+        pipeline.add_many(&[&src, &convert, &sink])?;
+        src.link(&convert)?;
+        convert.link(&sink)?;
 
         let appsink = sink
             .dynamic_cast::<AppSink>()
