@@ -181,6 +181,11 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
         await b.tapKey('return');
       }),
       _gap(),
+      _Btn(label: '/exit', tooltip: '/exit + Enter', onTap: () async {
+        await b.typeString('/exit');
+        await b.tapKey('return');
+      }),
+      _gap(),
       _Btn(label: 'git\ncmt', tooltip: 'git commit',           onTap: () => b.typeString('git commit\n')),
       _gap(),
       _Btn(label: '⌃V',  tooltip: 'Ctrl+V',                  onTap: () => b.tapKey('v', modifiers: {'ctrl'})),
