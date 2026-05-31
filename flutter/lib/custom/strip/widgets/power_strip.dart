@@ -27,6 +27,7 @@ class PowerStrip extends StatefulWidget {
   final bool leftHanded;
   final FFI ffi;
   final VoidCallback? onSessionsTap;
+  final ValueChanged<bool>? onCollapsedChanged;
 
   const PowerStrip({
     super.key,
@@ -44,6 +45,7 @@ class PowerStrip extends StatefulWidget {
     required this.onFileSend,
     required this.ffi,
     this.onSessionsTap,
+    this.onCollapsedChanged,
     this.leftHanded = false,
   });
 
@@ -315,6 +317,10 @@ class _PowerStripState extends State<PowerStrip> {
         widget.onKeyboardTap();
       case KeyType.stripToggle:
         setState(() => _collapsed = !_collapsed);
+        // SizeChangedLayoutNotifier alone is unreliable for this toggle
+        // (framework warns it races with the layout pipeline). Tell the
+        // parent directly so it can recompute canvasBottom.
+        widget.onCollapsedChanged?.call(_collapsed);
       case KeyType.disconnect:
         widget.onDisconnect();
       case KeyType.chatToggle:

@@ -399,6 +399,11 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
                 onFileSend: _onFileSend,
                 ffi: widget.ffi,
                 onSessionsTap: _onSessionsTap,
+                // Empty setState forces _MeasureHeight to rebuild so its
+                // post-frame _measure re-fires after PowerStrip's row count
+                // changes. SizeChangedLayoutNotifier alone misses this — see
+                // fix-attempt history in commits 62fdb0a7 / 1a010814.
+                onCollapsedChanged: (_) => setState(() {}),
               ),
             ),
           ),
