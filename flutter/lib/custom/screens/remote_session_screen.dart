@@ -85,18 +85,17 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
   }
 
   void _onKeyboardVisibilityChanged(bool visible) {
-    // RemoteSessionScreen positions the canvas via Positioned(bottom: canvasBottom),
-    // so the layout already reserves space for the keyboard without resizing the
-    // canvas model. We save/restore the offset directly to preserve zoom level
-    // without calling mobileFocusCanvasCursor(), which would call updateSize() with
-    // the keyboard viewInsets and cause an unwanted zoom-out.
+    // Canvas is pinned to safeBottom + _stripHeight (keyboard-independent),
+    // so opening the keyboard does not shrink the canvas region. Instead we
+    // translate the canvas up by 40% of the keyboard height so the user
+    // keeps context without the framebuffer resizing. Save/restore offset
+    // directly so mobileFocusCanvasCursor()/updateSize() don't fire with
+    // viewInsets and cause an unwanted zoom-out.
     if (visible) {
       widget.ffi.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
       widget.ffi.canvasModel.isMobileCanvasChanged = false;
-      // Canvas-bottom already clears the keyboard (canvasBottom uses
-      // stripBottom which equals keyboardHeight when the keyboard is open),
-      // so no additional pan is needed.
-      setState(() => _kbPanOffset = 0);
+      final mq = MediaQuery.of(context);
+      setState(() => _kbPanOffset = mq.viewInsets.bottom * 0.4);
     } else {
       widget.ffi.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
       setState(() => _kbPanOffset = 0);
@@ -331,11 +330,13 @@ class _RemoteSessionScreenState extends State<RemoteSessionScreen> {
     final keyboardHeight = mq.viewInsets.bottom;
     final stripBottom = keyboardHeight > 0 ? keyboardHeight : safeBottom;
 
-    // Canvas bottom: always leave a strip-sized gap above the keyboard (or
-    // safe area when the keyboard is closed). When row 2 is visible the
-    // strip is taller, so the gap doubles automatically via _stripHeight.
+    // Canvas bottom: pinned to safeBottom + _stripHeight when chat is closed
+    // so the keyboard does NOT shrink the canvas region — instead the canvas
+    // is panned upward by _kbPanOffset (see _onKeyboardVisibilityChanged).
+    // Partial chat rides the keyboard (stripBottom) because its input must
+    // stay above the keyboard. Max chat fills the screen.
     final canvasBottom = switch (_chatState) {
-      _ChatState.closed  => stripBottom + _stripHeight,
+      _ChatState.closed  => safeBottom + _stripHeight,
       _ChatState.partial => stripBottom + _stripHeight + _partialBarHeight,
       _ChatState.max     => mq.size.height - mq.viewPadding.top,
     };
