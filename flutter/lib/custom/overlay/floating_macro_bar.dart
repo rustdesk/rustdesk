@@ -166,6 +166,21 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
   List<Widget> _buildButtons() {
     final b = widget.bridge;
     return [
+      _Btn(label: 'appr', tooltip: 'approved + Enter', onTap: () async {
+        await b.typeString('approved');
+        await b.tapKey('return');
+      }),
+      _gap(),
+      _Btn(label: 'c+p', tooltip: 'commit and push + Enter', onTap: () async {
+        await b.typeString('commit and push');
+        await b.tapKey('return');
+      }),
+      _gap(),
+      _Btn(label: 'c+p+d', tooltip: 'commit, push and deploy + Enter', onTap: () async {
+        await b.typeString('commit, push and deploy');
+        await b.tapKey('return');
+      }),
+      _gap(),
       _Btn(label: '/clr', tooltip: '/clear + Enter', onTap: () async {
         await b.typeString('/clear');
         await b.tapKey('return');
