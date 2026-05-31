@@ -15,6 +15,7 @@ enum KeyType {
   typeString,
   sessionSwitch,
   fileSend,
+  arrowCross,
 }
 
 class KeyDef {

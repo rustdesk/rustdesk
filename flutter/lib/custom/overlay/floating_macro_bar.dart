@@ -166,6 +166,21 @@ class _FloatingMacroBarState extends State<FloatingMacroBar>
   List<Widget> _buildButtons() {
     final b = widget.bridge;
     return [
+      _Btn(label: '/clr', tooltip: '/clear + Enter', onTap: () async {
+        await b.typeString('/clear');
+        await b.tapKey('return');
+      }),
+      _gap(),
+      _Btn(label: '/rsm', tooltip: '/resume + Enter', onTap: () async {
+        await b.typeString('/resume');
+        await b.tapKey('return');
+      }),
+      _gap(),
+      _Btn(label: 'cc', tooltip: 'cc + Enter', onTap: () async {
+        await b.typeString('cc');
+        await b.tapKey('return');
+      }),
+      _gap(),
       _Btn(label: 'git\ncmt', tooltip: 'git commit',           onTap: () => b.typeString('git commit\n')),
       _gap(),
       _Btn(label: '⌃V',  tooltip: 'Ctrl+V',                  onTap: () => b.tapKey('v', modifiers: {'ctrl'})),

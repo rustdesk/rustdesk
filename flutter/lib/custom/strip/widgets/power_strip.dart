@@ -58,6 +58,7 @@ class _PowerStripState extends State<PowerStrip> {
   final Map<String, LayerLink> _cellLinks = {};
   OverlayEntry? _cmdPopup;
   String? _cmdPopupModifier;
+  OverlayEntry? _arrowOverlay;
 
   static const double _popupW = 44.0;
   static const double _popupH = 36.0;
@@ -74,6 +75,7 @@ class _PowerStripState extends State<PowerStrip> {
   void dispose() {
     widget.modifierController.removeListener(_onModifierChanged);
     _dismissCmdPopup();
+    _dismissArrowOverlay();
     super.dispose();
   }
 
@@ -95,21 +97,39 @@ class _PowerStripState extends State<PowerStrip> {
     _cmdPopupModifier = null;
   }
 
+  void _dismissArrowOverlay() {
+    _arrowOverlay?.remove();
+    _arrowOverlay = null;
+  }
+
   List<(String, String, Set<String>)> _popupLabelsFor(String modifier) {
     // (display label, key name, modifiers to send with the tap)
-    if (modifier == 'meta') {
-      return const [
-        ('C', 'c', {'meta'}),
-        ('V', 'v', {'meta'}),
-        ('⇥', 'tab', {'meta'}),
-      ];
+    switch (modifier) {
+      case 'meta':
+        return const [
+          ('C', 'c', {'meta'}),
+          ('V', 'v', {'meta'}),
+          ('⇥', 'tab', {'meta'}),
+          ('X', 'x', {'meta'}),
+          ('N', 'n', {'meta'}),
+          ('⇧V', 'v', {'meta', 'shift'}),
+        ];
+      case 'control':
+        return const [
+          ('◀', 'left', {'control'}),
+          ('V', 'v', {'control'}),
+          ('▶', 'right', {'control'}),
+          ('S', 's', {'control'}),
+          ('Q', 'q', {'control'}),
+          ('C', 'c', {'control'}),
+          ('X', 'x', {'control'}),
+        ];
+      case 'alt':
+        return const [
+          ('⏎', 'return', {'alt'}),
+        ];
     }
-    // control
-    return const [
-      ('◀', 'left', {'control'}),
-      ('V', 'v', {'control'}),
-      ('▶', 'right', {'control'}),
-    ];
+    return const [];
   }
 
   void _showCmdPopup(KeyDef k) {
@@ -121,47 +141,89 @@ class _PowerStripState extends State<PowerStrip> {
     _cmdPopupModifier = modifier;
 
     _cmdPopup = OverlayEntry(
-      builder: (ctx) => Positioned(
-        left: 0,
-        top: 0,
-        child: CompositedTransformFollower(
-          link: link,
-          showWhenUnlinked: false,
-          // Anchor the popup's bottom-center to the cell's top-center,
-          // then lift by `_popupAnchorGap` for breathing room. Using the
-          // follower means the popup tracks the cell across collapse/
-          // expand and keyboard show/hide without recomputing positions.
-          targetAnchor: Alignment.topCenter,
-          followerAnchor: Alignment.bottomCenter,
-          offset: const Offset(0, -_popupAnchorGap),
-          child: Material(
-            color: Colors.transparent,
-            child: SizedBox(
-              width: totalW,
-              height: _popupH,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < labels.length; i++) ...[
-                    if (i > 0) const SizedBox(width: _popupGap),
-                    _cmdPopupButton(
-                      labels[i].$1,
-                      labels[i].$2,
-                      labels[i].$3,
-                      modifier,
-                      _popupW,
-                      _popupH,
-                    ),
+      builder: (ctx) {
+        final shift = _horizontalShiftFor(ctx, link, totalW);
+        return Positioned(
+          left: 0,
+          top: 0,
+          child: CompositedTransformFollower(
+            link: link,
+            showWhenUnlinked: false,
+            // Anchor the popup's bottom-center to the cell's top-center,
+            // then lift by `_popupAnchorGap` for breathing room. Using the
+            // follower means the popup tracks the cell across collapse/
+            // expand and keyboard show/hide without recomputing positions.
+            // `shift` nudges horizontally so wide popups (e.g. 7-button Ctrl)
+            // stay inside the screen even when the cell is near an edge.
+            targetAnchor: Alignment.topCenter,
+            followerAnchor: Alignment.bottomCenter,
+            offset: Offset(shift, -_popupAnchorGap),
+            child: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: totalW,
+                height: _popupH,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < labels.length; i++) ...[
+                      if (i > 0) const SizedBox(width: _popupGap),
+                      _cmdPopupButton(
+                        labels[i].$1,
+                        labels[i].$2,
+                        labels[i].$3,
+                        modifier,
+                        _popupW,
+                        _popupH,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
     Overlay.of(context, rootOverlay: true).insert(_cmdPopup!);
   }
+
+  // Returns a horizontal offset (in cell-local coordinates) that shifts a
+  // popup of width `totalW` so it stays inside the screen. Returns 0 when
+  // the centered placement already fits or the cell's RenderBox hasn't
+  // laid out yet. We look up the cell via the LayerLink target's context
+  // — `leaderSize` is set by the LeaderLayer but `LeaderLayer.offset` is
+  // parent-relative, not global, so we resolve the global position
+  // through the target widget's RenderBox below.
+  double _horizontalShiftFor(
+      BuildContext ctx, LayerLink link, double totalW) {
+    final cellSize = link.leaderSize;
+    final targetCtx = _targetContextFor(link);
+    if (cellSize == null || targetCtx == null) return 0;
+    final box = targetCtx.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return 0;
+    final cellGlobalLeft = box.localToGlobal(Offset.zero).dx;
+    final mq = MediaQuery.of(ctx);
+    final screenW = mq.size.width;
+    final safeL = mq.viewPadding.left;
+    final safeR = mq.viewPadding.right;
+
+    final popupLeft = cellGlobalLeft + cellSize.width / 2 - totalW / 2;
+    final popupRight = popupLeft + totalW;
+
+    double shift = 0;
+    if (popupLeft < safeL) {
+      shift = safeL - popupLeft;
+    } else if (popupRight > screenW - safeR) {
+      shift = (screenW - safeR) - popupRight;
+    }
+    return shift;
+  }
+
+  // Tracks the BuildContext of each CompositedTransformTarget so the
+  // overflow-shift helper can resolve its RenderBox for global coords.
+  final Map<LayerLink, BuildContext> _targetCtxByLink = {};
+  BuildContext? _targetContextFor(LayerLink link) => _targetCtxByLink[link];
 
   Widget _cmdPopupButton(
       String label,
@@ -199,6 +261,135 @@ class _PowerStripState extends State<PowerStrip> {
           label,
           style:
               AppTokens.fontKey.copyWith(color: Colors.white, fontSize: 14),
+        ),
+      ),
+    );
+  }
+
+  void _showArrowOverlay(KeyDef k) {
+    _dismissArrowOverlay();
+    final link = _cellLink('arrowCross');
+    final crossW = _popupW * 3 + _popupGap * 2;
+    final crossH = _popupH * 3 + _popupGap * 2;
+
+    _arrowOverlay = OverlayEntry(
+      builder: (ctx) {
+        final shift = _horizontalShiftFor(ctx, link, crossW);
+        return Positioned(
+          left: 0,
+          top: 0,
+          child: CompositedTransformFollower(
+            link: link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.topCenter,
+            followerAnchor: Alignment.bottomCenter,
+            offset: Offset(shift, -_popupAnchorGap),
+            child: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: crossW,
+                height: crossH,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: _popupW, height: _popupH),
+                        const SizedBox(width: _popupGap),
+                        _arrowButton('↑', 'up'),
+                        const SizedBox(width: _popupGap),
+                        const SizedBox(width: _popupW, height: _popupH),
+                      ],
+                    ),
+                    const SizedBox(height: _popupGap),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _arrowButton('←', 'left'),
+                        const SizedBox(width: _popupGap),
+                        _arrowCloseButton(),
+                        const SizedBox(width: _popupGap),
+                        _arrowButton('→', 'right'),
+                      ],
+                    ),
+                    const SizedBox(height: _popupGap),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: _popupW, height: _popupH),
+                        const SizedBox(width: _popupGap),
+                        _arrowButton('↓', 'down'),
+                        const SizedBox(width: _popupGap),
+                        const SizedBox(width: _popupW, height: _popupH),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    Overlay.of(context, rootOverlay: true).insert(_arrowOverlay!);
+  }
+
+  Widget _arrowButton(String label, String keyName) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        widget.inputBridge.tapKey(keyName);
+      },
+      child: Container(
+        width: _popupW,
+        height: _popupH,
+        decoration: BoxDecoration(
+          color: AppTokens.colorPrimary,
+          borderRadius: BorderRadius.circular(AppTokens.radiusKey),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 6,
+              color: Colors.black38,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style:
+              AppTokens.fontKey.copyWith(color: Colors.white, fontSize: 14),
+        ),
+      ),
+    );
+  }
+
+  Widget _arrowCloseButton() {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        _dismissArrowOverlay();
+      },
+      child: Container(
+        width: _popupW,
+        height: _popupH,
+        decoration: BoxDecoration(
+          color: AppTokens.colorBgSurface,
+          borderRadius: BorderRadius.circular(AppTokens.radiusKey),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 6,
+              color: Colors.black38,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '✕',
+          style: AppTokens.fontKey
+              .copyWith(color: AppTokens.colorTextHigh, fontSize: 14),
         ),
       ),
     );
@@ -293,12 +484,25 @@ class _PowerStripState extends State<PowerStrip> {
           : null,
     );
     final hasPopup = k.type == KeyType.modifier &&
-        (k.keyName == 'meta' || k.keyName == 'control');
+        (k.keyName == 'meta' || k.keyName == 'control' || k.keyName == 'alt');
+    final isArrowCross = k.type == KeyType.arrowCross;
+    final linkKey = isArrowCross ? 'arrowCross' : k.keyName;
+    if (hasPopup || isArrowCross) {
+      final link = _cellLink(linkKey);
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: 2 * scale),
+        child: CompositedTransformTarget(
+          link: link,
+          child: Builder(builder: (ctx) {
+            _targetCtxByLink[link] = ctx;
+            return cell;
+          }),
+        ),
+      );
+    }
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 2 * scale),
-      child: hasPopup
-          ? CompositedTransformTarget(link: _cellLink(k.keyName), child: cell)
-          : cell,
+      child: cell,
     );
   }
 
@@ -307,7 +511,7 @@ class _PowerStripState extends State<PowerStrip> {
     switch (k.type) {
       case KeyType.modifier:
         widget.modifierController.cycleTap(k.keyName);
-        if ((k.keyName == 'meta' || k.keyName == 'control') &&
+        if ((k.keyName == 'meta' || k.keyName == 'control' || k.keyName == 'alt') &&
             widget.modifierController.modeFor(k.keyName) != ModifierMode.off) {
           _showCmdPopup(k);
         }
@@ -337,6 +541,12 @@ class _PowerStripState extends State<PowerStrip> {
         widget.onNextDisplay();
       case KeyType.fileSend:
         widget.onFileSend();
+      case KeyType.arrowCross:
+        if (_arrowOverlay != null) {
+          _dismissArrowOverlay();
+        } else {
+          _showArrowOverlay(k);
+        }
       case KeyType.typeString:
         if (k.keyString != null) {
           widget.inputBridge.typeString(k.keyString!);
