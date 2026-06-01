@@ -39,28 +39,6 @@
 
 #define CLIPRDR_SVC_CHANNEL_NAME "cliprdr"
 
-/* Maximum number of clipboard streams accepted from a remote peer (integer overflow / DoS guard) */
-#define WF_CLIPRDR_MAX_STREAMS 16384
-
-/* Validates the remote descriptor array size after cItems has been read safely. */
-static BOOL wf_cliprdr_file_group_descriptor_size_valid(SIZE_T size, UINT count)
-{
-	SIZE_T header_size = offsetof(FILEGROUPDESCRIPTORW, fgd);
-	SIZE_T descriptors_size;
-
-	if (count == 0 || count > WF_CLIPRDR_MAX_STREAMS)
-		return FALSE;
-
-	if (size < header_size)
-		return FALSE;
-
-	if ((SIZE_T)count > (((SIZE_T)-1) - header_size) / sizeof(FILEDESCRIPTORW))
-		return FALSE;
-
-	descriptors_size = header_size + (SIZE_T)count * sizeof(FILEDESCRIPTORW);
-	return size >= descriptors_size;
-}
-
 /**
  * Clipboard Formats
  */
@@ -246,7 +224,6 @@ struct wf_clipboard
 
 	HWND hwnd;
 	HANDLE hmem;
-	SIZE_T hmem_data_len;
 	HANDLE thread;
 	HANDLE formatDataRespEvent;
 	BOOL formatDataRespReceived;
@@ -652,50 +629,6 @@ void CliprdrStream_Delete(CliprdrStream *instance)
 	}
 }
 
-static void wf_cliprdr_release_streams(IStream **streams, ULONG count)
-{
-	ULONG i;
-
-	if (!streams)
-		return;
-
-	for (i = 0; i < count; i++)
-	{
-		if (streams[i])
-			CliprdrStream_Release(streams[i]);
-	}
-
-	free(streams);
-}
-
-static void wf_cliprdr_reset_streams(CliprdrDataObject *instance)
-{
-	if (!instance)
-		return;
-
-	wf_cliprdr_release_streams(instance->m_pStream, instance->m_nStreams);
-	instance->m_pStream = NULL;
-	instance->m_nStreams = 0;
-}
-
-/* Only call after clipboard->hmem has been locked by GlobalLock. */
-static HRESULT wf_cliprdr_fail_locked_file_descriptor_data(wfClipboard *clipboard,
-															STGMEDIUM *medium,
-															CliprdrDataObject *instance,
-															IStream **streams,
-															ULONG stream_count,
-															HRESULT error)
-{
-	GlobalUnlock(clipboard->hmem);
-	GlobalFree(clipboard->hmem);
-	clipboard->hmem = NULL;
-	clipboard->hmem_data_len = 0;
-	medium->hGlobal = NULL;
-	wf_cliprdr_release_streams(streams, stream_count);
-	wf_cliprdr_reset_streams(instance);
-	return error;
-}
-
 /**
  * IDataObject
  */
@@ -814,9 +747,6 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 	{
 		// FILEGROUPDESCRIPTOR *dsc;
 		FILEGROUPDESCRIPTORW *dsc;
-		IStream **streams = NULL;
-		UINT stream_count = 0;
-		SIZE_T hmem_size;
 		// DWORD remote_format_id = get_remote_format_id(clipboard, instance->m_pFormatEtc[idx].cfFormat);
 		// FIXME: origin code may be failed here???
 		if (cliprdr_send_data_request(instance->m_connID, clipboard, instance->m_pFormatEtc[idx].cfFormat) != 0)
@@ -834,48 +764,40 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		 * is the number of FILEDESCRIPTOR's */
 		// dsc = (FILEGROUPDESCRIPTOR *)GlobalLock(clipboard->hmem);
 		dsc = (FILEGROUPDESCRIPTORW *)GlobalLock(clipboard->hmem);
-		if (!dsc)
+		instance->m_nStreams = dsc->cItems;
+		GlobalUnlock(clipboard->hmem);
+
+		if (instance->m_nStreams > 0)
 		{
-			pMedium->hGlobal = NULL;
-			GlobalFree(clipboard->hmem);
-			clipboard->hmem = NULL;
-			clipboard->hmem_data_len = 0;
-			wf_cliprdr_reset_streams(instance);
-			return E_UNEXPECTED;
-		}
-
-		hmem_size = clipboard->hmem_data_len;
-		/* cItems is remote-controlled; verify the fixed header exists before reading it. */
-		if (hmem_size < offsetof(FILEGROUPDESCRIPTORW, fgd))
-			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
-
-		stream_count = dsc->cItems;
-		if (!wf_cliprdr_file_group_descriptor_size_valid(hmem_size, stream_count))
-			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
-
-		streams = (IStream **)calloc(stream_count, sizeof(IStream *));
-		if (!streams)
-			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    clipboard, pMedium, instance, NULL, 0, E_OUTOFMEMORY);
-
-		for (i = 0; i < stream_count; i++)
-		{
-			streams[i] =
-			    (IStream *)CliprdrStream_New(instance->m_connID, i, clipboard, &dsc->fgd[i]);
-			if (!streams[i])
+			if (!instance->m_pStream)
 			{
-				return wf_cliprdr_fail_locked_file_descriptor_data(
-				    clipboard, pMedium, instance, streams, i, E_OUTOFMEMORY);
+				instance->m_pStream = (LPSTREAM *)calloc(instance->m_nStreams, sizeof(LPSTREAM));
+
+				if (instance->m_pStream)
+				{
+					for (i = 0; i < instance->m_nStreams; i++)
+					{
+						instance->m_pStream[i] =
+							(IStream *)CliprdrStream_New(instance->m_connID, i, clipboard, &dsc->fgd[i]);
+
+						if (!instance->m_pStream[i])
+							return E_OUTOFMEMORY;
+					}
+				}
 			}
 		}
 
-		GlobalUnlock(clipboard->hmem);
-		wf_cliprdr_reset_streams(instance);
-		instance->m_pStream = streams;
-		instance->m_nStreams = stream_count;
-		return S_OK;
+		if (!instance->m_pStream)
+		{
+			if (clipboard->hmem)
+			{
+				GlobalFree(clipboard->hmem);
+				clipboard->hmem = NULL;
+			}
+
+			pMedium->hGlobal = NULL;
+			return E_OUTOFMEMORY;
+		}
 	}
 	else if (instance->m_pFormatEtc[idx].cfFormat == RegisterClipboardFormat(CFSTR_FILECONTENTS))
 	{
@@ -2239,14 +2161,14 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 		return FALSE;
 
 	/* add to name array */
+	clipboard->file_names[clipboard->nFiles] = (LPWSTR)malloc((size_t)MAX_PATH * sizeof(WCHAR));
+
+	if (!clipboard->file_names[clipboard->nFiles])
+		return FALSE;
+
 	// `MAX_PATH` is long enough for the file name.
 	// So we just return FALSE if the file name is too long, which is not a normal case.
 	if ((wcslen(full_file_name) + 1) > MAX_PATH)
-		return FALSE;
-
-	clipboard->file_names[clipboard->nFiles] = (LPWSTR)calloc(MAX_PATH, sizeof(WCHAR));
-
-	if (!clipboard->file_names[clipboard->nFiles])
 		return FALSE;
 
 	wcsncpy_s(clipboard->file_names[clipboard->nFiles], MAX_PATH, full_file_name, wcslen(full_file_name) + 1);
@@ -2856,7 +2778,6 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			break;
 		}
 		clipboard->hmem = NULL;
-		clipboard->hmem_data_len = 0;
 
 		if (formatDataResponse->msgFlags != CB_RESPONSE_OK)
 		{
@@ -2890,7 +2811,6 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			break;
 		}
 
-		clipboard->hmem_data_len = formatDataResponse->dataLen;
 		clipboard->hmem = hMem;
 		rc = CHANNEL_RC_OK;
 	} while (0);
