@@ -728,7 +728,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 onPressed: (context) {
                   changeSocks5Proxy();
                 }),
-          if (isAndroid && gFFI.serverModel.isStart)
+          if (isAndroid && !bind.isOutgoingOnly())
             SettingsTile(
                 title: Text(translate('Deploy')),
                 leading: Icon(Icons.cloud_upload),

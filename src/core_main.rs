@@ -644,6 +644,8 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--deploy" {
             if config::Config::no_register_device() {
                 println!("Cannot deploy an unregistrable device!");
+            } else if config::is_outgoing_only() {
+                println!("Cannot deploy Outgoing-only clients.");
             } else if crate::platform::is_installed() && is_root() {
                 let max = args.len() - 1;
                 let pos = args.iter().position(|x| x == "--token").unwrap_or(max);
