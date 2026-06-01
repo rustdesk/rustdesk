@@ -798,6 +798,10 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn send_terminal_input(&self, terminal_id: i32, data: String) {
+        const MAX_TERMINAL_INPUT_SIZE: usize = 1024 * 64; // 64KB
+        if data.len() > MAX_TERMINAL_INPUT_SIZE {
+            return;
+        }
         let mut action = TerminalAction::new();
         action.set_data(TerminalData {
             terminal_id,
