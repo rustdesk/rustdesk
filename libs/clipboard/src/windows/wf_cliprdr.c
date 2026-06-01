@@ -839,6 +839,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 			pMedium->hGlobal = NULL;
 			GlobalFree(clipboard->hmem);
 			clipboard->hmem = NULL;
+			clipboard->hmem_data_len = 0;
 			wf_cliprdr_reset_streams(instance);
 			return E_UNEXPECTED;
 		}
