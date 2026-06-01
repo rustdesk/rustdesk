@@ -62,7 +62,13 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
                 return false
             }
         }
-        audioRecorder = builder.build()
+        val recorder = try {
+            builder.build()
+        } catch (e: Exception) {
+            Log.e(logTag, "createAudioRecorder failed", e)
+            return false
+        }
+        audioRecorder = recorder
         Log.d(logTag, "createAudioRecorder done,minBufferSize:$minBufferSize")
         return true
     }

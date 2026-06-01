@@ -274,6 +274,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("keep-awake-during-incoming-sessions-label", "Keep screen awake during incoming sessions"),
         ("password-hidden-tip", "Permanent password is set (hidden)."),
         ("preset-password-in-use-tip", "Preset password is currently in use."),
+        ("allow-remote-toolbar-docking-any-edge", "Allow docking remote toolbar to any window edge"),
         ("wayland-keyboard-input-disabled-tip", "Keyboard input disabled"),
         ("wayland-keyboard-input-consent-tip", "This session uses Wayland. Keyboard input may be temporarily pasted via the remote clipboard, and clipboard history or other apps may read it (including passwords).\nPress OK to allow input for this session."),
         ("wayland-keyboard-input-applies-to-tip", "This permission applies to:"),

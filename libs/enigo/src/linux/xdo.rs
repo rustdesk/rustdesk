@@ -8,6 +8,7 @@
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 use hbb_common::libc::c_int;
+use hbb_common::x11::xlib::{Display, XCloseDisplay, XGetPointerMapping, XOpenDisplay};
 use libxdo_sys::{self, xdo_t, CURRENTWINDOW};
 use std::{borrow::Cow, ffi::CString};
 
@@ -32,6 +33,51 @@ fn mousebutton(button: MouseButton) -> c_int {
     }
 }
 
+/// Minimum number of buttons the X11 core pointer must support.
+/// Buttons 8 (Back) and 9 (Forward) are needed for mouse side buttons.
+const MIN_POINTER_BUTTONS: usize = 9;
+
+/// Check that the X11 core pointer's button map includes at least 9 buttons
+/// so that `XTestFakeButtonEvent` can simulate Back (8) and Forward (9).
+///
+/// RustDesk's uinput "Mouse passthrough" device normally provides enough
+/// buttons, but we log a warning if the map is too small so the issue is
+/// diagnosable. `XSetPointerMapping` cannot extend the button count (its
+/// length must match `XGetPointerMapping`), so we only diagnose here.
+fn check_x11_button_map() {
+    // Skip on non-X11 sessions to avoid noisy "XOpenDisplay failed" warnings
+    // on pure Wayland or headless environments without $DISPLAY.
+    if std::env::var_os("DISPLAY").is_none() {
+        return;
+    }
+
+    let display: *mut Display = unsafe { XOpenDisplay(std::ptr::null()) };
+    if display.is_null() {
+        log::warn!("XOpenDisplay failed, cannot check button map");
+        return;
+    }
+
+    let mut current_map = [0u8; 32];
+    let nbuttons =
+        unsafe { XGetPointerMapping(display, current_map.as_mut_ptr(), current_map.len() as i32) };
+    unsafe { XCloseDisplay(display) };
+
+    if nbuttons < 0 {
+        log::warn!("XGetPointerMapping failed (returned {nbuttons})");
+        return;
+    }
+
+    let nbuttons = nbuttons as usize;
+    if nbuttons >= MIN_POINTER_BUTTONS {
+        log::info!("X11 pointer has {nbuttons} buttons, side buttons supported");
+    } else {
+        log::warn!(
+            "X11 pointer has only {nbuttons} buttons (need {MIN_POINTER_BUTTONS}); \
+             back/forward side buttons may not work until a device with more buttons is added"
+        );
+    }
+}
+
 /// The main struct for handling the event emitting
 pub(super) struct EnigoXdo {
     xdo: *mut xdo_t,
@@ -52,6 +98,7 @@ impl Default for EnigoXdo {
             log::warn!("Failed to create xdo context, xdo functions will be disabled");
         } else {
             log::info!("xdo context created successfully");
+            check_x11_button_map();
         }
         Self {
             xdo,

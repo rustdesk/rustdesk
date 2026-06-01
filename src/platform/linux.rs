@@ -6,7 +6,7 @@ use hbb_common::{
     anyhow::anyhow,
     bail,
     config::{keys::OPTION_ALLOW_LINUX_HEADLESS, Config},
-    libc::{c_char, c_int, c_long, c_uint, c_void},
+    libc::{c_char, c_int, c_long, c_uint, c_ulong, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
     regex::{Captures, Regex},
@@ -29,6 +29,12 @@ use wallpaper;
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
+#[derive(Clone, Debug)]
+struct ActiveUserLookupCache {
+    uid: String,
+    username: String,
+}
+
 const INVALID_TERM_VALUES: [&str; 3] = ["", "unknown", "dumb"];
 const SHELL_PROCESSES: [&str; 4] = ["bash", "zsh", "fish", "sh"];
 
@@ -50,6 +56,8 @@ lazy_static::lazy_static! {
             }
         }
     };
+    static ref ACTIVE_USER_LOOKUP_CACHE: std::sync::Mutex<Option<ActiveUserLookupCache>> =
+        std::sync::Mutex::new(None);
     // https://github.com/rustdesk/rustdesk/issues/13705
     // Check if `sudo -E` actually preserves environment.
     //
@@ -82,6 +90,27 @@ lazy_static::lazy_static! {
     };
 }
 
+#[inline]
+fn update_active_user_lookup_cache(desktop: &Desktop) {
+    if let Ok(mut cache) = ACTIVE_USER_LOOKUP_CACHE.lock() {
+        if desktop.uid.is_empty() || desktop.username.is_empty() {
+            *cache = None;
+        } else {
+            *cache = Some(ActiveUserLookupCache {
+                uid: desktop.uid.clone(),
+                username: desktop.username.clone(),
+            });
+        }
+    }
+}
+
+#[inline]
+fn get_active_user_id_name_from_cache() -> Option<(String, String)> {
+    let cache = ACTIVE_USER_LOOKUP_CACHE.lock().ok()?;
+    let entry = cache.as_ref()?;
+    Some((entry.uid.clone(), entry.username.clone()))
+}
+
 thread_local! {
     // XDO context - created via libxdo-sys (which uses dynamic loading stub).
     // If libxdo is not available, xdo will be null and xdo-based functions become no-ops.
@@ -97,10 +126,55 @@ thread_local! {
     static DISPLAY: RefCell<*mut c_void> = RefCell::new(unsafe { XOpenDisplay(std::ptr::null())});
 }
 
+// X11 error event structure for the custom error handler.
+// See: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Using-the-Default-Error-Handlers
+#[repr(C)]
+struct XErrorEvent {
+    type_: c_int,
+    display: *mut c_void, // Display*
+    resourceid: c_ulong,  // XID
+    serial: c_ulong,
+    error_code: u8,
+    request_code: u8,
+    minor_code: u8,
+}
+
+type XErrorHandler = unsafe extern "C" fn(*mut c_void, *mut XErrorEvent) -> c_int;
+
+const X11_BAD_WINDOW: u8 = 3;
+const XDO_SUCCESS: c_int = 0;
+const XDO_ERROR: c_int = 1;
+
+/// Atomic flag set by the custom X error handler when a BadWindow error occurs.
+static X_BAD_WINDOW_DETECTED: AtomicBool = AtomicBool::new(false);
+static X_UNEXPECTED_ERROR_DETECTED: AtomicBool = AtomicBool::new(false);
+
+/// Custom X error handler that catches BadWindow errors (error_code == 3) instead of
+/// letting the default handler terminate the process.
+/// See issue: https://github.com/rustdesk/rustdesk/issues/9003
+unsafe extern "C" fn handle_x_error(_display: *mut c_void, event: *mut XErrorEvent) -> c_int {
+    if !event.is_null() && (*event).error_code == X11_BAD_WINDOW {
+        X_BAD_WINDOW_DETECTED.store(true, Ordering::SeqCst);
+        log::debug!("Caught X11 BadWindow error (suppressed), window was likely destroyed");
+        return 0;
+    }
+    X_UNEXPECTED_ERROR_DETECTED.store(true, Ordering::SeqCst);
+    if !event.is_null() {
+        log::warn!(
+            "X11 error: error_code={}, request_code={}, minor_code={}",
+            (*event).error_code,
+            (*event).request_code,
+            (*event).minor_code,
+        );
+    }
+    0
+}
+
 #[link(name = "X11")]
 extern "C" {
     fn XOpenDisplay(display_name: *const c_char) -> *mut c_void;
     // fn XCloseDisplay(d: *mut c_void) -> c_int;
+    fn XSetErrorHandler(handler: Option<XErrorHandler>) -> Option<XErrorHandler>;
 }
 
 #[link(name = "Xfixes")]
@@ -231,25 +305,47 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
                 if libxdo_sys::xdo_get_active_window(*xdo as *const _, &mut window) != 0 {
                     return;
                 }
-                if libxdo_sys::xdo_get_window_location(
+
+                // XSetErrorHandler is process-global, not scoped to this Display/thread.
+                // This path is currently called by the single window_focus service thread.
+                // While installed, this handler can still observe unrelated X11 errors from
+                // other threads; unexpected errors make this geometry query fail.
+                X_BAD_WINDOW_DETECTED.store(false, Ordering::SeqCst);
+                X_UNEXPECTED_ERROR_DETECTED.store(false, Ordering::SeqCst);
+                let prev_handler = XSetErrorHandler(Some(handle_x_error));
+
+                let loc_ret = libxdo_sys::xdo_get_window_location(
                     *xdo as *const _,
                     window,
                     &mut x as _,
                     &mut y as _,
                     std::ptr::null_mut(),
-                ) != 0
+                );
+                let size_ret = if loc_ret == XDO_SUCCESS {
+                    libxdo_sys::xdo_get_window_size(
+                        *xdo as *const _,
+                        window,
+                        &mut width,
+                        &mut height,
+                    )
+                } else {
+                    XDO_ERROR
+                };
+
+                // Do not call XSync(DISPLAY) here: DISPLAY is a separate
+                // XOpenDisplay() connection, while libxdo owns the Display*
+                // used by these geometry queries. These libxdo calls are
+                // synchronous XGetWindowAttributes-based queries, so the target
+                // BadWindow is expected to be delivered before the calls return.
+                XSetErrorHandler(prev_handler);
+                if X_BAD_WINDOW_DETECTED.load(Ordering::SeqCst)
+                    || X_UNEXPECTED_ERROR_DETECTED.load(Ordering::SeqCst)
+                    || loc_ret != XDO_SUCCESS
+                    || size_ret != XDO_SUCCESS
                 {
                     return;
                 }
-                if libxdo_sys::xdo_get_window_size(
-                    *xdo as *const _,
-                    window,
-                    &mut width,
-                    &mut height,
-                ) != 0
-                {
-                    return;
-                }
+
                 let center_x = x + (width / 2) as c_int;
                 let center_y = y + (height / 2) as c_int;
                 res = displays.iter().position(|d| {
@@ -722,6 +818,7 @@ pub fn start_os_service() {
     let mut last_restart = Instant::now();
     while running.load(Ordering::SeqCst) {
         desktop.refresh();
+        update_active_user_lookup_cache(&desktop);
 
         // Duplicate logic here with should_start_server
         // Login wayland will try to start a headless --server.
@@ -794,13 +891,29 @@ pub fn start_os_service() {
 }
 
 #[inline]
+/// Returns the cached active `(uid, username)` snapshot when available.
+/// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
 pub fn get_active_user_id_name() -> (String, String) {
+    if let Some(id_name) = get_active_user_id_name_from_cache() {
+        return id_name;
+    }
     let vec_id_name = get_values_of_seat0(&[1, 2]);
     (vec_id_name[0].clone(), vec_id_name[1].clone())
 }
 
 #[inline]
+/// Returns the cached active uid when available.
+/// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
 pub fn get_active_userid() -> String {
+    if let Some((uid, _)) = get_active_user_id_name_from_cache() {
+        return uid;
+    }
+    get_values_of_seat0(&[1])[0].clone()
+}
+
+#[inline]
+/// Returns the active uid from a fresh seat0 lookup, bypassing the service-loop cache.
+pub fn get_active_userid_fresh() -> String {
     get_values_of_seat0(&[1])[0].clone()
 }
 
@@ -855,7 +968,12 @@ fn _get_display_manager() -> String {
 }
 
 #[inline]
+/// Returns the cached active username when available.
+/// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
 pub fn get_active_username() -> String {
+    if let Some((_, username)) = get_active_user_id_name_from_cache() {
+        return username;
+    }
     get_values_of_seat0(&[2])[0].clone()
 }
 
@@ -2150,7 +2268,10 @@ pub fn clear_gnome_shortcuts_inhibitor_permission() -> ResultType<()> {
                 || err_name == "org.freedesktop.DBus.Error.UnknownObject"
                 || err_name == "org.freedesktop.DBus.Error.ServiceUnknown"
             {
-                log::info!("GNOME shortcuts inhibitor permission was not set ({})", err_name);
+                log::info!(
+                    "GNOME shortcuts inhibitor permission was not set ({})",
+                    err_name
+                );
                 Ok(())
             } else {
                 bail!("Failed to clear permission: {}", e)

@@ -743,6 +743,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "顯示名稱"),
         ("password-hidden-tip", "固定密碼已設定（已隱藏）"),
         ("preset-password-in-use-tip", "目前正在使用預設密碼"),
+        ("Enable privacy mode", ""),
+        ("allow-remote-toolbar-docking-any-edge", ""),
         ("wayland-keyboard-input-disabled-tip", ""),
         ("wayland-keyboard-input-consent-tip", ""),
         ("wayland-keyboard-input-applies-to-tip", ""),

@@ -654,6 +654,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accessible devices", "એક્સેસિબલ ઉપકરણો"),
         ("upgrade_remote_rustdesk_client_to_{}_tip", "રિમોટ ક્લાયન્ટને {} માં અપગ્રેડ કરો"),
         ("d3d_render_tip", "D3D રેન્ડરિંગ વાપરો"),
+        ("Use D3D rendering", ""),
         ("Printer", "પ્રિન્ટર"),
         ("printer-os-requirement-tip", "પ્રિન્ટિંગ માટે Windows જરૂરી છે."),
         ("printer-requires-installed-{}-client-tip", "આ માટે {} ક્લાયન્ટ ઇન્સ્ટોલ હોવું જોઈએ."),
@@ -742,5 +743,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "ડિસ્પ્લે નામ"),
         ("password-hidden-tip", "સુરક્ષા માટે પાસવર્ડ છુપાવેલ છે."),
         ("preset-password-in-use-tip", "પ્રીસેટ પાસવર્ડ વપરાશમાં છે."),
+        ("Enable privacy mode", ""),
+        ("allow-remote-toolbar-docking-any-edge", ""),
+        ("wayland-keyboard-input-disabled-tip", ""),
+        ("wayland-keyboard-input-consent-tip", ""),
+        ("wayland-keyboard-input-applies-to-tip", ""),
+        ("wayland-soft-keyboard-input-label", ""),
+        ("wayland-keyboard-input-clear-perm-tip", ""),
+        ("remember-wayland-keyboard-choice-tip", ""),
     ].iter().cloned().collect();
 }

@@ -64,6 +64,12 @@ Widget waylandKeyboardScopeChip(BuildContext context, String text) {
   );
 }
 
+// macOS privacy mode blacks out all online displays, so switching the remote
+// display does not weaken the local privacy protection.
+bool allowDisplaySwitchInPrivacyMode(PeerInfo pi) {
+  return pi.platform == kPeerPlatformMacOS;
+}
+
 class TTextMenu {
   final Widget child;
   final VoidCallback? onPressed;
@@ -921,8 +927,9 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Lock after session end'))));
   }
 
+  final privacyModeState = PrivacyModeState.find(id);
   if (pi.isSupportMultiDisplay &&
-      PrivacyModeState.find(id).isEmpty &&
+      (privacyModeState.isEmpty || allowDisplaySwitchInPrivacyMode(pi)) &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
     final value =
@@ -996,15 +1003,25 @@ List<TToggleMenu> toolbarPrivacyMode(
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
   final sessionId = ffi.sessionId;
+  final hasPrivacyModePermission = ffiModel.permissions['privacy_mode'] != false;
+
+  // Backend revocation already attempts to turn privacy mode off.
+  // Still keep this menu when privacy mode is active, so users can turn it off
+  // if there is a sync delay, version mismatch, or off attempt failure.
+  if (!hasPrivacyModePermission && privacyModeState.isEmpty) {
+    return []; // No permission and not active, hide options.
+  }
 
   getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc) {
-    final enabled = !ffi.ffiModel.viewOnly;
+    final enabled =
+        !ffiModel.viewOnly && (hasPrivacyModePermission || privacyModeState.isNotEmpty);
     return TToggleMenu(
         value: privacyModeState.isNotEmpty,
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
-                if (ffiModel.pi.currentDisplay != 0 &&
+                if (!allowDisplaySwitchInPrivacyMode(pi) &&
+                    ffiModel.pi.currentDisplay != 0 &&
                     ffiModel.pi.currentDisplay != kAllDisplayValue) {
                   msgBox(
                       sessionId,
@@ -1047,18 +1064,29 @@ List<TToggleMenu> toolbarPrivacyMode(
       })
     ];
   } else {
-    return privacyModeImpls.map((e) {
+    final visibleImpls = hasPrivacyModePermission
+        ? privacyModeImpls
+        : privacyModeImpls.where((e) {
+            final implKey = (e as List<dynamic>)[0] as String;
+            return privacyModeState.value == implKey;
+          }).toList();
+    return visibleImpls.map((e) {
       final implKey = (e as List<dynamic>)[0] as String;
       final implName = (e)[1] as String;
+      final enabled = !ffiModel.viewOnly &&
+          (hasPrivacyModePermission || privacyModeState.value == implKey);
       return TToggleMenu(
           child: Text(translate(implName)),
           value: privacyModeState.value == implKey,
-          onChanged: (value) {
-            if (value == null) return;
-            togglePrivacyModeTime = DateTime.now();
-            bind.sessionTogglePrivacyMode(
-                sessionId: sessionId, implKey: implKey, on: value);
-          });
+          onChanged: enabled
+              ? (value) {
+                  if (value == null) return;
+                  if (value && !hasPrivacyModePermission) return;
+                  togglePrivacyModeTime = DateTime.now();
+                  bind.sessionTogglePrivacyMode(
+                      sessionId: sessionId, implKey: implKey, on: value);
+                }
+              : null);
     }).toList();
   }
 }

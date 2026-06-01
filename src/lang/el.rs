@@ -743,6 +743,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "Εμφανιζόμενο όνομα"),
         ("password-hidden-tip", ""),
         ("preset-password-in-use-tip", ""),
+        ("Enable privacy mode", ""),
+        ("allow-remote-toolbar-docking-any-edge", ""),
         ("wayland-keyboard-input-disabled-tip", ""),
         ("wayland-keyboard-input-consent-tip", ""),
         ("wayland-keyboard-input-applies-to-tip", ""),

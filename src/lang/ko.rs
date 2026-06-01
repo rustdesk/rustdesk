@@ -743,6 +743,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "표시 이름"),
         ("password-hidden-tip", "영구 비밀번호가 설정되었습니다 (숨김)."),
         ("preset-password-in-use-tip", "현재 사전 설정된 비밀번호가 사용 중입니다."),
+        ("Enable privacy mode", "개인정보 보호 모드 사용함"),
+        ("allow-remote-toolbar-docking-any-edge", "원격 도구 모음을 창 가장자리에 도킹 허용"),
         ("wayland-keyboard-input-disabled-tip", ""),
         ("wayland-keyboard-input-consent-tip", ""),
         ("wayland-keyboard-input-applies-to-tip", ""),

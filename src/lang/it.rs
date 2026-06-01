@@ -743,6 +743,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "Visualizza nome"),
         ("password-hidden-tip", "È impostata una password permanente (nascosta)."),
         ("preset-password-in-use-tip", "È attualmente in uso la password preimpostata."),
+        ("Enable privacy mode", "Abilita modalità privacy"),
+        ("allow-remote-toolbar-docking-any-edge", "Consenti ancoraggio barra strumenti remota a qualsiasi bordo della finestra"),
         ("wayland-keyboard-input-disabled-tip", ""),
         ("wayland-keyboard-input-consent-tip", ""),
         ("wayland-keyboard-input-applies-to-tip", ""),
