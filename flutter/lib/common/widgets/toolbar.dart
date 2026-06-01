@@ -257,7 +257,20 @@ void showWaylandKeyboardInputWarningDialog(
           TextButton(
             onPressed: consentInProgress
                 ? null
-                : () => unawaited(openWaylandKeyboardIssueUrl()),
+                : () async {
+                    try {
+                      final opened = await openWaylandKeyboardIssueUrl();
+                      if (!opened) {
+                        // Opening this optional help link almost never fails in
+                        // normal desktop environments. Keep the result handled
+                        // for review hygiene, but avoid a low-value user toast.
+                        debugPrint('Failed to open Wayland keyboard issue URL');
+                      }
+                    } catch (e) {
+                      debugPrint(
+                          'Failed to open Wayland keyboard issue URL: $e');
+                    }
+                  },
             style: TextButton.styleFrom(
               foregroundColor: Colors.blue,
               padding: EdgeInsets.zero,
