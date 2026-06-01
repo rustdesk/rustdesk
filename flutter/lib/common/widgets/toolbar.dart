@@ -13,6 +13,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 bool isEditOsPassword = false;
 const String kPeerOptionAllowWaylandKeyboard = 'allow-wayland-keyboard';
@@ -42,8 +43,7 @@ bool shouldShowWaylandKeyboardPrompt({
   required bool isWaylandPeer,
   required bool allowWaylandKeyboardRemembered,
 }) {
-  return isWaylandPeer &&
-      !allowWaylandKeyboardRemembered &&
+  return !allowWaylandKeyboardRemembered &&
       !isWaylandKeyboardPromptSuppressedForConnection(connectionId);
 }
 
@@ -246,7 +246,21 @@ void showWaylandKeyboardInputWarningDialog(
               ],
             ).marginOnly(bottom: 10),
           ],
-          createDialogContent(kWaylandKeyboardIssueUrl).marginOnly(bottom: 6),
+          TextButton(
+            onPressed: consentInProgress
+                ? null
+                : () => launchUrl(Uri.parse(kWaylandKeyboardIssueUrl)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.blue,
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              translate('Why this happens'),
+              style: const TextStyle(decoration: TextDecoration.underline),
+            ),
+          ).marginOnly(bottom: 6),
           CheckboxListTile(
             value: remember,
             dense: true,

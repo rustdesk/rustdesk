@@ -745,11 +745,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", "当前使用预设密码"),
         ("Enable privacy mode", "允许隐私模式"),
         ("allow-remote-toolbar-docking-any-edge", ""),
-        ("wayland-keyboard-input-disabled-tip", "键盘输入已禁用"),
-        ("wayland-keyboard-input-consent-tip", "此会话使用 Wayland。键盘输入可能会临时通过被控端剪贴板粘贴到当前应用，剪贴板历史或其他应用可能读取这些内容（包括密码）。\n点击“OK”允许当前会话。"),
+        ("wayland-keyboard-input-disabled-tip", "允许键盘输入？"),
+        ("wayland-keyboard-input-consent-tip", "你在这台远程电脑上输入的内容（包括密码）可能被它上面的其他程序读取。是否允许本次会话使用键盘输入？"),
         ("wayland-keyboard-input-applies-to-tip", "此授权适用于："),
         ("wayland-soft-keyboard-input-label", "软键盘输入"),
         ("wayland-keyboard-input-clear-perm-tip", "清除已保存键盘授权"),
-        ("remember-wayland-keyboard-choice-tip", "在此设备上始终允许键盘输入"),
+        ("remember-wayland-keyboard-choice-tip", "以后在这台设备上不再询问"),
+        ("Why this happens", "了解原因"),
     ].iter().cloned().collect();
 }
