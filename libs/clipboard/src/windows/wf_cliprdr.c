@@ -246,6 +246,7 @@ struct wf_clipboard
 
 	HWND hwnd;
 	HANDLE hmem;
+	SIZE_T hmem_data_len;
 	HANDLE thread;
 	HANDLE formatDataRespEvent;
 	BOOL formatDataRespReceived;
@@ -688,6 +689,7 @@ static HRESULT wf_cliprdr_fail_locked_file_descriptor_data(wfClipboard *clipboar
 	GlobalUnlock(clipboard->hmem);
 	GlobalFree(clipboard->hmem);
 	clipboard->hmem = NULL;
+	clipboard->hmem_data_len = 0;
 	medium->hGlobal = NULL;
 	wf_cliprdr_release_streams(streams, stream_count);
 	wf_cliprdr_reset_streams(instance);
@@ -837,10 +839,11 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 			pMedium->hGlobal = NULL;
 			GlobalFree(clipboard->hmem);
 			clipboard->hmem = NULL;
+			wf_cliprdr_reset_streams(instance);
 			return E_UNEXPECTED;
 		}
 
-		hmem_size = GlobalSize(clipboard->hmem);
+		hmem_size = clipboard->hmem_data_len;
 		/* cItems is remote-controlled; verify the fixed header exists before reading it. */
 		if (hmem_size < offsetof(FILEGROUPDESCRIPTORW, fgd))
 			return wf_cliprdr_fail_locked_file_descriptor_data(
@@ -2235,19 +2238,15 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 		return FALSE;
 
 	/* add to name array */
+	// `MAX_PATH` is long enough for the file name.
+	// So we just return FALSE if the file name is too long, which is not a normal case.
+	if ((wcslen(full_file_name) + 1) > MAX_PATH)
+		return FALSE;
+
 	clipboard->file_names[clipboard->nFiles] = (LPWSTR)calloc(MAX_PATH, sizeof(WCHAR));
 
 	if (!clipboard->file_names[clipboard->nFiles])
 		return FALSE;
-
-	// `MAX_PATH` is long enough for the file name.
-	// So we just return FALSE if the file name is too long, which is not a normal case.
-	if ((wcslen(full_file_name) + 1) > MAX_PATH)
-	{
-		free(clipboard->file_names[clipboard->nFiles]);
-		clipboard->file_names[clipboard->nFiles] = NULL;
-		return FALSE;
-	}
 
 	wcsncpy_s(clipboard->file_names[clipboard->nFiles], MAX_PATH, full_file_name, wcslen(full_file_name) + 1);
 	/* add to descriptor array */
@@ -2856,6 +2855,7 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			break;
 		}
 		clipboard->hmem = NULL;
+		clipboard->hmem_data_len = 0;
 
 		if (formatDataResponse->msgFlags != CB_RESPONSE_OK)
 		{
@@ -2889,6 +2889,7 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			break;
 		}
 
+		clipboard->hmem_data_len = formatDataResponse->dataLen;
 		clipboard->hmem = hMem;
 		rc = CHANNEL_RC_OK;
 	} while (0);

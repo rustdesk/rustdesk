@@ -1,5 +1,6 @@
 #include <check.h>
 #include <stdlib.h>
+#include <stddef.h>
 
 #include "../libs/clipboard/src/windows/wf_cliprdr.c"
 
