@@ -802,6 +802,15 @@ impl<T: InvokeUiSession> Session<T> {
         if data.len() > MAX_TERMINAL_INPUT_SIZE {
             return;
         }
+        // Strip escape sequences and dangerous control characters before forwarding.
+        // Allowed whitespace: tab (0x09), newline (0x0A), carriage return (0x0D).
+        let data: String = data
+            .chars()
+            .filter(|&c| {
+                let code = c as u32;
+                !((code < 0x20 && c != '\t' && c != '\n' && c != '\r') || code == 0x7F)
+            })
+            .collect();
         let mut action = TerminalAction::new();
         action.set_data(TerminalData {
             terminal_id,
