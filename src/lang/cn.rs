@@ -748,7 +748,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("API Token", "API 令牌"),
         ("Deploy", "部署"),
         ("Custom ID (optional)", "自定义 ID（可选）"),
-        ("server_requires_deployment_tip", "服务器需要部署。是否部署此设备？"),
-        ("Server does not require deployment.", "服务器不需要部署。")
+        ("server_requires_deployment_tip", "服务器要求显式部署此设备。是否立即部署？"),
+        ("The server does not require explicit deployment.", "服务器不需要显式部署。"),
+        ("Unknown response.", "未知响应。"),
     ].iter().cloned().collect();
 }
