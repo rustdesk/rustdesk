@@ -21,6 +21,13 @@ const String kWaylandKeyboardIssueUrl =
     'https://github.com/rustdesk/rustdesk/issues/14586';
 final Set<String> _waylandKeyboardPromptSuppressedConnectionIds = <String>{};
 
+Future<bool> openWaylandKeyboardIssueUrl() {
+  return launchUrl(
+    Uri.parse(kWaylandKeyboardIssueUrl),
+    mode: LaunchMode.externalApplication,
+  );
+}
+
 bool isWaylandKeyboardPromptSuppressedForConnection(String connectionId) {
   return _waylandKeyboardPromptSuppressedConnectionIds.contains(connectionId);
 }
@@ -43,7 +50,8 @@ bool shouldShowWaylandKeyboardPrompt({
   required bool isWaylandPeer,
   required bool allowWaylandKeyboardRemembered,
 }) {
-  return !allowWaylandKeyboardRemembered &&
+  return isWaylandPeer &&
+      !allowWaylandKeyboardRemembered &&
       !isWaylandKeyboardPromptSuppressedForConnection(connectionId);
 }
 
@@ -249,7 +257,7 @@ void showWaylandKeyboardInputWarningDialog(
           TextButton(
             onPressed: consentInProgress
                 ? null
-                : () => launchUrl(Uri.parse(kWaylandKeyboardIssueUrl)),
+                : () => unawaited(openWaylandKeyboardIssueUrl()),
             style: TextButton.styleFrom(
               foregroundColor: Colors.blue,
               padding: EdgeInsets.zero,
@@ -1017,7 +1025,8 @@ List<TToggleMenu> toolbarPrivacyMode(
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
   final sessionId = ffi.sessionId;
-  final hasPrivacyModePermission = ffiModel.permissions['privacy_mode'] != false;
+  final hasPrivacyModePermission =
+      ffiModel.permissions['privacy_mode'] != false;
 
   // Backend revocation already attempts to turn privacy mode off.
   // Still keep this menu when privacy mode is active, so users can turn it off
@@ -1027,8 +1036,8 @@ List<TToggleMenu> toolbarPrivacyMode(
   }
 
   getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc) {
-    final enabled =
-        !ffiModel.viewOnly && (hasPrivacyModePermission || privacyModeState.isNotEmpty);
+    final enabled = !ffiModel.viewOnly &&
+        (hasPrivacyModePermission || privacyModeState.isNotEmpty);
     return TToggleMenu(
         value: privacyModeState.isNotEmpty,
         onChanged: enabled
