@@ -2,7 +2,7 @@ use std::{
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, RwLock,
+        Arc, Mutex as StdMutex, RwLock,
     },
     time::{Duration, Instant},
 };
@@ -47,7 +47,7 @@ static NOTIFIED_NEEDS_DEPLOY: AtomicBool = AtomicBool::new(false);
 // register_pk retry interval (ms) when device is awaiting deployment
 const DEPLOY_RETRY_INTERVAL: i64 = 30_000;
 lazy_static::lazy_static! {
-    static ref LAST_NOT_DEPLOYED_REGISTER: Mutex<Option<Instant>> = Mutex::new(None);
+    static ref LAST_NOT_DEPLOYED_REGISTER: StdMutex<Option<Instant>> = StdMutex::new(None);
 }
 
 // Single source of truth for the "awaiting deployment" backoff. The server has
@@ -63,7 +63,7 @@ async fn deploy_register_throttled() -> bool {
     }
     LAST_NOT_DEPLOYED_REGISTER
         .lock()
-        .await
+        .unwrap()
         .map(|t| (t.elapsed().as_millis() as i64) < DEPLOY_RETRY_INTERVAL)
         .unwrap_or(false)
 }
@@ -84,6 +84,8 @@ fn notify_android_needs_deploy() {
 
 #[cfg(target_os = "android")]
 pub(crate) fn reset_needs_deploy_notification() {
+    NEEDS_DEPLOY.store(false, Ordering::SeqCst);
+    *LAST_NOT_DEPLOYED_REGISTER.lock().unwrap() = None;
     NOTIFIED_NEEDS_DEPLOY.store(false, Ordering::SeqCst);
 }
 
@@ -752,7 +754,7 @@ impl RendezvousMediator {
         // DEPLOY_RETRY_INTERVAL ms is wasted traffic until the operator runs
         // `rustdesk --deploy --token <api_token>`.
         if NEEDS_DEPLOY.load(Ordering::SeqCst) {
-            let mut last = LAST_NOT_DEPLOYED_REGISTER.lock().await;
+            let mut last = LAST_NOT_DEPLOYED_REGISTER.lock().unwrap();
             if let Some(t) = *last {
                 if (t.elapsed().as_millis() as i64) < DEPLOY_RETRY_INTERVAL {
                     return Ok(());
@@ -760,7 +762,7 @@ impl RendezvousMediator {
             }
             *last = Some(Instant::now());
         } else {
-            *LAST_NOT_DEPLOYED_REGISTER.lock().await = None;
+            *LAST_NOT_DEPLOYED_REGISTER.lock().unwrap() = None;
         }
         let mut msg_out = Message::new();
         let pk = Config::get_key_pair().1;
