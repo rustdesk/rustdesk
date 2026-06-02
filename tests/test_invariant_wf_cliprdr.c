@@ -1,4 +1,5 @@
-#include <check.h>
+            /* When allocation fails, function must return NULL safely */
+            ck_assert_ptr_null(result);#include <check.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
