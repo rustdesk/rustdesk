@@ -752,7 +752,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The server does not require explicit deployment.", "Il server non richiede una distribuzione esplicita."),
         ("Unknown response.", "Risposta sconosciuta"),
         ("wayland-keyboard-input-disabled-tip", "Vuoi consentire l'input da tastiera?"),
-        ("wayland-keyboard-input-consent-tip", "Ciò che digiti in questo computer remoto (comprese le password) potrebbe essere letto da altre app prenti nel computer remoto."),
+        ("wayland-keyboard-input-consent-tip", "Ciò che digiti in questo computer remoto (comprese le password) potrebbe essere letto da altre app presenti nel computer remoto."),
         ("wayland-keyboard-input-applies-to-tip", "Questa scelta si applica a:"),
         ("wayland-soft-keyboard-input-label", "Inserimento tramite tastiera soft"),
         ("wayland-keyboard-input-reset-choice-tip", "Ripristina scelta input da tastiera"),
