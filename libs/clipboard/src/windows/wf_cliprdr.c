@@ -635,7 +635,8 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 
 	if (!success)
 	{
-		CliprdrStream_Delete(instance);
+		if (instance)
+			CliprdrStream_Delete(instance);
 		instance = NULL;
 	}
 
