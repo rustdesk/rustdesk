@@ -275,6 +275,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("password-hidden-tip", "Permanent password is set (hidden)."),
         ("preset-password-in-use-tip", "Preset password is currently in use."),
         ("allow-remote-toolbar-docking-any-edge", "Allow docking remote toolbar to any window edge"),
+        ("server_requires_deployment_tip", "The server requires this device to be deployed explicitly. Deploy now?"),
         ("wayland-keyboard-input-disabled-tip", "Allow keyboard input?"),
         ("wayland-keyboard-input-consent-tip", "What you type on this remote computer (including passwords) could be read by other apps on it."),
         ("wayland-keyboard-input-applies-to-tip", "This permission applies to:"),

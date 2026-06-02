@@ -745,12 +745,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", "A senha predefinida está sendo usada."),
         ("Enable privacy mode", "Habilitar modo de privacidade"),
         ("allow-remote-toolbar-docking-any-edge", "Permitir fixar a barra de ferramentas remota em qualquer borda da janela"),
-        ("wayland-keyboard-input-disabled-tip", ""),
-        ("wayland-keyboard-input-consent-tip", ""),
-        ("wayland-keyboard-input-applies-to-tip", ""),
-        ("wayland-soft-keyboard-input-label", ""),
-        ("wayland-keyboard-input-clear-perm-tip", ""),
-        ("remember-wayland-keyboard-choice-tip", ""),
-        ("Why this happens", ""),
+        ("API Token", ""),
+        ("Deploy", ""),
+        ("Custom ID (optional)", ""),
+        ("server_requires_deployment_tip", ""),
+        ("The server does not require explicit deployment.", ""),
+        ("Unknown response.", ""),
     ].iter().cloned().collect();
 }
