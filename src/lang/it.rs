@@ -748,7 +748,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("API Token", "Token API"),
         ("Deploy", "Distribuisci"),
         ("Custom ID (optional)", "ID personale (opzionale)"),
-        ("server_requires_deployment_tip", "Il server richiede che questo dispositivo venga distribuito in modo esplicito.Vuoi distribuirlo?"),
+        ("server_requires_deployment_tip", "Il server richiede che questo dispositivo venga distribuito in modo esplicito.\nVuoi distribuirlo?"),
         ("The server does not require explicit deployment.", "Il server non richiede una distribuzione esplicita."),
         ("Unknown response.", "Risposta sconosciuta"),
     ].iter().cloned().collect();
