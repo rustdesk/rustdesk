@@ -745,5 +745,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", "È attualmente in uso la password preimpostata."),
         ("Enable privacy mode", "Abilita modalità privacy"),
         ("allow-remote-toolbar-docking-any-edge", "Consenti ancoraggio barra strumenti remota a qualsiasi bordo della finestra"),
+        ("API Token", ""),
+        ("Deploy", ""),
+        ("Custom ID (optional)", ""),
+        ("server_requires_deployment_tip", ""),
+        ("The server does not require explicit deployment.", ""),
+        ("Unknown response.", ""),
     ].iter().cloned().collect();
 }

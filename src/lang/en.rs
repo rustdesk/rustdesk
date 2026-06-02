@@ -275,5 +275,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("password-hidden-tip", "Permanent password is set (hidden)."),
         ("preset-password-in-use-tip", "Preset password is currently in use."),
         ("allow-remote-toolbar-docking-any-edge", "Allow docking remote toolbar to any window edge"),
+        ("server_requires_deployment_tip", "The server requires this device to be deployed explicitly. Deploy now?"),
     ].iter().cloned().collect();
 }

@@ -745,5 +745,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", "현재 사전 설정된 비밀번호가 사용 중입니다."),
         ("Enable privacy mode", "개인정보 보호 모드 사용함"),
         ("allow-remote-toolbar-docking-any-edge", "원격 도구 모음을 창 가장자리에 도킹 허용"),
+        ("API Token", ""),
+        ("Deploy", ""),
+        ("Custom ID (optional)", ""),
+        ("server_requires_deployment_tip", ""),
+        ("The server does not require explicit deployment.", ""),
+        ("Unknown response.", ""),
     ].iter().cloned().collect();
 }
