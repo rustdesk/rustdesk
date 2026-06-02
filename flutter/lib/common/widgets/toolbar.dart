@@ -404,7 +404,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           isWaylandKeyboardPromptSuppressedForConnection(
               sessionId.toString()))) {
     v.add(TTextMenu(
-        child: Text(translate('wayland-keyboard-input-clear-perm-tip')),
+        child: Text(translate('wayland-keyboard-input-reset-choice-tip')),
         onPressed: () async {
           var persistedCleared = false;
           try {

@@ -755,7 +755,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland-keyboard-input-consent-tip", ""),
         ("wayland-keyboard-input-applies-to-tip", ""),
         ("wayland-soft-keyboard-input-label", ""),
-        ("wayland-keyboard-input-clear-perm-tip", ""),
+        ("wayland-keyboard-input-reset-choice-tip", ""),
         ("remember-wayland-keyboard-choice-tip", ""),
         ("Why this happens", ""),
     ].iter().cloned().collect();

@@ -280,7 +280,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland-keyboard-input-consent-tip", "What you type on this remote computer (including passwords) could be read by other apps on it."),
         ("wayland-keyboard-input-applies-to-tip", "This permission applies to:"),
         ("wayland-soft-keyboard-input-label", "Soft keyboard input"),
-        ("wayland-keyboard-input-clear-perm-tip", "Clear saved keyboard permission"),
+        ("wayland-keyboard-input-reset-choice-tip", "Reset keyboard input choice"),
         ("remember-wayland-keyboard-choice-tip", "Don't ask again for this remote computer"),
     ].iter().cloned().collect();
 }
