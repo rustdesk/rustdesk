@@ -751,5 +751,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server_requires_deployment_tip", ""),
         ("The server does not require explicit deployment.", ""),
         ("Unknown response.", ""),
+        ("wayland-keyboard-input-disabled-tip", ""),
+        ("wayland-keyboard-input-consent-tip", ""),
+        ("wayland-keyboard-input-applies-to-tip", ""),
+        ("wayland-soft-keyboard-input-label", ""),
+        ("wayland-keyboard-input-clear-perm-tip", ""),
+        ("remember-wayland-keyboard-choice-tip", ""),
+        ("Why this happens", ""),
     ].iter().cloned().collect();
 }
