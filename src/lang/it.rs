@@ -757,6 +757,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland-soft-keyboard-input-label", "Inserimento tramite tastiera soft"),
         ("wayland-keyboard-input-reset-choice-tip", "Ripristina scelta input da tastiera"),
         ("remember-wayland-keyboard-choice-tip", "Non chiedere più per questo computer remoto"),
-        ("Why this happens", ""),
+        ("Why this happens", "Perché accade questo"),
     ].iter().cloned().collect();
 }
