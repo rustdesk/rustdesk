@@ -48,6 +48,23 @@ flutter build ipa --release \
 
 Watch for `✓ Built IPA to build/ios/ipa`. Ignore the "launch image is set to the default placeholder" warning — it's pre-existing.
 
+**Common failure: `exportArchive No signing certificate "iOS Distribution" found`** — the Apple Distribution cert is missing from the keychain. Distribution certs can vanish (revoked, expired, wiped) even if prior builds succeeded from the same Mac. To diagnose:
+
+```bash
+security find-identity -v -p codesigning | grep -i distribution
+```
+
+If no `Apple Distribution: Ronen Bakhteev (GUW6BN8X57)` row appears, the user must install it via Xcode (Claude cannot — GUI-only):
+
+1. Xcode → Settings → **Apple Accounts** → select `ronenmars@gmail.com` → click the **Ronen Bakhteev** team row
+2. Click **Manage Certificates…**
+3. Click **+** (bottom-left) → choose **Apple Distribution**
+4. New row appears under "Apple Distribution Certificates" with a key icon → **Done**
+
+After they confirm, re-verify with `security find-identity`, then **delete any stale `Tabby.ipa` in `flutter/build/ios/ipa/`** before retrying the build (the `*.ipa` upload glob in Step 3 would otherwise pick up the old build). Then re-run the `flutter build ipa` command above.
+
+Fallback if Xcode Settings is uncooperative: `open flutter/build/ios/archive/Runner.xcarchive` opens Xcode Organizer with the just-built archive — **Distribute App → App Store Connect → Upload** can auto-provision the cert on the fly, bypassing keychain config.
+
 ### 3. Upload
 
 ```bash
@@ -72,3 +89,5 @@ Tell the user:
 - **Don't** skip the build before re-uploading; an old IPA in `build/ios/ipa/` will silently re-upload (`*.ipa` glob).
 - **Don't** add `--verbose` to `altool` unless debugging; it's very chatty.
 - **Don't** commit the API key, ever.
+- **Don't** try to fix a missing Apple Distribution cert yourself — keychain installs need user GUI interaction in Xcode. Surface the failure and the install steps from Step 2; let the user act.
+- **Don't** trust that a build that shipped recently means the cert still exists. Distribution certs disappear without warning. Re-verify with `security find-identity` whenever build/export fails on signing.
