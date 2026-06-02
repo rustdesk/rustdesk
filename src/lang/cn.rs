@@ -751,5 +751,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server_requires_deployment_tip", "服务器要求显式部署此设备。是否立即部署？"),
         ("The server does not require explicit deployment.", "服务器不需要显式部署。"),
         ("Unknown response.", "未知响应。"),
+        ("wayland-keyboard-input-disabled-tip", "允许键盘输入？"),
+        ("wayland-keyboard-input-consent-tip", "你在这台远程电脑上输入的内容（包括密码）可能被远程电脑上的其他程序读取。"),
+        ("wayland-keyboard-input-applies-to-tip", "此选择适用于："),
+        ("wayland-soft-keyboard-input-label", "软键盘输入"),
+        ("wayland-keyboard-input-reset-choice-tip", "重置键盘输入选择"),
+        ("remember-wayland-keyboard-choice-tip", "以后对这台远程电脑不再询问"),
+        ("Why this happens", "了解原因"),
     ].iter().cloned().collect();
 }

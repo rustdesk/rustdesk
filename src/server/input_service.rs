@@ -457,6 +457,12 @@ lazy_static::lazy_static! {
     static ref RELATIVE_MOUSE_CONNS: Arc<Mutex<std::collections::HashSet<i32>>> = Default::default();
 }
 
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    static ref WAYLAND_CLIPBOARD_INPUT_RECORDS: Arc<Mutex<Vec<(Instant, String)>>> =
+        Default::default();
+}
+
 #[inline]
 fn set_relative_mouse_active(conn: i32, active: bool) {
     let mut lock = RELATIVE_MOUSE_CONNS.lock().unwrap();
@@ -1594,15 +1600,28 @@ fn need_to_uppercase(en: &mut Enigo) -> bool {
 }
 
 fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
-    // On Wayland with uinput mode, use clipboard for character input
+    // On Wayland with uinput mode:
+    // - ASCII printable: input via key events (custom keyboard path, e.g. portal keysym)
+    // - Non-ASCII: input via clipboard paste
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
         // Skip clipboard for hotkeys (Ctrl/Alt/Meta pressed)
         if !is_hotkey_modifier_pressed(en) {
-            if down {
-                if let Ok(c) = char::try_from(chr) {
+            if let Ok(c) = char::try_from(chr) {
+                if is_ascii_printable(c) {
+                    if down {
+                        en.key_down(Key::Layout(c)).ok();
+                    } else {
+                        en.key_up(Key::Layout(c));
+                    }
+                } else if down {
                     input_char_via_clipboard_server(en, c);
                 }
+            } else {
+                log::warn!(
+                    "Ignore invalid unicode scalar in Wayland+uinput path: {}",
+                    chr
+                );
             }
             return;
         }
@@ -1637,11 +1656,17 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
 }
 
 fn process_unicode(en: &mut Enigo, chr: u32) {
-    // On Wayland with uinput mode, use clipboard for character input
+    // On Wayland with uinput mode:
+    // - ASCII printable: input via key sequence (custom keyboard path)
+    // - Non-ASCII: input via clipboard paste
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
         if let Ok(c) = char::try_from(chr) {
-            input_char_via_clipboard_server(en, c);
+            if is_ascii_printable(c) {
+                en.key_sequence(&c.to_string());
+            } else {
+                input_char_via_clipboard_server(en, c);
+            }
         }
         return;
     }
@@ -1652,10 +1677,16 @@ fn process_unicode(en: &mut Enigo, chr: u32) {
 }
 
 fn process_seq(en: &mut Enigo, sequence: &str) {
-    // On Wayland with uinput mode, use clipboard for text input
+    // On Wayland with uinput mode:
+    // - pure ASCII printable sequence: input via key sequence (custom keyboard path)
+    // - any non-ASCII present: input whole sequence via clipboard to preserve order
     #[cfg(target_os = "linux")]
     if !crate::platform::linux::is_x11() && wayland_use_uinput() {
-        input_text_via_clipboard_server(en, sequence);
+        if sequence.chars().all(is_ascii_printable) {
+            en.key_sequence(sequence);
+        } else {
+            input_text_via_clipboard_server(en, sequence);
+        }
         return;
     }
 
@@ -1668,40 +1699,103 @@ fn process_seq(en: &mut Enigo, sequence: &str) {
 /// this delay may be insufficient, but there is no reliable alternative mechanism.
 #[cfg(target_os = "linux")]
 const CLIPBOARD_SYNC_DELAY_MS: u64 = 50;
+#[cfg(target_os = "linux")]
+const WAYLAND_CLIPBOARD_INPUT_FILTER_WINDOW: Duration = Duration::from_secs(1);
+#[cfg(target_os = "linux")]
+const WAYLAND_CLIPBOARD_INPUT_MAX_RECORDS: usize = 256;
+#[cfg(target_os = "linux")]
+pub(super) const WAYLAND_CLIPBOARD_INPUT_MAX_TEXT_CHARS: usize = 1024;
+
+#[cfg(target_os = "linux")]
+fn cleanup_wayland_clipboard_input_records(records: &mut Vec<(Instant, String)>, now: Instant) {
+    records.retain(|(created_at, _)| {
+        now.saturating_duration_since(*created_at) <= WAYLAND_CLIPBOARD_INPUT_FILTER_WINDOW
+    });
+    let len = records.len();
+    if len > WAYLAND_CLIPBOARD_INPUT_MAX_RECORDS {
+        records.drain(0..(len - WAYLAND_CLIPBOARD_INPUT_MAX_RECORDS));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn normalize_wayland_clipboard_input_text(text: &str) -> String {
+    text.chars()
+        .take(WAYLAND_CLIPBOARD_INPUT_MAX_TEXT_CHARS)
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn get_wayland_clipboard_input_normalized_text(text: &str) -> Option<String> {
+    let normalized = normalize_wayland_clipboard_input_text(text);
+    if normalized.is_empty() {
+        return None;
+    }
+    Some(normalized)
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn record_wayland_clipboard_input_for_sync_filter(text: &str) -> Option<(Instant, String)> {
+    if text.is_empty() || crate::platform::linux::is_x11() {
+        return None;
+    }
+    let normalized = get_wayland_clipboard_input_normalized_text(text)?;
+    let now = Instant::now();
+    let mut records = WAYLAND_CLIPBOARD_INPUT_RECORDS.lock().unwrap();
+    cleanup_wayland_clipboard_input_records(&mut records, now);
+    records.push((now, normalized.clone()));
+    Some((now, normalized))
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn rollback_wayland_clipboard_input_record(record: (Instant, String)) {
+    let (created_at, normalized) = record;
+    let now = Instant::now();
+    let mut records = WAYLAND_CLIPBOARD_INPUT_RECORDS.lock().unwrap();
+    cleanup_wayland_clipboard_input_records(&mut records, now);
+    if let Some(pos) = records
+        .iter()
+        .rposition(|(record_created_at, record_normalized)| {
+            *record_created_at == created_at && *record_normalized == normalized
+        })
+    {
+        records.remove(pos);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn is_recent_wayland_clipboard_input(text: &str) -> bool {
+    if text.is_empty() || crate::platform::linux::is_x11() {
+        return false;
+    }
+    let Some(normalized) = get_wayland_clipboard_input_normalized_text(text) else {
+        return false;
+    };
+    let now = Instant::now();
+    let mut records = WAYLAND_CLIPBOARD_INPUT_RECORDS.lock().unwrap();
+    cleanup_wayland_clipboard_input_records(&mut records, now);
+    records
+        .iter()
+        .any(|(_, record_normalized)| record_normalized == &normalized)
+}
 
 /// Internal: Set clipboard content without delay.
 /// Returns true if clipboard was set successfully.
 #[cfg(target_os = "linux")]
 fn set_clipboard_content(text: &str) -> bool {
-    use arboard::{Clipboard, LinuxClipboardKind, SetExtLinux};
-
-    let mut clipboard = match Clipboard::new() {
-        Ok(cb) => cb,
-        Err(e) => {
-            log::error!("set_clipboard_content: failed to create clipboard: {:?}", e);
-            return false;
-        }
-    };
-
-    // Set both CLIPBOARD and PRIMARY selections
-    // Terminal uses PRIMARY for Shift+Insert, GUI apps use CLIPBOARD
-    if let Err(e) = clipboard
-        .set()
-        .clipboard(LinuxClipboardKind::Clipboard)
-        .text(text.to_owned())
-    {
-        log::error!("set_clipboard_content: failed to set CLIPBOARD: {:?}", e);
+    if let Err(e) = crate::clipboard::set_text_clipboard_with_owner_sync(
+        text,
+        crate::clipboard::ClipboardSide::Host,
+    ) {
+        log::error!(
+            "set_clipboard_content: failed to set clipboard with owner marker: {:?}",
+            e
+        );
         return false;
     }
-    if let Err(e) = clipboard
-        .set()
-        .clipboard(LinuxClipboardKind::Primary)
-        .text(text.to_owned())
-    {
-        log::warn!("set_clipboard_content: failed to set PRIMARY: {:?}", e);
-        // Continue anyway, CLIPBOARD might work
-    }
-
     true
 }
 
@@ -1714,7 +1808,11 @@ fn set_clipboard_content(text: &str) -> bool {
 #[cfg(target_os = "linux")]
 #[inline]
 pub(super) fn set_clipboard_for_paste_sync(text: &str) -> bool {
+    let record = record_wayland_clipboard_input_for_sync_filter(text);
     if !set_clipboard_content(text) {
+        if let Some(record) = record {
+            rollback_wayland_clipboard_input_record(record);
+        }
         return false;
     }
     std::thread::sleep(std::time::Duration::from_millis(CLIPBOARD_SYNC_DELAY_MS));
@@ -1916,49 +2014,53 @@ fn translate_process_code(code: u32, down: bool) {
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match &evt.union {
         Some(key_event::Union::Seq(seq)) => {
-            // On Wayland, handle character input directly in this (--server) process using clipboard.
-            // This function runs in the --server process (logged-in user session), which has
-            // WAYLAND_DISPLAY and XDG_RUNTIME_DIR — so clipboard operations work here.
-            //
-            // Why not let it go through uinput IPC:
-            // 1. For uinput mode: the uinput service thread runs in the --service (root) process,
-            //    which typically lacks user session environment. Clipboard operations there are
-            //    unreliable. Handling clipboard here avoids that issue.
-            // 2. For RDP input mode: Portal's notify_keyboard_keysym API interprets keysyms
-            //    based on its internal modifier state, which may not match our released state.
-            //    Using clipboard bypasses this issue entirely.
+            // On Wayland:
+            // - uinput mode (--service): keep clipboard handling in this process because
+            //   clipboard is unreliable in root service context.
+            // - rdp_input mode (--server): forward sequence to custom keyboard handler so
+            //   ASCII can use Portal keysym and non-ASCII can use clipboard.
             #[cfg(target_os = "linux")]
             if !crate::platform::linux::is_x11() {
                 let mut en = ENIGO.lock().unwrap();
-
-                // Check if this is a hotkey (Ctrl/Alt/Meta pressed)
-                // For hotkeys, we send character-based key events via Enigo instead of
-                // using the clipboard. This relies on the local keyboard layout for
-                // mapping characters to physical keys.
-                // This assumes client and server use the same keyboard layout (common case).
-                // Note: For non-Latin keyboards (e.g., Arabic), hotkeys may not work
-                // correctly if the character cannot be mapped to a key via KEY_MAP_LAYOUT.
-                // This is a known limitation - most common hotkeys (Ctrl+A/C/V/Z) use Latin
-                // characters which are mappable on most keyboard layouts.
-                if is_hotkey_modifier_pressed(&mut en) {
-                    // For hotkeys, send character-based key events via Enigo.
-                    // This relies on the local keyboard layout mapping (KEY_MAP_LAYOUT).
-                    for chr in seq.chars() {
-                        if !is_ascii_printable(chr) {
-                            log::warn!(
-                                "Hotkey with non-ASCII character may not work correctly on non-Latin keyboard layouts"
-                            );
-                        }
-                        en.key_click(Key::Layout(chr));
-                    }
+                if wayland_use_rdp_input() {
+                    release_shift_for_char_input(&mut en);
+                    en.key_sequence(seq);
                     return;
                 }
 
-                // Normal text input: release Shift and use clipboard
-                release_shift_for_char_input(&mut en);
+                if wayland_use_uinput() {
+                    // Check if this is a hotkey (Ctrl/Alt/Meta pressed)
+                    // For hotkeys, we send character-based key events via Enigo instead of
+                    // using the clipboard. This relies on the local keyboard layout for
+                    // mapping characters to physical keys.
+                    // This assumes client and server use the same keyboard layout (common case).
+                    // Note: For non-Latin keyboards (e.g., Arabic), hotkeys may not work
+                    // correctly if the character cannot be mapped to a key via KEY_MAP_LAYOUT.
+                    // This is a known limitation - most common hotkeys (Ctrl+A/C/V/Z) use Latin
+                    // characters which are mappable on most keyboard layouts.
+                    if is_hotkey_modifier_pressed(&mut en) {
+                        // For hotkeys, send character-based key events via Enigo.
+                        // This relies on the local keyboard layout mapping (KEY_MAP_LAYOUT).
+                        for chr in seq.chars() {
+                            if !is_ascii_printable(chr) {
+                                log::warn!(
+                                    "Hotkey with non-ASCII character may not work correctly on non-Latin keyboard layouts"
+                                );
+                            }
+                            en.key_click(Key::Layout(chr));
+                        }
+                        return;
+                    }
 
-                input_text_via_clipboard_server(&mut en, seq);
-                return;
+                    // Normal text input: release Shift and use clipboard
+                    release_shift_for_char_input(&mut en);
+                    if seq.chars().all(is_ascii_printable) {
+                        en.key_sequence(seq);
+                    } else {
+                        input_text_via_clipboard_server(&mut en, seq);
+                    }
+                    return;
+                }
             }
 
             // Fr -> US
