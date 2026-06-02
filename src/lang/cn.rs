@@ -753,7 +753,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Unknown response.", "未知响应。"),
         ("wayland-keyboard-input-disabled-tip", "允许键盘输入？"),
         ("wayland-keyboard-input-consent-tip", "你在这台远程电脑上输入的内容（包括密码）可能被远程电脑上的其他程序读取。"),
-        ("wayland-keyboard-input-applies-to-tip", "此授权适用于："),
+        ("wayland-keyboard-input-applies-to-tip", "此选择适用于："),
         ("wayland-soft-keyboard-input-label", "软键盘输入"),
         ("wayland-keyboard-input-reset-choice-tip", "重置键盘输入选择"),
         ("remember-wayland-keyboard-choice-tip", "以后对这台远程电脑不再询问"),
