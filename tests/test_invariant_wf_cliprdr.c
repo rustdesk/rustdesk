@@ -1,5 +1,4 @@
-            /* When allocation fails, function must return NULL safely */
-            ck_assert_ptr_null(result);#include <check.h>
+#include <check.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -56,9 +55,8 @@ START_TEST(test_cliprdr_allocation_null_check)
            Invalid outcome: dereferencing NULL (would crash before returning). */
         
         if (allocation_fail_count > 0) {
-            /* When allocation fails, result should be NULL or safe */
-            ck_assert_msg(result == NULL || result != NULL,
-                "cliprdr_stream_new must handle allocation failure safely");
+            /* When allocation fails, function must return NULL safely */
+            ck_assert_ptr_null(result);
         } else {
             /* When no failure, result should be valid */
             ck_assert_ptr_nonnull(result);
