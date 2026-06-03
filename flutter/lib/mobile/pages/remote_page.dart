@@ -68,6 +68,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   final _uniqueKey = UniqueKey();
   Timer? _iosKeyboardWorkaroundTimer;
   String? _iosComposingValue;
+  String? _iosLastControllerText;
+  TextRange? _iosLastComposingRange;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -151,6 +153,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (isIOS) {
       _textController.removeListener(_handleIOSTextControllerChanged);
     }
+    _textController.dispose();
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
     // after several awaits (canvas save, image update, the `enable_soft_keyboard`
     // platform call), so if the app is backgrounded while this page is disposing,
@@ -259,6 +262,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // https://github.com/flutter/flutter/issues/39900
       // https://github.com/rustdesk/rustdesk/discussions/11843#discussioncomment-13499698 - Virtual keyboard issue
       if (isIOS) {
+        _showEdit = false;
         _iosKeyboardWorkaroundTimer?.cancel();
         _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 100), () {
           if (!mounted) return;
@@ -283,12 +287,20 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  void _handleIOSSoftKeyboardInput(String newValue) {
+  void _handleIOSSoftKeyboardInput(
+    String newValue, {
+    bool forceCommitComposingText = false,
+  }) {
+    if (!inputModel.keyboardInputAllowed) {
+      return;
+    }
     final result = diffIOSSoftKeyboardInput(
       previousValue: _value,
       currentValue: newValue,
       composingRange: _textController.value.composing,
       previousComposingValue: _iosComposingValue,
+      sentinelPrefixLength: initText.length,
+      forceCommitComposingText: forceCommitComposingText,
     );
     _value = result.nextValue;
     _iosComposingValue = result.nextComposingValue;
@@ -309,7 +321,21 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void _handleIOSTextControllerChanged() {
-    _handleIOSSoftKeyboardInput(_textController.value.text);
+    if (!inputModel.keyboardInputAllowed) {
+      return;
+    }
+    final value = _textController.value;
+    final forceCommitComposingText = shouldForceCommitIOSComposingText(
+      previousControllerText: _iosLastControllerText,
+      previousComposingRange: _iosLastComposingRange,
+      currentValue: value,
+    );
+    _iosLastControllerText = value.text;
+    _iosLastComposingRange = value.composing;
+    _handleIOSSoftKeyboardInput(
+      value.text,
+      forceCommitComposingText: forceCommitComposingText,
+    );
   }
 
   void _handleNonIOSSoftKeyboardInput(String newValue) {
@@ -358,11 +384,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (!inputModel.keyboardInputAllowed) {
       return;
     }
-    if (isIOS) {
-      _handleIOSSoftKeyboardInput(newValue);
-    } else {
-      _handleNonIOSSoftKeyboardInput(newValue);
-    }
+    _handleNonIOSSoftKeyboardInput(newValue);
   }
 
   void inputChar(String char) {
@@ -405,6 +427,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // destroy first, so that our _value trick can work
     _value = initText;
     _iosComposingValue = null;
+    _iosLastControllerText = null;
+    _iosLastComposingRange = null;
     _textController.text = _value;
     setState(() => _showEdit = false);
     _timer?.cancel();
@@ -522,12 +546,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Widget getRawPointerAndKeyBody(Widget child) {
     final ffiModel = Provider.of<FfiModel>(context);
+    final forwardKeyboardEvents =
+        !(isIOS && _showEdit && keyboardVisibilityController.isVisible);
     return RawPointerMouseRegion(
       cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,
       inputModel: inputModel,
       // Disable RawKeyFocusScope before the connecting is established.
       // The "Delete" key on the soft keyboard may be grabbed when inputting the password dialog.
-      child: gFFI.ffiModel.pi.isSet.isTrue
+      child: gFFI.ffiModel.pi.isSet.isTrue && forwardKeyboardEvents
           ? RawKeyFocusScope(
               focusNode: _physicalFocusNode,
               inputModel: inputModel,
