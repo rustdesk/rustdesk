@@ -27,6 +27,7 @@ import 'common.dart';
 import 'consts.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
+import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
 
 import 'package:flutter_hbb/plugin/handlers.dart'
@@ -573,6 +574,14 @@ _registerEventHandler() {
   if (isDesktop) {
     platformFFI.registerEventHandler('native_ui', 'native_ui', (evt) async {
       NativeUiHandler.instance.onEvent(evt);
+    });
+  }
+  if (isAndroid) {
+    platformFFI.registerEventHandler(
+        'android_needs_deploy', 'android_needs_deploy', (_) async {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showDeployPromptDialog();
+      });
     });
   }
 }

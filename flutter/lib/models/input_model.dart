@@ -346,7 +346,7 @@ class InputModel {
   /// which runs per-engine, so each isolate registers its own handler tied
   /// to its own set of InputModels.
   static void initSideButtonChannel() {
-    if (!Platform.isLinux) return;
+    if (!isLinux) return;
     if (_sideButtonChannelInitialized) return;
     _sideButtonChannelInitialized = true;
 
@@ -473,6 +473,10 @@ class InputModel {
   List<RemoteWindowCoords> _remoteWindowCoords = [];
 
   late final SessionID sessionId;
+
+  // Local gate for clipboard-assisted input flows on mobile Wayland dialogs.
+  // It should not block physical keyboard events.
+  bool keyboardInputAllowed = true;
 
   bool get keyboardPerm => parent.target!.ffiModel.keyboard;
   String get id => parent.target?.id ?? '';

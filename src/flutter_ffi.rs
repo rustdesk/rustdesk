@@ -1153,6 +1153,22 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
+pub fn main_deploy_device(token: String, id: String) -> String {
+    #[cfg(target_os = "android")]
+    {
+        let new_id = match id.trim() {
+            "" => None,
+            id => Some(id.to_owned()),
+        };
+        ui_interface::deploy_device(token, new_id).message()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (token, id);
+        "Deployment is not supported on this platform.".to_owned()
+    }
+}
+
 pub fn main_resolve_avatar_url(avatar: String) -> SyncReturn<String> {
     SyncReturn(resolve_avatar_url(avatar))
 }
@@ -2116,6 +2132,7 @@ pub fn main_start_service() {
     #[cfg(target_os = "android")]
     {
         config::Config::set_option("stop-service".into(), "".into());
+        crate::rendezvous_mediator::reset_needs_deploy_notification();
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 }
@@ -2471,23 +2488,13 @@ pub fn is_disable_installation() -> SyncReturn<bool> {
 }
 
 pub fn is_preset_password() -> bool {
-    let hard = config::HARD_SETTINGS
-        .read()
-        .unwrap()
-        .get("password")
-        .cloned()
-        .unwrap_or_default();
-    if hard.is_empty() {
-        return false;
-    }
-
     // On desktop, service owns the authoritative config; query it via IPC and return only a boolean.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return crate::ipc::is_permanent_password_preset();
 
     // On mobile, we have no service IPC; verify against local storage.
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return config::Config::matches_permanent_password_plain(&hard);
+    return config::Config::is_using_preset_password();
 }
 
 // Don't call this function for desktop version.
@@ -3065,6 +3072,7 @@ pub mod server_side {
     pub unsafe extern "system" fn Java_ffi_FFI_startService(_env: JNIEnv, _class: JClass) {
         log::debug!("startService from jvm");
         config::Config::set_option("stop-service".into(), "".into());
+        crate::rendezvous_mediator::reset_needs_deploy_notification();
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 

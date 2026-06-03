@@ -1,10 +1,10 @@
 <p align="center">
   <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
-  <a href="#빌드를 위한 원시 단계">빌드</a> •
-  <a href="#Docker로 빌드하는 방법">Docker</a> •
-  <a href="#파일 구조">구조</a> •
-  <a href="#스크린샷">스냇샷</a><br>
-  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-DA.md">Dansk</a>] | [<a href="README-GR.md">Ελληνικά</a>] | [<a href="README-TR.md">Türkçe</a>] | [<a href="README-NO.md">Norsk</a>]<br>
+  <a href="#빌드를_위한_원시_단계">빌드</a> •
+  <a href="#Docker로_빌드하는_방법">Docker</a> •
+  <a href="#파일_구조">구조</a> •
+  <a href="#스크린샷">스냅샷</a><br>
+  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-DA.md">Dansk</a>] | [<a href="README-GR.md">Ελληνικά</a>] | [<a href="README-TR.md">Türkçe</a>] | [<a href="README-NO.md">Norsk</a>] | [<a href="README-RO.md">Română</a>]<br>
   <b>이 README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> 및 <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk 문서</a>를 귀하의 모국어로 번역하는 데 도움이 필요합니다</b>
 </p>
 
@@ -46,9 +46,9 @@ Sciter 동적 라이브러리를 직접 다운로드하세요.
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [macOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-## 빌드를 위한 원시 단계
+## 빌드를_위한_원시_단계
 
-- Rust 개발 환경과 C++ 빌드 환경을 준비합니다
+- Rust 개발 환경과 C++ 빌드 환경 준비
 
 - [vcpkg](https://github.com/microsoft/vcpkg)를 설치하고 `VCPKG_ROOT` 환경 변수를 올바르게 설정합니다
 
@@ -125,7 +125,7 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-## Docker로 빌드하는 방법
+## Docker로_빌드하는_방법
 
 먼저 리포지토리를 복제하고 Docker 컨테이너를 빌드합니다:
 
@@ -156,7 +156,7 @@ target/release/rustdesk
 
 RustDesk 리포지토리의 루트에서 이러한 명령을 실행하고 있는지 확인하세요. 그렇지 않으면 응용 프로그램이 필요한 리소스를 찾지 못할 수 있습니다. 또한 `install` 또는 `run` 과 같은 다른 cargo 하위 명령은 호스트가 아닌 컨테이너 내부에 프로그램을 설치하거나 실행하므로 현재 이 방법을 통해 지원되지 않는다는 점에 유의하세요.
 
-## 파일 구조
+## 파일_구조
 
 - **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: 비디오 코덱, 구성, tcp/udp wrapper, protobuf, 파일 전송을 위한 fs 함수 및 기타 유틸리티 함수
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: 화면 캡쳐

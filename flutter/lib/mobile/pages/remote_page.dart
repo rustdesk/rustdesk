@@ -77,6 +77,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   final FocusNode _physicalFocusNode = FocusNode();
   var _showEdit = false; // use soft keyboard
 
+  Worker? _waylandKeyboardGateWorker;
+  bool _waylandKeyboardGateInitialized = false;
+
   InputModel get inputModel => gFFI.inputModel;
   SessionID get sessionId => gFFI.sessionId;
 
@@ -126,6 +129,20 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           isKeyboardVisible: keyboardVisibilityController.isVisible);
     });
     WidgetsBinding.instance.addObserver(this);
+
+    inputModel.keyboardInputAllowed = true;
+
+    // Wayland sessions may use clipboard-based text input on the controlled side.
+    // Require explicit user confirmation before allowing soft-keyboard and
+    // clipboard-assisted text input. Physical keyboard events are not gated here.
+    _waylandKeyboardGateWorker = ever(gFFI.ffiModel.pi.isSet, (bool isSet) {
+      if (isSet) {
+        _initWaylandKeyboardGateIfNeeded();
+      }
+    });
+    if (gFFI.ffiModel.pi.isSet.value) {
+      _initWaylandKeyboardGateIfNeeded();
+    }
   }
 
   @override
@@ -134,6 +151,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (isIOS) {
       _textController.removeListener(_handleIOSTextControllerChanged);
     }
+    // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
+    // after several awaits (canvas save, image update, the `enable_soft_keyboard`
+    // platform call), so if the app is backgrounded while this page is disposing,
+    // dispose can be suspended before reaching it and the connection is never torn
+    // down. The reconnect then re-attaches to the leaked session and is stuck on
+    // "Connecting...". Dispatching it here makes teardown happen synchronously on
+    // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
+    unawaited(bind.sessionClose(sessionId: sessionId));
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -143,6 +168,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     await gFFI.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
+    clearWaylandKeyboardPromptSuppressedForConnection(sessionId.toString());
+    _waylandKeyboardGateWorker?.dispose();
+    inputModel.keyboardInputAllowed = true;
     await gFFI.close();
     _timer?.cancel();
     _iosKeyboardWorkaroundTimer?.cancel();
@@ -169,6 +197,40 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   // When swithing from other app to this app, try to sync clipboard.
   void trySyncClipboard() {
     gFFI.invokeMethod("try_sync_clipboard");
+  }
+
+  bool _shouldGateKeyboardForWayland() {
+    if (!(isAndroid || isIOS)) return false;
+    final pi = gFFI.ffiModel.pi;
+    return pi.platform == kPeerPlatformLinux && pi.isWayland;
+  }
+
+  void _initWaylandKeyboardGateIfNeeded() {
+    if (!mounted) return;
+    if (_waylandKeyboardGateInitialized) return;
+    if (!_shouldGateKeyboardForWayland()) return;
+
+    _waylandKeyboardGateInitialized = true;
+
+    final allowWaylandKeyboard =
+        mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
+    if (!shouldShowWaylandKeyboardPrompt(
+      connectionId: sessionId.toString(),
+      isWaylandPeer: _shouldGateKeyboardForWayland(),
+      allowWaylandKeyboardRemembered: allowWaylandKeyboard,
+    )) {
+      inputModel.keyboardInputAllowed = true;
+      return;
+    }
+
+    inputModel.keyboardInputAllowed = false;
+
+    // Ensure soft keyboard is not active before user confirms.
+    _showEdit = false;
+    gFFI.invokeMethod("enable_soft_keyboard", false);
+    _mobileFocusNode.unfocus();
+    _physicalFocusNode.requestFocus();
+    setState(() {});
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.
@@ -281,7 +343,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 content == '【】')) {
           // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
           bind.sessionInputString(sessionId: sessionId, value: content);
-          openKeyboard();
+          _openKeyboardUnlocked();
           return;
         }
         bind.sessionInputString(sessionId: sessionId, value: content);
@@ -293,6 +355,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   // handle mobile virtual keyboard
   void handleSoftKeyboardInput(String newValue) {
+    if (!inputModel.keyboardInputAllowed) {
+      return;
+    }
     if (isIOS) {
       _handleIOSSoftKeyboardInput(newValue);
     } else {
@@ -301,6 +366,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void inputChar(String char) {
+    if (!inputModel.keyboardInputAllowed) {
+      return;
+    }
     if (char == '\n') {
       char = 'VK_RETURN';
     } else if (char == ' ') {
@@ -310,6 +378,29 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void openKeyboard() {
+    final allowWaylandKeyboard =
+        mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
+    if (shouldShowWaylandKeyboardPrompt(
+      connectionId: sessionId.toString(),
+      isWaylandPeer: _shouldGateKeyboardForWayland(),
+      allowWaylandKeyboardRemembered: allowWaylandKeyboard,
+    )) {
+      inputModel.keyboardInputAllowed = false;
+      showWaylandKeyboardInputWarningDialog(
+        id: widget.id,
+        connectionId: sessionId.toString(),
+        ffi: gFFI,
+        onEnable: () async {
+          _openKeyboardUnlocked();
+        },
+      );
+      return;
+    }
+    _openKeyboardUnlocked();
+  }
+
+  void _openKeyboardUnlocked() {
+    inputModel.keyboardInputAllowed = true;
     gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
