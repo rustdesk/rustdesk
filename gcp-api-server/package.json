@@ -1,0 +1,32 @@
+{
+  "name": "rustdesk-gcp-api-server",
+  "version": "1.0.0",
+  "description": "Custom API Server for RustDesk using Google Cloud Run, Firebase Auth, and Firestore",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts"
+  },
+  "keywords": [
+    "rustdesk",
+    "firebase",
+    "cloudrun",
+    "gcp"
+  ],
+  "author": "Junyi Zhu",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "firebase-admin": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}
