@@ -28,7 +28,7 @@ pub struct xdo_search_t {
     _private: [u8; 0],
 }
 
-pub type useconds_t = c_uint;
+pub type UsecondsT = c_uint;
 
 pub const CURRENTWINDOW: Window = 0;
 
@@ -37,13 +37,13 @@ type FnXdoNewWithOpenedDisplay =
     unsafe extern "C" fn(*mut Display, *const c_char, c_int) -> *mut xdo_t;
 type FnXdoFree = unsafe extern "C" fn(*mut xdo_t);
 type FnXdoSendKeysequenceWindow =
-    unsafe extern "C" fn(*const xdo_t, Window, *const c_char, useconds_t) -> c_int;
+    unsafe extern "C" fn(*const xdo_t, Window, *const c_char, UsecondsT) -> c_int;
 type FnXdoSendKeysequenceWindowDown =
-    unsafe extern "C" fn(*const xdo_t, Window, *const c_char, useconds_t) -> c_int;
+    unsafe extern "C" fn(*const xdo_t, Window, *const c_char, UsecondsT) -> c_int;
 type FnXdoSendKeysequenceWindowUp =
-    unsafe extern "C" fn(*const xdo_t, Window, *const c_char, useconds_t) -> c_int;
+    unsafe extern "C" fn(*const xdo_t, Window, *const c_char, UsecondsT) -> c_int;
 type FnXdoEnterTextWindow =
-    unsafe extern "C" fn(*const xdo_t, Window, *const c_char, useconds_t) -> c_int;
+    unsafe extern "C" fn(*const xdo_t, Window, *const c_char, UsecondsT) -> c_int;
 type FnXdoClickWindow = unsafe extern "C" fn(*const xdo_t, Window, c_int) -> c_int;
 type FnXdoMouseDown = unsafe extern "C" fn(*const xdo_t, Window, c_int) -> c_int;
 type FnXdoMouseUp = unsafe extern "C" fn(*const xdo_t, Window, c_int) -> c_int;
@@ -287,7 +287,7 @@ pub unsafe extern "C" fn xdo_send_keysequence_window(
     xdo: *const xdo_t,
     window: Window,
     keysequence: *const c_char,
-    delay: useconds_t,
+    delay: UsecondsT,
 ) -> c_int {
     get_lib().map_or(1, |lib| {
         (lib.xdo_send_keysequence_window)(xdo, window, keysequence, delay)
@@ -298,7 +298,7 @@ pub unsafe extern "C" fn xdo_send_keysequence_window_down(
     xdo: *const xdo_t,
     window: Window,
     keysequence: *const c_char,
-    delay: useconds_t,
+    delay: UsecondsT,
 ) -> c_int {
     get_lib()
         .and_then(|lib| lib.xdo_send_keysequence_window_down)
@@ -309,7 +309,7 @@ pub unsafe extern "C" fn xdo_send_keysequence_window_up(
     xdo: *const xdo_t,
     window: Window,
     keysequence: *const c_char,
-    delay: useconds_t,
+    delay: UsecondsT,
 ) -> c_int {
     get_lib()
         .and_then(|lib| lib.xdo_send_keysequence_window_up)
@@ -320,7 +320,7 @@ pub unsafe extern "C" fn xdo_enter_text_window(
     xdo: *const xdo_t,
     window: Window,
     string: *const c_char,
-    delay: useconds_t,
+    delay: UsecondsT,
 ) -> c_int {
     get_lib()
         .and_then(|lib| lib.xdo_enter_text_window)

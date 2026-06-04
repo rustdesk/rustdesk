@@ -387,7 +387,7 @@ impl KeyboardControllable for EnigoXdo {
                     self.xdo as *const _,
                     CURRENTWINDOW,
                     string.as_ptr(),
-                    self.delay as libxdo_sys::useconds_t,
+                    self.delay as libxdo_sys::UsecondsT,
                 );
             }
         }
@@ -403,7 +403,7 @@ impl KeyboardControllable for EnigoXdo {
                 self.xdo as *const _,
                 CURRENTWINDOW,
                 string.as_ptr(),
-                self.delay as libxdo_sys::useconds_t,
+                self.delay as libxdo_sys::UsecondsT,
             );
         }
         Ok(())
@@ -419,7 +419,7 @@ impl KeyboardControllable for EnigoXdo {
                     self.xdo as *const _,
                     CURRENTWINDOW,
                     string.as_ptr(),
-                    self.delay as libxdo_sys::useconds_t,
+                    self.delay as libxdo_sys::UsecondsT,
                 );
             }
         }
@@ -435,7 +435,7 @@ impl KeyboardControllable for EnigoXdo {
                     self.xdo as *const _,
                     CURRENTWINDOW,
                     string.as_ptr(),
-                    self.delay as libxdo_sys::useconds_t,
+                    self.delay as libxdo_sys::UsecondsT,
                 );
             }
         }
