@@ -29,10 +29,10 @@ pub type PlugOutMonitor = fn(u32) -> ResultType<()>;
 pub type UpdateMonitorModes = fn(u32, u32, PMonitorMode) -> ResultType<()>;
 
 macro_rules! make_lib_wrapper {
-    ($($field:ident : $tp:ty),+) => {
+    ($($(#[$cfg:meta])* $field:ident : $tp:ty),+) => {
         struct LibWrapper {
             _lib: Option<Library>,
-            $($field: Option<$tp>),+
+            $($(#[$cfg])* $field: Option<$tp>),+
         }
 
         impl LibWrapper {
@@ -45,7 +45,7 @@ macro_rules! make_lib_wrapper {
                     }
                 };
 
-                $(let $field = if let Some(lib) = &lib {
+                $($(#[$cfg])* let $field = if let Some(lib) = &lib {
                     match unsafe { lib.symbol::<$tp>(stringify!($field)) } {
                         Ok(m) => {
                             Some(*m)
@@ -61,7 +61,7 @@ macro_rules! make_lib_wrapper {
 
                 Self {
                     _lib: lib,
-                    $( $field ),+
+                    $( $(#[$cfg])* $field ),+
                 }
             }
         }
@@ -75,16 +75,16 @@ macro_rules! make_lib_wrapper {
 }
 
 make_lib_wrapper!(
-    get_driver_install_path: GetDriverInstallPath,
+    #[cfg(windows)] get_driver_install_path: GetDriverInstallPath,
     is_device_created: IsDeviceCreated,
     close_device: CloseDevice,
     download_driver: DownLoadDriver,
     create_device: CreateDevice,
     install_update_driver: InstallUpdateDriver,
     uninstall_driver: UninstallDriver,
-    plug_in_monitor: PlugInMonitor,
-    plug_out_monitor: PlugOutMonitor,
-    update_monitor_modes: UpdateMonitorModes
+    #[cfg(windows)] plug_in_monitor: PlugInMonitor,
+    #[cfg(windows)] plug_out_monitor: PlugOutMonitor,
+    #[cfg(windows)] update_monitor_modes: UpdateMonitorModes
 );
 
 lazy_static::lazy_static! {
