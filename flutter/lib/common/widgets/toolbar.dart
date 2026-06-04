@@ -16,6 +16,12 @@ import 'package:get/get.dart';
 
 bool isEditOsPassword = false;
 
+// macOS privacy mode blacks out all online displays, so switching the remote
+// display does not weaken the local privacy protection.
+bool allowDisplaySwitchInPrivacyMode(PeerInfo pi) {
+  return pi.platform == kPeerPlatformMacOS;
+}
+
 class TTextMenu {
   final Widget child;
   final VoidCallback? onPressed;
@@ -684,8 +690,9 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Lock after session end'))));
   }
 
+  final privacyModeState = PrivacyModeState.find(id);
   if (pi.isSupportMultiDisplay &&
-      PrivacyModeState.find(id).isEmpty &&
+      (privacyModeState.isEmpty || allowDisplaySwitchInPrivacyMode(pi)) &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
     final value =
@@ -776,7 +783,8 @@ List<TToggleMenu> toolbarPrivacyMode(
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
-                if (ffiModel.pi.currentDisplay != 0 &&
+                if (!allowDisplaySwitchInPrivacyMode(pi) &&
+                    ffiModel.pi.currentDisplay != 0 &&
                     ffiModel.pi.currentDisplay != kAllDisplayValue) {
                   msgBox(
                       sessionId,

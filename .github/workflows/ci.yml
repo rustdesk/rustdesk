@@ -29,13 +29,13 @@ jobs:
   #   name: Ensure 'cargo fmt' has been run
   #   runs-on: ubuntu-20.04
   #   steps:
-  #   - uses: actions-rs/toolchain@v1
+  #   - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1
   #     with:
   #       toolchain: stable
   #       default: true
   #       profile: minimal
   #       components: rustfmt
-  #   - uses: actions/checkout@v3
+  #   - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
   #   - run: cargo fmt -- --check
 
   # min_version:
@@ -43,24 +43,24 @@ jobs:
   #   runs-on: ubuntu-20.04
   #   steps:
   #   - name: Checkout source code
-  #     uses: actions/checkout@v3
+  #     uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
   #     with:
   #       submodules: recursive
 
   #   - name: Install rust toolchain (v${{ env.MIN_SUPPORTED_RUST_VERSION }})
-  #     uses: actions-rs/toolchain@v1
+  #     uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1
   #     with:
   #       toolchain: ${{ env.MIN_SUPPORTED_RUST_VERSION }}
   #       default: true
   #       profile: minimal # minimal component installation (ie, no documentation)
   #       components: clippy
   #   - name: Run clippy (on minimum supported rust version to prevent warnings we can't fix)
-  #     uses: actions-rs/cargo@v1
+  #     uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
   #     with:
   #       command: clippy
   #       args: --locked --all-targets --all-features -- --allow clippy::unknown_clippy_lints
   #   - name: Run tests
-  #     uses: actions-rs/cargo@v1
+  #     uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
   #     with:
   #       command: test
   #       args: --locked
@@ -86,9 +86,9 @@ jobs:
     steps:
     - name: Free Disk Space (Ubuntu)
       if: runner.os == 'Linux'
-      # jlumbroso/free-disk-space@main is used in .github\workflows\flutter-build.yml
+      # jlumbroso/free-disk-space@v1.3.1 is used in .github\workflows\flutter-build.yml
       # But pinning to a specific version to avoid unexpected issues is preferred.
-      uses: jlumbroso/free-disk-space@v1.3.1
+      uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
       with:
         tool-cache: false
         android: true
@@ -99,14 +99,14 @@ jobs:
         swap-storage: false
 
     - name: Export GitHub Actions cache environment variables
-      uses: actions/github-script@v6
+      uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
       with:
         script: |
           core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
           core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
 
@@ -145,7 +145,7 @@ jobs:
         esac
 
     - name: Setup vcpkg with Github Actions binary cache
-      uses: lukka/run-vcpkg@v11
+      uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
       with:
         vcpkgDirectory: /opt/artifacts/vcpkg
         vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
@@ -156,7 +156,7 @@ jobs:
       shell: bash
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@v1
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
       with:
         toolchain: stable
         targets: ${{ matrix.job.target }}
@@ -172,10 +172,10 @@ jobs:
         cargo -V
         rustc -V
 
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
     - name: Build
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
       with:
         use-cross: ${{ matrix.job.use-cross }}
         command: build
@@ -243,7 +243,7 @@ jobs:
         echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_OUTPUT
 
     - name: Run tests
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
       with:
         use-cross: ${{ matrix.job.use-cross }}
         command: test

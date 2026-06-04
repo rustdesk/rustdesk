@@ -46,6 +46,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
           .setTitle(getWindowNameWithId(id));
     };
     tabController.onRemoved = (_, id) => onRemoveId(id);
+    tabController.onCloseWindow = _closeWindowFromConnection;
     final terminalId = params['terminalId'] ?? _nextTerminalId++;
     tabController.add(_createTerminalTab(
       peerId: params['id'],
@@ -144,6 +145,8 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     _windowClosing = true;
     final tabKeys = tabController.state.value.tabs.map((t) => t.key).toList();
     // Remove all UI tabs immediately (same instant behavior as the old tabController.clear())
+    // Keep the cleanup target lookup below synchronous before its first await:
+    // it relies on the current frame still retaining each TerminalPage's FFI/model.
     tabController.clear();
     // Run session cleanup in parallel with bounded timeout (closeTerminal() has internal 3s timeout).
     // Skip tabs already being closed by a concurrent _closeTab() to avoid duplicate FFI calls.
@@ -370,6 +373,12 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     final sortedSessions = persistentSessions.whereType<int>().toList()..sort();
     var peerId = args['peer_id'] as String? ?? '';
     if (peerId.isEmpty) {
+      if (tabController.state.value.tabs.isEmpty ||
+          tabController.state.value.selected >=
+              tabController.state.value.tabs.length) {
+        debugPrint('[TerminalTabPage] Skip restore: no selected tab');
+        return;
+      }
       final currentTab = tabController.state.value.selectedTabInfo;
       final parsed = _parseTabKey(currentTab.key);
       if (parsed == null) return;
@@ -380,6 +389,11 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         .where((parsed) => parsed != null && parsed.$1 == peerId)
         .map((parsed) => parsed!.$2)
         .toSet();
+    if (existingTerminalIds.isEmpty) {
+      debugPrint(
+          '[TerminalTabPage] Skip restore: no seed tab for peer $peerId');
+      return;
+    }
     for (final terminalId in sortedSessions) {
       if (!existingTerminalIds.add(terminalId)) {
         continue;
@@ -559,6 +573,11 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     if (tabController.state.value.tabs.isEmpty) {
       WindowController.fromWindowId(windowId()).close();
     }
+  }
+
+  Future<void> _closeWindowFromConnection() async {
+    await _closeAllTabs();
+    await WindowController.fromWindowId(windowId()).close();
   }
 
   int windowId() {
