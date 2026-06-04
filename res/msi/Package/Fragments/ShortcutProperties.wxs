@@ -68,7 +68,6 @@
 		<SetProperty Id="SavedStartMenuShortcutsCmdLineValue" Value="[CREATESTARTMENUSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS" />
 		<SetProperty Id="SavedDesktopShortcutsCmdLineValue" Value="[CREATEDESKTOPSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS" />
 		<SetProperty Id="SavedPrinterCmdLineValue" Value="[INSTALLPRINTER]" Before="AppSearch" Sequence="first" Condition="INSTALLPRINTER" />
-		<SetProperty Id="SavedPrinterPropertyCmdLineValue" Value="[PRINTER]" Before="AppSearch" Sequence="first" Condition="PRINTER" />
 
 		<!-- If a command line value was stored, restore it after the registry search has been performed -->
 		<SetProperty Action="RestoreSavedStartMenuShortcutsValue" Id="CREATESTARTMENUSHORTCUTS" Value="[SavedStartMenuShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedStartMenuShortcutsCmdLineValue" />
@@ -78,10 +77,11 @@
 		<!-- If a command line value or registry value was set, update the main properties with the value -->
 		<SetProperty Id="STARTMENUSHORTCUTS" Value="" After="RestoreSavedStartMenuShortcutsValue" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS AND NOT (CREATESTARTMENUSHORTCUTS = 1 OR CREATESTARTMENUSHORTCUTS = &quot;Y&quot; OR CREATESTARTMENUSHORTCUTS = &quot;y&quot;)" />
 		<SetProperty Id="DESKTOPSHORTCUTS" Value="" After="RestoreSavedDesktopShortcutsValue" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS AND NOT (CREATEDESKTOPSHORTCUTS = 1 OR CREATEDESKTOPSHORTCUTS = &quot;Y&quot; OR CREATEDESKTOPSHORTCUTS = &quot;y&quot;)" />
+		<!-- PRINTER defaults to empty now, so a saved or command-line INSTALLPRINTER=1
+				 must explicitly enable the main PRINTER property. Non-truthy INSTALLPRINTER
+				 values still clear PRINTER so upgrades preserve an explicit disabled choice. -->
 		<SetProperty Action="SetPrinterValueEnabled" Id="PRINTER" Value="1" After="RestoreSavedPrinterValue" Sequence="first" Condition="INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;" />
 		<SetProperty Action="SetPrinterValueDisabled" Id="PRINTER" Value="" After="SetPrinterValueEnabled" Sequence="first" Condition="INSTALLPRINTER AND NOT (INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;)" />
-		<SetProperty Action="RestoreSavedPrinterPropertyValue" Id="PRINTER" Value="[SavedPrinterPropertyCmdLineValue]" After="SetPrinterValueDisabled" Sequence="first" Condition="SavedPrinterPropertyCmdLineValue" />
-		<SetProperty Action="NormalizePrinterValueDisabled" Id="PRINTER" Value="" After="RestoreSavedPrinterPropertyValue" Sequence="first" Condition="PRINTER AND NOT (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
 
 	</Fragment>
 </Wix>

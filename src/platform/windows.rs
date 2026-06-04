@@ -1324,6 +1324,17 @@ pub fn get_install_options() -> String {
     serde_json::to_string(&opts).unwrap_or("{}".to_owned())
 }
 
+pub fn get_silent_install_options() -> &'static str {
+    let app_name = crate::get_app_name();
+    let subkey = format!(".{}", app_name.to_lowercase());
+    let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
+    if printer.as_deref() == Some("1") && is_win_10_or_greater() {
+        "desktopicon startmenu printer"
+    } else {
+        "desktopicon startmenu"
+    }
+}
+
 // This function return Option<String>, because some registry value may be empty.
 fn get_reg_of_hkcr(subkey: &str, name: &str) -> Option<String> {
     let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
