@@ -1,3 +1,4 @@
+#[cfg(windows)]
 use std::io::{self, Read};
 #[cfg(windows)]
 use virtual_display;
