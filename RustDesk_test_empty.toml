@@ -1,4 +1,0 @@
-[options]
-custom-rendezvous-server = "hbbs.cislink.nl"
-relay-server = "hbbr.cislink.nl"
-key = ""

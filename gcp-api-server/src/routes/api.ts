@@ -20,6 +20,7 @@ router.post('/currentUser', authenticateToken as any, authController.getCurrentU
 // ==========================================
 router.get('/ab/settings', authenticateToken as any, abController.getAbSettings as any);
 router.post('/ab/personal', authenticateToken as any, abController.getPersonalAb as any);
+router.post('/ab/shared/profiles', authenticateToken as any, abController.getSharedAbProfiles as any);
 
 // ==========================================
 // Peer Device Operations (within an Address Book)

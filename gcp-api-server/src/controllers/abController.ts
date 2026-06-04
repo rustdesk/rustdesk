@@ -2,6 +2,23 @@ import { Response } from 'express';
 import * as admin from 'firebase-admin';
 import { AuthenticatedRequest } from '../middleware/auth';
 
+const hasReadAccess = (abData: any, uid: string, isAdmin: boolean): boolean => {
+  if (isAdmin) return true;
+  if (abData.owner === uid) return true;
+  return abData.is_global === true || (Array.isArray(abData.accessible_users) && abData.accessible_users.includes(uid));
+};
+
+const hasWriteAccess = (abData: any, uid: string, isAdmin: boolean): boolean => {
+  if (isAdmin) return true;
+  if (abData.owner === uid) return true;
+  const hasAccess = abData.is_global === true || (Array.isArray(abData.accessible_users) && abData.accessible_users.includes(uid));
+  if (hasAccess) {
+    const rule = abData.rule ?? 3; // Default to Full Control (3)
+    return rule >= 2; // Read/Write (2) or Full Control (3)
+  }
+  return false;
+};
+
 /**
  * Get limits configuration for the Address Book.
  */
@@ -59,6 +76,10 @@ export const getPersonalAb = async (req: AuthenticatedRequest, res: Response): P
  * Fetch a page of peers (devices) belonging to a specific address book.
  */
 export const getPeers = async (req: AuthenticatedRequest, res: Response): Promise<any> => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const { ab, current, pageSize } = req.query;
 
   if (!ab) {
@@ -70,6 +91,14 @@ export const getPeers = async (req: AuthenticatedRequest, res: Response): Promis
 
   try {
     const db = admin.firestore();
+
+    const abDoc = await db.collection('address_books').doc(ab as string).get();
+    if (!abDoc.exists) {
+      return res.status(404).json({ error: 'Address Book not found' });
+    }
+    if (!hasReadAccess(abDoc.data(), req.user.uid, req.user.isAdmin === true)) {
+      return res.status(403).json({ error: 'Access denied to this Address Book' });
+    }
     
     // Query peers assigned to this address book
     const peersSnapshot = await db.collection('peers')
@@ -138,7 +167,7 @@ export const addPeer = async (req: AuthenticatedRequest, res: Response): Promise
     if (!abDoc.exists) {
       return res.status(404).json({ error: 'Address Book not found' });
     }
-    if (abDoc.data()?.owner !== req.user.uid && !req.user.isAdmin) {
+    if (!hasWriteAccess(abDoc.data(), req.user.uid, req.user.isAdmin === true)) {
       return res.status(403).json({ error: 'Access denied to this Address Book' });
     }
 
@@ -186,7 +215,7 @@ export const updatePeer = async (req: AuthenticatedRequest, res: Response): Prom
     if (!abDoc.exists) {
       return res.status(404).json({ error: 'Address Book not found' });
     }
-    if (abDoc.data()?.owner !== req.user.uid && !req.user.isAdmin) {
+    if (!hasWriteAccess(abDoc.data(), req.user.uid, req.user.isAdmin === true)) {
       return res.status(403).json({ error: 'Access denied to this Address Book' });
     }
 
@@ -239,7 +268,7 @@ export const deletePeers = async (req: AuthenticatedRequest, res: Response): Pro
     if (!abDoc.exists) {
       return res.status(404).json({ error: 'Address Book not found' });
     }
-    if (abDoc.data()?.owner !== req.user.uid && !req.user.isAdmin) {
+    if (!hasWriteAccess(abDoc.data(), req.user.uid, req.user.isAdmin === true)) {
       return res.status(403).json({ error: 'Access denied to this Address Book' });
     }
 
@@ -272,6 +301,9 @@ export const getTags = async (req: AuthenticatedRequest, res: Response): Promise
     if (!abDoc.exists) {
       return res.status(404).json({ error: 'Address Book not found' });
     }
+    if (!hasReadAccess(abDoc.data(), req.user?.uid || '', req.user?.isAdmin === true)) {
+      return res.status(403).json({ error: 'Access denied to this Address Book' });
+    }
 
     const tags = abDoc.data()?.tags || [];
     return res.json(tags);
@@ -299,6 +331,9 @@ export const addTag = async (req: AuthenticatedRequest, res: Response): Promise<
 
     if (!abDoc.exists) {
       return res.status(404).json({ error: 'Address Book not found' });
+    }
+    if (!hasWriteAccess(abDoc.data(), req.user?.uid || '', req.user?.isAdmin === true)) {
+      return res.status(403).json({ error: 'Access denied to this Address Book' });
     }
 
     const tags = abDoc.data()?.tags || [];
@@ -336,6 +371,9 @@ export const renameTag = async (req: AuthenticatedRequest, res: Response): Promi
 
     if (!abDoc.exists) {
       return res.status(404).json({ error: 'Address Book not found' });
+    }
+    if (!hasWriteAccess(abDoc.data(), req.user?.uid || '', req.user?.isAdmin === true)) {
+      return res.status(403).json({ error: 'Access denied to this Address Book' });
     }
 
     let tags = abDoc.data()?.tags || [];
@@ -397,6 +435,9 @@ export const updateTag = async (req: AuthenticatedRequest, res: Response): Promi
     if (!abDoc.exists) {
       return res.status(404).json({ error: 'Address Book not found' });
     }
+    if (!hasWriteAccess(abDoc.data(), req.user?.uid || '', req.user?.isAdmin === true)) {
+      return res.status(403).json({ error: 'Access denied to this Address Book' });
+    }
 
     let tags = abDoc.data()?.tags || [];
     let updated = false;
@@ -442,6 +483,9 @@ export const deleteTag = async (req: AuthenticatedRequest, res: Response): Promi
     if (!abDoc.exists) {
       return res.status(404).json({ error: 'Address Book not found' });
     }
+    if (!hasWriteAccess(abDoc.data(), req.user?.uid || '', req.user?.isAdmin === true)) {
+      return res.status(403).json({ error: 'Access denied to this Address Book' });
+    }
 
     let tags = abDoc.data()?.tags || [];
     tags = tags.filter((t: any) => t.name !== tagName);
@@ -466,6 +510,102 @@ export const deleteTag = async (req: AuthenticatedRequest, res: Response): Promi
     return res.json({ status: 'ok' });
   } catch (error) {
     console.error('Error deleting tag:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+/**
+ * Retrieve shared address book profiles for a user, auto-bootstrapping the Team book if needed.
+ */
+export const getSharedAbProfiles = async (req: AuthenticatedRequest, res: Response): Promise<any> => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const pageNum = parseInt(req.query.current as string) || 1;
+  const sizeNum = parseInt(req.query.pageSize as string) || 100;
+
+  try {
+    const db = admin.firestore();
+    const abRef = db.collection('address_books');
+
+    // 1. Auto-bootstrap the global Team address book if it doesn't exist
+    const globalSharedAbId = 'ab_cislink_shared_team';
+    const globalSharedAbRef = abRef.doc(globalSharedAbId);
+    const globalSharedAbDoc = await globalSharedAbRef.get();
+    
+    if (!globalSharedAbDoc.exists) {
+      await globalSharedAbRef.set({
+        guid: globalSharedAbId,
+        name: 'Cislink Team',
+        owner: 'system',
+        note: 'Global shared address book for the team',
+        rule: 3, // Full Control (3)
+        is_global: true,
+        tags: [],
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log('Automatically provisioned global team shared address book (ab_cislink_shared_team)');
+    }
+
+    // 2. Fetch all shared profiles:
+    // Query global address books
+    const globalSnapshot = await abRef.where('is_global', '==', true).get();
+
+    // Query address books owned by this user
+    const ownedSnapshot = await abRef.where('owner', '==', req.user.uid).get();
+
+    // Query address books where user is explicitly added in accessible_users
+    const sharedSnapshot = await abRef.where('accessible_users', 'array-contains', req.user.uid).get();
+
+    // Query all books if user is Admin
+    let adminSnapshotDocs: admin.firestore.QueryDocumentSnapshot[] = [];
+    if (req.user.isAdmin) {
+      const allSnapshot = await abRef.get();
+      adminSnapshotDocs = allSnapshot.docs;
+    }
+
+    // Combine and deduplicate
+    const allDocs = [
+      ...globalSnapshot.docs,
+      ...ownedSnapshot.docs,
+      ...sharedSnapshot.docs,
+      ...adminSnapshotDocs
+    ];
+
+    const uniqueDocsMap = new Map<string, admin.firestore.DocumentSnapshot>();
+    for (const doc of allDocs) {
+      const data = doc.data();
+      // Exclude their own "Personal" address book (handled by /api/ab/personal)
+      if (data?.owner === req.user.uid && data?.name === 'Personal') {
+        continue;
+      }
+      uniqueDocsMap.set(doc.id, doc);
+    }
+
+    const uniqueDocs = Array.from(uniqueDocsMap.values());
+    const profiles = uniqueDocs.map(doc => {
+      const data = doc.data();
+      return {
+        guid: doc.id,
+        name: data?.name || 'Shared Address Book',
+        owner: data?.owner || '',
+        note: data?.note || '',
+        rule: data?.rule ?? 3, // Default to full control
+        info: data?.info || null
+      };
+    });
+
+    // In-memory pagination
+    const startIndex = (pageNum - 1) * sizeNum;
+    const paginatedProfiles = profiles.slice(startIndex, startIndex + sizeNum);
+
+    return res.json({
+      total: profiles.length,
+      data: paginatedProfiles,
+    });
+  } catch (error) {
+    console.error('Error fetching shared address books:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 };

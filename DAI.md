@@ -7,6 +7,8 @@
 - [x] Implement Device Group controller (`/api/device-group/accessible`)
 - [x] Create Dockerfile and local environment configuration
 - [x] Document local run & GCP Cloud Run deployment steps
+- [x] Implement Shared Address Book profiles controller endpoint (`/api/ab/shared/profiles`) with automatic bootstrapping of "Cislink Team" book, and secure permissions for CRUD operations.
+- [x] Clean up obsolete test scripts, configuration files, key formatting logs, backup folders, and reserved system files.
 
 ## Safety Intercepts & Guidelines
 - **UNC blocking**: Do not use UNC paths.

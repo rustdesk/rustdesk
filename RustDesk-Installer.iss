@@ -12,10 +12,10 @@
 ; - Public Key: VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=
 
 #define MyAppName "RustDesk - Cislink Edition"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.4.4"
 #define MyAppPublisher "Cislink"
 #define MyAppURL "https://cislink.nl"
-#define MyAppExeName "rustdesk.exe"
+#define MyAppExeName "rustdesk-host=hbbs.cislink.nl,key=VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=,relay=hbbr.cislink.nl,.exe"
 
 [Setup]
 AppId={{A7B8C9D0-E1F2-4A5B-9C8D-7E6F5A4B3C2D}
@@ -34,10 +34,9 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 ShowLanguageDialog=auto
-; Custom icon configuration
-SetupIconFile=res\icon.ico
-UninstallDisplayIcon={app}\{#MyAppExeName}
-WizardSmallImageFile=res\icon.ico
+; Custom icon configuration - using Cislink custom icon
+SetupIconFile=res\cislink.ico
+UninstallDisplayIcon={app}\cislink.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -48,14 +47,15 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "autostart"; Description: "Start RustDesk automatically"; GroupDescription: "Additional options:"
 
 [Files]
-Source: "rustdesk.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "rustdesk.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
+Source: "res\cislink.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "RustDesk_Config_Template.toml"; DestDir: "{tmp}"; Flags: dontcopy
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\cislink.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: autostart
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\cislink.ico"
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: autostart; IconFilename: "{app}\cislink.ico"
 
 [Registry]
 Root: HKCR; Subkey: "rustdesk"; ValueType: string; ValueName: ""; ValueData: "URL:rustdesk Protocol"; Flags: uninsdeletekey
@@ -72,7 +72,8 @@ var
 begin
   Result := True;
   Log('Stopping RustDesk processes...');
-  Exec('taskkill', '/F /IM rustdesk.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Stop all rustdesk processes regardless of filename
+  Exec('taskkill', '/F /IM rustdesk*.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1000);
 end;
 
@@ -91,7 +92,9 @@ begin
   ConfigContent := '[options]' + #13#10 +
                    'custom-rendezvous-server = "hbbs.cislink.nl"' + #13#10 +
                    'relay-server = "hbbr.cislink.nl"' + #13#10 +
-                   'key = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="' + #13#10;
+                   'key = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="' + #13#10 +
+                   'enable-check-update = "N"' + #13#10 +
+                   'disable-installation = true' + #13#10;
   
   UserConfigDir := ExpandConstant('{userappdata}\RustDesk\config');
   SystemConfigDir := ExpandConstant('{commonappdata}\RustDesk\config');
@@ -117,12 +120,13 @@ var
   ResultCode: Integer;
 begin
   Result := True;
-  
-  if Exec('tasklist', '/FI "IMAGENAME eq rustdesk.exe" /NH', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+
+  // Check for any rustdesk process (wildcard not supported in tasklist filter, so we check the output)
+  if Exec('powershell', '-Command "Get-Process rustdesk* -ErrorAction SilentlyContinue"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
     if ResultCode = 0 then
     begin
-      if MsgBox('RustDesk is currently running. Setup needs to close it to continue.' + #13#10 + #13#10 + 
+      if MsgBox('RustDesk is currently running. Setup needs to close it to continue.' + #13#10 + #13#10 +
                 'Continue?', mbConfirmation, MB_YESNO) = IDYES then
       begin
         NeedRestart := True;
@@ -136,12 +140,122 @@ begin
   end;
 end;
 
+procedure CleanupOldRustDeskFiles();
+var
+  FindRec: TFindRec;
+  InstallPath: String;
+  OldFile: String;
+  NewExeName: String;
+begin
+  Log('Cleaning up old RustDesk files...');
+  InstallPath := ExpandConstant('{app}');
+  NewExeName := '{#MyAppExeName}';
+
+  if FindFirst(InstallPath + '\rustdesk*.exe', FindRec) then
+  begin
+    try
+      repeat
+        // Delete all rustdesk*.exe files except our new one
+        if CompareText(FindRec.Name, NewExeName) <> 0 then
+        begin
+          OldFile := InstallPath + '\' + FindRec.Name;
+          Log('Deleting old file: ' + OldFile);
+          DeleteFile(OldFile);
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+  Log('Old files cleanup completed');
+end;
+
+procedure UpdateAllShortcuts();
+var
+  NewExePath: String;
+  ShortcutPath: String;
+begin
+  Log('Updating shortcuts to point to new executable...');
+  NewExePath := ExpandConstant('{app}\{#MyAppExeName}');
+
+  // Update desktop shortcut if it exists
+  ShortcutPath := ExpandConstant('{autodesktop}\{#MyAppName}.lnk');
+  if FileExists(ShortcutPath) then
+  begin
+    DeleteFile(ShortcutPath);
+    CreateShellLink(
+      ShortcutPath,
+      '{#MyAppName}',
+      NewExePath,
+      '',
+      '',
+      '',
+      0,
+      SW_SHOWNORMAL
+    );
+    Log('Updated desktop shortcut');
+  end;
+
+  // Update start menu shortcut
+  ShortcutPath := ExpandConstant('{group}\{#MyAppName}.lnk');
+  if FileExists(ShortcutPath) then
+  begin
+    DeleteFile(ShortcutPath);
+    CreateShellLink(
+      ShortcutPath,
+      '{#MyAppName}',
+      NewExePath,
+      '',
+      '',
+      '',
+      0,
+      SW_SHOWNORMAL
+    );
+    Log('Updated start menu shortcut');
+  end;
+end;
+
+procedure ForceResetServerSettings();
+var
+  UserConfigDir: String;
+  SystemConfigDir: String;
+begin
+  Log('Force resetting all server settings...');
+
+  // Delete all existing configuration files to ensure clean slate
+  UserConfigDir := ExpandConstant('{userappdata}\RustDesk\config');
+  SystemConfigDir := ExpandConstant('{commonappdata}\RustDesk\config');
+
+  // Remove user configs
+  if DirExists(UserConfigDir) then
+  begin
+    DelTree(UserConfigDir, True, False, True);
+    Log('Deleted user config directory');
+  end;
+
+  // Remove system configs
+  if DirExists(SystemConfigDir) then
+  begin
+    DelTree(SystemConfigDir, True, False, True);
+    Log('Deleted system config directory');
+  end;
+
+  // Also delete RustDesk2.toml files (runtime user settings)
+  DeleteFile(ExpandConstant('{userappdata}\RustDesk\config\RustDesk2.toml'));
+  DeleteFile(ExpandConstant('{commonappdata}\RustDesk\config\RustDesk2.toml'));
+
+  Log('All old configurations cleared');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
     StopRustDesk();
-    CreateConfigFiles();
+    CleanupOldRustDeskFiles();
+    ForceResetServerSettings();  // Force clear all old settings
+    CreateConfigFiles();         // Create fresh config with our server
+    UpdateAllShortcuts();
     Sleep(500);
   end;
 end;
