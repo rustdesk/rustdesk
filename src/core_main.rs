@@ -262,10 +262,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 if config::is_disable_installation() {
                     return None;
                 }
-                #[cfg(not(windows))]
                 let options = "desktopicon startmenu";
-                #[cfg(windows)]
-                let options = "desktopicon startmenu printer";
                 let res = platform::install_me(options, "".to_owned(), true, args.len() > 1);
                 let text = match res {
                     Ok(_) => translate("Installation Successful!".to_string()),

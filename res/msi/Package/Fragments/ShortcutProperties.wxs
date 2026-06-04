@@ -4,17 +4,17 @@
 		<?include ..\Includes.wxi?>
 
 		<!--
-		Properties and related actions for specifying whether to install start menu/desktop shortcuts.
+		Properties and related actions for specifying whether to install shortcuts and the printer.
 		-->
 
 		<!-- These are the actual properties that get used in conditions to determine whether to
-				 install start menu shortcuts, they are initialized with a default value to install shortcuts.
-				 They should not be set directly from the command line or registry, instead the CREATE* properties
-				 below should be set, then they will update these properties with their values only if set. -->
+				 install start menu shortcuts or the printer. Shortcut properties default to install;
+				 PRINTER defaults to not install. The CREATE* properties below update shortcut
+				 properties from command line, bundle, or registry values. -->
 		<Property Id="STARTMENUSHORTCUTS" Value="1" Secure="yes"></Property>
 		<Property Id="DESKTOPSHORTCUTS" Value="1" Secure="yes"></Property>
 		<Property Id="STARTUPSHORTCUTS" Value="1" Secure="yes"></Property>
-		<Property Id="PRINTER" Value="1" Secure="yes"></Property>
+		<Property Id="PRINTER" Secure="yes"></Property>
 
 		<!-- These properties get set from either the command line, bundle or registry value,
 				 if set they update the properties above with their value. -->
@@ -68,6 +68,7 @@
 		<SetProperty Id="SavedStartMenuShortcutsCmdLineValue" Value="[CREATESTARTMENUSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS" />
 		<SetProperty Id="SavedDesktopShortcutsCmdLineValue" Value="[CREATEDESKTOPSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS" />
 		<SetProperty Id="SavedPrinterCmdLineValue" Value="[INSTALLPRINTER]" Before="AppSearch" Sequence="first" Condition="INSTALLPRINTER" />
+		<SetProperty Id="SavedPrinterPropertyCmdLineValue" Value="[PRINTER]" Before="AppSearch" Sequence="first" Condition="PRINTER" />
 
 		<!-- If a command line value was stored, restore it after the registry search has been performed -->
 		<SetProperty Action="RestoreSavedStartMenuShortcutsValue" Id="CREATESTARTMENUSHORTCUTS" Value="[SavedStartMenuShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedStartMenuShortcutsCmdLineValue" />
@@ -77,7 +78,10 @@
 		<!-- If a command line value or registry value was set, update the main properties with the value -->
 		<SetProperty Id="STARTMENUSHORTCUTS" Value="" After="RestoreSavedStartMenuShortcutsValue" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS AND NOT (CREATESTARTMENUSHORTCUTS = 1 OR CREATESTARTMENUSHORTCUTS = &quot;Y&quot; OR CREATESTARTMENUSHORTCUTS = &quot;y&quot;)" />
 		<SetProperty Id="DESKTOPSHORTCUTS" Value="" After="RestoreSavedDesktopShortcutsValue" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS AND NOT (CREATEDESKTOPSHORTCUTS = 1 OR CREATEDESKTOPSHORTCUTS = &quot;Y&quot; OR CREATEDESKTOPSHORTCUTS = &quot;y&quot;)" />
-		<SetProperty Id="PRINTER" Value="" After="RestoreSavedPrinterValue" Sequence="first" Condition="INSTALLPRINTER AND NOT (INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;)" />
+		<SetProperty Action="SetPrinterValueEnabled" Id="PRINTER" Value="1" After="RestoreSavedPrinterValue" Sequence="first" Condition="INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;" />
+		<SetProperty Action="SetPrinterValueDisabled" Id="PRINTER" Value="" After="SetPrinterValueEnabled" Sequence="first" Condition="INSTALLPRINTER AND NOT (INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;)" />
+		<SetProperty Action="RestoreSavedPrinterPropertyValue" Id="PRINTER" Value="[SavedPrinterPropertyCmdLineValue]" After="SetPrinterValueDisabled" Sequence="first" Condition="SavedPrinterPropertyCmdLineValue" />
+		<SetProperty Action="NormalizePrinterValueDisabled" Id="PRINTER" Value="" After="RestoreSavedPrinterPropertyValue" Sequence="first" Condition="PRINTER AND NOT (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
 
 	</Fragment>
 </Wix>
