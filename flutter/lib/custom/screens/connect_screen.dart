@@ -154,7 +154,7 @@ class _PeerIdField extends StatelessWidget {
     return TextField(
       controller: controller,
       inputFormatters: [IDTextInputFormatter()],
-      keyboardType: TextInputType.number,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textInputAction: TextInputAction.next,
       textAlign: TextAlign.center,
       style: const TextStyle(
