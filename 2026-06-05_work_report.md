@@ -20,6 +20,11 @@
 * Identified and removed obsolete test scripts (`build-installer.ps1`, `test-installer.ps1`, `update-config.ps1`, `Test-AllKeyFormats.ps1`, `build-win7-installer.ps1`), temporary log/text notes, unused TOML configurations (`RustDesk_test1.toml`, `RustDesk_test_empty.toml`, etc.), and leftover backup files/folders to ensure repository cleanliness.
 * Safely deleted the system-reserved `nul` file created by redirection errors.
 
+### 5. Secure Backup to Google Drive
+* Restored key database backup `db_v2.sqlite3` and metadata `PUBLIC_KEY.txt` & `BACKUP_INFO.txt` from history.
+* Used `rclone` to securely upload `db_v2.sqlite3`, `PUBLIC_KEY.txt`, `BACKUP_INFO.txt`, `cislink.ppk` (PuTTY Private Key), and `server_public_key.txt` to Google Drive (`smartthink-drive:`) in a dedicated folder: `RustDesk_Backup`.
+* Verified that all files are correctly stored in the cloud.
+
 ---
 
 **Developer:** Antigravity (Pair Programming with Antigravity 2.0)  
