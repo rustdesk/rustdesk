@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Você pode inserir um ID, um IP direto ou um domínio com uma porta (<domínio>:<porta>).\nPara acessar um dispositivo em outro servidor, adicione o IP do servidor (<id>@<endereço_servidor>?key=<chave_valor>), por exemplo,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nPara acessar um dispositivo em um servidor público, insira \"<id>@public\", a chave não é necessária para um servidor público."),
         ("privacy_mode_impl_mag_tip", "Modo 1"),
         ("privacy_mode_impl_virtual_display_tip", "Modo 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Entrar no modo privado"),
         ("Exit privacy mode", "Sair do modo privado"),
         ("idd_not_support_under_win10_2004_tip", "O driver de tela indireto não é suportado. É necessário o Windows 10, versão 2004 ou superior."),

@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Vous pouvez saisir un ID, une adresse IP ou un nom de domaine suivi d’un port (<domaine>:<port>).\nSi vous souhaitez accéder à un appareil sur un autre serveur, veuillez ajouter l’adresse du serveur (<id>@<adresse_serveur>?key=<valeur_clé>), par exemple :\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSi vous souhaitez accéder à un appareil sur un serveur public, veuillez saisir « <id>@public » (la clé n’est pas nécessaire pour le serveur public).\n\nSi vous souhaitez forcer l’utilisation d’une connexion via relais dès la première tentative, ajoutez « /r » après l’ID, par exemple : « 9123456234/r »."),
         ("privacy_mode_impl_mag_tip", "Mode 1"),
         ("privacy_mode_impl_virtual_display_tip", "Mode 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Entrer en mode de confidentialité"),
         ("Exit privacy mode", "Quitter le mode de confidentialité"),
         ("idd_not_support_under_win10_2004_tip", "Le pilote d’affichage indirect n’est pas pris en charge. Windows 10 version 2004 ou ultérieure est requis."),

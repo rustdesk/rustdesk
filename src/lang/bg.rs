@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Можете да въведете ID, директен IP адрес или домейн с порт (<domain>:<port>).\nАко искате да получите достъп до устройство на друг сървър, моля, добавете адреса на сървъра (<id>@<server_address >?key=<key_value>), например\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nАко искате да получите достъп до устройство на обществен сървър, моля, въведете \"<id>@public\" , ключът не е необходим за публичен сървър"),
         ("privacy_mode_impl_mag_tip", "Режим 1"),
         ("privacy_mode_impl_virtual_display_tip", "Режим 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Влизане в поверителен режим"),
         ("Exit privacy mode", "Изход от поверителен режим"),
         ("idd_not_support_under_win10_2004_tip", "Индиректен драйвер за дисплей не се поддържа. Изисква се Windows 10, версия 2004 или по-нова."),

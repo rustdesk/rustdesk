@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "आप ID, उपनाम (Alias) या IP पता दर्ज कर सकते हैं।"),
         ("privacy_mode_impl_mag_tip", "मैग्निफायर (Magnifier) गोपनीयता मोड"),
         ("privacy_mode_impl_virtual_display_tip", "वर्चुअल डिस्प्ले गोपनीयता मोड"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "गोपनीयता मोड में प्रवेश करें"),
         ("Exit privacy mode", "गोपनीयता मोड से बाहर निकलें"),
         ("idd_not_support_under_win10_2004_tip", "वर्चुअल डिस्प्ले Windows 10 संस्करण 2004 या उच्चतर पर समर्थित है।"),

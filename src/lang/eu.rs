@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "ID bat, IP zuzena edo ataka duen domeinu bat sar dezakezu (<domeinua>:<portua>).\nBeste zerbitzari bateko gailu batera sartu nahi baduzu, erantsi zerbitzariaren helbidea (<id>@<zerbitzariaren_helbidea>?key=<gako_balioa>), adibidez,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nZerbitzari publiko bateko gailuan sartu nahi baduzu, idatzi \"<id>@public\", gakoa ez da zerbitzari publikorako beharrezkoa.\n\nLehen konexioan igorpen-zerbitzari bat erabiltzea behartu nahi baduzu, gehitu \"/r\" IDaren amaieran, adibidez, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "1 modua"),
         ("privacy_mode_impl_virtual_display_tip", "2 modua"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Sartu modu pribatuan"),
         ("Exit privacy mode", "Irten modu pribatutik"),
         ("idd_not_support_under_win10_2004_tip", "Zeharkako pantaila kudeatzailea ez dago onartuta. Windows 10, 2004 bertsioa edo berriagoa behar da."),

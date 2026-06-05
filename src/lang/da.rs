@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Du kan indtaste ét ID, en direkte IP adresse, eller et domæne med en port (<domæne>:<port>).\nHvis du ønsker at forbinde til en enhed på en anden server, tilføj da server adressen (<id>@<server_adresse>?key=<nøgle>), fx,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nHvis du ønsker adgang til en enhed på en offentlig server, indtast venligst \"<id>@offentlig server\", nøglen er ikke nødvendig for offentlige servere.\n\nHvis du gerne vil tvinge brugen af en relay-forbindelse på den første forbindelse, tilføj \"/r\" efter ID'et, fx, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Tilstand 1"),
         ("privacy_mode_impl_virtual_display_tip", "Tilstand 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Start privatlivstilstand"),
         ("Exit privacy mode", "Afslut privatlivstilstand"),
         ("idd_not_support_under_win10_2004_tip", "Indirekte grafik drivere er ikke understøttet. Windows 10 version 2004 eller nyere er påkrævet."),

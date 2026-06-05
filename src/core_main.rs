@@ -216,7 +216,12 @@ pub fn core_main() -> Option<Vec<String>> {
         #[cfg(windows)]
         {
             use crate::platform;
-            if args[0] == "--uninstall" {
+            if args[0] == "--privacy-screen" {
+                if let Err(err) = crate::privacy_mode::run_privacy_screen_helper() {
+                    log::error!("Privacy screen helper failed: {}", err);
+                }
+                return None;
+            } else if args[0] == "--uninstall" {
                 if let Err(err) = platform::uninstall_me(true) {
                     log::error!("Failed to uninstall: {}", err);
                 }

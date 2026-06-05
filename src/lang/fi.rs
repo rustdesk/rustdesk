@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Anna etätunnus muodossa tunnus@palvelin"),
         ("privacy_mode_impl_mag_tip", "Yksityisyystila käyttää suurennustekniikkaa piilottaakseen sisällön."),
         ("privacy_mode_impl_virtual_display_tip", "Yksityisyystila käyttää virtuaalinäyttöä tietosuojan takaamiseksi."),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Siirry yksityisyystilaan"),
         ("Exit privacy mode", "Poistu yksityisyystilasta"),
         ("idd_not_support_under_win10_2004_tip", "Virtuaalinäyttöä ei tueta Windows 10 2004  versiota vanhemmissa järjestelmissä."),

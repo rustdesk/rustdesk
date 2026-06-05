@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Možete unijeti ID, izravnu IP adresu ili domenu s portom (<domena>:<port>).\nAko želite pristupiti uređaju na drugom poslužitelju, povežite adresu poslužitelja (<id>@<adresa_poslužitelja>?kljuć=<vrijednost_ključa>), naprimjer,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nAko želite pristupiti uređaju na javnom poslužitelju, unesite \"<id>@public\", ključ nije potreban za javni poslužitelj."),
         ("privacy_mode_impl_mag_tip", "Način 1"),
         ("privacy_mode_impl_virtual_display_tip", "Način 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Uđite u način privatnosti"),
         ("Exit privacy mode", "Izađi iz načina privatnosti"),
         ("idd_not_support_under_win10_2004_tip", "Neizravni upravljački program za zaslon nije podržan. Potreban je Windows 10 verzija 2004 ili novija."),

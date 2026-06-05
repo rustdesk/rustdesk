@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Megadhat egy azonosítót, egy közvetlen IP-címet vagy egy tartományt egy porttal (<domain>:<port>).\nHa egy másik kiszolgálón lévő eszközhöz szeretne hozzáférni, adja meg a kiszolgáló címét (<id>@<kiszolgáló_cím>?key=<key_value>), például\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nHa egy nyilvános kiszolgálón lévő eszközhöz szeretne hozzáférni, adja meg a „<id>@public” lehetőséget. A kulcsra nincs szükség nyilvános kiszolgálók esetén.\n\nHa az első kapcsolathoz továbbító-kiszolgálón keresztüli kapcsolatot akar kényszeríteni, adja hozzá az „/r” az azonosítót a végén, például „9123456234/r”."),
         ("privacy_mode_impl_mag_tip", "1. mód"),
         ("privacy_mode_impl_virtual_display_tip", "2. mód"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Lépjen be az adatvédelmi módba"),
         ("Exit privacy mode", "Lépjen ki az adatvédelmi módból"),
         ("idd_not_support_under_win10_2004_tip", "A közvetett grafikus illesztőprogram nem támogatott. Windows 10, 2004-es vagy újabb verzió szükséges."),

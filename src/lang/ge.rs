@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "შეგიძლიათ შეიყვანოთ იდენტიფიკატორი, პირდაპირი IP მისამართი ან დომენი პორტით (<დომენი>:<პორტი>).\nთუ გჭირდებათ წვდომა მოწყობილობაზე სხვა სერვერზე, დაამატეთ სერვერის მისამართი (<id>@<სერვერის_მისამართი>?key=<გასაღების_მნიშვნელობა>), მაგალითად:\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nთუ გჭირდებათ წვდომა მოწყობილობაზე საჯარო სერვერზე, შეიყვანეთ \"<id>@public\", გასაღები საჯარო სერვერისთვის არ არის საჭირო."),
         ("privacy_mode_impl_mag_tip", "რეჟიმი 1"),
         ("privacy_mode_impl_virtual_display_tip", "რეჟიმი 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "კონფიდენციალურობის რეჟიმის ჩართვა"),
         ("Exit privacy mode", "კონფიდენციალურობის რეჟიმის გამორთვა"),
         ("idd_not_support_under_win10_2004_tip", "არაპირდაპირი ჩვენების დრაივერი არ არის მხარდაჭერილი. საჭიროა Windows 10 ვერსია 2004 ან უფრო ახალი."),

@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Vnesete lahko ID, neposredni IP naslov, ali pa domeno in vrata (<domena>:<vrata>)\nČe želite dostopati do naprave na drugem strežniku, pripnite naslov strežnika (<id>@<naslov_strežnika>?key=<ključ>), npr. 9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nČe želite dostopati do naprave na javnem strežniku, vnesite »<id>@public«; ključ za javni strežnik ni potreben.\nČe želite vsiliti povezavo preko posrednika, pripnite »/r« na konec IDja, npr. »9123456234/r«."),
         ("privacy_mode_impl_mag_tip", "Način 1"),
         ("privacy_mode_impl_virtual_display_tip", "Način 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Vstopi v zasebni način"),
         ("Exit privacy mode", "Izstopi iz zasebnega načina"),
         ("idd_not_support_under_win10_2004_tip", "Posredni gonilnik ni podprt. Za uporabo rabite Windows 10 2004 ali novejšo različico."),

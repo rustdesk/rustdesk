@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Pode introduzir um ID, um IP direto ou um domínio com uma porta (<domain>:<port>).\nSe quiser aceder a um dispositivo noutro servidor, acrescente o endereço do servidor (<id>@<server_address>?key=<key_value>), por exemplo,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe quiser aceder a um dispositivo num servidor público, introduza \"<id>@public\", a chave não é necessária para servidores públicos.\n\nSe quiser forçar o uso de uma ligação via relay na primeira ligação, adicione \"/r\" no final do ID, por exemplo, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Modo 1"),
         ("privacy_mode_impl_virtual_display_tip", "Modo 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Entrar no modo privado"),
         ("Exit privacy mode", "Sair do modo privado"),
         ("idd_not_support_under_win10_2004_tip", "O controlador de ecrã indireto não é suportado. É necessário o Windows 10, versão 2004 ou mais recente."),

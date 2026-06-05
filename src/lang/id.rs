@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Anda bisa memasukkan ID, IP langsung, atau domain dengan port kostum yang sudah ditentukan (<domain>:<port>).\nJika anda ingin mengakses perangkat lain yang berbeda server, tambahkan alamat server setelah penulisan ID(<id>@<server_address>?key=<key_value>), sebagai contoh,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJika anda ingin mengakses perangkat yang menggunakan server publik, masukkan \"<id>@public\", server public tidak memerlukan key khusus"),
         ("privacy_mode_impl_mag_tip", "Mode 1"),
         ("privacy_mode_impl_virtual_display_tip", "Mode 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Masuk mode privasi"),
         ("Exit privacy mode", "Keluar mode privasi"),
         ("idd_not_support_under_win10_2004_tip", "Driver grafis yang Anda gunakan tidak kompatibel dengan versi Windows Anda dan memerlukan Windows 10 versi 2004 atau yang lebih baru"),

@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Nhập ID hoặc IP."),
         ("privacy_mode_impl_mag_tip", "Chế độ riêng tư (Magnifier)"),
         ("privacy_mode_impl_virtual_display_tip", "Chế độ riêng tư (Virtual Display)"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Vào chế độ riêng tư"),
         ("Exit privacy mode", "Thoát chế độ riêng tư"),
         ("idd_not_support_under_win10_2004_tip", "Yêu cầu Windows 10 2004 trở lên."),

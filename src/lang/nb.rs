@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Du kan taste inn en ID, en direkte IP, eller et domene med en port (<domain>:<port>).\nHvis du vil få tilgang til en enhet på en annen server, legg til serveradressen (<id>@<server_address>?key=<key_value>), for eksempel,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nHvis du vil få tilgang til en enhet på en offentlig server, tast inn \"<id>@public\", nøkkelen er ikke nødvendig for en offentlig server.\n\nHvis du vil tvinge bruk av en viderekoblingstilkobling ved første tilkobling, legg til \"/r\" på slutten av ID-en, for eksempel \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Modus 1"),
         ("privacy_mode_impl_virtual_display_tip", "Modus 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Gå inn i privatlivsmodus"),
         ("Exit privacy mode", "Avslutt privatlivsmodus"),
         ("idd_not_support_under_win10_2004_tip", "Indirekte skjermdriver støttes ikke. Windows 10, versjon 2004 eller nyere kreves."),
