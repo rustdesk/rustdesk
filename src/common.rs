@@ -910,19 +910,53 @@ pub fn check_software_update() {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
-    let (request, url) =
-        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
-    let latest_release_response = create_http_client_async()
-        .post(url)
-        .json(&request)
+    #[derive(serde_derive::Deserialize)]
+    struct CislinkUpdateResponse {
+        version: String,
+        windows_exe: Option<String>,
+        windows_msi: Option<String>,
+        macos_x64: Option<String>,
+        macos_aarch64: Option<String>,
+    }
+
+    let client = create_http_client_async();
+    let latest_release_response = client
+        .get("https://download.cislink.nl/rustdesk/latest.json")
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         .send()
         .await?;
     let bytes = latest_release_response.bytes().await?;
-    let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
-    let response_url = resp.url;
-    let latest_release_version = response_url.rsplit('/').next().unwrap_or_default();
+    let resp: CislinkUpdateResponse = serde_json::from_slice(&bytes)?;
+    
+    let mut response_url = "".to_string();
+    #[cfg(target_os = "windows")]
+    {
+        let is_msi = crate::platform::is_msi_installed().unwrap_or(false);
+        if is_msi {
+            if let Some(url) = resp.windows_msi {
+                response_url = url;
+            }
+        } else {
+            if let Some(url) = resp.windows_exe {
+                response_url = url;
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if cfg!(target_arch = "x86_64") {
+            if let Some(url) = resp.macos_x64 {
+                response_url = url;
+            }
+        } else if cfg!(target_arch = "aarch64") {
+            if let Some(url) = resp.macos_aarch64 {
+                response_url = url;
+            }
+        }
+    }
 
-    if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
+    let latest_release_version = resp.version;
+    if !response_url.is_empty() && get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
         #[cfg(feature = "flutter")]
         {
             let mut m = HashMap::new();
