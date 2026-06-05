@@ -24,7 +24,7 @@ To run RustDesk securely, we require a server with:
 ## 🔑 2. The Core Rule: Encryption Key Migration
 
 Repacked clients expect the current server public key:
-`wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=`
+`VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=`
 
 > [!WARNING]
 > Do **not** let the new server auto-generate new keys. If it does, all deployed client devices will fail to connect. You must copy the existing keys from the local desktop's Docker directory to the new server.

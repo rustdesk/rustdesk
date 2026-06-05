@@ -24,7 +24,7 @@ RustDesk 的 Public Key 应该是:
 - 纯 Base64 字符串
 - 约 44 字符长度
 - 以 = 结尾
-- 示例: `wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=`
+- 示例: `VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=`
 
 **不应该是**:
 - SSH 格式: `ssh-ed25519 AAAAC3Nza...`

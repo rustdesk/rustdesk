@@ -50,7 +50,7 @@ PowerShell.exe -ExecutionPolicy Bypass -File "Deploy-RustDeskConfig.ps1" -Restar
 
 - **服务器地址**: hbbs.cislink.nl
 - **中继服务器**: hbbr.cislink.nl  
-- **公钥**: wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=
+- **公钥**: VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=
 
 部署位置:
 - `%APPDATA%\RustDesk\config\RustDesk.toml`

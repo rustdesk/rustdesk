@@ -56,7 +56,7 @@ begin
       begin
         MsgBox('RustDesk configuration has been successfully deployed!' + #13#10 + #13#10 + 
                'Server: hbbs.cislink.nl' + #13#10 +
-               'Key: wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=', 
+               'Key: VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=', 
                mbInformation, MB_OK);
       end
       else

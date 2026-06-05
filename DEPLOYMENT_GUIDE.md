@@ -128,7 +128,7 @@ Get-Content "$env:APPDATA\RustDesk\config\RustDesk.toml"
 [options]
 custom-rendezvous-server = "hbbs.cislink.nl"
 relay-server = "hbbr.cislink.nl"
-key = "wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo="
+key = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="
 ```
 
 ### 方法 2: 批量验证脚本
@@ -141,7 +141,7 @@ foreach ($computer in $computers) {
     
     foreach ($config in $configs) {
         $content = Get-Content $config.FullName -Raw
-        if ($content -match "wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=") {
+        if ($content -match "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=") {
             Write-Host "✓ $computer - 配置正确" -ForegroundColor Green
         } else {
             Write-Host "✗ $computer - 配置有误" -ForegroundColor Red
@@ -176,7 +176,7 @@ foreach ($computer in $computers) {
 ### 问题 3: "Key 验证失败"
 **解决:**
 1. 在服务器上重新获取 public key
-2. 确认 key 为: `wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=`
+2. 确认 key 为: `VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=`
 3. 如果 key 不同,需要重新生成安装程序
 
 ## 🔄 更新配置
@@ -212,7 +212,7 @@ foreach ($computer in $computers) {
         if (Test-Path $configPath) {
             $result.ConfigExists = $true
             $content = Get-Content $configPath -Raw
-            $result.KeyCorrect = $content -match "wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo="
+            $result.KeyCorrect = $content -match "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="
             $result.LastModified = (Get-Item $configPath).LastWriteTime
             $result.Status = if ($result.KeyCorrect) { "Success" } else { "Wrong Key" }
         } else {
@@ -253,4 +253,4 @@ $report | Format-Table -AutoSize
 **创建日期**: 2025-10-12  
 **文件大小**: 1.9 MB  
 **服务器**: hbbs.cislink.nl  
-**Key**: wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=
+**Key**: VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=

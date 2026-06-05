@@ -35,7 +35,7 @@
 
 Server:        hbbs.cislink.nl
 Relay:         hbbr.cislink.nl
-Public Key:    wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=
+Public Key:    VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=
 
 ✅ Key has been verified from server
 ✅ Configuration files updated
@@ -96,7 +96,7 @@ Expected content:
 [options]
 custom-rendezvous-server = "hbbs.cislink.nl"
 relay-server = "hbbr.cislink.nl"
-key = "wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo="
+key = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="
 
 
 📊 BATCH DEPLOYMENT EXAMPLE
@@ -178,7 +178,7 @@ Solution: Re-verify server key matches configuration
 ═══════════════════════════════════════════════════════════════════════
 
 ✅ Config files exist in all locations
-✅ Key matches: wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo=
+✅ Key matches: VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=
 ✅ RustDesk client connects to hbbs.cislink.nl
 ✅ Remote control works
 ✅ No error messages in logs

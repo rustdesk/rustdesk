@@ -2,7 +2,7 @@
 # 用于验证当前系统的 RustDesk 配置是否正确
 
 param(
-    [string]$ExpectedKey = "wrrkMLBXkBGYVlvErzCFMHabakrxKQCsEX2lIbap5Jo="
+    [string]$ExpectedKey = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="
 )
 
 Write-Host "=" * 70 -ForegroundColor Cyan
