@@ -25,6 +25,13 @@
 * Used `rclone` to securely upload `db_v2.sqlite3`, `PUBLIC_KEY.txt`, `BACKUP_INFO.txt`, `cislink.ppk` (PuTTY Private Key), and `server_public_key.txt` to Google Drive (`smartthink-drive:`) in a dedicated folder: `RustDesk_Backup`.
 * Verified that all files are correctly stored in the cloud.
 
+### 6. Key Mismatch Resolution (Docker Desktop)
+* Diagnosed the client connection "wrong code" authentication error: our previous cleanup command deleted the bind-mounted `data/` directory, causing Docker's `hbbs` container to auto-generate a new key pair upon daily host restart.
+* Found the correct key pair (`id_ed25519` and `id_ed25519.pub`) in `D:\RustDesk-Server\data\` matching our expected client public key: `VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=`.
+* Restored the correct key pair to `D:\Rustdesk\data\` and restarted the `hbbs` container.
+* Checked logs to confirm that `hbbs` successfully started up using the correct public key, resolving the connection issues for all online clients.
+* Updated the root `.gitignore` to exclude the active `data/` folder, preventing any accidental leaks of private keys or databases.
+
 ---
 
 **Developer:** Antigravity (Pair Programming with Antigravity 2.0)  

@@ -10,6 +10,7 @@
 - [x] Implement Shared Address Book profiles controller endpoint (`/api/ab/shared/profiles`) with automatic bootstrapping of "Cislink Team" book, and secure permissions for CRUD operations.
 - [x] Clean up obsolete test scripts, configuration files, key formatting logs, backup folders, and reserved system files.
 - [x] Backup database file (db_v2.sqlite3) and key files (PUBLIC_KEY.txt, BACKUP_INFO.txt, cislink.ppk, server_public_key.txt) to Google Drive (smartthink-drive:RustDesk_Backup) using rclone.
+- [x] Resolve hbbs Docker container key mismatch issue by copying the correct key pair from D:\RustDesk-Server\data\ to D:\Rustdesk\data\ and restarting the hbbs container.
 
 ## Safety Intercepts & Guidelines
 - **UNC blocking**: Do not use UNC paths.

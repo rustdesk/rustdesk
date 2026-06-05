@@ -104,3 +104,7 @@ server_check_commands.txt
 
 # 服务器敏感信息
 server_public_key.txt
+
+# 本地 Docker 挂载数据
+data/
+
