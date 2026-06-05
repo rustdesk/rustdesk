@@ -23,6 +23,7 @@
 ### 5. Secure Backup to Google Drive
 * Restored key database backup `db_v2.sqlite3` and metadata `PUBLIC_KEY.txt` & `BACKUP_INFO.txt` from history.
 * Used `rclone` to securely upload `db_v2.sqlite3`, `PUBLIC_KEY.txt`, `BACKUP_INFO.txt`, `cislink.ppk` (PuTTY Private Key), and `server_public_key.txt` to Google Drive (`smartthink-drive:`) in a dedicated folder: `RustDesk_Backup`.
+* **Updated Keys Backup**: Uploaded the active restored private key `id_ed25519` and public key `id_ed25519.pub` to the Google Drive backup folder to complete the server credentials storage.
 * Verified that all files are correctly stored in the cloud.
 
 ### 6. Key Mismatch Resolution (Docker Desktop)
