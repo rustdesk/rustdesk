@@ -142,3 +142,4 @@ adb logcat | grep LOG_SERVICE
 - 此 APK 需要在 Root 手机上安装以获得最佳效果
 - 某些权限可能需要 Magisk 或其他 Root 解决方案才能授予
 - 不同 ROM 的自启动策略可能有所不同
+
