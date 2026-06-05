@@ -32,6 +32,7 @@
 * Restored the correct key pair to `D:\Rustdesk\data\` and restarted the `hbbs` container.
 * Checked logs to confirm that `hbbs` successfully started up using the correct public key, resolving the connection issues for all online clients.
 * Updated the root `.gitignore` to exclude the active `data/` folder, preventing any accidental leaks of private keys or databases.
+* **NotebookLM Safety Warning**: Created a persistent safety warning note inside the target Google NotebookLM workspace to prevent similar key mismatch issues in the future.
 
 ---
 

@@ -12,6 +12,7 @@
 - [x] Backup database file (db_v2.sqlite3) and key files (PUBLIC_KEY.txt, BACKUP_INFO.txt, cislink.ppk, server_public_key.txt) to Google Drive (smartthink-drive:RustDesk_Backup) using rclone.
 - [x] Resolve hbbs Docker container key mismatch issue by copying the correct key pair from D:\RustDesk-Server\data\ to D:\Rustdesk\data\ and restarting the hbbs container.
 - [x] Upload active server key pair (id_ed25519 and id_ed25519.pub) to Google Drive (smartthink-drive:RustDesk_Backup) using rclone.
+- [x] Create a safety warning note in Google NotebookLM (a0831bed-56db-4f1a-8e74-c739498bd1e1) detailing hbbs key mismatch and prevention rules.
 
 ## Safety Intercepts & Guidelines
 - **UNC blocking**: Do not use UNC paths.
