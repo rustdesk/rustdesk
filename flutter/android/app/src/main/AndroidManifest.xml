@@ -88,6 +88,7 @@
         <service
             android:name=".MainService"
             android:enabled="true"
+            android:stopWithTask="false"
             android:foregroundServiceType="mediaProjection" />
 
         <service

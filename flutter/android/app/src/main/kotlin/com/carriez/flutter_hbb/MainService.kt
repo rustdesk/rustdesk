@@ -346,7 +346,21 @@ class MainService : Service() {
                 requestMediaProjection()
             }
         }
-        return START_NOT_STICKY // don't use sticky (auto restart), the new service (from auto restart) will lose control
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d(logTag, "onTaskRemoved, restarting service")
+        val restartIntent = Intent(this, MainService::class.java).apply {
+            action = ACT_INIT_MEDIA_PROJECTION_AND_SERVICE
+            putExtra(EXT_INIT_FROM_BOOT, true)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(restartIntent)
+        } else {
+            startService(restartIntent)
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
