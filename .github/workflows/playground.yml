@@ -86,10 +86,9 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout source code
-        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+        uses: actions/checkout@v3
         with:
           ref: ${{ matrix.job.ref }}
-          submodules: recursive
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
