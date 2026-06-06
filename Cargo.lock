@@ -5996,8 +5996,8 @@ dependencies = [
 
 [[package]]
 name = "parity-tokio-ipc"
-version = "0.7.3-5"
-source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#c8c8bbcbabf9be1201c53afb0269b92b9b02d291"
+version = "0.7.3-6"
+source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#d0ae39bffe5d5a3e8d82a1b6bcb1ca5a9b2f1c01"
 dependencies = [
  "futures",
  "libc",
@@ -7270,7 +7270,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -7385,7 +7385,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "brotli",
  "dirs 5.0.1",

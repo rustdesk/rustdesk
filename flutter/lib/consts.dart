@@ -114,6 +114,9 @@ const String kOptionTerminalPersistent = "terminal-persistent";
 const String kOptionEnableTunnel = "enable-tunnel";
 const String kOptionEnableRemoteRestart = "enable-remote-restart";
 const String kOptionEnableBlockInput = "enable-block-input";
+const String kOptionEnablePrivacyMode = "enable-privacy-mode";
+const String kOptionEnablePermChangeInAcceptWindow =
+    "enable-perm-change-in-accept-window";
 const String kOptionAllowRemoteConfigModification =
     "allow-remote-config-modification";
 const String kOptionVerificationMethod = "verification-method";
@@ -139,6 +142,10 @@ const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
 const String kOptionCodecPreference = "codec-preference";
 const String kOptionRemoteMenubarDragLeft = "remote-menubar-drag-left";
 const String kOptionRemoteMenubarDragRight = "remote-menubar-drag-right";
+const String kOptionRemoteMenubarEdge = "remote-menubar-edge";
+const String kOptionRemoteMenubarFraction = "remote-menubar-frac";
+const String kOptionAllowMultiEdgeToolbarDock =
+    "allow-multi-edge-toolbar-dock";
 const String kOptionHideAbTagsPanel = "hideAbTagsPanel";
 const String kOptionRemoteMenubarState = "remoteMenubarState";
 const String kOptionPeerSorting = "peer-sorting";
@@ -187,6 +194,9 @@ const String kOptionDisableChangeId = "disable-change-id";
 const String kOptionDisableUnlockPin = "disable-unlock-pin";
 const kHideUsernameOnCard = "hide-username-on-card";
 const String kOptionHideHelpCards = "hide-help-cards";
+const String kOptionAllowDeepLinkPassword = "allow-deep-link-password";
+const String kOptionAllowDeepLinkServerSettings =
+    "allow-deep-link-server-settings";
 
 const String kOptionToggleViewOnly = "view-only";
 const String kOptionToggleShowMyCursor = "show-my-cursor";

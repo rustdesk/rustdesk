@@ -4,6 +4,9 @@ var body;
 var connections = [];
 var show_chat = false;
 var show_elevation = true;
+var is_privacy_mode_supported = handler.get_supported_privacy_mode_impls() != '[]';
+var allow_perm_change_in_accept_window =
+    handler.get_builtin_option('enable-perm-change-in-accept-window') != 'N';
 var svg_elevate = <svg t="1667992597853" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1850" width="16" height="16" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M892.761 160.724v426.504c0 25.588-6.419 51.036-19.177 76.339-12.798 25.336-29.547 49.86-50.254 73.627-20.707 23.79-44.372 46.296-70.97 67.516-26.589 21.244-53.543 40.177-80.921 56.768-27.363 16.623-53.968 30.461-79.801 41.438-25.809 11.008-48.433 18.547-67.871 22.64l-9.203 1.53-8.43-1.53c-19.958-4.093-43.094-11.632-69.432-22.64-26.337-10.969-53.708-24.816-82.080-41.438-28.388-16.591-56.256-35.524-83.618-56.768-27.378-21.219-51.776-43.725-73.265-67.516-21.488-23.759-38.868-48.291-52.155-73.627-13.319-25.305-19.974-50.759-19.974-76.339v-426.504l31.455-4.629 352.892-65.97 359.784 65.97 23.017 4.629zM510.028 151.884l-4.211-0.844-302.89 51.476v269.101h307.102v-319.734zM815.434 471.634h-305.406v383.031c19.682-4.51 41.052-11.411 64.141-20.692 23.033-9.249 45.815-20.234 68.304-32.867 22.513-12.672 44.159-26.739 64.969-42.203 20.818-15.472 39.23-32.047 55.277-49.797 16.024-17.703 28.822-36.131 38.386-55.222 9.549-19.131 14.328-38.553 14.328-58.235v-124.015z" p-id="1851" fill="#ffffff"></path></svg>;
 
 var hide_cm = undefined;
@@ -35,6 +38,7 @@ class Body: Reactor.Component
             me.sendMsg(msg);
         };
         var right_style = show_chat ? "" : "display: none";
+        var permissions_locked = !allow_perm_change_in_accept_window;
         var disconnected = c.disconnected;
         var show_elevation_btn = handler.can_elevate() && show_elevation && !c.is_file_transfer && !c.is_view_camera && !c.is_terminal && c.port_forward.length == 0;
         var show_accept_btn = handler.get_option('approve-mode') != 'password';
@@ -58,15 +62,16 @@ class Body: Reactor.Component
                 </div>
                 <div />
                 {c.is_file_transfer || c.is_terminal || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
-                {c.is_file_transfer || c.is_terminal || c.port_forward || disconnected ? "" : <div> <div .permissions>
+                {c.is_file_transfer || c.is_terminal || c.port_forward || disconnected ? "" : <div> <div class={permissions_locked ? "permissions locked" : "permissions"} style={permissions_locked ? "opacity:0.6;" : ""}>
                     <div class={!c.keyboard ? "disabled" : ""} title={translate('Enable keyboard/mouse')}><icon .keyboard /></div>
                     <div class={!c.clipboard ? "disabled" : ""} title={translate('Enable clipboard')}><icon .clipboard /></div>
                     <div class={!c.audio ? "disabled" : ""} title={translate('Enable audio')}><icon .audio /></div>
                     <div class={!c.file ? "disabled" : ""} title={translate('Enable file copy and paste')}><icon .file /></div>
                     <div class={!c.restart ? "disabled" : ""} title={translate('Enable remote restart')}><icon .restart /></div>
-                </div> <div .permissions style="margin-top:8px;" >
+                </div> <div class={permissions_locked ? "permissions locked" : "permissions"} style={permissions_locked ? "margin-top:8px;opacity:0.6;" : "margin-top:8px;"} >
                     <div class={!c.recording ? "disabled" : ""} title={translate('Enable recording session')}><icon .recording /></div>
                     <div class={!c.block_input ? "disabled" : ""} title={translate('Enable blocking user input')} style={is_win ? "" : "display:none;"}><icon .block_input /></div>
+                    <div class={!c.privacy_mode ? "disabled" : ""} title={translate('Enable privacy mode')} style={is_privacy_mode_supported ? "" : "display:none;"}><icon .privacy_mode /></div>
                 </div></div>
                 }
                 {c.is_file_transfer ? <div>{translate('Transfer file')}</div> : ""}
@@ -103,6 +108,7 @@ class Body: Reactor.Component
     }
 
     event click $(icon.keyboard) (e) {
+        if (!allow_perm_change_in_accept_window) return;
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.keyboard = !connection.keyboard;
@@ -112,6 +118,7 @@ class Body: Reactor.Component
     }
 
     event click $(icon.clipboard) {
+        if (!allow_perm_change_in_accept_window) return;
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.clipboard = !connection.clipboard;
@@ -121,6 +128,7 @@ class Body: Reactor.Component
     }
 
     event click $(icon.audio) {
+        if (!allow_perm_change_in_accept_window) return;
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.audio = !connection.audio;
@@ -130,6 +138,7 @@ class Body: Reactor.Component
     }
 
     event click $(icon.file) {
+        if (!allow_perm_change_in_accept_window) return;
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.file = !connection.file;
@@ -139,6 +148,7 @@ class Body: Reactor.Component
     }
 
     event click $(icon.restart) {
+        if (!allow_perm_change_in_accept_window) return;
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.restart = !connection.restart;
@@ -148,6 +158,7 @@ class Body: Reactor.Component
     }
 
     event click $(icon.recording) {
+        if (!allow_perm_change_in_accept_window) return;
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.recording = !connection.recording;
@@ -157,11 +168,22 @@ class Body: Reactor.Component
     }
 
     event click $(icon.block_input) {
+        if (!allow_perm_change_in_accept_window) return;
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.block_input = !connection.block_input;
             body.update();
             handler.switch_permission(cid, "block_input", connection.block_input);
+        });
+    }
+
+    event click $(icon.privacy_mode) {
+        if (!allow_perm_change_in_accept_window) return;
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.privacy_mode = !connection.privacy_mode;
+            body.update();
+            handler.switch_permission(cid, "privacy_mode", connection.privacy_mode);
         });
     }
 
@@ -368,7 +390,7 @@ function bring_to_top(idx=-1) {
     }
 }
 
-handler.addConnection = function(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
+handler.addConnection = function(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, privacy_mode) {
     stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
@@ -376,6 +398,7 @@ handler.addConnection = function(id, is_file_transfer, is_view_camera, is_termin
     });
     if (conn) {
         conn.authorized = authorized;
+        conn.privacy_mode = privacy_mode;
         update();
         return;
     }
@@ -391,7 +414,7 @@ handler.addConnection = function(id, is_file_transfer, is_view_camera, is_termin
         name: name, authorized: authorized, time: new Date(), now: new Date(),
         keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,
         audio: audio, file: file, restart: restart, recording: recording,
-        block_input:block_input,
+        block_input:block_input, privacy_mode:privacy_mode,
         disconnected: false
     };
     if (idx < 0) {
@@ -480,13 +503,19 @@ function getElapsed(time, now) {
     return out;
 }
 
-var ui_status_cache = [""];
+var ui_status_cache = ["", ""];
 function check_update_ui() {
     self.timer(1s, function() {
         var approve_mode = handler.get_option('approve-mode');
+        var allow_perm_change = handler.get_builtin_option('enable-perm-change-in-accept-window');
         var changed = false;
         if (ui_status_cache[0] != approve_mode) {
             ui_status_cache[0] = approve_mode;
+            changed = true;
+        }
+        if (ui_status_cache[1] != allow_perm_change) {
+            ui_status_cache[1] = allow_perm_change;
+            allow_perm_change_in_accept_window = allow_perm_change != 'N';
             changed = true;
         }
         if (changed) update();

@@ -17,6 +17,7 @@ var audio_enabled = true; // server side
 var file_enabled = true; // server side
 var restart_enabled = true; // server side
 var recording_enabled = true; // server side
+var privacy_mode_enabled = true; // server side
 var scroll_body = $(body);
 var peer_platform = "";
 
@@ -588,6 +589,7 @@ handler.setPermission = function(name, enabled) {
     if (name == "clipboard") clipboard_enabled = enabled;
     if (name == "restart") restart_enabled = enabled;
     if (name == "recording") recording_enabled = enabled;
+    if (name == "privacy_mode") privacy_mode_enabled = enabled;
     input_blocked = false;
     header.update();
     });

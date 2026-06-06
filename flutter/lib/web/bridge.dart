@@ -1538,7 +1538,10 @@ class RustdeskImpl {
 
   Future<void> mainAccountAuth(
       {required String op, required bool rememberMe, dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', [
+    // Safari only allows auth popups while handling the original user gesture.
+    // Use Future.sync so the JS call runs synchronously (pre-opening the OIDC
+    // window) while any interop error still surfaces as a Future error.
+    return Future.sync(() => js.context.callMethod('setByName', [
           'account_auth',
           jsonEncode({'op': op, 'remember': rememberMe})
         ]));
@@ -1726,7 +1729,7 @@ class RustdeskImpl {
   }
 
   String mainSupportedPrivacyModeImpls({dynamic hint}) {
-    throw UnimplementedError("mainSupportedPrivacyModeImpls");
+    return '[]';
   }
 
   String mainSupportedInputSource({dynamic hint}) {
@@ -2031,7 +2034,14 @@ class RustdeskImpl {
   }
 
   String mainResolveAvatarUrl({required String avatar, dynamic hint}) {
-    return js.context.callMethod('getByName', ['resolve_avatar_url', avatar])?.toString() ?? avatar;
+    return js.context.callMethod(
+            'getByName', ['resolve_avatar_url', avatar])?.toString() ??
+        avatar;
+  }
+
+  Future<String> mainDeployDevice(
+      {required String token, required String id, dynamic hint}) {
+    throw UnimplementedError("mainDeployDevice");
   }
 
   void dispose() {}
