@@ -546,8 +546,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Widget getRawPointerAndKeyBody(Widget child) {
     final ffiModel = Provider.of<FfiModel>(context);
-    final forwardKeyboardEvents =
-        !(isIOS && _showEdit && keyboardVisibilityController.isVisible);
+    final forwardKeyboardEvents = !(isIOS && _showEdit);
     return RawPointerMouseRegion(
       cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,
       inputModel: inputModel,
