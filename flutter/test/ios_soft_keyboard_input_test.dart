@@ -199,6 +199,148 @@ void main() {
       ]);
     });
 
+    test('sends ascii after committed Japanese text when composing collapses',
+        () {
+      var result = diffIOSSoftKeyboardInput(
+        previousValue: '111に',
+        currentValue: '111にa',
+        composingRange: const TextRange(start: 4, end: 5),
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111に');
+      expect(result.nextComposingValue, 'a');
+      expect(result.actions, isEmpty);
+
+      result = diffIOSSoftKeyboardInput(
+        previousValue: result.nextValue,
+        currentValue: '111にa',
+        composingRange: TextRange.empty,
+        previousComposingValue: result.nextComposingValue,
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111にa');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputKey('a'),
+      ]);
+    });
+
+    test('does not send pinyin composing after committed Japanese text', () {
+      var previousValue = '111みau';
+      String? previousComposingValue;
+
+      IOSSoftKeyboardInputResult diff(
+        String currentValue,
+        TextRange composingRange,
+      ) {
+        final result = diffIOSSoftKeyboardInput(
+          previousValue: previousValue,
+          currentValue: currentValue,
+          composingRange: composingRange,
+          previousComposingValue: previousComposingValue,
+          sentinelPrefixLength: 3,
+        );
+        previousValue = result.nextValue;
+        previousComposingValue = result.nextComposingValue;
+        return result;
+      }
+
+      var result = diff('111みaun', const TextRange(start: 6, end: 7));
+      expect(result.nextValue, '111みau');
+      expect(result.nextComposingValue, 'n');
+      expect(result.actions, isEmpty);
+
+      result = diff('111みauni', const TextRange(start: 6, end: 8));
+      expect(result.nextValue, '111みau');
+      expect(result.nextComposingValue, 'ni');
+      expect(result.actions, isEmpty);
+
+      result = diff('111みauni\u2006h', const TextRange(start: 6, end: 10));
+      expect(result.nextValue, '111みau');
+      expect(result.nextComposingValue, 'ni\u2006h');
+      expect(result.actions, isEmpty);
+
+      result = diff('111みauni\u2006hao', const TextRange(start: 6, end: 12));
+      expect(result.nextValue, '111みau');
+      expect(result.nextComposingValue, 'ni\u2006hao');
+      expect(result.actions, isEmpty);
+
+      result = diff('111みau你好', const TextRange(start: 6, end: 8));
+      expect(result.nextValue, '111みau你好');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('你好'),
+      ]);
+    });
+
+    test('sends committed ascii after Japanese text composing collapses', () {
+      var result = diffIOSSoftKeyboardInput(
+        previousValue: '111みau',
+        currentValue: '111みaua',
+        composingRange: const TextRange(start: 6, end: 7),
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111みau');
+      expect(result.nextComposingValue, 'a');
+      expect(result.actions, isEmpty);
+
+      result = diffIOSSoftKeyboardInput(
+        previousValue: result.nextValue,
+        currentValue: '111みaua',
+        composingRange: TextRange.empty,
+        previousComposingValue: result.nextComposingValue,
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111みaua');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputKey('a'),
+      ]);
+    });
+
+    test('sends Japanese IME ascii after space when composing collapses', () {
+      var previousValue = '111 ';
+      String? previousComposingValue;
+
+      IOSSoftKeyboardInputResult diff(
+        String currentValue,
+        TextRange composingRange,
+      ) {
+        final result = diffIOSSoftKeyboardInput(
+          previousValue: previousValue,
+          currentValue: currentValue,
+          composingRange: composingRange,
+          previousComposingValue: previousComposingValue,
+          sentinelPrefixLength: 3,
+        );
+        previousValue = result.nextValue;
+        previousComposingValue = result.nextComposingValue;
+        return result;
+      }
+
+      expect(diff('111 l', const TextRange(start: 4, end: 5)).actions, isEmpty);
+      expect(
+          diff('111 lm', const TextRange(start: 4, end: 6)).actions, isEmpty);
+      expect(
+          diff('111 lmw', const TextRange(start: 4, end: 7)).actions, isEmpty);
+      expect(
+          diff('111 lmww', const TextRange(start: 4, end: 8)).actions, isEmpty);
+      expect(diff('111 lmwwm', const TextRange(start: 4, end: 9)).actions,
+          isEmpty);
+
+      final result = diff('111 lmwwm', TextRange.empty);
+
+      expect(result.nextValue, '111 lmwwm');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('lmwwm'),
+      ]);
+    });
+
     test('does not send Korean jamo composition before commit', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '111',
@@ -208,6 +350,19 @@ void main() {
 
       expect(result.nextValue, '111');
       expect(result.nextComposingValue, 'ㅎㅏ');
+      expect(result.actions, isEmpty);
+    });
+
+    test('does not send Korean jamo without composing range', () {
+      final result = diffIOSSoftKeyboardInput(
+        previousValue: '111',
+        currentValue: '111ㅎ',
+        composingRange: TextRange.empty,
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111');
+      expect(result.nextComposingValue, 'ㅎ');
       expect(result.actions, isEmpty);
     });
 
@@ -236,6 +391,187 @@ void main() {
       expect(result.nextComposingValue, isNull);
       expect(result.actions, [
         const IOSSoftKeyboardInputAction.inputText('한'),
+      ]);
+    });
+
+    test('replaces Korean hangul after sentinel reset during composition', () {
+      var previousValue = '111';
+      String? previousComposingValue;
+      String? previousControllerText = '111';
+
+      IOSSoftKeyboardInputResult diff(String currentValue) {
+        final result = diffIOSSoftKeyboardInput(
+          previousValue: previousValue,
+          currentValue: currentValue,
+          composingRange: TextRange.empty,
+          previousComposingValue: previousComposingValue,
+          previousControllerText: previousControllerText,
+          sentinelPrefixLength: 3,
+        );
+        previousValue = result.nextValue;
+        previousComposingValue = result.nextComposingValue;
+        previousControllerText = currentValue;
+        return result;
+      }
+
+      expect(diff('111ㅎ').actions, isEmpty);
+      expect(diff('11').actions, isEmpty);
+      expect(diff('111').actions, isEmpty);
+
+      var result = diff('111하');
+      expect(result.nextValue, '111하');
+      expect(result.nextComposingValue, '하');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('하'),
+      ]);
+
+      expect(diff('111하').actions, isEmpty);
+      expect(diff('11').actions, isEmpty);
+      expect(diff('111').actions, isEmpty);
+
+      result = diff('111한');
+      expect(result.nextValue, '111한');
+      expect(result.nextComposingValue, '한');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.backspace(),
+        const IOSSoftKeyboardInputAction.inputText('한'),
+      ]);
+    });
+
+    test('keeps backspace when deleting sent Korean composing text', () {
+      final result = diffIOSSoftKeyboardInput(
+        previousValue: '111하',
+        currentValue: '111',
+        composingRange: TextRange.empty,
+        previousComposingValue: '하',
+        previousControllerText: '111하',
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.backspace(),
+      ]);
+    });
+
+    test('does not buffer unrelated Korean consonants until newline', () {
+      var previousValue = '111';
+      String? previousComposingValue;
+
+      IOSSoftKeyboardInputResult diff(String currentValue) {
+        final result = diffIOSSoftKeyboardInput(
+          previousValue: previousValue,
+          currentValue: currentValue,
+          composingRange: TextRange.empty,
+          previousComposingValue: previousComposingValue,
+          sentinelPrefixLength: 3,
+        );
+        previousValue = result.nextValue;
+        previousComposingValue = result.nextComposingValue;
+        return result;
+      }
+
+      var result = diff('111ㄹ');
+      expect(result.nextValue, '111');
+      expect(result.nextComposingValue, 'ㄹ');
+      expect(result.actions, isEmpty);
+
+      result = diff('111ㄹㅇ');
+      expect(result.nextValue, '111ㄹ');
+      expect(result.nextComposingValue, 'ㅇ');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('ㄹ'),
+      ]);
+
+      result = diff('111ㄹㅇㅎ');
+      expect(result.nextValue, '111ㄹㅇ');
+      expect(result.nextComposingValue, 'ㅎ');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('ㅇ'),
+      ]);
+
+      result = diff('111ㄹㅇㅎㅎ');
+      expect(result.nextValue, '111ㄹㅇㅎ');
+      expect(result.nextComposingValue, 'ㅎ');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('ㅎ'),
+      ]);
+
+      result = diff('111ㄹㅇㅎㅎㅇ');
+      expect(result.nextValue, '111ㄹㅇㅎㅎ');
+      expect(result.nextComposingValue, 'ㅇ');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('ㅎ'),
+      ]);
+
+      result = diff('111ㄹㅇㅎㅎㅇ\n');
+      expect(result.nextValue, '111ㄹㅇㅎㅎㅇ\n');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('ㅇ\n'),
+      ]);
+    });
+
+    test('does not backspace while Korean composition shrinks sentinel only',
+        () {
+      final result = diffIOSSoftKeyboardInput(
+        previousValue: '111',
+        currentValue: '11',
+        composingRange: TextRange.empty,
+        previousComposingValue: 'ㅎ',
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111');
+      expect(result.nextComposingValue, 'ㅎ');
+      expect(result.actions, isEmpty);
+    });
+
+    test('does not backspace while Korean hangul composition shrinks sentinel',
+        () {
+      final result = diffIOSSoftKeyboardInput(
+        previousValue: '111하',
+        currentValue: '11',
+        composingRange: TextRange.empty,
+        previousComposingValue: '하',
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111하');
+      expect(result.nextComposingValue, '하');
+      expect(result.actions, isEmpty);
+    });
+
+    test(
+        'does not send restored sentinel while Korean hangul composition resets',
+        () {
+      final result = diffIOSSoftKeyboardInput(
+        previousValue: '111하',
+        currentValue: '111',
+        composingRange: TextRange.empty,
+        previousComposingValue: '하',
+        previousControllerText: '11',
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111하');
+      expect(result.nextComposingValue, '하');
+      expect(result.actions, isEmpty);
+    });
+
+    test('does not send restored sentinel before committed Korean text', () {
+      final result = diffIOSSoftKeyboardInput(
+        previousValue: '11',
+        currentValue: '111하',
+        composingRange: TextRange.empty,
+        sentinelPrefixLength: 3,
+      );
+
+      expect(result.nextValue, '111하');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('하'),
       ]);
     });
 
@@ -328,7 +664,7 @@ void main() {
       ]);
     });
 
-    test('does not send input when only the sentinel prefix is restored', () {
+    test('sends typed sentinel after the prefix was shortened', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '11',
         currentValue: '111',
@@ -338,7 +674,9 @@ void main() {
 
       expect(result.nextValue, '111');
       expect(result.nextComposingValue, isNull);
-      expect(result.actions, isEmpty);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputKey('1'),
+      ]);
     });
 
     test('sends backspace when deleting from an empty sentinel tail', () {

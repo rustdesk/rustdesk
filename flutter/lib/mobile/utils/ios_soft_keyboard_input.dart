@@ -1,5 +1,71 @@
 import 'package:flutter/services.dart';
 
+const _sentinel = '1';
+const _pinyinMarkedTextSpace = '\u2006';
+const _maxHeldPinyinInitials = 2;
+const _pinyinInitials = <String>[
+  'zh',
+  'ch',
+  'sh',
+  'b',
+  'p',
+  'm',
+  'f',
+  'd',
+  't',
+  'n',
+  'l',
+  'g',
+  'k',
+  'h',
+  'j',
+  'q',
+  'x',
+  'r',
+  'z',
+  'c',
+  's',
+  'y',
+  'w',
+];
+const _pinyinFinals = <String>[
+  'a',
+  'ai',
+  'an',
+  'ang',
+  'ao',
+  'e',
+  'ei',
+  'en',
+  'eng',
+  'er',
+  'i',
+  'ia',
+  'ian',
+  'iang',
+  'iao',
+  'ie',
+  'in',
+  'ing',
+  'iong',
+  'iu',
+  'o',
+  'ong',
+  'ou',
+  'u',
+  'ua',
+  'uai',
+  'uan',
+  'uang',
+  'ue',
+  'ui',
+  'un',
+  'uo',
+  'v',
+  've',
+  'vn',
+];
+
 enum IOSSoftKeyboardInputActionType {
   backspace,
   inputKey,
@@ -74,29 +140,15 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
   required String currentValue,
   required TextRange composingRange,
   String? previousComposingValue,
+  String? previousControllerText,
   int? sentinelPrefixLength,
   bool forceCommitComposingText = false,
-  String sentinel = '1',
 }) {
   final tails = _sentinelTails(
     previousValue,
     currentValue,
-    sentinel,
     sentinelPrefixLength,
   );
-
-  if (_isOnlySentinelPrefixRestore(
-    previousValue,
-    currentValue,
-    sentinel,
-    sentinelPrefixLength,
-  )) {
-    return IOSSoftKeyboardInputResult(
-      nextValue: currentValue,
-      nextComposingValue: null,
-      actions: const [],
-    );
-  }
 
   if (!forceCommitComposingText &&
       _shouldHoldComposingText(
@@ -114,6 +166,19 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     );
   }
 
+  final koreanComposingResult = _invalidKoreanComposingResult(
+    previousValue: previousValue,
+    currentValue: currentValue,
+    previousTail: tails.previous,
+    currentTail: tails.current,
+    previousComposingValue: previousComposingValue,
+    previousControllerText: previousControllerText,
+    sentinelPrefixLength: sentinelPrefixLength,
+  );
+  if (!forceCommitComposingText && koreanComposingResult != null) {
+    return koreanComposingResult;
+  }
+
   final continuedComposingValue = _continuedComposingValue(
     tails.previous,
     tails.current,
@@ -127,22 +192,15 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     );
   }
 
-  final collapsedComposingValue = _collapsedComposingValue(
-    tails.previous,
-    tails.current,
-    previousComposingValue,
-  );
-  if (!forceCommitComposingText && collapsedComposingValue != null) {
-    return IOSSoftKeyboardInputResult(
-      nextValue: previousValue,
-      nextComposingValue: collapsedComposingValue,
-      actions: const [],
-    );
-  }
-
   return IOSSoftKeyboardInputResult(
     nextValue: currentValue,
-    nextComposingValue: null,
+    nextComposingValue: forceCommitComposingText
+        ? null
+        : _sentKoreanComposingValue(
+            previousTail: tails.previous,
+            currentTail: tails.current,
+            previousComposingValue: previousComposingValue,
+          ),
     actions: _inputActionsForTailChange(tails.previous, tails.current),
   );
 }
@@ -150,22 +208,27 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
 ({String previous, String current}) _sentinelTails(
   String previousValue,
   String currentValue,
-  String sentinel,
   int? sentinelPrefixLength,
 ) {
   if (_shouldResetSentinelBaseline(
     previousValue,
     currentValue,
-    sentinel,
-    sentinelPrefixLength,
   )) {
     return (previous: '', current: currentValue);
+  }
+
+  final restoredTail = _tailAfterRestoredSentinelPrefix(
+    previousValue,
+    currentValue,
+    sentinelPrefixLength,
+  );
+  if (restoredTail != null) {
+    return (previous: '', current: restoredTail);
   }
 
   final prefixLength = _effectiveSentinelPrefixLength(
     previousValue,
     currentValue,
-    sentinel,
     sentinelPrefixLength,
   );
   return (
@@ -177,19 +240,35 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
 bool _shouldResetSentinelBaseline(
   String previousValue,
   String currentValue,
-  String sentinel,
-  int? sentinelPrefixLength,
 ) {
-  if (sentinelPrefixLength == null || sentinel.isEmpty) return false;
-  final previousPrefixLength = _leadingSentinelLength(previousValue, sentinel);
+  final previousPrefixLength = _leadingSentinelLength(previousValue);
   if (previousPrefixLength == 0) return false;
-  if (_leadingSentinelLength(currentValue, sentinel) > 0) return false;
-  if (previousPrefixLength == sentinel.length &&
+  if (_leadingSentinelLength(currentValue) > 0) return false;
+  if (previousPrefixLength == _sentinel.length &&
       previousValue.length == previousPrefixLength &&
       currentValue.isEmpty) {
     return false;
   }
   return true;
+}
+
+String? _tailAfterRestoredSentinelPrefix(
+  String previousValue,
+  String currentValue,
+  int? sentinelPrefixLength,
+) {
+  if (sentinelPrefixLength == null) return null;
+  final previousPrefixLength = _leadingSentinelLength(previousValue);
+  final currentPrefixLength = _leadingSentinelLength(currentValue);
+  if (previousPrefixLength == 0) return null;
+  if (previousPrefixLength >= currentPrefixLength) return null;
+  if (currentPrefixLength > sentinelPrefixLength) return null;
+  if (previousValue.length != previousPrefixLength) return null;
+  if (currentValue.length <= currentPrefixLength) return null;
+
+  final tail = currentValue.substring(currentPrefixLength);
+  if (tail.runes.any((rune) => rune > 0x7F)) return tail;
+  return null;
 }
 
 List<IOSSoftKeyboardInputAction> _inputActionsForTailChange(
@@ -217,22 +296,6 @@ List<IOSSoftKeyboardInputAction> _inputActionsForTailChange(
   return actions;
 }
 
-bool _isOnlySentinelPrefixRestore(
-  String previousValue,
-  String currentValue,
-  String sentinel,
-  int? sentinelPrefixLength,
-) {
-  final prefixLengthLimit = sentinelPrefixLength;
-  if (prefixLengthLimit == null || sentinel.isEmpty) return false;
-  final previousPrefixLength = _leadingSentinelLength(previousValue, sentinel);
-  final currentPrefixLength = _leadingSentinelLength(currentValue, sentinel);
-  if (currentPrefixLength <= previousPrefixLength) return false;
-  if (currentPrefixLength > prefixLengthLimit) return false;
-  return previousValue.length == previousPrefixLength &&
-      currentValue.length == currentPrefixLength;
-}
-
 bool _isValidComposingRange(String value, TextRange range) {
   return range.isValid &&
       !range.isCollapsed &&
@@ -258,6 +321,128 @@ bool _shouldHoldComposingText(
   return _isComposingTransition(_compositionKind(previousComposingValue), kind);
 }
 
+IOSSoftKeyboardInputResult? _invalidKoreanComposingResult({
+  required String previousValue,
+  required String currentValue,
+  required String previousTail,
+  required String currentTail,
+  required String? previousComposingValue,
+  required String? previousControllerText,
+  required int? sentinelPrefixLength,
+}) {
+  final holdValue = _heldKoreanJamoValue(
+    currentTail,
+    previousComposingValue,
+  );
+  if (holdValue != null) {
+    final committedTail = currentTail.substring(
+      0,
+      currentTail.length - holdValue.length,
+    );
+    if (committedTail.isEmpty) {
+      return IOSSoftKeyboardInputResult(
+        nextValue: previousValue,
+        nextComposingValue: holdValue,
+        actions: const [],
+      );
+    }
+    return IOSSoftKeyboardInputResult(
+      nextValue:
+          currentValue.substring(0, currentValue.length - holdValue.length),
+      nextComposingValue: holdValue,
+      actions: _inputActionsForTailChange(previousTail, committedTail),
+    );
+  }
+
+  if (previousComposingValue == null || previousComposingValue.isEmpty) {
+    return null;
+  }
+
+  final previousKind = _compositionKind(previousComposingValue);
+  if (previousKind != _CompositionKind.koreanJamo &&
+      previousKind != _CompositionKind.koreanHangul) {
+    return null;
+  }
+
+  if (sentinelPrefixLength == null) {
+    return null;
+  }
+
+  final currentPrefixLength = _leadingSentinelLength(currentValue);
+  if (currentValue.length != currentPrefixLength) {
+    return null;
+  }
+  if (currentPrefixLength < sentinelPrefixLength) {
+    return IOSSoftKeyboardInputResult(
+      nextValue: previousValue,
+      nextComposingValue: previousComposingValue,
+      actions: const [],
+    );
+  }
+  if (currentPrefixLength == sentinelPrefixLength &&
+      _isShortenedSentinelOnlyValue(
+          previousControllerText, sentinelPrefixLength)) {
+    return IOSSoftKeyboardInputResult(
+      nextValue: previousValue,
+      nextComposingValue: previousComposingValue,
+      actions: const [],
+    );
+  }
+
+  return null;
+}
+
+String? _heldKoreanJamoValue(
+  String currentTail,
+  String? previousComposingValue,
+) {
+  if (currentTail.isEmpty ||
+      _compositionKind(currentTail) != _CompositionKind.koreanJamo) {
+    return null;
+  }
+  if (_containsKoreanVowelJamo(currentTail)) {
+    return currentTail;
+  }
+  if (previousComposingValue == null || previousComposingValue.isEmpty) {
+    return currentTail;
+  }
+  return String.fromCharCode(currentTail.runes.last);
+}
+
+String? _sentKoreanComposingValue({
+  required String previousTail,
+  required String currentTail,
+  required String? previousComposingValue,
+}) {
+  if (previousComposingValue == null || previousComposingValue.isEmpty) {
+    return null;
+  }
+
+  if (_compositionKind(currentTail) != _CompositionKind.koreanHangul) {
+    return null;
+  }
+
+  final previousKind = _compositionKind(previousComposingValue);
+  if (previousKind == _CompositionKind.koreanJamo) {
+    return currentTail;
+  }
+  if (previousKind == _CompositionKind.koreanHangul &&
+      previousTail == previousComposingValue) {
+    return currentTail;
+  }
+
+  return null;
+}
+
+bool _isShortenedSentinelOnlyValue(
+  String? value,
+  int sentinelPrefixLength,
+) {
+  if (value == null) return false;
+  final prefixLength = _leadingSentinelLength(value);
+  return value.length == prefixLength && prefixLength < sentinelPrefixLength;
+}
+
 String? _continuedComposingValue(
   String previousTail,
   String currentTail,
@@ -273,6 +458,13 @@ String? _continuedComposingValue(
 
   final kind = _compositionKind(continuedValue);
   if (!_shouldHoldCollapsedKind(kind)) return null;
+  if (kind == _CompositionKind.ascii && _containsJapaneseKana(previousTail)) {
+    return null;
+  }
+  if (kind == _CompositionKind.ascii &&
+      !_isLikelyPinyinComposingText(continuedValue)) {
+    return null;
+  }
 
   final previousKind = _compositionKind(previousComposingValue);
   if (!_isComposingTransition(previousKind, kind)) return null;
@@ -280,58 +472,100 @@ String? _continuedComposingValue(
   return continuedValue;
 }
 
-String? _collapsedComposingValue(
-  String previousTail,
-  String currentTail,
-  String? previousComposingValue,
-) {
-  if (previousComposingValue == null || previousComposingValue.isEmpty) {
-    return null;
-  }
-  if (!currentTail.startsWith(previousTail)) return null;
-
-  final composingTail = currentTail.substring(previousTail.length);
-  if (composingTail != previousComposingValue) return null;
-
-  final kind = _compositionKind(composingTail);
-  if (_shouldHoldCollapsedKind(kind)) return composingTail;
-  return null;
-}
-
 bool _shouldHoldCollapsedKind(_CompositionKind kind) {
   return kind == _CompositionKind.ascii || kind == _CompositionKind.koreanJamo;
+}
+
+bool _isLikelyPinyinComposingText(String value) {
+  final normalized =
+      value.toLowerCase().replaceAll(_pinyinMarkedTextSpace, ' ').trim();
+  if (normalized.isEmpty) return false;
+
+  final tokens = normalized.split(RegExp(r'\s+'));
+  return tokens.every(_isLikelyPinyinToken);
+}
+
+bool _isLikelyPinyinToken(String token) {
+  if (_isPinyinSyllablePrefix(token)) return true;
+  if (_isPinyinSyllableWithTrailingInitial(token)) return true;
+  return _isShortPinyinInitialSequence(token);
+}
+
+bool _isPinyinSyllablePrefix(String token) {
+  for (final initial in _pinyinInitials) {
+    if (initial.startsWith(token)) return true;
+    if (!token.startsWith(initial)) continue;
+
+    final finalPrefix = token.substring(initial.length);
+    if (finalPrefix.isEmpty) return true;
+    return _pinyinFinals
+        .any((finalValue) => finalValue.startsWith(finalPrefix));
+  }
+  return _pinyinFinals.any((finalValue) => finalValue.startsWith(token));
+}
+
+bool _isPinyinSyllableWithTrailingInitial(String token) {
+  for (var index = 1; index < token.length; index++) {
+    if (!_isCompletePinyinSyllable(token.substring(0, index))) continue;
+
+    final trailing = token.substring(index);
+    if (_pinyinInitials.any((initial) => initial.startsWith(trailing))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _isCompletePinyinSyllable(String token) {
+  for (final initial in _pinyinInitials) {
+    if (!token.startsWith(initial)) continue;
+    return _pinyinFinals.contains(token.substring(initial.length));
+  }
+  return _pinyinFinals.contains(token);
+}
+
+bool _isShortPinyinInitialSequence(String token) {
+  var offset = 0;
+  var count = 0;
+  while (offset < token.length) {
+    final initial = _pinyinInitialAt(token, offset);
+    if (initial == null) return false;
+    offset += initial.length;
+    count++;
+  }
+  return count <= _maxHeldPinyinInitials;
+}
+
+String? _pinyinInitialAt(String token, int offset) {
+  for (final initial in _pinyinInitials) {
+    if (token.startsWith(initial, offset)) return initial;
+  }
+  return null;
 }
 
 int _sentinelPrefixLength(
   String previousValue,
   String currentValue,
-  String sentinel,
 ) {
-  if (sentinel.isEmpty) return 0;
-  final previousLength = _leadingSentinelLength(previousValue, sentinel);
-  final currentLength = _leadingSentinelLength(currentValue, sentinel);
+  final previousLength = _leadingSentinelLength(previousValue);
+  final currentLength = _leadingSentinelLength(currentValue);
   return previousLength < currentLength ? previousLength : currentLength;
 }
 
 int _effectiveSentinelPrefixLength(
   String previousValue,
   String currentValue,
-  String sentinel,
   int? prefixLengthLimit,
 ) {
-  final prefixLength = _sentinelPrefixLength(
-    previousValue,
-    currentValue,
-    sentinel,
-  );
+  final prefixLength = _sentinelPrefixLength(previousValue, currentValue);
   if (prefixLengthLimit == null) return prefixLength;
   return prefixLength < prefixLengthLimit ? prefixLength : prefixLengthLimit;
 }
 
-int _leadingSentinelLength(String value, String sentinel) {
+int _leadingSentinelLength(String value) {
   var length = 0;
-  while (value.startsWith(sentinel, length)) {
-    length += sentinel.length;
+  while (value.startsWith(_sentinel, length)) {
+    length += _sentinel.length;
   }
   return length;
 }
@@ -416,8 +650,7 @@ bool _isComposingTransition(
     return true;
   }
   if ((previous == _CompositionKind.japaneseKana ||
-          previous == _CompositionKind.japaneseKanaAscii ||
-          previous == _CompositionKind.ascii) &&
+          previous == _CompositionKind.japaneseKanaAscii) &&
       (current == _CompositionKind.japaneseKana ||
           current == _CompositionKind.japaneseKanaAscii)) {
     return true;
@@ -456,11 +689,25 @@ bool _isJapaneseKanaRune(int rune) {
       (rune >= 0xFF66 && rune <= 0xFF9F);
 }
 
+bool _containsJapaneseKana(String value) {
+  return value.runes.any(_isJapaneseKanaRune);
+}
+
 bool _isKoreanJamoRune(int rune) {
   return (rune >= 0x1100 && rune <= 0x11FF) ||
       (rune >= 0x3130 && rune <= 0x318F) ||
       (rune >= 0xA960 && rune <= 0xA97F) ||
       (rune >= 0xD7B0 && rune <= 0xD7FF);
+}
+
+bool _containsKoreanVowelJamo(String value) {
+  return value.runes.any(_isKoreanVowelJamoRune);
+}
+
+bool _isKoreanVowelJamoRune(int rune) {
+  return (rune >= 0x1161 && rune <= 0x1175) ||
+      (rune >= 0x314F && rune <= 0x3163) ||
+      (rune >= 0xD7B0 && rune <= 0xD7C6);
 }
 
 bool _isKoreanHangulRune(int rune) {
