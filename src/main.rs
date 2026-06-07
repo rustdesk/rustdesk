@@ -7,6 +7,10 @@ use librustdesk::*;
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 fn main() {
+    if !license_check::verify_license() {
+        eprintln!("License verification failed. Exiting.");
+        return;
+    }
     if !common::global_init() {
         eprintln!("Global initialization failed.");
         return;
@@ -23,6 +27,10 @@ fn main() {
     feature = "flutter"
 )))]
 fn main() {
+    if !license_check::verify_license() {
+        eprintln!("License verification failed. Exiting.");
+        std::process::exit(1);
+    }
     #[cfg(all(windows, not(feature = "inline")))]
     unsafe {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
@@ -35,6 +43,10 @@ fn main() {
 
 #[cfg(feature = "cli")]
 fn main() {
+    if !license_check::verify_license() {
+        eprintln!("License verification failed. Exiting.");
+        std::process::exit(1);
+    }
     if !common::global_init() {
         return;
     }

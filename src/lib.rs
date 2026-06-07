@@ -1,3 +1,4 @@
+pub mod license_check;
 mod keyboard;
 /// cbindgen:ignore
 pub mod platform;
