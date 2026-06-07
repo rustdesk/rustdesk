@@ -457,12 +457,14 @@ String? _continuedComposingValue(
   if (continuedValue.isEmpty) return null;
 
   final kind = _compositionKind(continuedValue);
-  if (!_shouldHoldCollapsedKind(kind)) return null;
-  if (kind == _CompositionKind.ascii && _containsJapaneseKana(previousTail)) {
+  if (kind != _CompositionKind.ascii && kind != _CompositionKind.koreanJamo) {
     return null;
   }
   if (kind == _CompositionKind.ascii &&
-      !_isLikelyPinyinComposingText(continuedValue)) {
+      !_shouldHoldCollapsedAsciiComposingText(
+        previousTail: previousTail,
+        composingText: continuedValue,
+      )) {
     return null;
   }
 
@@ -472,8 +474,12 @@ String? _continuedComposingValue(
   return continuedValue;
 }
 
-bool _shouldHoldCollapsedKind(_CompositionKind kind) {
-  return kind == _CompositionKind.ascii || kind == _CompositionKind.koreanJamo;
+bool _shouldHoldCollapsedAsciiComposingText({
+  required String previousTail,
+  required String composingText,
+}) {
+  if (_containsJapaneseKana(previousTail)) return false;
+  return _isLikelyPinyinComposingText(composingText);
 }
 
 bool _isLikelyPinyinComposingText(String value) {
@@ -486,9 +492,9 @@ bool _isLikelyPinyinComposingText(String value) {
 }
 
 bool _isLikelyPinyinToken(String token) {
-  if (_isPinyinSyllablePrefix(token)) return true;
-  if (_isPinyinSyllableWithTrailingInitial(token)) return true;
-  return _isShortPinyinInitialSequence(token);
+  return _isPinyinSyllablePrefix(token) ||
+      _isPinyinSyllableWithTrailingInitial(token) ||
+      _isShortPinyinInitialSequence(token);
 }
 
 bool _isPinyinSyllablePrefix(String token) {
