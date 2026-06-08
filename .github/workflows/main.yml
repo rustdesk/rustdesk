@@ -1,0 +1,17 @@
+name: Restore Tag
+
+on:
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  restore-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Fetch and Push Tag
+        run: |
+          git remote add upstream https://github.com/rustdesk/rustdesk.git
+          git fetch upstream --tags
+          git push origin 1.4.7
