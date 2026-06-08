@@ -1,16 +1,16 @@
 name: Restore Tag
 
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   restore-tag:
     runs-on: ubuntu-latest
     steps:
-      - name: CheckoutCode
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.CheckoutCode }}
 
       - name: Fetch and Push Tag
         run: |
