@@ -2919,12 +2919,12 @@ impl Connection {
                     }
                 }
                 Some(message::Union::MultiClipboards(_mcb)) => {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard_enabled() {
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(_mcb.clipboards, ClipboardSide::Host);
+                        #[cfg(target_os = "android")]
+                        crate::clipboard::handle_msg_multi_clipboards(_mcb);
                     }
-                    #[cfg(target_os = "android")]
-                    crate::clipboard::handle_msg_multi_clipboards(_mcb);
                 }
                 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
                 Some(message::Union::Cliprdr(clip)) => {
