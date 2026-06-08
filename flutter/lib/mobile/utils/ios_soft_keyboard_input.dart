@@ -144,34 +144,37 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
   int? sentinelPrefixLength,
   bool forceCommitComposingText = false,
 }) {
+  final normalizedCurrentValue = _normalizedShortenedKoreanHangulValue(
+    previousValue: previousValue,
+    currentValue: currentValue,
+    composingRange: composingRange,
+    sentinelPrefixLength: sentinelPrefixLength,
+  );
   final tails = _sentinelTails(
     previousValue,
-    currentValue,
+    normalizedCurrentValue,
     sentinelPrefixLength,
   );
-
   if (!forceCommitComposingText &&
       _shouldHoldComposingText(
-        currentValue,
+        normalizedCurrentValue,
         composingRange,
         previousComposingValue,
       )) {
+    final nextComposingValue = normalizedCurrentValue.substring(
+      composingRange.start,
+      composingRange.end,
+    );
     return IOSSoftKeyboardInputResult(
       nextValue: previousValue,
-      nextComposingValue: currentValue.substring(
-        composingRange.start,
-        composingRange.end,
-      ),
+      nextComposingValue: nextComposingValue,
       actions: const [],
     );
   }
 
   final koreanComposingResult = _invalidKoreanComposingResult(
     previousValue: previousValue,
-    currentValue: currentValue,
-    previousTail: tails.previous,
-    currentTail: tails.current,
-    previousComposingValue: previousComposingValue,
+    currentValue: normalizedCurrentValue,
     previousControllerText: previousControllerText,
     sentinelPrefixLength: sentinelPrefixLength,
   );
@@ -192,17 +195,42 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     );
   }
 
-  return IOSSoftKeyboardInputResult(
-    nextValue: currentValue,
-    nextComposingValue: forceCommitComposingText
-        ? null
-        : _sentKoreanComposingValue(
-            previousTail: tails.previous,
-            currentTail: tails.current,
-            previousComposingValue: previousComposingValue,
-          ),
+  final result = IOSSoftKeyboardInputResult(
+    nextValue: normalizedCurrentValue,
+    nextComposingValue: null,
     actions: _inputActionsForTailChange(tails.previous, tails.current),
   );
+  return result;
+}
+
+String _normalizedShortenedKoreanHangulValue({
+  required String previousValue,
+  required String currentValue,
+  required TextRange composingRange,
+  required int? sentinelPrefixLength,
+}) {
+  if (sentinelPrefixLength == null) return currentValue;
+  if (_isValidComposingRange(currentValue, composingRange)) return currentValue;
+
+  final previousPrefixLength = _leadingSentinelLength(previousValue);
+  final currentPrefixLength = _leadingSentinelLength(currentValue);
+  if (previousPrefixLength < sentinelPrefixLength) return currentValue;
+  if (currentPrefixLength <= 0) return currentValue;
+  if (currentValue.length == currentPrefixLength) return currentValue;
+
+  final currentTail = currentValue.substring(currentPrefixLength);
+  if (_compositionKind(currentTail) != _CompositionKind.koreanHangul) {
+    return currentValue;
+  }
+  if (currentPrefixLength > sentinelPrefixLength) {
+    if (previousPrefixLength == sentinelPrefixLength &&
+        previousValue.length == previousPrefixLength) {
+      return '${_sentinel * sentinelPrefixLength}$currentTail';
+    }
+    return currentValue;
+  }
+  if (currentPrefixLength == sentinelPrefixLength) return currentValue;
+  return '${_sentinel * sentinelPrefixLength}$currentTail';
 }
 
 ({String previous, String current}) _sentinelTails(
@@ -313,6 +341,10 @@ bool _shouldHoldComposingText(
   final composingValue = value.substring(range.start, range.end);
   final kind = _compositionKind(composingValue);
   if (kind == _CompositionKind.committedText) return false;
+  if (kind == _CompositionKind.koreanJamo ||
+      kind == _CompositionKind.koreanHangul) {
+    return false;
+  }
 
   if (previousComposingValue == null || previousComposingValue.isEmpty) {
     return true;
@@ -324,46 +356,9 @@ bool _shouldHoldComposingText(
 IOSSoftKeyboardInputResult? _invalidKoreanComposingResult({
   required String previousValue,
   required String currentValue,
-  required String previousTail,
-  required String currentTail,
-  required String? previousComposingValue,
   required String? previousControllerText,
   required int? sentinelPrefixLength,
 }) {
-  final holdValue = _heldKoreanJamoValue(
-    currentTail,
-    previousComposingValue,
-  );
-  if (holdValue != null) {
-    final committedTail = currentTail.substring(
-      0,
-      currentTail.length - holdValue.length,
-    );
-    if (committedTail.isEmpty) {
-      return IOSSoftKeyboardInputResult(
-        nextValue: previousValue,
-        nextComposingValue: holdValue,
-        actions: const [],
-      );
-    }
-    return IOSSoftKeyboardInputResult(
-      nextValue:
-          currentValue.substring(0, currentValue.length - holdValue.length),
-      nextComposingValue: holdValue,
-      actions: _inputActionsForTailChange(previousTail, committedTail),
-    );
-  }
-
-  if (previousComposingValue == null || previousComposingValue.isEmpty) {
-    return null;
-  }
-
-  final previousKind = _compositionKind(previousComposingValue);
-  if (previousKind != _CompositionKind.koreanJamo &&
-      previousKind != _CompositionKind.koreanHangul) {
-    return null;
-  }
-
   if (sentinelPrefixLength == null) {
     return null;
   }
@@ -372,63 +367,22 @@ IOSSoftKeyboardInputResult? _invalidKoreanComposingResult({
   if (currentValue.length != currentPrefixLength) {
     return null;
   }
-  if (currentPrefixLength < sentinelPrefixLength) {
+
+  final isShortened = currentPrefixLength < sentinelPrefixLength;
+  final isRestoredAfterShortened =
+      currentPrefixLength == sentinelPrefixLength &&
+          _isShortenedSentinelOnlyValue(
+              previousControllerText, sentinelPrefixLength);
+  if (!isShortened && !isRestoredAfterShortened) return null;
+
+  final previousSentinelTail =
+      _tailAfterPrefix(previousValue, sentinelPrefixLength);
+  if (_endsWithKoreanText(previousSentinelTail)) {
     return IOSSoftKeyboardInputResult(
       nextValue: previousValue,
-      nextComposingValue: previousComposingValue,
+      nextComposingValue: null,
       actions: const [],
     );
-  }
-  if (currentPrefixLength == sentinelPrefixLength &&
-      _isShortenedSentinelOnlyValue(
-          previousControllerText, sentinelPrefixLength)) {
-    return IOSSoftKeyboardInputResult(
-      nextValue: previousValue,
-      nextComposingValue: previousComposingValue,
-      actions: const [],
-    );
-  }
-
-  return null;
-}
-
-String? _heldKoreanJamoValue(
-  String currentTail,
-  String? previousComposingValue,
-) {
-  if (currentTail.isEmpty ||
-      _compositionKind(currentTail) != _CompositionKind.koreanJamo) {
-    return null;
-  }
-  if (_containsKoreanVowelJamo(currentTail)) {
-    return currentTail;
-  }
-  if (previousComposingValue == null || previousComposingValue.isEmpty) {
-    return currentTail;
-  }
-  return String.fromCharCode(currentTail.runes.last);
-}
-
-String? _sentKoreanComposingValue({
-  required String previousTail,
-  required String currentTail,
-  required String? previousComposingValue,
-}) {
-  if (previousComposingValue == null || previousComposingValue.isEmpty) {
-    return null;
-  }
-
-  if (_compositionKind(currentTail) != _CompositionKind.koreanHangul) {
-    return null;
-  }
-
-  final previousKind = _compositionKind(previousComposingValue);
-  if (previousKind == _CompositionKind.koreanJamo) {
-    return currentTail;
-  }
-  if (previousKind == _CompositionKind.koreanHangul &&
-      previousTail == previousComposingValue) {
-    return currentTail;
   }
 
   return null;
@@ -457,14 +411,13 @@ String? _continuedComposingValue(
   if (continuedValue.isEmpty) return null;
 
   final kind = _compositionKind(continuedValue);
-  if (kind != _CompositionKind.ascii && kind != _CompositionKind.koreanJamo) {
+  if (kind != _CompositionKind.ascii) {
     return null;
   }
-  if (kind == _CompositionKind.ascii &&
-      !_shouldHoldCollapsedAsciiComposingText(
-        previousTail: previousTail,
-        composingText: continuedValue,
-      )) {
+  if (!_shouldHoldCollapsedAsciiComposingText(
+    previousTail: previousTail,
+    composingText: continuedValue,
+  )) {
     return null;
   }
 
@@ -706,14 +659,10 @@ bool _isKoreanJamoRune(int rune) {
       (rune >= 0xD7B0 && rune <= 0xD7FF);
 }
 
-bool _containsKoreanVowelJamo(String value) {
-  return value.runes.any(_isKoreanVowelJamoRune);
-}
-
-bool _isKoreanVowelJamoRune(int rune) {
-  return (rune >= 0x1161 && rune <= 0x1175) ||
-      (rune >= 0x314F && rune <= 0x3163) ||
-      (rune >= 0xD7B0 && rune <= 0xD7C6);
+bool _endsWithKoreanText(String value) {
+  if (value.isEmpty) return false;
+  final lastRune = value.runes.last;
+  return _isKoreanJamoRune(lastRune) || _isKoreanHangulRune(lastRune);
 }
 
 bool _isKoreanHangulRune(int rune) {
