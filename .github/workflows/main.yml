@@ -7,8 +7,10 @@ jobs:
   restore-tag:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: CheckoutCode
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT }}
 
       - name: Fetch and Push Tag
         run: |
