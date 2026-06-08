@@ -155,6 +155,16 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     normalizedCurrentValue,
     sentinelPrefixLength,
   );
+  final partialPinyinCommitResult = _partialPinyinCommitResult(
+    currentValue: normalizedCurrentValue,
+    composingRange: composingRange,
+    previousComposingValue: previousComposingValue,
+    tails: tails,
+  );
+  if (!forceCommitComposingText && partialPinyinCommitResult != null) {
+    return partialPinyinCommitResult;
+  }
+
   if (!forceCommitComposingText &&
       _shouldHoldComposingText(
         normalizedCurrentValue,
@@ -201,6 +211,66 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     actions: _inputActionsForTailChange(tails.previous, tails.current),
   );
   return result;
+}
+
+IOSSoftKeyboardInputResult? _partialPinyinCommitResult({
+  required String currentValue,
+  required TextRange composingRange,
+  required String? previousComposingValue,
+  required ({String previous, String current}) tails,
+}) {
+  if (!_isHeldPinyinComposingText(previousComposingValue)) return null;
+  if (!tails.current.startsWith(tails.previous)) return null;
+
+  final heldText = _heldPinyinTextAfterPartialCommit(
+    currentValue: currentValue,
+    composingRange: composingRange,
+    previousComposingValue: previousComposingValue!,
+    previousTail: tails.previous,
+    currentTail: tails.current,
+  );
+  if (heldText == null || !tails.current.endsWith(heldText)) return null;
+
+  final committedTail = tails.current.substring(
+    0,
+    tails.current.length - heldText.length,
+  );
+  final nextValue = currentValue.substring(
+    0,
+    currentValue.length - heldText.length,
+  );
+  return IOSSoftKeyboardInputResult(
+    nextValue: nextValue,
+    nextComposingValue: heldText,
+    actions: _inputActionsForTailChange(tails.previous, committedTail),
+  );
+}
+
+String? _heldPinyinTextAfterPartialCommit({
+  required String currentValue,
+  required TextRange composingRange,
+  required String previousComposingValue,
+  required String previousTail,
+  required String currentTail,
+}) {
+  if (_isValidComposingRange(currentValue, composingRange) &&
+      composingRange.end == currentValue.length) {
+    final composingText = currentValue.substring(
+      composingRange.start,
+      composingRange.end,
+    );
+    if (_isHeldPinyinComposingText(composingText)) return composingText;
+    return _pinyinSuffixAfterPartialCommit(
+      value: composingText,
+      previousComposingValue: previousComposingValue,
+    );
+  }
+
+  final delta = currentTail.substring(previousTail.length);
+  return _pinyinSuffixAfterPartialCommit(
+    value: delta,
+    previousComposingValue: previousComposingValue,
+  );
 }
 
 String _normalizedShortenedKoreanHangulValue({
@@ -435,6 +505,50 @@ bool _shouldHoldCollapsedAsciiComposingText({
   return _isLikelyPinyinComposingText(composingText);
 }
 
+bool _isHeldPinyinComposingText(String? value) {
+  if (value == null || value.isEmpty) return false;
+  if (_compositionKind(value) != _CompositionKind.ascii) return false;
+  return _isLikelyPinyinComposingText(value);
+}
+
+String? _pinyinSuffixAfterPartialCommit({
+  required String value,
+  required String previousComposingValue,
+}) {
+  final previous = _normalizedPinyinComposingText(previousComposingValue);
+  if (previous.isEmpty) return null;
+
+  for (final offset in _runeBoundaryOffsets(value)) {
+    final committedPrefix = value.substring(0, offset);
+    if (!_containsNonAscii(committedPrefix)) continue;
+
+    final suffix = value.substring(offset);
+    if (!_isHeldPinyinComposingText(suffix)) continue;
+    if (!previous.endsWith(_normalizedPinyinComposingText(suffix))) continue;
+    return suffix;
+  }
+  return null;
+}
+
+Iterable<int> _runeBoundaryOffsets(String value) sync* {
+  var offset = 0;
+  for (final rune in value.runes) {
+    offset += String.fromCharCode(rune).length;
+    if (offset < value.length) yield offset;
+  }
+}
+
+bool _containsNonAscii(String value) {
+  return value.runes.any((rune) => rune > 0x7F);
+}
+
+String _normalizedPinyinComposingText(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll(_pinyinMarkedTextSpace, '')
+      .replaceAll(RegExp(r'\s+'), '');
+}
+
 bool _isLikelyPinyinComposingText(String value) {
   final normalized =
       value.toLowerCase().replaceAll(_pinyinMarkedTextSpace, ' ').trim();
@@ -446,8 +560,22 @@ bool _isLikelyPinyinComposingText(String value) {
 
 bool _isLikelyPinyinToken(String token) {
   return _isPinyinSyllablePrefix(token) ||
+      _isPinyinSyllableSequencePrefix(token) ||
       _isPinyinSyllableWithTrailingInitial(token) ||
       _isShortPinyinInitialSequence(token);
+}
+
+bool _isPinyinSyllableSequencePrefix(String token) {
+  for (var index = 1; index < token.length; index++) {
+    if (!_isCompletePinyinSyllable(token.substring(0, index))) continue;
+
+    final remaining = token.substring(index);
+    if (_isPinyinSyllablePrefix(remaining) ||
+        _isPinyinSyllableSequencePrefix(remaining)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool _isPinyinSyllablePrefix(String token) {

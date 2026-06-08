@@ -894,6 +894,96 @@ void main() {
       expect(result.actions, isEmpty);
     });
 
+    test('sends partial pinyin commits while holding the remaining spelling',
+        () {
+      final session = _IOSSoftKeyboardInputSession('111');
+
+      var result = session.diff(
+        '111shenmeqingkuang',
+        const TextRange(start: 3, end: 18),
+      );
+      expect(result.nextValue, '111');
+      expect(result.nextComposingValue, 'shenmeqingkuang');
+      expect(result.actions, isEmpty);
+
+      result = session.diff('111什么qing\u2006kuang');
+      expect(result.nextValue, '111什么');
+      expect(result.nextComposingValue, 'qing\u2006kuang');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('什么'),
+      ]);
+
+      result = session.diff('111什么清苦ang');
+      expect(result.nextValue, '111什么清苦');
+      expect(result.nextComposingValue, 'ang');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('清苦'),
+      ]);
+    });
+
+    test('sends partial pinyin commit when remaining spelling is composing',
+        () {
+      final session = _IOSSoftKeyboardInputSession('111');
+
+      var result = session.diff(
+        '111shenmeqingkuang',
+        const TextRange(start: 3, end: 18),
+      );
+      expect(result.actions, isEmpty);
+
+      result = session.diff(
+        '111什么qing\u2006kuang',
+        const TextRange(start: 5, end: 15),
+      );
+
+      expect(result.nextValue, '111什么');
+      expect(result.nextComposingValue, 'qing\u2006kuang');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('什么'),
+      ]);
+    });
+
+    test('sends partial pinyin commit when iOS marks the whole mixed text',
+        () {
+      final session = _IOSSoftKeyboardInputSession('111');
+
+      var result = session.diff(
+        '111shen\u2006me\u2006qing\u2006kuang',
+        const TextRange(start: 3, end: 21),
+      );
+      expect(result.nextValue, '111');
+      expect(result.nextComposingValue, 'shen\u2006me\u2006qing\u2006kuang');
+      expect(result.actions, isEmpty);
+
+      result = session.diff(
+        '111什么qingkuang',
+        const TextRange(start: 3, end: 14),
+      );
+      expect(result.nextValue, '111什么');
+      expect(result.nextComposingValue, 'qingkuang');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('什么'),
+      ]);
+
+      result = session.diff(
+        '111什么qing\u2006kuang',
+        const TextRange(start: 3, end: 15),
+      );
+      expect(result.nextValue, '111什么');
+      expect(result.nextComposingValue, 'qing\u2006kuang');
+      expect(result.actions, isEmpty);
+
+      result = session.diff(
+        '111什么清苦ang',
+        const TextRange(start: 3, end: 10),
+      );
+      expect(result.nextValue, '111什么清苦');
+      expect(result.nextComposingValue, 'ang');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('清苦'),
+      ]);
+    });
+
     test('sends committed bopomofo candidate text', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '111',
