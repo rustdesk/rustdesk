@@ -484,10 +484,8 @@ String? _continuedComposingValue(
   if (kind != _CompositionKind.ascii) {
     return null;
   }
-  if (!_shouldHoldCollapsedAsciiComposingText(
-    previousTail: previousTail,
-    composingText: continuedValue,
-  )) {
+  if (_containsJapaneseKana(previousTail) ||
+      !_isLikelyPinyinComposingText(continuedValue)) {
     return null;
   }
 
@@ -495,14 +493,6 @@ String? _continuedComposingValue(
   if (!_isComposingTransition(previousKind, kind)) return null;
 
   return continuedValue;
-}
-
-bool _shouldHoldCollapsedAsciiComposingText({
-  required String previousTail,
-  required String composingText,
-}) {
-  if (_containsJapaneseKana(previousTail)) return false;
-  return _isLikelyPinyinComposingText(composingText);
 }
 
 bool _isHeldPinyinComposingText(String? value) {
@@ -561,7 +551,6 @@ bool _isLikelyPinyinComposingText(String value) {
 bool _isLikelyPinyinToken(String token) {
   return _isPinyinSyllablePrefix(token) ||
       _isPinyinSyllableSequencePrefix(token) ||
-      _isPinyinSyllableWithTrailingInitial(token) ||
       _isShortPinyinInitialSequence(token);
 }
 
@@ -570,7 +559,7 @@ bool _isPinyinSyllableSequencePrefix(String token) {
     if (!_isCompletePinyinSyllable(token.substring(0, index))) continue;
 
     final remaining = token.substring(index);
-    if (_isPinyinSyllablePrefix(remaining) ||
+    if (_isPinyinSyllablePrefixWithFinal(remaining) ||
         _isPinyinSyllableSequencePrefix(remaining)) {
       return true;
     }
@@ -591,16 +580,16 @@ bool _isPinyinSyllablePrefix(String token) {
   return _pinyinFinals.any((finalValue) => finalValue.startsWith(token));
 }
 
-bool _isPinyinSyllableWithTrailingInitial(String token) {
-  for (var index = 1; index < token.length; index++) {
-    if (!_isCompletePinyinSyllable(token.substring(0, index))) continue;
+bool _isPinyinSyllablePrefixWithFinal(String token) {
+  for (final initial in _pinyinInitials) {
+    if (!token.startsWith(initial)) continue;
 
-    final trailing = token.substring(index);
-    if (_pinyinInitials.any((initial) => initial.startsWith(trailing))) {
-      return true;
-    }
+    final finalPrefix = token.substring(initial.length);
+    if (finalPrefix.isEmpty) return false;
+    return _pinyinFinals
+        .any((finalValue) => finalValue.startsWith(finalPrefix));
   }
-  return false;
+  return _pinyinFinals.any((finalValue) => finalValue.startsWith(token));
 }
 
 bool _isCompletePinyinSyllable(String token) {

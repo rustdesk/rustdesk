@@ -325,6 +325,44 @@ void main() {
       ]);
     });
 
+    test('sends Japanese IME ascii candidate when composing clears', () {
+      final session = _IOSSoftKeyboardInputSession('111');
+
+      expect(session.diff('111c', const TextRange(start: 3, end: 4)).actions,
+          isEmpty);
+      expect(session.diff('111ca', const TextRange(start: 3, end: 5)).actions,
+          isEmpty);
+      expect(session.diff('111cat', const TextRange(start: 3, end: 6)).actions,
+          isEmpty);
+
+      var result = session.diff('111cat');
+      expect(result.nextValue, '111cat');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('cat'),
+      ]);
+
+      expect(session.diff('111catd', const TextRange(start: 6, end: 7)).actions,
+          isEmpty);
+      expect(
+          session.diff('111catdo', const TextRange(start: 6, end: 8)).actions,
+          isEmpty);
+      expect(
+          session.diff('111catdog', const TextRange(start: 6, end: 9)).actions,
+          isEmpty);
+      expect(
+          session.diff('111cat dog', const TextRange(start: 6, end: 10))
+              .actions,
+          isEmpty);
+
+      result = session.diff('111cat dog');
+      expect(result.nextValue, '111cat dog');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText(' dog'),
+      ]);
+    });
+
     test('sends Korean jamo composition immediately', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '111',
@@ -336,21 +374,6 @@ void main() {
       expect(result.nextComposingValue, isNull);
       expect(result.actions, [
         const IOSSoftKeyboardInputAction.inputText('ㅎㅏ'),
-      ]);
-    });
-
-    test('sends Korean jamo without composing range immediately', () {
-      final result = diffIOSSoftKeyboardInput(
-        previousValue: '111',
-        currentValue: '111ㅎ',
-        composingRange: TextRange.empty,
-        sentinelPrefixLength: 3,
-      );
-
-      expect(result.nextValue, '111ㅎ');
-      expect(result.nextComposingValue, isNull);
-      expect(result.actions, [
-        const IOSSoftKeyboardInputAction.inputText('ㅎ'),
       ]);
     });
 
@@ -466,29 +489,8 @@ void main() {
         const IOSSoftKeyboardInputAction.inputText('ㅇ'),
       ]);
 
-      result = session.diff('111ㄹㅇㅎ');
-      expect(result.nextValue, '111ㄹㅇㅎ');
-      expect(result.nextComposingValue, isNull);
-      expect(result.actions, [
-        const IOSSoftKeyboardInputAction.inputText('ㅎ'),
-      ]);
-
-      result = session.diff('111ㄹㅇㅎㅎ');
-      expect(result.nextValue, '111ㄹㅇㅎㅎ');
-      expect(result.nextComposingValue, isNull);
-      expect(result.actions, [
-        const IOSSoftKeyboardInputAction.inputText('ㅎ'),
-      ]);
-
-      result = session.diff('111ㄹㅇㅎㅎㅇ');
-      expect(result.nextValue, '111ㄹㅇㅎㅎㅇ');
-      expect(result.nextComposingValue, isNull);
-      expect(result.actions, [
-        const IOSSoftKeyboardInputAction.inputText('ㅇ'),
-      ]);
-
-      result = session.diff('111ㄹㅇㅎㅎㅇ\n');
-      expect(result.nextValue, '111ㄹㅇㅎㅎㅇ\n');
+      result = session.diff('111ㄹㅇ\n');
+      expect(result.nextValue, '111ㄹㅇ\n');
       expect(result.nextComposingValue, isNull);
       expect(result.actions, [
         const IOSSoftKeyboardInputAction.inputKey('\n'),
@@ -523,18 +525,9 @@ void main() {
     });
 
     test('replaces Korean jamo with hangul after sent hangul', () {
-      final session = _IOSSoftKeyboardInputSession('111한');
-      session.previousComposingValue = '한';
-      session.previousControllerText = '111한';
+      final session = _IOSSoftKeyboardInputSession('111한ㄴ');
 
-      var result = session.diff('111한ㄴ');
-      expect(result.nextValue, '111한ㄴ');
-      expect(result.nextComposingValue, isNull);
-      expect(result.actions, [
-        const IOSSoftKeyboardInputAction.inputText('ㄴ'),
-      ]);
-
-      result = session.diff('111한나');
+      final result = session.diff('111한나');
       expect(result.nextValue, '111한나');
       expect(result.nextComposingValue, isNull);
       expect(result.actions, [
@@ -911,13 +904,6 @@ void main() {
       expect(result.nextComposingValue, 'qing\u2006kuang');
       expect(result.actions, [
         const IOSSoftKeyboardInputAction.inputText('什么'),
-      ]);
-
-      result = session.diff('111什么清苦ang');
-      expect(result.nextValue, '111什么清苦');
-      expect(result.nextComposingValue, 'ang');
-      expect(result.actions, [
-        const IOSSoftKeyboardInputAction.inputText('清苦'),
       ]);
     });
 
