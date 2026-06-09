@@ -175,13 +175,16 @@ impl SessionPermissionConfig {
         *self.server_clipboard_enabled.read().unwrap()
             && *self.server_keyboard_enabled.read().unwrap()
             && !self.lc.read().unwrap().disable_clipboard.v
+            && !self.lc.read().unwrap().view_only.v
     }
 
     #[cfg(feature = "unix-file-copy-paste")]
     pub fn is_file_clipboard_required(&self) -> bool {
+        let lc = self.lc.read().unwrap();
         *self.server_keyboard_enabled.read().unwrap()
             && *self.server_file_transfer_enabled.read().unwrap()
-            && self.lc.read().unwrap().enable_file_copy_paste.v
+            && lc.enable_file_copy_paste.v
+            && !lc.view_only.v
     }
 }
 
@@ -411,13 +414,16 @@ impl<T: InvokeUiSession> Session<T> {
         *self.server_clipboard_enabled.read().unwrap()
             && *self.server_keyboard_enabled.read().unwrap()
             && !self.lc.read().unwrap().disable_clipboard.v
+            && !self.lc.read().unwrap().view_only.v
     }
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     pub fn is_file_clipboard_required(&self) -> bool {
+        let lc = self.lc.read().unwrap();
         *self.server_keyboard_enabled.read().unwrap()
             && *self.server_file_transfer_enabled.read().unwrap()
-            && self.lc.read().unwrap().enable_file_copy_paste.v
+            && lc.enable_file_copy_paste.v
+            && !lc.view_only.v
     }
 
     #[cfg(feature = "flutter")]
