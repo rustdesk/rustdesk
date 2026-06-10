@@ -114,29 +114,6 @@ class IOSSoftKeyboardInputResult {
   });
 }
 
-bool shouldForceCommitIOSComposingText({
-  required String? previousControllerText,
-  required TextRange? previousComposingRange,
-  required TextEditingValue currentValue,
-}) {
-  final previousRange = previousComposingRange;
-  if (previousControllerText == null || previousRange == null) return false;
-  if (previousControllerText != currentValue.text) return false;
-  if (!_isValidComposingRange(previousControllerText, previousRange)) {
-    return false;
-  }
-  if (_isValidComposingRange(currentValue.text, currentValue.composing)) {
-    return false;
-  }
-
-  final previousComposingText = previousControllerText.substring(
-    previousRange.start,
-    previousRange.end,
-  );
-  final kind = _compositionKind(previousComposingText);
-  return kind != _CompositionKind.ascii && kind != _CompositionKind.koreanJamo;
-}
-
 IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
   required String previousValue,
   required String currentValue,
@@ -145,7 +122,6 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
   String? previousControllerText,
   TextRange? previousControllerComposingRange,
   int? sentinelPrefixLength,
-  bool forceCommitComposingText = false,
 }) {
   final normalizedCurrentValue = _normalizedShortenedKoreanHangulValue(
     previousValue: previousValue,
@@ -164,7 +140,7 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     previousComposingValue: previousComposingValue,
     tails: tails,
   );
-  if (!forceCommitComposingText && partialPinyinCommitResult != null) {
+  if (partialPinyinCommitResult != null) {
     return partialPinyinCommitResult;
   }
   final partialBopomofoCommitResult = _partialBopomofoCommitResult(
@@ -173,16 +149,15 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     previousComposingValue: previousComposingValue,
     tails: tails,
   );
-  if (!forceCommitComposingText && partialBopomofoCommitResult != null) {
+  if (partialBopomofoCommitResult != null) {
     return partialBopomofoCommitResult;
   }
 
-  if (!forceCommitComposingText &&
-      _shouldHoldComposingText(
-        normalizedCurrentValue,
-        composingRange,
-        previousComposingValue,
-      )) {
+  if (_shouldHoldComposingText(
+    normalizedCurrentValue,
+    composingRange,
+    previousComposingValue,
+  )) {
     final nextComposingValue = normalizedCurrentValue.substring(
       composingRange.start,
       composingRange.end,
@@ -200,7 +175,7 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     previousControllerText: previousControllerText,
     sentinelPrefixLength: sentinelPrefixLength,
   );
-  if (!forceCommitComposingText && koreanComposingResult != null) {
+  if (koreanComposingResult != null) {
     return koreanComposingResult;
   }
 

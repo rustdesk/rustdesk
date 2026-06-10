@@ -1179,22 +1179,6 @@ void main() {
       ]);
     });
 
-    test('sends committed stroke text if composing range is retained', () {
-      final result = diffIOSSoftKeyboardInput(
-        previousValue: '111',
-        currentValue: '111一',
-        composingRange: const TextRange(start: 3, end: 4),
-        previousComposingValue: '一',
-        forceCommitComposingText: true,
-      );
-
-      expect(result.nextValue, '111一');
-      expect(result.nextComposingValue, isNull);
-      expect(result.actions, [
-        const IOSSoftKeyboardInputAction.inputText('一'),
-      ]);
-    });
-
     test('keeps emoji replacement on rune boundaries', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '111😀',
@@ -1223,92 +1207,6 @@ void main() {
       expect(result.actions, [
         const IOSSoftKeyboardInputAction.backspace(),
       ]);
-    });
-  });
-
-  group('shouldForceCommitIOSComposingText', () {
-    test('forces commit when composing collapses without text change', () {
-      expect(
-        shouldForceCommitIOSComposingText(
-          previousControllerText: '111一',
-          previousComposingRange: const TextRange(start: 3, end: 4),
-          currentValue: const TextEditingValue(
-            text: '111一',
-            composing: TextRange.collapsed(4),
-          ),
-        ),
-        isTrue,
-      );
-    });
-
-    test('does not force commit while composing range remains valid', () {
-      expect(
-        shouldForceCommitIOSComposingText(
-          previousControllerText: '111一丨',
-          previousComposingRange: const TextRange(start: 3, end: 4),
-          currentValue: const TextEditingValue(
-            text: '111一丨',
-            composing: TextRange(start: 3, end: 5),
-          ),
-        ),
-        isFalse,
-      );
-    });
-
-    test('does not force commit when ascii composing collapses', () {
-      expect(
-        shouldForceCommitIOSComposingText(
-          previousControllerText: '111ni',
-          previousComposingRange: const TextRange(start: 3, end: 5),
-          currentValue: const TextEditingValue(
-            text: '111ni',
-            composing: TextRange.empty,
-          ),
-        ),
-        isFalse,
-      );
-    });
-
-    test('does not force commit when Korean jamo composing collapses', () {
-      expect(
-        shouldForceCommitIOSComposingText(
-          previousControllerText: '111ㅎ',
-          previousComposingRange: const TextRange(start: 3, end: 4),
-          currentValue: const TextEditingValue(
-            text: '111ㅎ',
-            composing: TextRange.empty,
-          ),
-        ),
-        isFalse,
-      );
-    });
-
-    test('does not force commit when text changes', () {
-      expect(
-        shouldForceCommitIOSComposingText(
-          previousControllerText: '111一',
-          previousComposingRange: const TextRange(start: 3, end: 4),
-          currentValue: const TextEditingValue(
-            text: '111一丨',
-            composing: TextRange(start: 3, end: 5),
-          ),
-        ),
-        isFalse,
-      );
-    });
-
-    test('does not force commit without previous composing state', () {
-      expect(
-        shouldForceCommitIOSComposingText(
-          previousControllerText: null,
-          previousComposingRange: null,
-          currentValue: const TextEditingValue(
-            text: '111一',
-            composing: TextRange.collapsed(4),
-          ),
-        ),
-        isFalse,
-      );
     });
   });
 }
