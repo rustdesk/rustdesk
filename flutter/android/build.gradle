@@ -1,7 +1,7 @@
 allprojects {
     repositories {
         google()
-        jcenter()
+        mavenCentral()  // Replace jcenter with mavenCentral
         maven { url 'https://jitpack.io' }
     }
 }
@@ -13,6 +13,9 @@ subprojects {
 subprojects {
     project.evaluationDependsOn(':app')
 }
+
+// Add explicit Kotlin version
+ext.kotlin_version = '1.9.10'
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
