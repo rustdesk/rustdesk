@@ -191,6 +191,11 @@ percent-encoding = {version = "2.3", optional = true}
 once_cell = {version = "1.18", optional = true}
 nix = { version = "0.29", features = ["term", "process"]}
 gtk = "0.18"
+wayland-client = "0.31"
+# `client_system` provides the libwayland-backed Backend with
+# `from_foreign_display`, used to wrap GTK's existing wl_display.
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
 termios = "0.3"
 terminfo = "0.8"
 winit = "0.30"
