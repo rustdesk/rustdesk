@@ -78,11 +78,27 @@ pub fn get_asio_input_devices() -> Vec<String> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
     let mut out = Vec::new();
-    let Ok(host) = cpal::host_from_id(cpal::HostId::Asio) else {
-        return out;
+    let host = match cpal::host_from_id(cpal::HostId::Asio) {
+        Ok(host) => host,
+        Err(err) => {
+            log::debug!(
+                "Failed to get ASIO audio host for input devices ({}): {:?}",
+                ASIO_DEVICE_SUFFIX,
+                err
+            );
+            return out;
+        }
     };
-    let Ok(devices) = host.devices() else {
-        return out;
+    let devices = match host.devices() {
+        Ok(devices) => devices,
+        Err(err) => {
+            log::debug!(
+                "Failed to enumerate ASIO audio input devices ({}): {:?}",
+                ASIO_DEVICE_SUFFIX,
+                err
+            );
+            return out;
+        }
     };
     for device in devices {
         if device.default_input_config().is_err() {
@@ -352,7 +368,14 @@ mod cpal_impl {
             .devices()
             .with_context(|| "Failed to get ASIO audio devices")?
         {
-            if device.name().unwrap_or_default() != asio_input {
+            let device_name = match device.name() {
+                Ok(name) => name,
+                Err(err) => {
+                    log::debug!("Failed to get ASIO audio input device name: {:?}", err);
+                    continue;
+                }
+            };
+            if device_name != asio_input {
                 continue;
             }
             log::info!("ASIO input device: {}", asio_input);
