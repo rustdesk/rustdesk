@@ -1095,6 +1095,13 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & MOUSE_TYPE_MASK;
 
+    if evt_type == MOUSE_TYPE_MOVE {
+        // Switching back to absolute movement implicitly disables relative mouse
+        // mode. Update the state even when the event is dropped below, so that
+        // cursor/whiteboard rendering is not kept suppressed for this connection.
+        set_relative_mouse_active(conn, false);
+    }
+
     // Always let button-release events through, so that a button pressed by the
     // peer is not left stuck down when the controlled side user takes priority.
     if evt_type != MOUSE_TYPE_UP && !active_mouse_(conn) {
@@ -1134,8 +1141,6 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     }
     match evt_type {
         MOUSE_TYPE_MOVE => {
-            // Switching back to absolute movement implicitly disables relative mouse mode.
-            set_relative_mouse_active(conn, false);
             en.mouse_move_to(evt.x, evt.y);
             record_peer_input_pos(evt.x, evt.y);
             *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
