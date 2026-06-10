@@ -20,9 +20,10 @@ use scrap::wayland::pipewire::RDP_SESSION_INFO;
 #[cfg(target_os = "linux")]
 use std::sync::mpsc;
 use std::{
+    collections::VecDeque,
     convert::TryFrom,
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicI64, Ordering},
     thread,
     time::{self, Duration, Instant},
 };
@@ -496,6 +497,92 @@ const MOUSE_ACTIVE_DISTANCE: i32 = 5;
 
 static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
 
+// https://github.com/rustdesk/rustdesk/issues/40
+// Mouse move events injected for the peer are kept for this long, so that the
+// cursor position sampled by the recording thread can be attributed to the peer
+// even when the system applies injected events with a delay (e.g. async event
+// posting on macOS).
+const PEER_INPUT_POS_KEEP_DURATION: Duration = Duration::from_millis(1_000);
+// Hard cap of kept injected positions, to bound memory under high event rates.
+const PEER_INPUT_POS_CAP: usize = 256;
+// Default is enabled ("enable-" options are true unless set to "N").
+const OPTION_ENABLE_HOST_MOUSE_PRIORITY: &str = "enable-host-mouse-priority";
+
+// Millisecond timestamp (`get_time()`) until which the controlled side user is
+// considered to be actively using the mouse, so peer mouse events are dropped.
+static HOST_MOUSE_ACTIVE_UNTIL: AtomicI64 = AtomicI64::new(0);
+
+lazy_static::lazy_static! {
+    // Positions of recently injected peer mouse events, newest at the back.
+    static ref RECENT_PEER_INPUT_POS: Mutex<VecDeque<(Instant, (i32, i32))>> = Default::default();
+}
+
+#[inline]
+fn host_mouse_priority_enabled() -> bool {
+    hbb_common::config::option2bool(
+        OPTION_ENABLE_HOST_MOUSE_PRIORITY,
+        &hbb_common::config::Config::get_option(OPTION_ENABLE_HOST_MOUSE_PRIORITY),
+    )
+}
+
+fn record_peer_input_pos(x: i32, y: i32) {
+    let mut lock = RECENT_PEER_INPUT_POS.lock().unwrap();
+    while lock.len() >= PEER_INPUT_POS_CAP {
+        lock.pop_front();
+    }
+    lock.push_back((Instant::now(), (x, y)));
+}
+
+#[inline]
+fn pos_matches_recent_peer_input(
+    history: &VecDeque<(Instant, (i32, i32))>,
+    x: i32,
+    y: i32,
+) -> bool {
+    let in_active_dist = |a: i32, b: i32| -> bool { (a - b).abs() < MOUSE_ACTIVE_DISTANCE };
+    history
+        .iter()
+        .any(|(_, (px, py))| in_active_dist(*px, x) && in_active_dist(*py, y))
+}
+
+// Called from the cursor recording thread on every sample, before
+// `update_last_cursor_pos()`. If the cursor has moved to a position that does not
+// match any recently injected peer event, the movement must come from the
+// controlled side user, who is then given mouse priority for
+// `MOUSE_MOVE_PROTECTION_TIMEOUT`.
+fn update_host_mouse_activity(x: i32, y: i32) {
+    {
+        let lock = LATEST_SYS_CURSOR_POS.lock().unwrap();
+        let (last_x, last_y) = lock.1;
+        if last_x == INVALID_CURSOR_POS || (last_x == x && last_y == y) {
+            return;
+        }
+    }
+    let from_peer = {
+        let mut lock = RECENT_PEER_INPUT_POS.lock().unwrap();
+        while lock
+            .front()
+            .map(|(t, _)| t.elapsed() > PEER_INPUT_POS_KEEP_DURATION)
+            .unwrap_or(false)
+        {
+            lock.pop_front();
+        }
+        pos_matches_recent_peer_input(&lock, x, y)
+    };
+    if from_peer || !host_mouse_priority_enabled() {
+        return;
+    }
+    HOST_MOUSE_ACTIVE_UNTIL.store(
+        get_time() + MOUSE_MOVE_PROTECTION_TIMEOUT.as_millis() as i64,
+        Ordering::SeqCst,
+    );
+}
+
+#[inline]
+fn is_host_mouse_recently_active() -> bool {
+    get_time() < HOST_MOUSE_ACTIVE_UNTIL.load(Ordering::SeqCst)
+}
+
 // https://github.com/rustdesk/rustdesk/issues/9729
 // We need to do some special handling for macOS when using the legacy mode.
 #[cfg(target_os = "macos")]
@@ -531,6 +618,7 @@ pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
 
             let now = time::Instant::now();
             if let Some((x, y)) = crate::get_cursor_pos() {
+                update_host_mouse_activity(x, y);
                 update_last_cursor_pos(x, y);
             }
             let elapsed = now.elapsed();
@@ -539,6 +627,8 @@ pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
             }
         }
         update_last_cursor_pos(INVALID_CURSOR_POS, INVALID_CURSOR_POS);
+        RECENT_PEER_INPUT_POS.lock().unwrap().clear();
+        HOST_MOUSE_ACTIVE_UNTIL.store(0, Ordering::SeqCst);
     });
     Some(handle)
 }
@@ -945,69 +1035,14 @@ fn get_last_input_cursor_pos() -> (i32, i32) {
     (lock.x, lock.y)
 }
 
-// check if mouse is moved by the controlled side user to make controlled side has higher mouse priority than remote.
+// Check if mouse is moved by the controlled side user to make controlled side has higher mouse priority than remote.
+// https://github.com/rustdesk/rustdesk/issues/40
+// The detection itself runs asynchronously in the cursor recording thread
+// (`update_host_mouse_activity()`), so this check is non-blocking and adds no
+// latency to the input path. A previous synchronous implementation was reverted
+// in 542d86b667a2da19f89591a03a39edd9ab4d406e.
 fn active_mouse_(_conn: i32) -> bool {
-    true
-    /* this method is buggy (not working on macOS, making fast moving mouse event discarded here) and added latency (this is blocking way, must do in async way), so we disable it for now
-    // out of time protection
-    if LATEST_SYS_CURSOR_POS
-        .lock()
-        .unwrap()
-        .0
-        .map(|t| t.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT)
-        .unwrap_or(true)
-    {
-        return true;
-    }
-
-    // last conn input may be protected
-    if LATEST_PEER_INPUT_CURSOR.lock().unwrap().conn != conn {
-        return false;
-    }
-
-    let in_active_dist = |a: i32, b: i32| -> bool { (a - b).abs() < MOUSE_ACTIVE_DISTANCE };
-
-    // Check if input is in valid range
-    match crate::get_cursor_pos() {
-        Some((x, y)) => {
-            let (last_in_x, last_in_y) = get_last_input_cursor_pos();
-            let mut can_active = in_active_dist(last_in_x, x) && in_active_dist(last_in_y, y);
-            // The cursor may not have been moved to last input position if system is busy now.
-            // While this is not a common case, we check it again after some time later.
-            if !can_active {
-                // 100 micros may be enough for system to move cursor.
-                // Mouse inputs on macOS are asynchronous. 1. Put in a queue to process in main thread. 2. Send event async.
-                // More reties are needed on macOS.
-                #[cfg(not(target_os = "macos"))]
-                let retries = 10;
-                #[cfg(target_os = "macos")]
-                let retries = 100;
-                #[cfg(not(target_os = "macos"))]
-                let sleep_interval: u64 = 10;
-                #[cfg(target_os = "macos")]
-                let sleep_interval: u64 = 30;
-                for _retry in 0..retries {
-                    std::thread::sleep(std::time::Duration::from_micros(sleep_interval));
-                    // Sleep here can also somehow suppress delay accumulation.
-                    if let Some((x2, y2)) = crate::get_cursor_pos() {
-                        let (last_in_x, last_in_y) = get_last_input_cursor_pos();
-                        can_active = in_active_dist(last_in_x, x2) && in_active_dist(last_in_y, y2);
-                        if can_active {
-                            break;
-                        }
-                    }
-                }
-            }
-            if !can_active {
-                let mut lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
-                lock.x = INVALID_CURSOR_POS / 2;
-                lock.y = INVALID_CURSOR_POS / 2;
-            }
-            can_active
-        }
-        None => true,
-    }
-    */
+    !is_host_mouse_recently_active()
 }
 
 pub fn handle_pointer_(evt: &PointerDeviceEvent, conn: i32) {
@@ -1057,7 +1092,12 @@ pub fn handle_mouse_(
 }
 
 pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
-    if !active_mouse_(conn) {
+    let buttons = evt.mask >> 3;
+    let evt_type = evt.mask & MOUSE_TYPE_MASK;
+
+    // Always let button-release events through, so that a button pressed by the
+    // peer is not left stuck down when the controlled side user takes priority.
+    if evt_type != MOUSE_TYPE_UP && !active_mouse_(conn) {
         return;
     }
 
@@ -1067,8 +1107,6 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
 
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
-    let buttons = evt.mask >> 3;
-    let evt_type = evt.mask & MOUSE_TYPE_MASK;
     let mut en = ENIGO.lock().unwrap();
     #[cfg(target_os = "macos")]
     en.set_ignore_flags(enigo_ignore_flags());
@@ -1099,6 +1137,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             // Switching back to absolute movement implicitly disables relative mouse mode.
             set_relative_mouse_active(conn, false);
             en.mouse_move_to(evt.x, evt.y);
+            record_peer_input_pos(evt.x, evt.y);
             *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
                 conn,
                 time: get_time(),
@@ -1124,6 +1163,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             en.mouse_move_relative(dx, dy);
             // Get actual cursor position after relative movement for tracking
             if let Some((x, y)) = crate::get_cursor_pos() {
+                record_peer_input_pos(x, y);
                 *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
                     conn,
                     time: get_time(),
@@ -2472,4 +2512,57 @@ lazy_static::lazy_static! {
         (ControlKey::Insert, true),
         (ControlKey::Delete, true),
     ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn instant_ago(ms: u64) -> Instant {
+        Instant::now()
+            .checked_sub(Duration::from_millis(ms))
+            .unwrap()
+    }
+
+    #[test]
+    fn test_pos_matches_recent_peer_input() {
+        let mut history: VecDeque<(Instant, (i32, i32))> = VecDeque::new();
+        // Empty history never matches, any movement is attributed to the host user.
+        assert!(!pos_matches_recent_peer_input(&history, 100, 100));
+
+        history.push_back((instant_ago(500), (10, 10)));
+        history.push_back((instant_ago(100), (200, 200)));
+
+        // Exact match of an injected position.
+        assert!(pos_matches_recent_peer_input(&history, 200, 200));
+        // Within MOUSE_ACTIVE_DISTANCE of an injected position, including an
+        // older one (covers delayed event application, e.g. async on macOS).
+        assert!(pos_matches_recent_peer_input(
+            &history,
+            10 + MOUSE_ACTIVE_DISTANCE - 1,
+            10
+        ));
+        // Outside MOUSE_ACTIVE_DISTANCE on one axis only.
+        assert!(!pos_matches_recent_peer_input(
+            &history,
+            200,
+            200 + MOUSE_ACTIVE_DISTANCE
+        ));
+        // Far away from every injected position.
+        assert!(!pos_matches_recent_peer_input(&history, 500, 500));
+    }
+
+    #[test]
+    fn test_record_peer_input_pos_is_capped() {
+        RECENT_PEER_INPUT_POS.lock().unwrap().clear();
+        for i in 0..(PEER_INPUT_POS_CAP as i32 + 10) {
+            record_peer_input_pos(i, i);
+        }
+        let lock = RECENT_PEER_INPUT_POS.lock().unwrap();
+        assert_eq!(lock.len(), PEER_INPUT_POS_CAP);
+        // Oldest entries are dropped first.
+        assert_eq!(lock.front().map(|(_, p)| *p), Some((10, 10)));
+        drop(lock);
+        RECENT_PEER_INPUT_POS.lock().unwrap().clear();
+    }
 }
