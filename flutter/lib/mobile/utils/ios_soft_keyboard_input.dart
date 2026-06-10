@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 const _sentinel = '1';
@@ -134,6 +135,10 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     normalizedCurrentValue,
     sentinelPrefixLength,
   );
+
+  // Some IMEs commit only the selected prefix and leave the rest composing.
+  // Emit the committed prefix first, otherwise the remaining composing text may
+  // be replayed as normal input.
   final partialPinyinCommitResult = _partialPinyinCommitResult(
     currentValue: normalizedCurrentValue,
     composingRange: composingRange,
@@ -169,6 +174,8 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     );
   }
 
+  // Korean IME can briefly expose only the sentinel prefix while recomposing.
+  // Treat that as a transient controller state, not as remote backspaces.
   final koreanComposingResult = _invalidKoreanComposingResult(
     previousValue: previousValue,
     currentValue: normalizedCurrentValue,
@@ -179,6 +186,8 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     return koreanComposingResult;
   }
 
+  // iOS may clear the composing range without changing controller text. In
+  // that case the previous composing span is the committed text to send.
   final collapsedComposingCommitResult =
       _collapsedControllerComposingCommitResult(
     previousValue: previousValue,
@@ -366,6 +375,9 @@ String _normalizedShortenedKoreanHangulValue({
   if (sentinelPrefixLength == null) return currentValue;
   if (_isValidComposingRange(currentValue, composingRange)) return currentValue;
 
+  // Korean composition can temporarily shorten or over-restore the sentinel
+  // prefix. Normalize those controller artifacts before calculating the remote
+  // input diff.
   final previousPrefixLength = _leadingSentinelLength(previousValue);
   final currentPrefixLength = _leadingSentinelLength(currentValue);
   if (currentPrefixLength <= 0) return currentValue;
@@ -402,6 +414,8 @@ String _normalizedShortenedKoreanHangulValue({
   String currentValue,
   int? sentinelPrefixLength,
 ) {
+  // The sentinel prefix is local TextField state. Remote actions are based only
+  // on the text after the effective sentinel prefix.
   if (_shouldResetSentinelBaseline(
     previousValue,
     currentValue,
@@ -458,6 +472,8 @@ String? _tailAfterRestoredSentinelPrefix(
   if (previousValue.length != previousPrefixLength) return null;
   if (currentValue.length <= currentPrefixLength) return null;
 
+  // When a shortened sentinel prefix is restored before committed CJK text, do
+  // not treat the restored sentinel characters as user input.
   final tail = currentValue.substring(currentPrefixLength);
   if (tail.runes.any((rune) => rune > 0x7F)) return tail;
   return null;
@@ -579,6 +595,13 @@ String? _bopomofoSuffixAfterPartialCommit({
   final previous = _normalizedBopomofoComposingText(previousComposingValue);
   if (previous.isEmpty) return null;
 
+  // Mixed text means the candidate prefix was committed while the suffix is
+  // still composing. Keep holding the suffix and send only the committed prefix.
+  //
+  // Example: previous composing text is "ㄆㄨˊㄊㄠˊㄍㄢ". After selecting a
+  // candidate, iOS may expose "葡萄ㄍㄢ", where "葡萄" is committed text and
+  // "ㄍㄢ" is still marked text. The split point must be on a Unicode scalar
+  // boundary so the committed prefix can be sent without replaying the suffix.
   for (final offset in _runeBoundaryOffsets(value)) {
     final committedPrefix = value.substring(0, offset);
     if (!_containsNonBopomofoComposingText(committedPrefix)) continue;
@@ -610,6 +633,13 @@ bool _containsNonBopomofoComposingText(String value) {
   final previous = _normalizedPinyinComposingText(previousComposingValue);
   if (previous.isEmpty) return null;
 
+  // Pinyin partial selection can return committed text followed by the
+  // remaining spelling. Preserve the original spelling separators when possible.
+  //
+  // Example: previous composing text is "shen me". After selecting a candidate,
+  // iOS may expose "什么 shen me" or "什么shme". The committed prefix "什么"
+  // should be sent immediately, while the remaining spelling stays held as
+  // composing text until the IME commits or clears it.
   for (final offset in _runeBoundaryOffsets(value)) {
     final committedPrefix = value.substring(0, offset);
     if (!_containsNonAscii(committedPrefix)) continue;
@@ -636,6 +666,13 @@ String? _previousPinyinComposingSuffix({
   required String normalizedSuffix,
   required String previousComposingValue,
 }) {
+  // When iOS normalizes the visible suffix, recover the original suffix from
+  // the previous composing text. This keeps separators such as marked spaces
+  // intact for future comparisons.
+  //
+  // Example: previous "shen\u2006me", current mixed text "什么me". The current
+  // suffix normalizes to "me", but the value we keep should be the original
+  // previous suffix after the split, not a newly synthesized one.
   for (final offset in _runeBoundaryOffsets(previousComposingValue)) {
     final suffix = previousComposingValue.substring(offset);
     if (_startsWithPinyinSeparator(suffix)) continue;
@@ -655,6 +692,17 @@ bool _startsWithPinyinSeparator(String value) {
 }
 
 Iterable<int> _runeBoundaryOffsets(String value) sync* {
+  // Return substring offsets after each Unicode scalar value, excluding the
+  // final string length. This lets callers test every prefix/suffix split
+  // without cutting a surrogate pair in half.
+  //
+  // Examples:
+  // - "abc" yields 1, 2 -> "a|bc", "ab|c".
+  // - "你hao" yields 1, 2, 3 -> "你|hao", "你h|ao", "你ha|o".
+  // - "😀a" yields 2, not 1, because the emoji is a UTF-16 surrogate pair.
+  //
+  // This is rune-safe, not grapheme-cluster-safe. It protects surrogate pairs,
+  // but it does not keep combining-mark sequences such as "e\u0301" together.
   var offset = 0;
   for (final rune in value.runes) {
     offset += String.fromCharCode(rune).length;
@@ -674,6 +722,13 @@ String _normalizedPinyinComposingText(String value) {
 }
 
 bool _isLikelyPinyinComposingText(String value) {
+  // ASCII marked text can be normal Latin input or an intermediate Pinyin
+  // spelling. We only hold values that look like Pinyin syllable prefixes or a
+  // short sequence of initials, so normal words are still sent when composing
+  // collapses.
+  //
+  // Examples held while composing: "ni", "zhong", "lm".
+  // Example sent after composing clears: a normal candidate such as "cat".
   final normalized =
       value.toLowerCase().replaceAll(_pinyinMarkedTextSpace, ' ').trim();
   if (normalized.isEmpty) return false;
@@ -814,6 +869,14 @@ enum _CompositionKind {
 }
 
 _CompositionKind _compositionKind(String value) {
+  // Classify the marked text by the script shape exposed by iOS. CJK IMEs use
+  // different transient forms before the user commits a candidate:
+  // - Pinyin and some Japanese romaji stages are ASCII.
+  // - Chinese stroke input uses stroke runes such as "一丨".
+  // - Traditional Chinese Bopomofo uses "ㄋㄧˇ".
+  // - Japanese conversion uses kana such as "にほん".
+  // - Korean composition may expose jamo "ㅎㅏ" or a Hangul syllable "한".
+  // Anything mixed outside these forms is treated as committed text.
   if (value.runes.every(_isAsciiComposingRune)) {
     return _CompositionKind.ascii;
   }
