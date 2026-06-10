@@ -380,6 +380,7 @@ pub fn get_sound_inputs() -> Vec<String> {
                     }
                 }
             }
+            out.extend(crate::audio_service::get_asio_input_devices());
             out
         }
 
