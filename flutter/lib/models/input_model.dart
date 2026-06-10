@@ -1155,7 +1155,9 @@ class InputModel {
     }
     _relativeMouse.onEnterOrLeaveImage(enter);
     _flingTimer?.cancel();
-    if (!isInputSourceFlutter) {
+    // On Linux Wayland the call must fire even in Flutter input mode:
+    // the Rust side uses it to drive the keyboard shortcuts inhibitor.
+    if (!isInputSourceFlutter || (isLinux && bind.mainCurrentIsWayland())) {
       bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
     }
     if (!isWeb && enter) {
