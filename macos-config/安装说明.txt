@@ -1,0 +1,22 @@
+RustDesk macOS 安装说明 (Cislink 版)
+=====================================
+
+步骤 1: 安装 RustDesk
+- 双击 rustdesk-1.4.4-x86_64.dmg
+- 将 RustDesk 拖到 Applications 文件夹
+
+步骤 2: 导入配置
+- 打开 Finder
+- 按 Cmd+Shift+G，输入: ~/Library/Application Support/RustDesk/config
+- 将 RustDesk2.toml 文件复制到这个文件夹
+- 如果提示替换，选择"替换"
+
+步骤 3: 重启 RustDesk
+- 完全退出 RustDesk（右键 Dock 图标 → 退出）
+- 重新打开 RustDesk
+
+完成！现在 RustDesk 会自动连接到 Cislink 服务器。
+
+---
+如果首次打开提示"无法验证开发者"：
+→ 系统偏好设置 → 安全性与隐私 → 点击"仍要打开"

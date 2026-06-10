@@ -1,9 +1,10 @@
-; RustDesk Full Installer - Pre-configured for Cislink Server
-; This installer contains RustDesk client and pre-configured self-hosted server settings
+; RustDesk Full Installer - Pre-configured for Cislink Server (Windows 7 Compatible)
+; This installer contains RustDesk 1.3.4 client and pre-configured self-hosted server settings
+; Compatible with Windows 7 and later versions
 ;
 ; Build Requirements:
 ; 1. Inno Setup 6.x or higher
-; 2. RustDesk client (rustdesk.exe) in same directory as this script
+; 2. RustDesk client (rustdesk-1.3.4.exe) in same directory as this script
 ; 3. Run Inno Setup to compile this script
 ;
 ; Server Information:
@@ -12,7 +13,7 @@
 ; - Public Key: VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=
 
 #define MyAppName "RustDesk - Cislink Edition"
-#define MyAppVersion "1.4.4"
+#define MyAppVersion "1.3.4"
 #define MyAppPublisher "Cislink"
 #define MyAppURL "https://cislink.nl"
 #define MyAppExeName "rustdesk-host=hbbs.cislink.nl,key=VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY=,relay=hbbr.cislink.nl,.exe"
@@ -28,7 +29,7 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\RustDesk
 DefaultGroupName=RustDesk
 DisableProgramGroupPage=yes
-OutputBaseFilename=RustDesk_Cislink_Installer_v{#MyAppVersion}
+OutputBaseFilename=RustDesk_Cislink_Installer_v{#MyAppVersion}_Win7
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -37,6 +38,8 @@ ShowLanguageDialog=auto
 ; Custom icon configuration - using Cislink custom icon
 SetupIconFile=res\cislink.ico
 UninstallDisplayIcon={app}\cislink.ico
+; Windows 7 compatibility
+MinVersion=6.1
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -47,7 +50,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "autostart"; Description: "Start RustDesk automatically"; GroupDescription: "Additional options:"
 
 [Files]
-Source: "rustdesk.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
+Source: "rustdesk-1.3.4.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 Source: "res\cislink.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "RustDesk_Config_Template.toml"; DestDir: "{tmp}"; Flags: dontcopy
 
@@ -59,7 +62,7 @@ Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: au
 
 [Registry]
 Root: HKCR; Subkey: "rustdesk"; ValueType: string; ValueName: ""; ValueData: "URL:rustdesk Protocol"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "rustdesk"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; 
+Root: HKCR; Subkey: "rustdesk"; ValueType: string; ValueName: "URL Protocol"; ValueData: "";
 Root: HKCR; Subkey: "rustdesk\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
 [Code]
@@ -88,30 +91,30 @@ var
   SystemConfig2File: String;
 begin
   Log('Creating configuration files...');
-  
+
   ConfigContent := '[options]' + #13#10 +
                    'custom-rendezvous-server = "hbbs.cislink.nl"' + #13#10 +
                    'relay-server = "hbbr.cislink.nl"' + #13#10 +
                    'key = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="' + #13#10 +
                    'enable-check-update = "N"' + #13#10 +
                    'disable-installation = true' + #13#10;
-  
+
   UserConfigDir := ExpandConstant('{userappdata}\RustDesk\config');
   SystemConfigDir := ExpandConstant('{commonappdata}\RustDesk\config');
-  
+
   ForceDirectories(UserConfigDir);
   ForceDirectories(SystemConfigDir);
-  
+
   UserConfigFile := UserConfigDir + '\RustDesk.toml';
   UserConfig2File := UserConfigDir + '\RustDesk2.toml';
   SystemConfigFile := SystemConfigDir + '\RustDesk.toml';
   SystemConfig2File := SystemConfigDir + '\RustDesk2.toml';
-  
+
   SaveStringToFile(UserConfigFile, ConfigContent, False);
   SaveStringToFile(UserConfig2File, ConfigContent, False);
   SaveStringToFile(SystemConfigFile, ConfigContent, False);
   SaveStringToFile(SystemConfig2File, ConfigContent, False);
-  
+
   Log('Configuration files created successfully');
 end;
 
@@ -263,14 +266,14 @@ end;
 function InitializeUninstall(): Boolean;
 begin
   Result := True;
-  
+
   if MsgBox('Do you want to completely remove RustDesk (including configuration files)?' + #13#10 + #13#10 +
             'Yes = Delete all configurations' + #13#10 +
             'No = Keep configuration files', mbConfirmation, MB_YESNO) = IDYES then
   begin
     RegWriteStringValue(HKEY_CURRENT_USER, 'Software\RustDesk', 'DeleteConfig', '1');
   end;
-  
+
   StopRustDesk();
 end;
 
@@ -288,10 +291,10 @@ begin
       begin
         UserConfigDir := ExpandConstant('{userappdata}\RustDesk');
         SystemConfigDir := ExpandConstant('{commonappdata}\RustDesk');
-        
+
         DelTree(UserConfigDir, True, True, True);
         DelTree(SystemConfigDir, True, True, True);
-        
+
         RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\RustDesk');
       end;
     end;
@@ -299,8 +302,6 @@ begin
 end;
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--install-service"; Flags: runhidden; StatusMsg: "Installing RustDesk background service..."
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--password Time9changeit"; Flags: runhidden; StatusMsg: "Setting permanent access password..."
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]

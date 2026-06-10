@@ -1,6 +1,6 @@
-# RustDesk Customizations & GCP API Server Knowledge Base (2026-06-05)
+# RustDesk Customizations & GCP API Server Knowledge Base (2026-06-06)
 
-This documentation serves as the master knowledge base for custom configurations, client repacking scripts, and the custom GCP API Server developed for the RustDesk monorepo, as of June 5, 2026.
+This documentation serves as the master knowledge base for custom configurations, client repacking scripts, and the custom GCP API Server developed for the RustDesk monorepo, as of June 6, 2026.
 
 ---
 

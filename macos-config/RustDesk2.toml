@@ -1,4 +1,5 @@
-﻿[options]
+[options]
 custom-rendezvous-server = "hbbs.cislink.nl"
 relay-server = "hbbr.cislink.nl"
 key = "VXz1DqnNLuvAnsiTM6N1BnOkN37zCiEEikhsrZumpfY="
+enable-check-update = "N"

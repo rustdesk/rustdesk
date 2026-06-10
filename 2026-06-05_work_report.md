@@ -34,6 +34,11 @@
 * Updated the root `.gitignore` to exclude the active `data/` folder, preventing any accidental leaks of private keys or databases.
 * **NotebookLM Safety Warning**: Created a persistent safety warning note inside the target Google NotebookLM workspace to prevent similar key mismatch issues in the future.
 
+### 7. Custom Client Installer Generation
+* Executed the package installer compiler script `Build-RustDesk-Installer.ps1` with the `-SkipDownload` flag (utilizing local verified `rustdesk.exe` binary).
+* Compiled the Inno Setup script `RustDesk-Installer.iss` using Inno Setup compiler (`ISCC.exe`) successfully.
+* Generated the pre-configured installer client binary at `D:\Rustdesk\Output\RustDesk_Cislink_Installer_v1.4.4.exe` (24.18 MB) and copied it to the workspace root at `D:\Rustdesk\RustDesk_Cislink_Setup.exe`.
+
 ---
 
 **Developer:** Antigravity (Pair Programming with Antigravity 2.0)  

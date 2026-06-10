@@ -14,6 +14,8 @@
 - [x] Upload active server key pair (id_ed25519 and id_ed25519.pub) to Google Drive (smartthink-drive:RustDesk_Backup) using rclone.
 - [x] Create a safety warning note in Google NotebookLM (a0831bed-56db-4f1a-8e74-c739498bd1e1) detailing hbbs key mismatch and prevention rules.
 - [x] Customize RustDesk auto-update mechanism to use download.cislink.nl/rustdesk/latest.json and rebrand update cards
+- [x] Generate custom pre-configured Windows client installer binary (RustDesk_Cislink_Setup.exe) using Build-RustDesk-Installer.ps1 and Inno Setup.
+- [x] Configure client installer to register RustDesk service automatically and set the predefined permanent password (Time9changeit).
 
 ## Safety Intercepts & Guidelines
 - **UNC blocking**: Do not use UNC paths.
