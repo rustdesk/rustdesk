@@ -26,6 +26,9 @@ pub mod linux_desktop_manager;
 #[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 
+#[cfg(target_os = "linux")]
+pub mod wayland_keyboard_inhibit;
+
 #[cfg(all(
     not(all(target_os = "windows", not(target_pointer_width = "64"))),
     not(any(target_os = "android", target_os = "ios"))
