@@ -290,6 +290,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void _handleIOSSoftKeyboardInput(
     String newValue, {
     String? previousControllerText,
+    TextRange? previousControllerComposingRange,
     bool forceCommitComposingText = false,
   }) {
     if (!inputModel.keyboardInputAllowed) {
@@ -301,6 +302,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       composingRange: _textController.value.composing,
       previousComposingValue: _iosComposingValue,
       previousControllerText: previousControllerText,
+      previousControllerComposingRange: previousControllerComposingRange,
       sentinelPrefixLength: initText.length,
       forceCommitComposingText: forceCommitComposingText,
     );
@@ -337,6 +339,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _handleIOSSoftKeyboardInput(
       value.text,
       previousControllerText: previousControllerText,
+      previousControllerComposingRange: previousComposingRange,
       forceCommitComposingText: forceCommitComposingText,
     );
     _iosLastControllerText = value.text;

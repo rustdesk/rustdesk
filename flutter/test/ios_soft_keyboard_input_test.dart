@@ -98,7 +98,7 @@ void main() {
       ]);
     });
 
-    test('does not send ascii composing text when range collapses briefly', () {
+    test('sends ascii composing text when range collapses', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '111',
         currentValue: '111ni',
@@ -107,13 +107,14 @@ void main() {
         sentinelPrefixLength: 3,
       );
 
-      expect(result.nextValue, '111');
-      expect(result.nextComposingValue, 'ni');
-      expect(result.actions, isEmpty);
+      expect(result.nextValue, '111ni');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('ni'),
+      ]);
     });
 
-    test('does not send ascii composing text after committed text collapses',
-        () {
+    test('sends ascii composing text after committed text collapses', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '111你',
         currentValue: '111你ni',
@@ -122,9 +123,11 @@ void main() {
         sentinelPrefixLength: 3,
       );
 
-      expect(result.nextValue, '111你');
-      expect(result.nextComposingValue, 'ni');
-      expect(result.actions, isEmpty);
+      expect(result.nextValue, '111你ni');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('ni'),
+      ]);
     });
 
     test('does not send Japanese kana converted from romaji before commit', () {
@@ -351,7 +354,8 @@ void main() {
           session.diff('111catdog', const TextRange(start: 6, end: 9)).actions,
           isEmpty);
       expect(
-          session.diff('111cat dog', const TextRange(start: 6, end: 10))
+          session
+              .diff('111cat dog', const TextRange(start: 6, end: 10))
               .actions,
           isEmpty);
 
@@ -360,6 +364,46 @@ void main() {
       expect(result.nextComposingValue, isNull);
       expect(result.actions, [
         const IOSSoftKeyboardInputAction.inputText(' dog'),
+      ]);
+    });
+
+    test(
+        'sends pinyin-looking Japanese IME ascii candidate when composing clears',
+        () {
+      final session = _IOSSoftKeyboardInputSession('111');
+
+      expect(session.diff('111c', const TextRange(start: 3, end: 4)).actions,
+          isEmpty);
+      expect(session.diff('111ca', const TextRange(start: 3, end: 5)).actions,
+          isEmpty);
+      expect(session.diff('111can', const TextRange(start: 3, end: 6)).actions,
+          isEmpty);
+
+      final result = session.diff('111can');
+      expect(result.nextValue, '111can');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('can'),
+      ]);
+    });
+
+    test(
+        'commits collapsed composing text without replaying the trailing sentinel text',
+        () {
+      final result = diffIOSSoftKeyboardInput(
+        previousValue: 'ab11111に',
+        currentValue: 'abcat11111に',
+        composingRange: TextRange.empty,
+        previousComposingValue: 'cat',
+        previousControllerText: 'abcat11111に',
+        previousControllerComposingRange: const TextRange(start: 2, end: 5),
+        sentinelPrefixLength: 5,
+      );
+
+      expect(result.nextValue, 'abcat11111に');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('cat'),
       ]);
     });
 
@@ -434,6 +478,35 @@ void main() {
       expect(result.actions, [
         const IOSSoftKeyboardInputAction.backspace(),
         const IOSSoftKeyboardInputAction.inputText('한'),
+      ]);
+    });
+
+    test(
+        'does not send typed sentinel while Korean composition resets from a shortened prefix',
+        () {
+      final session = _IOSSoftKeyboardInputSession('11');
+
+      expect(session.diff('11ㅎ').actions, [
+        const IOSSoftKeyboardInputAction.inputText('ㅎ'),
+      ]);
+
+      var result = session.diff('1');
+      expect(result.nextValue, '11');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.backspace(),
+      ]);
+
+      result = session.diff('11');
+      expect(result.nextValue, '11');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, isEmpty);
+
+      result = session.diff('11하');
+      expect(result.nextValue, '11하');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('하'),
       ]);
     });
 
@@ -536,8 +609,7 @@ void main() {
       ]);
     });
 
-    test(
-        'does not send sentinel-only transients while Korean text changes',
+    test('does not send sentinel-only transients while Korean text changes',
         () {
       final session = _IOSSoftKeyboardInputSession('111한');
       session.previousControllerText = '111한';
@@ -844,36 +916,60 @@ void main() {
       expect(result.actions, isEmpty);
     });
 
-    test('does not send pinyin growth if composing range temporarily collapses',
-        () {
+    test('does not send bopomofo marked-text spacing before commit', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '111',
-        currentValue: '111ni hao',
-        composingRange: TextRange.empty,
-        previousComposingValue: 'ni',
-        sentinelPrefixLength: 3,
+        currentValue: '111ㄘ\u2004ㄧ',
+        composingRange: const TextRange(start: 3, end: 6),
       );
 
       expect(result.nextValue, '111');
-      expect(result.nextComposingValue, 'ni hao');
+      expect(result.nextComposingValue, 'ㄘ\u2004ㄧ');
       expect(result.actions, isEmpty);
     });
 
-    test('does not send pinyin growth with iOS marked-text spacing', () {
-      final result = diffIOSSoftKeyboardInput(
-        previousValue: '111',
-        currentValue: '111ni\u2006h',
-        composingRange: TextRange.empty,
-        previousComposingValue: 'ni',
-        sentinelPrefixLength: 3,
+    test('sends partial bopomofo commits while holding remaining symbols', () {
+      final session = _IOSSoftKeyboardInputSession('111');
+
+      var result = session.diff(
+        '111ㄆ\u2004ㄊ\u2004ㄍ\u2004ㄐ\u2004ㄔ\u2004ㄗ\u2004ㄧ',
+        const TextRange(start: 3, end: 16),
       );
-
       expect(result.nextValue, '111');
-      expect(result.nextComposingValue, 'ni\u2006h');
+      expect(result.nextComposingValue,
+          'ㄆ\u2004ㄊ\u2004ㄍ\u2004ㄐ\u2004ㄔ\u2004ㄗ\u2004ㄧ');
       expect(result.actions, isEmpty);
+
+      result = session.diff(
+        '111葡萄乾ㄐㄔㄗㄧ',
+        const TextRange(start: 3, end: 10),
+      );
+      expect(result.nextValue, '111葡萄乾');
+      expect(result.nextComposingValue, 'ㄐㄔㄗㄧ');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('葡萄乾'),
+      ]);
+
+      result = session.diff(
+        '111葡萄乾ㄐ\u2004ㄔ\u2004ㄗ\u2004ㄧ',
+        const TextRange(start: 3, end: 13),
+      );
+      expect(result.nextValue, '111葡萄乾');
+      expect(result.nextComposingValue, 'ㄐ\u2004ㄔ\u2004ㄗ\u2004ㄧ');
+      expect(result.actions, isEmpty);
+
+      result = session.diff(
+        '111葡萄乾警察ㄗㄧ',
+        const TextRange(start: 3, end: 10),
+      );
+      expect(result.nextValue, '111葡萄乾警察');
+      expect(result.nextComposingValue, 'ㄗㄧ');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('警察'),
+      ]);
     });
 
-    test('does not send pinyin growth after committed text', () {
+    test('sends pinyin growth after committed text', () {
       final result = diffIOSSoftKeyboardInput(
         previousValue: '111你',
         currentValue: '111你ni hao',
@@ -882,9 +978,11 @@ void main() {
         sentinelPrefixLength: 3,
       );
 
-      expect(result.nextValue, '111你');
-      expect(result.nextComposingValue, 'ni hao');
-      expect(result.actions, isEmpty);
+      expect(result.nextValue, '111你ni hao');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('ni hao'),
+      ]);
     });
 
     test('sends partial pinyin commits while holding the remaining spelling',
@@ -929,8 +1027,7 @@ void main() {
       ]);
     });
 
-    test('sends partial pinyin commit when iOS marks the whole mixed text',
-        () {
+    test('sends partial pinyin commit when iOS marks the whole mixed text', () {
       final session = _IOSSoftKeyboardInputSession('111');
 
       var result = session.diff(
@@ -967,6 +1064,58 @@ void main() {
       expect(result.nextComposingValue, 'ang');
       expect(result.actions, [
         const IOSSoftKeyboardInputAction.inputText('清苦'),
+      ]);
+    });
+
+    test('holds compact pinyin tail after partial candidate selection', () {
+      final session = _IOSSoftKeyboardInputSession('111');
+
+      var result = session.diff(
+        '111q\u2006w\u2006er\u2006t\u2006y',
+        const TextRange(start: 3, end: 13),
+      );
+      expect(result.nextValue, '111');
+      expect(result.nextComposingValue, 'q\u2006w\u2006er\u2006t\u2006y');
+      expect(result.actions, isEmpty);
+
+      result = session.diff(
+        '111全werty',
+        const TextRange(start: 3, end: 9),
+      );
+      expect(result.nextValue, '111全');
+      expect(result.nextComposingValue, 'w\u2006er\u2006t\u2006y');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('全'),
+      ]);
+
+      result = session.diff(
+        '111全问erty',
+        const TextRange(start: 3, end: 9),
+      );
+      expect(result.nextValue, '111全问');
+      expect(result.nextComposingValue, 'er\u2006t\u2006y');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('问'),
+      ]);
+
+      result = session.diff(
+        '111全问而ty',
+        const TextRange(start: 3, end: 8),
+      );
+      expect(result.nextValue, '111全问而');
+      expect(result.nextComposingValue, 'ty');
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('而'),
+      ]);
+
+      result = session.diff(
+        '111全问而同样',
+        const TextRange(start: 3, end: 8),
+      );
+      expect(result.nextValue, '111全问而同样');
+      expect(result.nextComposingValue, isNull);
+      expect(result.actions, [
+        const IOSSoftKeyboardInputAction.inputText('同样'),
       ]);
     });
 

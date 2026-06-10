@@ -2,6 +2,8 @@ import 'package:flutter/services.dart';
 
 const _sentinel = '1';
 const _pinyinMarkedTextSpace = '\u2006';
+const _textInputMarkedTextSpace = 0x2004;
+const _pinyinMarkedTextSpaceRune = 0x2006;
 const _maxHeldPinyinInitials = 2;
 const _pinyinInitials = <String>[
   'zh',
@@ -141,6 +143,7 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
   required TextRange composingRange,
   String? previousComposingValue,
   String? previousControllerText,
+  TextRange? previousControllerComposingRange,
   int? sentinelPrefixLength,
   bool forceCommitComposingText = false,
 }) {
@@ -163,6 +166,15 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
   );
   if (!forceCommitComposingText && partialPinyinCommitResult != null) {
     return partialPinyinCommitResult;
+  }
+  final partialBopomofoCommitResult = _partialBopomofoCommitResult(
+    currentValue: normalizedCurrentValue,
+    composingRange: composingRange,
+    previousComposingValue: previousComposingValue,
+    tails: tails,
+  );
+  if (!forceCommitComposingText && partialBopomofoCommitResult != null) {
+    return partialBopomofoCommitResult;
   }
 
   if (!forceCommitComposingText &&
@@ -192,37 +204,69 @@ IOSSoftKeyboardInputResult diffIOSSoftKeyboardInput({
     return koreanComposingResult;
   }
 
-  final continuedComposingValue = _continuedComposingValue(
-    tails.previous,
-    tails.current,
-    previousComposingValue,
+  final collapsedComposingCommitResult =
+      _collapsedControllerComposingCommitResult(
+    previousValue: previousValue,
+    currentValue: normalizedCurrentValue,
+    composingRange: composingRange,
+    previousControllerText: previousControllerText,
+    previousControllerComposingRange: previousControllerComposingRange,
   );
-  if (!forceCommitComposingText && continuedComposingValue != null) {
-    return IOSSoftKeyboardInputResult(
-      nextValue: previousValue,
-      nextComposingValue: continuedComposingValue,
-      actions: const [],
-    );
+  if (collapsedComposingCommitResult != null) {
+    return collapsedComposingCommitResult;
   }
 
-  final result = IOSSoftKeyboardInputResult(
+  return IOSSoftKeyboardInputResult(
     nextValue: normalizedCurrentValue,
     nextComposingValue: null,
     actions: _inputActionsForTailChange(tails.previous, tails.current),
   );
-  return result;
 }
 
-IOSSoftKeyboardInputResult? _partialPinyinCommitResult({
+IOSSoftKeyboardInputResult? _collapsedControllerComposingCommitResult({
+  required String previousValue,
+  required String currentValue,
+  required TextRange composingRange,
+  required String? previousControllerText,
+  required TextRange? previousControllerComposingRange,
+}) {
+  final previousText = previousControllerText;
+  final previousRange = previousControllerComposingRange;
+  if (previousText == null || previousRange == null) return null;
+  if (previousText != currentValue) return null;
+  if (!_isValidComposingRange(previousText, previousRange)) return null;
+  if (_isValidComposingRange(currentValue, composingRange)) return null;
+
+  final composingText = previousText.substring(
+    previousRange.start,
+    previousRange.end,
+  );
+  if (composingText.isEmpty) return null;
+
+  final expectedPreviousValue = previousText.replaceRange(
+    previousRange.start,
+    previousRange.end,
+    '',
+  );
+  if (previousValue != expectedPreviousValue) return null;
+
+  return IOSSoftKeyboardInputResult(
+    nextValue: currentValue,
+    nextComposingValue: null,
+    actions: _inputActionsForTailChange('', composingText),
+  );
+}
+
+IOSSoftKeyboardInputResult? _partialBopomofoCommitResult({
   required String currentValue,
   required TextRange composingRange,
   required String? previousComposingValue,
   required ({String previous, String current}) tails,
 }) {
-  if (!_isHeldPinyinComposingText(previousComposingValue)) return null;
+  if (!_isHeldBopomofoComposingText(previousComposingValue)) return null;
   if (!tails.current.startsWith(tails.previous)) return null;
 
-  final heldText = _heldPinyinTextAfterPartialCommit(
+  final heldText = _heldBopomofoTextAfterPartialCommit(
     currentValue: currentValue,
     composingRange: composingRange,
     previousComposingValue: previousComposingValue!,
@@ -246,7 +290,7 @@ IOSSoftKeyboardInputResult? _partialPinyinCommitResult({
   );
 }
 
-String? _heldPinyinTextAfterPartialCommit({
+String? _heldBopomofoTextAfterPartialCommit({
   required String currentValue,
   required TextRange composingRange,
   required String previousComposingValue,
@@ -259,7 +303,72 @@ String? _heldPinyinTextAfterPartialCommit({
       composingRange.start,
       composingRange.end,
     );
-    if (_isHeldPinyinComposingText(composingText)) return composingText;
+    if (_isHeldBopomofoComposingText(composingText)) return composingText;
+    return _bopomofoSuffixAfterPartialCommit(
+      value: composingText,
+      previousComposingValue: previousComposingValue,
+    );
+  }
+
+  final delta = currentTail.substring(previousTail.length);
+  return _bopomofoSuffixAfterPartialCommit(
+    value: delta,
+    previousComposingValue: previousComposingValue,
+  );
+}
+
+IOSSoftKeyboardInputResult? _partialPinyinCommitResult({
+  required String currentValue,
+  required TextRange composingRange,
+  required String? previousComposingValue,
+  required ({String previous, String current}) tails,
+}) {
+  if (!_isHeldPinyinComposingText(previousComposingValue)) return null;
+  if (!tails.current.startsWith(tails.previous)) return null;
+
+  final heldTail = _heldPinyinTailAfterPartialCommit(
+    currentValue: currentValue,
+    composingRange: composingRange,
+    previousComposingValue: previousComposingValue!,
+    previousTail: tails.previous,
+    currentTail: tails.current,
+  );
+  if (heldTail == null || !tails.current.endsWith(heldTail.currentSuffix)) {
+    return null;
+  }
+
+  final committedTail = tails.current.substring(
+    0,
+    tails.current.length - heldTail.currentSuffix.length,
+  );
+  final nextValue = currentValue.substring(
+    0,
+    currentValue.length - heldTail.currentSuffix.length,
+  );
+  return IOSSoftKeyboardInputResult(
+    nextValue: nextValue,
+    nextComposingValue: heldTail.composingValue,
+    actions: _inputActionsForTailChange(tails.previous, committedTail),
+  );
+}
+
+({String currentSuffix, String composingValue})?
+    _heldPinyinTailAfterPartialCommit({
+  required String currentValue,
+  required TextRange composingRange,
+  required String previousComposingValue,
+  required String previousTail,
+  required String currentTail,
+}) {
+  if (_isValidComposingRange(currentValue, composingRange) &&
+      composingRange.end == currentValue.length) {
+    final composingText = currentValue.substring(
+      composingRange.start,
+      composingRange.end,
+    );
+    if (_isHeldPinyinComposingText(composingText)) {
+      return (currentSuffix: composingText, composingValue: composingText);
+    }
     return _pinyinSuffixAfterPartialCommit(
       value: composingText,
       previousComposingValue: previousComposingValue,
@@ -284,9 +393,19 @@ String _normalizedShortenedKoreanHangulValue({
 
   final previousPrefixLength = _leadingSentinelLength(previousValue);
   final currentPrefixLength = _leadingSentinelLength(currentValue);
-  if (previousPrefixLength < sentinelPrefixLength) return currentValue;
   if (currentPrefixLength <= 0) return currentValue;
-  if (currentValue.length == currentPrefixLength) return currentValue;
+  if (currentValue.length == currentPrefixLength) {
+    final previousTail = _tailAfterPrefix(previousValue, previousPrefixLength);
+    final isShortenedKoreanSentinelReset =
+        previousPrefixLength < sentinelPrefixLength &&
+            currentPrefixLength < previousPrefixLength &&
+            _endsWithKoreanText(previousTail);
+    if (isShortenedKoreanSentinelReset) {
+      return _sentinel * previousPrefixLength;
+    }
+    return currentValue;
+  }
+  if (previousPrefixLength < sentinelPrefixLength) return currentValue;
 
   final currentTail = currentValue.substring(currentPrefixLength);
   if (_compositionKind(currentTail) != _CompositionKind.koreanHangul) {
@@ -467,41 +586,49 @@ bool _isShortenedSentinelOnlyValue(
   return value.length == prefixLength && prefixLength < sentinelPrefixLength;
 }
 
-String? _continuedComposingValue(
-  String previousTail,
-  String currentTail,
-  String? previousComposingValue,
-) {
-  if (previousComposingValue == null || previousComposingValue.isEmpty) {
-    return null;
-  }
-  if (!currentTail.startsWith(previousTail)) return null;
-
-  final continuedValue = currentTail.substring(previousTail.length);
-  if (continuedValue.isEmpty) return null;
-
-  final kind = _compositionKind(continuedValue);
-  if (kind != _CompositionKind.ascii) {
-    return null;
-  }
-  if (_containsJapaneseKana(previousTail) ||
-      !_isLikelyPinyinComposingText(continuedValue)) {
-    return null;
-  }
-
-  final previousKind = _compositionKind(previousComposingValue);
-  if (!_isComposingTransition(previousKind, kind)) return null;
-
-  return continuedValue;
-}
-
 bool _isHeldPinyinComposingText(String? value) {
   if (value == null || value.isEmpty) return false;
   if (_compositionKind(value) != _CompositionKind.ascii) return false;
   return _isLikelyPinyinComposingText(value);
 }
 
-String? _pinyinSuffixAfterPartialCommit({
+bool _isHeldBopomofoComposingText(String? value) {
+  if (value == null || value.isEmpty) return false;
+  return _compositionKind(value) == _CompositionKind.bopomofo;
+}
+
+String? _bopomofoSuffixAfterPartialCommit({
+  required String value,
+  required String previousComposingValue,
+}) {
+  final previous = _normalizedBopomofoComposingText(previousComposingValue);
+  if (previous.isEmpty) return null;
+
+  for (final offset in _runeBoundaryOffsets(value)) {
+    final committedPrefix = value.substring(0, offset);
+    if (!_containsNonBopomofoComposingText(committedPrefix)) continue;
+
+    final suffix = value.substring(offset);
+    if (!_isHeldBopomofoComposingText(suffix)) continue;
+    if (!previous.endsWith(_normalizedBopomofoComposingText(suffix))) continue;
+    return suffix;
+  }
+  return null;
+}
+
+String _normalizedBopomofoComposingText(String value) {
+  return value
+      .replaceAll(String.fromCharCode(_textInputMarkedTextSpace), '')
+      .replaceAll(String.fromCharCode(_pinyinMarkedTextSpaceRune), '')
+      .replaceAll(RegExp(r'\s+'), '');
+}
+
+bool _containsNonBopomofoComposingText(String value) {
+  return value.runes.any((rune) => !_isBopomofoComposingRune(rune));
+}
+
+({String currentSuffix, String composingValue})?
+    _pinyinSuffixAfterPartialCommit({
   required String value,
   required String previousComposingValue,
 }) {
@@ -513,11 +640,43 @@ String? _pinyinSuffixAfterPartialCommit({
     if (!_containsNonAscii(committedPrefix)) continue;
 
     final suffix = value.substring(offset);
-    if (!_isHeldPinyinComposingText(suffix)) continue;
-    if (!previous.endsWith(_normalizedPinyinComposingText(suffix))) continue;
-    return suffix;
+    final normalizedSuffix = _normalizedPinyinComposingText(suffix);
+    if (!previous.endsWith(normalizedSuffix)) continue;
+    if (_isHeldPinyinComposingText(suffix)) {
+      return (currentSuffix: suffix, composingValue: suffix);
+    }
+
+    final previousSuffix = _previousPinyinComposingSuffix(
+      normalizedSuffix: normalizedSuffix,
+      previousComposingValue: previousComposingValue,
+    );
+    if (previousSuffix != null) {
+      return (currentSuffix: suffix, composingValue: previousSuffix);
+    }
   }
   return null;
+}
+
+String? _previousPinyinComposingSuffix({
+  required String normalizedSuffix,
+  required String previousComposingValue,
+}) {
+  for (final offset in _runeBoundaryOffsets(previousComposingValue)) {
+    final suffix = previousComposingValue.substring(offset);
+    if (_startsWithPinyinSeparator(suffix)) continue;
+    if (!_isHeldPinyinComposingText(suffix)) continue;
+    if (_normalizedPinyinComposingText(suffix) == normalizedSuffix) {
+      return suffix;
+    }
+  }
+  return null;
+}
+
+bool _startsWithPinyinSeparator(String value) {
+  if (value.isEmpty) return false;
+  final rune = value.runes.first;
+  return rune == _pinyinMarkedTextSpaceRune ||
+      String.fromCharCode(rune).trim().isEmpty;
 }
 
 Iterable<int> _runeBoundaryOffsets(String value) sync* {
@@ -686,7 +845,7 @@ _CompositionKind _compositionKind(String value) {
   if (value.runes.every(_isChineseStrokeRune)) {
     return _CompositionKind.stroke;
   }
-  if (value.runes.every(_isBopomofoRune)) {
+  if (value.runes.every(_isBopomofoComposingRune)) {
     return _CompositionKind.bopomofo;
   }
   if (value.runes.every(_isJapaneseKanaRune)) {
@@ -708,7 +867,7 @@ _CompositionKind _compositionKind(String value) {
 
 bool _isAsciiComposingRune(int rune) {
   // iOS IME can emit 0x2006 during composing, so treat it as ASCII-like.
-  return rune <= 0x7F || rune == 0x2006;
+  return rune <= 0x7F || rune == _pinyinMarkedTextSpaceRune;
 }
 
 bool _isComposingTransition(
@@ -758,15 +917,17 @@ bool _isBopomofoRune(int rune) {
       rune == 0x02D9;
 }
 
+bool _isBopomofoComposingRune(int rune) {
+  return _isBopomofoRune(rune) ||
+      rune == _textInputMarkedTextSpace ||
+      rune == _pinyinMarkedTextSpaceRune;
+}
+
 bool _isJapaneseKanaRune(int rune) {
   return (rune >= 0x3040 && rune <= 0x309F) ||
       (rune >= 0x30A0 && rune <= 0x30FF) ||
       (rune >= 0x31F0 && rune <= 0x31FF) ||
       (rune >= 0xFF66 && rune <= 0xFF9F);
-}
-
-bool _containsJapaneseKana(String value) {
-  return value.runes.any(_isJapaneseKanaRune);
 }
 
 bool _isKoreanJamoRune(int rune) {
