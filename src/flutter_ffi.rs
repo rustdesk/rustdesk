@@ -612,6 +612,24 @@ pub fn session_handle_flutter_raw_key_event(
 // As Rust is multi-threaded, enter() can be called before leave().
 // The Rust-side grab ownership state filters stale transitions.
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
+    // On Wayland, ask the compositor to deliver system shortcuts
+    // (Alt+Tab, Super, ...) to the session window instead of handling
+    // them locally. No-op on X11 and on compositors without the protocol.
+    #[cfg(target_os = "linux")]
+    if !crate::platform::is_x11() {
+        if _enter {
+            // Gate the inhibitor on the session still existing. As noted above,
+            // a stale enter() can arrive after the session is gone (the
+            // enter-before-leave race); without this check it would inhibit
+            // shortcuts for whatever toplevel happens to be focused. release()
+            // stays unconditional so a leave can always clean up.
+            if sessions::get_session_by_session_id(&_session_id).is_some() {
+                crate::platform::wayland_keyboard_inhibit::inhibit_keyboard_shortcuts();
+            }
+        } else {
+            crate::platform::wayland_keyboard_inhibit::release_keyboard_shortcuts();
+        }
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
         let keyboard_mode = session.get_keyboard_mode();
