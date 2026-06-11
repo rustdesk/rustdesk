@@ -30,7 +30,11 @@ fn run_rdp(port: u16) {
         if !password.is_empty() {
             args.push(format!("/pass:{}", password));
         }
-        println!("{:?}", args);
+        if !username.is_empty() {
+            println!("RDP credentials provided");
+        } else {
+            println!("RDP credentials not provided");
+        }
         std::process::Command::new("cmdkey")
             .args(&args)
             .output()
