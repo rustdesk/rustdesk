@@ -9,6 +9,17 @@ name: rustqs windows min test
 
 on:
   workflow_dispatch:
+    inputs:
+      server:
+        description: 'RustDesk server (rendezvous host:port). Empty = no injection (default upstream).'
+        required: false
+        type: string
+        default: ''
+      key:
+        description: 'RustDesk server public key (base64). Empty = no injection.'
+        required: false
+        type: string
+        default: ''
 
 env:
   RUST_VERSION: "1.75"
@@ -46,6 +57,33 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      # L1: вшить сервер+ключ в config.rs ДО любой сборки. Опционально — пустые inputs = no-op.
+      - name: 'L1 inject: server + key into hbb_common/config.rs'
+        shell: bash
+        env:
+          INJ_SERVER: ${{ inputs.server }}
+          INJ_KEY: ${{ inputs.key }}
+        run: |
+          set -eu
+          f=libs/hbb_common/src/config.rs
+          if [ -n "${INJ_SERVER:-}" ]; then
+            echo "L1: server -> ${INJ_SERVER}"
+            # экранируем спецсимволы sed
+            esc=$(printf '%s' "$INJ_SERVER" | sed -e 's/[\/&]/\\&/g')
+            sed -i "s/rs-ny\.rustdesk\.com/${esc}/" "$f"
+            grep -n "${INJ_SERVER}" "$f" | head -3 || { echo "L1: server marker not found after sed"; exit 1; }
+          else
+            echo "L1: server input empty — skipping injection"
+          fi
+          if [ -n "${INJ_KEY:-}" ]; then
+            echo "L1: key embedded (len ${#INJ_KEY})"
+            esc=$(printf '%s' "$INJ_KEY" | sed -e 's/[\/&]/\\&/g')
+            sed -i "s|OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=|${esc}|" "$f"
+            if ! grep -F -q -- "${INJ_KEY}" "$f"; then echo "L1: key marker not found after sed"; exit 1; fi
+          else
+            echo "L1: key input empty — skipping injection"
+          fi
 
       - name: Restore bridge files
         uses: actions/download-artifact@v8
