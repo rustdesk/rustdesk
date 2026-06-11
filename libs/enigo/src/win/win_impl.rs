@@ -6,7 +6,7 @@ use winapi;
 
 use crate::win::keycodes::*;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
-use std::mem::*;
+use std::{mem::*, time::Duration};
 
 extern "system" {
     pub fn GetLastError() -> DWORD;
@@ -19,6 +19,7 @@ static mut LAYOUT: HKL = std::ptr::null_mut();
 
 /// The dwExtraInfo value in keyboard and mouse structure that used in SendInput()
 pub const ENIGO_INPUT_EXTRA_VALUE: ULONG_PTR = 100;
+const UNICODE_KEY_SEQUENCE_DELAY: Duration = Duration::from_millis(20);
 
 fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
     let mut u = INPUT_u::default();
@@ -237,6 +238,7 @@ impl KeyboardControllable for Enigo {
                 // do i need to produce a keyup?
                 // self.unicode_key_up(0);
             }
+            std::thread::sleep(UNICODE_KEY_SEQUENCE_DELAY);
         }
     }
 
