@@ -220,7 +220,8 @@ impl KeyboardControllable for Enigo {
     fn key_sequence(&mut self, sequence: &str) {
         let mut buffer = [0; 2];
 
-        for c in sequence.chars() {
+        let mut chars = sequence.chars().peekable();
+        while let Some(c) = chars.next() {
             // Windows uses uft-16 encoding. We need to check
             // for variable length characters. As such some
             // characters can be 32 bit long and those are
@@ -238,7 +239,9 @@ impl KeyboardControllable for Enigo {
                 // do i need to produce a keyup?
                 // self.unicode_key_up(0);
             }
-            std::thread::sleep(UNICODE_KEY_SEQUENCE_DELAY);
+            if chars.peek().is_some() {
+                std::thread::sleep(UNICODE_KEY_SEQUENCE_DELAY);
+            }
         }
     }
 
