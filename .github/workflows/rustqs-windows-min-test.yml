@@ -20,6 +20,11 @@ on:
         required: false
         type: string
         default: ''
+      app_name:
+        description: 'Brand name (sed RustDesk → this). Empty = no rebrand (default RustDesk).'
+        required: false
+        type: string
+        default: ''
 
 env:
   RUST_VERSION: "1.75"
@@ -84,6 +89,36 @@ jobs:
           else
             echo "L1: key input empty — skipping injection"
           fi
+
+      # L3: брендинг RustDesk → ${{ inputs.app_name }}. Опционально, sed по тем же файлам что rdgen.
+      - name: 'L3 brand: rename RustDesk → app_name'
+        if: ${{ inputs.app_name != '' }}
+        shell: bash
+        env:
+          APP: ${{ inputs.app_name }}
+        run: |
+          set -eu
+          esc=$(printf '%s' "$APP" | sed -e 's/[\/&]/\\&/g')
+
+          # Cargo.toml (main + portable)
+          for f in Cargo.toml libs/portable/Cargo.toml; do
+            sed -i -e "s|description = \"RustDesk Remote Desktop\"|description = \"${esc}\"|" \
+                   -e "s|ProductName = \"RustDesk\"|ProductName = \"${esc}\"|" \
+                   -e "s|FileDescription = \"RustDesk Remote Desktop\"|FileDescription = \"${esc}\"|" \
+                   -e "s|OriginalFilename = \"rustdesk.exe\"|OriginalFilename = \"${esc}.exe\"|" "$f"
+          done
+
+          # portable packer APP_PREFIX
+          sed -i -e "s|const APP_PREFIX: \&str = \"rustdesk\";|const APP_PREFIX: \&str = \"${esc}\";|" libs/portable/src/main.rs
+
+          # flutter Runner.rc
+          sed -i -e "s|\"RustDesk Remote Desktop\"|\"${esc}\"|" \
+                 -e "s|VALUE \"InternalName\", \"rustdesk\" \"\\\\0\"|VALUE \"InternalName\", \"${esc}\" \"\\\\0\"|" \
+                 -e "s|\"rustdesk.exe\"|\"${esc}.exe\"|" \
+                 -e "s|\"RustDesk\"|\"${esc}\"|" flutter/windows/runner/Runner.rc
+
+          echo "L3: brand → ${APP}"
+          grep -c "${APP}" Cargo.toml libs/portable/Cargo.toml libs/portable/src/main.rs flutter/windows/runner/Runner.rc | sed 's/^/  /'
 
       - name: Restore bridge files
         uses: actions/download-artifact@v8
