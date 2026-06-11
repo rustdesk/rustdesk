@@ -30,7 +30,6 @@ jobs:
       configuration: Release
       platform: x64
       target_version: Windows10
-      upload-artifact-name: topmostwindow-artifacts
 
   build:
     needs: [bridge, topmost]
