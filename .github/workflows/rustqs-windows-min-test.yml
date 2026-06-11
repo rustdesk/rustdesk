@@ -25,6 +25,11 @@ on:
         required: false
         type: string
         default: ''
+      custom_txt:
+        description: 'Base64-encoded custom_.txt payload (rdgen JSON: password, settings...). Empty = no quick-support.'
+        required: false
+        type: string
+        default: ''
 
 env:
   RUST_VERSION: "1.75"
@@ -89,6 +94,20 @@ jobs:
           else
             echo "L1: key input empty — skipping injection"
           fi
+
+      # L2 step A (PRE-BUILD): allowCustom — снять проверку подписи custom.txt + переименовать на custom_.txt
+      - name: 'L2 patch: allowCustom (remove signature check, custom.txt → custom_.txt)'
+        if: ${{ inputs.custom_txt != '' }}
+        shell: bash
+        run: |
+          set -eu
+          python3 .github/patches/rdgen-allowCustom.py
+          # верификация: блок проверки подписи должен быть удалён, упоминания custom.txt заменены
+          if grep -q '5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=' src/common.rs; then
+            echo "L2: allowCustom FAILED — signature key still present"; exit 1
+          fi
+          echo "L2: allowCustom applied (src/common.rs patched)"
+          grep -c 'custom_\.txt' src/common.rs || true
 
       # L3: брендинг RustDesk → ${{ inputs.app_name }}. Опционально, sed по тем же файлам что rdgen.
       - name: 'L3 brand: rename RustDesk → app_name'
@@ -221,6 +240,19 @@ jobs:
         with:
           name: topmostwindow-artifacts
           path: "./rustdesk"
+
+      # L2 step B (POST-BUILD): записать custom_.txt рядом с exe. base64 → decoded.
+      - name: 'L2 payload: write custom_.txt next to exe'
+        if: ${{ inputs.custom_txt != '' }}
+        shell: bash
+        env:
+          PAYLOAD: ${{ inputs.custom_txt }}
+        run: |
+          set -eu
+          # input — это уже base64 (rdgen-формат). Пишем КАК ЕСТЬ (read_custom_client декодирует сам).
+          printf '%s' "${PAYLOAD}" > ./rustdesk/custom_.txt
+          ls -la ./rustdesk/custom_.txt
+          echo "L2: custom_.txt written (size $(wc -c < ./rustdesk/custom_.txt))"
 
       - name: Upload unsigned
         uses: actions/upload-artifact@v7
