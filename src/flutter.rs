@@ -1278,7 +1278,7 @@ pub fn session_add_existed(
     let conn_type = if is_view_camera {
         ConnType::VIEW_CAMERA
     } else {
-        ConnType::DEFAULT_CONN
+        ConnType::RDP
     };
     sessions::insert_peer_session_id(peer_id, conn_type, session_id, displays);
     Ok(())

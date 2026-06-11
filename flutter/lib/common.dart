@@ -2310,7 +2310,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
     switch (type) {
       case UriLinkType.remoteDesktop:
         Future.delayed(Duration.zero, () {
-          rustDeskWinManager.newRemoteDesktop(id!,
+          rustDeskWinManager.newPortForward(id!, true,
               password: password,
               switchUuid: switchUuid,
               forceRelay: forceRelay);
@@ -2540,7 +2540,7 @@ connect(BuildContext context, String id,
     bool isViewCamera = false,
     bool isTerminal = false,
     bool isTcpTunneling = false,
-    bool isRDP = false,
+    bool isRDP = true,
     bool forceRelay = false,
     String? password,
     String? connToken,

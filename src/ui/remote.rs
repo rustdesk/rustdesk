@@ -609,7 +609,7 @@ impl SciterSession {
         } else if cmd.eq("--rdp") {
             ConnType::RDP
         } else {
-            ConnType::DEFAULT_CONN
+            ConnType::RDP
         };
 
         session
