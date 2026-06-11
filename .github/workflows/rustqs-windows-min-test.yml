@@ -107,10 +107,41 @@ jobs:
             exit 1
           fi
 
-      - name: Build rustdesk (Flutter Windows)
+      - name: Build rustdesk (Flutter Windows) + bring in native deps
         run: |
           python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+
+          # usbmmidd_v2 — виртуальный дисплей. Берём из release ФОРКА (суверенно).
+          Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive usbmmidd_v2.zip -DestinationPath .
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
+          mv -Force .\usbmmidd_v2 ./rustdesk
+
+          # Printer driver + adapter из release форка. Хеши сверяем по sha256sums (тоже из релиза).
+          try {
+            Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
+            Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
+            Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/sha256sums -OutFile sha256sums
+
+            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1.4\.zip$').Matches.Groups[1].Value
+            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256
+            $checksum_adapter = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
+            $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
+            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
+                Write-Output "printer driver+adapter checksums match, extracting"
+                Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
+                mkdir ./rustdesk/drivers
+                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
+                Expand-Archive printer_driver_adapter.zip -DestinationPath .
+                mv -Force .\printer_driver_adapter.dll ./rustdesk
+            } else {
+                Write-Output "checksum mismatch — ignoring printer files"
+            }
+          } catch {
+              Write-Host "Ignore the printer driver error."
+          }
 
       - name: Download RustDeskTempTopMostWindow artifacts
         uses: actions/download-artifact@v8
