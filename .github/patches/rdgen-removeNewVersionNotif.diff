@@ -1,0 +1,41 @@
+diff --git a/flutter/lib/desktop/pages/desktop_home_page.dart b/flutter/lib/desktop/pages/desktop_home_page.dart
+index ba724eed5..1604c429f 100644
+--- a/flutter/lib/desktop/pages/desktop_home_page.dart
++++ b/flutter/lib/desktop/pages/desktop_home_page.dart
+@@ -424,21 +424,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
+   }
+ 
+   Widget buildHelpCards(String updateUrl) {
+-    if (!bind.isCustomClient() &&
+-        updateUrl.isNotEmpty &&
+-        !isCardClosed &&
+-        bind.mainUriPrefixSync().contains('rustdesk')) {
+-      return buildInstallCard(
+-          "Status",
+-          "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
+-          "Click to download", () async {
+-        final Uri url = Uri.parse('https://rustdesk.com/download');
+-        await launchUrl(url);
+-      }, closeButton: true);
+-    }
+-    if (systemError.isNotEmpty) {
+-      return buildInstallCard("", systemError, "", () {});
+-    }
++    // if (!bind.isCustomClient() &&
++    //     updateUrl.isNotEmpty &&
++    //     !isCardClosed &&
++    //     bind.mainUriPrefixSync().contains('rustdesk')) {
++    //   return buildInstallCard(
++    //       "Status",
++    //       "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
++    //       "Click to download", () async {
++    //     final Uri url = Uri.parse('https://rustdesk.com/download');
++    //     await launchUrl(url);
++    //   }, closeButton: true);
++    // }
++    // if (systemError.isNotEmpty) {
++    //   return buildInstallCard("", systemError, "", () {});
++    // }
+ 
+     if (isWindows && !bind.isDisableInstallation()) {
+       if (!bind.mainIsInstalled()) {
