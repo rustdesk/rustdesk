@@ -139,10 +139,12 @@ jobs:
           echo "L3: brand → ${APP}"
           grep -c "${APP}" Cargo.toml libs/portable/Cargo.toml libs/portable/src/main.rs flutter/windows/runner/Runner.rc | sed 's/^/  /'
 
-          # Имя exe-файла: Flutter формирует его из CMakeLists.txt → BINARY_NAME = "rustdesk".
-          # Меняем переменную, чтобы итоговый exe назывался ${APP}.exe (а не rustdesk.exe).
-          sed -i -e "s|set(BINARY_NAME \"rustdesk\")|set(BINARY_NAME \"${esc}\")|" flutter/windows/runner/CMakeLists.txt
-          grep BINARY_NAME flutter/windows/runner/CMakeLists.txt
+          # Имя exe-файла: Flutter формирует его из flutter/windows/CMakeLists.txt
+          # (РОДИТЕЛЬСКИЙ, не runner/). Там и BINARY_NAME, и project().
+          sed -i -e "s|set(BINARY_NAME \"rustdesk\")|set(BINARY_NAME \"${esc}\")|" \
+                 -e "s|project(rustdesk LANGUAGES CXX)|project(${esc} LANGUAGES CXX)|" \
+                 flutter/windows/CMakeLists.txt
+          grep -E "BINARY_NAME|^project" flutter/windows/CMakeLists.txt | head -3
 
       - name: Restore bridge files
         uses: actions/download-artifact@v8
