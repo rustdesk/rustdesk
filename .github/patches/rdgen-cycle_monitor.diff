@@ -1,0 +1,87 @@
+diff --git a/flutter/lib/desktop/widgets/remote_toolbar.dart b/flutter/lib/desktop/widgets/remote_toolbar.dart
+index bc3757f1e..ba6509802 100644
+--- a/flutter/lib/desktop/widgets/remote_toolbar.dart
++++ b/flutter/lib/desktop/widgets/remote_toolbar.dart
+@@ -317,6 +317,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
+             borderRadius: borderRadius,
+             child: _DraggableShowHide(
+               id: widget.id,
++              ffi: widget.ffi,
+               sessionId: widget.ffi.sessionId,
+               dragging: _dragging,
+               fractionX: _fractionX,
+@@ -2460,6 +2461,7 @@ class RdoMenuButton<T> extends StatelessWidget {
+ 
+ class _DraggableShowHide extends StatefulWidget {
+   final String id;
++  final FFI ffi;
+   final SessionID sessionId;
+   final RxDouble fractionX;
+   final RxBool dragging;
+@@ -2472,6 +2474,7 @@ class _DraggableShowHide extends StatefulWidget {
+   const _DraggableShowHide({
+     Key? key,
+     required this.id,
++    required this.ffi,
+     required this.sessionId,
+     required this.fractionX,
+     required this.dragging,
+@@ -2583,6 +2586,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
+       mainAxisSize: MainAxisSize.min,
+       children: [
+         _buildDraggable(context),
++        _CycleMonitorMenu(id: widget.id, ffi: widget.ffi),
+         Obx(() => buttonWrapper(
+               () {
+                 widget.setFullscreen(!isFullscreen.value);
+@@ -2742,3 +2746,50 @@ class EdgeThicknessControl extends StatelessWidget {
+     return slider;
+   }
+ }
++
++class _CycleMonitorMenu extends StatelessWidget {
++  final String id;
++  final FFI ffi;
++
++  const _CycleMonitorMenu({
++    Key? key,
++    required this.id,
++    required this.ffi,
++  }) : super(key: key);
++
++  @override
++  Widget build(BuildContext context) {
++    final pi = ffi.ffiModel.pi;
++
++    //for (int i = 0; i < pi.displays.length; i++) {
++    return TextButton(
++      onPressed: () {
++        RxInt display = CurrentDisplayState.find(id);
++        display.value = display.value + 1;
++        if (display.value >= pi.displays.length) {
++          display.value = 0;
++        }
++        openMonitorInTheSameTab(display.value, ffi, pi);
++        pi.currentDisplay = display.value;
++      },
++      child: Stack(children: [
++        Container(
++            child: Align(
++                alignment: Alignment.center,
++                child: const Icon(
++                  Icons.personal_video,
++                  color: _ToolbarTheme.blueColor,
++                  size: 20.0,
++                ))),
++        Container(
++            child: Align(
++                alignment: Alignment(0.0, -0.4),
++                child: Text(
++                  '  ${CurrentDisplayState.find(id).value + 1}/${pi.displays.length}',
++                  style: const TextStyle(
++                      color: _ToolbarTheme.blueColor, fontSize: 8),
++                ))),
++      ]),
++    );
++  }
++}
