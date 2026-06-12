@@ -1,32 +1,44 @@
 name: rustqs windows min test
-# Минимальный тест: собрать дефолтный rustdesk.exe в форке на windows-2022.
-# Никакой инъекции/брендинга/подписи/заливки. Цель — проверить, что тулчейн зелёный.
-# Шаги — копия официального build-for-windows-flutter из flutter-build.yml@1.4.7,
-# только переиспользуем готовые bridge.yml и third-party-... через workflow_call.
+# Минимальный workflow сборки rustqs.exe (Flutter Windows) в форке rustdesk.
+# Шаги — копия build-for-windows-flutter@1.4.7 + workflow_dispatch + три слоя вшивания
+# (L1 config.rs server+key, L2 allowCustom+custom_.txt, L3 brand+rename exe).
 #
-# Запуск:  gh workflow run "rustqs windows min test" --ref rustqs/min-test --repo bashrusakh/rustdesk
-# Артефакт: rustdesk-min-test-windows (qweks → unzip → rustdesk.exe внутри ./rustdesk/)
+# Два режима передачи параметров (через workflow inputs):
+#   1) enc_payload — base64(openssl aes-256-cbc -pbkdf2 -pass pass:$SECRET) от JSON
+#      {server,key,app_name,custom_txt}. Recommended для prod: значения не утекают в
+#      логи публичного рана. Требует GitHub Secret WORKFLOW_PAYLOAD_KEY в форке.
+#   2) Открытые server/key/app_name/custom_txt — для дебага и тестирования.
+#      Удобно, но значения видны в логах рана. Не использовать на проде.
+#
+# Запуск из gh:
+#   gh api repos/$REPO/actions/workflows/rustqs-windows-min-test.yml/dispatches -X POST \
+#     -f ref=rustqs/min-test -f inputs[enc_payload]=$BLOB
 
 on:
   workflow_dispatch:
     inputs:
+      enc_payload:
+        description: 'Encrypted payload (base64 openssl aes-256-cbc -pbkdf2). Overrides open inputs below.'
+        required: false
+        type: string
+        default: ''
       server:
-        description: 'RustDesk server (rendezvous host:port). Empty = no injection (default upstream).'
+        description: '[Debug] RustDesk server (rendezvous host:port). Ignored if enc_payload set.'
         required: false
         type: string
         default: ''
       key:
-        description: 'RustDesk server public key (base64). Empty = no injection.'
+        description: '[Debug] RustDesk server public key (base64). Ignored if enc_payload set.'
         required: false
         type: string
         default: ''
       app_name:
-        description: 'Brand name (sed RustDesk → this). Empty = no rebrand (default RustDesk).'
+        description: '[Debug] Brand name. Ignored if enc_payload set.'
         required: false
         type: string
         default: ''
       custom_txt:
-        description: 'Base64-encoded custom_.txt payload (rdgen JSON: password, settings...). Empty = no quick-support.'
+        description: '[Debug] Base64 custom_.txt payload. Ignored if enc_payload set.'
         required: false
         type: string
         default: ''
@@ -68,58 +80,103 @@ jobs:
         with:
           submodules: recursive
 
-      # L1: вшить сервер+ключ в config.rs ДО любой сборки. Опционально — пустые inputs = no-op.
-      - name: 'L1 inject: server + key into hbb_common/config.rs'
+      # Разрешение параметров сборки: либо расшифровать enc_payload (prod),
+      # либо взять открытые inputs (debug). На выходе — env vars RQS_*, скрытые
+      # из логов через ::add-mask::.
+      - name: 'Resolve build config (decrypt or pass-through)'
         shell: bash
         env:
-          INJ_SERVER: ${{ inputs.server }}
-          INJ_KEY: ${{ inputs.key }}
+          ENC: ${{ inputs.enc_payload }}
+          PAYLOAD_KEY: ${{ secrets.WORKFLOW_PAYLOAD_KEY }}
+          IN_SERVER: ${{ inputs.server }}
+          IN_KEY: ${{ inputs.key }}
+          IN_APP: ${{ inputs.app_name }}
+          IN_CT: ${{ inputs.custom_txt }}
+        run: |
+          set -eu
+
+          if [ -n "${ENC:-}" ]; then
+            if [ -z "${PAYLOAD_KEY:-}" ]; then
+              echo "::error::enc_payload provided but secret WORKFLOW_PAYLOAD_KEY is not set in this repo"
+              exit 1
+            fi
+            echo "Resolve mode: ENCRYPTED (enc_payload, len ${#ENC})"
+            # base64 → openssl decrypt с PBKDF2 → JSON
+            decrypted=$(printf '%s' "$ENC" | base64 -d \
+              | openssl enc -d -aes-256-cbc -pbkdf2 -pass "pass:${PAYLOAD_KEY}")
+            RQS_SERVER=$(printf '%s' "$decrypted" | jq -r '.server // ""')
+            RQS_KEY=$(printf '%s' "$decrypted" | jq -r '.key // ""')
+            RQS_APP=$(printf '%s' "$decrypted" | jq -r '.app_name // ""')
+            RQS_CT=$(printf '%s' "$decrypted" | jq -r '.custom_txt // ""')
+          else
+            echo "Resolve mode: OPEN inputs (debug)"
+            RQS_SERVER="${IN_SERVER:-}"
+            RQS_KEY="${IN_KEY:-}"
+            RQS_APP="${IN_APP:-}"
+            RQS_CT="${IN_CT:-}"
+          fi
+
+          # Маскируем чувствительные значения в логах ДО экспорта в $GITHUB_ENV.
+          # add-mask распространяется на всё содержимое логов до конца job'a.
+          for v in "$RQS_KEY" "$RQS_CT"; do
+            if [ -n "$v" ]; then echo "::add-mask::$v"; fi
+          done
+
+          {
+            echo "RQS_SERVER=$RQS_SERVER"
+            echo "RQS_KEY=$RQS_KEY"
+            echo "RQS_APP_NAME=$RQS_APP"
+            echo "RQS_CUSTOM_TXT=$RQS_CT"
+          } >> "$GITHUB_ENV"
+
+          # сводка (без значений): что задано, что пусто
+          echo "config: server=$([ -n "$RQS_SERVER" ] && echo SET || echo empty)"
+          echo "config: key=$([ -n "$RQS_KEY" ] && echo SET || echo empty)"
+          echo "config: app_name=$([ -n "$RQS_APP" ] && echo SET || echo empty)"
+          echo "config: custom_txt=$([ -n "$RQS_CT" ] && echo SET || echo empty)"
+
+      # L1: вшить сервер+ключ в config.rs ДО любой сборки. Опционально.
+      - name: 'L1 inject: server + key into hbb_common/config.rs'
+        if: env.RQS_SERVER != '' || env.RQS_KEY != ''
+        shell: bash
         run: |
           set -eu
           f=libs/hbb_common/src/config.rs
-          if [ -n "${INJ_SERVER:-}" ]; then
-            echo "L1: server -> ${INJ_SERVER}"
-            # экранируем спецсимволы sed
-            esc=$(printf '%s' "$INJ_SERVER" | sed -e 's/[\/&]/\\&/g')
+          if [ -n "${RQS_SERVER:-}" ]; then
+            echo "L1: server -> (masked)"
+            esc=$(printf '%s' "$RQS_SERVER" | sed -e 's/[\/&]/\\&/g')
             sed -i "s/rs-ny\.rustdesk\.com/${esc}/" "$f"
-            grep -n "${INJ_SERVER}" "$f" | head -3 || { echo "L1: server marker not found after sed"; exit 1; }
-          else
-            echo "L1: server input empty — skipping injection"
+            grep -F -q -- "$RQS_SERVER" "$f" || { echo "L1: server marker not found after sed"; exit 1; }
           fi
-          if [ -n "${INJ_KEY:-}" ]; then
-            echo "L1: key embedded (len ${#INJ_KEY})"
-            esc=$(printf '%s' "$INJ_KEY" | sed -e 's/[\/&]/\\&/g')
+          if [ -n "${RQS_KEY:-}" ]; then
+            echo "L1: key embedded (len ${#RQS_KEY})"
+            esc=$(printf '%s' "$RQS_KEY" | sed -e 's/[\/&]/\\&/g')
             sed -i "s|OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=|${esc}|" "$f"
-            if ! grep -F -q -- "${INJ_KEY}" "$f"; then echo "L1: key marker not found after sed"; exit 1; fi
-          else
-            echo "L1: key input empty — skipping injection"
+            grep -F -q -- "$RQS_KEY" "$f" || { echo "L1: key marker not found after sed"; exit 1; }
           fi
 
       # L2 step A (PRE-BUILD): allowCustom — снять проверку подписи custom.txt + переименовать на custom_.txt
       - name: 'L2 patch: allowCustom (remove signature check, custom.txt → custom_.txt)'
-        if: ${{ inputs.custom_txt != '' }}
+        if: env.RQS_CUSTOM_TXT != ''
         shell: bash
         run: |
           set -eu
           python3 .github/patches/rdgen-allowCustom.py
-          # верификация: блок проверки подписи должен быть удалён, упоминания custom.txt заменены
           if grep -q '5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=' src/common.rs; then
             echo "L2: allowCustom FAILED — signature key still present"; exit 1
           fi
           echo "L2: allowCustom applied (src/common.rs patched)"
           grep -c 'custom_\.txt' src/common.rs || true
 
-      # L3: брендинг RustDesk → ${{ inputs.app_name }}. Опционально, sed по тем же файлам что rdgen.
+      # L3: брендинг RustDesk → app_name (sed по тем же файлам что rdgen + flutter CMakeLists)
       - name: 'L3 brand: rename RustDesk → app_name'
-        if: ${{ inputs.app_name != '' }}
+        if: env.RQS_APP_NAME != ''
         shell: bash
-        env:
-          APP: ${{ inputs.app_name }}
         run: |
           set -eu
+          APP="$RQS_APP_NAME"
           esc=$(printf '%s' "$APP" | sed -e 's/[\/&]/\\&/g')
 
-          # Cargo.toml (main + portable)
           for f in Cargo.toml libs/portable/Cargo.toml; do
             sed -i -e "s|description = \"RustDesk Remote Desktop\"|description = \"${esc}\"|" \
                    -e "s|ProductName = \"RustDesk\"|ProductName = \"${esc}\"|" \
@@ -127,23 +184,19 @@ jobs:
                    -e "s|OriginalFilename = \"rustdesk.exe\"|OriginalFilename = \"${esc}.exe\"|" "$f"
           done
 
-          # portable packer APP_PREFIX
           sed -i -e "s|const APP_PREFIX: \&str = \"rustdesk\";|const APP_PREFIX: \&str = \"${esc}\";|" libs/portable/src/main.rs
 
-          # flutter Runner.rc
           sed -i -e "s|\"RustDesk Remote Desktop\"|\"${esc}\"|" \
                  -e "s|VALUE \"InternalName\", \"rustdesk\" \"\\\\0\"|VALUE \"InternalName\", \"${esc}\" \"\\\\0\"|" \
                  -e "s|\"rustdesk.exe\"|\"${esc}.exe\"|" \
                  -e "s|\"RustDesk\"|\"${esc}\"|" flutter/windows/runner/Runner.rc
 
-          echo "L3: brand → ${APP}"
-          grep -c "${APP}" Cargo.toml libs/portable/Cargo.toml libs/portable/src/main.rs flutter/windows/runner/Runner.rc | sed 's/^/  /'
-
-          # Имя exe-файла: Flutter формирует его из flutter/windows/CMakeLists.txt
-          # (РОДИТЕЛЬСКИЙ, не runner/). Там и BINARY_NAME, и project().
+          # exe-имя через РОДИТЕЛЬСКИЙ flutter/windows/CMakeLists.txt
           sed -i -e "s|set(BINARY_NAME \"rustdesk\")|set(BINARY_NAME \"${esc}\")|" \
                  -e "s|project(rustdesk LANGUAGES CXX)|project(${esc} LANGUAGES CXX)|" \
                  flutter/windows/CMakeLists.txt
+
+          echo "L3: brand → ${APP}"
           grep -E "BINARY_NAME|^project" flutter/windows/CMakeLists.txt | head -3
 
       - name: Restore bridge files
@@ -211,14 +264,14 @@ jobs:
           python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
 
-          # usbmmidd_v2 — виртуальный дисплей. Берём из release ФОРКА (суверенно).
+          # usbmmidd_v2 — виртуальный дисплей. Из release ФОРКА (суверенно).
           Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
           Expand-Archive usbmmidd_v2.zip -DestinationPath .
           Remove-Item -Path usbmmidd_v2\Win32 -Recurse
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
           mv -Force .\usbmmidd_v2 ./rustdesk
 
-          # Printer driver + adapter из release форка. Хеши сверяем по sha256sums (тоже из релиза).
+          # Printer driver + adapter из release форка.
           try {
             Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
             Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
@@ -248,16 +301,13 @@ jobs:
           name: topmostwindow-artifacts
           path: "./rustdesk"
 
-      # L2 step B (POST-BUILD): записать custom_.txt рядом с exe. base64 → decoded.
+      # L2 step B (POST-BUILD): записать custom_.txt рядом с exe (значение уже base64).
       - name: 'L2 payload: write custom_.txt next to exe'
-        if: ${{ inputs.custom_txt != '' }}
+        if: env.RQS_CUSTOM_TXT != ''
         shell: bash
-        env:
-          PAYLOAD: ${{ inputs.custom_txt }}
         run: |
           set -eu
-          # input — это уже base64 (rdgen-формат). Пишем КАК ЕСТЬ (read_custom_client декодирует сам).
-          printf '%s' "${PAYLOAD}" > ./rustdesk/custom_.txt
+          printf '%s' "$RQS_CUSTOM_TXT" > ./rustdesk/custom_.txt
           ls -la ./rustdesk/custom_.txt
           echo "L2: custom_.txt written (size $(wc -c < ./rustdesk/custom_.txt))"
 
