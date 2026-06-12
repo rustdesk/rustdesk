@@ -1,0 +1,13 @@
+diff --git a/flutter/lib/desktop/pages/connection_page.dart b/flutter/lib/desktop/pages/connection_page.dart
+index d9dc3eec4..76f386b76 100644
+--- a/flutter/lib/desktop/pages/connection_page.dart
++++ b/flutter/lib/desktop/pages/connection_page.dart
+@@ -131,7 +131,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
+             if (!isIncomingOnly) startServiceWidget(),
+             // ready && public
+             // No need to show the guide if is custom client.
+-            if (!isIncomingOnly) setupServerWidget(),
++            //if (!isIncomingOnly) setupServerWidget(),
+           ],
+         );
+ 
