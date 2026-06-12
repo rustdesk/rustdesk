@@ -1,0 +1,129 @@
+diff --git a/flutter/lib/desktop/pages/desktop_setting_page.dart b/flutter/lib/desktop/pages/desktop_setting_page.dart
+index 56a99446c..5991aceed 100644
+--- a/flutter/lib/desktop/pages/desktop_setting_page.dart
++++ b/flutter/lib/desktop/pages/desktop_setting_page.dart
+@@ -1101,8 +1101,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
+             if (usePassword)
+               _SubButton('Set permanent password', setPasswordDialog,
+                   permEnabled && !locked),
+-            // if (usePassword)
+-            //   hide_cm(!locked).marginOnly(left: _kContentHSubMargin - 6),
++            if (usePassword)
++              hide_cm(!locked).marginOnly(left: _kContentHSubMargin - 6),
+             if (usePassword) radios[2],
+           ]);
+         })));
+diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
+index 3032a2321..66d0d8c26 100644
+--- a/flutter/lib/main.dart
++++ b/flutter/lib/main.dart
+@@ -245,7 +245,7 @@ void runConnectionManagerScreen() async {
+     MyTheme.currentThemeMode(),
+   );
+   final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
+-  gFFI.serverModel.hideCm = hide;
++  // gFFI.serverModel.hideCm = hide;
+   if (hide) {
+     await hideCmWindow(isStartup: true);
+   } else {
+diff --git a/flutter/lib/models/server_model.dart b/flutter/lib/models/server_model.dart
+index 877576461..4efd6c8b0 100644
+--- a/flutter/lib/models/server_model.dart
++++ b/flutter/lib/models/server_model.dart
+@@ -32,7 +32,7 @@ class ServerModel with ChangeNotifier {
+   bool _fileOk = false;
+   bool _clipboardOk = false;
+   bool _showElevation = false;
+-  bool hideCm = false;
++  bool _hideCm = false;
+   int _connectStatus = 0; // Rendezvous Server status
+   String _verificationMethod = "";
+   String _temporaryPasswordLength = "";
+@@ -62,6 +62,8 @@ class ServerModel with ChangeNotifier {
+ 
+   bool get clipboardOk => _clipboardOk;
+ 
++  bool get hideCm => _hideCm;
++
+   bool get showElevation => _showElevation;
+ 
+   int get connectStatus => _connectStatus;
+@@ -82,12 +84,11 @@ class ServerModel with ChangeNotifier {
+ 
+   setVerificationMethod(String method) async {
+     await bind.mainSetOption(key: kOptionVerificationMethod, value: method);
+-    /*
++
+     if (method != kUsePermanentPassword) {
+       await bind.mainSetOption(
+           key: 'allow-hide-cm', value: bool2option('allow-hide-cm', false));
+     }
+-    */
+   }
+ 
+   String get temporaryPasswordLength {
+@@ -104,12 +105,11 @@ class ServerModel with ChangeNotifier {
+ 
+   setApproveMode(String mode) async {
+     await bind.mainSetOption(key: kOptionApproveMode, value: mode);
+-    /*
++
+     if (mode != 'password') {
+       await bind.mainSetOption(
+           key: 'allow-hide-cm', value: bool2option('allow-hide-cm', false));
+     }
+-    */
+   }
+ 
+   TextEditingController get serverId => _serverId;
+@@ -126,7 +126,6 @@ class ServerModel with ChangeNotifier {
+     _emptyIdShow = translate("Generating ...");
+     _serverId = IDTextEditingController(text: _emptyIdShow);
+ 
+-    /*
+     // initital _hideCm at startup
+     final verificationMethod =
+         bind.mainGetOptionSync(key: kOptionVerificationMethod);
+@@ -137,7 +136,6 @@ class ServerModel with ChangeNotifier {
+         verificationMethod == kUsePermanentPassword)) {
+       _hideCm = false;
+     }
+-    */
+ 
+     timerCallback() async {
+       final connectionStatus =
+@@ -227,14 +225,14 @@ class ServerModel with ChangeNotifier {
+     final temporaryPasswordLength =
+         await bind.mainGetOption(key: "temporary-password-length");
+     final approveMode = await bind.mainGetOption(key: kOptionApproveMode);
+-    /*
++
+     var hideCm = option2bool(
+         'allow-hide-cm', await bind.mainGetOption(key: 'allow-hide-cm'));
+     if (!(approveMode == 'password' &&
+         verificationMethod == kUsePermanentPassword)) {
+       hideCm = false;
+     }
+-    */
++
+     if (_approveMode != approveMode) {
+       _approveMode = approveMode;
+       update = true;
+@@ -265,7 +263,7 @@ class ServerModel with ChangeNotifier {
+       _temporaryPasswordLength = temporaryPasswordLength;
+       update = true;
+     }
+-    /*
++
+     if (_hideCm != hideCm) {
+       _hideCm = hideCm;
+       if (desktopType == DesktopType.cm) {
+@@ -277,7 +275,7 @@ class ServerModel with ChangeNotifier {
+       }
+       update = true;
+     }
+-    */
++
+     if (update) {
+       notifyListeners();
+     }
