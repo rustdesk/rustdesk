@@ -7,6 +7,7 @@ use hbb_common::{
     ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 use totp_rs::{Algorithm, Secret, TOTP};
 
@@ -16,6 +17,29 @@ lazy_static::lazy_static! {
 
 const ISSUER: &str = "RustDesk";
 const TAG_LOGIN: &str = "Connection";
+
+/// 🔒 SECURITY FIX: Derive encryption key from machine-specific data
+/// instead of the previous hardcoded "00" key that provided no real
+/// protection.
+fn derive_encryption_key() -> String {
+    let id = {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        { crate::ipc::get_id().unwrap_or_default() }
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        { Config::get_id() }
+    };
+    let machine_uid = {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        { format!("{}-{}", whoami::fallible::hostname().unwrap_or_default(), std::env::consts::OS) }
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        { format!("android-{}", std::env::consts::ARCH) }
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(id.as_bytes());
+    hasher.update(machine_uid.as_bytes());
+    // Use hex digest as key for compatibility with existing encrypt/decrypt API
+    format!("{:x}", hasher.finalize()).chars().take(32).collect()
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TOTPInfo {
@@ -52,7 +76,8 @@ impl TOTPInfo {
     }
 
     pub fn into_string(&self) -> ResultType<String> {
-        let secret = encrypt_vec_or_original(self.secret.as_slice(), "00", 1024);
+        let key = derive_encryption_key();
+        let secret = encrypt_vec_or_original(self.secret.as_slice(), &key, 1024);
         let totp_info = TOTPInfo {
             secret,
             ..self.clone()
@@ -62,8 +87,9 @@ impl TOTPInfo {
     }
 
     pub fn from_str(data: &str) -> ResultType<TOTP> {
+        let key = derive_encryption_key();
         let mut totp_info = serde_json::from_str::<TOTPInfo>(data)?;
-        let (secret, success, _) = decrypt_vec_or_original(&totp_info.secret, "00");
+        let (secret, success, _) = decrypt_vec_or_original(&totp_info.secret, &key);
         if success {
             totp_info.secret = secret;
             return Ok(totp_info.new_totp()?);
@@ -121,7 +147,8 @@ pub struct TelegramBot {
 
 impl TelegramBot {
     fn into_string(&self) -> ResultType<String> {
-        let token = encrypt_vec_or_original(self.token_str.as_bytes(), "00", 1024);
+        let key = derive_encryption_key();
+        let token = encrypt_vec_or_original(self.token_str.as_bytes(), &key, 1024);
         let bot = TelegramBot {
             token,
             ..self.clone()
@@ -140,12 +167,13 @@ impl TelegramBot {
     }
 
     pub fn get() -> ResultType<Option<TelegramBot>> {
+        let key = derive_encryption_key();
         let data = Config::get_option("bot");
         if data.is_empty() {
             return Ok(None);
         }
         let mut bot = serde_json::from_str::<TelegramBot>(&data)?;
-        let (token, success, _) = decrypt_vec_or_original(&bot.token, "00");
+        let (token, success, _) = decrypt_vec_or_original(&bot.token, &key);
         if success {
             bot.token_str = String::from_utf8(token)?;
             return Ok(Some(bot));

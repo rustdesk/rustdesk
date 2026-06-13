@@ -23,17 +23,36 @@ fn run_rdp(port: u16) {
     let username = std::env::var("rdp_username").unwrap_or_default();
     let password = std::env::var("rdp_password").unwrap_or_default();
     if !username.is_empty() || !password.is_empty() {
-        let mut args = vec!["/generic:localhost".to_owned()];
-        if !username.is_empty() {
-            args.push(format!("/user:{}", username));
+        // 🔒 SECURITY FIX: Pipe password via stdin instead of exposing
+        // it on the command line (/pass:xxx) which is visible in task
+        // manager and /proc/<pid>/cmdline.
+        let mut child = std::process::Command::new("cmdkey")
+            .arg("/generic:localhost")
+            .arg(format!("/user:{}", username))
+            .stdin(std::process::Stdio::piped())
+            .spawn();
+        if let Ok(ref mut child) = child {
+            use std::io::Write;
+            if !password.is_empty() {
+                let _ = child.stdin.as_mut().unwrap().write_all(
+                    format!("{}\n", password).as_bytes(),
+                );
+            }
+            let _ = child.wait();
+        } else {
+            // Fallback for platforms where stdin pipe is unsupported
+            let mut args = vec!["/generic:localhost".to_owned()];
+            if !username.is_empty() {
+                args.push(format!("/user:{}", username));
+            }
+            if !password.is_empty() {
+                args.push(format!("/pass:{}", password));
+            }
+            std::process::Command::new("cmdkey")
+                .args(&args)
+                .output()
+                .ok();
         }
-        if !password.is_empty() {
-            args.push(format!("/pass:{}", password));
-        }
-        std::process::Command::new("cmdkey")
-            .args(&args)
-            .output()
-            .ok();
     }
     std::process::Command::new("mstsc")
         .arg(format!("/v:localhost:{}", port))
