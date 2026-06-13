@@ -191,13 +191,14 @@ jobs:
                  -e "s|\"rustdesk.exe\"|\"${esc}.exe\"|" \
                  -e "s|\"RustDesk\"|\"${esc}\"|" flutter/windows/runner/Runner.rc
 
-          # exe-имя через РОДИТЕЛЬСКИЙ flutter/windows/CMakeLists.txt
-          sed -i -e "s|set(BINARY_NAME \"rustdesk\")|set(BINARY_NAME \"${esc}\")|" \
-                 -e "s|project(rustdesk LANGUAGES CXX)|project(${esc} LANGUAGES CXX)|" \
-                 flutter/windows/CMakeLists.txt
-
-          echo "L3: brand → ${APP}"
-          grep -E "BINARY_NAME|^project" flutter/windows/CMakeLists.txt | head -3
+          # ВАЖНО: НЕ менять BINARY_NAME в flutter/windows/CMakeLists.txt!
+          # libs/portable/generate.py hard-coded ищет внутри Release/ файл с именем
+          # `rustdesk.exe` (см. вызов в build.py). Если переименовать — packer не найдёт
+          # exe и build упадёт. Метаданные (ProductName/FileDescription/etc) уже
+          # установлены через sed Runner.rc/Cargo.toml выше — этого достаточно для
+          # отображения "rustqs" в свойствах файла. Финальный self-extract single-exe
+          # переименовывается в "${appname}.exe" уже после packer'a (см. Portable-pack).
+          echo "L3: brand → ${APP} (BINARY_NAME left as 'rustdesk' for packer)"
 
       - name: Restore bridge files
         uses: actions/download-artifact@v8
@@ -261,17 +262,21 @@ jobs:
 
       - name: Build rustdesk (Flutter Windows) + bring in native deps
         run: |
+          # --skip-portable-pack: packer запускаем сами в отдельном шаге, чтобы
+          # положить custom_.txt + native deps в Release/ ДО упаковки.
+          # НЕ переименовываем Release/ → ./rustdesk — packer ищет именно по этому пути
+          # (libs/portable/generate.py вызывается с -f ../../flutter/build/windows/x64/runner/Release/).
           python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          $RELEASE = "flutter/build/windows/x64/runner/Release"
 
-          # usbmmidd_v2 — виртуальный дисплей. Из release ФОРКА (суверенно).
+          # usbmmidd_v2 — виртуальный дисплей. Из release ФОРКА (суверенно). → в Release/
           Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
           Expand-Archive usbmmidd_v2.zip -DestinationPath .
           Remove-Item -Path usbmmidd_v2\Win32 -Recurse
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
-          mv -Force .\usbmmidd_v2 ./rustdesk
+          mv -Force .\usbmmidd_v2 "$RELEASE/"
 
-          # Printer driver + adapter из release форка.
+          # Printer driver + adapter из release форка. → в Release/
           try {
             Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
             Invoke-WebRequest -Uri https://github.com/bashrusakh/rustdesk/releases/download/offline-assets-1.4.7/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
@@ -284,10 +289,10 @@ jobs:
             if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
                 Write-Output "printer driver+adapter checksums match, extracting"
                 Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
-                mkdir ./rustdesk/drivers
-                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
+                mkdir "$RELEASE/drivers"
+                mv -Force .\rustdesk_printer_driver_v4-1.4 "$RELEASE/drivers/RustDeskPrinterDriver"
                 Expand-Archive printer_driver_adapter.zip -DestinationPath .
-                mv -Force .\printer_driver_adapter.dll ./rustdesk
+                mv -Force .\printer_driver_adapter.dll "$RELEASE/"
             } else {
                 Write-Output "checksum mismatch — ignoring printer files"
             }
@@ -295,24 +300,58 @@ jobs:
               Write-Host "Ignore the printer driver error."
           }
 
-      - name: Download RustDeskTempTopMostWindow artifacts
+      - name: Download RustDeskTempTopMostWindow artifacts (→ Release/)
         uses: actions/download-artifact@v8
         with:
           name: topmostwindow-artifacts
-          path: "./rustdesk"
+          path: "./flutter/build/windows/x64/runner/Release"
 
-      # L2 step B (POST-BUILD): записать custom_.txt рядом с exe (значение уже base64).
-      - name: 'L2 payload: write custom_.txt next to exe'
+      # L2-B: положить custom_.txt в Release/ ДО запуска packer'a, чтобы он
+      # попал ВНУТРЬ single-exe. После self-extract клиента, custom_.txt будет лежать
+      # рядом с rustdesk.exe в TEMP-папке (там его и читает read_custom_client).
+      - name: 'L2 payload: place custom_.txt into Release/ (will be packed inside exe)'
         if: env.RQS_CUSTOM_TXT != ''
         shell: bash
         run: |
           set -eu
-          printf '%s' "$RQS_CUSTOM_TXT" > ./rustdesk/custom_.txt
-          ls -la ./rustdesk/custom_.txt
-          echo "L2: custom_.txt written (size $(wc -c < ./rustdesk/custom_.txt))"
+          dst=flutter/build/windows/x64/runner/Release/custom_.txt
+          printf '%s' "$RQS_CUSTOM_TXT" > "$dst"
+          ls -la "$dst"
+          echo "L2: custom_.txt placed inside Release/ (size $(wc -c < "$dst"))"
+
+      # L4: portable-pack (single self-extracting exe).
+      # generate.py сжимает ВСЁ из -f папки в data.bin → embedded в Rust packer-binary.
+      # Финал: target/release/rustdesk-portable-packer.exe (~30 MB). Переименуем в
+      # {appname}.exe и положим в ./output/ для upload-artifact.
+      - name: 'L4 portable-pack: build single-binary self-extracting exe'
+        shell: bash
+        run: |
+          set -eu
+          APP="${RQS_APP_NAME:-rustdesk}"
+          ls flutter/build/windows/x64/runner/Release/ | head
+          pushd libs/portable
+          pip3 install -r requirements.txt
+          # тот же CLI что вызывает build.py (когда --portable БЕЗ --skip-portable-pack).
+          # generate.py сам в конце вызывает `cargo build --locked --release` для
+          # portable-packer Rust-проекта (см. build_portable() в generate.py).
+          python3 ./generate.py \
+            -f ../../flutter/build/windows/x64/runner/Release/ \
+            -o . \
+            -e ../../flutter/build/windows/x64/runner/Release/rustdesk.exe
+          popd
+          mkdir -p ./output
+          src="./target/release/rustdesk-portable-packer.exe"
+          if [ ! -f "$src" ]; then
+            # Cargo мог быть в libs/portable/target — fallback
+            src="./libs/portable/target/release/rustdesk-portable-packer.exe"
+          fi
+          ls -lh "$src" || { echo "FAIL: portable-packer.exe not found"; find . -name "rustdesk-portable-packer.exe" 2>/dev/null; exit 1; }
+          cp "$src" "./output/${APP}.exe"
+          ls -lh "./output/"
+          echo "L4: ${APP}.exe size = $(stat -c%s "./output/${APP}.exe" 2>/dev/null || wc -c < "./output/${APP}.exe")"
 
       - name: Upload unsigned
         uses: actions/upload-artifact@v7
         with:
           name: rustdesk-min-test-windows
-          path: rustdesk
+          path: output
