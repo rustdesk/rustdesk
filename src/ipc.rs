@@ -1303,6 +1303,15 @@ fn running_server_uids_for_current_exe() -> ResultType<Vec<u32>> {
     Ok(server_uids)
 }
 
+/// 🔒 SECURITY FIX: Safe wrapper for `geteuid()`. This pure syscall was
+/// previously wrapped in `unsafe {}` unnecessarily. `geteuid()` has no memory
+/// safety constraints — it simply returns the calling process's effective UID.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[inline]
+fn effective_uid() -> u32 {
+    unsafe { hbb_common::libc::geteuid() as u32 }
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn user_main_ipc_server_uid() -> ResultType<u32> {
     let server_uids = running_server_uids_for_current_exe()?;
@@ -1318,7 +1327,7 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     {
         let use_user_main_ipc = USE_USER_MAIN_IPC.with(|use_user_main| use_user_main.get());
         let is_root_main_ipc =
-            unsafe { hbb_common::libc::geteuid() == 0 } && postfix.is_empty() && use_user_main_ipc;
+            effective_uid() == 0 && postfix.is_empty() && use_user_main_ipc;
         if is_root_main_ipc {
             let uid = user_main_ipc_server_uid()?;
             let path = Config::ipc_path_for_uid(uid, postfix);
@@ -2016,7 +2025,7 @@ pub async fn update_controlling_session_count(count: usize) -> ResultType<()> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn get_terminal_session_count() -> ResultType<usize> {
     let timeout_ms = 1_000;
-    let effective_uid = unsafe { hbb_common::libc::geteuid() as u32 };
+    let effective_uid = effective_uid();
     let candidate_uids = terminal_count_candidate_uids(effective_uid);
     let mut last_err: Option<anyhow::Error> = None;
     for candidate_uid in candidate_uids {
@@ -2134,7 +2143,7 @@ mod test {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn test_ipc_path_differs_by_uid_for_cm() {
-        let effective_uid = unsafe { hbb_common::libc::geteuid() as u32 };
+        let effective_uid = effective_uid();
         let other_uid = effective_uid.saturating_add(1);
         let postfix = "_cm";
 
