@@ -96,6 +96,8 @@ pub mod screenshot;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
+// Empirical grace window for suppressing noisy disconnect errors during remote reboot.
+const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
 
@@ -1740,7 +1742,8 @@ pub struct LoginConfigHandler {
     features: Option<Features>,
     pub session_id: u64, // used for local <-> server communication
     pub supported_encoding: SupportedEncoding,
-    pub restarting_remote_device: bool,
+    restarting_remote_device: bool,
+    restart_remote_device_at: Option<Instant>,
     pub force_relay: bool,
     pub direct: Option<bool>,
     pub received: bool,
@@ -1849,7 +1852,7 @@ impl LoginConfigHandler {
         }
         self.session_id = sid;
         self.supported_encoding = Default::default();
-        self.restarting_remote_device = false;
+        self.clear_restarting_remote_device();
         self.force_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
                 || force_relay
@@ -2777,6 +2780,25 @@ impl LoginConfigHandler {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         msg_out
+    }
+
+    pub fn mark_restarting_remote_device(&mut self) {
+        self.restarting_remote_device = true;
+        self.restart_remote_device_at = Some(Instant::now());
+    }
+
+    pub fn clear_restarting_remote_device(&mut self) {
+        self.restarting_remote_device = false;
+        self.restart_remote_device_at = None;
+    }
+
+    pub fn is_restarting_remote_device(&self) -> bool {
+        if !self.restarting_remote_device {
+            return false;
+        }
+        self.restart_remote_device_at
+            .map(|started_at| started_at.elapsed() < RESTART_REMOTE_DEVICE_GRACE)
+            .unwrap_or(false)
     }
 
     pub fn get_conn_token(&self) -> Option<String> {
@@ -3719,6 +3741,13 @@ pub trait Interface: Send + Clone + 'static + Sized {
         let title = "Connection Error";
         let text = err.to_string();
         let lc = self.get_lch();
+        if lc.read().unwrap().is_restarting_remote_device() {
+            log::info!("Restart remote device, suppress connection error: {err}");
+            // Flutter treats this as a reconnect control event. The text is kept
+            // for legacy UI and existing translation reuse.
+            self.msgbox("restarting", "Restarting remote device", "Connection in progress. Please wait.", "");
+            return;
+        }
         let direct = lc.read().unwrap().direct;
         let received = lc.read().unwrap().received;
 

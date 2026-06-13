@@ -10,6 +10,10 @@ use crate::{
     common::get_default_sound_input,
     ui_session_interface::{InvokeUiSession, Session},
 };
+
+// Empirical no-data window before exposing the restart reconnect state to the UI.
+// Restart msgbox text is kept as a legacy UI fallback; Flutter handles the type as a control event.
+const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
 #[cfg(any(
@@ -153,7 +157,6 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         };
 
-        let mut last_recv_time = Instant::now();
         let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
             ConnType::FILE_TRANSFER
@@ -219,6 +222,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut fps_instant = Instant::now();
 
                 let _keep_it = client::hc_connection(feedback, rendezvous_server, token).await;
+                let mut last_recv_time = Instant::now();
 
                 loop {
                     tokio::select! {
@@ -244,7 +248,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             } else {
                                 if self.handler.is_restarting_remote_device() {
                                     log::info!("Restart remote device");
-                                    self.handler.msgbox("restarting", "Restarting remote device", "remote_restarting_tip", "");
+                                    self.handler.msgbox("restarting", "Restarting remote device", "Connection in progress. Please wait.", "");
                                 } else {
                                     log::info!("Reset by the peer");
                                     self.handler.msgbox("error", "Connection Error", "Reset by the peer", "");
@@ -279,6 +283,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _ = status_timer.tick() => {
+                            if self.handler.is_restarting_remote_device()
+                                && last_recv_time.elapsed() >= RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT
+                            {
+                                self.handler.msgbox("restarting-show", "Restarting remote device", "Connection in progress. Please wait.", "");
+                                break;
+                            }
                             let elapsed = fps_instant.elapsed().as_millis();
                             if elapsed < 1000 {
                                 continue;
