@@ -3735,9 +3735,27 @@ Future<String?> _resolveLogoAsset(Brightness brightness) async {
   return null;
 }
 
-Widget _buildLogo(BuildContext context) {
-  return FutureBuilder<String?>(
-      future: _resolveLogoAsset(Theme.of(context).brightness),
+class _Logo extends StatefulWidget {
+  const _Logo();
+
+  @override
+  State<_Logo> createState() => _LogoState();
+}
+
+class _LogoState extends State<_Logo> {
+  final Map<Brightness, Future<String?>> _logoFutures = {};
+
+  Future<String?> _logoFutureFor(Brightness brightness) {
+    return _logoFutures.putIfAbsent(
+      brightness,
+      () => _resolveLogoAsset(brightness),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: _logoFutureFor(Theme.of(context).brightness),
       builder: (BuildContext context, AsyncSnapshot<String?> snapshot) {
         final asset = snapshot.data;
         if (asset != null) {
@@ -3754,11 +3772,13 @@ Widget _buildLogo(BuildContext context) {
           ).marginOnly(left: 12, right: 12, top: 12);
         }
         return const Offstage();
-      });
+      },
+    );
+  }
 }
 
 // max 300 x 60
-Widget loadLogo() => Builder(builder: (context) => _buildLogo(context));
+Widget loadLogo() => const _Logo();
 
 Widget loadIcon(double size) {
   return Image.asset('assets/icon.png',
