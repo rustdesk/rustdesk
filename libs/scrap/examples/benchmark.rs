@@ -93,6 +93,7 @@ fn test_vpx(
         width: width as _,
         height: height as _,
         quality,
+        image_quality: hbb_common::message_proto::ImageQuality::Balanced,
         codec: codec_id,
         keyframe_interval: None,
     });
@@ -263,6 +264,7 @@ mod hw {
                 width,
                 height,
                 quality,
+                image_quality: hbb_common::message_proto::ImageQuality::Balanced,
                 keyframe_interval: None,
             }),
             false,
