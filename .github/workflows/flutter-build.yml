@@ -25,8 +25,10 @@ env:
   SCITER_ARMV7_CMAKE_VERSION: "3.29.7"
   SCITER_NASM_DEBVERSION: "2.15.05-1"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.24.5"
-  ANDROID_FLUTTER_VERSION: "3.24.5"
+  # TODO(arm64): bumped from 3.24.5 to 3.44.0 so Windows arm64 builds (3.24.5 is x64-only
+  # and predates the DialogThemeData/TabBarThemeData APIs used in common.dart, added in 3.27).
+  FLUTTER_VERSION: "3.44.0"
+  ANDROID_FLUTTER_VERSION: "3.44.0"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
@@ -76,9 +78,20 @@ jobs:
               target: x86_64-pc-windows-msvc,
               os: windows-2022,
               arch: x86_64,
+              flutter-arch: x64,
               vcpkg-triplet: x64-windows-static,
+              build-args: "--vram",
             }
-          # - { target: aarch64-pc-windows-msvc, os: windows-2022, arch: aarch64 }
+          - {
+              target: aarch64-pc-windows-msvc,
+              os: windows-11-arm,
+              arch: aarch64,
+              flutter-arch: arm64,
+              vcpkg-triplet: arm64-windows-static,
+              # vram is x86/x64-only (NVENC needs CUDA, Intel MediaSDK needs __rdtsc);
+              # no NV/Intel/AMD hardware exists on Windows-on-ARM, so vram stays disabled here.
+              build-args: "",
+            }
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -99,31 +112,75 @@ jobs:
           path: ./
 
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@1a3da29f56261a1e1f937ec88f0856a9b8321d7e # v1
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
         with:
           version: ${{ env.LLVM_VERSION }}
 
       - name: Install flutter
+        id: flutter
+        # subosito only ships an x64 Windows SDK (Flutter's release manifest lists x64 only),
+        # so it installs x64 on both arches. The arm64 runner re-bootstraps Dart to arm64 in
+        # the next step.
         uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225  # v2.12.0; https://github.com/subosito/flutter-action/issues/277
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Force arm64 Dart SDK + engine
+        # The x64 SDK subosito installs bundles an x64 Dart with a matching engine-dart-sdk.stamp,
+        # so update_dart_sdk.ps1 short-circuits (stamp matches -> return) and keeps x64 Dart;
+        # `flutter build windows` then targets the Dart VM's arch = x64, even on this arm64 host.
+        # On this native-arm64 runner (PROCESSOR_ARCHITECTURE=ARM64), deleting the stamp and
+        # re-running update_dart_sdk.ps1 pulls the arm64 Dart (available since Flutter 3.44.0).
+        # https://github.com/flutter/flutter/issues/186730#issuecomment-4573214964
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        run: |
+          $flutterRoot = "${{ steps.flutter.outputs.CACHE-PATH }}"
+          Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          Write-Host "Flutter root: $flutterRoot"
+          Remove-Item -Force "$flutterRoot\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
+          & "$flutterRoot\bin\internal\update_dart_sdk.ps1"
+          # Confirm the Dart we ended up with is arm64 ("on windows_arm64"); fail loudly if not.
+          $dartVer = & "$flutterRoot\bin\dart.bat" --version 2>&1 | Out-String
+          Write-Host $dartVer
+          if ($dartVer -notmatch "windows_arm64") {
+            Write-Error "Expected an arm64 Dart SDK but got: $dartVer"
+            exit 1
+          }
+          & "$flutterRoot\bin\flutter.bat" precache --windows
+          # Fail fast if precache pulled the wrong-arch Windows engine: an arm64 Dart should
+          # fetch windows-arm64 engine artifacts. Bailing here saves the ~25min Rust build.
+          $engineDir = "$flutterRoot\bin\cache\artifacts\engine"
+          Write-Host "Engine artifacts present:"
+          Get-ChildItem $engineDir -Directory | Select-Object -ExpandProperty Name | Write-Host
+          if (-not (Test-Path "$engineDir\windows-arm64-release")) {
+            Write-Error "Expected windows-arm64-release engine artifacts but they are missing (wrong-arch SDK)."
+            exit 1
+          }
 
       # https://github.com/flutter/flutter/issues/155685
-      - name: Replace engine with rustdesk custom flutter engine
-        run: |
-          flutter doctor -v
-          flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
-          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
-          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+      # Only needed for x64: stock Flutter ships a native arm64 Windows engine.
+      # TODO(arm64): the rustdesk/engine windows-x64-release.zip is built for an older
+      # Flutter (3.24-era); with FLUTTER_VERSION 3.44.0 it fails flutter_assemble (MSB8066).
+      # Disabled until a 3.44-compatible custom engine is published; stock 3.44 x64 engine
+      # is used instead. Re-enable once rustdesk/engine ships a matching build.
+      # - name: Replace engine with rustdesk custom flutter engine
+      #   if: ${{ matrix.job.arch == 'x86_64' }}
+      #   run: |
+      #     flutter doctor -v
+      #     flutter precache --windows
+      #     Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+      #     Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+      #     mv -Force windows-x64-release/* C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Patch flutter
         shell: bash
         run: |
+          # TODO(arm64): 3.24.4 dropdown patch is for Flutter 3.24.5; disabled while on 3.44.0.
           cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
           cd $(dirname $(dirname $(which flutter)))
-          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+          # [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -163,11 +220,19 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
+      - name: Set SODIUM_LIB_DIR (arm64)
+        # libsodium-sys ships no arm64 Windows prebuilt lib; point it at the vcpkg-built one
+        # (only for arm64 — leaving it unset lets x64 use the crate's bundled lib).
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        shell: bash
+        run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib" >> "$GITHUB_ENV"
+
       - name: Build rustdesk
         run: |
           # Windows: build RustDesk
-          python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}
+          mv ./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release ./rustdesk
 
           # Download usbmmidd_v2.zip and extract it to ./rustdesk
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
@@ -473,7 +538,8 @@ jobs:
       - name: Patch flutter
         run: |
           cd $(dirname $(dirname $(which flutter)))
-          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          # TODO(arm64): 3.24.4 dropdown patch is for Flutter 3.24.5; disabled while on 3.44.0.
+          # [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -652,7 +718,8 @@ jobs:
       - name: Patch flutter
         run: |
           cd $(dirname $(dirname $(which flutter)))
-          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          # TODO(arm64): 3.24.4 dropdown patch is for Flutter 3.24.5; disabled while on 3.44.0.
+          # [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       - name: Workaround for flutter issue
         shell: bash
@@ -911,7 +978,8 @@ jobs:
       - name: Patch flutter
         run: |
           cd $(dirname $(dirname $(which flutter)))
-          [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          # TODO(arm64): 3.24.4 dropdown patch is for Flutter 3.24.5; disabled while on 3.44.0.
+          # [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
         id: setup-ndk
@@ -1183,7 +1251,8 @@ jobs:
       - name: Patch flutter
         run: |
           cd $(dirname $(dirname $(which flutter)))
-          [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          # TODO(arm64): 3.24.4 dropdown patch is for Flutter 3.24.5; disabled while on 3.44.0.
+          # [[ "3.24.5" == ${{env.ANDROID_FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -2020,7 +2089,8 @@ jobs:
         shell: bash
         run: |
           cd $(dirname $(dirname $(which flutter)))
-          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          # TODO(arm64): 3.24.4 dropdown patch is for Flutter 3.24.5; disabled while on 3.44.0.
+          # [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
       # https://rustdesk.com/docs/en/dev/build/web/
       - name: Build web
