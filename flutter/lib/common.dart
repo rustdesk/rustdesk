@@ -3717,14 +3717,14 @@ const _kDefaultLogoAsset = 'assets/logo.png';
 const _kLightLogoAsset = 'assets/logo_light.png';
 const _kDarkLogoAsset = 'assets/logo_dark.png';
 
-List<String> logoAssetCandidatesForBrightness(Brightness brightness) {
+List<String> _logoAssetCandidatesForBrightness(Brightness brightness) {
   return brightness == Brightness.dark
       ? [_kDarkLogoAsset, _kDefaultLogoAsset]
       : [_kLightLogoAsset, _kDefaultLogoAsset];
 }
 
 Future<String?> _resolveLogoAsset(Brightness brightness) async {
-  for (final asset in logoAssetCandidatesForBrightness(brightness)) {
+  for (final asset in _logoAssetCandidatesForBrightness(brightness)) {
     try {
       await rootBundle.load(asset);
       return asset;
