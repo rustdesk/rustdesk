@@ -260,28 +260,28 @@ class _RawTouchGestureDetectorRegionState
   }
 
   // for mobiles
+  // Modified: Always send right click event for long press, regardless of peer platform
+  // This fixes the issue where right click exits to Android home screen
   onLongPress() async {
     if (isNotTouchBasedDevice()) {
       return;
     }
-    if (!ffi.ffiModel.isPeerMobile) {
-      if (handleTouch) {
-        final isMoved = await ffi.cursorModel
-            .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
-        if (!isMoved) {
-          return;
-        }
-      } else {
-        if (shouldBlockMouseModeEvent()) {
-          return;
-        }
+    // Always handle long press as right click for all platforms
+    if (handleTouch) {
+      final isMoved = await ffi.cursorModel
+          .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
+      if (!isMoved) {
+        return;
       }
-      await inputModel.tap(MouseButtons.right);
     } else {
-      // It's better to send a message to tell the controlled device that the long press event is triggered.
-      // We're now using a `TimerTask` in `InputService.kt` to decide whether to trigger the long press event.
-      // It's not accurate and it's better to use the same detection logic in the controlling side.
+      if (shouldBlockMouseModeEvent()) {
+        return;
+      }
+      // Move cursor to position for mouse mode
+      await ffi.cursorModel.move(_doubleFinerTapPosition.dx, _doubleFinerTapPosition.dy);
     }
+    // Send right click event
+    await inputModel.tap(MouseButtons.right);
   }
 
   onLongPressMoveUpdate(LongPressMoveUpdateDetails d) async {

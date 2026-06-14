@@ -1046,6 +1046,12 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
     final more = <Widget>[
       SizedBox(width: 9999),
       wrap('Esc', () {
+        // Modified: ESC key now disconnects from remote session
+        // This provides a quick way to exit RustDesk connection
+        clientClose(sessionId, gFFI);
+      }),
+      wrap('Send Esc', () {
+        // New button: Send ESC key to remote system
         inputModel.inputKey('VK_ESCAPE');
       }),
       wrap('Tab', () {
