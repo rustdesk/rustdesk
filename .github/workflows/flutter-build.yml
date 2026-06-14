@@ -1952,7 +1952,7 @@ jobs:
 
       - name: Rename Binary
         run: |
-          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.deb flatpak/rustdesk.deb
+          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.deb com.rustdesk.RustDesk/rustdesk.deb
 
       - uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8 # no release tag; commit 2026-05-26
         name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
@@ -1968,17 +1968,35 @@ jobs:
           shell: /bin/bash
           install: |
             apt-get update -y
-            apt-get install -y git flatpak flatpak-builder
+            apt-get install -y git flatpak flatpak-builder jq
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
             pushd /workspace
+            git submodule update --init --recursive com.rustdesk.RustDesk
             # flatpak deps
             flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
             # package
-            pushd flatpak
-            git clone https://github.com/flathub/shared-modules.git --depth=1
-            flatpak-builder --user --install-deps-from=flathub -y --force-clean --repo=repo ./build ./rustdesk.json
+            pushd com.rustdesk.RustDesk
+            jq -e 'any(.modules[]?; type == "object" and .name == "rustdesk")' com.rustdesk.RustDesk.json > /dev/null
+            jq '
+              .["finish-args"] = (
+                (.["finish-args"] // []) +
+                (["--socket=wayland", "--socket=x11"] - (.["finish-args"] // []))
+              ) |
+              (.modules[] | select(type == "object" and .name == "rustdesk").sources) = [
+                {
+                  "type": "file",
+                  "path": "rustdesk.deb"
+                },
+                {
+                  "type": "file",
+                  "path": "com.rustdesk.RustDesk.metainfo.xml"
+                }
+              ]
+            ' com.rustdesk.RustDesk.json > com.rustdesk.RustDesk.local.json
+            jq -e 'any(.modules[]?; type == "object" and .name == "rustdesk" and any(.sources[]?; .type == "file" and .path == "rustdesk.deb"))' com.rustdesk.RustDesk.local.json > /dev/null
+            flatpak-builder --user --install-deps-from=flathub -y --force-clean --repo=repo ./build ./com.rustdesk.RustDesk.local.json
             flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak com.rustdesk.RustDesk
 
       - name: Publish flatpak package
@@ -1987,7 +2005,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak
+            com.rustdesk.RustDesk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak
 
   build-rustdesk-web:
     if: False
