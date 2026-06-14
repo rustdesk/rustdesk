@@ -48,7 +48,7 @@ _OidcProviderBranding _oidcProviderBranding(String op) {
               'gitlab': 'GitLab',
             }[op.toLowerCase()] ??
             toCapitalized(op),
-        iconKey: op,
+        iconKey: op.toLowerCase(),
       );
   }
 }
