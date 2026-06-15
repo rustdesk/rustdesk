@@ -24,6 +24,35 @@ const kOpSvgList = [
   'microsoft'
 ];
 
+class _OidcProviderBranding {
+  final String label;
+  final String iconKey;
+
+  const _OidcProviderBranding({
+    required this.label,
+    required this.iconKey,
+  });
+}
+
+_OidcProviderBranding _oidcProviderBranding(String op) {
+  switch (op.toLowerCase()) {
+    case 'azure':
+      return _OidcProviderBranding(
+        label: 'Microsoft',
+        iconKey: 'microsoft',
+      );
+    default:
+      return _OidcProviderBranding(
+        label: {
+              'github': 'GitHub',
+              'gitlab': 'GitLab',
+            }[op.toLowerCase()] ??
+            toCapitalized(op),
+        iconKey: op.toLowerCase(),
+      );
+  }
+}
+
 class _IconOP extends StatelessWidget {
   final String op;
   final String? icon;
@@ -74,11 +103,8 @@ class ButtonOP extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final opLabel = {
-          'github': 'GitHub',
-          'gitlab': 'GitLab'
-        }[op.toLowerCase()] ??
-        toCapitalized(op);
+    final branding = _oidcProviderBranding(op);
+    final buttonLabel = translate("Continue with {${branding.label}}");
     return Row(children: [
       Container(
         height: height,
@@ -95,7 +121,7 @@ class ButtonOP extends StatelessWidget {
                 SizedBox(
                   width: 30,
                   child: _IconOP(
-                    op: op,
+                    op: branding.iconKey,
                     icon: icon,
                     margin: EdgeInsets.only(right: 5),
                   ),
@@ -103,8 +129,7 @@ class ButtonOP extends StatelessWidget {
                 Expanded(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: Center(
-                        child: Text(translate("Continue with {$opLabel}"))),
+                    child: Center(child: Text(buttonLabel)),
                   ),
                 ),
               ],
