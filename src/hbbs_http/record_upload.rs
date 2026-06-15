@@ -32,7 +32,7 @@ pub fn run(rx: Receiver<RecordState>) {
         );
         // This URL is used for TLS connectivity testing and fallback detection.
         let login_option_url = format!("{}/api/login-options", &api_server);
-        let client = create_http_client_with_url(&login_option_url);
+        let client = create_http_client_with_url(&login_option_url, false);
         let mut uploader = RecordUploader {
             client,
             api_server,

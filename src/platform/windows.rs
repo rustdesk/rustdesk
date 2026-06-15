@@ -17,6 +17,7 @@ use hbb_common::{
     sysinfo::{Pid, System},
     timeout, tokio,
 };
+use sha2::Digest;
 use std::{
     collections::HashMap,
     ffi::{CString, OsString},
@@ -25,7 +26,11 @@ use std::{
     mem,
     os::{
         raw::c_ulong,
-        windows::{ffi::OsStringExt, process::CommandExt},
+        windows::{
+            ffi::OsStringExt,
+            fs::{MetadataExt, OpenOptionsExt},
+            process::CommandExt,
+        },
     },
     path::*,
     ptr::null_mut,
@@ -53,14 +58,15 @@ use winapi::{
             AllocateAndInitializeSid, DuplicateToken, EqualSid, FreeSid, GetTokenInformation,
         },
         shellapi::ShellExecuteW,
-        sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
+        sysinfoapi::{GetNativeSystemInfo, GetSystemDirectoryW, SYSTEM_INFO},
         winbase::*,
         wingdi::*,
         winnt::{
             SecurityImpersonation, TokenElevation, TokenGroups, TokenImpersonation, TokenType,
             DOMAIN_ALIAS_RID_ADMINS, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
-            ES_SYSTEM_REQUIRED, HANDLE, PROCESS_ALL_ACCESS, PROCESS_QUERY_LIMITED_INFORMATION,
-            PSID, SECURITY_BUILTIN_DOMAIN_RID, SECURITY_NT_AUTHORITY, SID_IDENTIFIER_AUTHORITY,
+            ES_SYSTEM_REQUIRED, FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_READ, HANDLE,
+            PROCESS_ALL_ACCESS, PROCESS_QUERY_LIMITED_INFORMATION, PSID,
+            SECURITY_BUILTIN_DOMAIN_RID, SECURITY_NT_AUTHORITY, SID_IDENTIFIER_AUTHORITY,
             TOKEN_ELEVATION, TOKEN_GROUPS, TOKEN_QUERY, TOKEN_TYPE,
         },
         winreg::HKEY_CURRENT_USER,
@@ -3609,31 +3615,301 @@ pub fn handle_custom_client_staging_dir_before_update(
     Ok(())
 }
 
-// Used for auto update and manual update in the main window.
-pub fn update_to(file: &str) -> ResultType<()> {
-    if file.ends_with(".exe") {
-        let custom_client_staging_dir = get_custom_client_staging_dir();
-        if crate::is_custom_client() {
-            handle_custom_client_staging_dir_before_update(&custom_client_staging_dir)?;
-        } else {
-            // Clean up any residual staging directory from previous custom client
-            allow_err!(remove_custom_client_staging_dir(&custom_client_staging_dir));
-        }
-        if !run_uac(file, "--update")? {
-            bail!(
-                "Failed to run the update exe with UAC, error: {:?}",
-                std::io::Error::last_os_error()
-            );
-        }
-    } else if file.ends_with(".msi") {
-        if let Err(e) = update_me_msi(file, false) {
-            bail!("Failed to run the update msi: {}", e);
-        }
-    } else {
-        // unreachable!()
+pub fn update_to_verified(file: &str, expected_sha256: &str) -> ResultType<()> {
+    let extension = update_file_extension(file).unwrap_or_default();
+    if extension != "exe" && extension != "msi" {
         bail!("Unsupported update file format: {}", file);
     }
+
+    let update_file = verify_update_file_signature_and_sha256(file, expected_sha256)?;
+    let custom_client_staging_dir = get_custom_client_staging_dir();
+    if crate::is_custom_client() {
+        handle_custom_client_staging_dir_before_update(&custom_client_staging_dir)?;
+    } else {
+        // Clean up any residual staging directory from previous custom client
+        allow_err!(remove_custom_client_staging_dir(&custom_client_staging_dir));
+    }
+
+    match extension.as_str() {
+        "exe" => {
+            if !run_uac(update_file.path_str()?, "--update")? {
+                bail!(
+                    "Failed to run the update exe with UAC, error: {:?}",
+                    std::io::Error::last_os_error()
+                );
+            }
+        }
+        "msi" => {
+            if let Err(e) = update_me_msi(update_file.path_str()?, false) {
+                bail!("Failed to run the update msi: {}", e);
+            }
+        }
+        _ => {
+            bail!("Unsupported update file format: {}", file);
+        }
+    }
     Ok(())
+}
+
+const UPDATE_FILE_ENV: &str = "RUSTDESK_UPDATE_FILE";
+
+const AUTHENTICODE_VERIFICATION_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+$updateFile = $env:RUSTDESK_UPDATE_FILE
+if ([string]::IsNullOrWhiteSpace($updateFile)) {
+    Write-Error 'Missing update file path'
+    exit 10
+}
+$candidate = Get-AuthenticodeSignature -LiteralPath $updateFile
+if ($candidate.Status -ne 'Valid') {
+    Write-Error ('Update file signature status: ' + $candidate.Status)
+    exit 11
+}
+if ($null -eq $candidate.SignerCertificate) {
+    Write-Error 'Missing signer certificate'
+    exit 12
+}
+$publisherName = $candidate.SignerCertificate.GetNameInfo(
+    [System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,
+    $false
+)
+if ([string]::IsNullOrWhiteSpace($publisherName)) {
+    Write-Error 'Missing signer publisher name'
+    exit 13
+}
+Write-Output $publisherName
+exit 0
+"#;
+
+const UPDATE_FILE_COPY_ATTEMPTS: usize = 16;
+
+pub struct VerifiedUpdateFile {
+    file: std::fs::File,
+    path: PathBuf,
+}
+
+impl VerifiedUpdateFile {
+    pub fn path_str(&self) -> ResultType<&str> {
+        let Some(path) = self.path.to_str() else {
+            bail!("Invalid update file path: {}", self.path.display());
+        };
+        Ok(path)
+    }
+}
+
+fn is_trusted_update_publisher_name(publisher_name: &str) -> bool {
+    let publisher_name = publisher_name.trim().to_ascii_lowercase();
+    publisher_name.contains("purslane") || publisher_name.contains("rustdesk")
+}
+
+fn is_update_file_attributes_trusted(attributes: u32) -> bool {
+    attributes & FILE_ATTRIBUTE_REPARSE_POINT == 0
+}
+
+fn update_file_open_flags() -> u32 {
+    FILE_FLAG_OPEN_REPARSE_POINT
+}
+
+fn update_file_extension(file: &str) -> Option<String> {
+    Path::new(file)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+}
+
+fn verified_update_file_path(file: &str) -> ResultType<PathBuf> {
+    let extension = update_file_extension(file).unwrap_or_default();
+    if extension != "exe" && extension != "msi" {
+        bail!("Unsupported update file format: {}", file);
+    }
+    Ok(std::env::temp_dir().join(format!(
+        "rustdesk-verified-{}-{}.{}",
+        std::process::id(),
+        hbb_common::rand::random::<u64>(),
+        extension
+    )))
+}
+
+fn is_temp_update_file_name(file_name: &str) -> bool {
+    if file_name.starts_with(".rustdesk-") && file_name.ends_with(".download") {
+        return file_name.contains(".exe.") || file_name.contains(".msi.");
+    }
+    if !(file_name.ends_with(".msi") || file_name.ends_with(".exe")) {
+        return false;
+    }
+    file_name.starts_with("rustdesk-")
+}
+
+fn open_update_file_for_verification(file: &str) -> ResultType<std::fs::File> {
+    let update_file = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .custom_flags(update_file_open_flags())
+        .open(file)
+        .map_err(|e| anyhow!("Failed to lock update file {}: {}", file, e))?;
+    let metadata = update_file
+        .metadata()
+        .map_err(|e| anyhow!("Failed to read update file metadata {}: {}", file, e))?;
+    if !is_update_file_attributes_trusted(metadata.file_attributes()) {
+        bail!(
+            "Refusing to verify update file through reparse point: {}",
+            file
+        );
+    }
+    Ok(update_file)
+}
+
+fn copy_update_file_for_verification(file: &str) -> ResultType<VerifiedUpdateFile> {
+    let mut source_file = open_update_file_for_verification(file)?;
+    for _ in 0..UPDATE_FILE_COPY_ATTEMPTS {
+        let path = verified_update_file_path(file)?;
+        let mut copy_file = match std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(update_file_open_flags())
+            .open(&path)
+        {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => {
+                return Err(anyhow!(
+                    "Failed to create verified update file {}: {}",
+                    path.display(),
+                    e
+                )
+                .into())
+            }
+        };
+        if let Err(e) = std::io::copy(&mut source_file, &mut copy_file) {
+            drop(copy_file);
+            std::fs::remove_file(&path).ok();
+            return Err(e.into());
+        }
+        if let Err(e) = copy_file.flush() {
+            drop(copy_file);
+            std::fs::remove_file(&path).ok();
+            return Err(e.into());
+        }
+        drop(copy_file);
+        let path_string = path.to_string_lossy().to_string();
+        let update_file = match open_update_file_for_verification(&path_string) {
+            Ok(file) => file,
+            Err(e) => {
+                std::fs::remove_file(&path).ok();
+                return Err(e);
+            }
+        };
+        return Ok(VerifiedUpdateFile {
+            file: update_file,
+            path,
+        });
+    }
+
+    bail!("Failed to create verified update file for {}", file);
+}
+
+pub fn verify_update_file_signature_and_sha256(
+    file: &str,
+    expected_sha256: &str,
+) -> ResultType<VerifiedUpdateFile> {
+    let mut update_file = copy_update_file_for_verification(file)?;
+    let update_path = match update_file.path_str() {
+        Ok(path) => path.to_owned(),
+        Err(e) => {
+            let path = update_file.path.clone();
+            drop(update_file);
+            std::fs::remove_file(&path).ok();
+            return Err(e);
+        }
+    };
+    if let Err(e) = verify_update_file_sha256(&mut update_file.file, expected_sha256, &update_path)
+        .and_then(|_| verify_update_file_signature_for_path(&update_path))
+    {
+        let path = update_file.path.clone();
+        drop(update_file);
+        std::fs::remove_file(&path).ok();
+        return Err(e);
+    }
+    Ok(update_file)
+}
+
+fn verify_update_file_sha256(
+    update_file: &mut std::fs::File,
+    expected_sha256: &str,
+    file: &str,
+) -> ResultType<()> {
+    let expected_sha256 = expected_sha256.trim().to_ascii_lowercase();
+    if expected_sha256.len() != 64 || !expected_sha256.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("Expected update file SHA256 is malformed for {}", file);
+    }
+
+    update_file.seek(io::SeekFrom::Start(0))?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let count = update_file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    update_file.seek(io::SeekFrom::Start(0))?;
+
+    let actual_sha256 = format!("{:x}", hasher.finalize());
+    if actual_sha256 != expected_sha256 {
+        bail!(
+            "SHA256 mismatch for {}: expected {}, got {}",
+            file,
+            expected_sha256,
+            actual_sha256
+        );
+    }
+    Ok(())
+}
+
+fn verify_update_file_signature_for_path(file: &str) -> ResultType<()> {
+    let mut system_dir = [0u16; MAX_PATH];
+    let len = unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) };
+    if len == 0 || len as usize >= system_dir.len() {
+        bail!("Failed to get Windows system directory");
+    }
+    let powershell = PathBuf::from(OsString::from_wide(&system_dir[..len as usize]))
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
+    if !powershell.exists() {
+        bail!("PowerShell not found at {}", powershell.display());
+    }
+    let output = std::process::Command::new(&powershell)
+        .args(["-NoProfile", "-NonInteractive", "-Command"])
+        .arg(AUTHENTICODE_VERIFICATION_SCRIPT)
+        .env(UPDATE_FILE_ENV, file)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()?;
+    if output.status.success() {
+        let publisher_name = String::from_utf8_lossy(&output.stdout);
+        let publisher_name = publisher_name.trim();
+        if is_trusted_update_publisher_name(publisher_name) {
+            return Ok(());
+        }
+        bail!(
+            "Update file signer publisher is not trusted for {}: {}",
+            file,
+            publisher_name
+        );
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    bail!(
+        "Update file signature verification failed for {}: status: {}; stderr: {}; stdout: {}",
+        file,
+        output.status,
+        stderr.trim(),
+        stdout.trim()
+    );
 }
 
 // Don't launch tray app when running with `\qn`.
@@ -3648,7 +3924,7 @@ pub fn update_to(file: &str) -> ResultType<()> {
 //    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
     let cmds = format!(
-        "chcp 65001 && msiexec /i {msi} {}",
+        "chcp 65001 && msiexec /i \"{msi}\" {}",
         if quiet { "/qn LAUNCH_TRAY_APP=N" } else { "" }
     );
     run_cmds(cmds, false, "update-msi")?;
@@ -3747,10 +4023,8 @@ pub fn try_remove_temp_update_files() {
         if let Ok(entry) = entry {
             let path = entry.path();
             if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                // Match files like rustdesk-*.msi or rustdesk-*.exe
-                if file_name.starts_with("rustdesk-")
-                    && (file_name.ends_with(".msi") || file_name.ends_with(".exe"))
-                {
+                // Match cached update files, verified copies, and stale download temp files.
+                if is_temp_update_file_name(file_name) {
                     // Skip files modified within the last hour to avoid deleting files being downloaded
                     if let Ok(metadata) = std::fs::metadata(&path) {
                         if let Ok(modified) = metadata.modified() {
@@ -4506,6 +4780,139 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn update_file_attributes_reject_reparse_points() {
+        assert!(!is_update_file_attributes_trusted(
+            winapi::um::winnt::FILE_ATTRIBUTE_REPARSE_POINT
+        ));
+        assert!(is_update_file_attributes_trusted(
+            winapi::um::winnt::FILE_ATTRIBUTE_ARCHIVE
+        ));
+    }
+
+    #[test]
+    fn update_file_open_flags_do_not_follow_reparse_points() {
+        assert_ne!(
+            update_file_open_flags() & winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT,
+            0
+        );
+    }
+
+    #[test]
+    fn authenticode_script_reads_update_file_from_environment() {
+        assert!(AUTHENTICODE_VERIFICATION_SCRIPT.contains("$env:RUSTDESK_UPDATE_FILE"));
+        assert!(!AUTHENTICODE_VERIFICATION_SCRIPT.contains("$args[0]"));
+    }
+
+    #[test]
+    fn verified_update_file_path_preserves_update_extension() {
+        let path = verified_update_file_path(r"C:\Temp\rustdesk-1.4.6-x86_64.exe").unwrap();
+        let file_name = path.file_name().and_then(|name| name.to_str()).unwrap();
+
+        assert!(file_name.starts_with("rustdesk-verified-"));
+        assert!(file_name.ends_with(".exe"));
+    }
+
+    #[test]
+    fn verified_update_file_path_accepts_uppercase_update_extension() {
+        let path = verified_update_file_path(r"C:\Temp\rustdesk-1.4.6-x86_64.EXE").unwrap();
+        let file_name = path.file_name().and_then(|name| name.to_str()).unwrap();
+
+        assert!(file_name.starts_with("rustdesk-verified-"));
+        assert!(file_name.ends_with(".exe"));
+    }
+
+    #[test]
+    fn verified_update_file_path_rejects_unsupported_extension() {
+        assert!(verified_update_file_path(r"C:\Temp\rustdesk-1.4.6.zip").is_err());
+    }
+
+    #[test]
+    fn temp_update_file_name_accepts_verified_update_copy() {
+        assert!(is_temp_update_file_name("rustdesk-verified-123-456.exe"));
+        assert!(is_temp_update_file_name("rustdesk-verified-123-456.msi"));
+        assert!(is_temp_update_file_name(
+            ".rustdesk-1.4.6-x86_64.exe.123.456.download"
+        ));
+        assert!(is_temp_update_file_name(
+            ".rustdesk-1.4.6-x86_64.msi.123.456.download"
+        ));
+    }
+
+    #[test]
+    fn temp_update_file_name_rejects_unrelated_file() {
+        assert!(!is_temp_update_file_name("verified-not-an-update.exe"));
+        assert!(!is_temp_update_file_name("other-verified-alpha-beta.exe"));
+        assert!(!is_temp_update_file_name("rustdesk-1.4.6.zip"));
+        assert!(!is_temp_update_file_name(
+            ".rustdesk-1.4.6-x86_64.zip.123.456.download"
+        ));
+    }
+
+    #[test]
+    fn update_file_sha256_matches_open_file_handle() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "rustdesk-update-sha256-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&test_dir);
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        let update_file_path = test_dir.join("update.exe");
+        std::fs::write(&update_file_path, b"rustdesk").unwrap();
+        let update_file_path = update_file_path.to_string_lossy().to_string();
+        let mut update_file = open_update_file_for_verification(&update_file_path).unwrap();
+
+        let result = verify_update_file_sha256(
+            &mut update_file,
+            "304ca1638c5effa6832e0e15b958a8f74847efe4df9c3f3187216e921c168fed",
+            &update_file_path,
+        );
+
+        assert!(result.is_ok());
+        drop(update_file);
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn update_file_sha256_rejects_mismatched_open_file_handle() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "rustdesk-update-sha256-mismatch-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&test_dir);
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        let update_file_path = test_dir.join("update.exe");
+        std::fs::write(&update_file_path, b"rustdesk").unwrap();
+        let update_file_path = update_file_path.to_string_lossy().to_string();
+        let mut update_file = open_update_file_for_verification(&update_file_path).unwrap();
+
+        let result = verify_update_file_sha256(
+            &mut update_file,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            &update_file_path,
+        );
+
+        assert!(result.is_err());
+        drop(update_file);
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn accepts_trusted_update_publisher_names() {
+        assert!(is_trusted_update_publisher_name("RustDesk LLC"));
+        assert!(is_trusted_update_publisher_name("Purslane"));
+        assert!(is_trusted_update_publisher_name("PURSLANE"));
+        assert!(is_trusted_update_publisher_name("rustdesk llc"));
+    }
+
+    #[test]
+    fn rejects_untrusted_update_publisher_names() {
+        assert!(!is_trusted_update_publisher_name("Untrusted Publisher"));
+        assert!(!is_trusted_update_publisher_name(""));
+    }
 
     // Test-only reusable Win32 HANDLE RAII helper.
     // If a future non-test path needs the same pattern, move it out of this test module.
