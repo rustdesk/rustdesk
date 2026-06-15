@@ -939,6 +939,9 @@ class FfiModel with ChangeNotifier {
         _restartReconnectDelayTimer =
             Timer(Duration(seconds: _restartReconnectSilentDelay), () {
           _restartReconnectDelayTimer = null;
+          if (parent.target?.closed == true) {
+            return;
+          }
           reconnect(dialogManager, sessionId, false);
         });
       }
