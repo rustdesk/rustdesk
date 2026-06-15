@@ -259,11 +259,13 @@ class _ViewCameraPageState extends State<ViewCameraPage>
                         }
                         return Container(
                           color: MyTheme.canvasColor,
-                          child: RawTouchGestureDetectorRegion(
-                            child: getBodyForMobile(),
-                            ffi: gFFI,
-                            isCamera: true,
-                          ),
+                          child: inputModel.isPhysicalMouse.value
+                              ? getBodyForMobile()
+                              : RawTouchGestureDetectorRegion(
+                                  child: getBodyForMobile(),
+                                  ffi: gFFI,
+                                  isCamera: true,
+                                ),
                         );
                       }),
                     ),

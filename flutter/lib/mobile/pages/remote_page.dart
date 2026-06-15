@@ -517,10 +517,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                               }
                               return Container(
                                 color: MyTheme.canvasColor,
-                                child: RawTouchGestureDetectorRegion(
-                                  child: getBodyForMobile(),
-                                  ffi: gFFI,
-                                ),
+                                child: inputModel.isPhysicalMouse.value
+                                    ? getBodyForMobile()
+                                    : RawTouchGestureDetectorRegion(
+                                        child: getBodyForMobile(),
+                                        ffi: gFFI,
+                                      ),
                               );
                             }),
                           ),
