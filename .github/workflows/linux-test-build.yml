@@ -1,0 +1,177 @@
+name: Linux Test Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/wayland-ext-data-control
+
+env:
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-linux-x86_64:
+    needs: [generate-bridge]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            git \
+            g++ \
+            libayatana-appindicator3-dev \
+            libasound2-dev \
+            libclang-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgtk-3-dev \
+            libpam0g-dev \
+            libpulse-dev \
+            libssl-dev \
+            libunwind-dev \
+            libva-dev \
+            libvdpau-dev \
+            libxcb-randr0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxdo-dev \
+            libxfixes-dev \
+            nasm \
+            ninja-build \
+            pkg-config \
+            python3 \
+            rpm \
+            unzip \
+            wget \
+            xz-utils
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-unknown-linux-gnu
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: linux-test-ubuntu-22.04
+
+      - name: Disable rust bridge build
+        shell: bash
+        run: |
+          sed -i 's/\["cdylib", "staticlib", "rlib"\]/\["cdylib"\]/g' Cargo.toml
+
+      - name: Setup vcpkg with GitHub Actions cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        run: |
+          if ! $VCPKG_ROOT/vcpkg \
+            install \
+            --triplet x64-linux \
+            --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-x64-linux-rel-out.log" || true
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2.12.0
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          FLUTTER_DIR="$(dirname "$(dirname "$(which flutter)")")"
+          PATCH_FILE="${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          cp "$PATCH_FILE" "$FLUTTER_DIR"
+          pushd "$FLUTTER_DIR"
+          if git apply --check flutter_3.24.4_dropdown_menu_enableFilter.diff; then
+            git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+          else
+            echo "Skipping outdated flutter patch for Flutter ${{ env.FLUTTER_VERSION }}"
+          fi
+          popd
+
+      - name: Build rustdesk core
+        shell: bash
+        run: |
+          cargo build --lib --features hwcodec,flutter,unix-file-copy-paste --release
+
+      - name: Build linux bundle and package
+        shell: bash
+        run: |
+          export CARGO_INCREMENTAL=0
+          export DEB_ARCH=amd64
+          python3 ./build.py --flutter --skip-cargo
+          tar -C flutter/build/linux/x64/release -czf rustdesk-linux-x86_64-bundle.tar.gz bundle
+          deb_file=$(ls rustdesk-*.deb | head -n1)
+          cp "$deb_file" rustdesk-linux-x86_64.deb
+          ls -lh rustdesk-linux-x86_64-bundle.tar.gz rustdesk-linux-x86_64.deb
+
+      - name: Upload linux bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-linux-x86_64-bundle
+          path: rustdesk-linux-x86_64-bundle.tar.gz
+
+      - name: Upload deb package
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-linux-x86_64-deb
+          path: rustdesk-linux-x86_64.deb
