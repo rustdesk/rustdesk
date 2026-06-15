@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Võid sisestada ID, otsese IP või domeeni koos pordiga (<domeen>:<port>).\nKui soovid juurdepääsu seadmele mõnes teises serveris, lisa palun serveri aadress (<id>@<serveri_aadress>?key=<võtme_väärtus>), näiteks,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nKui soovid juurdepääsu seadmele avalikus serveris, sisesta \"<id>@public\", avaliku serveri puhul ei ole võtit vaja."),
         ("privacy_mode_impl_mag_tip", "Režiim 1"),
         ("privacy_mode_impl_virtual_display_tip", "Režiim 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Sisene privaatsusrežiimi"),
         ("Exit privacy mode", "Välju privaatsusrežiimist"),
         ("idd_not_support_under_win10_2004_tip", "Kaudse kuvari draiver ei ole toetatud. Vajalik on Windows 10, versioon 2004 või uuem."),

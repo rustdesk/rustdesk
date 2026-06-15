@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Bir ID, doğrudan IP veya portlu bir etki alanı (<domain>:<port>) girebilirsiniz.\nBaşka bir sunucudaki bir cihaza erişmek istiyorsanız lütfen sunucu adresini (<id>@<server_address>?key=<key_value>) ekleyin, örneğin,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nGenel bir sunucudaki bir cihaza erişmek istiyorsanız lütfen \"<id>@public\" girin, genel sunucu için anahtara gerek yoktur.\n\nİlk bağlantıda bir aktarma bağlantısının kullanılmasını zorlamak istiyorsanız ID'nin sonuna \"/r\" ekleyin, örneğin, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Mod 1"),
         ("privacy_mode_impl_virtual_display_tip", "Mod 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Gizlilik moduna gir"),
         ("Exit privacy mode", "Gizlilik modundan çık"),
         ("idd_not_support_under_win10_2004_tip", "Dolaylı ekran sürücüsü desteklenmiyor. Windows 10, sürüm 2004 veya daha yenisi gereklidir."),

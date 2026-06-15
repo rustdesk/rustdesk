@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Możesz wprowadzić identyfikator, bezpośredni adres IP lub domenę z portem (<adres_domenowy>:<port>).\nJeżeli chcesz uzyskać dostęp do urządzenia na innym serwerze, dołącz adres serwera (<id>@<adres_serwera>?key=<wartość_klucza>, np. \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJeżeli chcesz uzyskać dostęp do urządzenia na serwerze publicznym, wpisz \"<id>@public\", klucz nie jest potrzebny dla serwera publicznego."),
         ("privacy_mode_impl_mag_tip", "Tryb 1"),
         ("privacy_mode_impl_virtual_display_tip", "Tryb 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Wejdź w tryb prywatności"),
         ("Exit privacy mode", "Wyjdź z trybu prywatności"),
         ("idd_not_support_under_win10_2004_tip", "Pośredni sterownik ekranu nie jest obsługiwany. Wymagany jest system Windows 10 w wersji 2004 lub nowszej."),

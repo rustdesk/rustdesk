@@ -21,6 +21,8 @@ mod win_input;
 #[cfg(windows)]
 pub mod win_mag;
 #[cfg(windows)]
+mod win_privacy_screen;
+#[cfg(windows)]
 pub mod win_topmost_window;
 
 #[cfg(target_os = "macos")]
@@ -41,6 +43,7 @@ pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = "privacy_mode_impl_mag";
 pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str =
     "privacy_mode_impl_exclude_from_capture";
 pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = "privacy_mode_impl_virtual_display";
+pub const PRIVACY_MODE_IMPL_WIN_PRIVACY_SCREEN: &str = "privacy_mode_impl_privacy_screen";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -159,8 +162,14 @@ lazy_static::lazy_static! {
             }
 
             map.insert(win_virtual_display::PRIVACY_MODE_IMPL, |impl_key: &str| {
-                    Box::new(win_virtual_display::PrivacyModeImpl::new(impl_key))
+                Box::new(win_virtual_display::PrivacyModeImpl::new(impl_key))
+            });
+
+            if win_privacy_screen::is_supported() {
+                map.insert(win_privacy_screen::PRIVACY_MODE_IMPL, |impl_key: &str| {
+                    Box::new(win_privacy_screen::PrivacyModeImpl::new(impl_key))
                 });
+            }
         }
         Arc::new(Mutex::new(map))
     };
@@ -347,11 +356,18 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
             ));
         }
 
+        if win_privacy_screen::is_supported() {
+            vec_impls.push((
+                PRIVACY_MODE_IMPL_WIN_PRIVACY_SCREEN,
+                "privacy_mode_impl_privacy_screen_tip",
+            ));
+        }
+
         vec_impls
     }
     #[cfg(target_os = "macos")]
     {
-        // No translation is intended for privacy_mode_impl_macos_tip as it is a 
+        // No translation is intended for privacy_mode_impl_macos_tip as it is a
         // placeholder for macOS specific privacy mode implementation which currently
         // doesn't provide multiple modes like Windows does.
         vec![(macos::PRIVACY_MODE_IMPL, "privacy_mode_impl_macos_tip")]
@@ -428,4 +444,9 @@ pub fn is_in_privacy_mode() -> bool {
         .as_ref()
         .map(|pm| pm.pre_conn_id() != INVALID_PRIVACY_MODE_CONN_ID)
         .unwrap_or(false)
+}
+
+#[cfg(windows)]
+pub fn run_privacy_screen_helper() -> ResultType<()> {
+    win_privacy_screen::run_helper()
 }

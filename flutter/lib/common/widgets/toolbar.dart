@@ -72,10 +72,13 @@ Widget waylandKeyboardScopeChip(BuildContext context, String text) {
   );
 }
 
-// macOS privacy mode blacks out all online displays, so switching the remote
+// These privacy modes cover every local display, so switching the remote
 // display does not weaken the local privacy protection.
-bool allowDisplaySwitchInPrivacyMode(PeerInfo pi) {
-  return pi.platform == kPeerPlatformMacOS;
+bool allowDisplaySwitchInPrivacyMode(PeerInfo pi,
+    {String privacyModeImpl = ''}) {
+  return pi.platform == kPeerPlatformMacOS ||
+      (pi.platform == kPeerPlatformWindows &&
+          privacyModeImpl == kPrivacyModeImplPrivacyScreen);
 }
 
 class TTextMenu {
@@ -964,7 +967,9 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
 
   final privacyModeState = PrivacyModeState.find(id);
   if (pi.isSupportMultiDisplay &&
-      (privacyModeState.isEmpty || allowDisplaySwitchInPrivacyMode(pi)) &&
+      (privacyModeState.isEmpty ||
+          allowDisplaySwitchInPrivacyMode(pi,
+              privacyModeImpl: privacyModeState.value)) &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
     final value =
@@ -1056,7 +1061,8 @@ List<TToggleMenu> toolbarPrivacyMode(
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
-                if (!allowDisplaySwitchInPrivacyMode(pi) &&
+                if (!allowDisplaySwitchInPrivacyMode(pi,
+                        privacyModeImpl: privacyModeState.value) &&
                     ffiModel.pi.currentDisplay != 0 &&
                     ffiModel.pi.currentDisplay != kAllDisplayValue) {
                   msgBox(

@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "ஐடி உள்ளீடு எழுத்துகள் எண்கள் மட்டும்"),
         ("privacy_mode_impl_mag_tip", "Windows Magnifier API"),
         ("privacy_mode_impl_virtual_display_tip", "Virtual Display Driver"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "தனியுரிமை முறையில் நுழை"),
         ("Exit privacy mode", "தனியுரிமை முறையிலிருந்து வெளியேறு"),
         ("idd_not_support_under_win10_2004_tip", "Virtual Display Driver Windows 10 2004 க்கு கீழ் ஆதரவில்லை"),

@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Можна ўвесці ідэнтыфікатар, прамы IP-адрас або дамен з портам (<дамен>:<порт>).\nКаб атрымаць доступ да прылады на іншым серверы, дадайце адрас сервера (<id>@<адрас_сервера>?key=<ключ_значэнне>), напрыклад:\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nКалі трэба атрымаць доступ да прылады на агульнадаступным серверы, увядзіце \"<id>@public\", ключ для публічнага сервера не патрабуецца."),
         ("privacy_mode_impl_mag_tip", "Рэжым 1"),
         ("privacy_mode_impl_virtual_display_tip", "Рэжым 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Уключыць рэжым канфідэнцыйнасці"),
         ("Exit privacy mode", "Адключыць рэжым канфідэнцыйнасці"),
         ("idd_not_support_under_win10_2004_tip", "Драйвер непрамога адлюстравання не падтрымліваецца. Патрабуецца Windows 10 версіі 2004 або навейшая."),

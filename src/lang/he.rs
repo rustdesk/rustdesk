@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "ניתן להזין מזהה, IP ישיר, או דומיין עם פורט (<domain>:<port>).\nאם ברצונך לגשת למכשיר בשרת אחר, אנא הוסף את כתובת השרת (<id>@<server_address>?key=<key_value>), לדוגמה,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nאם ברצונך לגשת למכשיר בשרת ציבורי, אנא הזן \"<id>@public\", המפתח אינו נדרש לשרת ציבורי"),
         ("privacy_mode_impl_mag_tip", "מצב 1"),
         ("privacy_mode_impl_virtual_display_tip", "מצב 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "הכנס למצב פרטיות"),
         ("Exit privacy mode", "צא ממצב פרטיות"),
         ("idd_not_support_under_win10_2004_tip", "מנהל התצוגה העקיף אינו נתמך. נדרשת גרסת Windows 10, גרסה 2004 או חדשה יותר."),

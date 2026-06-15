@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "คุณสามารถป้อน ID, IP ตรง หรือโดเมนพร้อมพอร์ต (<domain>:<port>) ได้\nหากต้องการเข้าถึงอุปกรณ์บนเซิร์ฟเวอร์อื่น กรุณาเพิ่มที่อยู่เซิร์ฟเวอร์ต่อท้าย (<id>@<server_address>?key=<key_value>) ตัวอย่างเช่น\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=\nหากต้องการเข้าถึงอุปกรณ์บนเซิร์ฟเวอร์สาธารณะ กรุณาป้อน \"<id>@public\" ซึ่งไม่จำเป็นต้องใช้คีย์สำหรับเซิร์ฟเวอร์สาธารณะ\n\nหากต้องการบังคับให้ใช้การเชื่อมต่อแบบรีเลย์ในการเชื่อมต่อครั้งแรก ให้เพิ่ม \"/r\" ต่อท้าย ID ตัวอย่างเช่น \"9123456234/r\""),
         ("privacy_mode_impl_mag_tip", "โหมด 1"),
         ("privacy_mode_impl_virtual_display_tip", "โหมด 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "เข้าสู่โหมดความเป็นส่วนตัว"),
         ("Exit privacy mode", "ออกจากโหมดความเป็นส่วนตัว"),
         ("idd_not_support_under_win10_2004_tip", "ไม่รองรับไดรเวอร์จอแสดงผลทางอ้อม ต้องใช้ Windows 10 เวอร์ชัน 2004 หรือใหม่กว่า"),

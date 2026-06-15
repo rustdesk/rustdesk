@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Μπορείτε να εισάγετε ένα ID, μια διεύθυνση IP, ή ένα όνομα τομέα με την αντίστοιχη πόρτα (<domain>:<port>).\nΑν θέλετε να συνδεθείτε σε μια συσκευή σε άλλο διακομιστή, παρακαλώ να προσθέσετε και την διεύθυνση του διακομιστή (<id>@<server_address>?key=<key_value>), για παράδειγμα,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nΑν θέλετε να συνδεθείτε σε κάποιο δημόσιο διακομιστή, προσθέστε το όνομά του \"<id>@public\", η παράμετρος key δεν απαιτείται για τους δημόσιους διακομιστές."),
         ("privacy_mode_impl_mag_tip", "Λειτουργία 1"),
         ("privacy_mode_impl_virtual_display_tip", "Λειτουργία 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Ενεργοποίηση λειτουργίας απορρήτου"),
         ("Exit privacy mode", "Διακοπή λειτουργίας απορρήτου"),
         ("idd_not_support_under_win10_2004_tip", "Το πρόγραμμα οδήγησης έμμεσης οθόνης δεν υποστηρίζεται. Απαιτείτε λειτουργικό σύστημα Windows 10 έκδοση 2004 ή νεότερο."),

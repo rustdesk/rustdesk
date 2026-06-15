@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Du kan ange ett ID, en direkt IP-adress eller en domän med port (<domain>:<port>).\nOm du vill nå en enhet på en annan server lägger du till serveradressen (<id>@<server_address>?key=<key_value>), till exempel,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nOm du vill nå en enhet på en offentlig server anger du \"<id>@public\"; nyckeln behövs inte för en offentlig server.\n\nOm du vill tvinga fram en reläanslutning vid första anslutningen lägger du till \"/r\" i slutet av ID:t, till exempel \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Läge 1"),
         ("privacy_mode_impl_virtual_display_tip", "Läge 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Aktivera privatläge"),
         ("Exit privacy mode", "Inaktivera privatläge"),
         ("idd_not_support_under_win10_2004_tip", "Indirekt skärmdrivrutin stöds inte. Windows 10 version 2004 eller senare krävs."),

@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Galite įvesti ID, tiesioginį IP arba domeną su prievadu (<domain>:<port>).\nJei norite pasiekti įrenginį kitame serveryje, pridėkite serverio adresą (<id>@<server_address>?key=<key_value>), pavyzdžiui,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJei norite pasiekti įrenginį viešajame serveryje, įveskite \"<id>@public\", viešajam serveriui raktas nereikalingas.\n\nJei norite priversti pirmą kartą jungiantis naudoti perdavimo ryšį, ID gale pridėkite \"/r\", pavyzdžiui, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "1 režimas"),
         ("privacy_mode_impl_virtual_display_tip", "2 režimas"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Įjungti privatumo režimą"),
         ("Exit privacy mode", "Išjungti privatumo režimą"),
         ("idd_not_support_under_win10_2004_tip", "Netiesioginio ekrano tvarkyklė nepalaikoma. Reikalinga Windows 10 2004 ar naujesnė versija."),
