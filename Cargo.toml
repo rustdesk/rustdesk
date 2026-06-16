@@ -41,6 +41,7 @@ unix-file-copy-paste = [
     "clipboard/unix-file-copy-paste",
 ]
 screencapturekit = ["cpal/screencapturekit"]
+asio = ["cpal/asio"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -107,7 +108,7 @@ system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit", features = ["asio"] }
+cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit" }
 winapi = { version = "0.3", features = [
     "winuser",
     "wincrypt",
