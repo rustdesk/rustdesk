@@ -1406,10 +1406,10 @@ static UINT32 get_remote_format_id(wfClipboard *clipboard, UINT32 local_format)
 	return local_format;
 }
 
-static void map_ensure_capacity(wfClipboard *clipboard)
+static BOOL map_ensure_capacity(wfClipboard *clipboard)
 {
 	if (!clipboard)
-		return;
+		return FALSE;
 
 	if (clipboard->map_size >= clipboard->map_capacity)
 	{
@@ -1420,11 +1420,20 @@ static void map_ensure_capacity(wfClipboard *clipboard)
 			(formatMapping *)realloc(clipboard->format_mappings, sizeof(formatMapping) * new_size);
 
 		if (!new_map)
-			return;
+			return FALSE;
+
+		// `realloc` does not initialize the grown region. `clear_format_map()` frees
+		// `map->name` for every slot up to `map_capacity`, so the newly added slots
+		// must be zeroed; otherwise `free()` is called on uninitialized (garbage)
+		// pointers, which corrupts the heap (issue #15291).
+		ZeroMemory(new_map + clipboard->map_capacity,
+				   (new_size - clipboard->map_capacity) * sizeof(formatMapping));
 
 		clipboard->format_mappings = new_map;
 		clipboard->map_capacity = new_size;
 	}
+
+	return TRUE;
 }
 
 static BOOL clear_format_map(wfClipboard *clipboard)
@@ -2448,6 +2457,11 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 
 	for (i = 0; i < formatList->numFormats; i++)
 	{
+		// Ensure room for slot `i` (== current map_size) BEFORE writing it, and bail
+		// out if the table cannot be grown, so we never write past the allocation.
+		if (!map_ensure_capacity(clipboard))
+			return ERROR_INTERNAL_ERROR;
+
 		format = &(formatList->formats[i]);
 		mapping = &(clipboard->format_mappings[i]);
 		mapping->remote_format_id = format->formatId;
@@ -2472,7 +2486,6 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 		}
 
 		clipboard->map_size++;
-		map_ensure_capacity(clipboard);
 	}
 
 	if (file_transferring(clipboard))
