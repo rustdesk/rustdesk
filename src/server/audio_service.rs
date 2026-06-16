@@ -346,8 +346,15 @@ mod cpal_impl {
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
-            if let Some(device) = get_asio_audio_input(&audio_input)? {
-                return Ok(device);
+            match get_asio_audio_input(&audio_input) {
+                Ok(Some(device)) => return Ok(device),
+                Ok(None) => {}
+                Err(err) => {
+                    log::warn!(
+                        "Failed to get ASIO audio input, falling back to default audio input: {:?}",
+                        err
+                    );
+                }
             }
             return get_audio_input(&audio_input);
         }
