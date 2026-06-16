@@ -30,6 +30,7 @@ use uuid::Uuid;
 use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
+    common::PLATFORM_ADDITION_IS_LOGIN_SCREEN,
     create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
     secure_tcp,
@@ -1901,11 +1902,11 @@ impl LoginConfigHandler {
 
     /// Check if the client should auto login.
     /// Return password if the client should auto login, otherwise return empty string.
-    pub fn should_auto_login(&self) -> String {
+    pub fn should_auto_login(&self, pi: &PeerInfo) -> String {
         let l = self.lock_after_session_end.v;
         let a = !self.get_option("auto-login").is_empty();
         let p = self.get_option("os-password");
-        if !p.is_empty() && l && a {
+        if !p.is_empty() && l && a && !peer_reports_unlocked_desktop(pi) {
             p
         } else {
             "".to_owned()
@@ -2801,6 +2802,67 @@ impl LoginConfigHandler {
         } else {
             "terminal-service-id"
         }
+    }
+}
+
+fn peer_reports_unlocked_desktop(pi: &PeerInfo) -> bool {
+    serde_json::from_str::<HashMap<String, serde_json::Value>>(&pi.platform_additions)
+        .ok()
+        .and_then(|platform_additions| {
+            platform_additions
+                .get(PLATFORM_ADDITION_IS_LOGIN_SCREEN)
+                .and_then(|value| value.as_bool())
+        })
+        == Some(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use hbb_common::message_proto::PeerInfo;
+
+    fn login_config_handler() -> super::LoginConfigHandler {
+        let mut handler = super::LoginConfigHandler::default();
+        handler.config.lock_after_session_end.v = true;
+        handler
+            .config
+            .options
+            .insert("auto-login".to_owned(), "Y".to_owned());
+        handler
+            .config
+            .options
+            .insert("os-password".to_owned(), "secret".to_owned());
+        handler
+    }
+
+    fn peer_info(platform_additions: &str) -> PeerInfo {
+        PeerInfo {
+            platform_additions: platform_additions.to_owned(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn should_auto_login_skips_unlocked_peer() {
+        let handler = login_config_handler();
+        let pi = peer_info(r#"{"is_login_screen":false}"#);
+
+        assert_eq!("", handler.should_auto_login(&pi));
+    }
+
+    #[test]
+    fn should_auto_login_keeps_peer_on_login_screen() {
+        let handler = login_config_handler();
+        let pi = peer_info(r#"{"is_login_screen":true}"#);
+
+        assert_eq!("secret", handler.should_auto_login(&pi));
+    }
+
+    #[test]
+    fn should_auto_login_keeps_legacy_peer_without_login_screen_state() {
+        let handler = login_config_handler();
+        let pi = peer_info("");
+
+        assert_eq!("secret", handler.should_auto_login(&pi));
     }
 }
 

@@ -1624,6 +1624,10 @@ impl Connection {
         #[cfg(target_os = "macos")]
         {
             platform_additions.insert(
+                crate::common::PLATFORM_ADDITION_IS_LOGIN_SCREEN.into(),
+                json!(crate::platform::is_prelogin() || crate::platform::is_locked()),
+            );
+            platform_additions.insert(
                 "supported_privacy_mode_impl".into(),
                 json!(privacy_mode::get_supported_privacy_mode_impl()),
             );

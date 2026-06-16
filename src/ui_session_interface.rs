@@ -1806,7 +1806,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 return;
             }
             self.try_change_init_resolution(pi.current_display);
-            let p = self.lc.read().unwrap().should_auto_login();
+            let p = self.lc.read().unwrap().should_auto_login(&pi);
             if !p.is_empty() {
                 input_os_password(p, true, self.clone());
             }
