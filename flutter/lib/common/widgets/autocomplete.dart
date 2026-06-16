@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import '../../../models/platform_model.dart';
@@ -5,13 +8,106 @@ import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 
+@visibleForTesting
+List<Peer> mergeAutocompletePeers({
+  Iterable<Peer> addressBookPeers = const [],
+  Iterable<Peer> groupPeers = const [],
+  Iterable<Peer> lanPeers = const [],
+  Iterable<Peer> recentPeers = const [],
+  Iterable<String> restRecentPeerIds = const [],
+}) {
+  final combinedPeers = <String, Peer>{};
+
+  void addPeer(Peer peer) {
+    if (peer.id.isEmpty) {
+      return;
+    }
+    final existingPeer = combinedPeers[peer.id];
+    if (existingPeer == null) {
+      combinedPeers[peer.id] = Peer.copy(peer);
+    } else if (peer.online) {
+      existingPeer.online = true;
+    }
+  }
+
+  for (final peer in addressBookPeers) {
+    addPeer(peer);
+  }
+  for (final peer in groupPeers) {
+    addPeer(peer);
+  }
+  for (final peer in lanPeers) {
+    addPeer(peer);
+  }
+  for (final peer in recentPeers) {
+    addPeer(peer);
+  }
+  for (final id in restRecentPeerIds) {
+    if (id.isNotEmpty && !combinedPeers.containsKey(id)) {
+      combinedPeers[id] = Peer.fromJson({'id': id});
+    }
+  }
+
+  return combinedPeers.values.toList(growable: false);
+}
+
+@visibleForTesting
+bool updateAutocompletePeerOnlineStates(
+  List<Peer> peers, {
+  required Set<String> onlines,
+  required Set<String> offlines,
+}) {
+  var changed = false;
+  for (final peer in peers) {
+    if (onlines.contains(peer.id)) {
+      if (!peer.online) {
+        peer.online = true;
+        changed = true;
+      }
+    } else if (offlines.contains(peer.id)) {
+      if (peer.online) {
+        peer.online = false;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+@visibleForTesting
+List<String> autocompleteOnlineQueryIds(
+  Iterable<Peer> options, {
+  required int limit,
+}) {
+  final ids = <String>[];
+  final seenIds = <String>{};
+  for (final peer in options) {
+    if (peer.id.isEmpty || seenIds.contains(peer.id)) {
+      continue;
+    }
+    seenIds.add(peer.id);
+    ids.add(peer.id);
+    if (ids.length >= limit) {
+      break;
+    }
+  }
+  return ids;
+}
+
 class AllPeersLoader {
   List<Peer> peers = [];
 
   bool _isPeersLoading = false;
   bool _isPeersLoaded = false;
+  Set<String> _lastQueryOnlineIds = {};
+  DateTime _lastQueryOnlineTime = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _queryOnlineTimer;
 
   final String _listenerKey = 'AllPeersLoader';
+  static const String _cbQueryOnlines = 'callback_query_onlines';
+  static const Duration _queryOnlineInterval = Duration(seconds: 5);
+  static const Duration _queryOnlineDebounce = Duration(milliseconds: 300);
+  static const int _maxQueryOnlineOptions = 20;
 
   late void Function(VoidCallback) setState;
 
@@ -26,6 +122,10 @@ class AllPeersLoader {
     gFFI.lanPeersModel.addListener(_mergeAllPeers);
     gFFI.abModel.addPeerUpdateListener(_listenerKey, _mergeAllPeers);
     gFFI.groupModel.addPeerUpdateListener(_listenerKey, _mergeAllPeers);
+    platformFFI.registerEventHandler(_cbQueryOnlines, _listenerKey,
+        (evt) async {
+      _updateOnlineState(evt);
+    });
   }
 
   void clear() {
@@ -33,6 +133,8 @@ class AllPeersLoader {
     gFFI.lanPeersModel.removeListener(_mergeAllPeers);
     gFFI.abModel.removePeerUpdateListener(_listenerKey);
     gFFI.groupModel.removePeerUpdateListener(_listenerKey);
+    platformFFI.unregisterEventHandler(_cbQueryOnlines, _listenerKey);
+    _queryOnlineTimer?.cancel();
   }
 
   Future<void> getAllPeers() async {
@@ -59,48 +161,58 @@ class AllPeersLoader {
   }
 
   void _mergeAllPeers() {
-    Map<String, dynamic> combinedPeers = {};
-    for (var p in gFFI.abModel.allPeers()) {
-      if (!combinedPeers.containsKey(p.id)) {
-        combinedPeers[p.id] = p.toJson();
-      }
-    }
-    for (var p in gFFI.groupModel.peers.map((e) => Peer.copy(e)).toList()) {
-      if (!combinedPeers.containsKey(p.id)) {
-        combinedPeers[p.id] = p.toJson();
-      }
-    }
-
-    List<Peer> parsedPeers = [];
-    for (var peer in combinedPeers.values) {
-      parsedPeers.add(Peer.fromJson(peer));
-    }
-
-    Set<String> peerIds = combinedPeers.keys.toSet();
-    for (final peer in gFFI.lanPeersModel.peers) {
-      if (!peerIds.contains(peer.id)) {
-        parsedPeers.add(peer);
-        peerIds.add(peer.id);
-      }
-    }
-
-    for (final peer in gFFI.recentPeersModel.peers) {
-      if (!peerIds.contains(peer.id)) {
-        parsedPeers.add(peer);
-        peerIds.add(peer.id);
-      }
-    }
-    for (final id in gFFI.recentPeersModel.restPeerIds) {
-      if (!peerIds.contains(id)) {
-        parsedPeers.add(Peer.fromJson({'id': id}));
-        peerIds.add(id);
-      }
-    }
-
-    peers = parsedPeers;
+    peers = mergeAutocompletePeers(
+      addressBookPeers: gFFI.abModel.allPeers(),
+      groupPeers: gFFI.groupModel.peers,
+      lanPeers: gFFI.lanPeersModel.peers,
+      recentPeers: gFFI.recentPeersModel.peers,
+      restRecentPeerIds: gFFI.recentPeersModel.restPeerIds,
+    );
     setState(() {
       _isPeersLoading = false;
       _isPeersLoaded = true;
+    });
+  }
+
+  void _updateOnlineState(Map<String, dynamic> evt) {
+    final changed = updateAutocompletePeerOnlineStates(
+      peers,
+      onlines: _splitPeerIds(evt['onlines']),
+      offlines: _splitPeerIds(evt['offlines']),
+    );
+    if (changed) {
+      setState(() {});
+    }
+  }
+
+  Set<String> _splitPeerIds(dynamic ids) {
+    if (ids is! String || ids.isEmpty) {
+      return {};
+    }
+    return ids.split(',').where((id) => id.isNotEmpty).toSet();
+  }
+
+  void queryOnlines(Iterable<Peer> options) {
+    final ids = autocompleteOnlineQueryIds(
+      options,
+      limit: _maxQueryOnlineOptions,
+    ).toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    final now = DateTime.now();
+    if (setEquals(ids, _lastQueryOnlineIds) &&
+        now.difference(_lastQueryOnlineTime) < _queryOnlineInterval) {
+      return;
+    }
+
+    _queryOnlineTimer?.cancel();
+    _queryOnlineTimer = Timer(_queryOnlineDebounce, () {
+      _lastQueryOnlineIds = ids;
+      _lastQueryOnlineTime = DateTime.now();
+      bind.queryOnlines(ids: ids.toList(growable: false)).catchError((e) {
+        debugPrint('query autocomplete online state failed: $e');
+      });
     });
   }
 }
