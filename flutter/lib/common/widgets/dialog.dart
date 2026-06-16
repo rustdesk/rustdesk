@@ -393,6 +393,7 @@ class DialogTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final int? maxLength;
+  final bool literalInput;
 
   static const kUsernameTitle = 'Username';
   static const kUsernameIcon = Icon(Icons.account_circle_outlined);
@@ -411,6 +412,7 @@ class DialogTextField extends StatelessWidget {
       this.keyboardType,
       this.inputFormatters,
       this.maxLength,
+      this.literalInput = false,
       required this.title,
       required this.controller})
       : super(key: key);
@@ -435,7 +437,17 @@ class DialogTextField extends StatelessWidget {
                 focusNode: focusNode,
                 autofocus: true,
                 obscureText: obscureText,
-                keyboardType: keyboardType,
+                keyboardType: keyboardType ??
+                    (literalInput ? TextInputType.visiblePassword : null),
+                textCapitalization: TextCapitalization.none,
+                autocorrect: !literalInput,
+                enableSuggestions: !literalInput,
+                smartDashesType: literalInput ? SmartDashesType.disabled : null,
+                smartQuotesType: literalInput ? SmartQuotesType.disabled : null,
+                enableIMEPersonalizedLearning: !literalInput,
+                spellCheckConfiguration: literalInput
+                    ? const SpellCheckConfiguration.disabled()
+                    : null,
                 inputFormatters: inputFormatters,
                 maxLength: maxLength,
               ),
