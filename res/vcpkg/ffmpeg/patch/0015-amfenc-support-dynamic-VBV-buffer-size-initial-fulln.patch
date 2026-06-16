@@ -1,0 +1,92 @@
+From f7c7fbbbcf1559fb8e044b07250b0bc8c7e55930 Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Thu, 26 Feb 2026 16:56:28 +0800
+Subject: [PATCH] amfenc: support dynamic VBV buffer size, initial fullness and
+ peak bitrate reconfigure
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/amfenc.c | 45 +++++++++++++++++++++++++++++++++++++++++++++
+ libavcodec/amfenc.h |  3 +++
+ 2 files changed, 48 insertions(+)
+
+diff --git a/libavcodec/amfenc.c b/libavcodec/amfenc.c
+index eb960d0e8a..ae36bf328d 100644
+--- a/libavcodec/amfenc.c
++++ b/libavcodec/amfenc.c
+@@ -283,6 +283,9 @@ static int amf_init_context(AVCodecContext *avctx)
+     ctx->last_max_qp_i = ctx->max_qp_i;
+     ctx->last_min_qp_p = ctx->min_qp_p;
+     ctx->last_max_qp_p = ctx->max_qp_p;
++    ctx->last_rc_buffer_size = avctx->rc_buffer_size;
++    ctx->last_rc_initial_buffer_occupancy = avctx->rc_initial_buffer_occupancy;
++    ctx->last_rc_max_rate = avctx->rc_max_rate;
+ 
+     // configure AMF logger
+     // the return of these functions indicates old state and do not affect behaviour
+@@ -669,6 +672,48 @@ static int reconfig_encoder(AVCodecContext *avctx)
+         ctx->last_bit_rate = avctx->bit_rate;
+     }
+ 
++    // Dynamic VBV buffer size reconfiguration
++    if (avctx->rc_buffer_size && avctx->rc_buffer_size != ctx->last_rc_buffer_size) {
++        if (!is_cqp) {
++            av_log(ctx, AV_LOG_INFO, "change rc_buffer_size from %d to %d\n", ctx->last_rc_buffer_size, avctx->rc_buffer_size);
++            if (avctx->codec->id == AV_CODEC_ID_H264) {
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_VBV_BUFFER_SIZE, avctx->rc_buffer_size);
++            } else if (avctx->codec->id == AV_CODEC_ID_HEVC) {
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_VBV_BUFFER_SIZE, avctx->rc_buffer_size);
++            }
++        }
++        ctx->last_rc_buffer_size = avctx->rc_buffer_size;
++    }
++
++    // Dynamic initial VBV buffer fullness reconfiguration
++    if (avctx->rc_initial_buffer_occupancy && avctx->rc_initial_buffer_occupancy != ctx->last_rc_initial_buffer_occupancy) {
++        if (!is_cqp && avctx->rc_buffer_size > 0) {
++            int amf_buffer_fullness = avctx->rc_initial_buffer_occupancy * 64 / avctx->rc_buffer_size;
++            if (amf_buffer_fullness > 64)
++                amf_buffer_fullness = 64;
++            av_log(ctx, AV_LOG_INFO, "change rc_initial_buffer_occupancy from %d to %d\n", ctx->last_rc_initial_buffer_occupancy, avctx->rc_initial_buffer_occupancy);
++            if (avctx->codec->id == AV_CODEC_ID_H264) {
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_INITIAL_VBV_BUFFER_FULLNESS, amf_buffer_fullness);
++            } else if (avctx->codec->id == AV_CODEC_ID_HEVC) {
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_INITIAL_VBV_BUFFER_FULLNESS, amf_buffer_fullness);
++            }
++        }
++        ctx->last_rc_initial_buffer_occupancy = avctx->rc_initial_buffer_occupancy;
++    }
++
++    // Dynamic peak bitrate reconfiguration
++    if (avctx->rc_max_rate && avctx->rc_max_rate != ctx->last_rc_max_rate) {
++        if (!is_cqp) {
++            av_log(ctx, AV_LOG_INFO, "change rc_max_rate from %"PRId64" to %"PRId64"\n", ctx->last_rc_max_rate, avctx->rc_max_rate);
++            if (avctx->codec->id == AV_CODEC_ID_H264) {
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_PEAK_BITRATE, avctx->rc_max_rate);
++            } else if (avctx->codec->id == AV_CODEC_ID_HEVC) {
++                AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_PEAK_BITRATE, avctx->rc_max_rate);
++            }
++        }
++        ctx->last_rc_max_rate = avctx->rc_max_rate;
++    }
++
+     // Dynamic QP/qmin/qmax reconfiguration
+     // Reference: https://amd.github.io/ama-sdk/latest/tuning_video_quality.html#dynamic-encoder-parameters
+     // CQP mode: dynamic QP, qmin, qmax
+diff --git a/libavcodec/amfenc.h b/libavcodec/amfenc.h
+index 8d4ee064dd..dc9ad9942b 100644
+--- a/libavcodec/amfenc.h
++++ b/libavcodec/amfenc.h
+@@ -125,6 +125,9 @@ typedef struct AmfContext {
+     int                 last_max_qp_i;
+     int                 last_min_qp_p;
+     int                 last_max_qp_p;
++    int                 last_rc_buffer_size;
++    int                 last_rc_initial_buffer_occupancy;
++    int64_t             last_rc_max_rate;
+ 
+     // HEVC - specific options
+ 
+-- 
+2.43.0.windows.1
+

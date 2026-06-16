@@ -576,11 +576,13 @@ fn run(vs: VideoService) -> ResultType<()> {
         &Config::get_option("allow-auto-record-incoming"),
     );
     let client_record = video_qos.record();
+    let image_quality = video_qos.latest_image_quality();
     drop(video_qos);
     let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
         &c,
         sp.name(),
         quality,
+        image_quality,
         client_record,
         record_incoming,
         last_portable_service_running,
@@ -594,6 +596,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 width: c.width as _,
                 height: c.height as _,
                 quality,
+                image_quality,
                 codec: VpxVideoCodecId::VP9,
                 keyframe_interval: None,
             }));
@@ -601,6 +604,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 &c,
                 sp.name(),
                 quality,
+                image_quality,
                 client_record,
                 record_incoming,
                 last_portable_service_running,
@@ -618,7 +622,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             bail!(e);
         }
     }
-    VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
+    VIDEO_QOS.lock().unwrap().store_rc_state(encoder.rc_state());
     VIDEO_QOS
         .lock()
         .unwrap()
@@ -658,6 +662,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         check_qos(
             &mut encoder,
             &mut quality,
+            image_quality,
             &mut spf,
             client_record,
             &mut send_counter,
@@ -926,6 +931,7 @@ fn setup_encoder(
     c: &CapturerInfo,
     name: String,
     quality: f32,
+    image_quality: ImageQuality,
     client_record: bool,
     record_incoming: bool,
     last_portable_service_running: bool,
@@ -942,6 +948,7 @@ fn setup_encoder(
         &c,
         name.to_string(),
         quality,
+        image_quality,
         client_record || record_incoming,
         last_portable_service_running,
         source,
@@ -958,6 +965,7 @@ fn get_encoder_config(
     c: &CapturerInfo,
     _name: String,
     quality: f32,
+    image_quality: ImageQuality,
     record: bool,
     _portable_service: bool,
     _source: VideoSource,
@@ -981,6 +989,7 @@ fn get_encoder_config(
                     width: c.width,
                     height: c.height,
                     quality,
+                    image_quality,
                     feature,
                     keyframe_interval,
                 });
@@ -993,6 +1002,7 @@ fn get_encoder_config(
                     width: c.width,
                     height: c.height,
                     quality,
+                    image_quality,
                     keyframe_interval,
                 });
             }
@@ -1000,6 +1010,7 @@ fn get_encoder_config(
                 width: c.width as _,
                 height: c.height as _,
                 quality,
+                image_quality,
                 codec: VpxVideoCodecId::VP9,
                 keyframe_interval,
             })
@@ -1008,6 +1019,7 @@ fn get_encoder_config(
             width: c.width as _,
             height: c.height as _,
             quality,
+            image_quality,
             codec: if format == CodecFormat::VP8 {
                 VpxVideoCodecId::VP8
             } else {
@@ -1025,6 +1037,7 @@ fn get_encoder_config(
             width: c.width as _,
             height: c.height as _,
             quality,
+            image_quality,
             codec: VpxVideoCodecId::VP9,
             keyframe_interval,
         }),
@@ -1310,6 +1323,7 @@ pub fn make_display_changed_msg(
 fn check_qos(
     encoder: &mut Encoder,
     ratio: &mut f32,
+    image_quality: ImageQuality,
     spf: &mut Duration,
     client_record: bool,
     send_counter: &mut usize,
@@ -1318,11 +1332,16 @@ fn check_qos(
 ) -> ResultType<()> {
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     *spf = video_qos.spf();
+    let latest_image_quality = video_qos.latest_image_quality();
+    if image_quality != latest_image_quality && encoder.rc_changed(latest_image_quality) {
+        log::info!("switch due to rate control changed");
+        bail!("SWITCH");
+    }
     if *ratio != video_qos.ratio() {
         *ratio = video_qos.ratio();
         if encoder.support_changing_quality() {
             allow_err!(encoder.set_quality(*ratio));
-            video_qos.store_bitrate(encoder.bitrate());
+            video_qos.store_rc_state(encoder.rc_state());
         } else {
             // Now only vaapi doesn't support changing quality
             if !video_qos.in_vbr_state() && !video_qos.latest_quality().is_custom() {

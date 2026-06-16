@@ -601,8 +601,9 @@ class QualityMonitor extends StatelessWidget {
                           "Delay",
                           "${qualityMonitorModel.data.delay == null ? '-' : (qualityMonitorModel.data.fps ?? "").replaceAll(' ', '').replaceAll('0', '').isEmpty ? 0 : qualityMonitorModel.data.delay}ms",
                           rightColor: Colors.green),
-                      _row("Target Bitrate",
-                          "${qualityMonitorModel.data.targetBitrate ?? '-'}kb"),
+                      if ((int.tryParse(qualityMonitorModel.data.targetBitrate ?? '') ?? 0) >= 1)
+                        _row("Target Bitrate",
+                            "${qualityMonitorModel.data.targetBitrate}kb"),
                       _row(
                           "Codec", qualityMonitorModel.data.codecFormat ?? '-'),
                       _row("Chroma", qualityMonitorModel.data.chroma ?? '-'),
