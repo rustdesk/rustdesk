@@ -3740,16 +3740,18 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn on_establish_connection_error(&self, err: String) {
         let title = "Connection Error";
         let text = err.to_string();
-        let lc = self.get_lch();
-        if lc.read().unwrap().is_restarting_remote_device() {
+        let lch = self.get_lch();
+        let (is_restarting, direct, received) = {
+            let lc = lch.read().unwrap();
+            (lc.is_restarting_remote_device(), lc.direct, lc.received)
+        };
+        if is_restarting {
             log::info!("Restart remote device, suppress connection error: {err}");
             // Flutter treats this as a reconnect control event. The text is kept
             // for legacy UI and existing translation reuse.
             self.msgbox("restarting", "Restarting remote device", "Connection in progress. Please wait.", "");
             return;
         }
-        let direct = lc.read().unwrap().direct;
-        let received = lc.read().unwrap().received;
 
         let mut relay_hint = false;
         let mut relay_hint_type = "relay-hint";

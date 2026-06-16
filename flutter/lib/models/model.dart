@@ -56,7 +56,7 @@ typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
 final _constSessionId = Uuid().v4obj();
 // Empirical restart reconnect cadence: keep the last frame briefly and retry quickly.
-const _restartReconnectSilentDelay = 5;
+const _restartReconnectSilentDelaySecs = 5;
 
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
@@ -937,7 +937,7 @@ class FfiModel with ChangeNotifier {
         // Retry once more after the silent window so restart reconnect attempts
         // are spaced by the empirical short cadence instead of only updating UI.
         _restartReconnectDelayTimer =
-            Timer(Duration(seconds: _restartReconnectSilentDelay), () {
+            Timer(Duration(seconds: _restartReconnectSilentDelaySecs), () {
           _restartReconnectDelayTimer = null;
           if (parent.target?.closed == true) {
             return;
