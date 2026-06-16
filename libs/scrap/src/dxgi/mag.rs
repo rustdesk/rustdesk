@@ -52,6 +52,33 @@ lazy_static::lazy_static! {
     static ref MAG_BUFFER: Mutex<(bool, Vec<u8>)> =  Default::default();
 }
 
+fn find_windows(cls: &str, name: &str) -> Result<Vec<HWND>> {
+    let name_c = CString::new(name)?;
+    let cls_c = if cls.is_empty() {
+        None
+    } else {
+        Some(CString::new(cls)?)
+    };
+    let mut hwnds = Vec::new();
+    unsafe {
+        let mut after = NULL as _;
+        loop {
+            let hwnd = FindWindowExA(
+                NULL as _,
+                after,
+                cls_c.as_ref().map_or(NULL as _, |c| c.as_ptr()),
+                name_c.as_ptr(),
+            );
+            if hwnd.is_null() {
+                break;
+            }
+            hwnds.push(hwnd);
+            after = hwnd;
+        }
+    }
+    Ok(hwnds)
+}
+
 pub type REFWICPixelFormatGUID = *const GUID;
 pub type WICPixelFormatGUID = GUID;
 
@@ -247,6 +274,8 @@ pub struct CapturerMag {
     rect: RECT,
     width: usize,
     height: usize,
+    excluded_window_target: Option<(String, String)>,
+    excluded_windows: Vec<HWND>,
 }
 
 impl Drop for CapturerMag {
@@ -261,6 +290,10 @@ impl CapturerMag {
         MagInterface::new().is_ok()
     }
 
+    // This captures through the legacy Windows Magnification API. Do not infer
+    // multi-monitor capture support from privacy overlay coverage: WebRTC also
+    // disables its magnifier capturer when SM_CMONITORS != 1.
+    // https://webrtc.googlesource.com/src/+/1845922d5a1bf9c27deeffb4a8c8daea124434c1/modules/desktop_capture/win/screen_capturer_win_magnifier.cc
     pub(crate) fn new(origin: (i32, i32), width: usize, height: usize) -> Result<Self> {
         unsafe {
             let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -305,6 +338,8 @@ impl CapturerMag {
             },
             width,
             height,
+            excluded_window_target: None,
+            excluded_windows: Vec::new(),
         };
 
         unsafe {
@@ -436,19 +471,35 @@ impl CapturerMag {
     }
 
     pub(crate) fn exclude(&mut self, cls: &str, name: &str) -> Result<bool> {
-        let name_c = CString::new(name)?;
+        let mut hwnds = find_windows(cls, name)?;
+        if hwnds.is_empty() {
+            return Ok(false);
+        }
+
+        self.exclude_windows(&mut hwnds)?;
+        self.excluded_window_target = Some((cls.to_owned(), name.to_owned()));
+        self.excluded_windows = hwnds;
+        Ok(true)
+    }
+
+    fn refresh_excluded_windows(&mut self) -> Result<()> {
+        let Some((cls, name)) = self.excluded_window_target.as_ref() else {
+            return Ok(());
+        };
+        let mut hwnds = find_windows(cls, name)?;
+        // Keep the previous filter list while privacy windows are being recreated.
+        if hwnds.is_empty() || hwnds == self.excluded_windows {
+            return Ok(());
+        }
+
+        self.exclude_windows(&mut hwnds)?;
+        self.excluded_windows = hwnds;
+        Ok(())
+    }
+
+    fn exclude_windows(&mut self, hwnds: &mut [HWND]) -> Result<bool> {
+        let count = hwnds.len() as _;
         unsafe {
-            let mut hwnd = if cls.len() == 0 {
-                FindWindowExA(NULL as _, NULL as _, NULL as _, name_c.as_ptr())
-            } else {
-                let cls_c = CString::new(cls).unwrap();
-                FindWindowExA(NULL as _, NULL as _, cls_c.as_ptr(), name_c.as_ptr())
-            };
-
-            if hwnd.is_null() {
-                return Ok(false);
-            }
-
             if let Some(set_window_filter_list_func) =
                 self.mag_interface.set_window_filter_list_func
             {
@@ -456,16 +507,15 @@ impl CapturerMag {
                     == set_window_filter_list_func(
                         self.magnifier_window,
                         MW_FILTERMODE_EXCLUDE,
-                        1,
-                        &mut hwnd,
+                        count,
+                        hwnds.as_mut_ptr(),
                     )
                 {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed MagSetWindowFilterList for cls {} name {}, error {}",
-                            cls,
-                            name,
+                            "Failed MagSetWindowFilterList for {} windows, error {}",
+                            count,
                             Error::last_os_error()
                         ),
                     ));
@@ -496,6 +546,7 @@ impl CapturerMag {
     }
 
     pub(crate) fn frame(&mut self, data: &mut Vec<u8>) -> Result<()> {
+        self.refresh_excluded_windows()?;
         Self::clear_data();
 
         unsafe {

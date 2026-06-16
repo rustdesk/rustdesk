@@ -1220,7 +1220,11 @@ void showOptions(
   if (image != null) {
     displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
   }
-  if (pi.displays.length > 1 && pi.currentDisplay != kAllDisplayValue) {
+  final privacyModeState = PrivacyModeState.find(id);
+  if (pi.displays.length > 1 &&
+      pi.currentDisplay != kAllDisplayValue &&
+      (privacyModeState.isEmpty ||
+          allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value))) {
     final cur = pi.currentDisplay;
     final children = <Widget>[];
     final isDarkTheme = MyTheme.currentThemeMode() == ThemeMode.dark;
@@ -1274,8 +1278,6 @@ void showOptions(
       await toolbarDisplayToggle(context, id, gFFI);
 
   List<TToggleMenu> privacyModeList = [];
-  // privacy mode
-  final privacyModeState = PrivacyModeState.find(id);
   if ((gFFI.ffiModel.pi.features.privacyMode && gFFI.ffiModel.keyboard) ||
       privacyModeState.isNotEmpty) {
     privacyModeList = toolbarPrivacyMode(privacyModeState, context, id, gFFI);

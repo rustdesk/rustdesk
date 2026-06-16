@@ -48,7 +48,7 @@ jobs:
         # Build. commit 53b548a5398624f7149a382000397993542ad796 is tag v0.3
       - name: Build the project
         run: |
-          cd RustDeskTempTopMostWindow && git checkout 53b548a5398624f7149a382000397993542ad796
+          cd RustDeskTempTopMostWindow && git checkout 6c8d6594c85f8c89be38b576abcfefac127159e1
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
