@@ -101,11 +101,10 @@ pub fn get_asio_input_devices() -> Vec<String> {
         }
     };
     for device in devices {
-        match device.supported_input_configs() {
-            Ok(mut configs) if configs.next().is_some() => {}
-            Ok(_) => continue,
+        match device.default_input_config() {
+            Ok(_) => {}
             Err(err) => {
-                log::debug!("Failed to get ASIO audio input configs: {:?}", err);
+                log::debug!("Failed to get ASIO audio input config: {:?}", err);
                 continue;
             }
         }
