@@ -41,10 +41,6 @@ unix-file-copy-paste = [
     "clipboard/unix-file-copy-paste",
 ]
 screencapturekit = ["cpal/screencapturekit"]
-# CPAL ASIO builds require the Steinberg ASIO SDK headers at build time.
-# Keep this opt-in so default Windows CI/developer builds do not compile asio-sys
-# without CPAL_ASIO_DIR or cpal's SDK download path being available.
-asio = ["cpal/asio"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -111,7 +107,7 @@ system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit" }
+cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit", features = ["asio"] }
 winapi = { version = "0.3", features = [
     "winuser",
     "wincrypt",

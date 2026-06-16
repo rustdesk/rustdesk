@@ -73,7 +73,7 @@ fn strip_asio_device_suffix(device: &str) -> Option<&str> {
     device.strip_suffix(ASIO_DEVICE_SUFFIX)
 }
 
-#[cfg(all(windows, feature = "asio"))]
+#[cfg(windows)]
 pub fn get_asio_input_devices() -> Vec<String> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
@@ -120,7 +120,7 @@ pub fn get_asio_input_devices() -> Vec<String> {
     out
 }
 
-#[cfg(not(all(windows, feature = "asio")))]
+#[cfg(not(windows))]
 pub fn get_asio_input_devices() -> Vec<String> {
     Vec::new()
 }
@@ -346,7 +346,6 @@ mod cpal_impl {
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
-            #[cfg(feature = "asio")]
             if let Some(device) = get_asio_audio_input(&audio_input)? {
                 return Ok(device);
             }
@@ -367,7 +366,7 @@ mod cpal_impl {
         Ok((device, format))
     }
 
-    #[cfg(all(windows, feature = "asio"))]
+    #[cfg(windows)]
     fn get_asio_audio_input(
         audio_input: &str,
     ) -> ResultType<Option<(Device, SupportedStreamConfig)>> {
