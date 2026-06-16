@@ -605,6 +605,24 @@ class _GeneralState extends State<_General> {
         },
       ));
     }
+    children.add(_OptionCheckBox(
+      context,
+      'Show monitor switch button on the main toolbar',
+      kOptionAllowMonitorSwitchMainToolbar,
+      isServer: false,
+      update: (_) {
+        reloadAllWindows();
+      },
+    ));
+    children.add(_OptionCheckBox(
+      context,
+      'Show monitor switch button on the minimized toolbar',
+      kOptionAllowMonitorSwitchMinToolbar,
+      isServer: false,
+      update: (_) {
+        reloadAllWindows();
+      },
+    ));
     return _Card(title: 'Other', children: children);
   }
 
