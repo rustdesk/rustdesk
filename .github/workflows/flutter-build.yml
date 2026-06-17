@@ -335,7 +335,11 @@ jobs:
         uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
 
       - name: Build msi
-        if: env.UPLOAD_ARTIFACT == 'true'
+        # MSI is x64-only for now: res/msi (WiX solution + native CustomActions DLL) has no
+        # arm64 platform config, and this step hardcodes -p:Platform=x64 / bin/x64. Skip it on
+        # arm64 until arm64 MSI packaging is implemented; the arm64 release still ships the
+        # self-extracted .exe built above.
+        if: env.UPLOAD_ARTIFACT == 'true' && matrix.job.arch == 'x86_64'
         run: |
           pushd ./res/msi
           python preprocess.py --arp -d ../../rustdesk
