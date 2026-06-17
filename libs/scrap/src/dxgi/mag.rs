@@ -472,6 +472,7 @@ impl CapturerMag {
 
     pub(crate) fn exclude(&mut self, cls: &str, name: &str) -> Result<bool> {
         let mut hwnds = find_windows(cls, name)?;
+        hwnds.sort_unstable_by_key(|hwnd| *hwnd as usize);
         self.excluded_window_target = Some((cls.to_owned(), name.to_owned()));
         if hwnds.is_empty() {
             self.excluded_windows.clear();
@@ -488,6 +489,10 @@ impl CapturerMag {
             return Ok(());
         };
         let mut hwnds = find_windows(cls, name)?;
+        hwnds.sort_unstable_by_key(|hwnd| *hwnd as usize);
+        // This runs from frame() because refreshed privacy overlays get new
+        // HWNDs. It is only used on the legacy magnifier backend while privacy
+        // mode is active; if it shows up as hot-path cost, throttle this check.
         // Keep the previous filter list while privacy windows are being recreated.
         if hwnds.is_empty() || hwnds == self.excluded_windows {
             return Ok(());
