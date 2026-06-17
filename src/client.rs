@@ -96,7 +96,7 @@ pub mod screenshot;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
-// Empirical grace window for suppressing noisy disconnect errors during remote reboot.
+// Empirical restart reconnect grace window.
 const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
@@ -1743,6 +1743,8 @@ pub struct LoginConfigHandler {
     pub session_id: u64, // used for local <-> server communication
     pub supported_encoding: SupportedEncoding,
     restarting_remote_device: bool,
+    // Start time of the restart grace window. On Windows the peer may briefly
+    // reconnect before the real reboot disconnect.
     restart_remote_device_at: Option<Instant>,
     pub force_relay: bool,
     pub direct: Option<bool>,
@@ -2796,6 +2798,11 @@ impl LoginConfigHandler {
         if !self.restarting_remote_device {
             return false;
         }
+        // Keep this flag alive for a short grace window instead of clearing it on
+        // connection_ready or the first peer bytes. During OS restart the peer can
+        // briefly reconnect before the real reboot disconnect, and clearing it too
+        // early would let the next disconnect escape the restart flow and fall back
+        // to the normal error dialog / manual reconnect path.
         self.restart_remote_device_at
             .map(|started_at| started_at.elapsed() < RESTART_REMOTE_DEVICE_GRACE)
             .unwrap_or(false)
