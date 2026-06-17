@@ -5,6 +5,7 @@ import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/login.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/common/widgets/resizable_side_panel.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -26,6 +27,10 @@ class _MyGroupState extends State<MyGroup> {
   RxString get searchAccessibleItemNameText =>
       gFFI.groupModel.searchAccessibleItemNameText;
   static TextEditingController searchUserController = TextEditingController();
+  final _devicesPanel = ResizablePanelController(
+      optionKey: kOptionAccessibleDevicesPanelWidth,
+      defaultWidth: 150,
+      maxWidth: 300);
 
   @override
   Widget build(BuildContext context) {
@@ -60,13 +65,13 @@ class _MyGroupState extends State<MyGroup> {
   Widget _buildLandscape() {
     return Row(
       children: [
-        Container(
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: Theme.of(context).colorScheme.background)),
-          child: Container(
-            width: 150,
+        Obx(
+          () => Container(
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: Theme.of(context).colorScheme.background)),
+            width: _devicesPanel.width.value,
             height: double.infinity,
             child: Column(
               children: [
@@ -81,7 +86,8 @@ class _MyGroupState extends State<MyGroup> {
               ],
             ),
           ),
-        ).marginOnly(right: 12.0),
+        ),
+        _devicesPanel.buildDivider(),
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
