@@ -109,17 +109,15 @@ impl PrivacyMode for PrivacyModeImpl {
             );
         }
 
-        let started_broker = self.handlers.is_default();
-        if started_broker {
-            log::info!("turn_on_privacy, dll not found when started, try start");
+        let should_start_broker = self.handlers.is_default();
+        if should_start_broker {
+            log::info!("turn_on_privacy, broker not running, try start");
             self.start()?;
             std::thread::sleep(std::time::Duration::from_millis(1_000));
         }
 
         if let Err(e) = self.show_privacy_windows(conn_id, true) {
-            if started_broker {
-                self.stop();
-            }
+            self.stop();
             return Err(e);
         }
         Ok(true)
@@ -133,7 +131,10 @@ impl PrivacyMode for PrivacyModeImpl {
         self.check_off_conn_id(conn_id)?;
         super::win_input::unhook()?;
         let hwnds = find_privacy_hwnds()?;
-        let _ = set_privacy_windows_visible(&hwnds, false)?;
+        let hide_result = set_privacy_windows_visible(&hwnds, false);
+        if hide_result.is_err() {
+            self.stop();
+        }
 
         if self.conn_id != INVALID_PRIVACY_MODE_CONN_ID {
             if let Some(state) = state {
@@ -148,7 +149,7 @@ impl PrivacyMode for PrivacyModeImpl {
             self.hwnd = 0;
         }
 
-        Ok(())
+        hide_result.map(|_| ())
     }
 
     #[inline]
@@ -324,12 +325,6 @@ impl PrivacyModeImpl {
             super::win_input::hook()?;
         }
         match set_privacy_windows_visible(&hwnds, true) {
-            Ok(0) => {
-                if hook_input {
-                    allow_err!(super::win_input::unhook());
-                }
-                bail!("No privacy window created");
-            }
             Ok(_) => {
                 let visible_hwnds =
                     match wait_find_visible_privacy_hwnds(PRIVACY_WINDOW_WAIT_MILLIS) {

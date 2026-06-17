@@ -472,12 +472,13 @@ impl CapturerMag {
 
     pub(crate) fn exclude(&mut self, cls: &str, name: &str) -> Result<bool> {
         let mut hwnds = find_windows(cls, name)?;
+        self.excluded_window_target = Some((cls.to_owned(), name.to_owned()));
         if hwnds.is_empty() {
+            self.excluded_windows.clear();
             return Ok(false);
         }
 
         self.exclude_windows(&mut hwnds)?;
-        self.excluded_window_target = Some((cls.to_owned(), name.to_owned()));
         self.excluded_windows = hwnds;
         Ok(true)
     }
