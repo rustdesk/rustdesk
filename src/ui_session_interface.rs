@@ -560,7 +560,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn restart_remote_device(&self) {
         let mut lc = self.lc.write().unwrap();
-        lc.restarting_remote_device = true;
+        lc.mark_restarting_remote_device();
         let msg = lc.restart_remote_device();
         self.send(Data::Message(msg));
     }
@@ -656,7 +656,7 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn is_restarting_remote_device(&self) -> bool {
-        self.lc.read().unwrap().restarting_remote_device
+        self.lc.read().unwrap().is_restarting_remote_device()
     }
 
     #[inline]
