@@ -115,4 +115,34 @@ void main() {
 
     expect(queryCount, 2);
   });
+
+  test('online callback updates currently displayed options', () async {
+    final loader = AllPeersLoader(
+      queryOnlines: (ids) async {},
+      queryOnlineDebounce: Duration(milliseconds: 1),
+    );
+    final displayedOptions = [_peer(id: '123456789')];
+
+    loader.queryOnlines(displayedOptions);
+    loader.updateOnlineStateForTesting({
+      'onlines': '123456789',
+      'offlines': '',
+    });
+
+    expect(displayedOptions.single.online, isTrue);
+    await Future.delayed(Duration(milliseconds: 2));
+  });
+
+  test('cached online callback state is reapplied after peers merge', () {
+    final loader = AllPeersLoader();
+    loader.updateOnlineStateForTesting({
+      'onlines': '123456789',
+      'offlines': '',
+    });
+
+    final mergedPeers = [_peer(id: '123456789')];
+    loader.applyLastOnlineStateForTesting(mergedPeers);
+
+    expect(mergedPeers.single.online, isTrue);
+  });
 }

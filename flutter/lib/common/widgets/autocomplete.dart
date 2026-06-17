@@ -102,8 +102,13 @@ class AllPeersLoader {
   Set<String> _lastQueryOnlineIds = {};
   DateTime _lastQueryOnlineTime = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _queryOnlineTimer;
+  List<Peer> _lastQueryOnlineOptions = const [];
+  Set<String> _lastOnlineIds = {};
+  Set<String> _lastOfflineIds = {};
   final Future<void> Function(List<String> ids) _queryOnlines;
   final Duration _queryOnlineDebounce;
+  void Function(VoidCallback)? _setState;
+  bool _isCleared = false;
 
   final String _listenerKey = 'AllPeersLoader';
   static const String _cbQueryOnlines = 'callback_query_onlines';
@@ -111,8 +116,6 @@ class AllPeersLoader {
   static const Duration _defaultQueryOnlineDebounce =
       Duration(milliseconds: 300);
   static const int _maxQueryOnlineOptions = 20;
-
-  late void Function(VoidCallback) setState;
 
   bool get needLoad => !_isPeersLoaded && !_isPeersLoading;
   bool get isPeersLoaded => _isPeersLoaded;
@@ -125,7 +128,8 @@ class AllPeersLoader {
             queryOnlineDebounce ?? _defaultQueryOnlineDebounce;
 
   void init(void Function(VoidCallback) setState) {
-    this.setState = setState;
+    _setState = setState;
+    _isCleared = false;
     gFFI.recentPeersModel.addListener(_mergeAllPeers);
     gFFI.lanPeersModel.addListener(_mergeAllPeers);
     gFFI.abModel.addPeerUpdateListener(_listenerKey, _mergeAllPeers);
@@ -143,6 +147,9 @@ class AllPeersLoader {
     gFFI.groupModel.removePeerUpdateListener(_listenerKey);
     platformFFI.unregisterEventHandler(_cbQueryOnlines, _listenerKey);
     _queryOnlineTimer?.cancel();
+    _lastQueryOnlineOptions = const [];
+    _setState = null;
+    _isCleared = true;
   }
 
   Future<void> getAllPeers() async {
@@ -169,6 +176,9 @@ class AllPeersLoader {
   }
 
   void _mergeAllPeers() {
+    if (_isCleared) {
+      return;
+    }
     peers = mergeAutocompletePeers(
       addressBookPeers: gFFI.abModel.allPeers(),
       groupPeers: gFFI.groupModel.peers,
@@ -176,21 +186,44 @@ class AllPeersLoader {
       recentPeers: gFFI.recentPeersModel.peers,
       restRecentPeerIds: gFFI.recentPeersModel.restPeerIds,
     );
-    setState(() {
+    _applyLastOnlineState(peers);
+    _scheduleSetState(() {
       _isPeersLoading = false;
       _isPeersLoaded = true;
     });
   }
 
   void _updateOnlineState(Map<String, dynamic> evt) {
-    final changed = updateAutocompletePeerOnlineStates(
-      peers,
-      onlines: _splitPeerIds(evt['onlines']),
-      offlines: _splitPeerIds(evt['offlines']),
-    );
-    if (changed) {
-      setState(() {});
+    if (_isCleared) {
+      return;
     }
+    _lastOnlineIds = _splitPeerIds(evt['onlines']);
+    _lastOfflineIds = _splitPeerIds(evt['offlines']);
+    final peersChanged = _applyLastOnlineState(peers);
+    final optionsChanged = _applyLastOnlineState(_lastQueryOnlineOptions);
+    if (peersChanged || optionsChanged) {
+      _scheduleSetState(() {});
+    }
+  }
+
+  void _scheduleSetState(VoidCallback callback) {
+    if (_isCleared) {
+      return;
+    }
+    final setState = _setState;
+    if (setState == null) {
+      callback();
+    } else {
+      setState(callback);
+    }
+  }
+
+  bool _applyLastOnlineState(List<Peer> peers) {
+    return updateAutocompletePeerOnlineStates(
+      peers,
+      onlines: _lastOnlineIds,
+      offlines: _lastOfflineIds,
+    );
   }
 
   Set<String> _splitPeerIds(dynamic ids) {
@@ -201,8 +234,12 @@ class AllPeersLoader {
   }
 
   void queryOnlines(Iterable<Peer> options) {
+    if (_isCleared) {
+      return;
+    }
+    _lastQueryOnlineOptions = options.toList(growable: false);
     final ids = autocompleteOnlineQueryIds(
-      options,
+      _lastQueryOnlineOptions,
       limit: _maxQueryOnlineOptions,
     ).toSet();
     _queryOnlineTimer?.cancel();
@@ -219,12 +256,25 @@ class AllPeersLoader {
     _queryOnlineTimer = Timer(_queryOnlineDebounce, () async {
       try {
         await _queryOnlines(ids.toList(growable: false));
+        if (_isCleared) {
+          return;
+        }
         _lastQueryOnlineIds = ids;
         _lastQueryOnlineTime = DateTime.now();
       } catch (e) {
         debugPrint('query autocomplete online state failed: $e');
       }
     });
+  }
+
+  @visibleForTesting
+  void updateOnlineStateForTesting(Map<String, dynamic> evt) {
+    _updateOnlineState(evt);
+  }
+
+  @visibleForTesting
+  bool applyLastOnlineStateForTesting(List<Peer> peers) {
+    return _applyLastOnlineState(peers);
   }
 }
 
