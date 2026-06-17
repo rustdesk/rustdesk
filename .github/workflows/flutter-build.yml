@@ -335,17 +335,18 @@ jobs:
         uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
 
       - name: Build msi
-        # MSI is x64-only for now: res/msi (WiX solution + native CustomActions DLL) has no
-        # arm64 platform config, and this step hardcodes -p:Platform=x64 / bin/x64. Skip it on
-        # arm64 until arm64 MSI packaging is implemented; the arm64 release still ships the
-        # self-extracted .exe built above.
-        if: env.UPLOAD_ARTIFACT == 'true' && matrix.job.arch == 'x86_64'
+        # Builds the MSI for the matrix arch. res/msi (WiX v4 + native CustomActions) carries
+        # both x64 and ARM64 platform configs; WcaUtil/DUtil ship arm64 libs. msbuild platform
+        # is x64 / ARM64; the produced Package.msi is globbed since its bin/<platform>/ dir varies.
+        if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./res/msi
           python preprocess.py --arp -d ../../rustdesk
           nuget restore msi.sln
-          msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
-          mv ./Package/bin/x64/Release/en-us/Package.msi ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
+          $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
+          msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
+          $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
+          mv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
           sha256sum ../../SignOutput/rustdesk-*.msi
 
       - name: Sign rustdesk self-extracted file
