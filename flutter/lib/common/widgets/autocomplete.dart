@@ -102,11 +102,14 @@ class AllPeersLoader {
   Set<String> _lastQueryOnlineIds = {};
   DateTime _lastQueryOnlineTime = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _queryOnlineTimer;
+  final Future<void> Function(List<String> ids) _queryOnlines;
+  final Duration _queryOnlineDebounce;
 
   final String _listenerKey = 'AllPeersLoader';
   static const String _cbQueryOnlines = 'callback_query_onlines';
   static const Duration _queryOnlineInterval = Duration(seconds: 5);
-  static const Duration _queryOnlineDebounce = Duration(milliseconds: 300);
+  static const Duration _defaultQueryOnlineDebounce =
+      Duration(milliseconds: 300);
   static const int _maxQueryOnlineOptions = 20;
 
   late void Function(VoidCallback) setState;
@@ -114,7 +117,12 @@ class AllPeersLoader {
   bool get needLoad => !_isPeersLoaded && !_isPeersLoading;
   bool get isPeersLoaded => _isPeersLoaded;
 
-  AllPeersLoader();
+  AllPeersLoader({
+    @visibleForTesting Future<void> Function(List<String> ids)? queryOnlines,
+    @visibleForTesting Duration? queryOnlineDebounce,
+  })  : _queryOnlines = queryOnlines ?? ((ids) => bind.queryOnlines(ids: ids)),
+        _queryOnlineDebounce =
+            queryOnlineDebounce ?? _defaultQueryOnlineDebounce;
 
   void init(void Function(VoidCallback) setState) {
     this.setState = setState;
@@ -197,6 +205,8 @@ class AllPeersLoader {
       options,
       limit: _maxQueryOnlineOptions,
     ).toSet();
+    _queryOnlineTimer?.cancel();
+    _queryOnlineTimer = null;
     if (ids.isEmpty) {
       return;
     }
@@ -206,13 +216,14 @@ class AllPeersLoader {
       return;
     }
 
-    _queryOnlineTimer?.cancel();
-    _queryOnlineTimer = Timer(_queryOnlineDebounce, () {
-      _lastQueryOnlineIds = ids;
-      _lastQueryOnlineTime = DateTime.now();
-      bind.queryOnlines(ids: ids.toList(growable: false)).catchError((e) {
+    _queryOnlineTimer = Timer(_queryOnlineDebounce, () async {
+      try {
+        await _queryOnlines(ids.toList(growable: false));
+        _lastQueryOnlineIds = ids;
+        _lastQueryOnlineTime = DateTime.now();
+      } catch (e) {
         debugPrint('query autocomplete online state failed: $e');
-      });
+      }
     });
   }
 }

@@ -80,4 +80,39 @@ void main() {
     expect(ids.where((id) => id == '0'), hasLength(1));
     expect(ids.last, '19');
   });
+
+  test('empty online query ids cancel pending debounce', () async {
+    final queriedIds = <List<String>>[];
+    final loader = AllPeersLoader(
+      queryOnlines: (ids) async {
+        queriedIds.add(ids);
+      },
+      queryOnlineDebounce: Duration(milliseconds: 1),
+    );
+
+    loader.queryOnlines([_peer(id: '123456789')]);
+    loader.queryOnlines([]);
+    await Future.delayed(Duration(milliseconds: 2));
+
+    expect(queriedIds, isEmpty);
+  });
+
+  test('failed online query enqueue does not suppress retry', () async {
+    var queryCount = 0;
+    final loader = AllPeersLoader(
+      queryOnlines: (ids) {
+        queryCount += 1;
+        return Future<void>.error(Exception('queue full'));
+      },
+      queryOnlineDebounce: Duration(milliseconds: 1),
+    );
+
+    loader.queryOnlines([_peer(id: '123456789')]);
+    await Future.delayed(Duration(milliseconds: 2));
+
+    loader.queryOnlines([_peer(id: '123456789')]);
+    await Future.delayed(Duration(milliseconds: 2));
+
+    expect(queryCount, 2);
+  });
 }
