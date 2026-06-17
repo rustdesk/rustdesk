@@ -272,10 +272,6 @@ fn create_capturer(
     if privacy_mode_id > 0 {
         #[cfg(windows)]
         {
-            // Windows Mode 1 can cover every local monitor with overlay windows,
-            // but the legacy magnifier capture backend is still single-monitor
-            // constrained. Keep display-switch gating aligned with that backend
-            // limit, not just the overlay coverage.
             if let Some(c1) = crate::privacy_mode::win_mag::create_capturer(
                 privacy_mode_id,
                 display.origin(),
