@@ -29,6 +29,10 @@ const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
 const String kPlatformAdditionsSupportedPrivacyModeImpl =
     "supported_privacy_mode_impl";
 
+const String kPrivacyModeImplMag = 'privacy_mode_impl_mag';
+const String kPrivacyModeImplExcludeFromCapture =
+    'privacy_mode_impl_exclude_from_capture';
+
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
 const String kPeerPlatformMacOS = "Mac OS";

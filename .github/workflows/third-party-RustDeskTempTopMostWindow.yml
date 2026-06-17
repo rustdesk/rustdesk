@@ -45,10 +45,10 @@ jobs:
         run: |
           git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
 
-        # Build. commit 53b548a5398624f7149a382000397993542ad796 is tag v0.3
+        # Build. commit 3b79772afb754a5a1111804864616c2e81513de8, support multiple monitors
       - name: Build the project
         run: |
-          cd RustDeskTempTopMostWindow && git checkout 53b548a5398624f7149a382000397993542ad796
+          cd RustDeskTempTopMostWindow && git checkout 3b79772afb754a5a1111804864616c2e81513de8
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
