@@ -136,14 +136,21 @@ impl PrivacyMode for PrivacyModeImpl {
             self.stop();
         }
 
+        // Continue local state cleanup even after stop(); the broker has
+        // been torn down, so keeping conn_id/hwnd would leave stale state.
         if self.conn_id != INVALID_PRIVACY_MODE_CONN_ID {
-            if let Some(state) = state {
-                allow_err!(super::set_privacy_mode_state(
-                    conn_id,
-                    state,
-                    PRIVACY_MODE_IMPL.to_string(),
-                    1_000
-                ));
+            // Only publish the off state after the hide message was posted.
+            // Otherwise the peer may receive a success-like state and then a
+            // failed turn-off response for the same request.
+            if hide_result.is_ok() {
+                if let Some(state) = state {
+                    allow_err!(super::set_privacy_mode_state(
+                        conn_id,
+                        state,
+                        PRIVACY_MODE_IMPL.to_string(),
+                        1_000
+                    ));
+                }
             }
             self.conn_id = INVALID_PRIVACY_MODE_CONN_ID.to_owned();
             self.hwnd = 0;
@@ -431,6 +438,9 @@ fn privacy_window_wait_millis(base_millis: u128, monitor_count: usize) -> u128 {
 }
 
 fn wait_find_privacy_hwnds_impl(msecs: u128, require_visible: bool) -> ResultType<Vec<HWND>> {
+    // This verifies initial turn-on coverage. If displays change during this
+    // short poll window, the DLL refreshes overlays asynchronously, while this
+    // check may still time out against the geometry sampled here.
     let monitor_rects = get_monitor_rects()?;
     if monitor_rects.is_empty() {
         bail!("No privacy monitor found");
