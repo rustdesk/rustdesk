@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Mund të vendosni një ID, një IP të drejtpërdrejtë, ose një domain me një port (<domain>:<port>).\nNëse dëshironi të aksesoni një pajisje në një server tjetër, ju lutemi shtoni adresën e serverit (<id>@<server_address>?key=<key_value>), për shembull,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nNëse dëshironi të aksesoni një pajisje në një server publik, ju lutemi vendosni \"<id>@public\", çelësi nuk nevojitet për serverin publik.\n\nNëse dëshironi të detyroni përdorimin e një lidhjeje transmetuese në lidhjen e parë, shtoni \"/r\" në fund të ID-së, për shembull, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Modaliteti 1"),
         ("privacy_mode_impl_virtual_display_tip", "Modaliteti 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Hyr në modalitetin e privatësisë"),
         ("Exit privacy mode", "Dil nga modaliteti i privatësisë"),
         ("idd_not_support_under_win10_2004_tip", "Drejtuesi i ekranit të tërthortë nuk mbështetet. Kërkohet Windows 10, versioni 2004 ose më i ri."),

@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "നിങ്ങൾക്ക് ഐഡി, ഏലിയാസ് അല്ലെങ്കിൽ ഐപി നൽകാം."),
         ("privacy_mode_impl_mag_tip", "മാഗ്നിഫയർ സ്വകാര്യ മോഡ്"),
         ("privacy_mode_impl_virtual_display_tip", "വെർച്വൽ ഡിസ്‌പ്ലേ സ്വകാര്യ മോഡ്"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "സ്വകാര്യ മോഡിലേക്ക് കടക്കുക"),
         ("Exit privacy mode", "സ്വകാര്യ മോഡിൽ നിന്ന് പുറത്തുകടക്കുക"),
         ("idd_not_support_under_win10_2004_tip", "Windows 10 (2004) എങ്കിലും വേണം."),

@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Puoi inserire un ID, un IP diretto o un dominio con una porta (<dominio>:<porta>).\nSe vuoi accedere as un dispositivo in un altro server, aggiungi l'indirizzo del server (<id>@<indirizzo_server >?key=<valore_chiave>), ad esempio\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe vuoi accedere as un dispositivo in un server pubblico, inserisci \"<id>@public\", per il server pubblico la chiave non è necessaria\n\nSe vuoi forzare l'uso di una connessione di inoltro alla prima connessione, aggiungi \"/r\" alla fine dell'ID, ad esempio \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Modo 1"),
         ("privacy_mode_impl_virtual_display_tip", "Modo 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Entra in modalità privacy"),
         ("Exit privacy mode", "Esci dalla modalità privacy"),
         ("idd_not_support_under_win10_2004_tip", "Il driver video indiretto non è supportato. È richiesto Windows 10, versione 2004 o successiva."),

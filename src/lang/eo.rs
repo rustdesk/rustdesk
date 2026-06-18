@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Vi povas enigi identigilon, rektan IP, aŭ domajnon kun pordo (<domain>:<port>).\nSe vi volas aliri aparaton sur alia servilo, bonvolu aldoni la servilan adreson (<id>@<server_address>?key=<key_value>), ekzemple,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe vi volas aliri aparaton sur publika servilo, bonvolu enigi \"<id>@public\", la ŝlosilo ne estas necesa por publika servilo.\n\nSe vi volas devigi la uzon de relajsa konekto ĉe la unua konekto, aldonu \"/r\" ĉe la fino de la identigilo, ekzemple, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Reĝimo 1"),
         ("privacy_mode_impl_virtual_display_tip", "Reĝimo 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Eniri privatan reĝimon"),
         ("Exit privacy mode", "Eliri privatan reĝimon"),
         ("idd_not_support_under_win10_2004_tip", "Nerekta ekrana pelilo ne estas subtenata. Windows 10, versio 2004 aŭ pli nova estas necesa."),

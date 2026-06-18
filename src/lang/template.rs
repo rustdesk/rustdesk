@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", ""),
         ("privacy_mode_impl_mag_tip", ""),
         ("privacy_mode_impl_virtual_display_tip", ""),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", ""),
         ("Exit privacy mode", ""),
         ("idd_not_support_under_win10_2004_tip", ""),

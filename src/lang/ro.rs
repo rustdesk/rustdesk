@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Introdu ID-ul sau adresa IP a dispozitivului la distanță"),
         ("privacy_mode_impl_mag_tip", "Modul privat prin Magnificare — nu este suportat pe toate sistemele"),
         ("privacy_mode_impl_virtual_display_tip", "Modul privat prin monitor virtual — necesită driverul de monitor virtual"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Intră în modul privat"),
         ("Exit privacy mode", "Ieși din modul privat"),
         ("idd_not_support_under_win10_2004_tip", "Driverul de monitor virtual nu este suportat pe versiuni de Windows anterioare versiunii 2004 (build 19041)."),

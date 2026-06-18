@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "U kunt een ID, een direct IP of een domein met poort (<domein>:<poort>) invoeren. Als u toegang wilt tot een apparaat op een andere server, voeg dan een serveradres en public key toe (<id>@<server_adres>?key=<key_value>), bijvoorbeeld \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.Als je toegang wilt als apparaat op een openbare server, voer dan \"<id>@public\" in, voor de openbare server is de sleutel niet nodig."),
         ("privacy_mode_impl_mag_tip", "Modus 1: Overlayscherm"),
         ("privacy_mode_impl_virtual_display_tip", "Modus 2: Monitor slaapstand"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Privacymodus openen"),
         ("Exit privacy mode", "Privacymodus afsluiten"),
         ("idd_not_support_under_win10_2004_tip", "Het indirecte displaystuurprogramma wordt niet ondersteund. Windows 10 versie 2004 of later is vereist."),

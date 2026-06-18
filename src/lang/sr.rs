@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Možete uneti ID, direktnu IP adresu ili domen sa portom (<domain>:<port>).\nAko želite da pristupite uređaju na drugom serveru, dodajte adresu servera (<id>@<server_address>?key=<key_value>), na primer,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nAko želite da pristupite uređaju na javnom serveru, unesite \"<id>@public\", ključ nije potreban za javni server.\n\nAko želite da prisilite korišćenje posredne konekcije pri prvom spajanju, dodajte \"/r\" na kraj ID-a, na primer, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Režim 1"),
         ("privacy_mode_impl_virtual_display_tip", "Režim 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Uđi u mod privatnosti"),
         ("Exit privacy mode", "Izađi iz moda privatnosti"),
         ("idd_not_support_under_win10_2004_tip", "Indirektni drajver za prikaz nije podržan. Potreban je Windows 10, verzija 2004 ili novija."),

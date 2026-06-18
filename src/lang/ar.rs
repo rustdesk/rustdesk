@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "يرجى إدخال المعرف بشكل صحيح"),
         ("privacy_mode_impl_mag_tip", "وضع الخصوصية مفعل. سيتم تعطيل بعض الميزات."),
         ("privacy_mode_impl_virtual_display_tip", "وضع الخصوصية مفعل. يتم استخدام شاشة افتراضية."),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "دخول وضع الخصوصية"),
         ("Exit privacy mode", "الخروج من وضع الخصوصية"),
         ("idd_not_support_under_win10_2004_tip", "لا يدعم IDD في Windows 10 الإصدار 2004 أو أقدم."),

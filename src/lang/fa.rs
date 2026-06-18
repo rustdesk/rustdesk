@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", " \"<id>@public\" :برای دسترسی به سرورهای عمومی نیازی به کلید نیست ، مثل \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\n برای مثال (<id>@<server_address>?key=<key_value>) :اگر می خواهید به دستگاه دیگری در سروری دسترسی پیدا کنید ، ادرس سرور را اضافه نمایید ماتتد \n (domain:port)یا یک دامنه با پورت را وارد کنید IP شما می توانید یک شناسه یا یک"),
         ("privacy_mode_impl_mag_tip", "حالت 1"),
         ("privacy_mode_impl_virtual_display_tip", "حالت 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "ورود به حالت حریم خصوصی"),
         ("Exit privacy mode", "خروج از حالت حریم خصوصی"),
         ("idd_not_support_under_win10_2004_tip", "درایور نمایش غیر مستقیم پشتیبانی نمی شود. ویندوز 10، نسخه 2004 یا جدیدتر مورد نیاز است"),

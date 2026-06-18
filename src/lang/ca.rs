@@ -562,6 +562,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Evita que l'usuari pugui interactuar p. ex. amb el teclat o ratolí"),
         ("privacy_mode_impl_mag_tip", "Mode 1"),
         ("privacy_mode_impl_virtual_display_tip", "Mode 2"),
+        ("privacy_mode_impl_privacy_screen_tip", ""),
         ("Enter privacy mode", "Inicia el Mode privat"),
         ("Exit privacy mode", "Surt del Mode privat"),
         ("idd_not_support_under_win10_2004_tip", "El controlador indirecte de pantalla no està suportat; es requereix Windows 10 versió 2004 o superior."),
