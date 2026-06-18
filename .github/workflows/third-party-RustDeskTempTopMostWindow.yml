@@ -11,6 +11,16 @@ on:
             required: true
             type: string
             default: 'windows-2022'
+        repository:
+            description: 'Repository'
+            required: false
+            type: string
+            default: 'rustdesk-org/RustDeskTempTopMostWindow'
+        ref:
+            description: 'Git ref'
+            required: false
+            type: string
+            default: 'c7b45f3eaa7ad433b7ccc9d860ec798367dbef41'
         configuration:
             description: 'Configuration'
             required: true
@@ -43,18 +53,17 @@ jobs:
 
       - name: Download the source code
         run: |
-          git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
+          git clone https://github.com/${{ inputs.repository }} RustDeskTempTopMostWindow
 
-        # Build. commit 3b79772afb754a5a1111804864616c2e81513de8, support multiple monitors
       - name: Build the project
         run: |
-          cd RustDeskTempTopMostWindow && git checkout 3b79772afb754a5a1111804864616c2e81513de8
+          cd RustDeskTempTopMostWindow && git checkout ${{ inputs.ref }}
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ inputs.upload-artifact }}
         with:
-            name: topmostwindow-artifacts
+            name: topmostwindow-artifacts-${{ inputs.platform }}
             path: |
               ./${{ env.build_output_dir }}/WindowInjection.dll
