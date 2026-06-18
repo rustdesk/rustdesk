@@ -1013,7 +1013,7 @@ class _MainMonitorSwitchButton extends StatelessWidget {
       final label = cycle.label;
 
       return _IconMenuButton(
-        tooltip: '${translate('Switch Display')} ($label/${cycle.total})',
+        tooltip: '${translate('Switch display')} ($label/${cycle.total})',
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         onPressed: cycle.next,
@@ -3537,7 +3537,7 @@ class _MinimizedMonitorSwitchButton extends StatelessWidget {
       }
 
       return Tooltip(
-        message: '${translate('Switch Display')} ($label/${cycle.total})',
+        message: '${translate('Switch display')} ($label/${cycle.total})',
         child: TextButton(
           onPressed: cycle.next,
           style: ButtonStyle(
