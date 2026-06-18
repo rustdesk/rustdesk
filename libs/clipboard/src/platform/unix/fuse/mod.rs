@@ -7,7 +7,8 @@ use fuser::MountOption;
 use hbb_common::{config::APP_NAME, log};
 use parking_lot::Mutex;
 use std::{
-    path::PathBuf,
+    io,
+    path::{Path, PathBuf},
     sync::{mpsc::Sender, Arc},
     time::Duration,
 };
@@ -53,8 +54,16 @@ pub fn init_fuse_context(is_client: bool) -> Result<(), CliprdrError> {
     } else {
         FUSE_CONTEXT_SERVER.lock()
     };
-    if fuse_context_lock.is_some() {
-        return Ok(());
+    if let Some(ctx) = fuse_context_lock.as_ref() {
+        if is_mount_point_healthy(&ctx.mount_point) {
+            return Ok(());
+        }
+        log::warn!(
+            "clipboard FUSE mount {} is disconnected, remounting",
+            ctx.mount_point.display()
+        );
+        let stale_context = fuse_context_lock.take();
+        drop(stale_context);
     }
     let mount_point = if is_client {
         FUSE_MOUNT_POINT_CLIENT.clone()
@@ -159,35 +168,100 @@ struct FuseContext {
 }
 
 // this function must be called after the main IPC is up
-fn prepare_fuse_mount_point(mount_point: &PathBuf) {
+fn prepare_fuse_mount_point(mount_point: &Path) {
     use std::{
         fs::{self, Permissions},
         os::unix::prelude::PermissionsExt,
     };
 
-    fs::create_dir(mount_point).ok();
-    fs::set_permissions(mount_point, Permissions::from_mode(0o777)).ok();
+    if let Some(parent) = mount_point.parent() {
+        if let Err(e) = fs::create_dir_all(parent) {
+            log::warn!("failed to create FUSE mount parent {:?}: {:?}", parent, e);
+        }
+    }
 
-    if let Err(e) = std::process::Command::new("umount")
-        .arg(mount_point)
-        .status()
-    {
-        log::warn!("umount {:?} may fail: {:?}", mount_point, e);
+    unmount_fuse_mount_point(mount_point);
+
+    if let Err(e) = fs::create_dir_all(mount_point) {
+        log::warn!(
+            "failed to create FUSE mount point {:?}: {:?}",
+            mount_point,
+            e
+        );
+    }
+    if let Err(e) = fs::set_permissions(mount_point, Permissions::from_mode(0o777)) {
+        log::warn!(
+            "failed to set FUSE mount point permissions {:?}: {:?}",
+            mount_point,
+            e
+        );
     }
 }
 
-fn uninit_fuse_context_(is_client: bool) {
-    if is_client {
-        let _ = FUSE_CONTEXT_CLIENT.lock().take();
-    } else {
-        let _ = FUSE_CONTEXT_SERVER.lock().take();
+fn is_mount_point_healthy(mount_point: &Path) -> bool {
+    is_mount_point_healthy_result(std::fs::metadata(mount_point))
+}
+
+fn is_mount_point_healthy_result<T>(result: io::Result<T>) -> bool {
+    match result {
+        Ok(_) => true,
+        Err(e) => {
+            e.raw_os_error() != Some(libc::ENOTCONN) && e.kind() != io::ErrorKind::NotFound
+        }
     }
+}
+
+fn unmount_fuse_mount_point(mount_point: &Path) {
+    if run_unmount_command("umount", &["-l"], mount_point) {
+        return;
+    }
+    if run_unmount_command("fusermount3", &["-uz"], mount_point) {
+        return;
+    }
+    run_unmount_command("fusermount", &["-uz"], mount_point);
+}
+
+fn run_unmount_command(program: &str, args: &[&str], mount_point: &Path) -> bool {
+    match std::process::Command::new(program)
+        .args(args)
+        .arg(mount_point)
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(status) => {
+            log::debug!(
+                "{} {:?} exited with status {:?}",
+                program,
+                mount_point,
+                status.code()
+            );
+            return false;
+        }
+        Err(e) => {
+            log::debug!("failed to run {} for {:?}: {:?}", program, mount_point, e);
+            return false;
+        }
+    }
+    true
+}
+
+fn uninit_fuse_context_(is_client: bool) {
+    let mut fuse_context_lock = if is_client {
+        FUSE_CONTEXT_CLIENT.lock()
+    } else {
+        FUSE_CONTEXT_SERVER.lock()
+    };
+    let ctx = fuse_context_lock.take();
+    drop(ctx);
 }
 
 impl Drop for FuseContext {
     fn drop(&mut self) {
-        self.session.lock().take().map(|s| s.join());
         log::info!("unmounting clipboard FUSE from {}", self.mount_point.display());
+        unmount_fuse_mount_point(&self.mount_point);
+        if let Some(session) = self.session.lock().take() {
+            session.join();
+        }
     }
 }
 
@@ -221,5 +295,32 @@ impl FuseContext {
             .into_iter()
             .map(|p| prefix.join(p).to_string_lossy().to_string())
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs, io};
+
+    #[test]
+    fn reports_disconnected_fuse_mount_as_unhealthy() {
+        let err = io::Error::from_raw_os_error(libc::ENOTCONN);
+
+        assert!(!is_mount_point_healthy_result::<()>(Err(err)));
+    }
+
+    #[test]
+    fn reports_existing_directory_mount_point_as_healthy() {
+        let mount_point = std::env::temp_dir().join(format!(
+            "rustdesk-fuse-mount-health-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&mount_point);
+        fs::create_dir(&mount_point).unwrap();
+
+        assert!(is_mount_point_healthy(&mount_point));
+
+        let _ = fs::remove_dir_all(&mount_point);
     }
 }
