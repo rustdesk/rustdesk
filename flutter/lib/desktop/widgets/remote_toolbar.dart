@@ -813,7 +813,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           mainGetLocalBoolOptionSync(kOptionAllowMonitorSwitchMainToolbar)) {
         return _MainMonitorSwitchButton(id: widget.id, ffi: widget.ffi);
       } else {
-        return Offstage();
+        return const Offstage();
       }
     }));
     if (!isWebDesktop) {
@@ -986,6 +986,7 @@ class _MonitorCycle {
   bool get _inRange => _current >= 0 && _current < total;
 
   String get label => _inRange ? '${_current + 1}' : '*';
+  String get tooltip => '${translate('Switch display')} ($label/$total)';
 
   void next() {
     final t = total;
@@ -1013,47 +1014,34 @@ class _MainMonitorSwitchButton extends StatelessWidget {
       final label = cycle.label;
 
       return _IconMenuButton(
-        tooltip: '${translate('Switch display')} ($label/${cycle.total})',
+        tooltip: cycle.tooltip,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         onPressed: cycle.next,
         icon: SizedBox(
           width: _ToolbarTheme.buttonSize,
           height: _ToolbarTheme.buttonSize,
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 23,
-                  height: 16,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 11,
-                      height: 1,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+          child: Stack(
+            alignment: const Alignment(0, -0.125),
+            children: [
+              SvgPicture.asset(
+                'assets/display_switcher.svg',
+                colorFilter:
+                    const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                width: _ToolbarTheme.buttonSize,
+                height: _ToolbarTheme.buttonSize,
+              ),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 11,
+                  height: 1,
+                  fontWeight: FontWeight.bold,
                 ),
-                Container(width: 3, height: 2, color: Colors.white),
-                Container(
-                  width: 9,
-                  height: 2,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(1),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
@@ -3537,7 +3525,7 @@ class _MinimizedMonitorSwitchButton extends StatelessWidget {
       }
 
       return Tooltip(
-        message: '${translate('Switch display')} ($label/${cycle.total})',
+        message: cycle.tooltip,
         child: TextButton(
           onPressed: cycle.next,
           style: ButtonStyle(
@@ -3551,10 +3539,10 @@ class _MinimizedMonitorSwitchButton extends StatelessWidget {
             }),
           ),
           child: Stack(
-            alignment: const Alignment(0, -0.15),
+            alignment: const Alignment(0, -0.125),
             children: [
               SvgPicture.asset(
-                'assets/display.svg',
+                'assets/display_switcher.svg',
                 colorFilter:
                     ColorFilter.mode(_ToolbarTheme.blueColor, BlendMode.srcIn),
                 width: iconSize,
@@ -3563,7 +3551,7 @@ class _MinimizedMonitorSwitchButton extends StatelessWidget {
               Text(
                 label,
                 style: const TextStyle(
-                  color: _ToolbarTheme.blueColor,
+                  color: Colors.white,
                   fontSize: 9,
                   height: 1,
                   fontWeight: FontWeight.bold,
