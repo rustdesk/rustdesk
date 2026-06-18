@@ -992,7 +992,7 @@ class _MonitorCycle {
     final t = total;
     if (t < 2) return;
     final from = _inRange ? _current : -1;
-    openMonitorInTheSameTab((from + 1) % t, ffi, _pi);
+    openMonitorInTheSameTab((from + 1) % t, ffi, _pi, updateCursorPos: false);
   }
 }
 
@@ -3336,7 +3336,9 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildDraggable(context),
-        _MinimizedMonitorSwitchButton(id: widget.id, ffi: widget.ffi),
+        Obx(() => collapse.isTrue
+            ? _MinimizedMonitorSwitchButton(id: widget.id, ffi: widget.ffi)
+            : const Offstage()),
         Obx(() => buttonWrapper(
               () {
                 widget.setFullscreen(!isFullscreen.value);
