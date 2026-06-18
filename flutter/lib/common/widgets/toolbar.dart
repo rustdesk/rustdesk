@@ -72,10 +72,24 @@ Widget waylandKeyboardScopeChip(BuildContext context, String text) {
   );
 }
 
-// macOS privacy mode blacks out all online displays, so switching the remote
-// display does not weaken the local privacy protection.
-bool allowDisplaySwitchInPrivacyMode(PeerInfo pi) {
-  return pi.platform == kPeerPlatformMacOS;
+bool _isWindowsMode1PrivacyImpl(String privacyModeImpl) {
+  return privacyModeImpl == kPrivacyModeImplMag ||
+      privacyModeImpl == kPrivacyModeImplExcludeFromCapture;
+}
+
+// macOS privacy mode blacks out all online displays. Windows Mode 1 also
+// covers every local monitor with privacy overlay windows, so remote display
+// switching does not weaken local privacy protection.
+//
+// Keep this separate from the capture backend capability. The legacy Windows
+// magnifier capturer is not reliable for multi-monitor capture; WebRTC's
+// screen_capturer_win_magnifier also disables it when SM_CMONITORS != 1:
+// https://webrtc.googlesource.com/src/+/1845922d5a1bf9c27deeffb4a8c8daea124434c1/modules/desktop_capture/win/screen_capturer_win_magnifier.cc
+bool allowDisplaySwitchInPrivacyMode(PeerInfo pi, String privacyModeImpl) {
+  return pi.platform == kPeerPlatformMacOS ||
+      (pi.platform == kPeerPlatformWindows &&
+          _isWindowsMode1PrivacyImpl(privacyModeImpl) &&
+          versionCmp(pi.version, '1.4.8') >= 0);
 }
 
 class TTextMenu {
@@ -964,7 +978,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
 
   final privacyModeState = PrivacyModeState.find(id);
   if (pi.isSupportMultiDisplay &&
-      (privacyModeState.isEmpty || allowDisplaySwitchInPrivacyMode(pi)) &&
+      (privacyModeState.isEmpty ||
+          allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
     final value =
@@ -1048,7 +1063,20 @@ List<TToggleMenu> toolbarPrivacyMode(
     return []; // No permission and not active, hide options.
   }
 
-  getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc) {
+  bool checkDisplayAllowedForPrivacyMode(String targetImplKey, bool turnOn) {
+    if (!turnOn ||
+        allowDisplaySwitchInPrivacyMode(pi, targetImplKey) ||
+        (ffiModel.pi.currentDisplay == 0 &&
+            !bind.sessionIsMultiUiSession(sessionId: sessionId))) {
+      return true;
+    }
+    msgBox(sessionId, 'custom-nook-nocancel-hasclose', 'info',
+        'Please switch to Display 1 first', '', ffi.dialogManager);
+    return false;
+  }
+
+  getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc,
+      String targetImplKey) {
     final enabled = !ffiModel.viewOnly &&
         (hasPrivacyModePermission || privacyModeState.isNotEmpty);
     return TToggleMenu(
@@ -1056,16 +1084,7 @@ List<TToggleMenu> toolbarPrivacyMode(
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
-                if (!allowDisplaySwitchInPrivacyMode(pi) &&
-                    ffiModel.pi.currentDisplay != 0 &&
-                    ffiModel.pi.currentDisplay != kAllDisplayValue) {
-                  msgBox(
-                      sessionId,
-                      'custom-nook-nocancel-hasclose',
-                      'info',
-                      'Please switch to Display 1 first',
-                      '',
-                      ffi.dialogManager);
+                if (!checkDisplayAllowedForPrivacyMode(targetImplKey, value)) {
                   return;
                 }
                 final option = 'privacy-mode';
@@ -1083,7 +1102,7 @@ List<TToggleMenu> toolbarPrivacyMode(
       getDefaultMenu((sid, opt) async {
         bind.sessionToggleOption(sessionId: sid, value: opt);
         togglePrivacyModeTime = DateTime.now();
-      })
+      }, kPrivacyModeImplMag)
     ];
   }
   if (privacyModeImpls.isEmpty) {
@@ -1097,7 +1116,7 @@ List<TToggleMenu> toolbarPrivacyMode(
         bind.sessionTogglePrivacyMode(
             sessionId: sid, implKey: implKey, on: privacyModeState.isEmpty);
         togglePrivacyModeTime = DateTime.now();
-      })
+      }, implKey)
     ];
   } else {
     final visibleImpls = hasPrivacyModePermission
@@ -1118,6 +1137,9 @@ List<TToggleMenu> toolbarPrivacyMode(
               ? (value) {
                   if (value == null) return;
                   if (value && !hasPrivacyModePermission) return;
+                  if (!checkDisplayAllowedForPrivacyMode(implKey, value)) {
+                    return;
+                  }
                   togglePrivacyModeTime = DateTime.now();
                   bind.sessionTogglePrivacyMode(
                       sessionId: sessionId, implKey: implKey, on: value);

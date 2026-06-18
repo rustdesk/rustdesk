@@ -810,8 +810,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
 
     toolbarItems.add(Obx(() {
-      if ((PrivacyModeState.find(widget.id).isEmpty ||
-              allowDisplaySwitchInPrivacyMode(pi)) &&
+      final privacyModeState = PrivacyModeState.find(widget.id);
+      if ((privacyModeState.isEmpty ||
+              allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
           pi.displaysCount.value > 1) {
         return _MonitorMenu(
             id: widget.id,
