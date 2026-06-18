@@ -4695,7 +4695,7 @@ dependencies = [
 [[package]]
 name = "magnum-opus"
 version = "0.4.0"
-source = "git+https://github.com/rustdesk-org/magnum-opus?rev=#588c6e1f9ed50c3a01fa64f3bd3e7cdb0378a114"
+source = "git+https://github.com/rustdesk-org/magnum-opus#588c6e1f9ed50c3a01fa64f3bd3e7cdb0378a114"
 dependencies = [
  "bindgen 0.59.2",
  "pkg-config",
