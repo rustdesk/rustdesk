@@ -1,0 +1,8 @@
+name: My Windows Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/flutter-build.yml
