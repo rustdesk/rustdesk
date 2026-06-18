@@ -47,7 +47,7 @@ jobs:
 
       - name: Build the project
         run: |
-          cd RustDeskTempTopMostWindow && git checkout c7b45f3eaa7ad433b7ccc9d860ec798367dbef41
+          cd RustDeskTempTopMostWindow && git checkout ecd8d6a139eee76845ea66423fb739af450fda90
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
