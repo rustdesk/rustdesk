@@ -76,7 +76,9 @@ Future<String?> _findCjkFontPath() async {
           if (p.isNotEmpty && File(p).existsSync()) paths.add(p);
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ARM64 Linux: fc-list failed for lang=$lang: $e');
+    }
     byLang[lang] = paths;
   }
 
