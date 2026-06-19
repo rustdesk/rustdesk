@@ -458,7 +458,13 @@ class _RawTouchGestureDetectorRegionState
   }
 
   onTwoFingerScaleUpdate(ScaleUpdateDetails d) async {
-    if (isNotTouchBasedDevice()) {
+    // On mobile, only operate on real touch — `CustomTouchGestureRecognizer`
+    // refuses to claim trackpad pan-zoom on mobile (gestures.dart), so any
+    // call here on iOS/Android is a real two-finger touch. The historical
+    // `isNotTouchBasedDevice()` guard was stateful (lastDeviceKind) and gave
+    // the wrong answer after the first incidental screen touch, breaking
+    // trackpad scroll until restart. See rustdesk/rustdesk#15209.
+    if ((isDesktop || isWebDesktop) && isNotTouchBasedDevice()) {
       return;
     }
 
@@ -484,11 +490,16 @@ class _RawTouchGestureDetectorRegionState
                     .toJson()));
       }
     } else {
-      // mobile
+      // mobile: real two-finger touch.
       ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
       _scale = d.scale;
-      ffi.canvasModel.panX(d.focalPointDelta.dx);
-      ffi.canvasModel.panY(d.focalPointDelta.dy);
+      // Only pan the local canvas when the remote view actually overflows
+      // the viewport — otherwise the pan moves nothing but black bars and
+      // surprises the user. (#15209)
+      if (ffi.canvasModel.isPanScrollUseful()) {
+        ffi.canvasModel.panX(d.focalPointDelta.dx);
+        ffi.canvasModel.panY(d.focalPointDelta.dy);
+      }
     }
   }
 
