@@ -174,6 +174,8 @@ const String kOptionShowVirtualMouse = "show-virtual-mouse";
 const String kOptionVirtualMouseScale = "virtual-mouse-scale";
 const String kOptionShowVirtualJoystick = "show-virtual-joystick";
 const String kOptionAllowAskForNoteAtEndOfConnection = "allow-ask-for-note";
+const String kOptionAllowMonitorSwitchMainToolbar = "allow-monitor-switch-main-toolbar";
+const String kOptionAllowMonitorSwitchMinToolbar = "allow-monitor-switch-min-toolbar";
 const String kOptionEnableShowTerminalExtraKeys = "enable-show-terminal-extra-keys";
 
 // network options
