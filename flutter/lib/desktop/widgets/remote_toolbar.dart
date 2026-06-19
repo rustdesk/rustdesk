@@ -807,8 +807,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     final List<Widget> toolbarItems = [];
     toolbarItems.add(_PinMenu(state: widget.state));
     toolbarItems.add(Obx(() {
-      if ((PrivacyModeState.find(widget.id).isEmpty ||
-              allowDisplaySwitchInPrivacyMode(pi)) &&
+      final privacyModeState = PrivacyModeState.find(widget.id);
+      if ((privacyModeState.isEmpty ||
+              allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
           pi.displaysCount.value > 1 &&
           mainGetLocalBoolOptionSync(kOptionAllowMonitorSwitchMainToolbar)) {
         return _MainMonitorSwitchButton(id: widget.id, ffi: widget.ffi);
