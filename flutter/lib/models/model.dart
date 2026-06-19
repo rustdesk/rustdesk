@@ -2645,6 +2645,19 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Returns true when the remote display, at the current scale, exceeds the
+  /// canvas viewport on at least one axis — i.e. when local pan would actually
+  /// reveal more content. Used by gesture handling to decide whether two-finger
+  /// trackpad scroll (or pinch+pan) should pan the local canvas or be passed
+  /// through / no-op'd. See `onTwoFingerScaleUpdate` in
+  /// flutter/lib/common/widgets/remote_input.dart and rustdesk/rustdesk#15209.
+  bool isPanScrollUseful() {
+    if (_size.width == 0 || _size.height == 0) return false;
+    final dw = getDisplayWidth() * _scale;
+    final dh = getDisplayHeight() * _scale;
+    return dw > _size.width || dh > _size.height;
+  }
+
   // mobile only
   updateScale(double v, Offset focalPoint) {
     if (parent.target?.imageModel.image == null) return;
