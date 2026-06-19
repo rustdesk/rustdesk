@@ -994,7 +994,15 @@ class _MonitorCycle {
     final t = total;
     if (t < 2) return;
     final from = _inRange ? _current : -1;
-    openMonitorInTheSameTab((from + 1) % t, ffi, _pi, updateCursorPos: false);
+    final target = (from + 1) % t;
+    final isChooseDisplayToOpenInNewWindow = _pi.isSupportMultiDisplay &&
+        bind.sessionGetDisplaysAsIndividualWindows(sessionId: ffi.sessionId) ==
+            'Y';
+    if (isChooseDisplayToOpenInNewWindow) {
+      openMonitorInNewTabOrWindow(target, ffi.id, _pi);
+    } else {
+      openMonitorInTheSameTab(target, ffi, _pi, updateCursorPos: false);
+    }
   }
 }
 
