@@ -76,38 +76,43 @@ class _AddressBookState extends State<AddressBook> {
       });
 
   Widget _buildAddressBookLandscape() {
-    return Row(
-      children: [
-        Offstage(
-            offstage: hideAbTagsPanel.value,
-            child: Obx(() => Container(
-                  decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Theme.of(context).colorScheme.background)),
-                  width: _tagsPanel.width.value,
-                  height: double.infinity,
-                  child: Column(
-                    children: [
-                      _buildAbDropdown(),
-                      _buildTagHeader().marginOnly(
-                          left: 8.0,
-                          right: gFFI.abModel.legacyMode.value ? 8.0 : 0,
-                          top: gFFI.abModel.legacyMode.value ? 8.0 : 0),
-                      Expanded(
-                        child: Container(
-                          width: double.infinity,
-                          height: double.infinity,
-                          child: _buildTags(),
-                        ),
-                      ),
-                      _buildAbPermission(),
-                    ],
-                  ),
-                ))),
-        if (!hideAbTagsPanel.value) _tagsPanel.buildDivider(),
-        _buildPeersViews()
-      ],
+    final panel = Container(
+      decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border:
+              Border.all(color: Theme.of(context).colorScheme.background)),
+      height: double.infinity,
+      child: Column(
+        children: [
+          _buildAbDropdown(),
+          _buildTagHeader().marginOnly(
+              left: 8.0,
+              right: gFFI.abModel.legacyMode.value ? 8.0 : 0,
+              top: gFFI.abModel.legacyMode.value ? 8.0 : 0),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              height: double.infinity,
+              child: _buildTags(),
+            ),
+          ),
+          _buildAbPermission(),
+        ],
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        children: [
+          Offstage(
+              offstage: hideAbTagsPanel.value,
+              child: Obx(() => SizedBox(
+                    width: _tagsPanel.effectiveWidth(constraints.maxWidth),
+                    child: panel,
+                  ))),
+          if (!hideAbTagsPanel.value) _tagsPanel.buildDivider(context),
+          _buildPeersViews()
+        ],
+      ),
     );
   }
 

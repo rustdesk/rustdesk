@@ -63,39 +63,42 @@ class _MyGroupState extends State<MyGroup> {
   }
 
   Widget _buildLandscape() {
-    return Row(
-      children: [
-        Obx(
-          () => Container(
-            decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: Theme.of(context).colorScheme.background)),
-            width: _devicesPanel.width.value,
-            height: double.infinity,
-            child: Column(
-              children: [
-                _buildLeftHeader(),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    child: _buildLeftList(),
-                  ),
-                )
-              ],
+    final panel = Container(
+      decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border:
+              Border.all(color: Theme.of(context).colorScheme.background)),
+      height: double.infinity,
+      child: Column(
+        children: [
+          _buildLeftHeader(),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              height: double.infinity,
+              child: _buildLeftList(),
             ),
-          ),
-        ),
-        _devicesPanel.buildDivider(),
-        Expanded(
-          child: Align(
-              alignment: Alignment.topLeft,
-              child: MyGroupPeerView(
-                menuPadding: widget.menuPadding,
+          )
+        ],
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        children: [
+          Obx(() => SizedBox(
+                width: _devicesPanel.effectiveWidth(constraints.maxWidth),
+                child: panel,
               )),
-        )
-      ],
+          _devicesPanel.buildDivider(context),
+          Expanded(
+            child: Align(
+                alignment: Alignment.topLeft,
+                child: MyGroupPeerView(
+                  menuPadding: widget.menuPadding,
+                )),
+          )
+        ],
+      ),
     );
   }
 

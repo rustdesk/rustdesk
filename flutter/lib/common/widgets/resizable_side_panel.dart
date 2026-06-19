@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/desktop/widgets/dragable_divider.dart';
+import 'dart:math';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
@@ -13,6 +13,9 @@ class ResizablePanelController {
   final double minWidth;
   final double maxWidth;
   late final RxDouble width;
+
+  static const double dividerHitWidth = 12.0;
+  static const double minContentWidth = 120.0;
 
   ResizablePanelController({
     required this.optionKey,
@@ -29,21 +32,31 @@ class ResizablePanelController {
     width.value = (width.value + dx).clamp(minWidth, maxWidth).toDouble();
   }
 
+  double effectiveWidth(double available) {
+    if (!available.isFinite) return width.value;
+    final maxAllowed = available - dividerHitWidth - minContentWidth;
+    return width.value.clamp(minWidth, max(minWidth, maxAllowed)).toDouble();
+  }
+
   void _persist() {
     bind.mainSetLocalOption(
         key: optionKey, value: width.value.toStringAsFixed(0));
   }
 
-  Widget buildDivider() {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onHorizontalDragUpdate: (details) => _onDrag(details.delta.dx),
-      onHorizontalDragEnd: (_) => _persist(),
-      onHorizontalDragCancel: _persist,
-      child: DraggableDivider(
-        axis: Axis.vertical,
-        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-        color: Colors.transparent,
+  Widget buildDivider(BuildContext context) {
+    final sign = Directionality.of(context) == TextDirection.rtl ? -1.0 : 1.0;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: (details) => _onDrag(sign * details.delta.dx),
+        onHorizontalDragEnd: (_) => _persist(),
+        onHorizontalDragCancel: _persist,
+        child: Container(
+          width: dividerHitWidth,
+          height: double.infinity,
+          color: Colors.transparent,
+        ),
       ),
     );
   }
