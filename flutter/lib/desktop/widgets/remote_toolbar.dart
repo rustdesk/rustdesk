@@ -3523,8 +3523,9 @@ class _MinimizedMonitorSwitchButton extends StatelessWidget {
         return const Offstage();
       }
       if (cycle.total < 2) return const Offstage();
-      if (PrivacyModeState.find(id).isNotEmpty &&
-          !allowDisplaySwitchInPrivacyMode(ffi.ffiModel.pi)) {
+      final privacyModeState = PrivacyModeState.find(id);
+      if (privacyModeState.isNotEmpty &&
+          !allowDisplaySwitchInPrivacyMode(ffi.ffiModel.pi, privacyModeState.value)) {
         return const Offstage();
       }
 
