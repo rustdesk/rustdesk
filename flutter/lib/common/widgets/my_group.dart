@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/login.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
+import 'package:flutter_hbb/common/widgets/resizable_side_panel.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 
@@ -66,7 +68,6 @@ class _MyGroupState extends State<MyGroup> {
               border:
                   Border.all(color: Theme.of(context).colorScheme.background)),
           child: Container(
-            width: 150,
             height: double.infinity,
             child: Column(
               children: [
@@ -81,7 +82,7 @@ class _MyGroupState extends State<MyGroup> {
               ],
             ),
           ),
-        ).marginOnly(right: 12.0),
+        ).resizable(kOptionAccessibleDevicesPanelWidth, defaultWidth: 150),
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
