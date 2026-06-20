@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common/widgets/remote_input.dart';
@@ -19,6 +20,26 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
           supportedDevices: supportedDevices,
         ) {
     _init();
+  }
+
+  /// Refuse to claim trackpad pan-zoom events on mobile platforms. The base
+  /// `ScaleGestureRecognizer` returns true unconditionally regardless of
+  /// `supportedDevices` (Flutter framework `scale.dart`), which on iPadOS
+  /// causes Magic Keyboard trackpad two-finger scroll to be converted into a
+  /// local canvas scale/pan via `onTwoFingerScaleUpdate`. Returning false on
+  /// mobile leaves the raw `Listener.onPointerPanZoomUpdate` path
+  /// (input_model.dart) — which sends the scroll to the remote — as the sole
+  /// consumer of trackpad gestures. On desktop we keep the default so existing
+  /// trackpad pinch-zoom in the desktop client continues to work.
+  ///
+  /// Refs: rustdesk/rustdesk#15209.
+  @override
+  bool isPointerPanZoomAllowed(PointerPanZoomStartEvent event) {
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android) {
+      return false;
+    }
+    return super.isPointerPanZoomAllowed(event);
   }
 
   // oneFingerPan
