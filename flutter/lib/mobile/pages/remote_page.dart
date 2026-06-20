@@ -469,8 +469,20 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     try {
       final image = gFFI.imageModel.image;
       if (image == null) return;
-      const targetW = 160;
-      const targetH = 160;
+      final rect = gFFI.ffiModel.rect;
+      final remoteW = rect?.width.toInt() ?? image.width;
+      final remoteH = rect?.height.toInt() ?? image.height;
+      const maxDim = 200;
+      int targetW, targetH;
+      if (remoteW >= remoteH) {
+        targetW = maxDim;
+        targetH = (maxDim * remoteH / remoteW).toInt();
+      } else {
+        targetH = maxDim;
+        targetW = (maxDim * remoteW / remoteH).toInt();
+      }
+      targetW = targetW.clamp(40, maxDim);
+      targetH = targetH.clamp(40, maxDim);
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
       canvas.drawImageRect(
