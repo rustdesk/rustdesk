@@ -462,10 +462,14 @@ impl DesktopManager {
         let (child_xorg, child_wm) = Self::start_x11(uid, gid, username, display_num, &envs)?;
         is_child_running.store(true, Ordering::SeqCst);
 
+        // capture the logind session scope (from a live child) for teardown, see
+        // reap_session_scope.
+        let scope_dir = Self::session_scope_dir(child_xorg.id());
+
         log::info!("Start xorg and wm done, notify and wait xtop x11");
         allow_err!(tx_res.send("".to_owned()));
 
-        Self::wait_stop_x11(child_xorg, child_wm);
+        Self::wait_stop_x11(child_xorg, child_wm, scope_dir, display_num);
         log::info!("Wait x11 stop done");
         Ok(())
     }
@@ -665,7 +669,222 @@ impl DesktopManager {
         }
     }
 
-    fn try_wait_stop_x11(child_xorg: &mut Child, child_wm: &mut Child) -> bool {
+    // resolve the "session-<id>.scope" directory pam_systemd put the x session in, read
+    // from a live child pid. cgroup v2 mounts every cgroup under /sys/fs/cgroup, v1/hybrid
+    // keeps the scope under the systemd controller mount; pick by the controller field and
+    // confirm the cgroup is real. empty if there is no such scope (e.g. no logind).
+    fn session_scope_dir(pid: u32) -> String {
+        let path = format!("/proc/{}/cgroup", pid);
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("Failed to read {} to find session scope: {}", path, e);
+                return "".to_owned();
+            }
+        };
+        for line in content.lines() {
+            // "<hierarchy>:<controllers>:<path>"; v2 unified is "0::<path>", the v1
+            // systemd hierarchy is "<n>:name=systemd:<path>".
+            let mut fields = line.splitn(3, ':');
+            let (controllers, cgroup) = match (fields.next(), fields.next(), fields.next()) {
+                (Some(_), Some(c), Some(p)) => (c, p),
+                _ => continue,
+            };
+            let scope = match Self::session_scope(cgroup) {
+                Some(s) => s,
+                None => continue,
+            };
+            let mount = if controllers.is_empty() {
+                "/sys/fs/cgroup"
+            } else if controllers.split(',').any(|c| c == "name=systemd") {
+                "/sys/fs/cgroup/systemd"
+            } else {
+                continue;
+            };
+            let dir = format!("{}{}", mount, scope);
+            if Path::new(&format!("{}/cgroup.procs", dir)).exists() {
+                return dir;
+            }
+        }
+        "".to_owned()
+    }
+
+    // the "/.../session-<id>.scope" prefix of a cgroup path, dropping any nested child
+    // cgroup below it so a descendant scope does not get mistaken for the session.
+    fn session_scope(cgroup: &str) -> Option<String> {
+        let mut scope = String::new();
+        for comp in cgroup.split('/').filter(|c| !c.is_empty()) {
+            scope.push('/');
+            scope.push_str(comp);
+            if comp.starts_with("session-") && comp.ends_with(".scope") {
+                return Some(scope);
+            }
+        }
+        None
+    }
+
+    // on teardown reap the whole session scope subtree, not just the xorg + wm pids:
+    // the per-session pipewire and other desktop children otherwise outlive them and
+    // hold the logind session in "closing", leaking sockets + displays on reconnect
+    // (rustdesk/rustdesk#15183). SIGTERM first so pipewire unlinks its sockets, then
+    // SIGKILL stragglers; skip our own pid (pam put the service in the scope too).
+    fn reap_session_scope(scope_dir: &str) {
+        if scope_dir.is_empty() {
+            return;
+        }
+        let me = std::process::id();
+        // spare the --server's own children and any descendants of them sharing this scope
+        // (see pid_is_spared); only the desktop session's leftovers are reaped.
+        let spared: Vec<u32> = crate::server::CHILD_PROCESS
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|c| c.id())
+            .collect();
+        for sig in [hbb_common::libc::SIGTERM, hbb_common::libc::SIGKILL] {
+            let mut pids = Vec::new();
+            Self::collect_scope_pids(Path::new(scope_dir), &mut pids);
+            let mut any = false;
+            for pid in pids {
+                if pid == me || Self::pid_is_spared(pid, &spared, me) {
+                    continue;
+                }
+                any = true;
+                log::info!("Reaping leftover session process {} (signal {})", pid, sig);
+                unsafe {
+                    if hbb_common::libc::kill(pid as hbb_common::libc::pid_t, sig) != 0 {
+                        let err = std::io::Error::last_os_error();
+                        // ESRCH = it already exited (or did between snapshot and now).
+                        if err.raw_os_error() != Some(hbb_common::libc::ESRCH) {
+                            log::warn!("Failed to signal session process {}: {}", pid, err);
+                        }
+                    }
+                }
+            }
+            if !any {
+                break;
+            }
+            if sig == hbb_common::libc::SIGTERM {
+                std::thread::sleep(Duration::from_millis(300));
+            }
+        }
+    }
+
+    // a tracked --server child (the sudo wrapper run_as_user spawns) or any descendant of
+    // one: with use_pty sudo runs --cm-no-ui under a monitor with its own pid, so walk the
+    // parent chain (stopping at the --server) to spare the worker, not just the wrapper.
+    fn pid_is_spared(pid: u32, spared: &[u32], me: u32) -> bool {
+        let mut cur = pid;
+        for _ in 0..32 {
+            if spared.contains(&cur) {
+                return true;
+            }
+            if cur <= 1 || cur == me {
+                return false;
+            }
+            match Self::parent_pid(cur) {
+                Some(ppid) => cur = ppid,
+                None => return false,
+            }
+        }
+        false
+    }
+
+    fn parent_pid(pid: u32) -> Option<u32> {
+        // /proc/<pid>/stat is "pid (comm) state ppid ..."; comm can contain spaces and ')',
+        // so read the fields after the last ')'.
+        let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+        stat.rsplit_once(')')?
+            .1
+            .split_whitespace()
+            .nth(1)?
+            .parse()
+            .ok()
+    }
+
+    // collect every pid in the cgroup subtree rooted at dir. "cgroup.procs" lists only
+    // the procs directly in a cgroup, so recurse into child cgroup directories to catch
+    // processes the desktop session moved into descendant scopes.
+    fn collect_scope_pids(dir: &Path, out: &mut Vec<u32>) {
+        let procs = dir.join("cgroup.procs");
+        match std::fs::read_to_string(&procs) {
+            Ok(content) => {
+                out.extend(content.lines().filter_map(|l| l.trim().parse::<u32>().ok()));
+            }
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                log::warn!("Failed to read {}: {}", procs.display(), e);
+            }
+            Err(_) => {}
+        }
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                log::warn!("Failed to list cgroup dir {}: {}", dir.display(), e);
+                return;
+            }
+            Err(_) => return,
+        };
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    log::warn!("Failed to read entry under {}: {}", dir.display(), e);
+                    continue;
+                }
+            };
+            match entry.file_type() {
+                Ok(t) if t.is_dir() => Self::collect_scope_pids(&entry.path(), out),
+                Ok(_) => {}
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    log::warn!("Failed to stat {}: {}", entry.path().display(), e);
+                }
+                Err(_) => {}
+            }
+        }
+    }
+
+    // a SIGKILL'd Xorg (how wait_x11_children_exit ends it) leaves "/tmp/.X<n>-lock" and
+    // "/tmp/.X11-unix/X<n>" behind, and get_avail_display() treats either file as "display
+    // in use", so the number is never reused and climbs until none are free
+    // (rustdesk/rustdesk#15183). a clean exit would remove them; do the same on teardown,
+    // but skip it if a live process still holds the lock: another server could have taken
+    // the number in the gap, and removing its files would break that display.
+    fn cleanup_x_display_files(display_num: u32) {
+        let lock = format!("/tmp/.X{}-lock", display_num);
+        if let Ok(content) = std::fs::read_to_string(&lock) {
+            if let Ok(pid) = content.trim().parse::<i32>() {
+                if Self::pid_alive(pid) {
+                    log::info!("X display {} still held by pid {}, leaving its files", display_num, pid);
+                    return;
+                }
+            }
+        }
+        for path in [lock, format!("/tmp/.X11-unix/X{}", display_num)] {
+            if let Err(e) = std::fs::remove_file(&path) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    log::warn!("Failed to remove stale X file {}: {}", path, e);
+                }
+            }
+        }
+    }
+
+    // signal-0 probe: the pid exists if kill succeeds or fails with EPERM (alive but not
+    // ours); only ESRCH means it is gone.
+    fn pid_alive(pid: i32) -> bool {
+        unsafe {
+            if hbb_common::libc::kill(pid as hbb_common::libc::pid_t, 0) == 0 {
+                return true;
+            }
+        }
+        std::io::Error::last_os_error().raw_os_error() == Some(hbb_common::libc::EPERM)
+    }
+
+    fn try_wait_stop_x11(
+        child_xorg: &mut Child,
+        child_wm: &mut Child,
+        scope_dir: &str,
+        display_num: u32,
+    ) -> bool {
         let mut desktop_manager = DESKTOP_MANAGER.lock().unwrap();
         let mut exited = true;
         if let Some(desktop_manager) = &mut (*desktop_manager) {
@@ -677,6 +896,8 @@ impl DesktopManager {
             if exited {
                 log::debug!("Wait x11 children exiting");
                 Self::wait_x11_children_exit(child_xorg, child_wm);
+                Self::reap_session_scope(scope_dir);
+                Self::cleanup_x_display_files(display_num);
                 desktop_manager
                     .is_child_running
                     .store(false, Ordering::SeqCst);
@@ -686,9 +907,14 @@ impl DesktopManager {
         exited
     }
 
-    fn wait_stop_x11(mut child_xorg: Child, mut child_wm: Child) {
+    fn wait_stop_x11(
+        mut child_xorg: Child,
+        mut child_wm: Child,
+        scope_dir: String,
+        display_num: u32,
+    ) {
         loop {
-            if Self::try_wait_stop_x11(&mut child_xorg, &mut child_wm) {
+            if Self::try_wait_stop_x11(&mut child_xorg, &mut child_wm, &scope_dir, display_num) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(super::SERVICE_INTERVAL));
@@ -804,5 +1030,56 @@ fn pam_get_service_name() -> String {
         app_name
     } else {
         "gdm".to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_scope_truncates_at_first_scope() {
+        assert_eq!(
+            DesktopManager::session_scope("/user.slice/user-1000.slice/session-3.scope").as_deref(),
+            Some("/user.slice/user-1000.slice/session-3.scope")
+        );
+        // a nested child scope must not be mistaken for the session
+        assert_eq!(
+            DesktopManager::session_scope(
+                "/user.slice/user-1000.slice/session-3.scope/app-foo.scope"
+            )
+            .as_deref(),
+            Some("/user.slice/user-1000.slice/session-3.scope")
+        );
+        assert_eq!(
+            DesktopManager::session_scope(
+                "/user.slice/user-1000.slice/user@1000.service/app.slice/x.service"
+            ),
+            None
+        );
+        assert_eq!(DesktopManager::session_scope("/"), None);
+    }
+
+    #[test]
+    fn collect_scope_pids_walks_descendant_cgroups() {
+        // regression for #15183: pids in descendant cgroups must be collected too
+        let base = std::env::temp_dir().join(format!("rustdesk-cgtest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let scope = base.join("session-3.scope");
+        let child = scope.join("app-foo.scope");
+        let nested = child.join("deeper.scope");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::create_dir_all(scope.join("empty.scope")).unwrap();
+        std::fs::write(scope.join("cgroup.procs"), "100\n101\n").unwrap();
+        std::fs::write(scope.join("cgroup.controllers"), "memory pids\n").unwrap();
+        std::fs::write(child.join("cgroup.procs"), "200\n").unwrap();
+        std::fs::write(nested.join("cgroup.procs"), "300\n").unwrap();
+
+        let mut pids = Vec::new();
+        DesktopManager::collect_scope_pids(&scope, &mut pids);
+        pids.sort();
+        let _ = std::fs::remove_dir_all(&base);
+
+        assert_eq!(pids, vec![100, 101, 200, 300]);
     }
 }
