@@ -1,11 +1,14 @@
 package com.carriez.flutter_hbb
 
 import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.graphics.drawable.BitmapDrawable
@@ -25,8 +28,10 @@ import android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
 import android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
 import android.widget.ImageView
 import android.widget.PopupMenu
+import androidx.core.app.NotificationCompat
 import com.caverock.androidsvg.SVG
 import ffi.FFI
+import java.nio.ByteBuffer
 import kotlin.math.abs
 
 class FloatingWindowService : Service(), View.OnTouchListener {
@@ -46,6 +51,7 @@ class FloatingWindowService : Service(), View.OnTouchListener {
 
     companion object {
         private val logTag = "floatingService"
+        private const val NOTIFY_ID_FLOATING = 200
         private var firstCreate = true
         private var viewWidth = 120
         private var viewHeight = 120
@@ -57,6 +63,13 @@ class FloatingWindowService : Service(), View.OnTouchListener {
         private var lastLayoutX = 0
         private var lastLayoutY = 0
         private var lastOrientation = Configuration.ORIENTATION_UNDEFINED
+
+        var instance: FloatingWindowService? = null
+            private set
+
+        fun updateFrame(rgbaBytes: ByteArray, width: Int, height: Int) {
+            instance?.updateFrameInternal(rgbaBytes, width, height)
+        }
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -65,6 +78,8 @@ class FloatingWindowService : Service(), View.OnTouchListener {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
+        startForegroundWithNotification()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         try {
             if (firstCreate) {
@@ -82,10 +97,70 @@ class FloatingWindowService : Service(), View.OnTouchListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        instance = null
         if (viewCreated) {
             windowManager.removeView(floatingView)
         }
         handler.removeCallbacks(runnable)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+    }
+
+    private fun updateFrameInternal(rgbaBytes: ByteArray, width: Int, height: Int) {
+        try {
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rgbaBytes))
+            runOnUiThread {
+                floatingView.setImageBitmap(bitmap)
+                floatingView.alpha = viewTransparency * 1f
+                // Ensure full width when showing frame content
+                if (layoutParams.width == viewWidth / 2) {
+                    layoutParams.width = viewWidth
+                    windowManager.updateViewLayout(floatingView, layoutParams)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(logTag, "updateFrame failed: $e")
+        }
+    }
+
+    private fun runOnUiThread(runnable: Runnable) {
+        Handler(Looper.getMainLooper()).post(runnable)
+    }
+
+    private fun startForegroundWithNotification() {
+        val channelId = "rustdesk_floating"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                translate("RustDesk"),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = translate("RustDesk")
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+            }
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.mipmap.ic_stat_logo)
+            .setContentTitle(translate("RustDesk"))
+            .setContentText(translate("Service is running"))
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .build()
+
+        startForeground(NOTIFY_ID_FLOATING, notification)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -312,7 +387,7 @@ class FloatingWindowService : Service(), View.OnTouchListener {
          }
          val idStopService = 2
          val hideStopService = FFI.getBuildinOption("hide-stop-service") == "Y"
-         if (!hideStopService) {
+         if (!hideStopService && MainService.isReady) {
              popupMenu.menu.add(0, idStopService, 0, translate("Stop service"))
          }
          popupMenu.setOnMenuItemClickListener { menuItem ->

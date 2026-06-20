@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -66,6 +68,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
   Timer? _iosKeyboardWorkaroundTimer;
+  Timer? _floatingFrameTimer;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -94,6 +97,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     gFFI.ffiModel.updateEventListener(sessionId, widget.id);
+    if (isAndroid) {
+      unawaited(gFFI.invokeMethod("set_active_remote_session", true));
+    }
     gFFI.start(
       widget.id,
       password: widget.password,
@@ -151,6 +157,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // "Connecting...". Dispatching it here makes teardown happen synchronously on
     // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
     unawaited(bind.sessionClose(sessionId: sessionId));
+    if (isAndroid) {
+      unawaited(gFFI.invokeMethod("set_active_remote_session", false));
+    }
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -166,6 +175,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     await gFFI.close();
     _timer?.cancel();
     _iosKeyboardWorkaroundTimer?.cancel();
+    _floatingFrameTimer?.cancel();
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -181,6 +191,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _stopFloatingFramePush();
       trySyncClipboard();
     }
   }
@@ -433,6 +444,57 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> moveToFloatingWindow() async {
+    final ok = await gFFI.invokeMethod("move_to_floating_window");
+    if (ok != true) {
+      showToast('No permission');
+    } else {
+      _startFloatingFramePush();
+    }
+  }
+
+  void _startFloatingFramePush() {
+    _floatingFrameTimer?.cancel();
+    _floatingFrameTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      _sendFloatingFrame();
+    });
+  }
+
+  void _stopFloatingFramePush() {
+    _floatingFrameTimer?.cancel();
+    _floatingFrameTimer = null;
+  }
+
+  Future<void> _sendFloatingFrame() async {
+    try {
+      final image = gFFI.imageModel.image;
+      if (image == null) return;
+      const targetW = 160;
+      const targetH = 160;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawImageRect(
+        image,
+        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        Rect.fromLTWH(0, 0, targetW.toDouble(), targetH.toDouble()),
+        Paint(),
+      );
+      final picture = recorder.endRecording();
+      final resized = await picture.toImage(targetW, targetH);
+      final byteData = await resized.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (byteData != null) {
+        await gFFI.invokeMethod("update_floating_frame", {
+          'bytes': byteData.buffer.asUint8List(),
+          'width': targetW,
+          'height': targetH,
+        });
+      }
+      resized.dispose();
+    } catch (e) {
+      debugPrint('_sendFloatingFrame error: $e');
+    }
+  }
+
   Widget _bottomWidget() => _showGestureHelp
       ? getGestureHelp()
       : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
@@ -575,7 +637,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         setState(() => _showEdit = false);
                         showOptions(context, widget.id, gFFI.dialogManager);
                       },
-                    )
+                    ),
+                    if (isAndroid)
+                      IconButton(
+                        color: Colors.white,
+                        icon: const Icon(Icons.picture_in_picture_alt),
+                        onPressed: moveToFloatingWindow,
+                      )
                   ] +
                   (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
                       ? []

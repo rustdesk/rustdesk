@@ -9,6 +9,7 @@ package com.carriez.flutter_hbb
 
 import ffi.FFI
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -39,6 +40,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         var flutterMethodChannel: MethodChannel? = null
         private var _rdClipboardManager: RdClipboardManager? = null
+        private var hasActiveRemoteSession = false
         val rdClipboardManager: RdClipboardManager?
             get() = _rdClipboardManager;
     }
@@ -230,6 +232,34 @@ class MainActivity : FlutterActivity() {
                     rdClipboardManager?.syncClipboard(true)
                     result.success(true)
                 }
+                "set_active_remote_session" -> {
+                    hasActiveRemoteSession = call.arguments == true
+                    Log.d(logTag, "set_active_remote_session: $hasActiveRemoteSession")
+                    result.success(true)
+                }
+                "update_floating_frame" -> {
+                    val args = call.arguments as? Map<*, *>
+                    if (args != null) {
+                        val bytes = args["bytes"] as? ByteArray
+                        val width = args["width"] as? Int ?: 120
+                        val height = args["height"] as? Int ?: 120
+                        if (bytes != null) {
+                            FloatingWindowService.updateFrame(bytes, width, height)
+                        }
+                    }
+                    result.success(true)
+                }
+                "move_to_floating_window" -> {
+                    val disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
+                    val canFloat = !disableFloatingWindow &&
+                            (MainService.isReady || hasActiveRemoteSession) &&
+                            XXPermissions.isGranted(context, Manifest.permission.SYSTEM_ALERT_WINDOW)
+                    if (canFloat) {
+                        startService(Intent(this, FloatingWindowService::class.java))
+                        moveTaskToBack(true)
+                    }
+                    result.success(canFloat)
+                }
                 GET_START_ON_BOOT_OPT -> {
                     val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
                     result.success(prefs.getBoolean(KEY_START_ON_BOOT_OPT, false))
@@ -402,7 +432,7 @@ class MainActivity : FlutterActivity() {
     override fun onStop() {
         super.onStop()
         val disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
-        if (!disableFloatingWindow && MainService.isReady) {
+        if (!disableFloatingWindow && (MainService.isReady || hasActiveRemoteSession)) {
             startService(Intent(this, FloatingWindowService::class.java))
         }
     }
