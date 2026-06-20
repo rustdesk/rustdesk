@@ -862,6 +862,18 @@ pub mod clipboard_listener {
     pub fn subscribe(name: String, tx: Sender<CallbackResult>) -> ResultType<()> {
         log::info!("Subscribe clipboard listener: {}", &name);
         let mut listener_lock = CLIPBOARD_LISTENER.lock().unwrap();
+        let stale_handle = listener_lock
+            .handle
+            .as_ref()
+            .map(|(_, h)| h.is_finished())
+            .unwrap_or(false);
+        if stale_handle {
+            if let Some((shutdown, h)) = listener_lock.handle.take() {
+                log::warn!("Cleaning up stale clipboard listener handle");
+                h.join().ok();
+                drop(shutdown);
+            }
+        }
         listener_lock
             .subscribers
             .lock()
