@@ -52,7 +52,7 @@ class FloatingWindowService : Service(), View.OnTouchListener {
         private const val PREFS_KEY_SIZE = "floating_window_size"
         private const val DEFAULT_SIZE = 180
         private const val MIN_SIZE = 80
-        private const val MAX_SIZE = 400
+        private const val MAX_SIZE = 600
         private val SIZE_PRESETS = intArrayOf(120, 200, 320)
         private var firstCreate = true
         private var viewUntouchable = false
@@ -269,15 +269,19 @@ class FloatingWindowService : Service(), View.OnTouchListener {
 
         popupMenu.menu.add(0, 0, 0, translate("Show RustDesk"))
 
+        val sizeSubmenu = popupMenu.menu.addSubMenu(1, 10, 1, "Size")
         val currentSize = loadSize()
-        val sizeIdx = SIZE_PRESETS.indexOf(currentSize)
-        val sizeLabel = if (sizeIdx >= 0) {
-            val names = arrayOf("Small", "Medium", "Large")
-            "${names[sizeIdx]} (${currentSize}px)"
-        } else {
-            "Size: ${currentSize}px"
+        sizeSubmenu.add(1, 11, 0, "Small (120px)")
+        sizeSubmenu.add(1, 12, 1, "Medium (200px)")
+        sizeSubmenu.add(1, 13, 2, "Large (320px)")
+        sizeSubmenu.add(1, 14, 3, "Half screen")
+        // Check current selection
+        when (currentSize) {
+            120 -> sizeSubmenu.getItem(0).isChecked = true
+            200 -> sizeSubmenu.getItem(1).isChecked = true
+            320 -> sizeSubmenu.getItem(2).isChecked = true
         }
-        popupMenu.menu.add(0, 3, 1, "$sizeLabel ▸")
+        sizeSubmenu.setGroupCheckable(1, true, true)
 
         val isServiceSyncEnabled = (MainActivity.rdClipboardManager?.isCaptureStarted ?: false)
                 && FFI.isServiceClipboardEnabled()
@@ -294,29 +298,43 @@ class FloatingWindowService : Service(), View.OnTouchListener {
                 0 -> { openMainActivity(); true }
                 1 -> { syncClipboard(); true }
                 2 -> { stopMainService(); true }
-                3 -> { cycleSize(); true }
+                11 -> { applySize(120); true }
+                12 -> { applySize(200); true }
+                13 -> { applySize(320); true }
+                14 -> { applyHalfScreen(); true }
                 else -> false
             }
         }
         popupMenu.show()
     }
 
-    private fun cycleSize() {
-        val current = loadSize()
-        val next = when {
-            current < 160 -> 200
-            current < 280 -> 320
-            else -> 120
-        }
-        saveSize(next)
+    private fun applySize(size: Int) {
+        saveSize(size)
         if (hasReceivedFrame && frameAspectRatio > 0f) {
             resizeToAspectRatio()
         } else {
-            layoutParams.width = next
-            layoutParams.height = next
+            layoutParams.width = size
+            layoutParams.height = size
             windowManager.updateViewLayout(floatingView, layoutParams)
         }
-        Log.d(logTag, "cycleSize: $current -> $next")
+        Log.d(logTag, "applySize -> $size")
+    }
+
+    private fun applyHalfScreen() {
+        val wh = getScreenSize(windowManager)
+        val screenW = wh.first
+        val screenH = wh.second
+        val halfW = screenW / 2
+        val halfH = screenH / 2
+        saveSize(halfW)
+        if (hasReceivedFrame && frameAspectRatio > 0f) {
+            resizeToAspectRatio()
+        } else {
+            layoutParams.width = halfW
+            layoutParams.height = halfH
+            windowManager.updateViewLayout(floatingView, layoutParams)
+        }
+        Log.d(logTag, "applyHalfScreen -> ${halfW}x${halfH}")
     }
 
     private fun openMainActivity() {
