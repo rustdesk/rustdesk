@@ -45,6 +45,9 @@ class FloatingWindowService : Service(), View.OnTouchListener {
     private var keepScreenOn = KeepScreenOn.DURING_CONTROLLED
     private var hasReceivedFrame = false
     private var frameAspectRatio = 1f
+    private var lastTapTime = 0L
+    private var isMini = false
+    private var sizeBeforeMini = 0
 
     companion object {
         private val logTag = "floatingService"
@@ -246,7 +249,19 @@ class FloatingWindowService : Service(), View.OnTouchListener {
                 if (abs(event.rawX - lastDownX) < clickDragTolerance &&
                     abs(event.rawY - lastDownY) < clickDragTolerance
                 ) {
-                    showPopupMenu()
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapTime < 300) {
+                        toggleMini()
+                        lastTapTime = 0
+                    } else {
+                        lastTapTime = now
+                        // Delay single-tap action in case double-tap follows
+                        handler.postDelayed({
+                            if (lastTapTime == now.toLong()) {
+                                showPopupMenu()
+                            }
+                        }, 300)
+                    }
                 }
             }
             MotionEvent.ACTION_MOVE -> {
@@ -264,6 +279,36 @@ class FloatingWindowService : Service(), View.OnTouchListener {
         return false
     }
 
+    private fun toggleMini() {
+        if (isMini) {
+            isMini = false
+            val restore = if (sizeBeforeMini > 0) sizeBeforeMini else loadSize()
+            if (hasReceivedFrame && frameAspectRatio > 0f) {
+                val maxDim = restore
+                if (frameAspectRatio >= 1f) {
+                    layoutParams.width = maxDim
+                    layoutParams.height = (maxDim / frameAspectRatio).toInt()
+                } else {
+                    layoutParams.height = maxDim
+                    layoutParams.width = (maxDim * frameAspectRatio).toInt()
+                }
+            } else {
+                layoutParams.width = restore
+                layoutParams.height = restore
+            }
+            floatingView.alpha = viewTransparency
+            Log.d(logTag, "toggleMini -> restore ${layoutParams.width}x${layoutParams.height}")
+        } else {
+            isMini = true
+            sizeBeforeMini = maxOf(layoutParams.width, layoutParams.height)
+            layoutParams.width = 48
+            layoutParams.height = 48
+            floatingView.alpha = 0.5f
+            Log.d(logTag, "toggleMini -> mini 48x48")
+        }
+        windowManager.updateViewLayout(floatingView, layoutParams)
+    }
+
     private fun showPopupMenu() {
         val popupMenu = PopupMenu(this, floatingView)
 
@@ -276,7 +321,7 @@ class FloatingWindowService : Service(), View.OnTouchListener {
             Triple(11, "Small", 120),
             Triple(12, "Medium", 320),
             Triple(13, "Large", screenW / 2),
-            Triple(14, "XL", (screenW * 0.75).toInt()),
+            Triple(14, "XL", screenW),
         )
         presets.forEach { (id, name, px) ->
             sizeSubmenu.add(1, id, 0, "$name (${px}px)")
@@ -302,7 +347,7 @@ class FloatingWindowService : Service(), View.OnTouchListener {
                 11 -> { applySize(120); true }
                 12 -> { applySize(320); true }
                 13 -> { applySize(screenW / 2); true }
-                14 -> { applySize((screenW * 0.75).toInt()); true }
+                14 -> { applySize(screenW); true }
                 else -> false
             }
         }
