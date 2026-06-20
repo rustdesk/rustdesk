@@ -758,5 +758,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland-keyboard-input-reset-choice-tip", "Restableix l'opció d'entrada de teclat"),
         ("remember-wayland-keyboard-choice-tip", "No tornis a preguntar-ho per a aquest equip remot"),
         ("Why this happens", "Per què passa això"),
+        ("Switch display", "Canvia de pantalla"),
+        ("Show monitor switch button on the main toolbar", "Mostra el botó de canvi de monitor a la barra d’eines principal"),
+        ("Show on the minimized toolbar", "Mostra a la barra d’eines minimitzada"),
     ].iter().cloned().collect();
 }

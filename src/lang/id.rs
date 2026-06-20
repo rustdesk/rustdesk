@@ -758,5 +758,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland-keyboard-input-reset-choice-tip", "Setel ulang pilihan masukan keyboard"),
         ("remember-wayland-keyboard-choice-tip", "Jangan tanya lagi untuk komputer jarak jauh ini"),
         ("Why this happens", "Mengapa ini terjadi"),
+        ("Switch display", "Ganti tampilan"),
+        ("Show monitor switch button on the main toolbar", "Tampilkan tombol pengalih monitor di bilah alat utama"),
+        ("Show on the minimized toolbar", "Tampilkan di bilah alat yang diperkecil"),
     ].iter().cloned().collect();
 }
