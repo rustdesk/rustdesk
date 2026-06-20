@@ -267,19 +267,20 @@ class FloatingWindowService : Service(), View.OnTouchListener {
     private fun showPopupMenu() {
         val popupMenu = PopupMenu(this, floatingView)
 
-        popupMenu.menu.add(0, 0, 0, translate("Show RustDesk"))
+        popupMenu.menu.add(0, 0, 0, translate("Show"))
 
         val sizeSubmenu = popupMenu.menu.addSubMenu(1, 10, 1, "Size")
         val currentSize = loadSize()
-        sizeSubmenu.add(1, 11, 0, "Small (120px)")
-        sizeSubmenu.add(1, 12, 1, "Medium (200px)")
-        sizeSubmenu.add(1, 13, 2, "Large (320px)")
-        sizeSubmenu.add(1, 14, 3, "Half screen")
-        // Check current selection
-        when (currentSize) {
-            120 -> sizeSubmenu.getItem(0).isChecked = true
-            200 -> sizeSubmenu.getItem(1).isChecked = true
-            320 -> sizeSubmenu.getItem(2).isChecked = true
+        val screenW = getScreenSize(windowManager).first
+        val presets = listOf(
+            Triple(11, "Small", 120),
+            Triple(12, "Medium", 320),
+            Triple(13, "Large", screenW / 2),
+            Triple(14, "XL", (screenW * 0.75).toInt()),
+        )
+        presets.forEach { (id, name, px) ->
+            sizeSubmenu.add(1, id, 0, "$name (${px}px)")
+            if (currentSize == px) sizeSubmenu.getItem(sizeSubmenu.size() - 1).isChecked = true
         }
         sizeSubmenu.setGroupCheckable(1, true, true)
 
@@ -299,9 +300,9 @@ class FloatingWindowService : Service(), View.OnTouchListener {
                 1 -> { syncClipboard(); true }
                 2 -> { stopMainService(); true }
                 11 -> { applySize(120); true }
-                12 -> { applySize(200); true }
-                13 -> { applySize(320); true }
-                14 -> { applyHalfScreen(); true }
+                12 -> { applySize(320); true }
+                13 -> { applySize(screenW / 2); true }
+                14 -> { applySize((screenW * 0.75).toInt()); true }
                 else -> false
             }
         }
@@ -318,23 +319,6 @@ class FloatingWindowService : Service(), View.OnTouchListener {
             windowManager.updateViewLayout(floatingView, layoutParams)
         }
         Log.d(logTag, "applySize -> $size")
-    }
-
-    private fun applyHalfScreen() {
-        val wh = getScreenSize(windowManager)
-        val screenW = wh.first
-        val screenH = wh.second
-        val halfW = screenW / 2
-        val halfH = screenH / 2
-        saveSize(halfW)
-        if (hasReceivedFrame && frameAspectRatio > 0f) {
-            resizeToAspectRatio()
-        } else {
-            layoutParams.width = halfW
-            layoutParams.height = halfH
-            windowManager.updateViewLayout(floatingView, layoutParams)
-        }
-        Log.d(logTag, "applyHalfScreen -> ${halfW}x${halfH}")
     }
 
     private fun openMainActivity() {
