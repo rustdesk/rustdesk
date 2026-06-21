@@ -862,7 +862,6 @@ pub mod clipboard_listener {
     pub fn subscribe(name: String, tx: Sender<CallbackResult>) -> ResultType<()> {
         log::info!("Subscribe clipboard listener: {}", &name);
         let mut listener_lock = CLIPBOARD_LISTENER.lock().unwrap();
-        cleanup_stale_listener(&mut listener_lock);
         listener_lock
             .subscribers
             .lock()
