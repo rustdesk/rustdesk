@@ -862,24 +862,14 @@ pub mod clipboard_listener {
     pub fn subscribe(name: String, tx: Sender<CallbackResult>) -> ResultType<()> {
         log::info!("Subscribe clipboard listener: {}", &name);
         let mut listener_lock = CLIPBOARD_LISTENER.lock().unwrap();
-        let stale_handle = listener_lock
-            .handle
-            .as_ref()
-            .map(|(_, h)| h.is_finished())
-            .unwrap_or(false);
-        if stale_handle {
-            if let Some((shutdown, h)) = listener_lock.handle.take() {
-                log::warn!("Cleaning up stale clipboard listener handle");
-                h.join().ok();
-                drop(shutdown);
-            }
-        }
+        cleanup_stale_listener(&mut listener_lock);
         listener_lock
             .subscribers
             .lock()
             .unwrap()
             .insert(name.clone(), tx);
 
+        cleanup_stale_listener(&mut listener_lock);
         if listener_lock.handle.is_none() {
             log::info!("Start clipboard listener thread");
             let handler = Handler {
@@ -903,6 +893,24 @@ pub mod clipboard_listener {
 
         log::info!("Clipboard listener subscribed: {}", name);
         Ok(())
+    }
+
+    fn cleanup_stale_listener(listener: &mut ClipboardListener) {
+        if !listener
+            .handle
+            .as_ref()
+            .map(|(_, h)| h.is_finished())
+            .unwrap_or(false)
+        {
+            return;
+        }
+        if let Some((shutdown, h)) = listener.handle.take() {
+            log::warn!("Cleaning up stale clipboard listener handle");
+            if let Err(e) = h.join() {
+                log::error!("Clipboard listener thread panicked during stale cleanup: {:?}", e);
+            }
+            drop(shutdown);
+        }
     }
 
     pub fn unsubscribe(name: &str) {
