@@ -8,6 +8,36 @@
   <b>We need your help to translate this README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> and <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Doc</a> to your native language</b>
 </p>
 
+---
+
+# Vestra Support Fork
+
+This repository is a **Vestra Interactive** downstream fork of [RustDesk](https://github.com/rustdesk/rustdesk), the open-source remote desktop software. It is customized to deliver a secure, self-hosted, and branded remote support client for Vestra Platform customers and technicians.
+
+### Current Project Status
+We are currently in **Phase 0 (Planning & Documentation)**. In this phase, we establish compliance guidelines, map infrastructure configurations, and define future branding overlays. No application code, network configuration, authentication flow, or encryption routines have been modified.
+
+### Project Goals & Scope
+* **Dedicated Relay**: Anchor connections to Vestra-managed servers for improved connection routing, control, and privacy.
+* **Custom Branding**: Streamline the client interface, customize logos and icons, and target connection configurations for zero-configuration startup.
+* **Portal Integration**: Link remote support sessions to the Vestra Core API, Admin Portal, and support ticket dashboard.
+* **Maintain Compatibility**: Restrict all customizations to branding and configurations, maintaining complete compatibility with the upstream RustDesk code.
+
+### Source Disclosure & Compliance
+As part of our commitment to open-source software and in compliance with the **GNU Affero General Public License (AGPL-3.0)**, we make the source code of Vestra Support publicly available. The code in this repository represents the source of truth for Vestra's downstream builds.
+
+For detailed architecture, configuration, branding, and compliance documentation, see:
+* [Vestra Support Overview](docs/VESTRA-SUPPORT.md)
+* [Development Roadmap](docs/ROADMAP.md)
+* [Relay Infrastructure Setup](docs/RELAY-INFRASTRUCTURE.md)
+* [Branding & Customization Guide](docs/BRANDING-GUIDE.md)
+* [Compliance & Licensing Guidelines](docs/COMPLIANCE.md)
+* [Release Philosophy](docs/RELEASE-PHILOSOPHY.md)
+* [High-Level Architecture](docs/ARCHITECTURE.md)
+* [Project Backlog Tasks](docs/PROJECT-BACKLOG.md)
+
+---
+
 > [!Caution]
 > **Misuse Disclaimer:** <br>
 > The developers of RustDesk do not condone or support any unethical or illegal use of this software. Misuse, such as unauthorized access, control or invasion of privacy, is strictly against our guidelines. The authors are not responsible for any misuse of the application.
