@@ -51,6 +51,7 @@ fn check_desktop_manager() {
 pub fn start_xdesktop() {
     debug_assert!(crate::is_server());
     std::thread::spawn(|| {
+        DesktopManager::recover_orphaned_session();
         *DESKTOP_MANAGER.lock().unwrap() = Some(DesktopManager::new());
 
         let interval = time::Duration::from_millis(super::SERVICE_INTERVAL);
@@ -462,9 +463,10 @@ impl DesktopManager {
         let (child_xorg, child_wm) = Self::start_x11(uid, gid, username, display_num, &envs)?;
         is_child_running.store(true, Ordering::SeqCst);
 
-        // capture the logind session scope (from a live child) for teardown, see
-        // reap_session_scope.
+        // capture the logind session scope (from a live child) for teardown and crash
+        // recovery, see reap_session_scope and recover_orphaned_session.
         let scope_dir = Self::session_scope_dir(child_xorg.id());
+        Self::save_orphaned_marker(&scope_dir, display_num);
 
         log::info!("Start xorg and wm done, notify and wait xtop x11");
         allow_err!(tx_res.send("".to_owned()));
@@ -879,6 +881,66 @@ impl DesktopManager {
         std::io::Error::last_os_error().raw_os_error() == Some(hbb_common::libc::EPERM)
     }
 
+    const ORPHANED_SESSION_KEY: &'static str = "headless-orphaned-session";
+
+    fn save_orphaned_marker(scope_dir: &str, display_num: u32) {
+        // tag the marker with this boot's id: a logind session id is only unique within a
+        // boot (the counter lives in /run and resets), so recovery must not reap a recorded
+        // scope path after a reboot, when it may name a different live session.
+        let boot_id = Self::current_boot_id().unwrap_or_default();
+        hbb_common::config::LocalConfig::set_option(
+            Self::ORPHANED_SESSION_KEY.to_owned(),
+            format!("{};{};{}", scope_dir, display_num, boot_id),
+        );
+    }
+
+    fn current_boot_id() -> Option<String> {
+        std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+            .ok()
+            .map(|s| s.trim().to_owned())
+    }
+
+    fn clear_orphaned_marker() {
+        hbb_common::config::LocalConfig::set_option(
+            Self::ORPHANED_SESSION_KEY.to_owned(),
+            String::new(),
+        );
+    }
+
+    fn parse_orphaned_marker(marker: &str) -> Option<(&str, u32, &str)> {
+        let (rest, boot_id) = marker.rsplit_once(';')?;
+        let (scope_dir, display) = rest.rsplit_once(';')?;
+        Some((scope_dir, display.trim().parse::<u32>().ok()?, boot_id))
+    }
+
+    // a run that dies before wait_stop_x11 (service or --server crash) leaks the headless
+    // session scope + X lock files, the same as a missed teardown (rustdesk/rustdesk#15183).
+    // reap exactly what the dead run recorded - never a scan, so unrelated sessions are safe.
+    fn recover_orphaned_session() {
+        let marker = hbb_common::config::LocalConfig::get_option(Self::ORPHANED_SESSION_KEY);
+        if marker.is_empty() {
+            return;
+        }
+        if let Some((scope_dir, display_num, boot_id)) = Self::parse_orphaned_marker(&marker) {
+            // only reap the recorded scope when the marker is from this same boot: a leaked
+            // cgroup cannot outlive a reboot, so cross-boot there is nothing legitimate to
+            // reap, and the recorded "session-N.scope" may by then name a different live
+            // session. the X lock cleanup is pid-guarded, so run it either way.
+            let same_boot = Self::current_boot_id().map_or(false, |b| b == boot_id);
+            log::info!(
+                "Recovering leaked headless session from a previous run: scope {}, display {} (same boot: {})",
+                scope_dir,
+                display_num,
+                same_boot
+            );
+            if same_boot {
+                Self::reap_session_scope(scope_dir);
+            }
+            Self::cleanup_x_display_files(display_num);
+        }
+        Self::clear_orphaned_marker();
+    }
+
     fn try_wait_stop_x11(
         child_xorg: &mut Child,
         child_wm: &mut Child,
@@ -898,6 +960,7 @@ impl DesktopManager {
                 Self::wait_x11_children_exit(child_xorg, child_wm);
                 Self::reap_session_scope(scope_dir);
                 Self::cleanup_x_display_files(display_num);
+                Self::clear_orphaned_marker();
                 desktop_manager
                     .is_child_running
                     .store(false, Ordering::SeqCst);
@@ -1081,5 +1144,28 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
 
         assert_eq!(pids, vec![100, 101, 200, 300]);
+    }
+
+    #[test]
+    fn parses_orphaned_session_marker() {
+        assert_eq!(
+            DesktopManager::parse_orphaned_marker(
+                "/sys/fs/cgroup/user.slice/user-1000.slice/session-3.scope;7;abc-123"
+            ),
+            Some((
+                "/sys/fs/cgroup/user.slice/user-1000.slice/session-3.scope",
+                7,
+                "abc-123"
+            ))
+        );
+        // an empty scope still carries the display so its stale X lock can be cleaned
+        assert_eq!(DesktopManager::parse_orphaned_marker(";5;abc-123"), Some(("", 5, "abc-123")));
+        // an empty boot id never matches the live one, so the scope reap is skipped
+        assert_eq!(DesktopManager::parse_orphaned_marker("/scope;5;"), Some(("/scope", 5, "")));
+        assert_eq!(DesktopManager::parse_orphaned_marker(""), None);
+        assert_eq!(DesktopManager::parse_orphaned_marker("garbage"), None);
+        // the pre-boot-id two-field format no longer parses, recovery just skips it
+        assert_eq!(DesktopManager::parse_orphaned_marker("/scope;7"), None);
+        assert_eq!(DesktopManager::parse_orphaned_marker("/scope;notnum;abc"), None);
     }
 }
