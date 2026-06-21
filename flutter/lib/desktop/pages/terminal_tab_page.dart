@@ -437,18 +437,16 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
             HardwareKeyboard.instance.isMetaPressed &&
             !HardwareKeyboard.instance.isShiftPressed) {
           // macOS: Cmd+W (standard for close tab)
-          final currentTab = tabController.state.value.selectedTabInfo;
           if (tabController.state.value.tabs.length > 1) {
-            _closeTab(currentTab.key);
+            _closeTab(tabController.state.value.selectedTabInfo.key);
             return true;
           }
         } else if (!isMacOS &&
             HardwareKeyboard.instance.isControlPressed &&
             HardwareKeyboard.instance.isShiftPressed) {
           // Other platforms: Ctrl+Shift+W (to avoid conflict with Ctrl+W word delete)
-          final currentTab = tabController.state.value.selectedTabInfo;
           if (tabController.state.value.tabs.length > 1) {
-            _closeTab(currentTab.key);
+            _closeTab(tabController.state.value.selectedTabInfo.key);
             return true;
           }
         }
@@ -501,13 +499,18 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   }
 
   void _addNewTerminal(String peerId, {int? terminalId}) {
-    // Find first tab for this peer to get connection parameters
-    final firstTab = tabController.state.value.tabs.firstWhere(
-      (tab) {
-        final last = tab.key.lastIndexOf('_');
-        return last > 0 && tab.key.substring(0, last) == peerId;
-      },
-    );
+    // Find first tab for this peer to get connection parameters. Use a nullable
+    // lookup (not firstWhere, which throws StateError) since the seed tab may
+    // have been closed while a restore loop was awaiting between iterations.
+    TabInfo? firstTab;
+    for (final tab in tabController.state.value.tabs) {
+      final last = tab.key.lastIndexOf('_');
+      if (last > 0 && tab.key.substring(0, last) == peerId) {
+        firstTab = tab;
+        break;
+      }
+    }
+    if (firstTab == null) return;
     if (firstTab.page is TerminalPage) {
       final page = firstTab.page as TerminalPage;
       final newTerminalId = terminalId ?? _nextTerminalId++;
@@ -526,6 +529,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   }
 
   void _addNewTerminalForCurrentPeer({int? terminalId}) {
+    if (tabController.state.value.tabs.isEmpty) return;
     final currentTab = tabController.state.value.selectedTabInfo;
     final parsed = _parseTabKey(currentTab.key);
     if (parsed == null) return;

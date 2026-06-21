@@ -75,6 +75,9 @@ class _TerminalPageState extends State<TerminalPage>
         '[TerminalPage] Terminal model created for terminal ${widget.terminalId}');
 
     _terminalModel.onResizeExternal = (w, h, pw, ph) {
+      // A resize can still fire while the page is tearing down; bail before
+      // touching the (possibly disposed) focus node.
+      if (!mounted) return;
       _cellHeight = ph * 1.0;
 
       // Enable focus once terminal has valid dimensions (first valid resize)
@@ -121,8 +124,10 @@ class _TerminalPageState extends State<TerminalPage>
   void dispose() {
     // Cancel tab state subscription to prevent memory leak
     _tabStateSubscription?.cancel();
+    // Drop the resize callback before disposing the focus node it touches.
+    _terminalModel.onResizeExternal = null;
     // Unregister terminal model from FFI
-    _ffi.unregisterTerminalModel(widget.terminalId);
+    _ffi.unregisterTerminalModel(widget.terminalId, _terminalModel);
     _terminalModel.dispose();
     _terminalFocusNode.dispose();
     // Release connection reference instead of closing directly

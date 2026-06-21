@@ -446,6 +446,7 @@ class RemoteToolbar extends StatefulWidget {
   final Function(int, Function(bool)) onEnterOrLeaveImageSetter;
   final Function(int) onEnterOrLeaveImageCleaner;
   final Function(VoidCallback) setRemoteState;
+  final VoidCallback? onToggleInlineTerminal;
 
   RemoteToolbar({
     Key? key,
@@ -455,6 +456,7 @@ class RemoteToolbar extends StatefulWidget {
     required this.onEnterOrLeaveImageSetter,
     required this.onEnterOrLeaveImageCleaner,
     required this.setRemoteState,
+    this.onToggleInlineTerminal,
   }) : super(key: key);
 
   @override
@@ -838,6 +840,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
     toolbarItems
         .add(_ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
+    toolbarItems.add(_InlineTerminalButton(
+      id: widget.id,
+      ffi: widget.ffi,
+      onToggle: widget.onToggleInlineTerminal,
+    ));
     toolbarItems.add(_DisplayMenu(
       id: widget.id,
       ffi: widget.ffi,
@@ -1328,6 +1335,38 @@ class _ControlMenu extends StatelessWidget {
                     trailingIcon: e.trailingIcon);
               }
             }).toList());
+  }
+}
+
+class _InlineTerminalButton extends StatelessWidget {
+  final String id;
+  final FFI ffi;
+  final VoidCallback? onToggle;
+
+  const _InlineTerminalButton({
+    Key? key,
+    required this.id,
+    required this.ffi,
+    this.onToggle,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return _IconSubmenuButton(
+        tooltip: '${translate('Terminal')} (inline)',
+        svg: "assets/terminal.svg",
+        color: _ToolbarTheme.blueColor,
+        hoverColor: _ToolbarTheme.hoverBlueColor,
+        ffi: ffi,
+        menuChildrenGetter: (_) => [
+              MenuButton(
+                child: Text('${translate('Terminal')} (inline)'),
+                onPressed: () {
+                  onToggle?.call();
+                },
+                ffi: ffi,
+              ),
+            ]);
   }
 }
 

@@ -22,6 +22,7 @@ import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
+import 'inline_terminal_panel.dart';
 
 import 'package:flutter_hbb/native/custom_cursor.dart'
     if (dart.library.html) 'package:flutter_hbb/web/custom_cursor.dart';
@@ -104,6 +105,9 @@ class _RemotePageState extends State<RemotePage>
   Worker? _waylandKeyboardModeWorker;
   bool _waylandKeyboardModeNormalized = false;
   bool _waylandKeyboardModeNormalizing = false;
+
+  // Inline terminal panel state
+  bool _showInlineTerminal = false;
 
   SessionID get sessionId => _ffi.sessionId;
 
@@ -392,6 +396,43 @@ class _RemotePageState extends State<RemotePage>
     removeSharedStates(widget.id);
   }
 
+  /// Toggle the inline terminal panel visibility
+  void toggleInlineTerminal() {
+    setState(() {
+      _showInlineTerminal = !_showInlineTerminal;
+    });
+  }
+
+  /// Build split view with remote desktop on top and terminal on bottom
+  Widget _buildSplitView(BuildContext context, Widget remoteBody) {
+    return Column(
+      children: [
+        // Remote desktop view (takes remaining space)
+        Expanded(
+          flex: 3,
+          child: remoteBody,
+        ),
+        // Terminal panel (bottom 40% of screen)
+        Expanded(
+          flex: 2,
+          child: InlineTerminalPanel(
+            peerId: widget.id,
+            password: widget.password,
+            isSharedPassword: widget.isSharedPassword,
+            forceRelay: widget.forceRelay,
+            // Closing the last tab collapses the split view instead of leaving
+            // an empty panel.
+            onClose: () {
+              if (_showInlineTerminal) {
+                setState(() => _showInlineTerminal = false);
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget emptyOverlay() => BlockableOverlay(
         /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
         /// see override build() in [BlockableOverlay]
@@ -419,6 +460,7 @@ class _RemotePageState extends State<RemotePage>
             }
           },
           setRemoteState: setState,
+          onToggleInlineTerminal: toggleInlineTerminal,
         );
 
     bodyWidget() {
@@ -506,7 +548,9 @@ class _RemotePageState extends State<RemotePage>
           }
           // Block the whole `bodyWidget()` when dialog shows.
           return BlockableOverlay(
-            underlying: bodyWidget(),
+            underlying: _showInlineTerminal
+                ? _buildSplitView(context, bodyWidget())
+                : bodyWidget(),
             state: _blockableOverlayState,
           );
         } else {

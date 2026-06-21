@@ -24,6 +24,7 @@ import '../../models/platform_model.dart';
 import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
+import '../../desktop/pages/inline_terminal_panel.dart';
 
 final initText = '1' * 1024;
 
@@ -74,6 +75,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
   var _showEdit = false; // use soft keyboard
+  bool _showInlineTerminal = false;
+  // Lazily mount the terminal panel on first open, then keep it alive so
+  // terminal sessions/tabs survive while the sheet is toggled.
+  bool _terminalMounted = false;
+  // Terminal sheet height as a fraction of the screen (drag handle / maximize).
+  double _terminalSheetFraction = 0.62;
+  bool _draggingSheet = false;
 
   Worker? _waylandKeyboardGateWorker;
   bool _waylandKeyboardGateInitialized = false;
@@ -242,7 +250,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (!visible) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       // [pi.version.isNotEmpty] -> check ready or not, avoid login without soft-keyboard
-      if (gFFI.chatModel.chatWindowOverlayEntry == null &&
+      // Don't re-suppress the keyboard while the inline terminal is open — it
+      // needs the soft keyboard, and re-arming FLAG_ALT_FOCUSABLE_IM here would
+      // stop the terminal from receiving input after the keyboard is dismissed.
+      if (!_showInlineTerminal &&
+          gFFI.chatModel.chatWindowOverlayEntry == null &&
           gFFI.ffiModel.pi.version.isNotEmpty) {
         gFFI.invokeMethod("enable_soft_keyboard", false);
       }
@@ -433,6 +445,189 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     });
   }
 
+  void _toggleTerminal(bool show) {
+    setState(() {
+      _showInlineTerminal = show;
+      if (show) _terminalMounted = true;
+    });
+    // Hand the keyboard to whichever surface is in front. While the terminal is
+    // open, ALLOW the soft keyboard (the desktop default blocks it via
+    // FLAG_ALT_FOCUSABLE_IM) and release the remote-desktop input focus (hidden
+    // text field + physical-key scope) so keystrokes go to the terminal. On
+    // close, restore the desktop default (keyboard suppressed) and its focus.
+    if (show) {
+      _showEdit = false;
+      gFFI.invokeMethod("enable_soft_keyboard", true);
+      _mobileFocusNode.unfocus();
+      _physicalFocusNode.unfocus();
+    } else {
+      _showEdit = false;
+      gFFI.invokeMethod("enable_soft_keyboard", false);
+      _physicalFocusNode.requestFocus();
+    }
+    _refitStream();
+  }
+
+  /// Refit the live stream to the area ABOVE the terminal sheet: tell the
+  /// canvas how much the sheet covers, then recompute the view style so the
+  /// stream fits and top-aligns to the visible region (not centered behind it).
+  void _refitStream() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        final h = MediaQuery.of(context).size.height;
+        final obstruction =
+            _showInlineTerminal ? h * _terminalSheetFraction : 0.0;
+        // Skip the FFI roundtrip when nothing changed (e.g. a no-op drag-end).
+        if (gFFI.canvasModel.bottomObstructionPx == obstruction) return;
+        gFFI.canvasModel.bottomObstructionPx = obstruction;
+        gFFI.canvasModel.updateViewStyle();
+      } catch (_) {}
+    });
+  }
+
+  /// A clean slide-up terminal sheet over the live stream. Drag the handle to
+  /// resize, tap maximize to expand to nearly full screen, and the scrim / ✕ /
+  /// drag-down-to-dismiss to close. Kept alive once mounted so sessions survive.
+  // Sheet height capped to the space actually on screen: when the keyboard is
+  // up the Scaffold body shrinks, so a full-height sheet would push its tab bar
+  // and top rows off the top. Clamping keeps everything visible above the
+  // keyboard (matters most when maximized).
+  double _effectiveSheetHeight(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final available = mq.size.height - mq.viewInsets.bottom;
+    return (mq.size.height * _terminalSheetFraction)
+        .clamp(0.0, available)
+        .toDouble();
+  }
+
+  Widget _buildTerminalSheet(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final sheetHeight = _effectiveSheetHeight(context);
+    final shown = _showInlineTerminal;
+    return Stack(
+      children: [
+        if (shown)
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => _toggleTerminal(false),
+              child: Container(color: Colors.black38),
+            ),
+          ),
+        AnimatedPositioned(
+          duration: _draggingSheet
+              ? Duration.zero
+              : const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          left: 0,
+          right: 0,
+          height: sheetHeight,
+          bottom: shown ? 0 : -(sheetHeight + 48),
+          child: Material(
+            color: const Color(0xFF1E1E1E),
+            elevation: 12,
+            // Keep the header and terminal clear of the status bar / gesture
+            // nav bar so every edge stays tappable. The top inset only matters
+            // when maximized (sheet reaches the status bar); a partial sheet
+            // sits mid-screen and needs no top padding.
+            child: SafeArea(
+              top: _terminalSheetFraction >= 0.88,
+              bottom: true,
+              child: Column(
+                children: [
+                  _buildTerminalSheetHeader(size.height),
+                  Expanded(
+                    // Pause the panel's tickers (cursor blink) while the sheet
+                    // is hidden — sessions stay alive, just no wasted repaints.
+                    child: TickerMode(
+                      enabled: _showInlineTerminal || _draggingSheet,
+                      child: InlineTerminalPanel(
+                        peerId: widget.id,
+                        password: widget.password,
+                        isSharedPassword: widget.isSharedPassword,
+                        forceRelay: widget.forceRelay,
+                        // Closing the last tab closes the terminal UI and
+                        // unmounts the panel, so reopening starts a fresh
+                        // session instead of a silent replacement tab.
+                        onClose: () {
+                          _toggleTerminal(false);
+                          setState(() => _terminalMounted = false);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTerminalSheetHeader(double screenH) {
+    final isMax = _terminalSheetFraction >= 0.88;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) => setState(() => _draggingSheet = true),
+      onVerticalDragUpdate: (d) {
+        setState(() {
+          _terminalSheetFraction =
+              (_terminalSheetFraction - d.delta.dy / screenH).clamp(0.12, 0.95);
+        });
+      },
+      onVerticalDragEnd: (DragEndDetails d) {
+        setState(() => _draggingSheet = false);
+        // Close ONLY on a clear downward fling; a slow drag just resizes the
+        // sheet (use the ✕ to close explicitly).
+        if ((d.primaryVelocity ?? 0) > 700 && _terminalSheetFraction <= 0.3) {
+          _terminalSheetFraction = 0.62;
+          _toggleTerminal(false);
+        }
+        _refitStream();
+      },
+      child: Container(
+        height: 36,
+        color: const Color(0xFF2D2D2D),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          children: [
+            IconButton(
+              icon: Icon(isMax ? Icons.fullscreen_exit : Icons.fullscreen,
+                  size: 18, color: Colors.grey.shade300),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              tooltip: isMax ? translate('Restore') : translate('Maximize'),
+              onPressed: () {
+                setState(() => _terminalSheetFraction = isMax ? 0.62 : 0.95);
+                _refitStream();
+              },
+            ),
+            Expanded(
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade600,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.close, size: 18, color: Colors.grey.shade300),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              tooltip: translate('Close'),
+              onPressed: () => _toggleTerminal(false),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _bottomWidget() => _showGestureHelp
       ? getGestureHelp()
       : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
@@ -500,7 +695,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             () => getRawPointerAndKeyBody(Overlay(
               initialEntries: [
                 OverlayEntry(builder: (context) {
-                  return Container(
+                  final remoteView = Container(
                     color: kColorCanvas,
                     child: isWebDesktop
                         ? getBodyForDesktopWithListener()
@@ -527,6 +722,28 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                             }),
                           ),
                   );
+                  // Keep the original full-screen render path when the
+                  // terminal isn't mounted (no regression to the live stream).
+                  if (!_terminalMounted) return remoteView;
+                  // When the terminal is up, shrink the stream into the visible
+                  // area ABOVE the sheet so it fits there instead of being
+                  // covered (the canvas refits via updateViewStyle on toggle).
+                  return Stack(
+                    children: [
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        // Keep the stream's bottom aligned with the (keyboard-
+                        // capped) sheet top so they don't diverge.
+                        bottom: _showInlineTerminal
+                            ? _effectiveSheetHeight(context)
+                            : 0,
+                        child: remoteView,
+                      ),
+                      _buildTerminalSheet(context),
+                    ],
+                  );
                 })
               ],
             )),
@@ -541,7 +758,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       inputModel: inputModel,
       // Disable RawKeyFocusScope before the connecting is established.
       // The "Delete" key on the soft keyboard may be grabbed when inputting the password dialog.
-      child: gFFI.ffiModel.pi.isSet.isTrue
+      // Also disable it while the inline terminal is open so physical keys reach
+      // the terminal instead of being routed to the remote desktop.
+      child: gFFI.ffiModel.pi.isSet.isTrue && !_showInlineTerminal
           ? RawKeyFocusScope(
               focusNode: _physicalFocusNode,
               inputModel: inputModel,
@@ -554,7 +773,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
       elevation: 10,
-      color: MyTheme.accent,
+      color: _showInlineTerminal ? const Color(0xFF2D2D2D) : MyTheme.accent,
       child: Row(
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -575,7 +794,28 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         setState(() => _showEdit = false);
                         showOptions(context, widget.id, gFFI.dialogManager);
                       },
-                    )
+                    ),
+                    // Terminal toggle - visually distinct when active
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: _showInlineTerminal
+                            ? MyTheme.accent.withOpacity(0.3)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        color: _showInlineTerminal
+                            ? MyTheme.accent
+                            : Colors.white,
+                        icon: const Icon(Icons.terminal),
+                        tooltip: _showInlineTerminal
+                            ? translate('Close')
+                            : translate('Terminal'),
+                        onPressed: () =>
+                            _toggleTerminal(!_showInlineTerminal),
+                      ),
+                    ),
                   ] +
                   (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
                       ? []

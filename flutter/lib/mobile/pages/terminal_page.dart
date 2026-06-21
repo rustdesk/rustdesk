@@ -102,7 +102,7 @@ class _TerminalPageState extends State<TerminalPage>
   @override
   void dispose() {
     // Unregister terminal model from FFI
-    _ffi.unregisterTerminalModel(widget.terminalId);
+    _ffi.unregisterTerminalModel(widget.terminalId, _terminalModel);
     _terminalModel.dispose();
     _keyboardDebounce?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -116,6 +116,7 @@ class _TerminalPageState extends State<TerminalPage>
 
     _keyboardDebounce?.cancel();
     _keyboardDebounce = Timer(const Duration(milliseconds: 20), () {
+      if (!mounted) return;
       final bottomInset = MediaQuery.of(context).viewInsets.bottom;
       setState(() {
         _sysKeyboardHeight = bottomInset;
@@ -131,14 +132,28 @@ class _TerminalPageState extends State<TerminalPage>
   }
 
   EdgeInsets _calculatePadding(double heightPx) {
-    if (_cellHeight == null) {
-      return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+    const defaultPadding = EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+    final cellHeight = _cellHeight;
+    // Guard against NaN/zero/negative inputs (e.g. a tall keyboard in landscape
+    // makes realHeight <= 0); mirrors the hardened desktop version.
+    if (!heightPx.isFinite ||
+        heightPx <= 0 ||
+        cellHeight == null ||
+        !cellHeight.isFinite ||
+        cellHeight <= 0) {
+      return defaultPadding;
     }
     final realHeight = heightPx - _sysKeyboardHeight - _keyboardHeight;
-    final rows = (realHeight / _cellHeight!).floor();
-    final extraSpace = realHeight - rows * _cellHeight!;
-    final topBottom = max(0.0, extraSpace / 2.0);
-    return EdgeInsets.only(left: 5.0, right: 5.0, top: topBottom, bottom: topBottom + _sysKeyboardHeight + _keyboardHeight);
+    if (!realHeight.isFinite) return defaultPadding;
+    final rows = (realHeight / cellHeight).floor();
+    if (rows <= 0) return defaultPadding;
+    final extraSpace = realHeight - rows * cellHeight;
+    final topBottom = extraSpace.isFinite ? max(0.0, extraSpace / 2.0) : 0.0;
+    return EdgeInsets.only(
+        left: 5.0,
+        right: 5.0,
+        top: topBottom,
+        bottom: topBottom + _sysKeyboardHeight + _keyboardHeight);
   }
 
   @override

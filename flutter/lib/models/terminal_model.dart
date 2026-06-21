@@ -37,6 +37,13 @@ class TerminalModel with ChangeNotifier {
   bool _suppressNextTerminalDataOutput = false;
 
   void Function(int w, int h, int pw, int ph)? onResizeExternal;
+  // Fired with the server's surviving persistent terminal session ids (those
+  // not already open locally), so an embedder can offer to reattach to them.
+  void Function(List<int> persistentSessions)? onPersistentSessions;
+  // Optional transform applied to keyboard input from the terminal view before
+  // it is sent — lets an embedder implement sticky modifiers (e.g. a Ctrl/Alt
+  // accessory bar) that combine with the next system-keyboard key.
+  String Function(String data)? inputTransform;
 
   Future<void> _handleInput(String data) async {
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
@@ -77,7 +84,8 @@ class TerminalModel with ChangeNotifier {
     // Setup terminal callbacks
     terminal.onOutput = (data) {
       if (_suppressTerminalOutput) return;
-      _handleInput(data);
+      final t = inputTransform;
+      _handleInput(t != null ? t(data) : data);
     };
 
     terminal.onResize = (w, h, pw, ph) async {
@@ -169,12 +177,17 @@ class TerminalModel with ChangeNotifier {
     }
   }
 
+  // NOTE: this bypasses terminal.onOutput, so [inputTransform] is NOT applied
+  // here — callers (e.g. an accessory key bar) must apply their own modifiers
+  // before calling, otherwise a sticky modifier would be applied twice.
   Future<void> sendVirtualKey(String data) async {
     return _handleInput(data);
   }
 
-  Future<void> closeTerminal() async {
-    if (_terminalOpened) {
+  Future<void> closeTerminal({bool force = false}) async {
+    // force lets us reap a session that never finished opening (e.g. a hung
+    // corpse restored from a previous run), which would otherwise be unclosable.
+    if (_terminalOpened || force) {
       try {
         await bind
             .sessionCloseTerminal(
@@ -194,7 +207,8 @@ class TerminalModel with ChangeNotifier {
         // Continue with cleanup even if close fails
       }
       _terminalOpened = false;
-      notifyListeners();
+      // The widget may have been disposed during the await above.
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -248,6 +262,10 @@ class TerminalModel with ChangeNotifier {
   }
 
   void handleTerminalResponse(Map<String, dynamic> evt) {
+    // A terminal_response can still arrive (and be routed here) between this
+    // model being disposed and its widget tearing down; ignore it so we never
+    // notifyListeners() on a disposed ChangeNotifier.
+    if (_disposed) return;
     final String? type = evt['type'];
     final int evtTerminalId = getTerminalIdFromEvt(evt);
 
@@ -301,12 +319,13 @@ class TerminalModel with ChangeNotifier {
         _scheduleMarkViewReady();
       }
 
-      // Process any buffered input
+      // Process any buffered input. These callbacks resolve on a later
+      // microtask, by which point the model may have been disposed.
       _processBufferedInputAsync().then((_) {
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }).catchError((e) {
         debugPrint('[TerminalModel] Error processing buffered input: $e');
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       });
 
       final persistentSessions =
@@ -314,6 +333,7 @@ class TerminalModel with ChangeNotifier {
               .whereType<int>()
               .where((id) => !parent.terminalModels.containsKey(id))
               .toList();
+      onPersistentSessions?.call(persistentSessions);
       if (kWindowId != null && persistentSessions.isNotEmpty) {
         DesktopMultiWindow.invokeMethod(
             kWindowId!,
@@ -472,7 +492,12 @@ class TerminalModel with ChangeNotifier {
     final int exitCode = evt['exit_code'] ?? 0;
     _writeToTerminal('\r\nTerminal closed with exit code: $exitCode\r\n');
     _terminalOpened = false;
-    notifyListeners();
+    // Surface the close to the UI (it shows a "Session closed / Restart"
+    // banner), but do NOT reap the persistent session here: a `closed` can be
+    // spurious/stale (e.g. a saturated output channel or a transient reconnect),
+    // and reaping it would permanently destroy a session the user was still
+    // using. The session is reaped only by an explicit tab close.
+    if (!_disposed) notifyListeners();
   }
 
   void _handleTerminalError(Map<String, dynamic> evt) {

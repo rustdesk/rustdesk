@@ -2254,6 +2254,11 @@ class CanvasModel with ChangeNotifier {
   static double get bottomToEdge =>
       isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.bottom : 0;
 
+  // Height (px) of a bottom overlay that covers part of the canvas on mobile
+  // (e.g. the inline terminal sheet). Subtracted from the usable height so the
+  // stream fits and top-aligns to the visible area above it.
+  double bottomObstructionPx = 0;
+
   Size getSize() {
     final mediaData = MediaQueryData.fromView(ui.window);
     final size = mediaData.size;
@@ -2267,6 +2272,7 @@ class CanvasModel with ChangeNotifier {
       // bottom overlay (e.g. key-help tools) so the canvas is not covered.
       h = h -
           mediaData.viewInsets.bottom -
+          bottomObstructionPx -
           (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
               0);
       // Orientation-specific handling:
@@ -2366,7 +2372,11 @@ class CanvasModel with ChangeNotifier {
 
   _resetCanvasOffset(int displayWidth, int displayHeight) {
     _x = (size.width - displayWidth * _scale) / 2;
-    _y = (size.height - displayHeight * _scale) / 2;
+    // Top-align when a bottom overlay (the inline terminal sheet) shrinks the
+    // canvas, so the stream sits at the top of the visible area, not centered.
+    _y = bottomObstructionPx > 0
+        ? 0
+        : (size.height - displayHeight * _scale) / 2;
     if (isMobile) {
       _moveToCenterCursor();
     }
@@ -2683,6 +2693,8 @@ class CanvasModel with ChangeNotifier {
     _x = 0;
     _y = 0;
     _scale = 1.0;
+    // Reset the terminal-sheet obstruction so it can't shrink the next session.
+    bottomObstructionPx = 0;
     _lastViewStyle = ViewStyle.defaultViewStyle();
     _timerMobileFocusCanvasCursor?.cancel();
     _timerMobileRestoreCanvasOffset?.cancel();
@@ -3981,15 +3993,26 @@ class FFI {
     return await platformFFI.invokeMethod(method, arguments);
   }
 
-  // Terminal model management
+  // Terminal model management. Models are keyed by terminal id over a single
+  // per-peer connection, so two embedders (e.g. the tabbed terminal and the
+  // inline panel) must not reuse an id; warn if a live model would be clobbered.
   void registerTerminalModel(int terminalId, TerminalModel model) {
     debugPrint('[FFI] Registering terminal model for terminal $terminalId');
+    final existing = _terminalModels[terminalId];
+    if (existing != null && !identical(existing, model)) {
+      debugPrint(
+          '[FFI] WARNING: terminal id $terminalId already registered to a different model; overwriting');
+    }
     _terminalModels[terminalId] = model;
   }
 
-  void unregisterTerminalModel(int terminalId) {
+  // Identity-checked so a late-disposing page can't remove a replacement model
+  // that re-registered under the same id (which would silently drop its events).
+  void unregisterTerminalModel(int terminalId, TerminalModel model) {
     debugPrint('[FFI] Unregistering terminal model for terminal $terminalId');
-    _terminalModels.remove(terminalId);
+    if (identical(_terminalModels[terminalId], model)) {
+      _terminalModels.remove(terminalId);
+    }
   }
 
   void routeTerminalResponse(Map<String, dynamic> evt) {
@@ -3999,6 +4022,8 @@ class FFI {
     final model = _terminalModels[terminalId];
     if (model != null) {
       model.handleTerminalResponse(evt);
+    } else {
+      debugPrint('[FFI] No terminal model registered for terminal $terminalId; dropping event');
     }
   }
 }
