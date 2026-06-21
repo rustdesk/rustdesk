@@ -47,6 +47,18 @@ class _TerminalPageState extends State<TerminalPage>
   static const EdgeInsets _defaultTerminalPadding =
       EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
 
+  static const TerminalStyle _terminalStyle = TerminalStyle(
+    fontSize: 14,
+    fontFamily: 'JetBrainsMono Nerd Font',
+    fontFamilyFallback: [
+      'Cascadia Code',
+      'Fira Code',
+      'Menlo',
+      'Consolas',
+      'monospace',
+    ],
+  );
+
   late FFI _ffi;
   late TerminalModel _terminalModel;
   double? _cellHeight;
@@ -199,6 +211,7 @@ class _TerminalPageState extends State<TerminalPage>
             _terminalModel.terminal,
             controller: _terminalModel.terminalController,
             focusNode: _terminalFocusNode,
+            textStyle: _terminalStyle,
             // Note: autofocus is not used here because focus is managed manually
             // via _onTabStateChanged() to handle tab switching properly.
             backgroundOpacity: 0.7,

@@ -98,8 +98,18 @@ class _InlineTerminalPanelState extends State<InlineTerminalPanel> {
 
   // Slightly larger than xterm's default (13) with comfortable line height for
   // legibility on a phone-sized split view.
-  static const TerminalStyle _textStyle =
-      TerminalStyle(fontSize: 14, height: 1.3);
+  static const TerminalStyle _textStyle = TerminalStyle(
+    fontSize: 14,
+    height: 1.3,
+    fontFamily: 'JetBrainsMono Nerd Font',
+    fontFamilyFallback: [
+      'Cascadia Code',
+      'Fira Code',
+      'Menlo',
+      'Consolas',
+      'monospace',
+    ],
+  );
 
   // Show the on-screen special-keys bar (Esc/Ctrl/Alt/arrows/…). Honours the
   // same option as the stock mobile terminal (default on).

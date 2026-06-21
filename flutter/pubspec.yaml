@@ -172,6 +172,9 @@ flutter:
     - family: More
       fonts:
         - asset: assets/more.ttf
+    - family: JetBrainsMono Nerd Font
+      fonts:
+        - asset: assets/JetBrainsMonoNerdFont-Regular.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
