@@ -598,22 +598,6 @@ class MyTheme {
     }
   }
 
-  /// Applies [fallbacks] as fontFamilyFallback to every text style in both
-  /// themes. Called once at startup on ARM64 Linux after a CJK font has been
-  /// loaded via FontLoader (see flutter/flutter#139293).
-  static void applyFontFallback(List<String> fallbacks) {
-    lightTheme = lightTheme.copyWith(
-      textTheme: lightTheme.textTheme.apply(fontFamilyFallback: fallbacks),
-      primaryTextTheme:
-          lightTheme.primaryTextTheme.apply(fontFamilyFallback: fallbacks),
-    );
-    darkTheme = darkTheme.copyWith(
-      textTheme: darkTheme.textTheme.apply(fontFamilyFallback: fallbacks),
-      primaryTextTheme:
-          darkTheme.primaryTextTheme.apply(fontFamilyFallback: fallbacks),
-    );
-  }
-
   static ThemeMode currentThemeMode() {
     final preference = getThemeModePreference();
     if (preference == ThemeMode.system) {
