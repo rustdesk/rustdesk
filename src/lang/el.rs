@@ -761,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Switch display", "Εναλλαγή οθόνης"),
         ("Show monitor switch button on the main toolbar", "Εμφάνιση κουμπιού εναλλαγής οθόνης στην κύρια γραμμή εργαλείων"),
         ("Show on the minimized toolbar", "Εμφάνιση στην ελαχιστοποιημένη γραμμή εργαλείων"),
+        ("All monitors", "Όλες οι οθόνες"),
+        ("#{} monitor", "Οθόνη {}"),
     ].iter().cloned().collect();
 }

@@ -761,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Switch display", "Přepnout obrazovku"),
         ("Show monitor switch button on the main toolbar", "Zobrazit tlačítko přepnutí monitoru na hlavním panelu nástrojů"),
         ("Show on the minimized toolbar", "Zobrazit na minimalizovaném panelu nástrojů"),
+        ("All monitors", "Všechny monitory"),
+        ("#{} monitor", "Monitor č. {}"),
     ].iter().cloned().collect();
 }

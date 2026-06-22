@@ -761,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Switch display", "Ndërro ekranin"),
         ("Show monitor switch button on the main toolbar", "Shfaq butonin e ndërrimit të monitorit te shiriti kryesor i veglave"),
         ("Show on the minimized toolbar", "Shfaq te shiriti i minimizuar i veglave"),
+        ("All monitors", "Të gjithë monitorët"),
+        ("#{} monitor", "Monitori {}"),
     ].iter().cloned().collect();
 }

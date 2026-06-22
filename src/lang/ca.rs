@@ -761,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Switch display", "Canvia de pantalla"),
         ("Show monitor switch button on the main toolbar", "Mostra el botó de canvi de monitor a la barra d’eines principal"),
         ("Show on the minimized toolbar", "Mostra a la barra d’eines minimitzada"),
+        ("All monitors", "Tots els monitors"),
+        ("#{} monitor", "Monitor {}"),
     ].iter().cloned().collect();
 }
