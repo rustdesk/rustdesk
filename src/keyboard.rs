@@ -1037,15 +1037,36 @@ fn remap_shortcut_for_peer(
         _ => return key_events,
     };
 
-    let mut key_event = KeyEvent::new();
-    key_event.mode = KeyboardMode::Legacy.into();
-    key_event.down = down;
-    key_event.set_control_key(ControlKey::Tab);
+    if down {
+        return vec![
+            legacy_control_key_event(ControlKey::Alt, false),
+            legacy_control_key_event(ControlKey::Control, true),
+            legacy_control_tab_event(true, modifiers),
+        ];
+    }
+
+    vec![
+        legacy_control_tab_event(false, modifiers),
+        legacy_control_key_event(ControlKey::Control, false),
+        legacy_control_key_event(ControlKey::Alt, false),
+    ]
+}
+
+fn legacy_control_tab_event(down: bool, modifiers: ShortcutModifierState) -> KeyEvent {
+    let mut key_event = legacy_control_key_event(ControlKey::Tab, down);
     if modifiers.shift {
         key_event.modifiers.push(ControlKey::Shift.into());
     }
     key_event.modifiers.push(ControlKey::Control.into());
-    vec![key_event]
+    key_event
+}
+
+fn legacy_control_key_event(control_key: ControlKey, down: bool) -> KeyEvent {
+    let mut key_event = KeyEvent::new();
+    key_event.mode = KeyboardMode::Legacy.into();
+    key_event.down = down;
+    key_event.set_control_key(control_key);
+    key_event
 }
 
 pub fn send_key_event(key_event: &KeyEvent) {
@@ -1738,6 +1759,57 @@ mod tests {
         key_event.modifiers.iter().map(|key| key.value()).collect()
     }
 
+    fn assert_legacy_control_key_event(key_event: &KeyEvent, control_key: ControlKey, down: bool) {
+        assert!(crate::is_control_key(key_event, &control_key));
+        assert_eq!(key_event.down, down);
+        assert_eq!(key_event.mode.enum_value(), Ok(KeyboardMode::Legacy));
+    }
+
+    #[test]
+    fn remaps_windows_alt_tab_to_complete_control_tab_tap_for_macos_peer() {
+        let tab_down = remap_shortcut_for_peer(
+            OS_LOWER_MACOS,
+            &tab_event(true),
+            vec![key_event_with_control_key(ControlKey::Tab, true)],
+            ShortcutModifierState {
+                alt: true,
+                ctrl: false,
+                shift: false,
+                command: false,
+            },
+        );
+
+        assert_eq!(tab_down.len(), 3);
+        assert_legacy_control_key_event(&tab_down[0], ControlKey::Alt, false);
+        assert_legacy_control_key_event(&tab_down[1], ControlKey::Control, true);
+        assert_legacy_control_key_event(&tab_down[2], ControlKey::Tab, true);
+        assert_eq!(
+            modifier_values(&tab_down[2]),
+            vec![ControlKey::Control.value()]
+        );
+
+        let tab_up = remap_shortcut_for_peer(
+            OS_LOWER_MACOS,
+            &tab_event(false),
+            vec![key_event_with_control_key(ControlKey::Tab, false)],
+            ShortcutModifierState {
+                alt: true,
+                ctrl: false,
+                shift: false,
+                command: false,
+            },
+        );
+
+        assert_eq!(tab_up.len(), 3);
+        assert_legacy_control_key_event(&tab_up[0], ControlKey::Tab, false);
+        assert_eq!(
+            modifier_values(&tab_up[0]),
+            vec![ControlKey::Control.value()]
+        );
+        assert_legacy_control_key_event(&tab_up[1], ControlKey::Control, false);
+        assert_legacy_control_key_event(&tab_up[2], ControlKey::Alt, false);
+    }
+
     #[test]
     fn remaps_windows_alt_tab_to_control_tab_for_macos_peer() {
         let remapped = remap_shortcut_for_peer(
@@ -1752,12 +1824,12 @@ mod tests {
             },
         );
 
-        assert_eq!(remapped.len(), 1);
-        assert!(crate::is_control_key(&remapped[0], &ControlKey::Tab));
-        assert!(remapped[0].down);
-        assert_eq!(remapped[0].mode.enum_value(), Ok(KeyboardMode::Legacy));
+        assert_eq!(remapped.len(), 3);
+        assert_legacy_control_key_event(&remapped[0], ControlKey::Alt, false);
+        assert_legacy_control_key_event(&remapped[1], ControlKey::Control, true);
+        assert_legacy_control_key_event(&remapped[2], ControlKey::Tab, true);
         assert_eq!(
-            modifier_values(&remapped[0]),
+            modifier_values(&remapped[2]),
             vec![ControlKey::Control.value()]
         );
     }
@@ -1777,7 +1849,7 @@ mod tests {
         );
 
         assert_eq!(
-            modifier_values(&remapped[0]),
+            modifier_values(&remapped[2]),
             vec![ControlKey::Shift.value(), ControlKey::Control.value()]
         );
     }
