@@ -44,7 +44,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_change_tip", "a-z, A-Z, 0-9, -(대시) 및 _(밑줄) 문자만 허용됩니다. 첫 글자는 a-z, A-Z여야 합니다. 길이는 6에서 16 사이여야 합니다."),
         ("Website", "웹사이트"),
         ("About", "정보"),
-        ("Slogan_tip", "이 혼란스러운 세상에서 마음을 담아 만들었습니다! - 한국어 번역: 비너스걸"),
+        ("Slogan_tip", "이 혼란스러운 세상에서 마음을 담아 만들었습니다!"),
         ("Privacy Statement", "개인정보 보호정책"),
         ("Mute", "음소거"),
         ("Build Date", "빌드 날짜"),
