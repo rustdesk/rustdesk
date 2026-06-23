@@ -274,6 +274,7 @@ jobs:
 
       - name: Build msi
         run: |
+          Copy-Item ./rustdesk/rustdesk.exe ./rustdesk/${{ env.APP_NAME }}.exe
           pushd ./res/msi
           python preprocess.py --arp -d ../../rustdesk --app-name ${{ env.APP_NAME }}
           nuget restore msi.sln
@@ -283,6 +284,7 @@ jobs:
           sha256sum ../../SignOutput/${{ env.ARTIFACT_PREFIX }}-*.msi
 
       - name: Upload Windows x64 installers
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rustdesk-windows-x86_64-installers
