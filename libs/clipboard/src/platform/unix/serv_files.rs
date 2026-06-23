@@ -73,7 +73,11 @@ impl ClipFiles {
         self.files_pdu.clear();
     }
 
-    fn sync_files(&mut self, clipboard_files: &[String]) -> Result<(), CliprdrError> {
+    fn sync_files(
+        &mut self,
+        clipboard_files: &[String],
+        sigs: Vec<FileSig>,
+    ) -> Result<(), CliprdrError> {
         let clipboard_paths = clipboard_files
             .iter()
             .map(|s| PathBuf::from(s))
@@ -85,7 +89,7 @@ impl ClipFiles {
             .position(|f| !f.path.is_dir())
             .unwrap_or(usize::MAX);
         self.files = clipboard_files.to_vec();
-        self.sigs = fingerprint(clipboard_files);
+        self.sigs = sigs;
         Ok(())
     }
 
@@ -296,7 +300,7 @@ pub fn sync_files(files: &[String]) -> Result<(), CliprdrError> {
     {
         return Ok(());
     }
-    files_lock.sync_files(files)?;
+    files_lock.sync_files(files, current)?;
     Ok(files_lock.build_file_list_pdu())
 }
 
