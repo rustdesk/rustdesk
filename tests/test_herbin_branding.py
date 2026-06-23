@@ -39,6 +39,7 @@ def main() -> None:
         assert 'APP_NAME: "RustDesk-Herbin"' in workflow
         assert 'ARTIFACT_PREFIX: "rustdesk-herbin"' in workflow
         assert "--app-name ${{ env.APP_NAME }}" in workflow
+        assert "Copy-Item ./rustdesk/rustdesk.exe ./rustdesk/${{ env.APP_NAME }}.exe" in workflow
         assert "${{ env.ARTIFACT_PREFIX }}-${{ env.VERSION }}-x86_64.exe" in workflow
         assert "${{ env.ARTIFACT_PREFIX }}-${{ env.VERSION }}-x86_64.msi" in workflow
 
