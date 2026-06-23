@@ -3113,11 +3113,7 @@ pub fn get_unicode_from_vk(vk: u32) -> Option<u16> {
 }
 
 pub fn is_process_consent_running() -> ResultType<bool> {
-    let output = std::process::Command::new("cmd")
-        .args(&["/C", "tasklist | findstr consent.exe"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()?;
-    Ok(output.status.success() && !output.stdout.is_empty())
+    Ok(!get_pids("consent.exe")?.is_empty())
 }
 
 pub struct WakeLock(u32);
