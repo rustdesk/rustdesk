@@ -7,6 +7,7 @@ use librustdesk::*;
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 fn main() {
+    common::apply_fork_identity();
     if !common::global_init() {
         eprintln!("Global initialization failed.");
         return;
@@ -23,6 +24,7 @@ fn main() {
     feature = "flutter"
 )))]
 fn main() {
+    common::apply_fork_identity();
     #[cfg(all(windows, not(feature = "inline")))]
     unsafe {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
@@ -35,6 +37,7 @@ fn main() {
 
 #[cfg(feature = "cli")]
 fn main() {
+    common::apply_fork_identity();
     if !common::global_init() {
         return;
     }

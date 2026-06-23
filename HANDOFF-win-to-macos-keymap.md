@@ -23,6 +23,12 @@ The preferred direction is to implement a small, peer-aware mapping layer inside
 - Baseline commit: `456817b4f42114be5025263a7241dddb7470d479`
 - Submodule:
   - `libs/hbb_common` at `387603f47cbb15c0d3dc3d67ae3396d3eb707daf`
+- Fork product identity:
+  - App name: `RustDesk-Herbin`
+  - Namespace keyword: `herbin`
+  - Bundle identifier: `com.herbin.rustdesk`
+  - Windows installer/artifact prefix: `rustdesk-herbin`
+  - Config namespace is intentionally separate from upstream RustDesk because config paths are derived from `APP_NAME`.
 
 ## Relevant Files
 
@@ -84,6 +90,7 @@ Optional later target:
 - Do not implement a broad keyboard-layout compatibility layer.
 - Do not modify server-side macOS injection unless the control-side approach cannot meet the acceptance criteria.
 - Do not change default behavior for Windows-to-Windows, Windows-to-Linux, macOS-to-macOS, mobile, or web sessions.
+- Do not share the upstream RustDesk install identity or user configuration namespace in the installable fork.
 
 ## Recommended Design
 

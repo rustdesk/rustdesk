@@ -1005,6 +1005,16 @@ pub fn get_app_name() -> String {
     hbb_common::config::APP_NAME.read().unwrap().clone()
 }
 
+pub const FORK_APP_NAME: &str = "RustDesk-Herbin";
+
+#[inline]
+pub fn apply_fork_identity() {
+    let mut app_name = hbb_common::config::APP_NAME.write().unwrap();
+    if app_name.as_str() == "RustDesk" {
+        *app_name = FORK_APP_NAME.to_owned();
+    }
+}
+
 #[inline]
 pub fn is_rustdesk() -> bool {
     hbb_common::config::APP_NAME.read().unwrap().eq("RustDesk")
