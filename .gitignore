@@ -6,6 +6,9 @@
 .env
 libsciter-gtk.so
 src/ui/inline.rs
+edar-changeset.tar.gz
+.vs/
+libs/portable/app_metadata.toml
 extractor
 __pycache__
 src/version.rs
@@ -21,6 +24,7 @@ sciter.dll
 **pdb
 src/bridge_generated.rs
 src/bridge_generated.io.rs
+'Como Fazer Build na PowerShell.txt'
 *deb
 rustdesk
 *.cache

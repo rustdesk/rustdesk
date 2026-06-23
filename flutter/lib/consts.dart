@@ -11,6 +11,12 @@ const double kDesktopRemoteTabBarHeight = 28.0;
 const int kInvalidWindowId = -1;
 const int kMainWindowId = 0;
 
+// Visible product/brand name shown in graphical views (tab-bar brand, About card).
+// Decoupled from the internal APP_NAME token ("RemoteAccessTool"), which must stay
+// space-free because it's reused as the exe name, config dir, file association, and
+// the single-instance window title. This display string may contain spaces.
+const String kAppDisplayName = 'EDAR Remote Access Tool';
+
 const kAllDisplayValue = -1;
 
 const kKeyLegacyMode = 'legacy';

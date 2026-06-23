@@ -76,20 +76,51 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         block: _block, mask: true, use: canBeBlocked, child: child);
   }
 
+  // EDAR brand header: emblem + name, shown at the top of the left pane.
+  Widget buildBrandHeader(BuildContext context) {
+    final subColor =
+        Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.7);
+    return Container(
+      margin: const EdgeInsets.only(top: 16, bottom: 6, left: 8, right: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          loadIcon(52),
+          const SizedBox(height: 10),
+          Text(
+            'EDAR',
+            style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.5,
+                color: MyTheme.accent),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Remote Access Tool',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.5,
+                color: subColor),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
     final isOutgoingOnly = bind.isOutgoingOnly();
     final children = <Widget>[
       if (!isOutgoingOnly) buildPresetPasswordWarning(),
+      buildBrandHeader(context),
       if (bind.isCustomClient())
         Align(
           alignment: Alignment.center,
           child: loadPowered(context),
         ),
-      Align(
-        alignment: Alignment.center,
-        child: loadLogo(),
-      ),
       buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
@@ -461,14 +492,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     }
 
     if (isWindows && !bind.isDisableInstallation()) {
-      if (!bind.mainIsInstalled()) {
-        return buildInstallCard(
-            "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",
-            () async {
-          await rustDeskWinManager.closeAllSubWindows();
-          bind.mainGotoInstall();
-        });
-      } else if (bind.mainIsInstalledLowerVersion()) {
+      // EDAR: the UAC "Install to system" prompt (install_tip) was removed by request.
+      if (bind.mainIsInstalled() && bind.mainIsInstalledLowerVersion()) {
         return buildInstallCard(
             "Status", "Your installation is lower version.", "Click to upgrade",
             () async {

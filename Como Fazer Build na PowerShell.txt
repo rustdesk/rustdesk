@@ -1,0 +1,17 @@
+git switch -c edar-rebrand    | trocar de branch, se necessário.
+
+$vs2022 = & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -version "[17.0,18.0)" -products * -property installationPath    | prepara para aceder a shell do VS 2022
+
+Import-Module "$vs2022\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+
+
+Enter-VsDevShell -VsInstallPath $vs2022 -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+
+
+$env:LIBCLANG_PATH="C:\Program Files\LLVM\bin"
+
+$env:VCPKG_ROOT="C:\dev\vcpkg"
+
+Remove-Item -Recurse -Force .\flutter\build\windows -ErrorAction SilentlyContinue   | apagar o "esterco" deixado pela ultima build neste branch.
+
+python build.py --portable --flutter --skip-portable-pack
