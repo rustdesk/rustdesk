@@ -6,6 +6,11 @@
 .env
 libsciter-gtk.so
 src/ui/inline.rs
+CLAUDE.md
+GEMINI.md
+AGENTS.md
+.gitignore
+tests/
 edar-changeset.tar.gz
 .vs/
 libs/portable/app_metadata.toml
