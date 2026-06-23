@@ -1,0 +1,9 @@
+# Implementation Notes
+
+## Windows-to-macOS shortcut remap
+
+- The implemented target is `Alt+Tab` on the Windows control side producing the same remote behavior as the current `Ctrl+Tab` workflow on the macOS peer.
+- This intentionally differs from the original handoff wording that explored `Ctrl+Tab` to `Command+Tab`; the user clarified that `Ctrl+Tab` should remain unchanged.
+- The first version is fork-local and controlled by `ENABLE_WINDOWS_TO_MACOS_ALT_TAB_REMAP`, defaulting to enabled in this fork.
+- The remap is limited to Windows builds, macOS peers, and Tab press/release events while Alt is held. It emits a legacy `ControlKey::Tab` event with `ControlKey::Control`, preserving `Shift`.
+- Local macOS test execution is blocked by missing native build dependency `libyuv` under `/opt/homebrew/Cellar/libyuv`; Windows GitHub Actions remains the authoritative build validation path for the installable artifact.
