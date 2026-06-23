@@ -29,7 +29,7 @@ sciter.dll
 **pdb
 src/bridge_generated.rs
 src/bridge_generated.io.rs
-'Como Fazer Build na PowerShell.txt'
+Como Fazer Build na PowerShell.txt
 *deb
 rustdesk
 *.cache
