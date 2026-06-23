@@ -321,7 +321,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Fullscreen", "Tela Cheia"),
         ("Mobile Actions", "Ações móveis"),
         ("Select Monitor", "Selecionar tela"),
-        ("Control Actions", "Controlar ações"),
+        ("Control Actions", "Ações de controle"),
         ("Display Settings", "Configurações de exibição"),
         ("Ratio", "Proporção"),
         ("Image Quality", "Qualidade de imagem"),
