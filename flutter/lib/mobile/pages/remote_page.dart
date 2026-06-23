@@ -550,6 +550,63 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
+  Widget buildMobileMonitorSwitchButton() {
+    return Obx(() {
+      final pi = gFFI.ffiModel.pi;
+      final total = pi.displays.length;
+
+      if (total < 2) {
+        return const Offstage();
+      }
+
+      final current = CurrentDisplayState.find(widget.id).value;
+      final inRange = current >= 0 && current < total;
+      final label = inRange ? '${current + 1}' : '*';
+      final target = ((inRange ? current : -1) + 1) % total;
+
+      return IconButton(
+        tooltip: '${translate('Switch display')} ($label/$total)',
+        color: Colors.white,
+        icon: SizedBox(
+          width: 28,
+          height: 28,
+          child: Stack(
+            alignment: const Alignment(0, -0.125),
+            children: [
+              SvgPicture.asset(
+                'assets/display_switcher.svg',
+                colorFilter: const ColorFilter.mode(
+                  Colors.white,
+                  BlendMode.srcIn,
+                ),
+                width: 28,
+                height: 28,
+              ),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 10,
+                  height: 1,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        onPressed: () {
+          openMonitorInTheSameTab(
+            target,
+            gFFI,
+            pi,
+            updateCursorPos: false,
+          );
+        },
+      );
+    });
+  }
+
   Widget getBottomAppBar() {
     final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
@@ -575,7 +632,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         setState(() => _showEdit = false);
                         showOptions(context, widget.id, gFFI.dialogManager);
                       },
-                    )
+                    ),
+                    buildMobileMonitorSwitchButton(),
                   ] +
                   (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
                       ? []
