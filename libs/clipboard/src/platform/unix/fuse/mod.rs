@@ -73,7 +73,7 @@ pub fn init_fuse_context(is_client: bool) -> Result<(), CliprdrError> {
     let (server, tx) = FuseServer::new(FUSE_TIMEOUT);
     let server = Arc::new(Mutex::new(server));
 
-    prepare_fuse_mount_point(&mount_point);
+    prepare_fuse_mount_point(&mount_point)?;
     let mnt_opts = [
         MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
         MountOption::NoAtime,
@@ -166,14 +166,27 @@ struct FuseContext {
 }
 
 // this function must be called after the main IPC is up
-fn prepare_fuse_mount_point(mount_point: &PathBuf) {
+fn prepare_fuse_mount_point(mount_point: &PathBuf) -> Result<(), CliprdrError> {
     use std::{
         fs::{self, Permissions},
         os::unix::prelude::PermissionsExt,
     };
 
-    fs::create_dir_all(mount_point).ok();
-    fs::set_permissions(mount_point, Permissions::from_mode(0o777)).ok();
+    fs::create_dir_all(mount_point).map_err(|e| {
+        log::error!(
+            "failed to create clipboard FUSE mount point {}: {:?}",
+            mount_point.display(),
+            e
+        );
+        CliprdrError::CliprdrInit
+    })?;
+    if let Err(e) = fs::set_permissions(mount_point, Permissions::from_mode(0o777)) {
+        log::warn!(
+            "failed to set clipboard FUSE mount point permissions {}: {:?}",
+            mount_point.display(),
+            e
+        );
+    }
 
     if let Err(e) = std::process::Command::new("umount")
         .arg(mount_point)
@@ -181,6 +194,7 @@ fn prepare_fuse_mount_point(mount_point: &PathBuf) {
     {
         log::warn!("umount {:?} may fail: {:?}", mount_point, e);
     }
+    Ok(())
 }
 
 fn uninit_fuse_context_(is_client: bool) {
