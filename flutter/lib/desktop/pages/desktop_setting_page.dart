@@ -484,7 +484,27 @@ class _GeneralState extends State<_General> {
 
   Widget other() {
     final showAutoUpdate = isWindows && bind.mainIsInstalled();
-    final children = <Widget>[
+    final deviceChildren = <Widget>[
+      _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
+      if (!isWeb) wallpaper(),
+      if (showAutoUpdate)
+        _OptionCheckBox(
+          context,
+          'Auto update',
+          kOptionAllowAutoUpdate,
+          isServer: true,
+        ),
+      if (isWindows && !bind.isOutgoingOnly())
+        _OptionCheckBox(
+          context,
+          'Capture screen using DirectX',
+          kOptionDirectxCapture,
+        ),
+      if (!isWeb && bind.mainShowOption(key: kOptionAllowLinuxHeadless))
+        _OptionCheckBox(
+            context, 'Allow linux headless', kOptionAllowLinuxHeadless),
+    ];
+    final connectionChildren = <Widget>[
       if (!isWeb && !bind.isIncomingOnly())
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,
@@ -499,8 +519,6 @@ class _GeneralState extends State<_General> {
             reloadAllWindows();
           },
         ),
-      _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
-      if (!isWeb) wallpaper(),
       if (!isWeb && !bind.isIncomingOnly()) ...[
         _OptionCheckBox(
           context,
@@ -547,19 +565,6 @@ class _GeneralState extends State<_General> {
             kOptionEnableCheckUpdate,
             isServer: false,
           ),
-        if (showAutoUpdate)
-          _OptionCheckBox(
-            context,
-            'Auto update',
-            kOptionAllowAutoUpdate,
-            isServer: true,
-          ),
-        if (isWindows && !bind.isOutgoingOnly())
-          _OptionCheckBox(
-            context,
-            'Capture screen using DirectX',
-            kOptionDirectxCapture,
-          ),
         if (!bind.isIncomingOnly()) ...[
           _OptionCheckBox(
             context,
@@ -579,7 +584,7 @@ class _GeneralState extends State<_General> {
 
     // Add client-side wakelock option for desktop platforms
     if (!bind.isIncomingOnly()) {
-      children.add(_OptionCheckBox(
+      connectionChildren.add(_OptionCheckBox(
         context,
         'keep-awake-during-outgoing-sessions-label',
         kOptionKeepAwakeDuringOutgoingSessions,
@@ -587,12 +592,8 @@ class _GeneralState extends State<_General> {
       ));
     }
 
-    if (!isWeb && bind.mainShowOption(key: kOptionAllowLinuxHeadless)) {
-      children.add(_OptionCheckBox(
-          context, 'Allow linux headless', kOptionAllowLinuxHeadless));
-    }
     if (!bind.isDisableAccount()) {
-      children.add(_OptionCheckBox(
+      connectionChildren.add(_OptionCheckBox(
         context,
         'note-at-conn-end-tip',
         kOptionAllowAskForNoteAtEndOfConnection,
@@ -606,7 +607,7 @@ class _GeneralState extends State<_General> {
         },
       ));
     }
-    children.add(_OptionCheckBox(
+    connectionChildren.add(_OptionCheckBox(
       context,
       'Show monitor switch button on the main toolbar',
       kOptionAllowMonitorSwitchMainToolbar,
@@ -634,7 +635,7 @@ class _GeneralState extends State<_General> {
       },
     ));
     if (mainGetLocalBoolOptionSync(kOptionAllowMonitorSwitchMainToolbar)) {
-      children.add(KeyedSubtree(
+      connectionChildren.add(KeyedSubtree(
         key: _minToolbarOptionKey,
         child: _OptionCheckBox(
           context,
@@ -647,7 +648,14 @@ class _GeneralState extends State<_General> {
         ).marginOnly(left: _kCheckBoxLeftMargin * 3),
       ));
     }
-    return _Card(title: 'Other', children: children);
+    return Column(
+      children: [
+        if (deviceChildren.isNotEmpty)
+          _Card(title: 'Your Device', children: deviceChildren),
+        if (connectionChildren.isNotEmpty)
+          _Card(title: 'Connection', children: connectionChildren),
+      ],
+    );
   }
 
   Widget wallpaper() {
