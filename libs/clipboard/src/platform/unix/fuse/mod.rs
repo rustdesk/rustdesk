@@ -4,7 +4,7 @@ use super::filetype::FileDescription;
 use crate::{ClipboardFile, CliprdrError};
 use cs::FuseServer;
 use fuser::MountOption;
-use hbb_common::{config::APP_NAME, log};
+use hbb_common::{config::Config, log};
 use parking_lot::Mutex;
 use std::{
     path::PathBuf,
@@ -14,13 +14,13 @@ use std::{
 
 lazy_static::lazy_static! {
     static ref FUSE_MOUNT_POINT_CLIENT: Arc<String> = {
-        let mnt_path = format!("/tmp/{}/{}", APP_NAME.read().unwrap(), "cliprdr-client");
+        let mnt_path = fuse_mount_point("cliprdr-client");
         // No need to run `canonicalize()` here.
         Arc::new(mnt_path)
     };
 
     static ref FUSE_MOUNT_POINT_SERVER: Arc<String> = {
-        let mnt_path = format!("/tmp/{}/{}", APP_NAME.read().unwrap(), "cliprdr-server");
+        let mnt_path = fuse_mount_point("cliprdr-server");
         // No need to run `canonicalize()` here.
         Arc::new(mnt_path)
     };
@@ -30,6 +30,13 @@ lazy_static::lazy_static! {
 }
 
 static FUSE_TIMEOUT: Duration = Duration::from_secs(3);
+
+fn fuse_mount_point(name: &str) -> String {
+    let mut path = PathBuf::from(Config::ipc_path(""));
+    path.pop();
+    path.push(name);
+    path.to_string_lossy().to_string()
+}
 
 pub fn get_exclude_paths(is_client: bool) -> Arc<String> {
     if is_client {
@@ -165,7 +172,7 @@ fn prepare_fuse_mount_point(mount_point: &PathBuf) {
         os::unix::prelude::PermissionsExt,
     };
 
-    fs::create_dir(mount_point).ok();
+    fs::create_dir_all(mount_point).ok();
     fs::set_permissions(mount_point, Permissions::from_mode(0o777)).ok();
 
     if let Err(e) = std::process::Command::new("umount")
@@ -187,7 +194,10 @@ fn uninit_fuse_context_(is_client: bool) {
 impl Drop for FuseContext {
     fn drop(&mut self) {
         self.session.lock().take().map(|s| s.join());
-        log::info!("unmounting clipboard FUSE from {}", self.mount_point.display());
+        log::info!(
+            "unmounting clipboard FUSE from {}",
+            self.mount_point.display()
+        );
     }
 }
 
