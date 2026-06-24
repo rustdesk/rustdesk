@@ -172,14 +172,30 @@ fn prepare_fuse_mount_point(mount_point: &PathBuf) -> Result<(), CliprdrError> {
         os::unix::prelude::PermissionsExt,
     };
 
-    fs::create_dir_all(mount_point).map_err(|e| {
-        log::error!(
-            "failed to create clipboard FUSE mount point {}: {:?}",
+    let recovered_stale_mount = if let Err(e) = fs::create_dir_all(mount_point) {
+        log::warn!(
+            "failed to create clipboard FUSE mount point {}, trying stale mount cleanup: {:?}",
             mount_point.display(),
             e
         );
-        CliprdrError::CliprdrInit
-    })?;
+        if let Err(e) = std::process::Command::new("umount")
+            .arg(mount_point)
+            .status()
+        {
+            log::warn!("umount {:?} may fail: {:?}", mount_point, e);
+        }
+        fs::create_dir_all(mount_point).map_err(|e| {
+            log::error!(
+                "failed to create clipboard FUSE mount point {} after cleanup: {:?}",
+                mount_point.display(),
+                e
+            );
+            CliprdrError::CliprdrInit
+        })?;
+        true
+    } else {
+        false
+    };
     if let Err(e) = fs::set_permissions(mount_point, Permissions::from_mode(0o777)) {
         log::warn!(
             "failed to set clipboard FUSE mount point permissions {}: {:?}",
@@ -188,11 +204,13 @@ fn prepare_fuse_mount_point(mount_point: &PathBuf) -> Result<(), CliprdrError> {
         );
     }
 
-    if let Err(e) = std::process::Command::new("umount")
-        .arg(mount_point)
-        .status()
-    {
-        log::warn!("umount {:?} may fail: {:?}", mount_point, e);
+    if !recovered_stale_mount {
+        if let Err(e) = std::process::Command::new("umount")
+            .arg(mount_point)
+            .status()
+        {
+            log::warn!("umount {:?} may fail: {:?}", mount_point, e);
+        }
     }
     Ok(())
 }
