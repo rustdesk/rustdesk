@@ -1505,8 +1505,9 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
         let id = id.to_owned();
         let uuid = uuid.clone();
         let old_id = old_id.clone();
+        let pk = Config::get_key_pair().1;
         futs.push(tokio::spawn(async move {
-            let tmp = check_id(rendezvous_server, old_id, id, uuid).await;
+            let tmp = check_id(rendezvous_server, old_id, id, uuid, pk).await;
             if !tmp.is_empty() {
                 *err.lock().unwrap() = tmp;
             }
@@ -1531,6 +1532,7 @@ async fn check_id(
     old_id: String,
     id: String,
     uuid: Bytes,
+    pk: Vec<u8>,
 ) -> &'static str {
     if let Ok(mut socket) = hbb_common::socket_client::connect_tcp(
         crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
@@ -1543,6 +1545,7 @@ async fn check_id(
             old_id,
             id,
             uuid,
+            pk: pk.into(),
             ..Default::default()
         });
         let mut ok = false;
