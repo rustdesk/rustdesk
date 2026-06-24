@@ -1500,12 +1500,13 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
 
     let mut futs = Vec::new();
     let err: Arc<Mutex<&str>> = Default::default();
+    let pk = Config::get_key_pair().1;
     for rendezvous_server in rendezvous_servers {
         let err = err.clone();
         let id = id.to_owned();
         let uuid = uuid.clone();
         let old_id = old_id.clone();
-        let pk = Config::get_key_pair().1;
+        let pk = pk.clone();
         futs.push(tokio::spawn(async move {
             let tmp = check_id(rendezvous_server, old_id, id, uuid, pk).await;
             if !tmp.is_empty() {
