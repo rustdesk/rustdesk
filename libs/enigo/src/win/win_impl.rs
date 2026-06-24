@@ -223,7 +223,7 @@ impl KeyboardControllable for Enigo {
             // Windows uses uft-16 encoding. We need to check
             // for variable length characters. As such some
             // characters can be 32 bit long and those are
-            // encoded in such called hight and low surrogates
+            // encoded in so-called high and low surrogates
             // each 16 bit wide that needs to be send after
             // another to the SendInput function without
             // being interrupted by "keyup"

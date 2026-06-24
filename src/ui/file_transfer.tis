@@ -72,6 +72,48 @@ function getExt(name) {
 class JobTable: Reactor.Component {
   this var jobs = [];
   this var job_map = {};
+  this var next_conflict_batch_id = 1;
+  this var remembered_write_strategy = {};
+
+  function nextConflictBatchId() {
+    return this.next_conflict_batch_id++;
+  }
+
+  function getRememberedWriteStrategy(conflict_batch_id) {
+    var is_override = this.remembered_write_strategy[conflict_batch_id];
+    if (is_override == true || is_override == false) return is_override;
+    return null;
+  }
+
+  function rememberWriteStrategy(conflict_batch_id, is_override) {
+    this.remembered_write_strategy[conflict_batch_id] = is_override;
+  }
+
+  function cancelTransferJob(job) {
+    job.finished = true;
+    job.err = "cancel";
+    this.updateJob(job);
+  }
+
+  function cancelTransferConflictBatch(id) {
+    var job = this.job_map[id];
+    if (!job) return;
+    var conflict_batch_id = job.conflict_batch_id;
+    if (conflict_batch_id == null) {
+      this.cancelTransferJob(job);
+      handler.cancel_job(job.id);
+      refreshDir(!job.is_remote);
+      return;
+    }
+    delete this.remembered_write_strategy[conflict_batch_id];
+    for (var i = 0; i < this.jobs.length; ++i) {
+      var current_job = this.jobs[i];
+      if (current_job.conflict_batch_id != conflict_batch_id || current_job.finished) continue;
+      this.cancelTransferJob(current_job);
+      handler.cancel_job(current_job.id);
+    }
+    refreshDir(!job.is_remote);
+  }
 
   function render() {
     var me = this;
@@ -109,10 +151,12 @@ class JobTable: Reactor.Component {
   function clearAllJobs() {
     this.jobs = [];
     this.job_map = {};
+    this.next_conflict_batch_id = 1;
+    this.remembered_write_strategy = {};
     this.update();
   }
 
-  function send(path, is_remote) {
+  function send(path, is_remote, conflict_batch_id = null) {
     var to;
     var show_hidden;
     if (is_remote) {
@@ -123,13 +167,15 @@ class JobTable: Reactor.Component {
       show_hidden = file_transfer.local_folder_view.show_hidden;
     }
     if (!to) return;
+    if (conflict_batch_id == null) conflict_batch_id = this.nextConflictBatchId();
     to += handler.get_path_sep(!is_remote) + getFileName(is_remote, path);
     var id = handler.get_next_job_id();
     this.jobs.push({ type: "transfer",
                      id: id, path: path, to: to,
                      include_hidden: show_hidden,
                      is_remote: is_remote,
-                     is_last: false
+                     is_last: false,
+                     conflict_batch_id: conflict_batch_id
                     });
     this.job_map[id] = this.jobs[this.jobs.length - 1];
     handler.send_files(id, 0, path, to, 0, show_hidden, is_remote);
@@ -141,7 +187,8 @@ class JobTable: Reactor.Component {
     var job = { type: "transfer",
     id: id, path: path, to: to,
     include_hidden: show_hidden,
-    is_remote: is_remote, is_last: true, file_num: file_num };
+    is_remote: is_remote, is_last: true, file_num: file_num,
+    conflict_batch_id: this.nextConflictBatchId() };
     this.jobs.push(job);
     this.job_map[id] = this.jobs[this.jobs.length - 1];
     handler.update_next_job_id(id + 1);
@@ -230,6 +277,7 @@ class JobTable: Reactor.Component {
         else return translate("Waiting");
       }
     }
+    if (job.err == "cancel") return translate("Cancel");
     if (!job.entries) return translate("Waiting");
     var i = job.file_num + 1;
     var n = job.num_entries || job.entries.length;
@@ -262,6 +310,8 @@ class JobTable: Reactor.Component {
 
   function updateJobStatus(id, file_num = -1, err = null, speed = null, finished_size = 0) {
     var job = this.job_map[id];
+    if (!job) return;
+    if (job.finished && job.err == "cancel") return;
     if (job.type == "del-file"){
       job.finished = true;
       job.err = err;
@@ -269,7 +319,6 @@ class JobTable: Reactor.Component {
       this.updateJob(job);
       return;
     }
-    if (!job) return;
     if (file_num < job.file_num) return;
     job.file_num = file_num;
     var n = job.num_entries || job.entries.length;
@@ -601,8 +650,9 @@ class FolderView : Reactor.Component {
     event click $(.send) () {
       var rows = this.getCurrentRows();
       if (!rows || rows.length == 0) return;
+      var conflict_batch_id = file_transfer.job_table.nextConflictBatchId();
       for (var i = 0; i < rows.length; ++i) {
-        file_transfer.job_table.send(rows[i][0], this.is_remote);
+        file_transfer.job_table.send(rows[i][0], this.is_remote, conflict_batch_id);
       }
     }
 
@@ -780,6 +830,13 @@ handler.confirmDeleteFiles = function(id, i, name) {
 
 handler.overrideFileConfirm = function(id, file_num, to, is_upload, is_identical) {
   var jt = file_transfer.job_table;
+  var job = jt.job_map[id];
+  if (!job || job.finished) return;
+  var remembered = jt.getRememberedWriteStrategy(job.conflict_batch_id);
+  if (remembered == true || remembered == false) {
+    handler.set_write_override(id, file_num, remembered, true, is_upload);
+    return;
+  }
   var identical_msg = is_identical ? translate("identical_file_tip"): "";
   msgbox("custom-skip", "Confirm Write Strategy", "<div .form> \
         <div>" + translate('Overwrite') + " " + translate('files') + ".</div> \
@@ -788,22 +845,18 @@ handler.overrideFileConfirm = function(id, file_num, to, is_upload, is_identical
         <div>" + identical_msg + "</div> \
         <div><button|checkbox(remember) {ts}>" + translate('Do this for all conflicts') + "</button></div> \
     </div>", "", function(res=null) {
+      var current_job = jt.job_map[id];
+      if (!current_job || current_job.finished) return;
       if (!res) {
-        jt.updateJobStatus(id, -1, "cancel");
-        handler.cancel_job(id);
-      } else if (res.skip) {
-        if (res.remember){
-          handler.set_write_override(id,file_num,false,true, is_upload); //
-        } else {
-          handler.set_write_override(id,file_num,false,false,is_upload); //
-        }
-      } else {
-        if (res.remember){
-          handler.set_write_override(id,file_num,true,true,is_upload); //
-        } else {
-          handler.set_write_override(id,file_num,true,false,is_upload); //
-        }
+        jt.cancelTransferConflictBatch(id);
+        return;
       }
+      var is_override = !res.skip;
+      var remember = res.remember ? true : false;
+      if (remember) {
+        jt.rememberWriteStrategy(current_job.conflict_batch_id, is_override);
+      }
+      handler.set_write_override(id, file_num, is_override, remember, is_upload);
     });
 }
 

@@ -326,12 +326,14 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
         try_sync_peer_option(&session, &session_id, &value, None);
     }
     #[cfg(not(target_os = "ios"))]
-    if sessions::get_session_by_session_id(&session_id).is_some() && value == "disable-clipboard" {
+    if sessions::get_session_by_session_id(&session_id).is_some()
+        && (value == "disable-clipboard" || value == "view-only")
+    {
         crate::flutter::update_text_clipboard_required();
     }
     #[cfg(feature = "unix-file-copy-paste")]
     if sessions::get_session_by_session_id(&session_id).is_some()
-        && value == config::keys::OPTION_ENABLE_FILE_COPY_PASTE
+        && (value == config::keys::OPTION_ENABLE_FILE_COPY_PASTE || value == "view-only")
     {
         crate::flutter::update_file_clipboard_required();
     }
@@ -2850,8 +2852,16 @@ pub fn main_get_common(key: String) -> String {
                 crate::platform::windows::is_msi_installed(),
                 crate::common::is_custom_client(),
             ) {
-                (Ok(true), false) => format!("rustdesk-{_version}-x86_64.msi"),
-                (Ok(true), true) | (Ok(false), _) => format!("rustdesk-{_version}-x86_64.exe"),
+                (Ok(true), false) => match crate::platform::windows::release_arch_suffix() {
+                    Some(arch) => format!("rustdesk-{_version}-{arch}.msi"),
+                    None => "error:unsupported".to_owned(),
+                },
+                (Ok(true), true) | (Ok(false), _) => {
+                    match crate::platform::windows::release_arch_suffix() {
+                        Some(arch) => format!("rustdesk-{_version}-{arch}.exe"),
+                        None => "error:unsupported".to_owned(),
+                    }
+                }
                 (Err(e), _) => {
                     log::error!("Failed to check if is msi: {}", e);
                     format!("error:update-failed-check-msi-tip")

@@ -758,5 +758,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland-keyboard-input-reset-choice-tip", "키보드 입력 선택 초기화"),
         ("remember-wayland-keyboard-choice-tip", "이 원격 컴퓨터에 대해 다시 묻지 않기"),
         ("Why this happens", "이런 현상이 발생하는 이유"),
+        ("Switch display", "디스플레이 전환"),
+        ("Show monitor switch button on the main toolbar", "기본 도구 모음에 모니터 전환 버튼 표시"),
+        ("Show on the minimized toolbar", "최소화된 도구 모음에 표시"),
+        ("All monitors", "모든 모니터"),
+        ("#{} monitor", "{}번 모니터"),
     ].iter().cloned().collect();
 }

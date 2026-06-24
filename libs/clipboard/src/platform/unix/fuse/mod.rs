@@ -4,7 +4,7 @@ use super::filetype::FileDescription;
 use crate::{ClipboardFile, CliprdrError};
 use cs::FuseServer;
 use fuser::MountOption;
-use hbb_common::{config::APP_NAME, log};
+use hbb_common::{config::Config, log};
 use parking_lot::Mutex;
 use std::{
     path::PathBuf,
@@ -14,13 +14,13 @@ use std::{
 
 lazy_static::lazy_static! {
     static ref FUSE_MOUNT_POINT_CLIENT: Arc<String> = {
-        let mnt_path = format!("/tmp/{}/{}", APP_NAME.read().unwrap(), "cliprdr-client");
+        let mnt_path = fuse_mount_point("cliprdr-client");
         // No need to run `canonicalize()` here.
         Arc::new(mnt_path)
     };
 
     static ref FUSE_MOUNT_POINT_SERVER: Arc<String> = {
-        let mnt_path = format!("/tmp/{}/{}", APP_NAME.read().unwrap(), "cliprdr-server");
+        let mnt_path = fuse_mount_point("cliprdr-server");
         // No need to run `canonicalize()` here.
         Arc::new(mnt_path)
     };
@@ -30,6 +30,13 @@ lazy_static::lazy_static! {
 }
 
 static FUSE_TIMEOUT: Duration = Duration::from_secs(3);
+
+fn fuse_mount_point(name: &str) -> String {
+    let mut path = PathBuf::from(Config::ipc_path(""));
+    path.pop();
+    path.push(name);
+    path.to_string_lossy().to_string()
+}
 
 pub fn get_exclude_paths(is_client: bool) -> Arc<String> {
     if is_client {
@@ -66,7 +73,7 @@ pub fn init_fuse_context(is_client: bool) -> Result<(), CliprdrError> {
     let (server, tx) = FuseServer::new(FUSE_TIMEOUT);
     let server = Arc::new(Mutex::new(server));
 
-    prepare_fuse_mount_point(&mount_point);
+    prepare_fuse_mount_point(&mount_point)?;
     let mnt_opts = [
         MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
         MountOption::NoAtime,
@@ -159,21 +166,53 @@ struct FuseContext {
 }
 
 // this function must be called after the main IPC is up
-fn prepare_fuse_mount_point(mount_point: &PathBuf) {
+fn prepare_fuse_mount_point(mount_point: &PathBuf) -> Result<(), CliprdrError> {
     use std::{
         fs::{self, Permissions},
         os::unix::prelude::PermissionsExt,
     };
 
-    fs::create_dir(mount_point).ok();
-    fs::set_permissions(mount_point, Permissions::from_mode(0o777)).ok();
-
-    if let Err(e) = std::process::Command::new("umount")
-        .arg(mount_point)
-        .status()
-    {
-        log::warn!("umount {:?} may fail: {:?}", mount_point, e);
+    let recovered_stale_mount = if let Err(e) = fs::create_dir_all(mount_point) {
+        log::warn!(
+            "failed to create clipboard FUSE mount point {}, trying stale mount cleanup: {:?}",
+            mount_point.display(),
+            e
+        );
+        if let Err(e) = std::process::Command::new("umount")
+            .arg(mount_point)
+            .status()
+        {
+            log::warn!("umount {:?} may fail: {:?}", mount_point, e);
+        }
+        fs::create_dir_all(mount_point).map_err(|e| {
+            log::error!(
+                "failed to create clipboard FUSE mount point {} after cleanup: {:?}",
+                mount_point.display(),
+                e
+            );
+            CliprdrError::CliprdrInit
+        })?;
+        true
+    } else {
+        false
+    };
+    if let Err(e) = fs::set_permissions(mount_point, Permissions::from_mode(0o777)) {
+        log::warn!(
+            "failed to set clipboard FUSE mount point permissions {}: {:?}",
+            mount_point.display(),
+            e
+        );
     }
+
+    if !recovered_stale_mount {
+        if let Err(e) = std::process::Command::new("umount")
+            .arg(mount_point)
+            .status()
+        {
+            log::warn!("umount {:?} may fail: {:?}", mount_point, e);
+        }
+    }
+    Ok(())
 }
 
 fn uninit_fuse_context_(is_client: bool) {
@@ -187,7 +226,10 @@ fn uninit_fuse_context_(is_client: bool) {
 impl Drop for FuseContext {
     fn drop(&mut self) {
         self.session.lock().take().map(|s| s.join());
-        log::info!("unmounting clipboard FUSE from {}", self.mount_point.display());
+        log::info!(
+            "unmounting clipboard FUSE from {}",
+            self.mount_point.display()
+        );
     }
 }
 
