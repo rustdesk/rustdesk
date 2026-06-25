@@ -68,6 +68,9 @@ mod ui_session_interface;
 
 mod hbbs_http;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod internal_api;
+
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub mod clipboard_file;
 

@@ -1,0 +1,161 @@
+name: Build Linux ARM server
+
+on:
+  workflow_dispatch:
+
+env:
+  RUST_VERSION: "1.75"
+  TARGET: "aarch64-unknown-linux-gnu"
+  ARCH: "aarch64"
+  DISTRO: "ubuntu18.04"
+  VCPKG_TRIPLET: "arm64-linux"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  build-linux-arm-server:
+    name: build linux arm64 server
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+
+      - name: Maximize build space
+        shell: bash
+        run: |
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo apt-get update -y
+          sudo apt-get install -y nasm
+          df -h
+          free -m
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ env.TARGET }}
+
+      - name: Save Rust toolchain version
+        shell: bash
+        run: |
+          RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
+          echo "RUST_TOOLCHAIN_VERSION=$RUST_TOOLCHAIN_VERSION" >> "$GITHUB_ENV"
+
+      - name: Setup vcpkg with GitHub Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        env:
+          VCPKG_DEFAULT_TRIPLET: ${{ env.VCPKG_TRIPLET }}
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ env.VCPKG_TRIPLET }}
+        run: |
+          sudo apt-get install -y libva-dev
+          if ! "$VCPKG_ROOT/vcpkg" install --triplet "${{ env.VCPKG_TRIPLET }}" --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT" -name "*.log" -print -exec cat {} \;
+            exit 1
+          fi
+          head -n 100 "$VCPKG_ROOT/buildtrees/ffmpeg/build-${{ env.VCPKG_TRIPLET }}-rel-out.log" || true
+
+      - name: Build rustdesk server binary
+        uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8
+        env:
+          RUSTDESK_ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
+          RUSTDESK_RELAY_SERVER: ${{ vars.RUSTDESK_RELAY_SERVER }}
+          RUSTDESK_SERVER_KEY: ${{ secrets.RUSTDESK_SERVER_KEY }}
+        with:
+          arch: ${{ env.ARCH }}
+          distro: ${{ env.DISTRO }}
+          githubToken: ${{ github.token }}
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+            --env "RUSTDESK_ID_SERVER=${{ vars.RUSTDESK_ID_SERVER }}"
+            --env "RUSTDESK_RELAY_SERVER=${{ vars.RUSTDESK_RELAY_SERVER }}"
+            --env "RUSTDESK_SERVER_KEY=${{ secrets.RUSTDESK_SERVER_KEY }}"
+          shell: /bin/bash
+          install: |
+            apt-get update -y
+            apt-get install -y \
+              build-essential \
+              clang \
+              cmake \
+              curl \
+              gcc \
+              git \
+              g++ \
+              libayatana-appindicator3-dev \
+              libasound2-dev \
+              libclang-10-dev \
+              libdrm-dev \
+              libgstreamer1.0-dev \
+              libgstreamer-plugins-base1.0-dev \
+              libgtk-3-dev \
+              libpam0g-dev \
+              libpulse-dev \
+              libssl-dev \
+              libva-dev \
+              libvdpau-dev \
+              libxcb-randr0-dev \
+              libxcb-shape0-dev \
+              libxcb-xfixes0-dev \
+              libxdo-dev \
+              libxfixes-dev \
+              libx11-dev \
+              llvm-10-dev \
+              nasm \
+              ninja-build \
+              pkg-config \
+              python3 \
+              tree \
+              unzip \
+              wget \
+              xz-utils \
+              zlib1g-dev
+            apt-get remove -y libopus-dev || true
+            tree -L 3 /opt/artifacts/vcpkg/installed
+          run: |
+            git config --global --add safe.directory "*"
+            pushd /opt
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.TARGET }}.tar.gz
+            tar -zxvf rust.tar.gz > /dev/null
+            rm rust.tar.gz
+            cd rust-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.TARGET }}
+            ./install.sh
+            rm -rf /opt/rust-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.TARGET }}
+            mkdir -p ~/.cargo/
+            echo """
+              [source.crates-io]
+              registry = 'https://github.com/rust-lang/crates.io-index'
+            """ > ~/.cargo/config
+            pushd /workspace
+            export VCPKG_ROOT=/opt/artifacts/vcpkg
+            export VCPKG_DEFAULT_TRIPLET=${{ env.VCPKG_TRIPLET }}
+            export VCPKG_DEFAULT_HOST_TRIPLET=${{ env.VCPKG_TRIPLET }}
+            export CARGO_INCREMENTAL=0
+            cargo build --locked --release --features hwcodec,unix-file-copy-paste --bin rustdesk --target ${{ env.TARGET }} --jobs 3
+            mkdir -p dist
+            cp target/${{ env.TARGET }}/release/rustdesk dist/rustdesk-linux-arm64
+            strip dist/rustdesk-linux-arm64 || true
+            sha256sum dist/rustdesk-linux-arm64 > dist/rustdesk-linux-arm64.sha256
+
+      - name: Upload rustdesk linux arm64 server
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustdesk-linux-arm64-server
+          path: dist/

@@ -186,6 +186,13 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     init_plugins(&args);
+    #[cfg(target_os = "linux")]
+    if args.is_empty() {
+        log::info!("start default linux server with user {}", crate::username());
+        hbb_common::allow_err!(crate::platform::check_autostart_config());
+        crate::start_server(true, false);
+        return None;
+    }
     if args.is_empty() || crate::common::is_empty_uni_link(&args[0]) {
         #[cfg(target_os = "macos")]
         {
@@ -394,12 +401,6 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "linux")]
             {
                 hbb_common::allow_err!(crate::platform::check_autostart_config());
-                std::process::Command::new("pkill")
-                    .arg("-f")
-                    .arg(&format!("{} --tray", crate::get_app_name().to_lowercase()))
-                    .status()
-                    .ok();
-                hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
             }
             #[cfg(windows)]
             crate::privacy_mode::restore_reg_connectivity(true, false);

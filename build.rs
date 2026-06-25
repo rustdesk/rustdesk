@@ -90,5 +90,8 @@ fn main() {
         build_mac();
         println!("cargo:rustc-link-lib=framework=ApplicationServices");
     }
+    if target_os == "linux" && std::env::var_os("CARGO_FEATURE_HWCODEC").is_some() {
+        println!("cargo:rustc-link-lib=z");
+    }
     println!("cargo:rerun-if-changed=build.rs");
 }

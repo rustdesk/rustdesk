@@ -46,6 +46,7 @@ screencapturekit = ["cpal/screencapturekit"]
 
 [dependencies]
 async-trait = "0.1"
+axum = "0.7"
 scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common" }
 serde_derive = "1.0"
