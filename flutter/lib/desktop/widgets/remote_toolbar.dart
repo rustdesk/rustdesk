@@ -779,6 +779,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           borderRadius: borderRadius,
           child: _DraggableShowHide(
             id: widget.id,
+            ffi: widget.ffi,
             sessionId: widget.ffi.sessionId,
             dragging: _dragging,
             fraction: _fraction,
@@ -805,13 +806,25 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       BuildContext context, _ToolbarEdge edge, bool isHorizontal) {
     final List<Widget> toolbarItems = [];
     toolbarItems.add(_PinMenu(state: widget.state));
+    toolbarItems.add(Obx(() {
+      final privacyModeState = PrivacyModeState.find(widget.id);
+      if ((privacyModeState.isEmpty ||
+              allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
+          pi.displaysCount.value > 1 &&
+          mainGetLocalBoolOptionSync(kOptionAllowMonitorSwitchMainToolbar)) {
+        return _MainMonitorSwitchButton(id: widget.id, ffi: widget.ffi);
+      } else {
+        return const Offstage();
+      }
+    }));
     if (!isWebDesktop) {
       toolbarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
 
     toolbarItems.add(Obx(() {
-      if ((PrivacyModeState.find(widget.id).isEmpty ||
-              allowDisplaySwitchInPrivacyMode(pi)) &&
+      final privacyModeState = PrivacyModeState.find(widget.id);
+      if ((privacyModeState.isEmpty ||
+              allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
           pi.displaysCount.value > 1) {
         return _MonitorMenu(
             id: widget.id,
@@ -964,6 +977,88 @@ class _MobileActionMenu extends StatelessWidget {
   }
 }
 
+class _MonitorCycle {
+  final String id;
+  final FFI ffi;
+  const _MonitorCycle(this.id, this.ffi);
+
+  PeerInfo get _pi => ffi.ffiModel.pi;
+  int get total => _pi.displays.length;
+  int get _current => CurrentDisplayState.find(id).value;
+  bool get _inRange => _current >= 0 && _current < total;
+
+  String get label => _inRange ? '${_current + 1}' : '*';
+  String get tooltip => '${translate('Switch display')} ($label/$total)';
+
+  void next() {
+    final t = total;
+    if (t < 2) return;
+    final from = _inRange ? _current : -1;
+    final target = (from + 1) % t;
+    final isChooseDisplayToOpenInNewWindow = _pi.isSupportMultiDisplay &&
+        bind.sessionGetDisplaysAsIndividualWindows(sessionId: ffi.sessionId) ==
+            'Y';
+    if (isChooseDisplayToOpenInNewWindow) {
+      openMonitorInNewTabOrWindow(target, ffi.id, _pi);
+    } else {
+      openMonitorInTheSameTab(target, ffi, _pi, updateCursorPos: false);
+    }
+  }
+}
+
+class _MainMonitorSwitchButton extends StatelessWidget {
+  final String id;
+  final FFI ffi;
+
+  const _MainMonitorSwitchButton({
+    Key? key,
+    required this.id,
+    required this.ffi,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final cycle = _MonitorCycle(id, ffi);
+    return Obx(() {
+      if (cycle.total < 2) return const Offstage();
+      final label = cycle.label;
+
+      return _IconMenuButton(
+        tooltip: cycle.tooltip,
+        color: _ToolbarTheme.blueColor,
+        hoverColor: _ToolbarTheme.hoverBlueColor,
+        onPressed: cycle.next,
+        icon: SizedBox(
+          width: _ToolbarTheme.buttonSize,
+          height: _ToolbarTheme.buttonSize,
+          child: Stack(
+            alignment: const Alignment(0, -0.125),
+            children: [
+              SvgPicture.asset(
+                'assets/display_switcher.svg',
+                colorFilter:
+                    const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                width: _ToolbarTheme.buttonSize,
+                height: _ToolbarTheme.buttonSize,
+              ),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 11,
+                  height: 1,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+}
+
 class _MonitorMenu extends StatelessWidget {
   final String id;
   final FFI ffi;
@@ -1072,8 +1167,8 @@ class _MonitorMenu extends StatelessWidget {
             tooltip: isMulti
                 ? ''
                 : isAllMonitors
-                    ? 'all monitors'
-                    : '#${i + 1} monitor',
+                    ? 'All monitors'
+                    : '#{${i + 1}} monitor',
             hMargin: isMulti ? null : 6,
             vMargin: isMulti ? null : 12,
             topLevel: false,
@@ -2757,7 +2852,7 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
         horizontal: widget.hMargin ?? _ToolbarTheme.buttonHMargin,
         vertical: widget.vMargin ?? _ToolbarTheme.buttonVMargin);
     button = Tooltip(
-      message: widget.tooltip,
+      message: translate(widget.tooltip),
       child: button,
     );
     if (widget.topLevel) {
@@ -2970,6 +3065,7 @@ class RdoMenuButton<T> extends StatelessWidget {
 
 class _DraggableShowHide extends StatefulWidget {
   final String id;
+  final FFI ffi;
   final SessionID sessionId;
   final RxDouble fraction;
   final Rx<_ToolbarEdge> edge;
@@ -2993,6 +3089,7 @@ class _DraggableShowHide extends StatefulWidget {
   const _DraggableShowHide({
     Key? key,
     required this.id,
+    required this.ffi,
     required this.sessionId,
     required this.fraction,
     required this.edge,
@@ -3249,6 +3346,9 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildDraggable(context),
+        Obx(() => collapse.isTrue
+            ? _MinimizedMonitorSwitchButton(id: widget.id, ffi: widget.ffi)
+            : const Offstage()),
         Obx(() => buttonWrapper(
               () {
                 widget.setFullscreen(!isFullscreen.value);
@@ -3407,5 +3507,75 @@ class EdgeThicknessControl extends StatelessWidget {
     );
 
     return slider;
+  }
+}
+
+class _MinimizedMonitorSwitchButton extends StatelessWidget {
+  final String id;
+  final FFI ffi;
+
+  const _MinimizedMonitorSwitchButton({
+    Key? key,
+    required this.id,
+    required this.ffi,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    const double iconSize = 20;
+    final cycle = _MonitorCycle(id, ffi);
+
+    return Obx(() {
+      final label = cycle.label;
+      if (!mainGetLocalBoolOptionSync(kOptionAllowMonitorSwitchMainToolbar) ||
+          !mainGetLocalBoolOptionSync(kOptionAllowMonitorSwitchMinToolbar)) {
+        return const Offstage();
+      }
+      if (cycle.total < 2) return const Offstage();
+      final privacyModeState = PrivacyModeState.find(id);
+      if (privacyModeState.isNotEmpty &&
+          !allowDisplaySwitchInPrivacyMode(
+              ffi.ffiModel.pi, privacyModeState.value)) {
+        return const Offstage();
+      }
+
+      return Tooltip(
+        message: cycle.tooltip,
+        child: TextButton(
+          onPressed: cycle.next,
+          style: ButtonStyle(
+            minimumSize: MaterialStateProperty.all(const Size(0, 0)),
+            padding: MaterialStateProperty.all(EdgeInsets.zero),
+            backgroundColor: MaterialStateProperty.resolveWith((states) {
+              if (states.contains(MaterialState.hovered)) {
+                return _ToolbarTheme.blueColor.withOpacity(0.15);
+              }
+              return null;
+            }),
+          ),
+          child: Stack(
+            alignment: const Alignment(0, -0.125),
+            children: [
+              SvgPicture.asset(
+                'assets/display_switcher.svg',
+                colorFilter:
+                    ColorFilter.mode(_ToolbarTheme.blueColor, BlendMode.srcIn),
+                width: iconSize,
+                height: iconSize,
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  height: 1,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
   }
 }

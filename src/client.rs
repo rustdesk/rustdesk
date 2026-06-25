@@ -96,6 +96,8 @@ pub mod screenshot;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
+// Empirical restart reconnect grace window.
+const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
 
@@ -1740,7 +1742,10 @@ pub struct LoginConfigHandler {
     features: Option<Features>,
     pub session_id: u64, // used for local <-> server communication
     pub supported_encoding: SupportedEncoding,
-    pub restarting_remote_device: bool,
+    restarting_remote_device: bool,
+    // Start time of the restart grace window. On Windows the peer may briefly
+    // reconnect before the real reboot disconnect.
+    restart_remote_device_at: Option<Instant>,
     pub force_relay: bool,
     pub direct: Option<bool>,
     pub received: bool,
@@ -1849,7 +1854,7 @@ impl LoginConfigHandler {
         }
         self.session_id = sid;
         self.supported_encoding = Default::default();
-        self.restarting_remote_device = false;
+        self.clear_restarting_remote_device();
         self.force_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
                 || force_relay
@@ -2777,6 +2782,30 @@ impl LoginConfigHandler {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         msg_out
+    }
+
+    pub fn mark_restarting_remote_device(&mut self) {
+        self.restarting_remote_device = true;
+        self.restart_remote_device_at = Some(Instant::now());
+    }
+
+    pub fn clear_restarting_remote_device(&mut self) {
+        self.restarting_remote_device = false;
+        self.restart_remote_device_at = None;
+    }
+
+    pub fn is_restarting_remote_device(&self) -> bool {
+        if !self.restarting_remote_device {
+            return false;
+        }
+        // Keep this flag alive for a short grace window instead of clearing it on
+        // connection_ready or the first peer bytes. During OS restart the peer can
+        // briefly reconnect before the real reboot disconnect, and clearing it too
+        // early would let the next disconnect escape the restart flow and fall back
+        // to the normal error dialog / manual reconnect path.
+        self.restart_remote_device_at
+            .map(|started_at| started_at.elapsed() < RESTART_REMOTE_DEVICE_GRACE)
+            .unwrap_or(false)
     }
 
     pub fn get_conn_token(&self) -> Option<String> {
@@ -3718,9 +3747,18 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn on_establish_connection_error(&self, err: String) {
         let title = "Connection Error";
         let text = err.to_string();
-        let lc = self.get_lch();
-        let direct = lc.read().unwrap().direct;
-        let received = lc.read().unwrap().received;
+        let lch = self.get_lch();
+        let (is_restarting, direct, received) = {
+            let lc = lch.read().unwrap();
+            (lc.is_restarting_remote_device(), lc.direct, lc.received)
+        };
+        if is_restarting {
+            log::info!("Restart remote device, suppress connection error: {err}");
+            // Flutter treats this as a reconnect control event. The text is kept
+            // for legacy UI and existing translation reuse.
+            self.msgbox("restarting", "Restarting remote device", "Connection in progress. Please wait.", "");
+            return;
+        }
 
         let mut relay_hint = false;
         let mut relay_hint_type = "relay-hint";

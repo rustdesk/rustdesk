@@ -113,11 +113,11 @@ pub enum MouseButton {
 
     /// Scroll up button
     ScrollUp,
-    /// Left right button
+    /// Scroll down button
     ScrollDown,
-    /// Left right button
+    /// Scroll left button
     ScrollLeft,
-    /// Left right button
+    /// Scroll right button
     ScrollRight,
 }
 
