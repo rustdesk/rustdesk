@@ -2,12 +2,6 @@ name: Fdroid version file generation
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - '[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-[0-9]+'
-      - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'
 
 jobs:
   # https://gitlab.com/fdroid/fdroiddata/-/blob/master/metadata/com.carriez.flutter_hbb.yml

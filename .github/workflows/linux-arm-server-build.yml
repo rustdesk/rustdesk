@@ -1,20 +1,27 @@
-name: Build Linux ARM server
+name: Build Linux ARM Flutter
 
 on:
   workflow_dispatch:
 
 env:
   RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
   TARGET: "aarch64-unknown-linux-gnu"
   ARCH: "aarch64"
   DISTRO: "ubuntu18.04"
+  DEB_ARCH: "arm64"
   VCPKG_TRIPLET: "arm64-linux"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VERSION: "1.4.8"
 
 jobs:
-  build-linux-arm-server:
-    name: build linux arm64 server
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-linux-arm-flutter:
+    name: build rustdesk linux arm64 flutter
+    needs: [generate-bridge]
     runs-on: ubuntu-22.04-arm
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -23,11 +30,6 @@ jobs:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Checkout source code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          submodules: recursive
 
       - name: Maximize build space
         shell: bash
@@ -40,11 +42,23 @@ jobs:
           df -h
           free -m
 
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+
+      - name: Free Space
+        shell: bash
+        run: |
+          df -h
+          free -m
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ env.TARGET }}
+          components: "rustfmt"
 
       - name: Save Rust toolchain version
         shell: bash
@@ -52,7 +66,13 @@ jobs:
           RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
           echo "RUST_TOOLCHAIN_VERSION=$RUST_TOOLCHAIN_VERSION" >> "$GITHUB_ENV"
 
-      - name: Setup vcpkg with GitHub Actions binary cache
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
@@ -67,12 +87,18 @@ jobs:
         run: |
           sudo apt-get install -y libva-dev
           if ! "$VCPKG_ROOT/vcpkg" install --triplet "${{ env.VCPKG_TRIPLET }}" --x-install-root="$VCPKG_ROOT/installed"; then
-            find "$VCPKG_ROOT" -name "*.log" -print -exec cat {} \;
+            find "$VCPKG_ROOT" -name "*.log" | while read -r log_file; do
+              echo "$log_file:"
+              echo "======"
+              cat "$log_file"
+              echo "======"
+              echo ""
+            done
             exit 1
           fi
           head -n 100 "$VCPKG_ROOT/buildtrees/ffmpeg/build-${{ env.VCPKG_TRIPLET }}-rel-out.log" || true
 
-      - name: Build rustdesk server binary
+      - name: Build rustdesk linux arm64 flutter
         uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8
         env:
           RUSTDESK_ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
@@ -82,6 +108,9 @@ jobs:
           arch: ${{ env.ARCH }}
           distro: ${{ env.DISTRO }}
           githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+            ls -l /opt/artifacts/vcpkg/installed
           dockerRunArgs: |
             --volume "${PWD}:/workspace"
             --volume "/opt/artifacts:/opt/artifacts"
@@ -91,43 +120,42 @@ jobs:
           shell: /bin/bash
           install: |
             apt-get update -y
+            echo -e "installing deps"
             apt-get install -y \
-              build-essential \
-              clang \
-              cmake \
-              curl \
-              gcc \
-              git \
-              g++ \
-              libayatana-appindicator3-dev \
-              libasound2-dev \
-              libclang-10-dev \
-              libdrm-dev \
-              libgstreamer1.0-dev \
-              libgstreamer-plugins-base1.0-dev \
-              libgtk-3-dev \
-              libpam0g-dev \
-              libpulse-dev \
-              libssl-dev \
-              libva-dev \
-              libvdpau-dev \
-              libxcb-randr0-dev \
-              libxcb-shape0-dev \
-              libxcb-xfixes0-dev \
-              libxdo-dev \
-              libxfixes-dev \
-              libx11-dev \
-              llvm-10-dev \
-              nasm \
-              ninja-build \
-              pkg-config \
-              python3 \
-              tree \
-              unzip \
-              wget \
-              xz-utils \
-              zlib1g-dev
+               build-essential \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libayatana-appindicator3-dev \
+               libasound2-dev \
+               libclang-10-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpam0g-dev \
+               libpulse-dev \
+               libva-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               llvm-10-dev \
+               nasm \
+               ninja-build \
+               pkg-config \
+               tree \
+               python3 \
+               rpm \
+               unzip \
+               wget \
+               xz-utils \
+               libssl-dev
             apt-get remove -y libopus-dev || true
+            ls -l ./
             tree -L 3 /opt/artifacts/vcpkg/installed
           run: |
             git config --global --add safe.directory "*"
@@ -137,25 +165,78 @@ jobs:
             rm rust.tar.gz
             cd rust-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.TARGET }}
             ./install.sh
-            rm -rf /opt/rust-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.TARGET }}
+            rm -rf rust-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.TARGET }}
+
             mkdir -p ~/.cargo/
             echo """
               [source.crates-io]
               registry = 'https://github.com/rust-lang/crates.io-index'
             """ > ~/.cargo/config
+            cat ~/.cargo/config
+
             pushd /workspace
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             export VCPKG_DEFAULT_TRIPLET=${{ env.VCPKG_TRIPLET }}
             export VCPKG_DEFAULT_HOST_TRIPLET=${{ env.VCPKG_TRIPLET }}
-            export CARGO_INCREMENTAL=0
-            cargo build --locked --release --features hwcodec,unix-file-copy-paste --bin rustdesk --target ${{ env.TARGET }} --jobs 3
-            mkdir -p dist
-            cp target/${{ env.TARGET }}/release/rustdesk dist/rustdesk-linux-arm64
-            strip dist/rustdesk-linux-arm64 || true
-            sha256sum dist/rustdesk-linux-arm64 > dist/rustdesk-linux-arm64.sha256
+            export JOBS="--jobs 3"
+            cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste --release
+            rm -rf target/release/deps target/release/build
+            rm -rf ~/.cargo
 
-      - name: Upload rustdesk linux arm64 server
+            git config --global --add safe.directory "*"
+            pushd /workspace
+            export PATH=/opt/flutter-elinux/bin:$PATH
+            sed -i "s/flutter build linux --release/flutter-elinux build linux --verbose/g" ./build.py
+            sed -i "s/x64\/release/arm64\/release/g" ./build.py
+            popd
+
+            pushd /opt
+            wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            git clone https://github.com/sony/flutter-elinux.git || true
+            pushd flutter-elinux
+              git fetch
+              git reset --hard ${{ env.FLUTTER_VERSION }}
+              bin/flutter-elinux doctor -v
+              bin/flutter-elinux precache --linux
+            popd
+            cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
+            rm -rf flutter
+
+            if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
+              pushd /opt/flutter-elinux/flutter
+              git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+              popd
+            fi
+
+            pushd /workspace
+            export CARGO_INCREMENTAL=0
+            export DEB_ARCH=${{ env.DEB_ARCH }}
+            python3 ./build.py --flutter --skip-cargo
+            for name in rustdesk*??.deb; do
+              mv "$name" "${name%%.deb}-${{ env.ARCH }}.deb"
+            done
+
+            pushd /workspace
+            sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter.spec
+            HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ env.ARCH }}
+            for name in rustdesk*??.rpm; do
+                mv "$name" /workspace/"${name%%.rpm}.rpm"
+            done
+
+            pushd /workspace
+            sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter-suse.spec
+            HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ env.ARCH }}
+            for name in rustdesk*??.rpm; do
+                mv "$name" /workspace/"${name%%.rpm}-suse.rpm"
+            done
+
+      - name: Upload deb/rpm packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: rustdesk-linux-arm64-server
-          path: dist/
+          name: rustdesk-linux-arm64-flutter-packages
+          path: |
+            rustdesk-*.deb
+            rustdesk-*.rpm
