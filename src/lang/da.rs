@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Skjul forbindelseshåndteringsvindue"),
         ("hide_cm_tip", "Tillad at skjule, hvis der kun forbindes ved brug af midlertidige og permanente adgangskoder"),
         ("wayland_experiment_tip", "Wayland understøttelse er stadigvæk under udvikling. Hvis du har brug for ubemandet adgang, bedes du bruge X11."),
-        ("drm_capture_tip", "DRM/KMS direkte optagelse er aktiv — ingen portalsamtykke påkrævet. Fungerer ubetjent og ved loginskærmen."),
+        ("drm_capture_tip", "Direkte DRM/KMS-optagelse er tilgængelig — intet portalsamtykke kræves. Understøtter uovervåget adgang og optagelse af loginskærmen."),
         ("Right click to select tabs", "Højreklik for at vælge faner"),
         ("Skipped", "Sprunget over"),
         ("Add to address book", "Tilføj til adressebog"),

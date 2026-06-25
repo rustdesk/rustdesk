@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Fshih dritaren e menaxhimit të lidhjes"),
         ("hide_cm_tip", "Kjo është e mundur vetëm nëse aksesi bëhet nëpërmjet një fjalëkalimi të përhershëm"),
         ("wayland_experiment_tip", "Mbështetja për Wayland është në fazë eksperimentale, ju lutemi përdorni X11 nëse keni nevojë për akses pa mbikëqyrje."),
-        ("drm_capture_tip", "Kapja e drejtpërdrejtë DRM/KMS është aktive — nuk nevojitet pëlqimi i portalit. Funksionon pa mbikëqyrje dhe në ekranin e hyrjes."),
+        ("drm_capture_tip", "Kapja e drejtpërdrejtë DRM/KMS është e disponueshme — nuk nevojitet pëlqimi i portalit. Mbështet aksesin pa mbikëqyrje dhe kapjen e ekranit të hyrjes."),
         ("Right click to select tabs", "Klikoni me të djathtën për të zgjedhur skedat"),
         ("Skipped", "U kapërcye"),
         ("Add to address book", "Shto te libri i adresave"),

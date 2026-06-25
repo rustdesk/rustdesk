@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Slēpt savienojuma pārvaldības logu"),
         ("hide_cm_tip", "Atļaut paslēpšanu tikai tad, ja akceptējat sesijas, izmantojot paroli un pastāvīgo paroli"),
         ("wayland_experiment_tip", "Wayland atbalsts ir eksperimentālā stadijā. Ja nepieciešama neuzraudzīta piekļuve, lūdzu, izmantojiet X11."),
-        ("drm_capture_tip", "Tiešā DRM/KMS tveršana ir aktīva — portāla piekrišana nav nepieciešama. Darbojas bez uzraudzības un pieteikšanās ekrānā."),
+        ("drm_capture_tip", "Tiešā DRM/KMS tveršana ir pieejama — portāla piekrišana nav nepieciešama. Atbalsta bezuzraudzības piekļuvi un pieteikšanās ekrāna tveršanu."),
         ("Right click to select tabs", "Ar peles labo pogu noklikšķiniet, lai atlasītu cilnes"),
         ("Skipped", "Izlaists"),
         ("Add to address book", "Pievienot adrešu grāmatai"),

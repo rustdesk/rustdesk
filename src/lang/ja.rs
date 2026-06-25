@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "接続管理画面を隠す"),
         ("hide_cm_tip", "パスワードによるセッションを許可し、固定パスワードを使用する場合にのみ、管理画面の非表示を許可する。"),
         ("wayland_experiment_tip", "Wayland の対応は試験的なものです。無人アクセスを使用する場合はX11デスクトップをご利用ください。"),
-        ("drm_capture_tip", "DRM/KMS ダイレクトキャプチャが有効です — ポータル承認不要。無人アクセスやログイン画面でも動作します。"),
+        ("drm_capture_tip", "DRM/KMS ダイレクトキャプチャが利用可能です — ポータルの承認は不要。無人アクセスやログイン画面のキャプチャに対応しています。"),
         ("Right click to select tabs", "右クリックでタブを選択"),
         ("Skipped", "スキップ"),
         ("Add to address book", "アドレス帳に追加"),

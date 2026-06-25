@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", ""),
         ("hide_cm_tip", ""),
         ("wayland_experiment_tip", ""),
+        ("drm_capture_tip", ""),
         ("Right click to select tabs", ""),
         ("Skipped", ""),
         ("Add to address book", ""),

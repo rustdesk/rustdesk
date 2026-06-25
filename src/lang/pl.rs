@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Ukryj okno zarządzania połączeniem"),
         ("hide_cm_tip", "Pozwalaj na ukrycie tylko, gdy akceptujesz sesje za pośrednictwem hasła i używasz hasła permanentnego"),
         ("wayland_experiment_tip", "Wsparcie dla Wayland jest niekompletne, użyj X11 jeżeli chcesz korzystać z dostępu nienadzorowanego"),
-        ("drm_capture_tip", "Bezpośrednie przechwytywanie DRM/KMS jest aktywne — zgoda portalu nie jest wymagana. Działa bez nadzoru i na ekranie logowania."),
+        ("drm_capture_tip", "Bezpośrednie przechwytywanie DRM/KMS jest dostępne — zgoda portalu nie jest wymagana. Obsługuje dostęp bez nadzoru oraz przechwytywanie ekranu logowania."),
         ("Right click to select tabs", "Kliknij prawym przyciskiem myszy, aby wybrać zakładkę"),
         ("Skipped", "Pominięte"),
         ("Add to address book", "Dodaj do Książki Adresowej"),

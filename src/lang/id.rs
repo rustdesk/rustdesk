@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Sembunyikan jendela pengaturan koneksi"),
         ("hide_cm_tip", "Izinkan untuk menyembunyikan hanya jika menerima sesi melalui kata sandi dan menggunakan kata sandi permanen"),
         ("wayland_experiment_tip", "Dukungan Wayland masih dalam tahap percobaan, harap gunakan X11 jika Anda memerlukan akses tanpa pengawasan"),
-        ("drm_capture_tip", "Tangkapan langsung DRM/KMS aktif — tidak diperlukan persetujuan portal. Bekerja tanpa pengawasan dan di layar login."),
+        ("drm_capture_tip", "Tangkapan langsung DRM/KMS tersedia — tidak memerlukan persetujuan portal. Mendukung akses tanpa pengawasan dan tangkapan layar login."),
         ("Right click to select tabs", "Klik kanan untuk memilih tab"),
         ("Skipped", "Dilewati"),
         ("Add to address book", "Tambahkan ke Buku Alamat"),

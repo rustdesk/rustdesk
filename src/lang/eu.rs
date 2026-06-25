@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Ezkutatu konexio kudeatze leihoa"),
         ("hide_cm_tip", "Utzi ezkutatzen saioak pasahitzarekin onartzen badira eta pasahitza betirakoa bada"),
         ("wayland_experiment_tip", "Wayland euskarria oraindik fase esperimentalean dago, mesedez, erabili X11 arretarik gabeko sarrera behar baduzu."),
-        ("drm_capture_tip", "DRM/KMS zuzeneko kaptura aktibo dago — portalaren baimena ez da beharrezkoa. Ikuskaritzarik gabe eta saio-hasierako pantailan funtzionatzen du."),
+        ("drm_capture_tip", "DRM/KMS zuzeneko kaptura erabilgarri dago — ez da portalaren baimenik behar. Inork zaindu gabeko atzipena eta saio-hasierako pantailaren kaptura onartzen ditu."),
         ("Right click to select tabs", "Eskuineko klika fitxak hautatzeko"),
         ("Skipped", "Saltatuta"),
         ("Add to address book", "Gehitu helbide-liburura"),
