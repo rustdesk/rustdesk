@@ -2293,7 +2293,10 @@ pub fn is_x11() -> bool {
 //   • the `drm` feature is compiled in, AND
 //   • we are on a Wayland session, AND
 //   • at least one /dev/dri/card* node is present, AND
-//   • the drmtap-helper binary is reachable (installed or beside the executable).
+//   • the drmtap-helper binary is present in one of the paths libdrmtap actually
+//     searches at runtime (see privilege_helper.c). Checking the real search
+//     paths — not "beside the executable", which libdrmtap never searches —
+//     avoids reporting DRM as available when capture would fail to find a helper.
 pub fn is_drm_capture_available() -> bool {
     #[cfg(feature = "drm")]
     {
@@ -2310,12 +2313,17 @@ pub fn is_drm_capture_available() -> bool {
         if !has_card {
             return false;
         }
-        // Verify drmtap-helper is present: check installed path and dev-build path.
-        let installed = std::path::Path::new("/usr/lib/rustdesk/drmtap-helper").exists();
-        let beside = std::env::current_exe().ok().map_or(false, |exe| {
-            exe.parent().map_or(false, |d| d.join("drmtap-helper").exists())
-        });
-        installed || beside
+        // Mirror libdrmtap's helper_search_paths so the UI status matches what
+        // capture will actually find.
+        const HELPER_PATHS: [&str; 6] = [
+            "/usr/lib/rustdesk/drmtap-helper",
+            "/usr/libexec/drmtap-helper",
+            "/usr/local/libexec/drmtap-helper",
+            "/usr/local/bin/drmtap-helper",
+            "/usr/bin/drmtap-helper",
+            "/usr/lib/drmtap/drmtap-helper",
+        ];
+        HELPER_PATHS.iter().any(|p| std::path::Path::new(p).exists())
     }
     #[cfg(not(feature = "drm"))]
     false
