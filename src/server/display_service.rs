@@ -310,6 +310,14 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
     let use_logical_scale = !is_x11()
         && crate::is_server()
         && scrap::wayland::display::get_displays().displays.len() > 1;
+    // Set cursor downscale once, from the primary display, so mixed-DPI setups
+    // do not end up with whichever display happened to be last in the list.
+    #[cfg(target_os = "linux")]
+    if use_logical_scale {
+        if let Some(primary) = all.first() {
+            crate::platform::linux::set_cursor_downscale(primary.scale());
+        }
+    }
     let displays = all
         .iter()
         .map(|d| {
@@ -326,10 +334,6 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
                 if use_logical_scale {
                     scale = d.scale();
                 }
-                // Match the XFixes (XWayland) cursor — captured at a HiDPI size —
-                // to the physically-captured video by dividing it by the display
-                // scale on the client side. No-op (1.0) on X11 / unscaled displays.
-                crate::platform::linux::set_cursor_downscale(scale);
             }
             let original_resolution = get_original_resolution(
                 &display_name,

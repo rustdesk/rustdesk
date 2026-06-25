@@ -430,8 +430,8 @@ fn downscale_rgba(
             out[di..di + 4].copy_from_slice(&colors[si..si + 4]);
         }
     }
-    let nhx = ((hotx as f64) / factor).round() as i32;
-    let nhy = ((hoty as f64) / factor).round() as i32;
+    let nhx = (((hotx as f64) / factor).round() as i32).clamp(0, nw - 1);
+    let nhy = (((hoty as f64) / factor).round() as i32).clamp(0, nh - 1);
     (nw, nh, out, nhx, nhy)
 }
 
@@ -439,9 +439,10 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     #[cfg(feature = "drm")]
     if !is_x11() {
         if let Some(c) = scrap::drm_cursor() {
-            if c.id != hcursor {
-                bail!("cursor id mismatch: expected {}, got {}", hcursor, c.id);
-            }
+            // The DRM cursor is updated asynchronously; its id may have advanced
+            // past hcursor between get_cursor() and get_cursor_data().  Return the
+            // latest snapshot rather than bailing, which would trigger a 10-second
+            // MouseCursorService backoff and log spam.
             let mut cd: CursorData = Default::default();
             cd.id = c.id;
             // Same logical-canvas downscale as the XFixes path: the hardware
@@ -2299,8 +2300,12 @@ pub fn is_drm_capture_available() -> bool {
         if is_x11() {
             return false;
         }
-        let has_card = (0..4).any(|n| {
-            std::path::Path::new(&format!("/dev/dri/card{}", n)).exists()
+        let has_card = std::fs::read_dir("/dev/dri").map_or(false, |mut dir| {
+            dir.any(|e| {
+                e.ok()
+                    .and_then(|e| e.file_name().into_string().ok())
+                    .map_or(false, |n| n.starts_with("card"))
+            })
         });
         if !has_card {
             return false;
