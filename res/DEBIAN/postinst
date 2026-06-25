@@ -10,7 +10,8 @@ if [ "$1" = configure ]; then
 	# Grant drmtap-helper the single capability it needs to open the DRM device
 	# without running the main rustdesk process as root.
 	if [ -f /usr/lib/rustdesk/drmtap-helper ] && command -v setcap >/dev/null; then
-		setcap cap_sys_admin+ep /usr/lib/rustdesk/drmtap-helper || true
+		setcap cap_sys_admin+ep /usr/lib/rustdesk/drmtap-helper \
+			|| echo "rustdesk: warning: setcap on drmtap-helper failed; DRM/KMS capture will fall back to PipeWire" >&2
 	fi
 
 	if [ "systemd" == "$INITSYS" ]; then

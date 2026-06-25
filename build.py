@@ -354,7 +354,9 @@ def build_flutter_deb(version, features):
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
     # Install drmtap-helper so postinst can apply cap_sys_admin+ep (drm builds only).
     system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-    system2('cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper || true')
+    # Only present in drm-enabled builds; copy it when built, but don't mask a
+    # genuine copy error (e.g. unwritable dest) the way `|| true` would.
+    system2('if [ -f ../target/release/drmtap-helper ]; then cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper; fi')
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
@@ -394,7 +396,9 @@ def build_deb_from_folder(version, binary_folder):
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
     # Install drmtap-helper so postinst can apply cap_sys_admin+ep (drm builds only).
     system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-    system2('cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper || true')
+    # Only present in drm-enabled builds; copy it when built, but don't mask a
+    # genuine copy error (e.g. unwritable dest) the way `|| true` would.
+    system2('if [ -f ../target/release/drmtap-helper ]; then cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper; fi')
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
