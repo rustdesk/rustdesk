@@ -182,7 +182,6 @@ pub(super) async fn check_init() -> ResultType<()> {
                     log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                     try_fix_logical_size(&mut all);
                 }
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 super::display_service::check_update_displays(&all);
@@ -224,6 +223,11 @@ pub(super) async fn check_init() -> ResultType<()> {
 
                     lock.insert(idx, cap_display_info as u64);
                 }
+                // Mark initialised only after every capturer was created and
+                // inserted. If Capturer::new() fails above, the `?` returns early
+                // with the flag still false so the next call can retry, rather
+                // than the duplicate-init guard permanently leaving zero capturers.
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
             }
         }
     }

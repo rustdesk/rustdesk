@@ -161,7 +161,8 @@ impl Display {
             }
 
             let mut raw_displays = vec![std::mem::zeroed::<drmtap_display>(); 8];
-            let n = drmtap_list_displays(ctx, raw_displays.as_mut_ptr(), 8);
+            let cap = raw_displays.len() as i32;
+            let n = drmtap_list_displays(ctx, raw_displays.as_mut_ptr(), cap);
             drmtap_close(ctx);
 
             if n <= 0 {
@@ -171,13 +172,19 @@ impl Display {
                 ));
             }
 
+            // drmtap_list_displays returns the total connected-connector count,
+            // which may exceed the buffer capacity (only `cap` entries are
+            // written). Clamp before indexing so >8 connectors can't read past
+            // the end of the Vec.
+            let count = (n as usize).min(raw_displays.len());
+
             let mut idxs: Vec<usize> =
-                (0..n as usize).filter(|&i| raw_displays[i].active != 0).collect();
+                (0..count).filter(|&i| raw_displays[i].active != 0).collect();
             if idxs.is_empty() {
                 // nvidia-drm doesn't flag the connector active via the legacy API
                 // even with a live scanout; fall back to all enumerated displays
                 // and let the capturer auto-select the active CRTC (crtc_id 0).
-                idxs = (0..n as usize).collect();
+                idxs = (0..count).collect();
             }
             let displays: Vec<Display> = idxs
                 .into_iter()

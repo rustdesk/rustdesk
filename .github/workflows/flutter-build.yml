@@ -1557,8 +1557,7 @@ jobs:
                unzip \
                wget \
                xz-utils \
-               libssl-dev \
-               patchelf
+               libssl-dev
             # we have libopus compiled by us.
             apt-get remove -y libopus-dev || true
             # output devs
