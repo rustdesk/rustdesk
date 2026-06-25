@@ -389,6 +389,24 @@ pub fn core_main() -> Option<Vec<String>> {
             log::info!("start --service");
             crate::start_os_service();
             return None;
+        } else if args[0] == "--uinput-service" {
+            // Minimal root helper: provide ONLY the uinput IPC services
+            // (keyboard/mouse/control) so a separately-run, unprivileged
+            // `--server` can inject input on Wayland — without the invasive
+            // `--service` lifecycle management. Run as root.
+            #[cfg(target_os = "linux")]
+            {
+                use crate::server::uinput::service;
+                log::info!("start --uinput-service (keyboard/mouse/control)");
+                std::thread::spawn(|| service::start_service_control());
+                std::thread::spawn(|| service::start_service_keyboard());
+                std::thread::spawn(|| service::start_service_mouse());
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(3600));
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            return None;
         } else if args[0] == "--server" {
             log::info!("start --server with user {}", crate::username());
             #[cfg(target_os = "linux")]
