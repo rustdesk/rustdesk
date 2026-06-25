@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Peida ühenduse haldamise aken"),
         ("hide_cm_tip", "Luba varjamine ainult siis, kui parooliga seansse võetakse vastu ning kasutatakse püsivat parooli."),
         ("wayland_experiment_tip", "Waylandi tugi on katsetusjärgus, järelvalveta juurdepääsu vajadusel palun kasuta X11."),
+        ("drm_capture_tip", "DRM/KMS otsekaardistus on aktiivne — portaali nõusolek pole vajalik. Töötab järelvalveta ja sisselogimisekraanil."),
         ("Right click to select tabs", "Paremklõpsa vahekaartide valimiseks"),
         ("Skipped", "Vahelejäetud"),
         ("Add to address book", "Lisa aadressiraamatusse"),

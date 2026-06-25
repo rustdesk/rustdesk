@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Verberg het venster voor verbindingsbeheer"),
         ("hide_cm_tip", "Dit kan alleen als de toegang via een permanent wachtwoord verloopt."),
         ("wayland_experiment_tip", "Wayland ondersteuning is slechts experimenteel. Gebruik alstublieft X11 als u onbeheerde toegang nodig heeft."),
+        ("drm_capture_tip", "DRM/KMS directe opname is actief — geen portaltoestemming vereist. Werkt onbeheerd en op het aanmeldingsscherm."),
         ("Right click to select tabs", "Rechts klikken om tabbladen te selecteren"),
         ("Skipped", "Overgeslagen"),
         ("Add to address book", "Toevoegen aan Adresboek"),

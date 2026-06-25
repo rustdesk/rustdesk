@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Amaga la finestra d'administració de la connexió"),
         ("hide_cm_tip", "Permet amagar la finestra només en acceptar sessions entrants sempre que s'utilitzi una contrasenya permanent"),
         ("wayland_experiment_tip", "El suport per a Wayland està en fase experimental; es recomana l'ús d'x11 si us cal accés de forma desatesa."),
+        ("drm_capture_tip", "La captura directa DRM/KMS és activa — no cal consentiment del portal. Funciona de forma desatesa i a la pantalla d'inici de sessió."),
         ("Right click to select tabs", "Feu clic amb el botó dret per a seleccionar pestanyes"),
         ("Skipped", "S'ha omès"),
         ("Add to address book", "Afegeix a la llibreta d'adreces"),

@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Cua sa ventana de gestione de sas connessiones"),
         ("hide_cm_tip", "Permite de cuare petzi si s'atzetant sessiones cun crae permanente"),
         ("wayland_experiment_tip", "Su suportu Wayland est in fase isperimentale, si boles un'atzessu istàbile imprea X11."),
+        ("drm_capture_tip", "Sa captura diretta DRM/KMS est attiva — non si abbisognat su consensu de su portal. Funtzionat senza assistèntzia e in sa schermada de intradura."),
         ("Right click to select tabs", "Incarca cun su pulsante destru pro seletzionare sas ischedas"),
         ("Skipped", "Brincadu"),
         ("Add to address book", "Annanghe a sa rubrica"),

@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Kapcsolatkezelő ablak elrejtése"),
         ("hide_cm_tip", "Ez csak akkor lehetséges, ha a hozzáférés állandó jelszóval történik."),
         ("wayland_experiment_tip", "A Wayland-támogatás csak kísérleti jellegű. Használja az X11-et, ha felügyelet nélküli hozzáférésre van szüksége."),
+        ("drm_capture_tip", "A DRM/KMS közvetlen rögzítés aktív — nincs szükség portál-hozzájárulásra. Felügyelet nélkül és a bejelentkezési képernyőn is működik."),
         ("Right click to select tabs", "Jobb klikk a lapok kiválasztásához"),
         ("Skipped", "Kihagyott"),
         ("Add to address book", "Hozzáadás a címjegyzékhez"),

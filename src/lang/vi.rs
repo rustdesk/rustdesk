@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Ẩn cửa sổ quản lý kết nối"),
         ("hide_cm_tip", "Chỉ ẩn khi sử dụng mật khẩu vĩnh viễn"),
         ("wayland_experiment_tip", "Wayland đang thử nghiệm, hãy dùng X11 nếu muốn ổn định."),
+        ("drm_capture_tip", "Chụp màn hình trực tiếp DRM/KMS đang hoạt động — không cần xác nhận portal. Hoạt động không cần giám sát và ở màn hình đăng nhập."),
         ("Right click to select tabs", "Chuột phải để chọn tab"),
         ("Skipped", "Đã bỏ qua"),
         ("Add to address book", "Thêm vào sổ địa chỉ"),

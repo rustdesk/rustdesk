@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "კავშირის მართვის ფანჯრის დამალვა"),
         ("hide_cm_tip", "დამალვის დაშვება, თუ სესიები მიიღება პაროლით ან გამოიყენება მუდმივი პაროლი"),
         ("wayland_experiment_tip", "Wayland-ის მხარდაჭერა ექსპერიმენტულ ეტაპზეა, გამოიყენეთ X11, თუ გჭირდებათ ავტომატური წვდომა."),
+        ("drm_capture_tip", "DRM/KMS პირდაპირი ჩაწერა აქტიურია — პორტალის თანხმობა არ საჭიროება. მუშაობს ოპერატორის გარეშე და შესვლის ეკრანზე."),
         ("Right click to select tabs", "ჩანართების არჩევა მარჯვენა ღილაკით"),
         ("Skipped", "გამოტოვებულია"),
         ("Add to address book", "მისამართების წიგნში დამატება"),
