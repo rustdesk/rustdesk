@@ -397,7 +397,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "Solicitud de acceso a su dispositivo"),
         ("Hide connection management window", "Ocultar ventana de gestión de conexión"),
         ("hide_cm_tip", "Permitir ocultar solo si se aceptan sesiones a través de contraseña y usando contraseña permanente"),
-        ("wayland_experiment_tip", "El soporte para Wayland está en fase experimental, por favor, use X11 si necesita acceso desatendido."),
+        ("wayland_experiment_tip", "La captura directa DRM/KMS está activa. Wayland y X11 están completamente soportados sin PipeWire ni diálogos de portal."),
         ("Right click to select tabs", "Clic derecho para seleccionar pestañas"),
         ("Skipped", "Omitido"),
         ("Add to address book", "Añadir al directorio"),

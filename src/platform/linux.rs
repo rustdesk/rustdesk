@@ -2285,6 +2285,26 @@ pub fn is_x11() -> bool {
     *IS_X11
 }
 
+// Returns true when:
+//   • the `drm` feature is compiled in, AND
+//   • we are on a Wayland session, AND
+//   • at least one /dev/dri/card* node is present.
+// The last check is a fast heuristic; the actual helper capability
+// check happens when capture starts and falls back gracefully.
+pub fn is_drm_capture_available() -> bool {
+    #[cfg(feature = "drm")]
+    {
+        if is_x11() {
+            return false;
+        }
+        return (0..4).any(|n| {
+            std::path::Path::new(&format!("/dev/dri/card{}", n)).exists()
+        });
+    }
+    #[cfg(not(feature = "drm"))]
+    false
+}
+
 #[inline]
 pub fn is_selinux_enforcing() -> bool {
     match run_cmds("getenforce") {

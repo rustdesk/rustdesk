@@ -397,7 +397,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "Zugriff auf Ihr Gerät anfordern"),
         ("Hide connection management window", "Fenster zur Verwaltung der Verbindung verstecken"),
         ("hide_cm_tip", "Dies ist nur möglich, wenn der Zugriff über ein permanentes Passwort erfolgt."),
-        ("wayland_experiment_tip", "Die Unterstützung von Wayland ist nur experimentell. Bitte nutzen Sie X11, wenn Sie einen unbeaufsichtigten Zugriff benötigen."),
+        ("wayland_experiment_tip", "DRM/KMS-Direktaufnahme ist aktiv. Wayland und X11 werden vollständig unterstützt – ohne PipeWire oder Portal-Abfragen."),
         ("Right click to select tabs", "Tabs mit rechtem Mausklick auswählen"),
         ("Skipped", "Übersprungen"),
         ("Add to address book", "Zum Adressbuch hinzufügen"),
