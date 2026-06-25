@@ -353,6 +353,9 @@ def build_flutter_deb(version, features):
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
     system2("patchelf --set-rpath '/usr/share/rustdesk/lib' tmpdeb/usr/share/rustdesk/rustdesk")
+    # Install drmtap-helper so postinst can apply cap_sys_admin+ep (drm builds only).
+    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    system2('cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper || true')
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
@@ -391,9 +394,9 @@ def build_deb_from_folder(version, binary_folder):
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
     system2("patchelf --set-rpath '/usr/share/rustdesk/lib' tmpdeb/usr/share/rustdesk/rustdesk")
-    # Install drmtap-helper alongside rustdesk so postinst can setcap it.
+    # Install drmtap-helper so postinst can apply cap_sys_admin+ep (drm builds only).
     system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-    system2('cp drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper || true')
+    system2('cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper || true')
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)

@@ -248,6 +248,7 @@ pub struct Capturer {
     buffer: Vec<u8>,
     last_fb_id: u32,
     frame_count: u64,
+    cursor_tick: u64,
     skip_count: u64,
     last_grab_time: Instant,
 }
@@ -285,6 +286,7 @@ impl Capturer {
                 buffer: Vec::new(),
                 last_fb_id: 0,
                 frame_count: 0,
+                cursor_tick: 0,
                 skip_count: 0,
                 last_grab_time: Instant::now(),
             })
@@ -324,6 +326,15 @@ impl TraitCapturer for Capturer {
             self.last_grab_time = Instant::now();
             let current_fb_id = frame.fb_id;
 
+            // Poll the hardware cursor plane independently of framebuffer changes.
+            // The cursor plane is a separate DRM plane — its shape can change even
+            // when the scanout framebuffer is unchanged (e.g. while the desktop is
+            // idle but the user is moving the mouse).
+            self.cursor_tick += 1;
+            if self.cursor_tick % 4 == 0 {
+                self.update_cursor();
+            }
+
             // fb_id skip: if framebuffer hasn't changed, skip expensive copy
             if current_fb_id == self.last_fb_id && self.last_fb_id != 0 {
                 drmtap_frame_release(self.ctx, &mut frame);
@@ -358,94 +369,6 @@ impl TraitCapturer for Capturer {
 
             drmtap_frame_release(self.ctx, &mut frame);
 
-            // Periodically capture the hardware cursor from the DRM cursor plane
-            // (via the privileged helper) so the client can show the real,
-            // shape-changing Wayland cursor instead of the stale XFixes one. The
-            // shape changes rarely, so a few times per second is plenty; the image
-            // is tiny (~64x64). Only this CRTC's cursor is captured (visible==0 when
-            // the pointer is on another monitor — then we keep the last shape).
-            if self.frame_count % 4 == 0 {
-                let mut c: drmtap_cursor_info = std::mem::zeroed();
-                let cret = drmtap_get_cursor(self.ctx, &mut c);
-                if cret == 0
-                    && c.visible != 0
-                    && !c.pixels.is_null()
-                    && c.width > 0
-                    && c.height > 0
-                    && (c.width as i64) * (c.height as i64) <= 256 * 256
-                {
-                    let cw = c.width as i32;
-                    let ch = c.height as i32;
-                    let n = (cw * ch) as usize;
-                    let src = std::slice::from_raw_parts(c.pixels, n);
-                    let mut hash: u64 = 1469598103934665603;
-                    let mut colors = Vec::with_capacity(n * 4);
-                    // Track the non-transparent bounding box to derive the hotspot:
-                    // i915 doesn't expose the cursor hotspot, and the graphic sits
-                    // inside a (mostly transparent) 64x64 buffer, so drawing the
-                    // buffer top-left at the pointer leaves the cursor mis-placed.
-                    let (mut minx, mut miny, mut maxx, mut maxy) = (cw, ch, -1i32, -1i32);
-                    for (i, &p) in src.iter().enumerate() {
-                        // libdrmtap cursor pixels are ARGB8888; RustDesk wants RGBA.
-                        let a = ((p >> 24) & 0xff) as u8;
-                        let r = ((p >> 16) & 0xff) as u8;
-                        let g = ((p >> 8) & 0xff) as u8;
-                        let b = (p & 0xff) as u8;
-                        colors.push(r);
-                        colors.push(g);
-                        colors.push(b);
-                        colors.push(a);
-                        hash ^= p as u64;
-                        hash = hash.wrapping_mul(1099511628211);
-                        // Bound the *solid* pixels (alpha >= 128). Using a solid
-                        // threshold instead of any-non-transparent keeps faint
-                        // antialiased edge pixels from pushing the box past the
-                        // real tip, which would offset the derived hotspot.
-                        if a >= 128 {
-                            let x = (i as i32) % cw;
-                            let y = (i as i32) / cw;
-                            if x < minx { minx = x; }
-                            if x > maxx { maxx = x; }
-                            if y < miny { miny = y; }
-                            if y > maxy { maxy = y; }
-                        }
-                    }
-                    // Derive the hotspot from the solid bounding box. The cursor
-                    // graphic sits inside a (mostly transparent) buffer and i915
-                    // does not expose the real hotspot, so we approximate it:
-                    //   - tall/narrow cursors (I-beam, vertical resize) -> centre
-                    //   - otherwise (arrow-like pointers) -> top-left (the tip)
-                    // Falls back to (0,0) for an empty cursor.
-                    let (hotx, hoty) = if c.hot_x != 0 || c.hot_y != 0 {
-                        // Driver exposed a real hotspot (virtio/vmwgfx VMs) — exact.
-                        (c.hot_x, c.hot_y)
-                    } else if maxx >= minx && maxy >= miny {
-                        let bw = maxx - minx + 1;
-                        let bh = maxy - miny + 1;
-                        if bh > bw * 2 {
-                            ((minx + maxx) / 2, (miny + maxy) / 2) // centred (I-beam-like)
-                        } else {
-                            (minx, miny) // top-left tip (arrow-like)
-                        }
-                    } else {
-                        (0, 0)
-                    };
-                    let mut lock = DRM_CURSOR.lock().unwrap();
-                    let changed = lock.as_ref().map_or(true, |old| old.id != hash);
-                    if changed {
-                        *lock = Some(DrmCursor {
-                            id: hash,
-                            width: cw,
-                            height: ch,
-                            hotx,
-                            hoty,
-                            colors,
-                        });
-                    }
-                }
-                drmtap_cursor_release(self.ctx, &mut c);
-            }
-
             self.frame_count += 1;
             self.w = w;
             self.h = h;
@@ -456,6 +379,78 @@ impl TraitCapturer for Capturer {
                 h,
             )))
         }
+    }
+
+}
+
+impl Capturer {
+    // Capture the hardware cursor from the DRM cursor plane and update DRM_CURSOR.
+    // The cursor plane is independent of the scanout framebuffer, so this is called
+    // on every cursor_tick even when the framebuffer hasn't changed.
+    unsafe fn update_cursor(&mut self) {
+        let mut c: drmtap_cursor_info = std::mem::zeroed();
+        let cret = drmtap_get_cursor(self.ctx, &mut c);
+        if cret == 0
+            && c.visible != 0
+            && !c.pixels.is_null()
+            && c.width > 0
+            && c.height > 0
+            && (c.width as i64) * (c.height as i64) <= 256 * 256
+        {
+            let cw = c.width as i32;
+            let ch = c.height as i32;
+            let n = (cw * ch) as usize;
+            let src = std::slice::from_raw_parts(c.pixels, n);
+            let mut hash: u64 = 1469598103934665603;
+            let mut colors = Vec::with_capacity(n * 4);
+            let (mut minx, mut miny, mut maxx, mut maxy) = (cw, ch, -1i32, -1i32);
+            for (i, &p) in src.iter().enumerate() {
+                let a = ((p >> 24) & 0xff) as u8;
+                let r = ((p >> 16) & 0xff) as u8;
+                let g = ((p >> 8) & 0xff) as u8;
+                let b = (p & 0xff) as u8;
+                colors.push(r);
+                colors.push(g);
+                colors.push(b);
+                colors.push(a);
+                hash ^= p as u64;
+                hash = hash.wrapping_mul(1099511628211);
+                if a >= 128 {
+                    let x = (i as i32) % cw;
+                    let y = (i as i32) / cw;
+                    if x < minx { minx = x; }
+                    if x > maxx { maxx = x; }
+                    if y < miny { miny = y; }
+                    if y > maxy { maxy = y; }
+                }
+            }
+            let (hotx, hoty) = if c.hot_x != 0 || c.hot_y != 0 {
+                (c.hot_x, c.hot_y)
+            } else if maxx >= minx && maxy >= miny {
+                let bw = maxx - minx + 1;
+                let bh = maxy - miny + 1;
+                if bh > bw * 2 {
+                    ((minx + maxx) / 2, (miny + maxy) / 2)
+                } else {
+                    (minx, miny)
+                }
+            } else {
+                (0, 0)
+            };
+            let mut lock = DRM_CURSOR.lock().unwrap();
+            let changed = lock.as_ref().map_or(true, |old| old.id != hash);
+            if changed {
+                *lock = Some(DrmCursor {
+                    id: hash,
+                    width: cw,
+                    height: ch,
+                    hotx,
+                    hoty,
+                    colors,
+                });
+            }
+        }
+        drmtap_cursor_release(self.ctx, &mut c);
     }
 }
 

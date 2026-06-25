@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Kaŝi la fenestron de konekta administrado"),
         ("hide_cm_tip", "Permesi kaŝadon nur se oni akceptas sesiojn per pasvorto kaj uzas permanentan pasvorton"),
         ("wayland_experiment_tip", "La subteno de Wayland estas en eksperimenta stadio, bonvolu uzi X11 se vi bezonas senĉeestan aliron."),
-        ("drm_capture_tip", "Rekta kapto DRM/KMS estas aktiva — neniu portala konsento necesas. Funkcias sennombre kaj ĉe la ensaluta ekrano."),
+        ("drm_capture_tip", "Rekta kapto DRM/KMS estas aktiva — neniu portala konsento necesas. Funkcias senatende kaj ĉe la ensaluta ekrano."),
         ("Right click to select tabs", "Dekstre alklaku por elekti langetojn"),
         ("Skipped", "Preterlasita"),
         ("Add to address book", "Aldoni al adresaro"),

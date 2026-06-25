@@ -87,19 +87,19 @@ fn install_drmtap_helper() {
         return;
     }
     // DEP_DRMTAP_HELPER_BIN is emitted by libdrmtap-sys via `links = "drmtap"`.
-    if let Ok(src) = std::env::var("DEP_DRMTAP_HELPER_BIN") {
-        let out_dir = std::env::var("OUT_DIR").unwrap();
-        // Walk up three levels: OUT_DIR is .../target/<profile>/build/<pkg>/out
-        let target_dir = std::path::Path::new(&out_dir)
-            .ancestors()
-            .nth(3)
-            .expect("unexpected OUT_DIR depth");
-        let dst = target_dir.join("drmtap-helper");
-        std::fs::copy(&src, &dst).unwrap_or_else(|e| {
-            panic!("failed to copy drmtap-helper from {} to {}: {}", src, dst.display(), e)
-        });
-        println!("cargo:rerun-if-changed={}", src);
-    }
+    let src = std::env::var("DEP_DRMTAP_HELPER_BIN")
+        .expect("DEP_DRMTAP_HELPER_BIN not set; libdrmtap-sys must emit it when drm feature is enabled");
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    // Walk up three levels: OUT_DIR is .../target/<profile>/build/<pkg>/out
+    let target_dir = std::path::Path::new(&out_dir)
+        .ancestors()
+        .nth(3)
+        .expect("unexpected OUT_DIR depth");
+    let dst = target_dir.join("drmtap-helper");
+    std::fs::copy(&src, &dst).unwrap_or_else(|e| {
+        panic!("failed to copy drmtap-helper from {} to {}: {}", src, dst.display(), e)
+    });
+    println!("cargo:rerun-if-changed={}", src);
 }
 
 fn main() {

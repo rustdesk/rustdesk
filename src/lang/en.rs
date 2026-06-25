@@ -128,7 +128,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-time Password", "One-time password"),
         ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using permanent password"),
         ("wayland_experiment_tip", "Wayland support is experimental. Please use X11 if you need unattended access."),
-        ("drm_capture_tip", "DRM/KMS direct capture is active — no portal consent required. Works unattended and at the login screen."),
+        ("drm_capture_tip", "DRM/KMS direct capture is available — no portal consent required. Supports unattended access and login screen capture."),
         ("software_render_tip", "If you're using Nvidia graphics card under Linux and the remote window closes immediately after connecting, switching to the open-source Nouveau driver and choosing to use software rendering may help. A software restart is required."),
         ("config_input", "In order to control remote desktop with keyboard, you need to grant RustDesk \"Input Monitoring\" permissions."),
         ("config_microphone", "In order to speak remotely, you need to grant RustDesk \"Record Audio\" permissions."),

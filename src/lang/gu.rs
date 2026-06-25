@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "કનેક્શન મેનેજમેન્ટ વિન્ડો છુપાવો"),
         ("hide_cm_tip", "જો પાસવર્ડ દ્વારા કનેક્શન હોય તો જ છુપાવો"),
         ("wayland_experiment_tip", "Wayland સપોર્ટ હજુ પ્રાયોગિક ધોરણે છે"),
-        ("drm_capture_tip", "DRM/KMS સીધું કૅપ્ચર સક્રિય છે — પોર્ટલ સંમતિની જરૂર નથી. અित्યયारी અને લૉગિન સ્ક્રીन પर कार्य करे छे."),
+        ("drm_capture_tip", "DRM/KMS સીધું કૅપ્ચર સક્રિય છે — પોર્ટલ સંમતિ જરૂરી નથી. તે સ્વ-સ્ફૂર્ત રીતે અને લૉગિન સ્ક્રીન પર કાર્ય કરે છે."),
         ("Right click to select tabs", "ટેબ્સ પસંદ કરવા રાઇટ ક્લિક કરો"),
         ("Skipped", "રહેવા દીધું (Skipped)"),
         ("Add to address book", "એડ્રેસ બુકમાં ઉમેરો"),

@@ -439,6 +439,9 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     #[cfg(feature = "drm")]
     if !is_x11() {
         if let Some(c) = scrap::drm_cursor() {
+            if c.id != hcursor {
+                bail!("cursor id mismatch: expected {}, got {}", hcursor, c.id);
+            }
             let mut cd: CursorData = Default::default();
             cd.id = c.id;
             // Same logical-canvas downscale as the XFixes path: the hardware
