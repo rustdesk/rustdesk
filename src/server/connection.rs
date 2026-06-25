@@ -407,8 +407,11 @@ impl Connection {
         stream: super::Stream,
         id: i32,
         server: super::ServerPtrWeak,
-        control_permissions: Option<ControlPermissions>,
+        meta: super::ConnectionMeta,
     ) {
+        let super::ConnectionMeta {
+            control_permissions,
+        } = meta;
         // Android is not supported yet, so we always set control_permissions to None.
         #[cfg(target_os = "android")]
         let control_permissions = None;
@@ -1308,7 +1311,7 @@ impl Connection {
         {
             self.send_login_error("Your ip is blocked by the peer")
                 .await;
-            Self::post_alarm_audit(
+            self.post_alarm_audit(
                 AlarmAuditType::IpWhitelist, //"ip whitelist",
                 json!({ "ip":addr.ip() }),
             );
@@ -1408,6 +1411,7 @@ impl Connection {
             "id":json!(Config::get_id()),
             "uuid":json!(crate::encode64(hbb_common::get_uuid())),
             "peer_id":json!(self.lr.my_id),
+            "conn_id":json!(self.inner.id()),
             "type": r#type as i8,
             "path":path,
             "is_file":is_file,
@@ -1418,7 +1422,7 @@ impl Connection {
         });
     }
 
-    pub fn post_alarm_audit(typ: AlarmAuditType, info: Value) {
+    fn post_alarm_audit(&self, typ: AlarmAuditType, info: Value) {
         let url = crate::get_audit_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
@@ -1432,6 +1436,7 @@ impl Connection {
         v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["typ"] = json!(typ as i8);
         v["info"] = serde_json::Value::String(info.to_string());
+        v["conn_id"] = json!(self.inner.id());
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
         });
@@ -3668,7 +3673,7 @@ impl Connection {
                         );
                         self.send_login_error("Please try 1 minute later").await;
                         sleep(1.).await;
-                        Self::post_alarm_audit(
+                        self.post_alarm_audit(
                             AlarmAuditType::TerminalOsLoginConcurrency,
                             json!({
                                 "ip": self.ip,
@@ -3856,7 +3861,7 @@ impl Connection {
                 prefix_num
             ))
             .await;
-            Self::post_alarm_audit(
+            self.post_alarm_audit(
                 AlarmAuditType::ExceedIPv6PrefixAttempts,
                 json!({
                             "ip": self.ip,
@@ -3901,7 +3906,7 @@ impl Connection {
                 if let Some(audit) = decision.audit {
                     // For OS blocked/backoff events, we currently emit one alarm report per blocked attempt.
                     // TODO: Add unified cumulative/aggregation fields across alarm producers.
-                    Self::post_alarm_audit(
+                    self.post_alarm_audit(
                         audit,
                         json!({
                                     "ip": self.ip,
@@ -3938,7 +3943,7 @@ impl Connection {
 
         let res = if failure.2 > 30 {
             self.send_login_error("Too many wrong attempts").await;
-            Self::post_alarm_audit(
+            self.post_alarm_audit(
                 AlarmAuditType::ExceedThirtyAttempts,
                 json!({
                             "ip": self.ip,
@@ -3949,7 +3954,7 @@ impl Connection {
             false
         } else if time == failure.0 && failure.1 > 6 {
             self.send_login_error("Please try 1 minute later").await;
-            Self::post_alarm_audit(
+            self.post_alarm_audit(
                 AlarmAuditType::SixAttemptsWithinOneMinute,
                 json!({
                             "ip": self.ip,
@@ -5490,6 +5495,7 @@ fn try_activate_screen() {
     });
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AlarmAuditType {
     IpWhitelist = 0,
     ExceedThirtyAttempts = 1,
