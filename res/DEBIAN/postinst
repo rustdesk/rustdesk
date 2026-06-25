@@ -7,6 +7,12 @@ if [ "$1" = configure ]; then
 	INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
 	ln -f -s /usr/share/rustdesk/rustdesk /usr/bin/rustdesk
 
+	# Grant drmtap-helper the single capability it needs to open the DRM device
+	# without running the main rustdesk process as root.
+	if [ -f /usr/lib/rustdesk/drmtap-helper ] && command -v setcap >/dev/null; then
+		setcap cap_sys_admin+ep /usr/lib/rustdesk/drmtap-helper || true
+	fi
+
 	if [ "systemd" == "$INITSYS" ]; then
 
 		if [ -e /etc/systemd/system/rustdesk.service ]; then

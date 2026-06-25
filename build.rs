@@ -77,9 +77,35 @@ fn install_android_deps() {
     println!("cargo:rustc-link-lib=OpenSLES");
 }
 
+// When the `drm` feature is enabled on Linux, copy the drmtap-helper binary
+// (compiled by libdrmtap-sys/build.rs) next to the rustdesk binary so it can
+// be found at runtime and packaged in the deb/rpm.
+fn install_drmtap_helper() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let drm_enabled = std::env::var("CARGO_FEATURE_DRM").is_ok();
+    if target_os != "linux" || !drm_enabled {
+        return;
+    }
+    // DEP_DRMTAP_HELPER_BIN is emitted by libdrmtap-sys via `links = "drmtap"`.
+    if let Ok(src) = std::env::var("DEP_DRMTAP_HELPER_BIN") {
+        let out_dir = std::env::var("OUT_DIR").unwrap();
+        // Walk up three levels: OUT_DIR is .../target/<profile>/build/<pkg>/out
+        let target_dir = std::path::Path::new(&out_dir)
+            .ancestors()
+            .nth(3)
+            .expect("unexpected OUT_DIR depth");
+        let dst = target_dir.join("drmtap-helper");
+        std::fs::copy(&src, &dst).unwrap_or_else(|e| {
+            panic!("failed to copy drmtap-helper from {} to {}: {}", src, dst.display(), e)
+        });
+        println!("cargo:rerun-if-changed={}", src);
+    }
+}
+
 fn main() {
     hbb_common::gen_version();
     install_android_deps();
+    install_drmtap_helper();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();
     #[cfg(windows)]

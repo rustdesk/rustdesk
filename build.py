@@ -352,6 +352,7 @@ def build_flutter_deb(version, features):
         'cp ../res/pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+    system2("patchelf --set-rpath '/usr/share/rustdesk/lib' tmpdeb/usr/share/rustdesk/rustdesk")
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
@@ -389,6 +390,10 @@ def build_deb_from_folder(version, binary_folder):
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+    system2("patchelf --set-rpath '/usr/share/rustdesk/lib' tmpdeb/usr/share/rustdesk/rustdesk")
+    # Install drmtap-helper alongside rustdesk so postinst can setcap it.
+    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    system2('cp drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper || true')
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
