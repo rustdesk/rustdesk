@@ -538,11 +538,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
       if (bind.mainCurrentIsWayland()) {
         final drmAvailable = bind.mainIsDrmCaptureAvailable();
-        final tipKey = drmAvailable ? "drm_capture_tip" : "wayland_experiment_tip";
-        LinuxCards.add(buildInstallCard(
-            drmAvailable ? "Status" : "Warning", tipKey, "", () async {},
-            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
-            closeButton: true));
+        if (drmAvailable) {
+          LinuxCards.add(buildInstallCard(
+              "Status", "drm_capture_tip", "", () async {},
+              marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+              closeButton: true));
+        } else {
+          LinuxCards.add(buildInstallCard(
+              "Warning", "wayland_experiment_tip", "", () async {},
+              marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+              help: 'Help',
+              link: 'https://rustdesk.com/docs/en/client/linux/#x11-required'));
+        }
       } else if (bind.mainIsLoginWayland()) {
         LinuxCards.add(buildInstallCard("Warning",
             "Login screen using Wayland is not supported", "", () async {},

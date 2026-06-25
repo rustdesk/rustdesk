@@ -2291,18 +2291,26 @@ pub fn is_x11() -> bool {
 // Returns true when:
 //   • the `drm` feature is compiled in, AND
 //   • we are on a Wayland session, AND
-//   • at least one /dev/dri/card* node is present.
-// The last check is a fast heuristic; the actual helper capability
-// check happens when capture starts and falls back gracefully.
+//   • at least one /dev/dri/card* node is present, AND
+//   • the drmtap-helper binary is reachable (installed or beside the executable).
 pub fn is_drm_capture_available() -> bool {
     #[cfg(feature = "drm")]
     {
         if is_x11() {
             return false;
         }
-        return (0..4).any(|n| {
+        let has_card = (0..4).any(|n| {
             std::path::Path::new(&format!("/dev/dri/card{}", n)).exists()
         });
+        if !has_card {
+            return false;
+        }
+        // Verify drmtap-helper is present: check installed path and dev-build path.
+        let installed = std::path::Path::new("/usr/lib/rustdesk/drmtap-helper").exists();
+        let beside = std::env::current_exe().ok().map_or(false, |exe| {
+            exe.parent().map_or(false, |d| d.join("drmtap-helper").exists())
+        });
+        installed || beside
     }
     #[cfg(not(feature = "drm"))]
     false
