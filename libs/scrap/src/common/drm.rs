@@ -49,6 +49,12 @@ pub fn drm_cursor() -> Option<DrmCursor> {
     DRM_CURSOR.lock().unwrap().clone()
 }
 
+/// Cheap id-only accessor for the ~33ms cursor poll fast path, which only needs
+/// the id to detect shape changes — avoids cloning the pixel buffer every poll.
+pub fn drm_cursor_id() -> Option<u64> {
+    DRM_CURSOR.lock().unwrap().as_ref().map(|c| c.id)
+}
+
 pub struct Display {
     name: String,
     // Logical origin in the compositor's coordinate space (from the matching
@@ -139,9 +145,11 @@ impl Display {
         // The drmtap context is opened and closed within this function scope.
         unsafe {
             let device_env = std::env::var("DRM_DEVICE").ok();
-            let device_cstr = device_env.as_ref().map(|s| {
-                std::ffi::CString::new(s.as_str()).unwrap()
-            });
+            // DRM_DEVICE is user-controlled; an interior NUL would make CString::new
+            // fail — treat that as unset (null device_path) rather than panicking.
+            let device_cstr = device_env
+                .as_ref()
+                .and_then(|s| std::ffi::CString::new(s.as_str()).ok());
 
             let cfg = drmtap_config {
                 device_path: device_cstr
@@ -266,9 +274,11 @@ impl Capturer {
         // The returned pointer is checked for null before use.
         unsafe {
             let device_env = std::env::var("DRM_DEVICE").ok();
-            let device_cstr = device_env.as_ref().map(|s| {
-                std::ffi::CString::new(s.as_str()).unwrap()
-            });
+            // DRM_DEVICE is user-controlled; an interior NUL would make CString::new
+            // fail — treat that as unset (null device_path) rather than panicking.
+            let device_cstr = device_env
+                .as_ref()
+                .and_then(|s| std::ffi::CString::new(s.as_str()).ok());
 
             let cfg = drmtap_config {
                 device_path: device_cstr

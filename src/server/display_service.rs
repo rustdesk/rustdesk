@@ -312,9 +312,11 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
         && scrap::wayland::display::get_displays().displays.len() > 1;
     // Set cursor downscale once, from the primary display, so mixed-DPI setups
     // do not end up with whichever display happened to be last in the list.
+    // Use the same primary-detection as `primary` below — the primary is not
+    // guaranteed to be all[0] on the PipeWire/Wayland path.
     #[cfg(target_os = "linux")]
     if use_logical_scale {
-        if let Some(primary) = all.first() {
+        if let Some(primary) = all.get(get_primary_2(all)) {
             crate::platform::linux::set_cursor_downscale(primary.scale());
         }
     }

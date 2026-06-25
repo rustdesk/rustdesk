@@ -397,6 +397,13 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "linux")]
             {
                 use crate::server::uinput::service;
+                // The uinput services need write access to /dev/uinput, which
+                // requires root. Fail loudly instead of parking forever with
+                // services that silently failed to bind.
+                if !is_root() {
+                    log::error!("--uinput-service must be run as root");
+                    return None;
+                }
                 log::info!("start --uinput-service (keyboard/mouse/control)");
                 std::thread::spawn(|| service::start_service_control());
                 std::thread::spawn(|| service::start_service_keyboard());

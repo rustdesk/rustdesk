@@ -363,8 +363,8 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 pub fn get_cursor() -> ResultType<Option<u64>> {
     #[cfg(feature = "drm")]
     if !is_x11() {
-        if let Some(c) = scrap::drm_cursor() {
-            return Ok(Some(c.id));
+        if let Some(id) = scrap::drm_cursor_id() {
+            return Ok(Some(id));
         }
     }
     let mut res = None;
