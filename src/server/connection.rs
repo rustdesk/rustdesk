@@ -310,6 +310,7 @@ pub struct Connection {
     video_ack_required: bool,
     server_audit_conn: String,
     server_audit_file: String,
+    controlled_context: Option<ControlledContext>,
     lr: LoginRequest,
     peer_argb: u32,
     session_last_recv_time: Option<Arc<Mutex<Instant>>>,
@@ -411,6 +412,7 @@ impl Connection {
     ) {
         let super::ConnectionMeta {
             control_permissions,
+            controlled_context,
         } = meta;
         // Android is not supported yet, so we always set control_permissions to None.
         #[cfg(target_os = "android")]
@@ -498,6 +500,7 @@ impl Connection {
             video_ack_required: false,
             server_audit_conn: "".to_owned(),
             server_audit_file: "".to_owned(),
+            controlled_context,
             lr: Default::default(),
             peer_argb: 0u32,
             session_last_recv_time: None,
@@ -1337,10 +1340,14 @@ impl Connection {
         msg_out.set_hash(self.hash.clone());
         self.send(msg_out).await;
         self.get_api_server();
-        self.post_conn_audit(json!({
+        let mut audit = json!({
             "ip": addr.ip(),
             "action": "new",
-        }));
+        });
+        if let Some(token) = self.conn_audit_token() {
+            audit["conn_audit_token"] = json!(token);
+        }
+        self.post_conn_audit(audit);
         true
     }
 
@@ -1355,6 +1362,18 @@ impl Connection {
             Config::get_option("custom-rendezvous-server"),
             "file".to_owned(),
         );
+    }
+
+    fn conn_audit_token(&self) -> Option<&str> {
+        let token = self
+            .controlled_context
+            .as_ref()
+            .map(|c| c.conn_audit_token.as_str())?;
+        if token.is_empty() {
+            None
+        } else {
+            Some(token)
+        }
     }
 
     fn post_conn_audit(&self, v: Value) {

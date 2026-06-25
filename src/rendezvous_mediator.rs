@@ -33,8 +33,11 @@ use crate::{
 
 type Message = RendezvousMessage;
 
-fn connection_meta(control_permissions: Option<ControlPermissions>) -> ConnectionMeta {
-    ConnectionMeta::from_control_permissions(control_permissions)
+fn connection_meta(
+    control_permissions: Option<ControlPermissions>,
+    controlled_context: Option<ControlledContext>,
+) -> ConnectionMeta {
+    ConnectionMeta::new(control_permissions, controlled_context)
 }
 
 lazy_static::lazy_static! {
@@ -494,7 +497,10 @@ impl RendezvousMediator {
         if last.0 == addr && last.1.elapsed().as_millis() < 100 {
             return Ok(());
         }
-        let meta = connection_meta(rr.control_permissions.clone().into_option());
+        let meta = connection_meta(
+            rr.control_permissions.clone().into_option(),
+            rr.controlled_context.clone().into_option(),
+        );
 
         self.create_relay(
             rr.socket_addr.into(),
@@ -570,7 +576,10 @@ impl RendezvousMediator {
         let relay_server = self.get_relay_server(fla.relay_server.clone());
         let relay = use_ws() || Config::is_proxy();
         let mut socket_addr_v6 = Default::default();
-        let meta = connection_meta(fla.control_permissions.clone().into_option());
+        let meta = connection_meta(
+            fla.control_permissions.clone().into_option(),
+            fla.controlled_context.clone().into_option(),
+        );
         if peer_addr_v6.port() > 0 && !relay {
             socket_addr_v6 = start_ipv6(peer_addr_v6, addr, server.clone(), meta.clone()).await;
         }
@@ -646,7 +655,10 @@ impl RendezvousMediator {
         let peer_addr_v6 = hbb_common::AddrMangle::decode(&ph.socket_addr_v6);
         let relay = use_ws() || Config::is_proxy() || ph.force_relay;
         let mut socket_addr_v6 = Default::default();
-        let meta = connection_meta(ph.control_permissions.into_option());
+        let meta = connection_meta(
+            ph.control_permissions.into_option(),
+            ph.controlled_context.into_option(),
+        );
         if peer_addr_v6.port() > 0 && !relay {
             socket_addr_v6 =
                 start_ipv6(peer_addr_v6, peer_addr, server.clone(), meta.clone()).await;

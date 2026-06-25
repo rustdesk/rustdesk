@@ -82,15 +82,28 @@ pub type Childs = Arc<Mutex<Vec<std::process::Child>>>;
 type ConnMap = HashMap<i32, ConnInner>;
 
 /// Bundles per-connection metadata passed from rendezvous/server entry points.
-/// Part 1 carries only `control_permissions`; part 2 extends this with controller audit context.
 #[derive(Clone, Default)]
 pub struct ConnectionMeta {
     pub control_permissions: Option<ControlPermissions>,
+    pub controlled_context: Option<ControlledContext>,
 }
 
 impl ConnectionMeta {
     pub fn from_control_permissions(control_permissions: Option<ControlPermissions>) -> Self {
-        Self { control_permissions }
+        Self {
+            control_permissions,
+            controlled_context: None,
+        }
+    }
+
+    pub fn new(
+        control_permissions: Option<ControlPermissions>,
+        controlled_context: Option<ControlledContext>,
+    ) -> Self {
+        Self {
+            control_permissions,
+            controlled_context,
+        }
     }
 }
 
