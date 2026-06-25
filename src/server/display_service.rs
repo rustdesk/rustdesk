@@ -326,6 +326,10 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
                 if use_logical_scale {
                     scale = d.scale();
                 }
+                // Match the XFixes (XWayland) cursor — captured at a HiDPI size —
+                // to the physically-captured video by dividing it by the display
+                // scale on the client side. No-op (1.0) on X11 / unscaled displays.
+                crate::platform::linux::set_cursor_downscale(scale);
             }
             let original_resolution = get_original_resolution(
                 &display_name,
