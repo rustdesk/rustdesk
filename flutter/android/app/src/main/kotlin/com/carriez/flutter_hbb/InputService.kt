@@ -101,8 +101,15 @@ class InputService : AccessibilityService() {
      * @param _x X coordinate of mouse pointer
      * @param _y Y coordinate of mouse pointer
      */
-    @RequiresApi(Build.VERSION_CODES.N)
-    fun onMouseInput(mask: Int, _x: Int, _y: Int) {
+    /**
+ * Handles mouse input events from the remote desktop session.
+ *
+ * @param mask Bitmask indicating which mouse buttons/buttons changed state
+ * @param _x X coordinate of mouse pointer
+ * @param _y Y coordinate of mouse pointer
+ */
+@RequiresApi(Build.VERSION_CODES.N)
+fun onMouseInput(mask: Int, _x: Int, _y: Int) {
         val x = max(0, _x)
         val y = max(0, _y)
 
@@ -399,6 +406,11 @@ class InputService : AccessibilityService() {
         }
     }
 
+    /**
+     * Handles key events from the remote desktop session.
+     *
+     * @param data ByteArray containing the key event data
+     */
     @RequiresApi(Build.VERSION_CODES.N)
     fun onKeyEvent(data: ByteArray) {
         val keyEvent = KeyEvent.parseFrom(data)
@@ -688,6 +700,12 @@ class InputService : AccessibilityService() {
         return success
     }
 
+    /**
+     * Updates the text of an accessibility node.
+     *
+     * @param node The accessibility node to update
+     * @return True if the text was successfully updated, false otherwise
+     */
     fun updateTextForAccessibilityNode(node: AccessibilityNodeInfo): Boolean {
         var success = false
         this.fakeEditTextForTextStateCalculation?.text?.let {
@@ -701,7 +719,13 @@ class InputService : AccessibilityService() {
         return success
     }
 
-    fun updateTextAndSelectionForAccessibiltyNode(node: AccessibilityNodeInfo): Boolean {
+    /**
+ * Updates the text and selection of an accessibility node.
+ *
+ * @param node The accessibility node to update
+ * @return True if the update was successful, false otherwise
+ */
+fun updateTextAndSelectionForAccessibiltyNode(node: AccessibilityNodeInfo): Boolean {
         var success = updateTextForAccessibilityNode(node)
 
         if (success) {
@@ -769,8 +793,14 @@ class InputService : AccessibilityService() {
         return super.onUnbind(intent)
     }
 
+    /**
+     * Called when the accessibility service is being destroyed.
+     * Cleans up resources and notifies Flutter of disconnection.
+     */
     override fun onDestroy() {
         ctx = null
+        // Notify Flutter that input service is disconnected
+        MainActivity.flutterMethodChannel?.invokeMethod("on_state_changed", mapOf("name" to "input", "value" to false.toString()))
         super.onDestroy()
     }
 
