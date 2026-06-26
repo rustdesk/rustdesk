@@ -951,6 +951,11 @@ impl Client {
         clipboard_listener::unsubscribe(Self::CLIENT_CLIPBOARD_NAME);
         CLIPBOARD_STATE.lock().unwrap().running = false;
         #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
+        crate::clipboard::try_empty_clipboard_files_sync(
+            crate::clipboard::ClipboardSide::Client,
+            0,
+        );
+        #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
         clipboard::platform::unix::fuse::uninit_fuse_context(true);
     }
 

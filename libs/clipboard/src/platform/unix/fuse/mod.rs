@@ -394,18 +394,23 @@ fn unmount_fuse_mount_point(mount_point: &Path) {
     {
         return;
     }
-    if run_unmount_command("umount", &["-l"], mount_point) {
-        return;
+    for (program, args) in unmount_command_candidates() {
+        if run_unmount_command(program, args, mount_point) {
+            return;
+        }
     }
-    if run_unmount_command("fusermount3", &["-uz"], mount_point) {
-        return;
-    }
-    if !run_unmount_command("fusermount", &["-uz"], mount_point) {
-        log::warn!(
-            "failed to unmount clipboard FUSE mount point {:?}",
-            mount_point
-        );
-    }
+    log::warn!(
+        "failed to unmount clipboard FUSE mount point {:?}",
+        mount_point
+    );
+}
+
+fn unmount_command_candidates() -> [(&'static str, &'static [&'static str]); 3] {
+    [
+        ("fusermount3", &["-uz"]),
+        ("fusermount", &["-uz"]),
+        ("umount", &["-l"]),
+    ]
 }
 
 fn run_unmount_command(program: &str, args: &[&str], mount_point: &Path) -> bool {
