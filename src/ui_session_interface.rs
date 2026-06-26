@@ -128,6 +128,10 @@ impl ConnectionRoundState {
             true
         }
     }
+
+    pub fn is_connected(&self) -> bool {
+        matches!(self.state, ConnectionState::Connected)
+    }
 }
 
 impl Default for ConnectionRoundState {

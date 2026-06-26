@@ -941,15 +941,10 @@ impl Client {
 
     #[cfg(not(target_os = "ios"))]
     fn try_stop_clipboard() {
-        // There's a bug here.
-        // If session is closed by the peer, `has_sessions_running()` will always return true.
-        // It's better to check if the active session number.
-        // But it's not a problem, because the clipboard thread does not consume CPU.
-        //
-        // If we want to fix it, we can add a flag to indicate if session is active.
-        // But I think it's not necessary to introduce complexity at this point.
+        // Disconnected Flutter sessions may keep UI handlers alive, so only connected sessions
+        // should block clipboard cleanup.
         #[cfg(feature = "flutter")]
-        if crate::flutter::sessions::has_sessions_running(ConnType::DEFAULT_CONN) {
+        if crate::flutter::sessions::has_connected_sessions_running(ConnType::DEFAULT_CONN) {
             return;
         }
         #[cfg(not(target_os = "android"))]

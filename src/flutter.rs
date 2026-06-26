@@ -2297,6 +2297,16 @@ pub mod sessions {
             *r#type == conn_type && s.session_handlers.read().unwrap().len() != 0
         })
     }
+
+    #[inline]
+    #[cfg(not(target_os = "ios"))]
+    pub fn has_connected_sessions_running(conn_type: ConnType) -> bool {
+        SESSIONS.read().unwrap().iter().any(|((_, r#type), s)| {
+            *r#type == conn_type
+                && s.session_handlers.read().unwrap().len() != 0
+                && s.connection_round_state.lock().unwrap().is_connected()
+        })
+    }
 }
 
 pub(super) mod async_tasks {
