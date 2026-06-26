@@ -121,6 +121,7 @@ jobs:
           install: |
             apt-get update -y
             echo -e "installing deps"
+            # rpm is not needed because this workflow only builds deb packages.
             apt-get install -y \
                build-essential \
                clang \
@@ -149,7 +150,6 @@ jobs:
                pkg-config \
                tree \
                python3 \
-               rpm \
                unzip \
                wget \
                xz-utils \
@@ -217,26 +217,26 @@ jobs:
               mv "$name" "${name%%.deb}-${{ env.ARCH }}.deb"
             done
 
-            pushd /workspace
-            sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter.spec
-            HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
-            pushd ~/rpmbuild/RPMS/${{ env.ARCH }}
-            for name in rustdesk*??.rpm; do
-                mv "$name" /workspace/"${name%%.rpm}.rpm"
-            done
+            # pushd /workspace
+            # sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter.spec
+            # HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+            # pushd ~/rpmbuild/RPMS/${{ env.ARCH }}
+            # for name in rustdesk*??.rpm; do
+            #     mv "$name" /workspace/"${name%%.rpm}.rpm"
+            # done
 
-            pushd /workspace
-            sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter-suse.spec
-            HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
-            pushd ~/rpmbuild/RPMS/${{ env.ARCH }}
-            for name in rustdesk*??.rpm; do
-                mv "$name" /workspace/"${name%%.rpm}-suse.rpm"
-            done
+            # pushd /workspace
+            # sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter-suse.spec
+            # HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
+            # pushd ~/rpmbuild/RPMS/${{ env.ARCH }}
+            # for name in rustdesk*??.rpm; do
+            #     mv "$name" /workspace/"${name%%.rpm}-suse.rpm"
+            # done
 
-      - name: Upload deb/rpm packages
+      - name: Upload deb packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rustdesk-linux-arm64-flutter-packages
+          # Only upload deb packages; rpm artifacts are intentionally disabled.
           path: |
             rustdesk-*.deb
-            rustdesk-*.rpm

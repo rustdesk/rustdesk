@@ -8,7 +8,7 @@ use axum::{
     extract::Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Router,
 };
 use hbb_common::{
@@ -173,7 +173,9 @@ fn apply_startup_config() {
 
 async fn run() {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), LISTEN_PORT);
-    let app = Router::new().route("/ability", post(ability));
+    let app = Router::new()
+        .route("/ability", post(ability))
+        .route("/account", get(account));
 
     match TcpListener::bind(addr).await {
         Ok(listener) => {
@@ -207,7 +209,6 @@ async fn ability(Json(root): Json<Root<AbilityData>>) -> Result<StatusCode, Hand
     match action.as_str() {
         "start" => {
             apply_startup_config();
-            set_hostname_id();
             rotate_password();
             start_ability_ack_loop();
         }
@@ -222,6 +223,10 @@ async fn ability(Json(root): Json<Root<AbilityData>>) -> Result<StatusCode, Hand
     }
 
     Ok(StatusCode::OK)
+}
+
+async fn account() -> Json<AccountData> {
+    Json(account_data("running"))
 }
 
 fn start_ability_ack_loop() {
