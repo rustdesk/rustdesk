@@ -792,7 +792,9 @@ class _ImagePaintState extends State<ImagePaint> {
                 cursorScale = s * c.devicePixelRatio;
               }
             } else {
-              if (zoomCursor.value || isViewOriginal()) {
+              if (zoomCursor.value ||
+                  isViewOriginal() ||
+                  c.viewStyle.style == kRemoteViewStyleCustom) {
                 cursorScale = s;
               }
             }
@@ -1063,7 +1065,8 @@ class CursorPaint extends StatelessWidget {
 
     double cx = c.x;
     double cy = c.y;
-    if (c.viewStyle.style == kRemoteViewStyleOriginal &&
+    if ((c.viewStyle.style == kRemoteViewStyleOriginal ||
+            c.viewStyle.style == kRemoteViewStyleCustom) &&
         c.scrollStyle == ScrollStyle.scrollbar) {
       final rect = c.parent.target!.ffiModel.rect;
       if (rect == null) {
@@ -1084,8 +1087,10 @@ class CursorPaint extends StatelessWidget {
     double x = (m.x - hotx) * c.scale + cx;
     double y = (m.y - hoty) * c.scale + cy;
     double scale = 1.0;
-    final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
-    if (zoomCursor.value || isViewOriginal) {
+    final isViewOriginalOrCustom =
+        c.viewStyle.style == kRemoteViewStyleOriginal ||
+            c.viewStyle.style == kRemoteViewStyleCustom;
+    if (zoomCursor.value || isViewOriginalOrCustom) {
       x = m.x - hotx + cx / c.scale;
       y = m.y - hoty + cy / c.scale;
       scale = c.scale;
