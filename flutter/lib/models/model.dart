@@ -112,6 +112,7 @@ class CachedPeerData {
 class FfiModel with ChangeNotifier {
   CachedPeerData cachedPeerData = CachedPeerData();
   PeerInfo _pi = PeerInfo();
+  int? lastUserDisplay;
   Rect? _rect;
 
   var _inputBlocked = false;
@@ -1400,6 +1401,18 @@ class FfiModel with ChangeNotifier {
       if (_pi.currentDisplay < _pi.displays.length) {
         // now replaced to _updateCurDisplay
         updateCurDisplay(sessionId);
+      }
+      // After an auto reconnect, return to the monitor the user last chose.
+      final last = lastUserDisplay;
+      if (!isCache &&
+          last != null &&
+          last != _pi.currentDisplay &&
+          bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
+                  sessionId: sessionId) !=
+              'Y' &&
+          (last == kAllDisplayValue ||
+              (last >= 0 && last < _pi.displays.length))) {
+        openMonitorInTheSameTab(last, parent.target!, _pi);
       }
       if (displays.isNotEmpty) {
         _reconnects = 1;
