@@ -153,7 +153,7 @@ impl OidcSession {
         }
         // This URL is used to detect the appropriate TLS implementation for the server.
         let login_option_url = format!("{}/api/login-options", api_server);
-        let _ = create_http_client_with_url(&login_option_url);
+        let _ = create_http_client_with_url(&login_option_url, false);
         write_guard.warmed_api_server = Some(api_server.to_owned());
     }
 
