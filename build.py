@@ -33,6 +33,9 @@ def get_deb_arch() -> str:
         return "amd64"
     return custom_arch
 
+def get_deb_package_name() -> str:
+    return os.environ.get("DEB_PACKAGE_NAME", "rustdesk")
+
 def get_deb_extra_depends() -> str:
     custom_arch = os.environ.get("DEB_ARCH")
     if custom_arch == "armhf": # for arm32v7 libsciter-gtk.so
@@ -293,7 +296,7 @@ def generate_control_file(version):
     control_file_path = "../res/DEBIAN/control"
     system2('/bin/rm -rf %s' % control_file_path)
 
-    content = """Package: rustdesk
+    content = """Package: %s
 Section: net
 Priority: optional
 Version: %s
@@ -304,7 +307,7 @@ Depends: libgtk-3-0t64 | libgtk-3-0, libxcb-randr0, libxdo3 | libxdo4, libxfixes
 Recommends: libayatana-appindicator3-1
 Description: A remote control software.
 
-""" % (version, get_deb_arch(), get_deb_extra_depends())
+""" % (get_deb_package_name(), version, get_deb_arch(), get_deb_extra_depends())
     file = open(control_file_path, "w")
     file.write(content)
     file.close()
@@ -357,11 +360,12 @@ def build_flutter_deb(version, features):
     generate_control_file(version)
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
     md5_file_folder("tmpdeb/")
-    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+    deb_name = get_deb_package_name()
+    system2(f'dpkg-deb -b tmpdeb {deb_name}.deb;')
 
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    os.rename(f'{deb_name}.deb', '../%s-%s.deb' % (deb_name, version))
     os.chdir("..")
 
 
@@ -394,11 +398,12 @@ def build_deb_from_folder(version, binary_folder):
     generate_control_file(version)
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
     md5_file_folder("tmpdeb/")
-    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+    deb_name = get_deb_package_name()
+    system2(f'dpkg-deb -b tmpdeb {deb_name}.deb;')
 
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    os.rename(f'{deb_name}.deb', '../%s-%s.deb' % (deb_name, version))
     os.chdir("..")
 
 
