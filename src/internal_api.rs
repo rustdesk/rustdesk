@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const LISTEN_PORT: u16 = 3000;
-const ABILITY_ACK_INTERVAL_SECS: u64 = 35;
+const ABILITY_ACK_INTERVAL_SECS: u64 = 30;
 const PASSWORD_ROTATE_SECS: u64 = 10 * 60;
 const PASSWORD_LENGTH: usize = 10;
 const BUSINESS: &str = "rustdesk";
