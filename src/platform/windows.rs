@@ -3648,7 +3648,7 @@ pub fn update_to(file: &str) -> ResultType<()> {
 //    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
     let cmds = format!(
-        "chcp 65001 && msiexec /i {msi} {}",
+        "chcp 65001 && msiexec /i {msi} {} REBOOT=ReallySuppress /norestart",
         if quiet { "/qn LAUNCH_TRAY_APP=N" } else { "" }
     );
     run_cmds(cmds, false, "update-msi")?;
