@@ -238,12 +238,7 @@ fn prepare_fuse_mount_point(mount_point: &PathBuf) -> Result<(), CliprdrError> {
             mount_point.display(),
             e
         );
-        if let Err(e) = std::process::Command::new("umount")
-            .arg(mount_point)
-            .status()
-        {
-            log::warn!("umount {:?} may fail: {:?}", mount_point, e);
-        }
+        unmount_fuse_mount_point(mount_point);
         fs::create_dir_all(mount_point).map_err(|e| {
             log::error!(
                 "failed to create clipboard FUSE mount point {} after cleanup: {:?}",
@@ -265,12 +260,7 @@ fn prepare_fuse_mount_point(mount_point: &PathBuf) -> Result<(), CliprdrError> {
     }
 
     if !recovered_stale_mount {
-        if let Err(e) = std::process::Command::new("umount")
-            .arg(mount_point)
-            .status()
-        {
-            log::warn!("umount {:?} may fail: {:?}", mount_point, e);
-        }
+        unmount_fuse_mount_point(mount_point);
     }
     Ok(())
 }
@@ -394,6 +384,14 @@ fn unmount_fuse_mount_point(mount_point: &Path) {
             "refusing to unmount unsafe clipboard FUSE mount point {:?}",
             mount_point
         );
+        return;
+    }
+    if inspect_mount_point_state_with(
+        mount_point,
+        std::fs::metadata(mount_point),
+        std::fs::read_to_string("/proc/self/mountinfo"),
+    ) == MountPointState::NotMounted
+    {
         return;
     }
     if run_unmount_command("umount", &["-l"], mount_point) {
