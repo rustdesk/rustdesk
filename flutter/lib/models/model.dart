@@ -113,6 +113,7 @@ class FfiModel with ChangeNotifier {
   CachedPeerData cachedPeerData = CachedPeerData();
   PeerInfo _pi = PeerInfo();
   int? lastUserDisplay;
+  int? pendingMonitorRestore;
   Rect? _rect;
 
   var _inputBlocked = false;
@@ -249,6 +250,8 @@ class FfiModel with ChangeNotifier {
 
   clear() {
     _pi = PeerInfo();
+    lastUserDisplay = null;
+    pendingMonitorRestore = null;
     _secure = null;
     _direct = null;
     _inputBlocked = false;
@@ -1402,18 +1405,19 @@ class FfiModel with ChangeNotifier {
         // now replaced to _updateCurDisplay
         updateCurDisplay(sessionId);
       }
-      // After an auto reconnect, return to the monitor the user last chose.
+      // After reconnecting, restore the last selected monitor once the canvas is ready.
+      // Switching earlier can offset the view if the monitor sizes differ.
       final last = lastUserDisplay;
-      if (!isCache &&
-          last != null &&
-          last != _pi.currentDisplay &&
-          bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
-                  sessionId: sessionId) !=
-              'Y' &&
-          (last == kAllDisplayValue ||
-              (last >= 0 && last < _pi.displays.length))) {
-        openMonitorInTheSameTab(last, parent.target!, _pi);
-      }
+      pendingMonitorRestore = (!isCache &&
+              last != null &&
+              last != _pi.currentDisplay &&
+              bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
+                      sessionId: sessionId) !=
+                  'Y' &&
+              (last == kAllDisplayValue ||
+                  (last >= 0 && last < _pi.displays.length)))
+          ? last
+          : null;
       if (displays.isNotEmpty) {
         _reconnects = 1;
         _offlineReconnectStartTime = null;
@@ -3931,6 +3935,13 @@ class FFI {
       await canvasModel.initializeEdgeScrollEdgeThickness();
       for (final cb in imageModel.callbacksOnFirstImage) {
         cb(id);
+      }
+      // Skip if the session closed while the canvas was being set up.
+      final restore = ffiModel.pendingMonitorRestore;
+      ffiModel.pendingMonitorRestore = null;
+      if (restore != null && !closed) {
+        openMonitorInTheSameTab(restore, this, ffiModel.pi,
+            recordSelection: false);
       }
     }
   }
