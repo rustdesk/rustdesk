@@ -94,6 +94,13 @@ class InputService : AccessibilityService() {
 
     private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
+    /**
+     * Handles mouse input events from the remote desktop session.
+     *
+     * @param mask Bitmask indicating which mouse buttons/buttons changed state
+     * @param _x X coordinate of mouse pointer
+     * @param _y Y coordinate of mouse pointer
+     */
     @RequiresApi(Build.VERSION_CODES.N)
     fun onMouseInput(mask: Int, _x: Int, _y: Int) {
         val x = max(0, _x)
@@ -214,6 +221,13 @@ class InputService : AccessibilityService() {
         }
     }
 
+    /**
+     * Handles touch input events from the remote desktop session.
+     *
+     * @param mask Bitmask indicating touch gesture type
+     * @param _x X coordinate of touch point
+     * @param _y Y coordinate of touch point
+     */
     @RequiresApi(Build.VERSION_CODES.N)
     fun onTouchInput(mask: Int, _x: Int, _y: Int) {
         when (mask) {
@@ -716,6 +730,10 @@ class InputService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
     }
 
+    /**
+     * Called when the accessibility service is connected.
+     * Sets up the service context and notifies Flutter of connection state.
+     */
     override fun onServiceConnected() {
         super.onServiceConnected()
         ctx = this
@@ -737,6 +755,13 @@ class InputService : AccessibilityService() {
         MainActivity.flutterMethodChannel?.invokeMethod("on_state_changed", mapOf("name" to "input", "value" to true.toString()))
     }
 
+    /**
+     * Called when the accessibility service is unbound from a client.
+     * Clears the service context and notifies Flutter of disconnection.
+     *
+     * @param intent The Intent that was used to bind to this service
+     * @return Boolean indicating whether uncached state should be retained
+     */
     override fun onUnbind(intent: Intent?): Boolean {
         ctx = null
         // Notify Flutter that input service is disconnected

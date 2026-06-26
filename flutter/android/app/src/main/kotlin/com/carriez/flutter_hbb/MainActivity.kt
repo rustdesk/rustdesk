@@ -197,6 +197,9 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success(true)
                 }
+                // Handles the stop_input method call from Flutter
+                // Requests the input service to disable itself, but lets the service lifecycle
+                // handle the actual state updates to avoid race conditions
                 "stop_input" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                         InputService.ctx?.disableSelf()
