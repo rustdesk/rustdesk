@@ -26,6 +26,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
 import android.view.inputmethod.EditorInfo
+import android.content.Intent
 import androidx.annotation.RequiresApi
 import java.util.*
 import java.lang.Character
@@ -34,6 +35,8 @@ import kotlin.math.max
 import hbb.MessageOuterClass.KeyEvent
 import hbb.MessageOuterClass.KeyboardMode
 import hbb.KeyEventConverter
+import com.carriez.flutter_hbb.MainActivity
+import io.flutter.plugin.common.MethodChannel
 
 // const val BUTTON_UP = 2
 // const val BUTTON_BACK = 0x08
@@ -730,6 +733,15 @@ class InputService : AccessibilityService() {
         val layout = fakeEditTextForTextStateCalculation?.getLayout()
         Log.d(logTag, "fakeEditTextForTextStateCalculation layout:$layout")
         Log.d(logTag, "onServiceConnected!")
+        // Notify Flutter that input service is connected
+        MainActivity.flutterMethodChannel?.invokeMethod("on_state_changed", mapOf("name" to "input", "value" to true.toString()))
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        ctx = null
+        // Notify Flutter that input service is disconnected
+        MainActivity.flutterMethodChannel?.invokeMethod("on_state_changed", mapOf("name" to "input", "value" to false.toString()))
+        return super.onUnbind(intent)
     }
 
     override fun onDestroy() {

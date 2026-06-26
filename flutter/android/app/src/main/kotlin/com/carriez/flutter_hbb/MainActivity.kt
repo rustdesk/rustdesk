@@ -201,11 +201,7 @@ class MainActivity : FlutterActivity() {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                         InputService.ctx?.disableSelf()
                     }
-                    InputService.ctx = null
-                    Companion.flutterMethodChannel?.invokeMethod(
-                        "on_state_changed",
-                        mapOf("name" to "input", "value" to InputService.isOpen.toString())
-                    )
+                    // Do not manually set ctx to null or update UI here; let the service lifecycle handle it.
                     result.success(true)
                 }
                 "cancel_notification" -> {
