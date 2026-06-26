@@ -20,6 +20,7 @@ import '../../common/widgets/dialog.dart';
 import '../../common/widgets/remote_input.dart';
 import '../../models/input_model.dart';
 import '../../models/model.dart';
+import '../../models/soft_keyboard_input_utils.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
 import '../widgets/dialog.dart';
@@ -286,6 +287,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     var subNewValue = newValue.substring(j + 1);
     var subOldValue = oldValue.substring(j + 1);
 
+    // ponytail: the Android path factors this content-diff out as computeSoftKeyboardEdit() in
+    // models/soft_keyboard_input_utils.dart; kept inline here to avoid touching working iOS code.
     // get common prefix of subNewValue and subOldValue
     var common = 0;
     for (;
@@ -326,43 +329,29 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void _handleNonIOSSoftKeyboardInput(String newValue) {
-    var oldValue = _value;
+    // Diff by CONTENT, not length: Korean/CJK IMEs mutate the composing syllable in place
+    // (ㅁ→마→만), which keeps the text-field length unchanged. The old length-only diff no-op'd
+    // on equal length and silently dropped every medial/final jamo (issue #7727). The shared
+    // helper backspaces the changed tail then retypes it, which converges regardless.
+    final effectiveOld = clipboardAdjustedOldValue(_value, newValue);
     _value = newValue;
-    if (oldValue.isNotEmpty &&
-        newValue.isNotEmpty &&
-        oldValue[0] == '1' &&
-        newValue[0] != '1') {
-      // clipboard
-      oldValue = '';
+    final edit = computeSoftKeyboardEdit(effectiveOld, newValue);
+    for (var k = 0; k < edit.backspaces; k++) {
+      inputModel.inputKey('VK_BACK');
     }
-    if (newValue.length == oldValue.length) {
-      // ?
-    } else if (newValue.length < oldValue.length) {
-      final char = 'VK_BACK';
-      inputModel.inputKey(char);
+    if (edit.insert.isEmpty) {
+      return;
+    }
+    if (isAutoInsertedBracketPair(effectiveOld, edit.backspaces, edit.insert)) {
+      // can not only input insert[0], because when input ], [ are also auto insert, which cause ] never be input
+      bind.sessionInputString(sessionId: sessionId, value: edit.insert);
+      _openKeyboardUnlocked();
+      return;
+    }
+    if (edit.insert.length > 1) {
+      bind.sessionInputString(sessionId: sessionId, value: edit.insert);
     } else {
-      final content = newValue.substring(oldValue.length);
-      if (content.length > 1) {
-        if (oldValue != '' &&
-            content.length == 2 &&
-            (content == '""' ||
-                content == '()' ||
-                content == '[]' ||
-                content == '<>' ||
-                content == "{}" ||
-                content == '”“' ||
-                content == '《》' ||
-                content == '（）' ||
-                content == '【】')) {
-          // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          bind.sessionInputString(sessionId: sessionId, value: content);
-          _openKeyboardUnlocked();
-          return;
-        }
-        bind.sessionInputString(sessionId: sessionId, value: content);
-      } else {
-        inputChar(content);
-      }
+      inputChar(edit.insert);
     }
   }
 
