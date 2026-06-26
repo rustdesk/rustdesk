@@ -192,20 +192,16 @@ impl LocalFile {
             });
         };
 
-        if offset != self.offset.load(Ordering::Relaxed) {
+        let read_result = if offset != self.offset.load(Ordering::Relaxed) {
             handle
                 .seek(std::io::SeekFrom::Start(offset))
-                .map_err(|e| CliprdrError::FileError {
-                    path: self.path.to_string_lossy().to_string(),
-                    err: e,
-                })?;
+                .and_then(|_| handle.read_exact(buf))
+        } else {
+            handle.read_exact(buf)
+        };
+        if let Err(e) = read_result {
+            return Err(self.invalidate_handle(e));
         }
-        handle
-            .read_exact(buf)
-            .map_err(|e| CliprdrError::FileError {
-                path: self.path.to_string_lossy().to_string(),
-                err: e,
-            })?;
         let new_offset = offset + (buf.len() as u64);
         self.offset.store(new_offset, Ordering::Relaxed);
 
@@ -216,6 +212,15 @@ impl LocalFile {
         }
 
         Ok(())
+    }
+
+    fn invalidate_handle(&mut self, err: std::io::Error) -> CliprdrError {
+        self.offset.store(0, Ordering::Relaxed);
+        self.handle = None;
+        CliprdrError::FileError {
+            path: self.path.to_string_lossy().to_string(),
+            err,
+        }
     }
 }
 
@@ -278,7 +283,10 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
 
 #[cfg(test)]
 mod file_list_test {
-    use std::{path::PathBuf, sync::atomic::AtomicU64};
+    use std::{
+        path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
+    };
 
     use hbb_common::bytes::{BufMut, BytesMut};
 
@@ -382,6 +390,32 @@ mod file_list_test {
         as_bin_parse_test("/")?;
         as_bin_parse_test("test")?;
         as_bin_parse_test("/test")?;
+        Ok(())
+    }
+
+    #[test]
+    fn read_exact_at_reopens_after_read_failure() -> Result<(), Box<dyn std::error::Error>> {
+        let file_path = std::env::temp_dir().join(format!(
+            "rustdesk-clipboard-local-file-{}",
+            std::process::id()
+        ));
+        std::fs::write(&file_path, b"")?;
+
+        let mut file = LocalFile::try_open(&std::env::temp_dir(), &file_path)?;
+        file.size = 1;
+
+        let mut buf = [0u8; 1];
+        assert!(file.read_exact_at(&mut buf, 0).is_err());
+        assert!(file.handle.is_none());
+        assert_eq!(file.offset.load(Ordering::Relaxed), 0);
+
+        std::fs::write(&file_path, [42u8])?;
+
+        file.read_exact_at(&mut buf, 0)?;
+        assert_eq!(buf, [42u8]);
+        assert!(file.handle.is_none());
+
+        std::fs::remove_file(file_path)?;
         Ok(())
     }
 }
