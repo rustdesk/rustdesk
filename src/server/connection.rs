@@ -1344,8 +1344,8 @@ impl Connection {
             "ip": addr.ip(),
             "action": "new",
         });
-        if let Some(token) = self.conn_audit_token() {
-            audit["conn_audit_token"] = json!(token);
+        if let Some(audit_ref) = self.conn_audit_ref() {
+            audit["conn_audit_ref"] = json!(audit_ref);
         }
         self.post_conn_audit(audit);
         true
@@ -1364,15 +1364,15 @@ impl Connection {
         );
     }
 
-    fn conn_audit_token(&self) -> Option<&str> {
-        let token = self
+    fn conn_audit_ref(&self) -> Option<&str> {
+        let audit_ref = self
             .controlled_context
             .as_ref()
-            .map(|c| c.conn_audit_token.as_str())?;
-        if token.is_empty() {
+            .map(|c| c.conn_audit_ref.as_str())?;
+        if audit_ref.is_empty() {
             None
         } else {
-            Some(token)
+            Some(audit_ref)
         }
     }
 
@@ -1457,8 +1457,8 @@ impl Connection {
         v["info"] = serde_json::Value::String(info.to_string());
         v["conn_id"] = json!(self.inner.id());
         if typ == AlarmAuditType::IpWhitelist {
-            if let Some(token) = self.conn_audit_token() {
-                v["conn_audit_token"] = json!(token);
+            if let Some(audit_ref) = self.conn_audit_ref() {
+                v["conn_audit_ref"] = json!(audit_ref);
             }
         }
         tokio::spawn(async move {
