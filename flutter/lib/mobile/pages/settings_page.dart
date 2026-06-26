@@ -79,6 +79,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _denyLANDiscovery = false;
   var _onlyWhiteList = false;
   var _enableDirectIPAccess = false;
+  var _enableDirectDomainAccess = false;
   var _enableRecordSession = false;
   var _enableHardwareCodec = false;
   var _allowWebSocket = false;
@@ -111,6 +112,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _onlyWhiteList = whitelistNotEmpty();
     _enableDirectIPAccess = option2bool(
         kOptionDirectServer, bind.mainGetOptionSync(key: kOptionDirectServer));
+    _enableDirectDomainAccess = option2bool(
+        kOptionDirectDomain, bind.mainGetOptionSync(key: kOptionDirectDomain));
     _enableRecordSession = option2bool(kOptionEnableRecordSession,
         bind.mainGetOptionSync(key: kOptionEnableRecordSession));
     _enableHardwareCodec = option2bool(kOptionEnableHwcodec,
@@ -471,6 +474,20 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                     bool2option(kOptionDirectServer, _enableDirectIPAccess);
                 await bind.mainSetOption(
                     key: kOptionDirectServer, value: value);
+                setState(() {});
+              },
+      ),
+      SettingsTile.switchTile(
+        title: Text(translate("Enable direct domain access")),
+        initialValue: _enableDirectDomainAccess,
+        onToggle: isOptionFixed(kOptionDirectDomain)
+            ? null
+            : (_) async {
+                _enableDirectDomainAccess = !_enableDirectDomainAccess;
+                String value =
+                    bool2option(kOptionDirectDomain, _enableDirectDomainAccess);
+                await bind.mainSetOption(
+                    key: kOptionDirectDomain, value: value);
                 setState(() {});
               },
       ),

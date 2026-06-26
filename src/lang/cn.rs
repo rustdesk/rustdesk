@@ -189,6 +189,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable RDP session sharing", "允许 RDP 会话共享"),
         ("Auto Login", "自动登录（设置断开后锁定才有效）"),
         ("Enable direct IP access", "允许 IP 直接访问"),
+        ("Enable direct domain access", "允许域名直接访问"),
+        ("Direct Domain Access", "域名直接访问"),
         ("Rename", "重命名"),
         ("Space", "空格"),
         ("Create desktop shortcut", "创建桌面快捷方式"),

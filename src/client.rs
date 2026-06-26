@@ -270,11 +270,37 @@ impl Client {
                 false,
             ));
         }
-        // Allow connect to {domain}:{port}
-        if hbb_common::is_domain_port_str(peer) {
+        let is_domain = hbb_common::is_domain_str(peer);
+        let is_domain_port = hbb_common::is_domain_port_str(peer);
+        if (is_domain || is_domain_port)
+            && hbb_common::config::option2bool(
+                hbb_common::config::keys::OPTION_DIRECT_DOMAIN,
+                &hbb_common::config::Config::get_option(
+                    hbb_common::config::keys::OPTION_DIRECT_DOMAIN,
+                ),
+            )
+        {
+            let target = if is_domain {
+                check_port(peer, RELAY_PORT + 1)
+            } else {
+                peer.to_string()
+            };
+            let mut resolved_ip = "".to_string();
+            if let Ok(mut addrs) = tokio::net::lookup_host(&target).await {
+                if let Some(addr) = addrs.next() {
+                    resolved_ip = format!("{}:{}", addr.ip(), addr.port());
+                }
+            }
+            if resolved_ip.is_empty() {
+                bail!("Failed to resolve domain");
+            }
+            
+            interface.get_lch().write().unwrap().resolved_id = Some(resolved_ip.clone());
+
             return Ok((
                 (
-                    connect_tcp_local(peer, None, CONNECT_TIMEOUT).await?,
+                    connect_tcp_local(resolved_ip, None, CONNECT_TIMEOUT)
+                        .await?,
                     true,
                     None,
                     None,
@@ -1731,6 +1757,7 @@ struct ConnToken {
 #[derive(Default)]
 pub struct LoginConfigHandler {
     id: String,
+    pub resolved_id: Option<String>,
     pub conn_type: ConnType,
     pub is_terminal_admin: bool,
     hash: Hash,
@@ -2656,7 +2683,8 @@ impl LoginConfigHandler {
             let server = Config::get_rendezvous_server();
             (format!("{my_id}@{server}"), id.clone())
         } else {
-            (my_id, self.id.clone())
+            let current_id = self.resolved_id.clone().unwrap_or_else(|| self.id.clone());
+            (my_id, current_id)
         };
         let mut avatar = get_builtin_option(keys::OPTION_AVATAR);
         if avatar.is_empty() {

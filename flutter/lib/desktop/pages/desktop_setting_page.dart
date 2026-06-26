@@ -1343,6 +1343,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return [
       _OptionCheckBox(context, 'Enable direct IP access', kOptionDirectServer,
           update: update, enabled: !locked),
+      _OptionCheckBox(context, 'Enable direct domain access', kOptionDirectDomain,
+          update: update, enabled: !locked),
       () {
         // Simple temp wrapper for PR check
         tmpWrapper() {
