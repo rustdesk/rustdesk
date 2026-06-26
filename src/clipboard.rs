@@ -151,12 +151,14 @@ pub fn update_clipboard_files(files: Vec<String>, side: ClipboardSide) {
 #[cfg(feature = "unix-file-copy-paste")]
 pub fn try_empty_clipboard_files(_side: ClipboardSide, _conn_id: i32) {
     std::thread::spawn(move || {
-        try_empty_clipboard_files_sync(_side, _conn_id);
+        if let Err(e) = try_empty_clipboard_files_sync(_side, _conn_id) {
+            log::error!("Failed to empty clipboard files: {}", e);
+        }
     });
 }
 
 #[cfg(feature = "unix-file-copy-paste")]
-pub fn try_empty_clipboard_files_sync(_side: ClipboardSide, _conn_id: i32) {
+pub fn try_empty_clipboard_files_sync(_side: ClipboardSide, _conn_id: i32) -> ResultType<()> {
     let mut ctx = CLIPBOARD_CTX.lock().unwrap();
     if ctx.is_none() {
         match ClipboardContext::new() {
@@ -165,7 +167,7 @@ pub fn try_empty_clipboard_files_sync(_side: ClipboardSide, _conn_id: i32) {
             }
             Err(e) => {
                 log::error!("Failed to create clipboard context: {}", e);
-                return;
+                bail!("Failed to create clipboard context: {}", e);
             }
         }
     }
@@ -183,12 +185,14 @@ pub fn try_empty_clipboard_files_sync(_side: ClipboardSide, _conn_id: i32) {
             ctx.try_empty_clipboard_files(_side);
             // No need to make sure the context is enabled.
             clipboard::ContextSend::proc(|context| -> ResultType<()> {
-                context.empty_clipboard(_conn_id).ok();
+                if !context.empty_clipboard(_conn_id)? {
+                    bail!("Failed to empty clipboard files for conn_id {}", _conn_id);
+                }
                 Ok(())
-            })
-            .ok();
+            })?;
         }
     }
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]

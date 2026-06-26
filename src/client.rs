@@ -951,10 +951,12 @@ impl Client {
         clipboard_listener::unsubscribe(Self::CLIENT_CLIPBOARD_NAME);
         CLIPBOARD_STATE.lock().unwrap().running = false;
         #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
-        crate::clipboard::try_empty_clipboard_files_sync(
+        if let Err(e) = crate::clipboard::try_empty_clipboard_files_sync(
             crate::clipboard::ClipboardSide::Client,
             0,
-        );
+        ) {
+            log::error!("Failed to empty client clipboard files: {}", e);
+        }
         #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
         clipboard::platform::unix::fuse::uninit_fuse_context(true);
     }
