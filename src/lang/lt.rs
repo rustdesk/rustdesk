@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Slėpti ryšio valdymo langą"),
         ("hide_cm_tip", "Leisti paslėpti didžiąją ir mažąją raidę, jei priimamos slaptažodžio sesijos arba naudojamas nuolatinis slaptažodis"),
         ("wayland_experiment_tip", "Wayland palaikymas yra eksperimentinis, naudokite X11, jei jums reikalingas automatinis prisijungimas."),
+        ("drm_capture_tip", "Galimas tiesioginis DRM/KMS fiksavimas — portalo sutikimas nereikalingas. Palaiko prieigą be priežiūros ir prisijungimo ekrano fiksavimą."),
         ("Right click to select tabs", "Dešiniuoju pelės mygtuku spustelėkite, kad pasirinktumėte skirtukus"),
         ("Skipped", "Praleisti"),
         ("Add to address book", "Pridėti prie adresų knygos"),

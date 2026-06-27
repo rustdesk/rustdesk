@@ -77,9 +77,39 @@ fn install_android_deps() {
     println!("cargo:rustc-link-lib=OpenSLES");
 }
 
+// When the `drm` feature is enabled on Linux, copy the drmtap-helper binary
+// (compiled by libdrmtap-sys/build.rs) into the cargo target dir so the
+// packaging scripts (build.py) can pick it up from target/<profile>/ and
+// install it to /usr/lib/rustdesk/, where libdrmtap searches for it at runtime.
+fn install_drmtap_helper() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let drm_enabled = std::env::var("CARGO_FEATURE_DRM").is_ok();
+    if target_os != "linux" || !drm_enabled {
+        return;
+    }
+    // DEP_DRMTAP_HELPER_BIN is emitted by libdrmtap-sys via `links = "drmtap"`.
+    let src = std::env::var("DEP_DRMTAP_HELPER_BIN")
+        .expect("DEP_DRMTAP_HELPER_BIN not set; libdrmtap-sys must emit it when drm feature is enabled");
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    // OUT_DIR is .../<profile>/build/<pkg>/out; the profile dir (where the binary
+    // lands) is the parent of the "build" component. Locating it by structure is
+    // robust to cross builds (.../<triple>/<profile>/...) and custom profile names.
+    let target_dir = std::path::Path::new(&out_dir)
+        .ancestors()
+        .find(|p| p.file_name().map_or(false, |n| n == "build"))
+        .and_then(|p| p.parent())
+        .expect("could not locate profile dir from OUT_DIR");
+    let dst = target_dir.join("drmtap-helper");
+    std::fs::copy(&src, &dst).unwrap_or_else(|e| {
+        panic!("failed to copy drmtap-helper from {} to {}: {}", src, dst.display(), e)
+    });
+    println!("cargo:rerun-if-changed={}", src);
+}
+
 fn main() {
     hbb_common::gen_version();
     install_android_deps();
+    install_drmtap_helper();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();
     #[cfg(windows)]

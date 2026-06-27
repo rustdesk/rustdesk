@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Bağlantı yönetimi penceresini gizle"),
         ("hide_cm_tip", "Oturumları yalnızca parola ile kabul edebilir ve kalıcı parola kullanıyorsanız gizlemeye izin verin"),
         ("wayland_experiment_tip", "Wayland desteği deneysel aşamada olduğundan, gerektiğinde X11'i kullanmanız önerilir"),
+        ("drm_capture_tip", "DRM/KMS doğrudan yakalama kullanılabilir — portal onayı gerektirmez. Gözetimsiz erişimi ve oturum açma ekranı yakalamayı destekler."),
         ("Right click to select tabs", "Sekmeleri seçmek için sağ tıklayın"),
         ("Skipped", "Atlandı"),
         ("Add to address book", "Adres Defterine Ekle"),

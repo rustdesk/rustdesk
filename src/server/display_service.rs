@@ -310,6 +310,16 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
     let use_logical_scale = !is_x11()
         && crate::is_server()
         && scrap::wayland::display::get_displays().displays.len() > 1;
+    // Set cursor downscale once, from the primary display, so mixed-DPI setups
+    // do not end up with whichever display happened to be last in the list.
+    // Use the same primary-detection as `primary` below — the primary is not
+    // guaranteed to be all[0] on the PipeWire/Wayland path.
+    #[cfg(target_os = "linux")]
+    if use_logical_scale {
+        if let Some(primary) = all.get(get_primary_2(all)) {
+            crate::platform::linux::set_cursor_downscale(primary.scale());
+        }
+    }
     let displays = all
         .iter()
         .map(|d| {
@@ -390,6 +400,21 @@ pub fn get_primary() -> usize {
 #[inline]
 pub fn get_primary_2(all: &Vec<Display>) -> usize {
     all.iter().position(|d| d.is_primary()).unwrap_or(0)
+}
+
+// Cursor downscale should match the display actually being served, not always
+// the primary — otherwise a mixed-DPI multi-monitor setup mis-scales the cursor
+// when a non-primary display is captured. check_update_displays seeds a sane
+// default from the primary; this overrides it from the served display when a
+// capturer is created. Same multi-display/logical-scale gate as there.
+#[cfg(target_os = "linux")]
+pub(crate) fn update_cursor_downscale_for_served(display: &Display) {
+    let use_logical_scale = !is_x11()
+        && crate::is_server()
+        && scrap::wayland::display::get_displays().displays.len() > 1;
+    if use_logical_scale {
+        crate::platform::linux::set_cursor_downscale(display.scale());
+    }
 }
 
 #[inline]

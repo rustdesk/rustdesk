@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "הסתר חלון ניהול חיבורים"),
         ("hide_cm_tip", "אפשר הסתרה רק אם מקבלים הפעלות דרך סיסמה ומשתמשים בסיסמה קבועה"),
         ("wayland_experiment_tip", "תמיכה ב-Wayland נמצאת בשלב ניסיוני, אנא השתמש ב-X11 אם אתה זקוק לגישה ללא ליווי מהצד המרוחק"),
+        ("drm_capture_tip", "לכידת DRM/KMS ישירה זמינה — אין צורך בהסכמת פורטל. תומכת בגישה ללא השגחה ובלכידת מסך ההתחברות."),
         ("Right click to select tabs", "לחץ לחיצה ימנית כדי לבחור לשוניות"),
         ("Skipped", "דולג"),
         ("Add to address book", "הוסף לספר הכתובות"),

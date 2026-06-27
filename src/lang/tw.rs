@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "隱藏連線管理視窗"),
         ("hide_cm_tip", "只在允許密碼連線且使用固定密碼的情況下才隱藏"),
         ("wayland_experiment_tip", "目前對於 Wayland 的支援處於實驗階段，如果您需要使用無人值守存取，請使用 X11。"),
+        ("drm_capture_tip", "可使用 DRM/KMS 直接擷取 — 無需 portal 授權同意。支援無人值守存取及登入畫面擷取。"),
         ("Right click to select tabs", "右鍵選擇分頁"),
         ("Skipped", "已跳過"),
         ("Add to address book", "新增到通訊錄"),

@@ -164,15 +164,24 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
 
                 let mut all = Display::all()?;
-                log::debug!("Initializing displays with fill_displays()");
-                {
-                    let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
-                    let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
-                    fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)?;
+                // When DRM/KMS capture is active the displays are already enumerated
+                // correctly; skip PipeWire fill_displays (which needs a portal session).
+                #[cfg(feature = "drm")]
+                let is_drm = all.first().map_or(false, |d| matches!(d, Display::DRM(_)));
+                #[cfg(not(feature = "drm"))]
+                let is_drm = false;
+                if is_drm {
+                    log::info!("DRM/KMS displays detected, skipping PipeWire initialisation");
+                } else {
+                    log::debug!("Initializing displays with fill_displays()");
+                    {
+                        let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
+                        let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
+                        fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)?;
+                    }
+                    log::debug!("Attempting to fix logical size with try_fix_logical_size()");
+                    try_fix_logical_size(&mut all);
                 }
-                log::debug!("Attempting to fix logical size with try_fix_logical_size()");
-                try_fix_logical_size(&mut all);
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 super::display_service::check_update_displays(&all);
@@ -214,6 +223,11 @@ pub(super) async fn check_init() -> ResultType<()> {
 
                     lock.insert(idx, cap_display_info as u64);
                 }
+                // Mark initialised only after every capturer was created and
+                // inserted. If Capturer::new() fails above, the `?` returns early
+                // with the flag still false so the next call can retry, rather
+                // than the duplicate-init guard permanently leaving zero capturers.
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
             }
         }
     }

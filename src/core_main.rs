@@ -389,6 +389,48 @@ pub fn core_main() -> Option<Vec<String>> {
             log::info!("start --service");
             crate::start_os_service();
             return None;
+        } else if args[0] == "--uinput-service" {
+            // Minimal root helper: provide ONLY the uinput IPC services
+            // (keyboard/mouse/control) so a separately-run, unprivileged
+            // `--server` can inject input on Wayland — without the invasive
+            // `--service` lifecycle management. Run as root.
+            #[cfg(target_os = "linux")]
+            {
+                use crate::server::uinput::service;
+                // The uinput services need write access to /dev/uinput, which
+                // requires root. Fail loudly instead of parking forever with
+                // services that silently failed to bind.
+                if !is_root() {
+                    log::error!("--uinput-service must be run as root");
+                    return None;
+                }
+                log::info!("start --uinput-service (keyboard/mouse/control)");
+                let (tx, rx) = std::sync::mpsc::channel();
+                let services: [(&str, fn()); 3] = [
+                    ("control", service::start_service_control),
+                    ("keyboard", service::start_service_keyboard),
+                    ("mouse", service::start_service_mouse),
+                ];
+                for (name, run) in services {
+                    let tx = tx.clone();
+                    std::thread::spawn(move || {
+                        run();
+                        // start_service only returns if it failed (e.g. could not
+                        // bind its IPC socket) — report which one so the failure
+                        // is not silently swallowed.
+                        let _ = tx.send(name);
+                    });
+                }
+                // Block until a service returns. In normal operation they run
+                // forever, so this parks the main thread; if one exits we log it
+                // and shut down rather than lingering with a broken helper.
+                if let Ok(name) = rx.recv() {
+                    log::error!("--uinput-service: {} service exited unexpectedly", name);
+                }
+                return None;
+            }
+            #[cfg(not(target_os = "linux"))]
+            return None;
         } else if args[0] == "--server" {
             log::info!("start --server with user {}", crate::username());
             #[cfg(target_os = "linux")]

@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "कनेक्शन प्रबंधन विंडो छुपाएं"),
         ("hide_cm_tip", "केवल तभी छुपाएं जब पासवर्ड से कनेक्शन की अनुमति हो"),
         ("wayland_experiment_tip", "Wayland समर्थन अभी परीक्षण मोड में है"),
+        ("drm_capture_tip", "DRM/KMS डायरेक्ट कैप्चर उपलब्ध है — पोर्टल सहमति की आवश्यकता नहीं। अनअटेंडेड एक्सेस और लॉगिन स्क्रीन कैप्चर समर्थित हैं।"),
         ("Right click to select tabs", "टैब चुनने के लिए राइट क्लिक करें"),
         ("Skipped", "छोड़ दिया गया"),
         ("Add to address book", "पता पुस्तिका में जोड़ें"),

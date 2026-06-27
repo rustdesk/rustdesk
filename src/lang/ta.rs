@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "இணைப்பு மேலாண்மை சாளரத்தை மறை"),
         ("hide_cm_tip", "இணைப்பு_மேலாளர்_மறை_குறிப்பு"),
         ("wayland_experiment_tip", "வேலேண்ட்_சோதனை_குறிப்பு"),
+        ("drm_capture_tip", "DRM/KMS நேரடி கைப்பற்றல் கிடைக்கிறது — போர்டல் ஒப்புதல் தேவையில்லை. கண்காணிப்பாளர் இல்லாத அணுகலையும் உள்நுழைவுத் திரை கைப்பற்றலையும் ஆதரிக்கிறது."),
         ("Right click to select tabs", "தாவல்களைத் தேர்ந்தெடுக்க வலது கிளிக் செய்யவும்"),
         ("Skipped", "தவிர்க்கப்பட்டது"),
         ("Add to address book", "முகவரி புத்தகத்தில் சேர்"),
