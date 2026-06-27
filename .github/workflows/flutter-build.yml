@@ -93,7 +93,7 @@ jobs:
               arch: x86_64,
               flutter-arch: x64,
               vcpkg-triplet: x64-windows-static,
-              build-args: "--vram",
+              build-args: "--vram --asio",
             }
           - {
               target: aarch64-pc-windows-msvc,
@@ -131,6 +131,46 @@ jobs:
         uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
         with:
           version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Steinberg ASIO SDK
+        if: ${{ matrix.job.arch == 'x86_64' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sdkRoot = Join-Path $env:RUNNER_TEMP "asio_sdk"
+          $extractRoot = Join-Path $env:RUNNER_TEMP "asio_sdk_extract"
+          $zipPath = Join-Path $env:RUNNER_TEMP "asio_sdk.zip"
+          Remove-Item -Recurse -Force $sdkRoot -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force $extractRoot -ErrorAction SilentlyContinue
+          Invoke-WebRequest -Uri "https://www.steinberg.net/asiosdk" -OutFile $zipPath
+          New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
+          Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
+          $source = Get-ChildItem -Path $extractRoot -Directory | Where-Object {
+            (Test-Path (Join-Path $_.FullName "host")) -and
+            (Test-Path (Join-Path $_.FullName "host\pc")) -and
+            (Test-Path (Join-Path $_.FullName "common"))
+          } | Select-Object -First 1
+          if ($null -eq $source) {
+            Get-ChildItem -Path $extractRoot -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
+            throw "Failed to find extracted ASIO SDK root"
+          }
+          Move-Item -Path $source.FullName -Destination $sdkRoot
+          $requiredPaths = @(
+            "host",
+            "host\pc",
+            "host\asiodrivers.h",
+            "common",
+            "common\asio.h",
+            "common\asiosys.h"
+          )
+          foreach ($relativePath in $requiredPaths) {
+            $path = Join-Path $sdkRoot $relativePath
+            if (!(Test-Path $path)) {
+              throw "ASIO SDK is missing required path: $relativePath"
+            }
+          }
+          "CPAL_ASIO_DIR=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "CPAL_ASIO_DIR=$sdkRoot"
 
       - name: Install flutter
         id: flutter
@@ -412,6 +452,45 @@ jobs:
         with:
           version: ${{ env.LLVM_VERSION }}
 
+      - name: Install Steinberg ASIO SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sdkRoot = Join-Path $env:RUNNER_TEMP "asio_sdk"
+          $extractRoot = Join-Path $env:RUNNER_TEMP "asio_sdk_extract"
+          $zipPath = Join-Path $env:RUNNER_TEMP "asio_sdk.zip"
+          Remove-Item -Recurse -Force $sdkRoot -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force $extractRoot -ErrorAction SilentlyContinue
+          Invoke-WebRequest -Uri "https://www.steinberg.net/asiosdk" -OutFile $zipPath
+          New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
+          Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
+          $source = Get-ChildItem -Path $extractRoot -Directory | Where-Object {
+            (Test-Path (Join-Path $_.FullName "host")) -and
+            (Test-Path (Join-Path $_.FullName "host\pc")) -and
+            (Test-Path (Join-Path $_.FullName "common"))
+          } | Select-Object -First 1
+          if ($null -eq $source) {
+            Get-ChildItem -Path $extractRoot -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
+            throw "Failed to find extracted ASIO SDK root"
+          }
+          Move-Item -Path $source.FullName -Destination $sdkRoot
+          $requiredPaths = @(
+            "host",
+            "host\pc",
+            "host\asiodrivers.h",
+            "common",
+            "common\asio.h",
+            "common\asiosys.h"
+          )
+          foreach ($relativePath in $requiredPaths) {
+            $path = Join-Path $sdkRoot $relativePath
+            if (!(Test-Path $path)) {
+              throw "ASIO SDK is missing required path: $relativePath"
+            }
+          }
+          "CPAL_ASIO_DIR=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "CPAL_ASIO_DIR=$sdkRoot"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
@@ -458,7 +537,7 @@ jobs:
           # Patch sciter x86
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
           cargo update -p sciter-rs --precise 674e07d3066ca9a92ced3816203ab6b652629d1e
-          cargo build --locked --features inline,vram,hwcodec --release --bins
+          cargo build --locked --features inline,vram,hwcodec,asio --release --bins
           mkdir -p ./Release
           mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
