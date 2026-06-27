@@ -2041,30 +2041,18 @@ impl TerminalServiceProxy {
             for terminal_id in closed_terminals {
                 let mut exit_code = 0;
 
-                if !self.is_persistent {
-                    if let Some(session_arc) = sessions.remove(&terminal_id) {
-                        service.lock().unwrap().sessions.remove(&terminal_id);
-                        let mut session = session_arc.lock().unwrap();
-                        // Take the child and add to zombie reaper
-                        if let Some(mut child) = session.child.take() {
-                            // Try to get exit code if available
-                            if let Ok(Some(status)) = child.try_wait() {
-                                exit_code = status.exit_code() as i32;
-                            }
-                            add_to_reaper(child);
+                // Always remove the session: the shell has exited, so there is
+                // nothing to reconnect to — even in persistent mode. Keeping a
+                // dead session would cause handle_open() to "reconnect" to it
+                // instead of creating a fresh terminal.
+                if let Some(session_arc) = sessions.remove(&terminal_id) {
+                    service.lock().unwrap().sessions.remove(&terminal_id);
+                    let mut session = session_arc.lock().unwrap();
+                    if let Some(mut child) = session.child.take() {
+                        if let Ok(Some(status)) = child.try_wait() {
+                            exit_code = status.exit_code() as i32;
                         }
-                    }
-                } else {
-                    // For persistent sessions, just clear the child reference
-                    if let Some(session_arc) = sessions.get(&terminal_id) {
-                        let mut session = session_arc.lock().unwrap();
-                        if let Some(mut child) = session.child.take() {
-                            // Try to get exit code if available
-                            if let Ok(Some(status)) = child.try_wait() {
-                                exit_code = status.exit_code() as i32;
-                            }
-                            add_to_reaper(child);
-                        }
+                        add_to_reaper(child);
                     }
                 }
 
