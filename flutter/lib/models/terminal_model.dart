@@ -38,6 +38,10 @@ class TerminalModel with ChangeNotifier {
 
   void Function(int w, int h, int pw, int ph)? onResizeExternal;
 
+  /// Called when the terminal session ends (shell exits or error).
+  /// The listener (typically TerminalPage) can use this to auto-close the tab.
+  VoidCallback? onClosed;
+
   Future<void> _handleInput(String data) async {
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
     // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
@@ -473,6 +477,8 @@ class TerminalModel with ChangeNotifier {
     _writeToTerminal('\r\nTerminal closed with exit code: $exitCode\r\n');
     _terminalOpened = false;
     notifyListeners();
+    // Auto-close the tab/page
+    onClosed?.call();
   }
 
   void _handleTerminalError(Map<String, dynamic> evt) {
