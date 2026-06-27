@@ -131,6 +131,12 @@ def make_parser():
         help='Build with unix file copy paste feature'
     )
     parser.add_argument(
+        '--drm',
+        action='store_true',
+        help='Linux only: build the DRM/KMS capture backend (ships the privileged '
+             'drmtap-helper, installed 0750 root:rustdesk-capture). Off by default.'
+    )
+    parser.add_argument(
         '--skip-cargo',
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
@@ -282,6 +288,8 @@ def get_features(args):
         features.append('flutter')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if not windows and not osx and args.drm:
+        features.append('drm')
     if osx:
         if args.screencapturekit:
             features.append('screencapturekit')
@@ -352,11 +360,13 @@ def build_flutter_deb(version, features):
         'cp ../res/pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
-    # Install drmtap-helper so postinst can apply cap_sys_admin+ep (drm builds only).
-    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-    # Only present in drm-enabled builds; copy it when built, but don't mask a
-    # genuine copy error (e.g. unwritable dest) the way `|| true` would.
-    system2('if [ -f ../target/release/drmtap-helper ]; then cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper; fi')
+    # Install drmtap-helper for the privileged DRM/KMS capture path — but ONLY
+    # when this build actually enabled the `drm` feature. Gating on the feature
+    # (not on whether a stale ../target/release/drmtap-helper happens to exist
+    # from an earlier --drm build) keeps the opt-in guarantee for normal packages.
+    if 'drm' in features:
+        system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+        system2('cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper')
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
@@ -394,11 +404,15 @@ def build_deb_from_folder(version, binary_folder):
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
-    # Install drmtap-helper so postinst can apply cap_sys_admin+ep (drm builds only).
+    # Install drmtap-helper for the DRM/KMS capture path from the STAGED payload
+    # (binary_folder), not from ../target/release — that tree may be unrelated or
+    # stale for a prebuilt / cross-arch bundle. The helper is only in the payload
+    # when the bundle was built with the `drm` feature, so this stays opt-in. The
+    # `cp -r` above already placed any bundled drmtap-helper under
+    # usr/share/rustdesk/; move it to usr/lib/rustdesk/ where postinst applies the
+    # 0750 + capability.
     system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-    # Only present in drm-enabled builds; copy it when built, but don't mask a
-    # genuine copy error (e.g. unwritable dest) the way `|| true` would.
-    system2('if [ -f ../target/release/drmtap-helper ]; then cp ../target/release/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper; fi')
+    system2('if [ -f tmpdeb/usr/share/rustdesk/drmtap-helper ]; then mv tmpdeb/usr/share/rustdesk/drmtap-helper tmpdeb/usr/lib/rustdesk/drmtap-helper; fi')
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
