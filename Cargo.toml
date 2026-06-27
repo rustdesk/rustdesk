@@ -178,7 +178,8 @@ ttf-parser = "0.25"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Direct dep so build.rs receives DEP_DRMTAP_HELPER_BIN via the `links` mechanism.
-libdrmtap-sys = { version = "0.4.3", optional = true }
+# Exact pin: the helper is a privileged TCB component, keep it on the audited version.
+libdrmtap-sys = { version = "=0.4.4", optional = true }
 libxdo-sys = "0.11"
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }

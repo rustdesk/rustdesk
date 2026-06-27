@@ -55,7 +55,8 @@ pkg-config = { version = "0.3.27", optional = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 # DRM/KMS capture bindings (statically embeds the libdrmtap C sources).
 # Enabled via the `drm` feature; not required for PipeWire/X11-only builds.
-libdrmtap-sys = { version = "0.4.3", optional = true }
+# Exact pin: the helper is a privileged TCB component, keep it on the audited version.
+libdrmtap-sys = { version = "=0.4.4", optional = true }
 dbus = { version = "0.9", optional = true }
 tracing = { version = "0.1", optional = true }
 gstreamer = { version = "0.16", optional = true }
