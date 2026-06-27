@@ -37,6 +37,16 @@ const COMPRESS_THRESHOLD: usize = 512; // Compress terminal data larger than thi
 const DEFAULT_RECONNECT_BUFFER_BYTES: usize = 8 * 1024;
 const MAX_SIGWINCH_PHASE_ATTEMPTS: u8 = 3; // Max attempts per SIGWINCH phase before giving up
 
+/// Join a thread with a timeout. Returns true if the thread finished within the timeout.
+/// Spawns a helper thread to perform the join so the caller is not blocked indefinitely.
+fn join_thread_with_timeout(handle: thread::JoinHandle<()>, timeout: Duration) -> bool {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = tx.send(handle.join());
+    });
+    rx.recv_timeout(timeout).is_ok()
+}
+
 /// Two-phase SIGWINCH trigger for TUI app redraw on reconnection.
 ///
 /// Why two phases? A single resize-then-restore done back-to-back is too fast:
@@ -852,17 +862,29 @@ impl TerminalSession {
             self.pty_pair = None;
         }
 
-        // Wait for threads to finish
-        // The reader thread should join before the writer thread on Windows.
+        // Wait for threads to finish.
+        // Use timeout-based join on all platforms to avoid blocking indefinitely
+        // if a thread is stuck (e.g. Linux PTY reader after child exit, or
+        // Windows pipe reader in edge cases).
+        let mut reader_stuck = false;
         if let Some(reader_thread) = self.reader_thread.take() {
-            let _ = reader_thread.join();
+            if !join_thread_with_timeout(reader_thread, Duration::from_millis(500)) {
+                log::debug!("Reader thread did not exit within timeout");
+                reader_stuck = true;
+            }
         }
 
         // The read can read the last "\r\n" after the writer thread (not the child process) exits
         // on Linux in my tests.
         // But we still send "\r\n" to the writer thread and let the reader thread exit first for safety.
         if let Some(writer_thread) = self.writer_thread.take() {
-            let _ = writer_thread.join();
+            if !join_thread_with_timeout(writer_thread, Duration::from_millis(500)) {
+                log::debug!("Writer thread did not exit within timeout");
+            }
+        }
+
+        if reader_stuck {
+            log::debug!("Reader thread still running, will be cleaned up later");
         }
 
         if let Some(mut child) = self.child.take() {
@@ -1857,19 +1879,34 @@ impl TerminalServiceProxy {
         // Process each session with its own lock
         for (terminal_id, session_arc) in sessions {
             if let Ok(mut session) = session_arc.try_lock() {
-                // Check if reader thread is still alive and we haven't sent closed message yet
+                // Check if the session has ended (reader thread finished or child exited).
+                // On Linux, the PTY reader thread may not return EOF when the shell exits
+                // (the cloned master fd keeps the read side open), so we also poll the child
+                // process via try_wait() as a fallback detection mechanism.
                 let mut should_send_closed = false;
                 if !session.closed_message_sent {
                     if let Some(thread) = &session.reader_thread {
                         if thread.is_finished() {
                             should_send_closed = true;
-                            session.closed_message_sent = true;
                         }
                     }
+                    if !should_send_closed {
+                        if let Some(child) = &mut session.child {
+                            match child.try_wait() {
+                                Ok(Some(_)) => {
+                                    should_send_closed = true;
+                                }
+                                Ok(None) => {} // still running
+                                Err(e) => {
+                                    log::warn!("Terminal {} child wait error: {}", terminal_id, e);
+                                }
+                            }
+                        }
+                    }
+                    if should_send_closed {
+                        session.closed_message_sent = true;
+                    }
                 }
-                // It's Ok to put the closed message here.
-                // Because the `reader_thread` is joined in `stop()`,
-                // and `stop()` is called before the session is dropped.
                 if should_send_closed {
                     closed_terminals.push(terminal_id);
                 }
@@ -2004,30 +2041,18 @@ impl TerminalServiceProxy {
             for terminal_id in closed_terminals {
                 let mut exit_code = 0;
 
-                if !self.is_persistent {
-                    if let Some(session_arc) = sessions.remove(&terminal_id) {
-                        service.lock().unwrap().sessions.remove(&terminal_id);
-                        let mut session = session_arc.lock().unwrap();
-                        // Take the child and add to zombie reaper
-                        if let Some(mut child) = session.child.take() {
-                            // Try to get exit code if available
-                            if let Ok(Some(status)) = child.try_wait() {
-                                exit_code = status.exit_code() as i32;
-                            }
-                            add_to_reaper(child);
+                // Always remove the session: the shell has exited, so there is
+                // nothing to reconnect to — even in persistent mode. Keeping a
+                // dead session would cause handle_open() to "reconnect" to it
+                // instead of creating a fresh terminal.
+                if let Some(session_arc) = sessions.remove(&terminal_id) {
+                    service.lock().unwrap().sessions.remove(&terminal_id);
+                    let mut session = session_arc.lock().unwrap();
+                    if let Some(mut child) = session.child.take() {
+                        if let Ok(Some(status)) = child.try_wait() {
+                            exit_code = status.exit_code() as i32;
                         }
-                    }
-                } else {
-                    // For persistent sessions, just clear the child reference
-                    if let Some(session_arc) = sessions.get(&terminal_id) {
-                        let mut session = session_arc.lock().unwrap();
-                        if let Some(mut child) = session.child.take() {
-                            // Try to get exit code if available
-                            if let Ok(Some(status)) = child.try_wait() {
-                                exit_code = status.exit_code() as i32;
-                            }
-                            add_to_reaper(child);
-                        }
+                        add_to_reaper(child);
                     }
                 }
 
