@@ -302,6 +302,10 @@ fn create_capturer(
             #[cfg(not(windows))]
             {
                 log::debug!("Create capturer from scrap");
+                // Scale the cursor for the display actually being served (mixed
+                // DPI multi-monitor), not always the primary.
+                #[cfg(target_os = "linux")]
+                crate::server::display_service::update_cursor_downscale_for_served(&display);
                 return Ok(Box::new(
                     Capturer::new(display).with_context(|| "Failed to create capturer")?,
                 ));

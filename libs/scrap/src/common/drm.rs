@@ -17,6 +17,7 @@
 use crate::{Frame, TraitCapturer};
 use std::{io, time::{Duration, Instant}};
 use super::x11::PixelBuffer;
+use hbb_common::log;
 
 // FFI bindings to libdrmtap — struct layouts must match drmtap.h exactly!
 // Use libdrmtap-sys crate for static linking
@@ -139,6 +140,24 @@ fn logical_geometry_for(
     (phys_x, phys_y, phys_w, phys_h, 1.0)
 }
 
+/// Index of the display matching the compositor's primary output (by connector
+/// name), or 0 if the primary is unknown or doesn't match an enumerated
+/// connector. Keeps the DRM primary consistent with the Wayland/compositor
+/// primary instead of just libdrmtap's enumeration order.
+fn primary_display_index(displays: &[Display]) -> usize {
+    #[cfg(feature = "wayland")]
+    if let Some(name) = crate::wayland::display::get_primary_monitor() {
+        if let Some(idx) = displays.iter().position(|d| d.name == name) {
+            return idx;
+        }
+        log::debug!(
+            "DRM: compositor primary '{name}' not among enumerated connectors; using first"
+        );
+    }
+    let _ = displays;
+    0
+}
+
 impl Display {
     pub fn all() -> io::Result<Vec<Display>> {
         // SAFETY: All FFI calls use valid pointers and check return values.
@@ -194,10 +213,9 @@ impl Display {
                 // and let the capturer auto-select the active CRTC (crtc_id 0).
                 idxs = (0..count).collect();
             }
-            let displays: Vec<Display> = idxs
+            let mut displays: Vec<Display> = idxs
                 .into_iter()
-                .enumerate()
-                .map(|(idx, i)| {
+                .map(|i| {
                     let name_bytes: Vec<u8> = raw_displays[i]
                         .name
                         .iter()
@@ -224,7 +242,7 @@ impl Display {
                         logical_h,
                         scale,
                         crtc_id: raw_displays[i].crtc_id,
-                        primary: idx == 0,
+                        primary: false,
                     }
                 })
                 .collect();
@@ -236,13 +254,23 @@ impl Display {
                 ));
             }
 
+            // Mark the primary to match the compositor's primary output (by
+            // connector name) rather than libdrmtap's enumeration order. Falls
+            // back to the first display if the compositor primary is unknown or
+            // its name doesn't match an enumerated connector.
+            let primary_idx = primary_display_index(&displays);
+            if let Some(d) = displays.get_mut(primary_idx) {
+                d.primary = true;
+            }
+
             Ok(displays)
         }
     }
 
     pub fn primary() -> io::Result<Display> {
         let mut all = Self::all()?;
-        Ok(all.remove(0))
+        let idx = all.iter().position(|d| d.primary).unwrap_or(0);
+        Ok(all.remove(idx))
     }
 
     pub fn width(&self) -> usize { self.w }

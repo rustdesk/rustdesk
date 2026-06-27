@@ -162,7 +162,10 @@ fn try_gdbus_primary() -> Option<String> {
     None
 }
 
-fn get_primary_monitor() -> Option<String> {
+/// The compositor's primary output connector name (e.g. "HDMI-A-1", "DP-2"),
+/// detected via xrandr/kscreen/gdbus. Also used by the DRM backend so its
+/// primary matches the compositor's, not just libdrmtap's enumeration order.
+pub fn get_primary_monitor() -> Option<String> {
     try_xrandr_primary()
         .or_else(try_kscreen_primary)
         .or_else(try_gdbus_primary)

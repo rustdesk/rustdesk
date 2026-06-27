@@ -74,9 +74,14 @@ impl Display {
         // (helper missing, no active CRTC, etc.).
         #[cfg(all(target_os = "linux", feature = "drm"))]
         if !super::is_x11() {
-            if let Ok(d) = drm::Display::primary() {
-                log::info!("DRM/KMS capture active");
-                return Ok(Display::DRM(d));
+            match drm::Display::primary() {
+                Ok(d) => {
+                    log::info!("DRM/KMS capture active");
+                    return Ok(Display::DRM(d));
+                }
+                Err(e) => log::debug!(
+                    "DRM/KMS capture unavailable ({e}); falling back to PipeWire/portal"
+                ),
             }
         }
 
@@ -91,11 +96,17 @@ impl Display {
         // On Wayland: try DRM/KMS first (see primary() for rationale).
         #[cfg(all(target_os = "linux", feature = "drm"))]
         if !super::is_x11() {
-            if let Ok(displays) = drm::Display::all() {
-                if !displays.is_empty() {
+            match drm::Display::all() {
+                Ok(displays) if !displays.is_empty() => {
                     log::info!("DRM/KMS capture active ({} display(s))", displays.len());
                     return Ok(displays.into_iter().map(Display::DRM).collect());
                 }
+                Ok(_) => log::debug!(
+                    "DRM/KMS reported no displays; falling back to PipeWire/portal"
+                ),
+                Err(e) => log::debug!(
+                    "DRM/KMS capture unavailable ({e}); falling back to PipeWire/portal"
+                ),
             }
         }
 
