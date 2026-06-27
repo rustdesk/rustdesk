@@ -32,6 +32,7 @@ use crate::{
 };
 
 type Message = RendezvousMessage;
+const DEDUP_WINDOW_MS: u128 = 100;
 
 fn connection_meta(
     control_permissions: Option<ControlPermissions>,
@@ -45,7 +46,11 @@ fn connection_meta(
 
 lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Mutex<String> = Default::default();
-    static ref LAST_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
+    static ref LAST_MSG: Mutex<(SocketAddr, SocketAddr, Instant)> = Mutex::new((
+        SocketAddr::new([0; 4].into(), 0),
+        SocketAddr::new(std::net::Ipv6Addr::UNSPECIFIED.into(), 0),
+        Instant::now()
+    ));
     static ref LAST_RELAY_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
@@ -497,7 +502,7 @@ impl RendezvousMediator {
         let last = *LAST_RELAY_MSG.lock().await;
         *LAST_RELAY_MSG.lock().await = (addr, Instant::now());
         // skip duplicate relay request messages
-        if last.0 == addr && last.1.elapsed().as_millis() < 100 {
+        if last.0 == addr && last.1.elapsed().as_millis() < DEDUP_WINDOW_MS {
             return Ok(());
         }
         let meta = connection_meta(
@@ -569,13 +574,20 @@ impl RendezvousMediator {
 
     async fn handle_intranet(&self, fla: FetchLocalAddr, server: ServerPtr) -> ResultType<()> {
         let addr = AddrMangle::decode(&fla.socket_addr);
+        let peer_addr_v6 = hbb_common::AddrMangle::decode(&fla.socket_addr_v6);
         let last = *LAST_MSG.lock().await;
-        *LAST_MSG.lock().await = (addr, Instant::now());
-        // skip duplicate punch hole messages
-        if last.0 == addr && last.1.elapsed().as_millis() < 100 {
+        *LAST_MSG.lock().await = (addr, peer_addr_v6, Instant::now());
+        //IPv4: Continue using the existing deduplication mechanism.
+        //IPv6: Because IPv6 hole‑punching can be triggered in parallel from both the pure‑TCP branch and the UDP branch.
+        // refer to Client::_start_inner
+        //two attempts may occur simultaneously. Deduplicate solely by the IP address (i.e., keep only one entry per IPv6 address). This prevents duplicate IPv6 hole‑punching attempts.
+        if last.2.elapsed().as_millis() < DEDUP_WINDOW_MS
+            && last.0 == addr
+            && ((last.1.port() == 0 && peer_addr_v6.port() == 0)
+                || last.1.ip() == peer_addr_v6.ip())
+        {
             return Ok(());
         }
-        let peer_addr_v6 = hbb_common::AddrMangle::decode(&fla.socket_addr_v6);
         let relay_server = self.get_relay_server(fla.relay_server.clone());
         let relay = use_ws() || Config::is_proxy();
         let mut socket_addr_v6 = Default::default();
@@ -649,13 +661,18 @@ impl RendezvousMediator {
 
     async fn handle_punch_hole(&self, ph: PunchHole, server: ServerPtr) -> ResultType<()> {
         let mut peer_addr = AddrMangle::decode(&ph.socket_addr);
+        let peer_addr_v6 = hbb_common::AddrMangle::decode(&ph.socket_addr_v6);
         let last = *LAST_MSG.lock().await;
-        *LAST_MSG.lock().await = (peer_addr, Instant::now());
-        // skip duplicate punch hole messages
-        if last.0 == peer_addr && last.1.elapsed().as_millis() < 100 {
+        *LAST_MSG.lock().await = (peer_addr, peer_addr_v6, Instant::now());
+        // skip duplicate punch hole messages (match by IP pair, ignore short-lived port jitter)
+        if last.2.elapsed().as_millis() < DEDUP_WINDOW_MS
+            && last.0 == peer_addr
+            && ((last.1.port() == 0 && peer_addr_v6.port() == 0)
+                || last.1.ip() == peer_addr_v6.ip())
+        {
             return Ok(());
         }
-        let peer_addr_v6 = hbb_common::AddrMangle::decode(&ph.socket_addr_v6);
+
         let relay = use_ws() || Config::is_proxy() || ph.force_relay;
         let mut socket_addr_v6 = Default::default();
         let meta = connection_meta(
@@ -666,10 +683,11 @@ impl RendezvousMediator {
             socket_addr_v6 =
                 start_ipv6(peer_addr_v6, peer_addr, server.clone(), meta.clone()).await;
         }
+        let has_ipv6_punch = !socket_addr_v6.is_empty();
         let relay_server = self.get_relay_server(ph.relay_server);
         // for ensure, websocket go relay directly
         if ph.nat_type.enum_value() == Ok(NatType::SYMMETRIC)
-            || Config::get_nat_type() == NatType::SYMMETRIC as i32
+            || (Config::get_nat_type() == NatType::SYMMETRIC as i32 && !has_ipv6_punch)
             || relay
             || (config::is_disable_tcp_listen() && ph.udp_port <= 0)
         {
@@ -932,15 +950,15 @@ async fn start_ipv6(
     server: ServerPtr,
     meta: ConnectionMeta,
 ) -> bytes::Bytes {
-    crate::test_ipv6().await;
-    if let Some((socket, local_addr_v6)) = crate::get_ipv6_socket().await {
+    // get v6 socket and mapped v6 addr.
+    if let Some((socket, mapped_addr_v6)) = crate::get_ipv6_socket().await {
         let server = server.clone();
         tokio::spawn(async move {
             allow_err!(
                 udp_nat_listen(socket.clone(), peer_addr_v6, peer_addr_v4, server, meta).await
             );
         });
-        return local_addr_v6;
+        return mapped_addr_v6;
     }
     Default::default()
 }

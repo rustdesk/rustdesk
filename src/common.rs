@@ -96,7 +96,7 @@ lazy_static::lazy_static! {
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
-    static ref PUBLIC_IPV6_ADDR: Arc<Mutex<(Option<SocketAddr>, Option<Instant>)>> = Default::default();
+
 }
 
 lazy_static::lazy_static! {
@@ -581,7 +581,6 @@ impl Drop for CheckTestNatType {
 }
 
 pub fn test_nat_type() {
-    test_ipv6_sync();
     use std::sync::atomic::{AtomicBool, Ordering};
     std::thread::spawn(move || {
         static IS_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -2398,108 +2397,6 @@ pub async fn test_nat_ipv4() -> ResultType<(SocketAddr, String)> {
     };
 }
 
-async fn test_bind_ipv6() -> ResultType<SocketAddr> {
-    let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
-    let socket = UdpSocket::bind(local_addr).await?;
-    let addr = STUNS_V6[0]
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
-        .ok_or_else(|| {
-            anyhow!(
-                "Failed to resolve STUN ipv6 server address: {}",
-                STUNS_V6[0]
-            )
-        })?;
-    socket.connect(addr).await?;
-    Ok(socket.local_addr()?)
-}
-
-pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
-    if PUBLIC_IPV6_ADDR
-        .lock()
-        .unwrap()
-        .1
-        .map(|x| x.elapsed().as_secs() < 60)
-        .unwrap_or(false)
-    {
-        return None;
-    }
-    PUBLIC_IPV6_ADDR.lock().unwrap().1 = Some(Instant::now());
-
-    match test_bind_ipv6().await {
-        Ok(mut addr) => {
-            if let std::net::IpAddr::V6(ip) = addr.ip() {
-                if !ip.is_loopback()
-                    && !ip.is_unspecified()
-                    && !ip.is_multicast()
-                    && (ip.segments()[0] & 0xe000) == 0x2000
-                {
-                    addr.set_port(0);
-                    PUBLIC_IPV6_ADDR.lock().unwrap().0 = Some(addr);
-                    log::debug!("Found public IPv6 address locally: {}", addr);
-                }
-            }
-        }
-        Err(e) => {
-            log::warn!("Failed to bind IPv6 socket: {}", e);
-        }
-    }
-    // Interestingly, on my macOS, sometimes my ipv6 works, sometimes not (test with ping6 or https://test-ipv6.com/).
-    // I checked ifconfig, could not see any difference. Both secure ipv6 and temporary ipv6 are there.
-    // So we can not rely on the local ipv6 address queries with if_addrs.
-    // above test_bind_ipv6 is safer, because it can fail in this case.
-    /*
-    std::thread::spawn(|| {
-        if let Ok(ifaces) = if_addrs::get_if_addrs() {
-            for iface in ifaces {
-                if let if_addrs::IfAddr::V6(v6) = iface.addr {
-                    let ip = v6.ip;
-                    if !ip.is_loopback()
-                        && !ip.is_unspecified()
-                        && !ip.is_multicast()
-                        && !ip.is_unique_local()
-                        && !ip.is_unicast_link_local()
-                        && (ip.segments()[0] & 0xe000) == 0x2000
-                    {
-                        // only use the first one, on mac, the first one is the stable
-                        // one, the last one is the temporary one. The middle ones are deperecated.
-                        *PUBLIC_IPV6_ADDR.lock().unwrap() =
-                            Some((SocketAddr::from((ip, 0)), Instant::now()));
-                        log::debug!("Found public IPv6 address locally: {}", ip);
-                        break;
-                    }
-                }
-            }
-        }
-    });
-    */
-
-    Some(tokio::spawn(async {
-        use hbb_common::futures::future::{select_ok, FutureExt};
-        let tests = STUNS_V6
-            .iter()
-            .map(|&stun| stun_ipv6_test(stun).boxed())
-            .collect::<Vec<_>>();
-
-        match select_ok(tests).await {
-            Ok(res) => {
-                let mut addr = res.0 .0;
-                addr.set_port(0); // Set port to 0 to avoid conflicts
-                PUBLIC_IPV6_ADDR.lock().unwrap().0 = Some(addr);
-                log::debug!(
-                    "Found public IPv6 address via STUN server {}: {}",
-                    res.0 .1,
-                    addr
-                );
-            }
-            Err(e) => {
-                log::error!("Failed to get public IPv6 address: {}", e);
-            }
-        };
-    }))
-}
-
 pub async fn punch_udp(
     socket: Arc<UdpSocket>,
     listen: bool,
@@ -2551,35 +2448,131 @@ pub async fn punch_udp(
     }
 }
 
-fn test_ipv6_sync() {
-    #[tokio::main(flavor = "current_thread")]
-    async fn func() {
-        if let Some(job) = test_ipv6().await {
-            job.await.ok();
-        }
-    }
-    std::thread::spawn(func);
-}
+/// STUN query on the actual hole-punching socket.
+/// Tries up to 2 STUN servers sequentially within a global deadline.
+/// Returns the mapped (external) addresses from each successful response.
+/// All queries use the SAME socket .
+async fn stun_probe_on_socketv6(socket: &UdpSocket) -> Vec<SocketAddr> {
+    use std::net::ToSocketAddrs;
+    use stunclient::StunClient;
 
-pub async fn get_ipv6_socket() -> Option<(Arc<UdpSocket>, bytes::Bytes)> {
-    let Some(addr) = PUBLIC_IPV6_ADDR.lock().unwrap().0 else {
-        return None;
-    };
+    let mut mapped_addrs: Vec<SocketAddr> = Vec::new();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(3);
 
-    match UdpSocket::bind(addr).await {
-        Err(err) => {
-            log::warn!("Failed to create UDP socket for IPv6: {err}");
+    for stun_server in STUNS_V6.iter() {
+        if mapped_addrs.len() >= 1 {
+            //enough for decision, no need to wait for more
+            //If we needed to determine the NAT type, we would set this value to 2 so that the result could be compared later.
+            //Relay connections and hole‑punching are performed in parallel.
+            //so,We don’t need to do that.
+            break;
         }
-        Ok(socket) => {
-            if let Ok(local_addr_v6) = socket.local_addr() {
-                return Some((
-                    Arc::new(socket),
-                    hbb_common::AddrMangle::encode(local_addr_v6).into(),
-                ));
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        let per_server = std::cmp::min(remaining, std::time::Duration::from_millis(1500));
+
+        let stun_addr = match tokio::net::lookup_host(stun_server)
+            .await
+            .ok()
+            .and_then(|mut it| it.find(|x| x.is_ipv6()))
+        {
+            Some(a) => a,
+            None => continue,
+        };
+
+        let client = StunClient::new(stun_addr);
+        match tokio::time::timeout(per_server, client.query_external_address_async(socket)).await {
+            Ok(Ok(addr)) => {
+                log::debug!("IPv6 STUN {} → mapped {}", stun_server, addr);
+                mapped_addrs.push(addr);
+            }
+
+            Ok(Err(e)) => {
+                log::debug!("IPv6 STUN {} failed: {}", stun_server, e);
+            }
+            Err(_) => {
+                log::debug!("IPv6 STUN {} timed out", stun_server);
             }
         }
     }
-    None
+    mapped_addrs
+}
+
+/// Returns `(socket, encoded_mapped_addr)` where:
+/// - `socket` is bound to a local GUA address (used for sending/receiving),
+/// - `encoded_mapped_addr` is the STUN-discovered external address (reported to hbbs).
+/// Under NAT, the local and external addresses/ports may differ.
+pub async fn get_ipv6_socket() -> Option<(Arc<UdpSocket>, bytes::Bytes)> {
+    fn is_usable_global_ipv6(addr: std::net::IpAddr) -> bool {
+        if let std::net::IpAddr::V6(ip) = addr {
+            !ip.is_loopback()
+                && !ip.is_unspecified()
+                && !ip.is_multicast()
+                && (ip.segments()[0] & 0xe000) == 0x2000
+        } else {
+            false
+        }
+    }
+    fn route_probe_ipv6() -> Option<std::net::IpAddr> {
+        // We’re not establishing a real connection, only performing a routing probe.
+        // so we use a hard‑coded IP address instead of a domain name to avoid unnecessary DNS resolution. This address is Cloudflare’s STUN server.
+        let addr: SocketAddr = "[2606:4700:49::]:3478".parse().ok()?;
+        let socket = std::net::UdpSocket::bind(SocketAddr::from(([0u16; 8], 0))).ok()?;
+        socket
+            .connect(addr)
+            .map_err(|_| log::debug!("route probe fail"))
+            .ok()?;
+        socket.local_addr().ok().map(|a| a.ip())
+    }
+
+    let local_addr_ip = route_probe_ipv6()?;
+
+    let socket = match UdpSocket::bind(SocketAddr::from((local_addr_ip, 0))).await {
+        Ok(s) => s,
+        Err(err) => {
+            log::warn!("Failed to create UDP socket for IPv6: {err}");
+            return None;
+        }
+    };
+    // We only need to obtain an IPv6 GUA (global unicast address). If we have it, we skip the STUN test,
+    // which reduces unnecessary connection latency and lets the connection be established more quickly.
+    // In this case, the external port is the same as the local port.
+    if is_usable_global_ipv6(local_addr_ip) {
+        let socket_port = socket.local_addr().ok()?.port();
+        let external_addr = SocketAddr::new(local_addr_ip, socket_port);
+        log::debug!(
+            "IPv6 socket: local={} (usable global IPv6, skipping STUN), external={}",
+            local_addr_ip,
+            external_addr
+        );
+        return Some((
+            Arc::new(socket),
+            hbb_common::AddrMangle::encode(external_addr).into(),
+        ));
+    }
+
+    log::debug!("IPv6 socket: local={} (not gua)", local_addr_ip);
+    // Single STUN flow on the actual hole-punching socket.
+    // Same source port for STUN and hole punching — correct under any NAT type.
+    // Pass local_addr so STUN can short-circuit when no NAT is detected.
+    let mapped_addrs = stun_probe_on_socketv6(&socket).await;
+
+    if mapped_addrs.is_empty() {
+        log::warn!("Failed to get IPv6 mapping from STUN");
+        return None;
+    }
+    let external_addr = mapped_addrs[0];
+    log::debug!(
+        "IPv6 socket: local={}, external={} (reported to hbbs)",
+        local_addr_ip,
+        external_addr
+    );
+    Some((
+        Arc::new(socket),
+        hbb_common::AddrMangle::encode(external_addr).into(),
+    ))
 }
 
 // The color is the same to `str2color()` in flutter.
