@@ -7,11 +7,23 @@ if [ "$1" = configure ]; then
 	INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
 	ln -f -s /usr/share/rustdesk/rustdesk /usr/bin/rustdesk
 
-	# Grant drmtap-helper the single capability it needs to open the DRM device
-	# without running the main rustdesk process as root.
-	if [ -f /usr/lib/rustdesk/drmtap-helper ] && command -v setcap >/dev/null; then
-		setcap cap_sys_admin+ep /usr/lib/rustdesk/drmtap-helper \
-			|| echo "rustdesk: warning: setcap on drmtap-helper failed; DRM/KMS capture will fall back to PipeWire" >&2
+	# DRM/KMS capture helper: grant the single capability it needs to read the
+	# scanout, but do NOT leave it world-executable (a world-exec cap_sys_admin
+	# binary on a multi-user host lets any local user read the active scanout,
+	# incl. the login/lock screen or another user's session). Restrict it to a
+	# dedicated group FIRST (so there is never a window where it is both 0755 and
+	# capability-bearing), then setcap. Only members of `rustdesk-capture` can run
+	# it — an administrator opts users in with `usermod -aG rustdesk-capture <user>`;
+	# everyone else falls back to the PipeWire/portal path.
+	if [ -f /usr/lib/rustdesk/drmtap-helper ]; then
+		groupadd -f -r rustdesk-capture 2>/dev/null \
+			|| addgroup --system rustdesk-capture 2>/dev/null || true
+		chown root:rustdesk-capture /usr/lib/rustdesk/drmtap-helper 2>/dev/null || true
+		chmod 0750 /usr/lib/rustdesk/drmtap-helper
+		if command -v setcap >/dev/null; then
+			setcap cap_sys_admin+ep /usr/lib/rustdesk/drmtap-helper \
+				|| echo "rustdesk: warning: setcap on drmtap-helper failed; DRM/KMS capture will fall back to PipeWire" >&2
+		fi
 	fi
 
 	if [ "systemd" == "$INITSYS" ]; then
