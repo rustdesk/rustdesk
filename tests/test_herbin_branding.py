@@ -23,6 +23,7 @@ def main() -> None:
     service_rs = read(ROOT / "src/service.rs")
     keyboard_rs = read(ROOT / "src/keyboard.rs")
     input_service_rs = read(ROOT / "src/server/input_service.rs")
+    flutter_pubspec = read(ROOT / "flutter/pubspec.yaml")
     mac_app_info = read(ROOT / "flutter/macos/Runner/Configs/AppInfo.xcconfig")
     mac_info_plist = read(ROOT / "flutter/macos/Runner/Info.plist")
     mac_project = read(ROOT / "flutter/macos/Runner.xcodeproj/project.pbxproj")
@@ -68,6 +69,9 @@ def main() -> None:
     assert "en.key_down(Key::Tab).ok();" in input_service_rs
     assert "en.key_up(Key::Tab);" in input_service_rs
     assert "en.key_up(Key::Meta);" in input_service_rs
+
+    assert "sdk: '^3.1.0'" in flutter_pubspec
+    assert "s/3.1.0/2.17.0" not in playground_workflow
 
     assert "PRODUCT_NAME = RustDesk-Herbin" in mac_app_info
     assert "PRODUCT_BUNDLE_IDENTIFIER = com.herbin.rustdesk" in mac_app_info
