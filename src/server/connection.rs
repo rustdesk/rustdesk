@@ -1517,7 +1517,7 @@ impl Connection {
         self.conn_audit_two_factor = two_factor;
     }
 
-    fn normalize_conn_audit_primary_auth(&mut self) {
+    fn normalize_conn_audit_auth_fields(&mut self) {
         if matches!(
             self.conn_audit_primary_auth,
             ConnAuditPrimaryAuth::Click | ConnAuditPrimaryAuth::SwitchSides
@@ -1649,7 +1649,7 @@ impl Connection {
             .unwrap()
             .get(&self.session_key())
             .map(|s| s.last_recv_time.clone());
-        self.normalize_conn_audit_primary_auth();
+        self.normalize_conn_audit_auth_fields();
         let mut audit = json!({"peer": ((&self.lr.my_id, &self.lr.my_name)), "type": conn_type});
         if self.conn_audit_primary_auth != ConnAuditPrimaryAuth::None {
             audit["primary_auth"] = json!(self.conn_audit_primary_auth.as_i64());
