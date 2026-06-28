@@ -32,16 +32,6 @@ const OS_LOWER_MACOS: &str = "macos";
 #[allow(dead_code)]
 const OS_LOWER_ANDROID: &str = "android";
 
-const ENABLE_WINDOWS_TO_MACOS_ALT_TAB_REMAP: bool = true;
-
-#[derive(Clone, Copy)]
-struct ShortcutModifierState {
-    alt: bool,
-    ctrl: bool,
-    shift: bool,
-    command: bool,
-}
-
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
@@ -49,18 +39,27 @@ static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 // macOS: Cmd+G (track G key)
 // Windows/Linux: Ctrl+Alt (track whichever modifier was pressed last)
 // This prevents the exit from retriggering on OS key-repeat.
-#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(all(
+    feature = "flutter",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 static EXIT_SHORTCUT_KEY_DOWN: AtomicBool = AtomicBool::new(false);
 
 // Track whether relative mouse mode is currently active.
 // This is set by Flutter via set_relative_mouse_mode_state() and checked
 // by the rdev grab loop to determine if exit shortcuts should be processed.
-#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(all(
+    feature = "flutter",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 static RELATIVE_MOUSE_MODE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Set the relative mouse mode state from Flutter.
 /// This is called when entering or exiting relative mouse mode.
-#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(all(
+    feature = "flutter",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 pub fn set_relative_mouse_mode_state(active: bool) {
     RELATIVE_MOUSE_MODE_ACTIVE.store(active, Ordering::SeqCst);
     // Reset exit shortcut state when mode changes to avoid stale state
@@ -587,10 +586,8 @@ fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
     #[cfg(target_os = "macos")]
     let is_tracked_key = key == Key::KeyG;
     #[cfg(not(target_os = "macos"))]
-    let is_tracked_key = key == Key::ControlLeft
-        || key == Key::ControlRight
-        || key == Key::Alt
-        || key == Key::AltGr;
+    let is_tracked_key =
+        key == Key::ControlLeft || key == Key::ControlRight || key == Key::Alt || key == Key::AltGr;
 
     // Block key up if key down was blocked (to avoid orphan key up event on remote).
     // This must be checked before clearing the flag below.
@@ -985,22 +982,6 @@ pub fn event_to_key_events(
         }
     };
 
-    #[cfg(target_os = "windows")]
-    {
-        let (alt, ctrl, shift, command) = client::get_modifiers_state(false, false, false, false);
-        key_events = remap_shortcut_for_peer(
-            peer.as_str(),
-            event,
-            key_events,
-            ShortcutModifierState {
-                alt,
-                ctrl,
-                shift,
-                command,
-            },
-        );
-    }
-
     let is_numpad_key = is_numpad_key(&event);
     if keyboard_mode != KeyboardMode::Translate || is_numpad_key {
         let is_letter_key = is_letter_key_4_lock_modes(&event);
@@ -1014,59 +995,6 @@ pub fn event_to_key_events(
         }
     }
     key_events
-}
-
-fn remap_shortcut_for_peer(
-    peer: &str,
-    event: &Event,
-    key_events: Vec<KeyEvent>,
-    modifiers: ShortcutModifierState,
-) -> Vec<KeyEvent> {
-    if !ENABLE_WINDOWS_TO_MACOS_ALT_TAB_REMAP
-        || peer != OS_LOWER_MACOS
-        || !modifiers.alt
-        || modifiers.ctrl
-        || modifiers.command
-    {
-        return key_events;
-    }
-
-    let down = match event.event_type {
-        EventType::KeyPress(Key::Tab) => true,
-        EventType::KeyRelease(Key::Tab) => false,
-        _ => return key_events,
-    };
-
-    if down {
-        return vec![
-            legacy_control_key_event(ControlKey::Alt, false),
-            legacy_control_key_event(ControlKey::Control, true),
-            legacy_control_tab_event(true, modifiers),
-        ];
-    }
-
-    vec![
-        legacy_control_tab_event(false, modifiers),
-        legacy_control_key_event(ControlKey::Control, false),
-        legacy_control_key_event(ControlKey::Alt, false),
-    ]
-}
-
-fn legacy_control_tab_event(down: bool, modifiers: ShortcutModifierState) -> KeyEvent {
-    let mut key_event = legacy_control_key_event(ControlKey::Tab, down);
-    if modifiers.shift {
-        key_event.modifiers.push(ControlKey::Shift.into());
-    }
-    key_event.modifiers.push(ControlKey::Control.into());
-    key_event
-}
-
-fn legacy_control_key_event(control_key: ControlKey, down: bool) -> KeyEvent {
-    let mut key_event = KeyEvent::new();
-    key_event.mode = KeyboardMode::Legacy.into();
-    key_event.down = down;
-    key_event.set_control_key(control_key);
-    key_event
 }
 
 pub fn send_key_event(key_event: &KeyEvent) {
@@ -1716,199 +1644,5 @@ pub mod input_source {
                 CONFIG_INPUT_SOURCE_2_TIP.to_string(),
             ),
         ]
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn tab_event(down: bool) -> Event {
-        Event {
-            event_type: if down {
-                EventType::KeyPress(Key::Tab)
-            } else {
-                EventType::KeyRelease(Key::Tab)
-            },
-            time: std::time::SystemTime::UNIX_EPOCH,
-            name: None,
-            unicode: None,
-            platform_code: 0,
-            position_code: 0,
-            usb_hid: 0,
-        }
-    }
-
-    fn key_event_with_control_key(control_key: ControlKey, down: bool) -> KeyEvent {
-        let mut key_event = KeyEvent::new();
-        key_event.mode = KeyboardMode::Map.into();
-        key_event.down = down;
-        key_event.set_control_key(control_key);
-        key_event
-    }
-
-    fn key_event_with_chr(chr: u32, down: bool) -> KeyEvent {
-        let mut key_event = KeyEvent::new();
-        key_event.mode = KeyboardMode::Map.into();
-        key_event.down = down;
-        key_event.set_chr(chr);
-        key_event
-    }
-
-    fn modifier_values(key_event: &KeyEvent) -> Vec<i32> {
-        key_event.modifiers.iter().map(|key| key.value()).collect()
-    }
-
-    fn assert_legacy_control_key_event(key_event: &KeyEvent, control_key: ControlKey, down: bool) {
-        assert!(crate::is_control_key(key_event, &control_key));
-        assert_eq!(key_event.down, down);
-        assert_eq!(key_event.mode.enum_value(), Ok(KeyboardMode::Legacy));
-    }
-
-    #[test]
-    fn remaps_windows_alt_tab_to_complete_control_tab_tap_for_macos_peer() {
-        let tab_down = remap_shortcut_for_peer(
-            OS_LOWER_MACOS,
-            &tab_event(true),
-            vec![key_event_with_control_key(ControlKey::Tab, true)],
-            ShortcutModifierState {
-                alt: true,
-                ctrl: false,
-                shift: false,
-                command: false,
-            },
-        );
-
-        assert_eq!(tab_down.len(), 3);
-        assert_legacy_control_key_event(&tab_down[0], ControlKey::Alt, false);
-        assert_legacy_control_key_event(&tab_down[1], ControlKey::Control, true);
-        assert_legacy_control_key_event(&tab_down[2], ControlKey::Tab, true);
-        assert_eq!(
-            modifier_values(&tab_down[2]),
-            vec![ControlKey::Control.value()]
-        );
-
-        let tab_up = remap_shortcut_for_peer(
-            OS_LOWER_MACOS,
-            &tab_event(false),
-            vec![key_event_with_control_key(ControlKey::Tab, false)],
-            ShortcutModifierState {
-                alt: true,
-                ctrl: false,
-                shift: false,
-                command: false,
-            },
-        );
-
-        assert_eq!(tab_up.len(), 3);
-        assert_legacy_control_key_event(&tab_up[0], ControlKey::Tab, false);
-        assert_eq!(
-            modifier_values(&tab_up[0]),
-            vec![ControlKey::Control.value()]
-        );
-        assert_legacy_control_key_event(&tab_up[1], ControlKey::Control, false);
-        assert_legacy_control_key_event(&tab_up[2], ControlKey::Alt, false);
-    }
-
-    #[test]
-    fn remaps_windows_alt_tab_to_control_tab_for_macos_peer() {
-        let remapped = remap_shortcut_for_peer(
-            OS_LOWER_MACOS,
-            &tab_event(true),
-            vec![key_event_with_control_key(ControlKey::Tab, true)],
-            ShortcutModifierState {
-                alt: true,
-                ctrl: false,
-                shift: false,
-                command: false,
-            },
-        );
-
-        assert_eq!(remapped.len(), 3);
-        assert_legacy_control_key_event(&remapped[0], ControlKey::Alt, false);
-        assert_legacy_control_key_event(&remapped[1], ControlKey::Control, true);
-        assert_legacy_control_key_event(&remapped[2], ControlKey::Tab, true);
-        assert_eq!(
-            modifier_values(&remapped[2]),
-            vec![ControlKey::Control.value()]
-        );
-    }
-
-    #[test]
-    fn remaps_windows_alt_shift_tab_to_control_shift_tab_for_macos_peer() {
-        let remapped = remap_shortcut_for_peer(
-            OS_LOWER_MACOS,
-            &tab_event(true),
-            vec![key_event_with_control_key(ControlKey::Tab, true)],
-            ShortcutModifierState {
-                alt: true,
-                ctrl: false,
-                shift: true,
-                command: false,
-            },
-        );
-
-        assert_eq!(
-            modifier_values(&remapped[2]),
-            vec![ControlKey::Shift.value(), ControlKey::Control.value()]
-        );
-    }
-
-    #[test]
-    fn leaves_tab_without_alt_unchanged() {
-        let original = key_event_with_control_key(ControlKey::Tab, true);
-        let remapped = remap_shortcut_for_peer(
-            OS_LOWER_MACOS,
-            &tab_event(true),
-            vec![original.clone()],
-            ShortcutModifierState {
-                alt: false,
-                ctrl: false,
-                shift: false,
-                command: false,
-            },
-        );
-
-        assert_eq!(remapped, vec![original]);
-    }
-
-    #[test]
-    fn leaves_non_macos_peer_unchanged() {
-        let original = key_event_with_control_key(ControlKey::Tab, true);
-        let remapped = remap_shortcut_for_peer(
-            OS_LOWER_WINDOWS,
-            &tab_event(true),
-            vec![original.clone()],
-            ShortcutModifierState {
-                alt: true,
-                ctrl: false,
-                shift: false,
-                command: false,
-            },
-        );
-
-        assert_eq!(remapped, vec![original]);
-    }
-
-    #[test]
-    fn leaves_non_tab_shortcuts_unchanged() {
-        let original = key_event_with_chr('c' as u32, true);
-        let event = Event {
-            event_type: EventType::KeyPress(Key::KeyC),
-            ..tab_event(true)
-        };
-        let remapped = remap_shortcut_for_peer(
-            OS_LOWER_MACOS,
-            &event,
-            vec![original.clone()],
-            ShortcutModifierState {
-                alt: true,
-                ctrl: false,
-                shift: false,
-                command: false,
-            },
-        );
-
-        assert_eq!(remapped, vec![original]);
     }
 }

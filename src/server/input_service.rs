@@ -1957,12 +1957,89 @@ fn release_shift_for_char_input(en: &mut Enigo) {
     }
 }
 
+/// macOS server-side POC: remap a legacy `Alt(+Shift)+Tab` keystroke coming from a
+/// peer into a `Command(+Shift)+Tab` shape, so it drives the native macOS Cmd+Tab
+/// application switcher instead of being delivered as Alt+Tab.
+///
+/// This mirrors the RustDesk-like enigo sequence proven in the standalone POC:
+///   press:   reset_flag(); key_up(Alt/RAlt); add_flag(Meta)[+Shift]; key_down(Tab)
+///   release: key_up(Tab); reset_flag(); key_up(Meta); key_up(Alt/RAlt)
+///
+/// The trailing `key_up(Meta)` on the release path is the cleanup that dismisses
+/// the macOS switcher UI; without it the switcher stays on screen.
+///
+/// Returns `true` when the event was handled and the caller must skip the normal
+/// legacy path. Narrow by design: only `ControlKey::Tab` is remapped, only when
+/// `Alt`/`RAlt` is present, and never when `Control`/`RControl`/`Meta`/`RWin` is
+/// already held. `Shift`/`RShift` are preserved as flags so Cmd+Shift+Tab cycles
+/// backwards through the switcher.
+#[cfg(target_os = "macos")]
+fn try_remap_mac_alt_tab(en: &mut Enigo, evt: &KeyEvent, down: bool) -> bool {
+    // Only remap Tab.
+    match evt.union {
+        Some(key_event::Union::ControlKey(ck)) if ck.value() == ControlKey::Tab.value() => {}
+        _ => return false,
+    }
+
+    let mods: Vec<i32> = evt.modifiers.iter().map(|m| m.value()).collect();
+    let has_alt =
+        mods.contains(&ControlKey::Alt.value()) || mods.contains(&ControlKey::RAlt.value());
+    if !has_alt {
+        return false;
+    }
+    // Don't remap if a control/meta modifier is already present; only plain
+    // Alt(+Shift)+Tab is rewritten.
+    let has_ctrl_or_meta = mods.contains(&ControlKey::Control.value())
+        || mods.contains(&ControlKey::RControl.value())
+        || mods.contains(&ControlKey::Meta.value())
+        || mods.contains(&ControlKey::RWin.value());
+    if has_ctrl_or_meta {
+        return false;
+    }
+
+    let has_shift =
+        mods.contains(&ControlKey::Shift.value()) || mods.contains(&ControlKey::RShift.value());
+
+    if down {
+        // The Alt key was usually injected by the preceding Alt-down event.
+        // Release it before sending the Command+Tab shape so Option does not
+        // remain visible to macOS during the remapped shortcut.
+        en.reset_flag();
+        en.key_up(Key::Alt);
+        en.key_up(Key::RightAlt);
+        en.add_flag(&Key::Meta);
+        if has_shift {
+            en.add_flag(&Key::Shift);
+        }
+        en.key_down(Key::Tab).ok();
+    } else {
+        // Tab up, then drop the Meta flag and release Meta so the macOS
+        // switcher dismisses. Releasing Alt again is harmless and avoids a
+        // stale Option state if the original Alt-up event is delayed or lost.
+        en.key_up(Key::Tab);
+        en.reset_flag();
+        en.key_up(Key::Meta);
+        en.key_up(Key::Alt);
+        en.key_up(Key::RightAlt);
+    }
+    true
+}
+
 fn legacy_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut to_release: Vec<Key> = Vec::new();
 
     let mut en = ENIGO.lock().unwrap();
+
+    // macOS POC: rewrite legacy Alt(+Shift)+Tab to Command(+Shift)+Tab and
+    // dismiss the switcher on release. Handled entirely here, so skip the rest
+    // of the legacy path when it applies.
+    #[cfg(target_os = "macos")]
+    if try_remap_mac_alt_tab(&mut en, &evt, evt.down) {
+        return;
+    }
+
     sync_modifiers(&mut en, &evt, &mut to_release);
 
     let down = evt.down;

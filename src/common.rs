@@ -1006,12 +1006,21 @@ pub fn get_app_name() -> String {
 }
 
 pub const FORK_APP_NAME: &str = "RustDesk-Herbin";
+#[cfg(target_os = "macos")]
+pub const FORK_ORG: &str = "com.herbin";
 
 #[inline]
 pub fn apply_fork_identity() {
     let mut app_name = hbb_common::config::APP_NAME.write().unwrap();
     if app_name.as_str() == "RustDesk" {
         *app_name = FORK_APP_NAME.to_owned();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut org = hbb_common::config::ORG.write().unwrap();
+        if org.as_str() == "com.carriez" {
+            *org = FORK_ORG.to_owned();
+        }
     }
 }
 
@@ -1933,7 +1942,7 @@ pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
         if same_uid && p.user_id() != my_uid {
             continue;
         }
-        // on mac, p.cmd() get "/Applications/RustDesk.app/Contents/MacOS/RustDesk", "XPC_SERVICE_NAME=com.carriez.RustDesk_server"
+        // on mac, p.cmd() get "/Applications/RustDesk-Herbin.app/Contents/MacOS/RustDesk-Herbin", "XPC_SERVICE_NAME=com.herbin.RustDesk-Herbin_server"
         let parg = if p.cmd().len() <= 1 { "" } else { &p.cmd()[1] };
         if arg.is_empty() {
             if !parg.starts_with("--") {

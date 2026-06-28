@@ -25,12 +25,12 @@
 			<string>Editor</string>
 			<key>CFBundleURLIconFile</key>
 			<string></string>
-			<key>CFBundleURLName</key>
-			<string>com.carriez.rustdesk</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>rustdesk</string>
-			</array>
+				<key>CFBundleURLName</key>
+				<string>com.herbin.rustdesk</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>rustdesk-herbin</string>
+				</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
