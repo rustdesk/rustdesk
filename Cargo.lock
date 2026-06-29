@@ -763,6 +763,8 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools 0.12.1",
+ "log",
+ "prettyplease",
  "proc-macro2 1.0.93",
  "quote 1.0.36",
  "regex",
@@ -7601,8 +7603,9 @@ name = "scrap"
 version = "0.5.0"
 dependencies = [
  "android_logger",
- "bindgen 0.65.1",
+ "bindgen 0.71.1",
  "block",
+ "cc",
  "cfg-if 1.0.0",
  "dbus",
  "docopt",

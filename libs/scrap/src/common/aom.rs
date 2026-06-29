@@ -13,7 +13,6 @@ use crate::{EncodeInput, EncodeYuvFormat, Pixfmt};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
-    log,
     message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
     ResultType,
 };
@@ -23,10 +22,59 @@ generate_call_macro!(call_aom, false);
 generate_call_macro!(call_aom_allow_err, true);
 generate_call_ptr_macro!(call_aom_ptr);
 
-impl Default for aom_codec_enc_cfg_t {
-    fn default() -> Self {
-        unsafe { std::mem::zeroed() }
-    }
+extern "C" {
+    pub fn rustdesk_aom_enc_cfg_alloc_default(
+        iface: *const aom_codec_iface,
+        usage: ::std::os::raw::c_uint,
+        out: *mut *mut aom_codec_enc_cfg_t,
+    ) -> aom_codec_err_t;
+
+    pub fn rustdesk_aom_enc_cfg_free(cfg: *mut aom_codec_enc_cfg_t);
+
+    pub fn rustdesk_aom_enc_cfg_set_basic(
+        c: *mut aom_codec_enc_cfg_t,
+        w: ::std::os::raw::c_uint,
+        h: ::std::os::raw::c_uint,
+        threads: ::std::os::raw::c_uint,
+        bitrate: ::std::os::raw::c_uint,
+        timebase_den: ::std::os::raw::c_uint,
+        bit_depth: ::std::os::raw::c_uint,
+        usage_profile: ::std::os::raw::c_uint,
+        lag_in_frames: ::std::os::raw::c_uint,
+    );
+
+    pub fn rustdesk_aom_enc_cfg_set_quantizer(
+        c: *mut aom_codec_enc_cfg_t,
+        q_min: ::std::os::raw::c_uint,
+        q_max: ::std::os::raw::c_uint,
+    );
+
+    pub fn rustdesk_aom_enc_cfg_set_keyframe(
+        c: *mut aom_codec_enc_cfg_t,
+        min_dist: ::std::os::raw::c_uint,
+        max_dist: ::std::os::raw::c_uint,
+        disabled: ::std::os::raw::c_int,
+    );
+
+    pub fn rustdesk_aom_enc_cfg_set_profile(
+        c: *mut aom_codec_enc_cfg_t,
+        profile: ::std::os::raw::c_uint,
+    );
+
+    pub fn rustdesk_aom_enc_cfg_get_w(c: *const aom_codec_enc_cfg_t) -> ::std::os::raw::c_uint;
+    pub fn rustdesk_aom_enc_cfg_get_h(c: *const aom_codec_enc_cfg_t) -> ::std::os::raw::c_uint;
+    pub fn rustdesk_aom_enc_cfg_get_threads(c: *const aom_codec_enc_cfg_t) -> ::std::os::raw::c_uint;
+    pub fn rustdesk_aom_enc_cfg_get_target_bitrate(c: *const aom_codec_enc_cfg_t) -> ::std::os::raw::c_uint;
+
+    pub fn rustdesk_aom_dec_cfg_alloc(
+        threads: ::std::os::raw::c_uint,
+        w: ::std::os::raw::c_uint,
+        h: ::std::os::raw::c_uint,
+        allow_lowbitdepth: ::std::os::raw::c_uint,
+        out: *mut *mut aom_codec_dec_cfg_t,
+    ) -> aom_codec_err_t;
+
+    pub fn rustdesk_aom_dec_cfg_free(cfg: *mut aom_codec_dec_cfg_t);
 }
 
 impl Default for aom_codec_ctx_t {
@@ -51,25 +99,22 @@ pub struct AomEncoderConfig {
 
 pub struct AomEncoder {
     ctx: aom_codec_ctx_t,
+    cfg: *mut aom_codec_enc_cfg_t,
     width: usize,
     height: usize,
     i444: bool,
     yuvfmt: EncodeYuvFormat,
 }
 
-// https://webrtc.googlesource.com/src/+/refs/heads/main/modules/video_coding/codecs/av1/libaom_av1_encoder.cc
 mod webrtc {
     use super::*;
 
     const kUsageProfile: u32 = AOM_USAGE_REALTIME;
     const kBitDepth: u32 = 8;
-    const kLagInFrames: u32 = 0; // No look ahead.
+    const kLagInFrames: u32 = 0;
     pub(super) const kTimeBaseDen: i64 = 1000;
 
-    // Only positive speeds, range for real-time coding currently is: 6 - 8.
-    // Lower means slower/better quality, higher means fastest/lower quality.
     fn get_cpu_speed(width: u32, height: u32) -> u32 {
-        // aux_config_ = nullptr, kComplexityHigh
         if width * height <= 320 * 180 {
             8
         } else if width * height <= 640 * 360 {
@@ -93,55 +138,64 @@ mod webrtc {
         i: *const aom_codec_iface,
         cfg: AomEncoderConfig,
         i444: bool,
-    ) -> ResultType<aom_codec_enc_cfg> {
-        let mut c = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-        call_aom!(aom_codec_enc_config_default(i, &mut c, kUsageProfile));
+    ) -> ResultType<*mut aom_codec_enc_cfg_t> {
+        let mut c: *mut aom_codec_enc_cfg_t = ptr::null_mut();
 
-        // Overwrite default config with input encoder settings & RTC-relevant values.
-        c.g_w = cfg.width;
-        c.g_h = cfg.height;
-        c.g_threads = codec_thread_num(64) as _;
-        c.g_timebase.num = 1;
-        c.g_timebase.den = kTimeBaseDen as _;
-        c.g_input_bit_depth = kBitDepth;
-        if let Some(keyframe_interval) = cfg.keyframe_interval {
-            c.kf_min_dist = 0;
-            c.kf_max_dist = keyframe_interval as _;
-        } else {
-            c.kf_mode = aom_kf_mode::AOM_KF_DISABLED;
+        call_aom!(rustdesk_aom_enc_cfg_alloc_default(
+            i,
+            kUsageProfile,
+            &mut c
+        ));
+
+        if c.is_null() {
+            return Err(anyhow!("aom config allocation returned null"));
         }
-        let (q_min, q_max) = AomEncoder::calc_q_values(cfg.quality);
-        c.rc_min_quantizer = q_min;
-        c.rc_max_quantizer = q_max;
-        c.rc_target_bitrate = AomEncoder::bitrate(cfg.width as _, cfg.height as _, cfg.quality);
-        c.rc_undershoot_pct = 50;
-        c.rc_overshoot_pct = 50;
-        c.rc_buf_initial_sz = 600;
-        c.rc_buf_optimal_sz = 600;
-        c.rc_buf_sz = 1000;
-        c.g_usage = kUsageProfile;
-        c.g_error_resilient = 0;
-        // Low-latency settings.
-        c.rc_end_usage = aom_rc_mode::AOM_CBR; // Constant Bit Rate (CBR) mode
-        c.g_pass = aom_enc_pass::AOM_RC_ONE_PASS; // One-pass rate control
-        c.g_lag_in_frames = kLagInFrames; // No look ahead when lag equals 0.
 
-        // https://aomedia.googlesource.com/aom/+/refs/tags/v3.6.0/av1/common/enums.h#82
-        c.g_profile = if i444 { 1 } else { 0 };
+        let (q_min, q_max) = AomEncoder::calc_q_values(cfg.quality);
+        let bitrate = AomEncoder::bitrate(cfg.width, cfg.height, cfg.quality);
+
+        unsafe {
+            rustdesk_aom_enc_cfg_set_basic(
+                c,
+                cfg.width,
+                cfg.height,
+                codec_thread_num(64) as _,
+                bitrate,
+                kTimeBaseDen as _,
+                kBitDepth,
+                kUsageProfile,
+                kLagInFrames,
+            );
+
+            rustdesk_aom_enc_cfg_set_quantizer(c, q_min, q_max);
+
+            if let Some(keyframe_interval) = cfg.keyframe_interval {
+                rustdesk_aom_enc_cfg_set_keyframe(c, 0, keyframe_interval as _, 0);
+            } else {
+                rustdesk_aom_enc_cfg_set_keyframe(c, 0, 0, 1);
+            }
+
+            rustdesk_aom_enc_cfg_set_profile(c, if i444 { 1 } else { 0 });
+        }
 
         Ok(c)
     }
 
-    pub fn set_controls(ctx: *mut aom_codec_ctx_t, cfg: &aom_codec_enc_cfg) -> ResultType<()> {
+    pub fn set_controls(ctx: *mut aom_codec_ctx_t, cfg: *const aom_codec_enc_cfg_t) -> ResultType<()> {
         use aom_tune_content::*;
         use aome_enc_control_id::*;
+
         macro_rules! call_ctl {
             ($ctx:expr, $av1e:expr, $arg:expr) => {{
                 call_aom_allow_err!(aom_codec_control($ctx, $av1e as i32, $arg));
             }};
         }
 
-        call_ctl!(ctx, AOME_SET_CPUUSED, get_cpu_speed(cfg.g_w, cfg.g_h));
+        let w = unsafe { rustdesk_aom_enc_cfg_get_w(cfg) };
+        let h = unsafe { rustdesk_aom_enc_cfg_get_h(cfg) };
+        let threads = unsafe { rustdesk_aom_enc_cfg_get_threads(cfg) };
+
+        call_ctl!(ctx, AOME_SET_CPUUSED, get_cpu_speed(w, h));
         call_ctl!(ctx, AV1E_SET_ENABLE_CDEF, 1);
         call_ctl!(ctx, AV1E_SET_ENABLE_TPL_MODEL, 0);
         call_ctl!(ctx, AV1E_SET_DELTAQ_MODE, 0);
@@ -151,28 +205,23 @@ mod webrtc {
         call_ctl!(ctx, AV1E_SET_COEFF_COST_UPD_FREQ, 3);
         call_ctl!(ctx, AV1E_SET_MODE_COST_UPD_FREQ, 3);
         call_ctl!(ctx, AV1E_SET_MV_COST_UPD_FREQ, 3);
-        // kScreensharing
         call_ctl!(ctx, AV1E_SET_TUNE_CONTENT, AOM_CONTENT_SCREEN);
         call_ctl!(ctx, AV1E_SET_ENABLE_PALETTE, 1);
-        let tile_set = if cfg.g_threads == 4 && cfg.g_w == 640 && (cfg.g_h == 360 || cfg.g_h == 480)
-        {
+
+        let tile_set = if threads == 4 && w == 640 && (h == 360 || h == 480) {
             AV1E_SET_TILE_ROWS
         } else {
             AV1E_SET_TILE_COLUMNS
         };
-        // Failed on android
-        call_ctl!(ctx, tile_set, (cfg.g_threads as f64 * 1.0f64).log2().ceil());
+
+        call_ctl!(ctx, tile_set, (threads as f64).log2().ceil());
         call_ctl!(ctx, AV1E_SET_ROW_MT, 1);
         call_ctl!(ctx, AV1E_SET_ENABLE_OBMC, 0);
         call_ctl!(ctx, AV1E_SET_NOISE_SENSITIVITY, 0);
         call_ctl!(ctx, AV1E_SET_ENABLE_WARPED_MOTION, 0);
         call_ctl!(ctx, AV1E_SET_ENABLE_GLOBAL_MOTION, 0);
         call_ctl!(ctx, AV1E_SET_ENABLE_REF_FRAME_MVS, 0);
-        call_ctl!(
-            ctx,
-            AV1E_SET_SUPERBLOCK_SIZE,
-            get_super_block_size(cfg.g_w, cfg.g_h, cfg.g_threads)
-        );
+        call_ctl!(ctx, AV1E_SET_SUPERBLOCK_SIZE, get_super_block_size(w, h, threads));
         call_ctl!(ctx, AV1E_SET_ENABLE_CFL_INTRA, 0);
         call_ctl!(ctx, AV1E_SET_ENABLE_SMOOTH_INTRA, 0);
         call_ctl!(ctx, AV1E_SET_ENABLE_ANGLE_DELTA, 0);
@@ -210,18 +259,36 @@ impl EncoderApi for AomEncoder {
                 let c = webrtc::enc_cfg(i, config, i444)?;
 
                 let mut ctx = Default::default();
-                // Flag options: AOM_CODEC_USE_PSNR and AOM_CODEC_USE_HIGHBITDEPTH
                 let flags: aom_codec_flags_t = 0;
-                call_aom!(aom_codec_enc_init_ver(
-                    &mut ctx,
-                    i,
-                    &c,
-                    flags,
-                    AOM_ENCODER_ABI_VERSION as _
-                ));
-                webrtc::set_controls(&mut ctx, &c)?;
+
+                let init_result = unsafe {
+                    aom_codec_enc_init_ver(
+                        &mut ctx,
+                        i,
+                        c,
+                        flags,
+                        AOM_ENCODER_ABI_VERSION as _,
+                    )
+                };
+
+                if init_result != aom_codec_err_t::AOM_CODEC_OK {
+                    unsafe {
+                        rustdesk_aom_enc_cfg_free(c);
+                    }
+                    call_aom!(init_result);
+                }
+
+                if let Err(err) = webrtc::set_controls(&mut ctx, c) {
+                    unsafe {
+                        let _ = aom_codec_destroy(&mut ctx);
+                        rustdesk_aom_enc_cfg_free(c);
+                    }
+                    return Err(err);
+                }
+
                 Ok(Self {
                     ctx,
+                    cfg: c,
                     width: config.width as _,
                     height: config.height as _,
                     i444,
@@ -240,14 +307,14 @@ impl EncoderApi for AomEncoder {
         {
             frames.push(Self::create_frame(frame));
         }
-        if frames.len() > 0 {
+        if !frames.is_empty() {
             Ok(Self::create_video_frame(frames))
         } else {
             Err(anyhow!("no valid frame"))
         }
     }
 
-    fn yuvfmt(&self) -> crate::EncodeYuvFormat {
+    fn yuvfmt(&self) -> EncodeYuvFormat {
         self.yuvfmt.clone()
     }
 
@@ -257,18 +324,30 @@ impl EncoderApi for AomEncoder {
     }
 
     fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
-        let mut c = unsafe { *self.ctx.config.enc.to_owned() };
         let (q_min, q_max) = Self::calc_q_values(ratio);
-        c.rc_min_quantizer = q_min;
-        c.rc_max_quantizer = q_max;
-        c.rc_target_bitrate = Self::bitrate(self.width as _, self.height as _, ratio);
-        call_aom!(aom_codec_enc_config_set(&mut self.ctx, &c));
+        let bitrate = Self::bitrate(self.width as _, self.height as _, ratio);
+
+        unsafe {
+            rustdesk_aom_enc_cfg_set_quantizer(self.cfg, q_min, q_max);
+            rustdesk_aom_enc_cfg_set_basic(
+                self.cfg,
+                self.width as _,
+                self.height as _,
+                codec_thread_num(64) as _,
+                bitrate,
+                webrtc::kTimeBaseDen as _,
+                8,
+                AOM_USAGE_REALTIME,
+                0,
+            );
+        }
+
+        call_aom!(aom_codec_enc_config_set(&mut self.ctx, self.cfg));
         Ok(())
     }
 
     fn bitrate(&self) -> u32 {
-        let c = unsafe { *self.ctx.config.enc.to_owned() };
-        c.rc_target_bitrate
+        unsafe { rustdesk_aom_enc_cfg_get_target_bitrate(self.cfg) }
     }
 
     fn support_changing_quality(&self) -> bool {
@@ -292,6 +371,7 @@ impl AomEncoder {
         if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
         }
+
         let fmt = if self.i444 {
             aom_img_fmt::AOM_IMG_FMT_I444
         } else {
@@ -307,14 +387,16 @@ impl AomEncoder {
             stride_align as _,
             data.as_ptr() as _,
         ));
+
         let pts = webrtc::kTimeBaseDen / 1000 * ms;
         let duration = webrtc::kTimeBaseDen / 1000;
+
         call_aom!(aom_codec_encode(
             &mut self.ctx,
             &image,
             pts as _,
-            duration as _, // Duration
-            0,             // Flags
+            duration as _,
+            0,
         ));
 
         Ok(EncodeFrames {
@@ -360,7 +442,7 @@ impl AomEncoder {
 
         let t = b as f32 / 200.0;
 
-        let mut q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
+        let mut q_min = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
         let mut q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
 
         q_min = q_min.clamp(q_min2, q_min1);
@@ -376,6 +458,7 @@ impl AomEncoder {
         } else {
             aom_img_fmt::AOM_IMG_FMT_I420
         };
+
         unsafe {
             aom_img_wrap(
                 &mut img,
@@ -386,6 +469,7 @@ impl AomEncoder {
                 0x1 as _,
             );
         }
+
         let pixfmt = if i444 { Pixfmt::I444 } else { Pixfmt::I420 };
         EncodeYuvFormat {
             pixfmt,
@@ -402,6 +486,7 @@ impl Drop for AomEncoder {
     fn drop(&mut self) {
         unsafe {
             let result = aom_codec_destroy(&mut self.ctx);
+            rustdesk_aom_enc_cfg_free(self.cfg);
             if result != aom_codec_err_t::AOM_CODEC_OK {
                 panic!("failed to destroy aom codec");
             }
@@ -416,6 +501,7 @@ pub struct EncodeFrames<'a> {
 
 impl<'a> Iterator for EncodeFrames<'a> {
     type Item = EncodeFrame<'a>;
+
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             unsafe {
@@ -429,8 +515,6 @@ impl<'a> Iterator for EncodeFrames<'a> {
                         key: (f.flags & AOM_FRAME_IS_KEY) != 0,
                         pts: f.pts,
                     });
-                } else {
-                    // Ignore the packet.
                 }
             }
         }
@@ -445,19 +529,37 @@ impl AomDecoder {
     pub fn new() -> Result<Self> {
         let i = call_aom_ptr!(aom_codec_av1_dx());
         let mut ctx = Default::default();
-        let cfg = aom_codec_dec_cfg_t {
-            threads: codec_thread_num(64) as _,
-            w: 0,
-            h: 0,
-            allow_lowbitdepth: 1,
-        };
-        call_aom!(aom_codec_dec_init_ver(
-            &mut ctx,
-            i,
-            &cfg,
+
+        let mut cfg: *mut aom_codec_dec_cfg_t = ptr::null_mut();
+
+        call_aom!(rustdesk_aom_dec_cfg_alloc(
+            codec_thread_num(64) as _,
             0,
-            AOM_DECODER_ABI_VERSION as _,
+            0,
+            1,
+            &mut cfg,
         ));
+
+        if cfg.is_null() {
+            return Err(Error::FailedCall("aom decoder config allocation returned null".to_string()));
+        }
+
+        let init_result = unsafe {
+            aom_codec_dec_init_ver(
+                &mut ctx,
+                i,
+                cfg,
+                0,
+                AOM_DECODER_ABI_VERSION as _,
+            )
+        };
+
+        unsafe {
+            rustdesk_aom_dec_cfg_free(cfg);
+        }
+
+        call_aom!(init_result);
+
         Ok(Self { ctx })
     }
 
@@ -475,7 +577,6 @@ impl AomDecoder {
         })
     }
 
-    /// Notify the decoder to return any pending frame
     pub fn flush<'a>(&'a mut self) -> Result<DecodeFrames<'a>> {
         call_aom!(aom_codec_decode(
             &mut self.ctx,
@@ -483,6 +584,7 @@ impl AomDecoder {
             0,
             ptr::null_mut(),
         ));
+
         Ok(DecodeFrames {
             ctx: &mut self.ctx,
             iter: ptr::null(),
@@ -508,17 +610,19 @@ pub struct DecodeFrames<'a> {
 
 impl<'a> Iterator for DecodeFrames<'a> {
     type Item = Image;
+
     fn next(&mut self) -> Option<Self::Item> {
         let img = unsafe { aom_codec_get_frame(self.ctx, &mut self.iter) };
         if img.is_null() {
-            return None;
+            None
         } else {
-            return Some(Image(img));
+            Some(Image(img))
         }
     }
 }
 
 pub struct Image(*mut aom_image_t);
+
 impl Image {
     #[inline]
     pub fn new() -> Self {
