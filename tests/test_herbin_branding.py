@@ -72,6 +72,10 @@ def main() -> None:
 
     assert "sdk: '^3.1.0'" in flutter_pubspec
     assert "s/3.1.0/2.17.0" not in playground_workflow
+    for macos_workflow in [playground_workflow, codex_macos_workflow]:
+        assert "Ad-hoc sign unsigned app" in macos_workflow
+        assert 'codesign --force --deep --sign - --options runtime "$APP"' in macos_workflow
+        assert 'codesign --verify --deep --strict --verbose=4 "$APP"' in macos_workflow
 
     assert "PRODUCT_NAME = RustDesk-Herbin" in mac_app_info
     assert "PRODUCT_BUNDLE_IDENTIFIER = com.herbin.rustdesk" in mac_app_info

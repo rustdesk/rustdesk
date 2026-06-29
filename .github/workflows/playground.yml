@@ -161,6 +161,12 @@ jobs:
           sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
+      - name: Ad-hoc sign unsigned app
+        run: |
+          APP="./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app"
+          codesign --force --deep --sign - --options runtime "$APP"
+          codesign --verify --deep --strict --verbose=4 "$APP"
+
       - name: create unsigned dmg
         run: |
           CREATE_DMG="$(command -v create-dmg)"

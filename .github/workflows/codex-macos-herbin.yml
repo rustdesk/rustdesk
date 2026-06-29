@@ -102,6 +102,12 @@ jobs:
           test "$(defaults read "$PWD/$APP/Contents/Info" CFBundleIdentifier)" = "com.herbin.rustdesk"
           test "$(defaults read "$PWD/$APP/Contents/Info" CFBundleName)" = "RustDesk-Herbin"
 
+      - name: Ad-hoc sign unsigned app
+        run: |
+          APP="./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app"
+          codesign --force --deep --sign - --options runtime "$APP"
+          codesign --verify --deep --strict --verbose=4 "$APP"
+
       - name: Create unsigned DMG
         run: |
           CREATE_DMG="$(command -v create-dmg)"
