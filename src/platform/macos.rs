@@ -304,6 +304,7 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
 
 fn correct_app_name(s: &str) -> String {
     let mut s = s.to_owned();
+    s = s.replace("com.carriez.RustDesk", &crate::get_full_name());
     if let Some(bundleid) = get_bundle_id() {
         s = s.replace("com.carriez.rustdesk", &bundleid);
     }

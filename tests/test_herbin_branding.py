@@ -23,6 +23,9 @@ def main() -> None:
     service_rs = read(ROOT / "src/service.rs")
     keyboard_rs = read(ROOT / "src/keyboard.rs")
     input_service_rs = read(ROOT / "src/server/input_service.rs")
+    macos_rs = read(ROOT / "src/platform/macos.rs")
+    mac_install_script = read(ROOT / "src/platform/privileges_scripts/install.scpt")
+    mac_update_script = read(ROOT / "src/platform/privileges_scripts/update.scpt")
     flutter_pubspec = read(ROOT / "flutter/pubspec.yaml")
     mac_app_info = read(ROOT / "flutter/macos/Runner/Configs/AppInfo.xcconfig")
     mac_info_plist = read(ROOT / "flutter/macos/Runner/Info.plist")
@@ -53,22 +56,26 @@ def main() -> None:
     assert "ENABLE_WINDOWS_TO_MACOS_ALT_TAB_REMAP" not in keyboard_rs
     assert "remap_shortcut_for_peer" not in keyboard_rs
 
-    assert "fn try_remap_mac_alt_tab" in input_service_rs
-    assert "ck.value() == ControlKey::Tab.value()" in input_service_rs
-    assert "mods.contains(&ControlKey::Alt.value())" in input_service_rs
-    assert "mods.contains(&ControlKey::RAlt.value())" in input_service_rs
-    assert "mods.contains(&ControlKey::Control.value())" in input_service_rs
-    assert "mods.contains(&ControlKey::RControl.value())" in input_service_rs
-    assert "mods.contains(&ControlKey::Meta.value())" in input_service_rs
-    assert "mods.contains(&ControlKey::RWin.value())" in input_service_rs
-    assert "mods.contains(&ControlKey::Shift.value())" in input_service_rs
-    assert "mods.contains(&ControlKey::RShift.value())" in input_service_rs
+    assert "fn try_remap_mac_alt_tab" not in input_service_rs
     assert "en.key_up(Key::Alt);" in input_service_rs
     assert "en.key_up(Key::RightAlt);" in input_service_rs
     assert "en.add_flag(&Key::Meta);" in input_service_rs
+    assert "en.key_down(Key::Meta).ok();" in input_service_rs
     assert "en.key_down(Key::Tab).ok();" in input_service_rs
     assert "en.key_up(Key::Tab);" in input_service_rs
     assert "en.key_up(Key::Meta);" in input_service_rs
+
+    assert 'const HERBIN_MACOS_KEYMAP_OPTION: &str = "herbin-macos-keymap";' in input_service_rs
+    assert 'const DEFAULT_HERBIN_MACOS_KEYMAP: &str = "alt+tab=cmd+tab";' in input_service_rs
+    assert "Config::get_option(HERBIN_MACOS_KEYMAP_OPTION)" in input_service_rs
+    assert "fn parse_macos_shortcut_chord" in input_service_rs
+    assert "fn parse_macos_shortcut_rule" in input_service_rs
+    assert "fn configured_macos_shortcut_rules()" in input_service_rs
+    assert "fn try_remap_macos_shortcut(evt: &KeyEvent) -> bool" in input_service_rs
+    assert "if try_remap_macos_shortcut(evt) {\n        return;\n    }\n\n    #[cfg(not(any(target_os = \"android\", target_os = \"ios\")))]" in input_service_rs
+    assert "fn release_macos_shortcut_tab(target_shift: bool)" in input_service_rs
+    assert "fn release_macos_shortcut_remap()" in input_service_rs
+    assert "release_macos_shortcut_remap();" in input_service_rs
 
     assert "sdk: '^3.1.0'" in flutter_pubspec
     assert "s/3.1.0/2.17.0" not in playground_workflow
@@ -90,6 +97,15 @@ def main() -> None:
     assert "PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;" not in mac_project
     assert 'BuildableName = "RustDesk-Herbin.app"' in mac_scheme
     assert 'BuildableName = "RustDesk.app"' not in mac_scheme
+    assert 's = s.replace("com.carriez.RustDesk", &crate::get_full_name());' in macos_rs
+    assert 'launchctl bootstrap gui/$uid ' in mac_install_script
+    assert 'launchctl kickstart -k gui/$uid/$agent_label' in mac_install_script
+    assert 'agent_label=$(basename ' in mac_install_script
+    assert 'legacy_agent_plist' in mac_install_script
+    assert '"Rust" & "Desk-Herbin_server.plist"' in mac_install_script
+    assert 'legacy_daemon_plist' in mac_update_script
+    assert '"Rust" & "Desk-Herbin_service.plist"' in mac_update_script
+    assert 'set app_bundle to "/Applications/RustDesk.app"' not in mac_update_script
 
     for packaging_file in [
         build_py,

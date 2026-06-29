@@ -7,6 +7,8 @@ use crate::whiteboard;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
+#[cfg(target_os = "macos")]
+use hbb_common::config::Config;
 use hbb_common::{
     get_time,
     message_proto::{pointer_device_event::Union::TouchEvent, touch_event::Union::ScaleUpdate},
@@ -45,6 +47,8 @@ impl super::service::Reset for StateCursor {
         *self = Default::default();
         crate::platform::reset_input_cache();
         fix_key_down_timeout(true);
+        #[cfg(target_os = "macos")]
+        release_macos_shortcut_remap();
     }
 }
 
@@ -500,6 +504,28 @@ static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
 // We need to do some special handling for macOS when using the legacy mode.
 #[cfg(target_os = "macos")]
 static LAST_KEY_LEGACY_MODE: AtomicBool = AtomicBool::new(true);
+#[cfg(target_os = "macos")]
+const HERBIN_MACOS_KEYMAP_OPTION: &str = "herbin-macos-keymap";
+#[cfg(target_os = "macos")]
+const DEFAULT_HERBIN_MACOS_KEYMAP: &str = "alt+tab=cmd+tab";
+#[cfg(target_os = "macos")]
+const MACOS_VK_TAB: u32 = 0x30;
+#[cfg(target_os = "macos")]
+const MACOS_VK_COMMAND: u32 = 0x37;
+#[cfg(target_os = "macos")]
+const MACOS_VK_RIGHT_COMMAND: u32 = 0x36;
+#[cfg(target_os = "macos")]
+const MACOS_VK_SHIFT: u32 = 0x38;
+#[cfg(target_os = "macos")]
+const MACOS_VK_RIGHT_SHIFT: u32 = 0x3C;
+#[cfg(target_os = "macos")]
+const MACOS_VK_OPTION: u32 = 0x3A;
+#[cfg(target_os = "macos")]
+const MACOS_VK_RIGHT_OPTION: u32 = 0x3D;
+#[cfg(target_os = "macos")]
+const MACOS_VK_CONTROL: u32 = 0x3B;
+#[cfg(target_os = "macos")]
+const MACOS_VK_RIGHT_CONTROL: u32 = 0x3E;
 // We use enigo to
 // 1. Simulate mouse events
 // 2. Simulate the legacy mode key events
@@ -514,6 +540,74 @@ fn enigo_ignore_flags() -> bool {
 fn set_last_legacy_mode(v: bool) {
     LAST_KEY_LEGACY_MODE.store(v, Ordering::SeqCst);
     ENIGO.lock().unwrap().set_ignore_flags(!v);
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MacosShortcutKey {
+    Alt,
+    RAlt,
+    Shift,
+    RShift,
+    Control,
+    RControl,
+    Meta,
+    RWin,
+    Tab,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Clone, Copy, Default)]
+struct MacosShortcutChord {
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    meta: bool,
+    key: Option<MacosShortcutKey>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Clone, Copy)]
+struct MacosShortcutRule {
+    from: MacosShortcutChord,
+    to: MacosShortcutChord,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Default)]
+struct MacosShortcutRemapState {
+    alt_down: bool,
+    ralt_down: bool,
+    shift_down: bool,
+    rshift_down: bool,
+    control_down: bool,
+    rcontrol_down: bool,
+    meta_down: bool,
+    rwin_down: bool,
+    tab_down: bool,
+    command_down: bool,
+    target_shift: bool,
+}
+
+#[cfg(target_os = "macos")]
+impl MacosShortcutRemapState {
+    fn source_alt_down(&self) -> bool {
+        self.alt_down || self.ralt_down
+    }
+
+    fn source_shift_down(&self) -> bool {
+        self.shift_down || self.rshift_down
+    }
+
+    fn source_ctrl_or_meta_down(&self) -> bool {
+        self.control_down || self.rcontrol_down || self.meta_down || self.rwin_down
+    }
+}
+
+#[cfg(target_os = "macos")]
+lazy_static::lazy_static! {
+    static ref HERBIN_MACOS_SHORTCUT_REMAP_STATE: Arc<Mutex<MacosShortcutRemapState>> =
+        Default::default();
 }
 
 pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
@@ -1957,72 +2051,300 @@ fn release_shift_for_char_input(en: &mut Enigo) {
     }
 }
 
-/// macOS server-side POC: remap a legacy `Alt(+Shift)+Tab` keystroke coming from a
-/// peer into a `Command(+Shift)+Tab` shape, so it drives the native macOS Cmd+Tab
-/// application switcher instead of being delivered as Alt+Tab.
-///
-/// This mirrors the RustDesk-like enigo sequence proven in the standalone POC:
-///   press:   reset_flag(); key_up(Alt/RAlt); add_flag(Meta)[+Shift]; key_down(Tab)
-///   release: key_up(Tab); reset_flag(); key_up(Meta); key_up(Alt/RAlt)
-///
-/// The trailing `key_up(Meta)` on the release path is the cleanup that dismisses
-/// the macOS switcher UI; without it the switcher stays on screen.
-///
-/// Returns `true` when the event was handled and the caller must skip the normal
-/// legacy path. Narrow by design: only `ControlKey::Tab` is remapped, only when
-/// `Alt`/`RAlt` is present, and never when `Control`/`RControl`/`Meta`/`RWin` is
-/// already held. `Shift`/`RShift` are preserved as flags so Cmd+Shift+Tab cycles
-/// backwards through the switcher.
 #[cfg(target_os = "macos")]
-fn try_remap_mac_alt_tab(en: &mut Enigo, evt: &KeyEvent, down: bool) -> bool {
-    // Only remap Tab.
-    match evt.union {
-        Some(key_event::Union::ControlKey(ck)) if ck.value() == ControlKey::Tab.value() => {}
-        _ => return false,
-    }
-
-    let mods: Vec<i32> = evt.modifiers.iter().map(|m| m.value()).collect();
-    let has_alt =
-        mods.contains(&ControlKey::Alt.value()) || mods.contains(&ControlKey::RAlt.value());
-    if !has_alt {
-        return false;
-    }
-    // Don't remap if a control/meta modifier is already present; only plain
-    // Alt(+Shift)+Tab is rewritten.
-    let has_ctrl_or_meta = mods.contains(&ControlKey::Control.value())
-        || mods.contains(&ControlKey::RControl.value())
-        || mods.contains(&ControlKey::Meta.value())
-        || mods.contains(&ControlKey::RWin.value());
-    if has_ctrl_or_meta {
-        return false;
-    }
-
-    let has_shift =
-        mods.contains(&ControlKey::Shift.value()) || mods.contains(&ControlKey::RShift.value());
-
-    if down {
-        // The Alt key was usually injected by the preceding Alt-down event.
-        // Release it before sending the Command+Tab shape so Option does not
-        // remain visible to macOS during the remapped shortcut.
-        en.reset_flag();
-        en.key_up(Key::Alt);
-        en.key_up(Key::RightAlt);
-        en.add_flag(&Key::Meta);
-        if has_shift {
-            en.add_flag(&Key::Shift);
+fn parse_macos_shortcut_chord(raw: &str) -> Option<MacosShortcutChord> {
+    let mut chord = MacosShortcutChord::default();
+    for token in raw.split('+') {
+        match token.trim().to_ascii_lowercase().as_str() {
+            "alt" | "option" => chord.alt = true,
+            "ctrl" | "control" => chord.ctrl = true,
+            "shift" => chord.shift = true,
+            "cmd" | "command" | "meta" | "super" | "win" => chord.meta = true,
+            "tab" => {
+                if chord.key.is_some() {
+                    return None;
+                }
+                chord.key = Some(MacosShortcutKey::Tab);
+            }
+            _ => return None,
         }
-        en.key_down(Key::Tab).ok();
-    } else {
-        // Tab up, then drop the Meta flag and release Meta so the macOS
-        // switcher dismisses. Releasing Alt again is harmless and avoids a
-        // stale Option state if the original Alt-up event is delayed or lost.
-        en.key_up(Key::Tab);
-        en.reset_flag();
-        en.key_up(Key::Meta);
-        en.key_up(Key::Alt);
-        en.key_up(Key::RightAlt);
     }
-    true
+    chord.key.map(|_| chord)
+}
+
+#[cfg(target_os = "macos")]
+fn parse_macos_shortcut_rule(raw: &str) -> Option<MacosShortcutRule> {
+    let mut parts = raw.split('=');
+    let from = parse_macos_shortcut_chord(parts.next()?.trim())?;
+    let to = parse_macos_shortcut_chord(parts.next()?.trim())?;
+    if parts.next().is_some() {
+        return None;
+    }
+    let rule = MacosShortcutRule { from, to };
+    if is_supported_macos_shortcut_rule(&rule) {
+        Some(rule)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn is_supported_macos_shortcut_rule(rule: &MacosShortcutRule) -> bool {
+    rule.from.key == Some(MacosShortcutKey::Tab)
+        && rule.from.alt
+        && !rule.from.ctrl
+        && !rule.from.meta
+        && rule.to.key == Some(MacosShortcutKey::Tab)
+        && rule.to.meta
+        && !rule.to.alt
+        && !rule.to.ctrl
+}
+
+#[cfg(target_os = "macos")]
+fn configured_macos_shortcut_rules() -> Vec<MacosShortcutRule> {
+    let configured = Config::get_option(HERBIN_MACOS_KEYMAP_OPTION);
+    let raw = configured.trim();
+    let raw_lower = raw.to_ascii_lowercase();
+    if matches!(raw_lower.as_str(), "off" | "none" | "disabled") {
+        return Vec::new();
+    }
+    let raw = if raw.is_empty() {
+        DEFAULT_HERBIN_MACOS_KEYMAP
+    } else {
+        raw
+    };
+    raw.split(|c| c == ';' || c == ',' || c == '\n')
+        .filter_map(|entry| parse_macos_shortcut_rule(entry.trim()))
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn choose_macos_shortcut_rule(
+    rules: &[MacosShortcutRule],
+    has_shift: bool,
+) -> Option<MacosShortcutRule> {
+    rules
+        .iter()
+        .copied()
+        .find(|rule| rule.from.shift == has_shift)
+        .or_else(|| rules.iter().copied().find(|rule| !rule.from.shift))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_event_has_modifier(evt: &KeyEvent, left: ControlKey, right: ControlKey) -> bool {
+    evt.modifiers
+        .iter()
+        .any(|modifier| modifier.value() == left.value() || modifier.value() == right.value())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_event_has_ctrl_or_meta_modifier(evt: &KeyEvent) -> bool {
+    macos_event_has_modifier(evt, ControlKey::Control, ControlKey::RControl)
+        || macos_event_has_modifier(evt, ControlKey::Meta, ControlKey::RWin)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_control_key_to_shortcut_key(value: i32) -> Option<MacosShortcutKey> {
+    if value == ControlKey::Alt.value() {
+        Some(MacosShortcutKey::Alt)
+    } else if value == ControlKey::RAlt.value() {
+        Some(MacosShortcutKey::RAlt)
+    } else if value == ControlKey::Shift.value() {
+        Some(MacosShortcutKey::Shift)
+    } else if value == ControlKey::RShift.value() {
+        Some(MacosShortcutKey::RShift)
+    } else if value == ControlKey::Control.value() {
+        Some(MacosShortcutKey::Control)
+    } else if value == ControlKey::RControl.value() {
+        Some(MacosShortcutKey::RControl)
+    } else if value == ControlKey::Meta.value() {
+        Some(MacosShortcutKey::Meta)
+    } else if value == ControlKey::RWin.value() {
+        Some(MacosShortcutKey::RWin)
+    } else if value == ControlKey::Tab.value() {
+        Some(MacosShortcutKey::Tab)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_raw_keycode_to_shortcut_key(code: u32) -> Option<MacosShortcutKey> {
+    match code {
+        MACOS_VK_OPTION => Some(MacosShortcutKey::Alt),
+        MACOS_VK_RIGHT_OPTION => Some(MacosShortcutKey::RAlt),
+        MACOS_VK_SHIFT => Some(MacosShortcutKey::Shift),
+        MACOS_VK_RIGHT_SHIFT => Some(MacosShortcutKey::RShift),
+        MACOS_VK_CONTROL => Some(MacosShortcutKey::Control),
+        MACOS_VK_RIGHT_CONTROL => Some(MacosShortcutKey::RControl),
+        MACOS_VK_COMMAND => Some(MacosShortcutKey::Meta),
+        MACOS_VK_RIGHT_COMMAND => Some(MacosShortcutKey::RWin),
+        MACOS_VK_TAB => Some(MacosShortcutKey::Tab),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_event_shortcut_key(evt: &KeyEvent) -> Option<MacosShortcutKey> {
+    match evt.union {
+        Some(key_event::Union::ControlKey(ck)) => macos_control_key_to_shortcut_key(ck.value()),
+        Some(key_event::Union::Chr(code)) => macos_raw_keycode_to_shortcut_key(code),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn update_macos_shortcut_source_state(
+    state: &mut MacosShortcutRemapState,
+    key: MacosShortcutKey,
+    down: bool,
+) {
+    match key {
+        MacosShortcutKey::Alt => state.alt_down = down,
+        MacosShortcutKey::RAlt => state.ralt_down = down,
+        MacosShortcutKey::Shift => state.shift_down = down,
+        MacosShortcutKey::RShift => state.rshift_down = down,
+        MacosShortcutKey::Control => state.control_down = down,
+        MacosShortcutKey::RControl => state.rcontrol_down = down,
+        MacosShortcutKey::Meta => state.meta_down = down,
+        MacosShortcutKey::RWin => state.rwin_down = down,
+        MacosShortcutKey::Tab => state.tab_down = down,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn press_macos_shortcut_tab(target_shift: bool, command_was_down: bool) {
+    set_last_legacy_mode(true);
+    let mut en = ENIGO.lock().unwrap();
+    en.reset_flag();
+    en.key_up(Key::Alt);
+    en.key_up(Key::RightAlt);
+    if !command_was_down {
+        en.key_down(Key::Meta).ok();
+    }
+    en.add_flag(&Key::Meta);
+    if target_shift {
+        en.add_flag(&Key::Shift);
+    }
+    en.key_down(Key::Tab).ok();
+}
+
+#[cfg(target_os = "macos")]
+fn release_macos_shortcut_tab(target_shift: bool) {
+    set_last_legacy_mode(true);
+    let mut en = ENIGO.lock().unwrap();
+    en.reset_flag();
+    en.add_flag(&Key::Meta);
+    if target_shift {
+        en.add_flag(&Key::Shift);
+    }
+    en.key_up(Key::Tab);
+    en.reset_flag();
+}
+
+#[cfg(target_os = "macos")]
+fn release_macos_shortcut_remap() {
+    let should_release = {
+        let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
+        let should_release = state.command_down || state.tab_down;
+        *state = MacosShortcutRemapState::default();
+        should_release
+    };
+    record_pressed_key(KeysDown::EnigoKey(ControlKey::Alt.value() as u64), false);
+    record_pressed_key(KeysDown::EnigoKey(ControlKey::RAlt.value() as u64), false);
+    record_pressed_key(KeysDown::EnigoKey(ControlKey::Tab.value() as u64), false);
+    if !should_release {
+        return;
+    }
+
+    set_last_legacy_mode(true);
+    let mut en = ENIGO.lock().unwrap();
+    en.key_up(Key::Tab);
+    en.reset_flag();
+    en.key_up(Key::Meta);
+    en.key_up(Key::Alt);
+    en.key_up(Key::RightAlt);
+}
+
+#[cfg(target_os = "macos")]
+fn try_remap_macos_shortcut(evt: &KeyEvent) -> bool {
+    let key = match macos_event_shortcut_key(evt) {
+        Some(key) => key,
+        None => return false,
+    };
+    let rules = configured_macos_shortcut_rules();
+    let remap_is_active = {
+        let state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
+        state.command_down || state.tab_down
+    };
+    if rules.is_empty() && !remap_is_active {
+        return false;
+    }
+
+    match key {
+        MacosShortcutKey::Alt | MacosShortcutKey::RAlt => {
+            let should_release = {
+                let state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
+                !evt.down && state.command_down
+            };
+            if should_release {
+                release_macos_shortcut_remap();
+                return true;
+            }
+
+            let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
+            update_macos_shortcut_source_state(&mut state, key, evt.down);
+            false
+        }
+        MacosShortcutKey::Shift
+        | MacosShortcutKey::RShift
+        | MacosShortcutKey::Control
+        | MacosShortcutKey::RControl
+        | MacosShortcutKey::Meta
+        | MacosShortcutKey::RWin => {
+            let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
+            update_macos_shortcut_source_state(&mut state, key, evt.down);
+            false
+        }
+        MacosShortcutKey::Tab => {
+            if evt.down {
+                let (target_shift, command_was_down) = {
+                    let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
+                    let has_alt = state.source_alt_down()
+                        || macos_event_has_modifier(evt, ControlKey::Alt, ControlKey::RAlt);
+                    let has_shift = state.source_shift_down()
+                        || macos_event_has_modifier(evt, ControlKey::Shift, ControlKey::RShift);
+                    let has_ctrl_or_meta = state.source_ctrl_or_meta_down()
+                        || macos_event_has_ctrl_or_meta_modifier(evt);
+                    let Some(rule) = choose_macos_shortcut_rule(&rules, has_shift) else {
+                        return false;
+                    };
+                    if !has_alt || has_ctrl_or_meta {
+                        return false;
+                    }
+                    let command_was_down = state.command_down;
+                    let target_shift = has_shift || rule.to.shift;
+                    state.tab_down = true;
+                    state.command_down = true;
+                    state.target_shift = target_shift;
+                    (target_shift, command_was_down)
+                };
+                press_macos_shortcut_tab(target_shift, command_was_down);
+                true
+            } else {
+                let target_shift = {
+                    let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
+                    if !state.command_down && !state.tab_down {
+                        return false;
+                    }
+                    state.tab_down = false;
+                    state.target_shift
+                };
+                release_macos_shortcut_tab(target_shift);
+                true
+            }
+        }
+    }
 }
 
 fn legacy_keyboard_mode(evt: &KeyEvent) {
@@ -2031,14 +2353,6 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     let mut to_release: Vec<Key> = Vec::new();
 
     let mut en = ENIGO.lock().unwrap();
-
-    // macOS POC: rewrite legacy Alt(+Shift)+Tab to Command(+Shift)+Tab and
-    // dismiss the switcher on release. Handled entirely here, so skip the rest
-    // of the legacy path when it applies.
-    #[cfg(target_os = "macos")]
-    if try_remap_mac_alt_tab(&mut en, &evt, evt.down) {
-        return;
-    }
 
     sync_modifiers(&mut en, &evt, &mut to_release);
 
@@ -2315,6 +2629,11 @@ fn is_legacy_mode(evt: &KeyEvent) -> bool {
 
 pub fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
+        return;
+    }
+
+    #[cfg(target_os = "macos")]
+    if try_remap_macos_shortcut(evt) {
         return;
     }
 
