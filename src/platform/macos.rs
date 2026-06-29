@@ -234,16 +234,12 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
             }
-            _ => {
+            Ok(status) if !status.success() => {
+                log::warn!("run osascript failed with status: {}", status);
+            }
+            Ok(_) => {
                 let installed = std::path::Path::new(&agent_plist_file).exists();
                 log::info!("Agent file {} installed: {}", agent_plist_file, installed);
-                if installed {
-                    log::info!("launch server");
-                    std::process::Command::new("launchctl")
-                        .args(&["load", "-w", &agent_plist_file])
-                        .status()
-                        .ok();
-                }
             }
         }
     });
@@ -310,6 +306,46 @@ fn correct_app_name(s: &str) -> String {
     s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
     s = s.replace("RustDesk", &crate::get_app_name());
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{correct_app_name, PRIVILEGES_SCRIPTS_DIR};
+
+    #[test]
+    fn install_script_bootstraps_agent_into_user_domain() {
+        let install = PRIVILEGES_SCRIPTS_DIR
+            .get_file("install.scpt")
+            .and_then(|file| file.contents_utf8())
+            .map(correct_app_name)
+            .expect("install.scpt should be embedded");
+        let app_name = crate::get_app_name();
+
+        assert!(
+            install.contains("launchctl bootstrap gui/$uid")
+                || install.contains("launchctl bootstrap user/$uid"),
+            "install script must bootstrap the agent into a user launchd domain",
+        );
+        assert!(
+            install.contains("launchctl kickstart -k gui/$uid/$agent_label")
+                || install.contains("launchctl kickstart -k user/$uid/$agent_label"),
+            "install script must kickstart the agent after bootstrapping it",
+        );
+        assert!(
+            install.contains("quoted form of user"),
+            "install script must quote username-derived paths",
+        );
+        assert!(
+            install.contains(&format!(
+                "test ! -f \"$user_preferences_dir/{}.toml\" || cp -rf",
+                app_name
+            )) && install.contains(&format!(
+                "test ! -f \"$user_preferences_dir/{}2.toml\" || cp -rf",
+                app_name
+            )),
+            "install script must treat missing preference files as optional",
+        );
+    }
 }
 
 pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
