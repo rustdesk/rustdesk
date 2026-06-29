@@ -247,8 +247,7 @@ enum ConnAuditPrimaryAuth {
     Click = 1,
     TemporaryPassword = 2,
     PermanentPassword = 3,
-    VerifiedInSameSession = 4,
-    SwitchSides = 5,
+    SwitchSides = 4,
 }
 
 impl ConnAuditPrimaryAuth {
@@ -263,7 +262,6 @@ enum ConnAuditTwoFactor {
     None = 0,
     Totp = 1,
     TrustedDevice = 2,
-    VerifiedInSameSession = 3,
 }
 
 impl ConnAuditTwoFactor {
@@ -2327,9 +2325,9 @@ impl Connection {
                     || !tfa && self.validate_password_plain(&session.random_password))
             {
                 if tfa {
-                    self.set_conn_audit_two_factor(ConnAuditTwoFactor::VerifiedInSameSession);
+                    self.set_conn_audit_two_factor(ConnAuditTwoFactor::Totp);
                 } else {
-                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::VerifiedInSameSession);
+                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::TemporaryPassword);
                 }
                 log::info!("is recent session");
                 return true;
