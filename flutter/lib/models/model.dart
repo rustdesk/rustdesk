@@ -114,6 +114,7 @@ class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
   int? lastUserDisplay;
   int? pendingMonitorRestore;
+  Timer? _pendingRestoreTimer;
   Rect? _rect;
 
   var _inputBlocked = false;
@@ -251,7 +252,7 @@ class FfiModel with ChangeNotifier {
   clear() {
     _pi = PeerInfo();
     lastUserDisplay = null;
-    pendingMonitorRestore = null;
+    _cancelPendingMonitorRestore();
     _secure = null;
     _direct = null;
     _inputBlocked = false;
@@ -936,6 +937,7 @@ class FfiModel with ChangeNotifier {
       // frame briefly, then shows the Connecting overlay.
       if (_restartReconnectDelayTimer == null) {
         parent.target?.inputModel.setRelativeMouseMode(false);
+        _cancelPendingMonitorRestore();
         bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
         clearPermissions();
         // Retry once more after the silent window so restart reconnect attempts
@@ -1088,10 +1090,17 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  void _cancelPendingMonitorRestore() {
+    _pendingRestoreTimer?.cancel();
+    _pendingRestoreTimer = null;
+    pendingMonitorRestore = null;
+  }
+
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
+    _cancelPendingMonitorRestore();
     bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
     clearPermissions();
     dialogManager.dismissAll();
@@ -1410,7 +1419,7 @@ class FfiModel with ChangeNotifier {
       final last = lastUserDisplay;
       pendingMonitorRestore = (!isCache &&
               last != null &&
-              last != _pi.currentDisplay &&
+              last != currentDisplay &&
               bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
                       sessionId: sessionId) !=
                   'Y' &&
@@ -1418,6 +1427,12 @@ class FfiModel with ChangeNotifier {
                   (last >= 0 && last < _pi.displays.length)))
           ? last
           : null;
+      // Fallback if the first image event never reaches this tab (multi-UI).
+      _pendingRestoreTimer?.cancel();
+      if (pendingMonitorRestore != null) {
+        _pendingRestoreTimer = Timer(const Duration(milliseconds: 1500),
+            () => parent.target?._applyPendingMonitorRestore());
+      }
       if (displays.isNotEmpty) {
         _reconnects = 1;
         _offlineReconnectStartTime = null;
@@ -3936,13 +3951,20 @@ class FFI {
       for (final cb in imageModel.callbacksOnFirstImage) {
         cb(id);
       }
-      // Skip if the session closed while the canvas was being set up.
-      final restore = ffiModel.pendingMonitorRestore;
-      ffiModel.pendingMonitorRestore = null;
-      if (restore != null && !closed) {
-        openMonitorInTheSameTab(restore, this, ffiModel.pi,
-            recordSelection: false);
-      }
+      _applyPendingMonitorRestore();
+    }
+  }
+
+  void _applyPendingMonitorRestore() {
+    final restore = ffiModel.pendingMonitorRestore;
+    ffiModel._cancelPendingMonitorRestore();
+    if (restore == null || closed) return;
+    // The display list may have changed since the restore was queued.
+    final displays = ffiModel.pi.displays;
+    if ((restore == kAllDisplayValue && displays.isNotEmpty) ||
+        (restore >= 0 && restore < displays.length)) {
+      openMonitorInTheSameTab(restore, this, ffiModel.pi,
+          recordSelection: false);
     }
   }
 
