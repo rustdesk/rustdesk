@@ -2213,15 +2213,13 @@ fn update_macos_shortcut_source_state(
 }
 
 #[cfg(target_os = "macos")]
-fn press_macos_shortcut_tab(target_shift: bool, command_was_down: bool) {
+fn press_macos_shortcut_tab(target_shift: bool) {
     set_last_legacy_mode(true);
     let mut en = ENIGO.lock().unwrap();
     en.reset_flag();
     en.key_up(Key::Alt);
     en.key_up(Key::RightAlt);
-    if !command_was_down {
-        en.key_down(Key::Meta).ok();
-    }
+    en.key_down(Key::Meta).ok();
     en.add_flag(&Key::Meta);
     if target_shift {
         en.add_flag(&Key::Shift);
@@ -2234,6 +2232,7 @@ fn release_macos_shortcut_tab(target_shift: bool) {
     set_last_legacy_mode(true);
     let mut en = ENIGO.lock().unwrap();
     en.reset_flag();
+    en.key_down(Key::Meta).ok();
     en.add_flag(&Key::Meta);
     if target_shift {
         en.add_flag(&Key::Shift);
@@ -2308,7 +2307,7 @@ fn try_remap_macos_shortcut(evt: &KeyEvent) -> bool {
         }
         MacosShortcutKey::Tab => {
             if evt.down {
-                let (target_shift, command_was_down) = {
+                let target_shift = {
                     let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
                     let has_alt = state.source_alt_down()
                         || macos_event_has_modifier(evt, ControlKey::Alt, ControlKey::RAlt);
@@ -2322,14 +2321,13 @@ fn try_remap_macos_shortcut(evt: &KeyEvent) -> bool {
                     if !has_alt || has_ctrl_or_meta {
                         return false;
                     }
-                    let command_was_down = state.command_down;
                     let target_shift = has_shift || rule.to.shift;
                     state.tab_down = true;
                     state.command_down = true;
                     state.target_shift = target_shift;
-                    (target_shift, command_was_down)
+                    target_shift
                 };
-                press_macos_shortcut_tab(target_shift, command_was_down);
+                press_macos_shortcut_tab(target_shift);
                 true
             } else {
                 let target_shift = {

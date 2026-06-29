@@ -97,15 +97,31 @@ def main() -> None:
     assert "PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;" not in mac_project
     assert 'BuildableName = "RustDesk-Herbin.app"' in mac_scheme
     assert 'BuildableName = "RustDesk.app"' not in mac_scheme
-    assert 's = s.replace("com.carriez.RustDesk", &crate::get_full_name());' in macos_rs
+    assert 'let full_name_placeholder = "__full_name__";' in macos_rs
+    assert 's = s.replace("com.carriez.RustDesk", full_name_placeholder);' in macos_rs
+    assert 's.replace(full_name_placeholder, &crate::get_full_name())' in macos_rs
+    assert 's = s.replace("com.carriez.RustDesk", &crate::get_full_name());' not in macos_rs
     assert 'launchctl bootstrap gui/$uid ' in mac_install_script
     assert 'launchctl kickstart -k gui/$uid/$agent_label' in mac_install_script
     assert 'agent_label=$(basename ' in mac_install_script
     assert 'legacy_agent_plist' in mac_install_script
     assert '"Rust" & "Desk-Herbin_server.plist"' in mac_install_script
+    assert 'bad_agent_plist' in mac_install_script
+    assert '"Rust" & "Desk-Herbin-Herbin_server.plist"' in mac_install_script
     assert 'legacy_daemon_plist' in mac_update_script
     assert '"Rust" & "Desk-Herbin_service.plist"' in mac_update_script
+    assert 'bad_daemon_plist' in mac_update_script
+    assert '"Rust" & "Desk-Herbin-Herbin_service.plist"' in mac_update_script
     assert 'set app_bundle to "/Applications/RustDesk.app"' not in mac_update_script
+
+    assert "command_was_down" not in input_service_rs
+    assert "fn press_macos_shortcut_tab(target_shift: bool)" in input_service_rs
+    assert "en.key_down(Key::Meta).ok();\n    en.add_flag(&Key::Meta);" in input_service_rs
+    assert "fn release_macos_shortcut_tab(target_shift: bool)" in input_service_rs
+    assert (
+        "en.key_down(Key::Meta).ok();\n    en.add_flag(&Key::Meta);\n    if target_shift"
+        in input_service_rs
+    )
 
     for packaging_file in [
         build_py,

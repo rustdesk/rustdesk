@@ -303,14 +303,15 @@ fn update_daemon_agent(agent_plist_file: String, update_source_dir: String, sync
 }
 
 fn correct_app_name(s: &str) -> String {
+    let full_name_placeholder = "__full_name__";
     let mut s = s.to_owned();
-    s = s.replace("com.carriez.RustDesk", &crate::get_full_name());
+    s = s.replace("com.carriez.RustDesk", full_name_placeholder);
     if let Some(bundleid) = get_bundle_id() {
         s = s.replace("com.carriez.rustdesk", &bundleid);
     }
     s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
     s = s.replace("RustDesk", &crate::get_app_name());
-    s
+    s.replace(full_name_placeholder, &crate::get_full_name())
 }
 
 pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
