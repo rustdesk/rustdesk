@@ -1414,7 +1414,7 @@ class FfiModel with ChangeNotifier {
               bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
                       sessionId: sessionId) !=
                   'Y' &&
-              (last == kAllDisplayValue ||
+              ((last == kAllDisplayValue && _pi.displays.isNotEmpty) ||
                   (last >= 0 && last < _pi.displays.length)))
           ? last
           : null;
