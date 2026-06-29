@@ -105,8 +105,20 @@ jobs:
       - name: Ad-hoc sign unsigned app
         run: |
           APP="./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app"
-          codesign --force --deep --sign - --options runtime "$APP"
+          ENTITLEMENTS="$(mktemp)"
+          cp flutter/macos/Runner/Release.entitlements "$ENTITLEMENTS"
+          /usr/libexec/PlistBuddy -c 'Add :com.apple.security.cs.disable-library-validation bool true' "$ENTITLEMENTS" || \
+            /usr/libexec/PlistBuddy -c 'Set :com.apple.security.cs.disable-library-validation true' "$ENTITLEMENTS"
+          find "$APP/Contents/Frameworks" -type d -name '*.framework' -prune -print0 | while IFS= read -r -d '' framework; do
+            codesign --force --sign - --options runtime "$framework"
+          done
+          find "$APP/Contents/Frameworks" -type f -name '*.dylib' -print0 | while IFS= read -r -d '' dylib; do
+            codesign --force --sign - --options runtime "$dylib"
+          done
+          codesign --force --sign - --options runtime "$APP/Contents/MacOS/service"
+          codesign --force --sign - --options runtime --entitlements "$ENTITLEMENTS" "$APP"
           codesign --verify --deep --strict --verbose=4 "$APP"
+          rm -f "$ENTITLEMENTS"
 
       - name: Create unsigned DMG
         run: |

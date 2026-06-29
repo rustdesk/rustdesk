@@ -74,7 +74,10 @@ def main() -> None:
     assert "s/3.1.0/2.17.0" not in playground_workflow
     for macos_workflow in [playground_workflow, codex_macos_workflow]:
         assert "Ad-hoc sign unsigned app" in macos_workflow
-        assert 'codesign --force --deep --sign - --options runtime "$APP"' in macos_workflow
+        assert "disable-library-validation" in macos_workflow
+        assert 'find "$APP/Contents/Frameworks" -type d -name \'*.framework\'' in macos_workflow
+        assert 'codesign --force --sign - --options runtime "$APP/Contents/MacOS/service"' in macos_workflow
+        assert 'codesign --force --sign - --options runtime --entitlements "$ENTITLEMENTS" "$APP"' in macos_workflow
         assert 'codesign --verify --deep --strict --verbose=4 "$APP"' in macos_workflow
 
     assert "PRODUCT_NAME = RustDesk-Herbin" in mac_app_info
