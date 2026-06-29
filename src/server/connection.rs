@@ -246,10 +246,9 @@ enum ConnAuditPrimaryAuth {
     None = 0,
     Click = 1,
     TemporaryPassword = 2,
-    LocalPermanentPassword = 3,
-    PresetPermanentPassword = 4,
-    VerifiedInSameSession = 5,
-    SwitchSides = 6,
+    PermanentPassword = 3,
+    VerifiedInSameSession = 4,
+    SwitchSides = 5,
 }
 
 impl ConnAuditPrimaryAuth {
@@ -2293,7 +2292,7 @@ impl Connection {
                 if local_permanent_password_storage_is_usable_for_auth(&local_storage, &local_salt)
                     && self.validate_password_storage(&local_storage)
                 {
-                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::LocalPermanentPassword);
+                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::PermanentPassword);
                     print_fallback();
                     return true;
                 }
@@ -2302,7 +2301,7 @@ impl Connection {
                 if preset_permanent_password_storage_is_usable_for_auth(&hard, &salt)
                     && self.validate_preset_password_storage(&hard, &salt)
                 {
-                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::PresetPermanentPassword);
+                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::PermanentPassword);
                     print_fallback();
                     return true;
                 }
