@@ -66,11 +66,28 @@ def main() -> None:
     assert "en.key_up(Key::Meta);" in input_service_rs
 
     assert 'const HERBIN_MACOS_KEYMAP_OPTION: &str = "herbin-macos-keymap";' in input_service_rs
+    assert 'const HERBIN_MACOS_KEYMAP_FILE_NAME: &str = "herbin-keymap.json";' in input_service_rs
+    assert '"RustDesk-Herbin"' in input_service_rs
+    assert '".config"' in input_service_rs
     assert 'const DEFAULT_HERBIN_MACOS_KEYMAP: &str = "alt+tab=cmd+tab";' in input_service_rs
+    assert "struct HerbinMacosKeymapConfig" in input_service_rs
+    assert "struct HerbinMacosKeymapRuleConfig" in input_service_rs
+    assert "fn herbin_macos_keymap_path()" in input_service_rs
+    assert "fn load_macos_shortcut_rules_from_json_file()" in input_service_rs
+    assert "serde_json::from_str::<HerbinMacosKeymapConfig>" in input_service_rs
+    assert "failed to read Herbin macOS keymap" in input_service_rs
+    assert "failed to parse Herbin macOS keymap" in input_service_rs
+    assert "hold_until" in input_service_rs
+    assert "source_modifiers_released" in input_service_rs
+    assert "modes" in input_service_rs
     assert "Config::get_option(HERBIN_MACOS_KEYMAP_OPTION)" in input_service_rs
     assert "fn parse_macos_shortcut_chord" in input_service_rs
     assert "fn parse_macos_shortcut_rule" in input_service_rs
+    assert "fn parse_macos_shortcut_rule_config" in input_service_rs
     assert "fn configured_macos_shortcut_rules()" in input_service_rs
+    assert (
+        "if let Some(rules) = load_macos_shortcut_rules_from_json_file()" in input_service_rs
+    )
     assert "fn try_remap_macos_shortcut(evt: &KeyEvent) -> bool" in input_service_rs
     assert "if try_remap_macos_shortcut(evt) {\n        return;\n    }\n\n    #[cfg(not(any(target_os = \"android\", target_os = \"ios\")))]" in input_service_rs
     assert "fn release_macos_shortcut_tab(target_shift: bool)" in input_service_rs
@@ -116,10 +133,11 @@ def main() -> None:
 
     assert "command_was_down" not in input_service_rs
     assert "fn press_macos_shortcut_tab(target_shift: bool)" in input_service_rs
-    assert "en.key_down(Key::Meta).ok();\n    en.add_flag(&Key::Meta);" in input_service_rs
+    assert "en.add_flag(&Key::Meta);\n    en.key_down(Key::Meta).ok();" in input_service_rs
+    assert "en.key_down(Key::Meta).ok();\n    en.add_flag(&Key::Meta);" not in input_service_rs
     assert "fn release_macos_shortcut_tab(target_shift: bool)" in input_service_rs
     assert (
-        "en.key_down(Key::Meta).ok();\n    en.add_flag(&Key::Meta);\n    if target_shift"
+        "en.add_flag(&Key::Meta);\n    en.key_down(Key::Meta).ok();\n    if target_shift"
         in input_service_rs
     )
 

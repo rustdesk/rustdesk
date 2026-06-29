@@ -19,6 +19,10 @@ use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
 #[cfg(target_os = "linux")]
 use scrap::wayland::pipewire::RDP_SESSION_INFO;
+#[cfg(target_os = "macos")]
+use serde::Deserialize;
+#[cfg(target_os = "macos")]
+use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::sync::mpsc;
 use std::{
@@ -507,6 +511,8 @@ static LAST_KEY_LEGACY_MODE: AtomicBool = AtomicBool::new(true);
 #[cfg(target_os = "macos")]
 const HERBIN_MACOS_KEYMAP_OPTION: &str = "herbin-macos-keymap";
 #[cfg(target_os = "macos")]
+const HERBIN_MACOS_KEYMAP_FILE_NAME: &str = "herbin-keymap.json";
+#[cfg(target_os = "macos")]
 const DEFAULT_HERBIN_MACOS_KEYMAP: &str = "alt+tab=cmd+tab";
 #[cfg(target_os = "macos")]
 const MACOS_VK_TAB: u32 = 0x30;
@@ -571,6 +577,34 @@ struct MacosShortcutChord {
 struct MacosShortcutRule {
     from: MacosShortcutChord,
     to: MacosShortcutChord,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Deserialize)]
+struct HerbinMacosKeymapConfig {
+    #[serde(default = "herbin_keymap_enabled_by_default")]
+    enabled: bool,
+    #[serde(default)]
+    rules: Vec<HerbinMacosKeymapRuleConfig>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Deserialize)]
+struct HerbinMacosKeymapRuleConfig {
+    from: HerbinMacosShortcutEndpointConfig,
+    to: HerbinMacosShortcutEndpointConfig,
+    #[serde(default)]
+    modes: Vec<String>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Deserialize)]
+struct HerbinMacosShortcutEndpointConfig {
+    key: String,
+    #[serde(default)]
+    modifiers: Vec<String>,
+    #[serde(default)]
+    hold_until: Option<String>,
 }
 
 #[cfg(target_os = "macos")]
@@ -2101,7 +2135,131 @@ fn is_supported_macos_shortcut_rule(rule: &MacosShortcutRule) -> bool {
 }
 
 #[cfg(target_os = "macos")]
+fn herbin_keymap_enabled_by_default() -> bool {
+    true
+}
+
+#[cfg(target_os = "macos")]
+fn herbin_macos_keymap_path() -> PathBuf {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/Users/herbin"));
+    home.join(".config")
+        .join("RustDesk-Herbin")
+        .join(HERBIN_MACOS_KEYMAP_FILE_NAME)
+}
+
+#[cfg(target_os = "macos")]
+fn parse_macos_shortcut_endpoint_config(
+    config: &HerbinMacosShortcutEndpointConfig,
+) -> Option<MacosShortcutChord> {
+    let mut chord = MacosShortcutChord::default();
+    for modifier in &config.modifiers {
+        match modifier.trim().to_ascii_lowercase().as_str() {
+            "alt" | "option" => chord.alt = true,
+            "ctrl" | "control" => chord.ctrl = true,
+            "shift" => chord.shift = true,
+            "cmd" | "command" | "meta" | "super" | "win" => chord.meta = true,
+            _ => return None,
+        }
+    }
+    chord.key = match config.key.trim().to_ascii_lowercase().as_str() {
+        "tab" => Some(MacosShortcutKey::Tab),
+        _ => return None,
+    };
+    Some(chord)
+}
+
+#[cfg(target_os = "macos")]
+fn has_supported_macos_keymap_modes(modes: &[String]) -> bool {
+    modes.is_empty()
+        || modes.iter().any(|mode| {
+            matches!(
+                mode.trim().to_ascii_lowercase().as_str(),
+                "all" | "legacy" | "map" | "translate"
+            )
+        })
+}
+
+#[cfg(target_os = "macos")]
+fn has_supported_macos_keymap_hold_until(config: &HerbinMacosShortcutEndpointConfig) -> bool {
+    config
+        .hold_until
+        .as_deref()
+        .map(|hold_until| {
+            matches!(
+                hold_until.trim().to_ascii_lowercase().as_str(),
+                "source_modifiers_released"
+            )
+        })
+        .unwrap_or(true)
+}
+
+#[cfg(target_os = "macos")]
+fn parse_macos_shortcut_rule_config(
+    config: &HerbinMacosKeymapRuleConfig,
+) -> Option<MacosShortcutRule> {
+    if !has_supported_macos_keymap_modes(&config.modes)
+        || !has_supported_macos_keymap_hold_until(&config.to)
+    {
+        return None;
+    }
+    let rule = MacosShortcutRule {
+        from: parse_macos_shortcut_endpoint_config(&config.from)?,
+        to: parse_macos_shortcut_endpoint_config(&config.to)?,
+    };
+    if is_supported_macos_shortcut_rule(&rule) {
+        Some(rule)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn load_macos_shortcut_rules_from_json_file() -> Option<Vec<MacosShortcutRule>> {
+    let path = herbin_macos_keymap_path();
+    if !path.exists() {
+        return None;
+    }
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(err) => {
+            log::warn!(
+                "failed to read Herbin macOS keymap {}: {}",
+                path.display(),
+                err
+            );
+            return None;
+        }
+    };
+    let config = match serde_json::from_str::<HerbinMacosKeymapConfig>(&raw) {
+        Ok(config) => config,
+        Err(err) => {
+            log::warn!(
+                "failed to parse Herbin macOS keymap {}: {}",
+                path.display(),
+                err
+            );
+            return None;
+        }
+    };
+    if !config.enabled {
+        return Some(Vec::new());
+    }
+    Some(
+        config
+            .rules
+            .iter()
+            .filter_map(parse_macos_shortcut_rule_config)
+            .collect(),
+    )
+}
+
+#[cfg(target_os = "macos")]
 fn configured_macos_shortcut_rules() -> Vec<MacosShortcutRule> {
+    if let Some(rules) = load_macos_shortcut_rules_from_json_file() {
+        return rules;
+    }
     let configured = Config::get_option(HERBIN_MACOS_KEYMAP_OPTION);
     let raw = configured.trim();
     let raw_lower = raw.to_ascii_lowercase();
@@ -2219,8 +2377,8 @@ fn press_macos_shortcut_tab(target_shift: bool) {
     en.reset_flag();
     en.key_up(Key::Alt);
     en.key_up(Key::RightAlt);
-    en.key_down(Key::Meta).ok();
     en.add_flag(&Key::Meta);
+    en.key_down(Key::Meta).ok();
     if target_shift {
         en.add_flag(&Key::Shift);
     }
@@ -2232,8 +2390,8 @@ fn release_macos_shortcut_tab(target_shift: bool) {
     set_last_legacy_mode(true);
     let mut en = ENIGO.lock().unwrap();
     en.reset_flag();
-    en.key_down(Key::Meta).ok();
     en.add_flag(&Key::Meta);
+    en.key_down(Key::Meta).ok();
     if target_shift {
         en.add_flag(&Key::Shift);
     }
