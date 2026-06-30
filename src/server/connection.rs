@@ -5261,7 +5261,7 @@ impl Connection {
             return;
         };
         let Some(conn_type) = self.authed_conn_type() else {
-            // Unrachable, but just in case, we drop the options if the connection type is unknown.
+            // Unreachable, but just in case, we drop the options if the connection type is unknown.
             return;
         };
         let (scoped, violation) = Self::scoped_login_option(conn_type, &option);
