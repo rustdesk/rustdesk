@@ -32,6 +32,6 @@
 
 - Current direction: keep the macOS controlled-side shortcut remapper in `src/server/input_service.rs`, but make the mapping rules adjustable without rebuilding.
 - Runtime keymap path: `$HOME/.config/RustDesk-Herbin/herbin-keymap.json`, which is `/Users/herbin/.config/RustDesk-Herbin/herbin-keymap.json` for the target user.
-- The app does not auto-create the JSON file. If the file is absent, unreadable, or invalid JSON, RustDesk-Herbin falls back to the existing `herbin-macos-keymap` option and then to the built-in `alt+tab=cmd+tab` default.
-- First-version JSON scope is intentionally narrow: `tab` with `alt`/`shift`/`ctrl`/`cmd` modifiers, with only supported rules such as Windows `Alt+Tab` to macOS `Cmd+Tab`. This keeps copy/paste and unrelated keyboard shortcuts outside the feature.
+- The app does not auto-create the JSON file. If the file is absent, unreadable, or invalid JSON, RustDesk-Herbin falls back to the existing `herbin-macos-keymap` option and then to the built-in `alt+tab=ctrl+tab` default.
+- Current JSON scope is intentionally narrow: `tab`, `a-z0-9`, and `$same` with `alt`/`shift`/`ctrl`/`cmd` modifiers. The recommended experiment is a one-way Alt layer (`Alt+Tab` to `Ctrl+Tab`, `Alt+a-z0-9` to `Ctrl+same`) while leaving existing `Ctrl+...` shortcuts untouched.
 - Supported JSON fields: top-level `enabled`, `rules`; per-rule `from`, `to`, `modes`; endpoint `key`, `modifiers`, `hold_until`. `hold_until` currently accepts `source_modifiers_released`, matching the intended Alt-held app-switcher behavior.
