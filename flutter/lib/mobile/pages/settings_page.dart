@@ -97,6 +97,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _enableTrustedDevices = false;
   var _enableUdpPunch = false;
   var _allowInsecureTlsFallback = false;
+  var _allowInsecureSessionFallback = false;
   var _disableUdp = false;
   var _enableIpv6Punch = false;
   var _isUsingPublicServer = false;
@@ -118,6 +119,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _allowWebSocket = mainGetBoolOptionSync(kOptionAllowWebSocket);
     _allowInsecureTlsFallback =
         mainGetBoolOptionSync(kOptionAllowInsecureTLSFallback);
+    _allowInsecureSessionFallback =
+        mainGetBoolOptionSync(kOptionAllowInsecureSessionFallback);
     _disableUdp = bind.mainGetOptionSync(key: kOptionDisableUdp) == 'Y';
     _autoRecordIncomingSession = option2bool(kOptionAllowAutoRecordIncoming,
         bind.mainGetOptionSync(key: kOptionAllowAutoRecordIncoming));
@@ -764,6 +767,22 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                           kOptionAllowInsecureTLSFallback);
                       setState(() {
                         _allowInsecureTlsFallback = newValue;
+                      });
+                    },
+            ),
+          if (!disabledSettings && !_hideNetwork)
+            SettingsTile.switchTile(
+              title: Text(translate('Allow insecure session fallback')),
+              initialValue: _allowInsecureSessionFallback,
+              onToggle: isOptionFixed(kOptionAllowInsecureSessionFallback)
+                  ? null
+                  : (v) async {
+                      await mainSetBoolOption(
+                          kOptionAllowInsecureSessionFallback, v);
+                      final newValue = mainGetBoolOptionSync(
+                          kOptionAllowInsecureSessionFallback);
+                      setState(() {
+                        _allowInsecureSessionFallback = newValue;
                       });
                     },
             ),

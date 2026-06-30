@@ -763,5 +763,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "最小化したツールバーに表示"),
         ("All monitors", "すべてのディスプレイ"),
         ("#{} monitor", "ディスプレイ {}"),
+        ("Allow insecure session fallback", ""),
+        ("allow-insecure-session-fallback-tip", ""),
     ].iter().cloned().collect();
 }

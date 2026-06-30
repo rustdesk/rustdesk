@@ -763,5 +763,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "न्यूनतम किए गए टूलबार पर दिखाएं"),
         ("All monitors", "सभी मॉनिटर"),
         ("#{} monitor", "मॉनिटर {}"),
+        ("Allow insecure session fallback", ""),
+        ("allow-insecure-session-fallback-tip", ""),
     ].iter().cloned().collect();
 }

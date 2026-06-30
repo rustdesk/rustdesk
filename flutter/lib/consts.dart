@@ -181,6 +181,8 @@ const String kOptionEnableShowTerminalExtraKeys = "enable-show-terminal-extra-ke
 // network options
 const String kOptionAllowWebSocket = "allow-websocket";
 const String kOptionAllowInsecureTLSFallback = "allow-insecure-tls-fallback";
+const String kOptionAllowInsecureSessionFallback =
+    "allow-insecure-session-fallback";
 const String kOptionDisableUdp = "disable-udp";
 const String kOptionEnableFlutterHttpOnRust = "enable-flutter-http-on-rust";
 

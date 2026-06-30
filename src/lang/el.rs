@@ -763,5 +763,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Εμφάνιση στην ελαχιστοποιημένη γραμμή εργαλείων"),
         ("All monitors", "Όλες οι οθόνες"),
         ("#{} monitor", "Οθόνη {}"),
+        ("Allow insecure session fallback", ""),
+        ("allow-insecure-session-fallback-tip", ""),
     ].iter().cloned().collect();
 }

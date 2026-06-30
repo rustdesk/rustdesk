@@ -768,8 +768,11 @@ impl Client {
         } else {
             key
         });
+        let allow_insecure_fallback =
+            Config::get_option(keys::OPTION_ALLOW_INSECURE_SESSION_FALLBACK) == "Y";
         let mut sign_pk = None;
         let mut option_pk = None;
+        let mut fallback_reason = "missing public key from rendezvous server";
         if !signed_id_pk.is_empty() {
             if let Some(rs_pk) = rs_pk {
                 if let Ok((id, pk)) = decode_id_pk(&signed_id_pk, &rs_pk) {
@@ -778,17 +781,27 @@ impl Client {
                         option_pk = Some(pk.to_vec());
                     }
                 }
+            } else {
+                bail!("Handshake failed: missing rendezvous public key");
             }
             if sign_pk.is_none() {
-                log::error!("Handshake failed: invalid public key from rendezvous server");
+                if allow_insecure_fallback {
+                    fallback_reason = "invalid public key from rendezvous server";
+                } else {
+                    bail!("Handshake failed: invalid public key from rendezvous server");
+                }
             }
         }
         let sign_pk = match sign_pk {
             Some(v) => v,
-            None => {
+            None if allow_insecure_fallback => {
+                log::warn!("Handshake fallback allowed: {fallback_reason}");
                 // send an empty message out in case server is setting up secure and waiting for first message
                 conn.send(&Message::new()).await?;
-                return Ok(option_pk);
+                return Ok(None);
+            }
+            None => {
+                bail!("Handshake failed: missing public key from rendezvous server");
             }
         };
         match timeout(READ_TIMEOUT, conn.next()).await? {
@@ -810,22 +823,45 @@ impl Client {
                                 conn.set_key(key);
                             } else {
                                 log::error!("Handshake failed: sign failure");
-                                conn.send(&Message::new()).await?;
+                                if allow_insecure_fallback {
+                                    log::warn!("Handshake fallback allowed: peer id mismatch");
+                                    conn.send(&Message::new()).await?;
+                                    return Ok(None);
+                                } else {
+                                    bail!("Handshake failed: peer id mismatch");
+                                }
                             }
                         } else {
-                            // fall back to non-secure connection in case pk mismatch
-                            log::info!("pk mismatch, fall back to non-secure");
-                            let mut msg_out = Message::new();
-                            msg_out.set_public_key(PublicKey::new());
-                            conn.send(&msg_out).await?;
+                            if allow_insecure_fallback {
+                                // fall back to non-secure connection in case pk mismatch
+                                log::warn!("Handshake fallback allowed: peer public key mismatch");
+                                let mut msg_out = Message::new();
+                                msg_out.set_public_key(PublicKey::new());
+                                conn.send(&msg_out).await?;
+                                return Ok(None);
+                            } else {
+                                bail!("Handshake failed: peer public key mismatch");
+                            }
                         }
                     } else {
                         log::error!("Handshake failed: invalid message type");
-                        conn.send(&Message::new()).await?;
+                        if allow_insecure_fallback {
+                            log::warn!("Handshake fallback allowed: invalid message type");
+                            conn.send(&Message::new()).await?;
+                            return Ok(None);
+                        } else {
+                            bail!("Handshake failed: invalid message type");
+                        }
                     }
                 } else {
                     log::error!("Handshake failed: invalid message format");
-                    conn.send(&Message::new()).await?;
+                    if allow_insecure_fallback {
+                        log::warn!("Handshake fallback allowed: invalid message format");
+                        conn.send(&Message::new()).await?;
+                        return Ok(None);
+                    } else {
+                        bail!("Handshake failed: invalid message format");
+                    }
                 }
             }
             None => {

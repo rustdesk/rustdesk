@@ -1709,6 +1709,11 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     final outgoingOnly = bind.isOutgoingOnly();
 
     final divider = const Divider(height: 1, indent: 16, endIndent: 16);
+    final switchAllInsecureFallback = switchWidget(
+        Icons.warning_amber_rounded,
+        'Allow insecure session fallback',
+        'allow-insecure-session-fallback-tip',
+        kOptionAllowInsecureSessionFallback);
     return _Card(
       title: 'Network',
       children: [
@@ -1752,6 +1757,8 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                               'Allow insecure TLS fallback',
                               'allow-insecure-tls-fallback-tip',
                               kOptionAllowInsecureTLSFallback),
+                          divider,
+                          switchAllInsecureFallback,
                           if (!outgoingOnly) divider,
                           if (!outgoingOnly)
                             listTile(
@@ -1780,6 +1787,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                     }
                   },
                 ),
+              if (isWeb) switchAllInsecureFallback,
             ],
           ),
         ),

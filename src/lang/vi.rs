@@ -763,5 +763,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Hiển thị trên thanh công cụ thu nhỏ"),
         ("All monitors", "Tất cả màn hình"),
         ("#{} monitor", "Màn hình {}"),
+        ("Allow insecure session fallback", ""),
+        ("allow-insecure-session-fallback-tip", ""),
     ].iter().cloned().collect();
 }

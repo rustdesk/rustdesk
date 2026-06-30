@@ -203,6 +203,8 @@ pub async fn create_tcp_connection(
     let mut stream = stream;
     let id = server.write().unwrap().get_new_id();
     let (sk, pk) = Config::get_key_pair();
+    let allow_insecure_fallback =
+        Config::get_option(hbb_common::config::keys::OPTION_ALLOW_INSECURE_SESSION_FALLBACK) == "Y";
     if secure && pk.len() == sign::PUBLICKEYBYTES && sk.len() == sign::SECRETKEYBYTES {
         let mut sk_ = [0u8; sign::SECRETKEYBYTES];
         sk_[..].copy_from_slice(&sk);
@@ -236,22 +238,46 @@ pub async fn create_tcp_connection(
                                 &our_sk_b,
                             )?);
                         } else if pk.asymmetric_value.is_empty() {
-                            Config::set_key_confirmed(false);
-                            log::info!("Force to update pk");
+                            if allow_insecure_fallback {
+                                Config::set_key_confirmed(false);
+                                log::warn!(
+                                    "Handshake fallback allowed: empty public key from peer"
+                                );
+                            } else {
+                                let reason = "Handshake failed: empty public key from peer";
+                                send_handshake_close_reason(&mut stream, reason).await;
+                                bail!(reason);
+                            }
                         } else {
-                            bail!("Handshake failed: invalid public sign key length from peer");
+                            let reason = "Handshake failed: invalid public sign key length from peer";
+                            send_handshake_close_reason(&mut stream, reason).await;
+                            bail!(reason);
                         }
+                    } else if allow_insecure_fallback {
+                        log::warn!("Handshake fallback allowed: invalid message type");
                     } else {
-                        log::error!("Handshake failed: invalid message type");
+                        let reason = "Handshake failed: insecure session fallback is not allowed by controlled side";
+                        send_handshake_close_reason(&mut stream, reason).await;
+                        bail!(reason);
                     }
                 } else {
-                    bail!("Handshake failed: invalid message format");
+                    let reason = "Handshake failed: invalid message format";
+                    send_handshake_close_reason(&mut stream, reason).await;
+                    bail!(reason);
                 }
             }
             None => {
-                bail!("Failed to receive public key");
+                let reason = "Failed to receive public key";
+                send_handshake_close_reason(&mut stream, reason).await;
+                bail!(reason);
             }
         }
+    } else if secure && allow_insecure_fallback {
+        log::warn!("Handshake fallback allowed: missing local signing key");
+    } else if secure {
+        let reason = "Handshake failed: missing local signing key";
+        send_handshake_close_reason(&mut stream, reason).await;
+        bail!(reason);
     }
 
     #[cfg(target_os = "macos")]
@@ -268,6 +294,17 @@ pub async fn create_tcp_connection(
     }
     Connection::start(addr, stream, id, Arc::downgrade(&server), meta).await;
     Ok(())
+}
+
+async fn send_handshake_close_reason(stream: &mut Stream, reason: &str) {
+    let mut misc = Misc::new();
+    misc.set_close_reason(reason.to_string());
+    let mut msg = Message::new();
+    msg.set_misc(misc);
+    match timeout(CONNECT_TIMEOUT, stream.send(&msg)).await {
+        Ok(res) => allow_err!(res),
+        Err(err) => log::debug!("Timed out sending handshake close reason: {}", err),
+    }
 }
 
 pub async fn accept_connection(

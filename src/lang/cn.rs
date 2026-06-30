@@ -763,5 +763,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "在最小化工具栏上显示"),
         ("All monitors", "所有显示器"),
         ("#{} monitor", "{}号显示器"),
+        ("Allow insecure session fallback", "允许回退到不安全的连接"),
+        ("allow-insecure-session-fallback-tip", "启用此选项后，当端对端加密会话设置失败时，将回退到不安全连接并继续。"),
     ].iter().cloned().collect();
 }

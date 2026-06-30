@@ -279,5 +279,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland-soft-keyboard-input-label", "Soft keyboard input"),
         ("wayland-keyboard-input-reset-choice-tip", "Reset keyboard input choice"),
         ("remember-wayland-keyboard-choice-tip", "Don't ask again for this remote computer"),
+        ("allow-insecure-session-fallback-tip", "Allow insecure session fallback to continue without end-to-end encryption when secure session setup fails."),
     ].iter().cloned().collect();
 }

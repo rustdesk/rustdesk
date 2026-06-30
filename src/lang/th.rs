@@ -763,5 +763,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "แสดงบนแถบเครื่องมือที่ย่อเล็กสุด"),
         ("All monitors", "จอภาพทั้งหมด"),
         ("#{} monitor", "จอภาพ {}"),
+        ("Allow insecure session fallback", ""),
+        ("allow-insecure-session-fallback-tip", ""),
     ].iter().cloned().collect();
 }

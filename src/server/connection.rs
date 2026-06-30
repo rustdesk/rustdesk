@@ -1383,6 +1383,15 @@ impl Connection {
             audit["conn_audit_ref"] = json!(audit_ref);
         }
         self.post_conn_audit(audit);
+        if !self.stream.is_secured() {
+            self.post_alarm_audit(
+                AlarmAuditType::InsecureConnection,
+                json!({
+                    "ip": addr.ip(),
+                    "action": "accepted",
+                }),
+            );
+        }
         true
     }
 
@@ -1491,7 +1500,10 @@ impl Connection {
         v["typ"] = json!(typ as i8);
         v["info"] = serde_json::Value::String(info.to_string());
         v["conn_id"] = json!(self.inner.id());
-        if typ == AlarmAuditType::IpWhitelist {
+        if matches!(
+            typ,
+            AlarmAuditType::IpWhitelist | AlarmAuditType::InsecureConnection
+        ) {
             if let Some(audit_ref) = self.conn_audit_ref() {
                 v["conn_audit_ref"] = json!(audit_ref);
             }
@@ -5599,6 +5611,7 @@ pub enum AlarmAuditType {
     ExceedIPv6PrefixAttempts = 6,
     TerminalOsLoginBackoff = 7,
     TerminalOsLoginConcurrency = 8,
+    InsecureConnection = 10,
 }
 
 pub enum FileAuditType {
