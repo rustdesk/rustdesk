@@ -380,6 +380,7 @@ pub fn get_sound_inputs() -> Vec<String> {
                     }
                 }
             }
+            crate::audio_service::append_asio_input_devices(&mut out);
             out
         }
 

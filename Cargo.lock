@@ -335,6 +335,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175571dd1d178ced59193a6fc02dde1b972eb0bc56c892cde9beeceac5bf0f6b"
 
 [[package]]
+name = "asio-sys"
+version = "0.2.2"
+source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#6b374bcaed076750ca8fce6da518ab39b882e14a"
+dependencies = [
+ "bindgen 0.69.4",
+ "cc",
+ "num-derive 0.4.2",
+ "num-traits 0.2.19",
+ "parse_cfg",
+ "walkdir",
+]
+
+[[package]]
 name = "asn1-rs"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -745,12 +758,15 @@ dependencies = [
  "itertools 0.12.1",
  "lazy_static",
  "lazycell",
+ "log",
+ "prettyplease",
  "proc-macro2 1.0.93",
  "quote 1.0.36",
  "regex",
  "rustc-hash 1.1.0",
  "shlex",
  "syn 2.0.98",
+ "which",
 ]
 
 [[package]]
@@ -1743,6 +1759,7 @@ version = "0.15.3"
 source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#6b374bcaed076750ca8fce6da518ab39b882e14a"
 dependencies = [
  "alsa",
+ "asio-sys",
  "cidre",
  "core-foundation-sys 0.8.7",
  "coreaudio-rs",
@@ -1753,6 +1770,7 @@ dependencies = [
  "mach2",
  "ndk 0.8.0",
  "ndk-context",
+ "num-traits 0.2.19",
  "oboe",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -6034,6 +6052,15 @@ dependencies = [
  "redox_syscall 0.5.2",
  "smallvec",
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "parse_cfg"
+version = "4.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "905787a434a2c721408e7c9a252e85f3d93ca0f118a5283022636c0e05a7ea49"
+dependencies = [
+ "nom",
 ]
 
 [[package]]

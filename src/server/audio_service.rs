@@ -20,6 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const NAME: &'static str = "audio";
 pub const AUDIO_DATA_SIZE_U8: usize = 960 * 4; // 10ms in 48000 stereo
+pub const ASIO_DEVICE_SUFFIX: &str = " (ASIO)";
 static RESTARTING: AtomicBool = AtomicBool::new(false);
 
 lazy_static::lazy_static! {
@@ -65,6 +66,67 @@ fn get_audio_input() -> String {
         .unwrap()
         .clone()
         .unwrap_or(Config::get_option("audio-input"))
+}
+
+#[inline]
+fn strip_asio_device_suffix(device: &str) -> Option<&str> {
+    device.strip_suffix(ASIO_DEVICE_SUFFIX)
+}
+
+#[cfg(all(windows, feature = "asio"))]
+pub fn get_asio_input_devices() -> Vec<String> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+
+    let mut out = Vec::new();
+    let host = match cpal::host_from_id(cpal::HostId::Asio) {
+        Ok(host) => host,
+        Err(err) => {
+            log::debug!(
+                "Failed to get ASIO audio host for input devices ({}): {:?}",
+                ASIO_DEVICE_SUFFIX,
+                err
+            );
+            return out;
+        }
+    };
+    let devices = match host.devices() {
+        Ok(devices) => devices,
+        Err(err) => {
+            log::debug!(
+                "Failed to enumerate ASIO audio input devices ({}): {:?}",
+                ASIO_DEVICE_SUFFIX,
+                err
+            );
+            return out;
+        }
+    };
+    for device in devices {
+        match device.default_input_config() {
+            Ok(_) => {}
+            Err(err) => {
+                log::debug!("Failed to get ASIO audio input config: {:?}", err);
+                continue;
+            }
+        }
+        let name = match device.name() {
+            Ok(name) => name,
+            Err(err) => {
+                log::debug!("Failed to get ASIO audio input device name: {:?}", err);
+                continue;
+            }
+        };
+        out.push(format!("{name}{ASIO_DEVICE_SUFFIX}"));
+    }
+    out
+}
+
+#[cfg(not(all(windows, feature = "asio")))]
+pub fn get_asio_input_devices() -> Vec<String> {
+    Vec::new()
+}
+
+pub fn append_asio_input_devices(out: &mut Vec<String>) {
+    out.extend(get_asio_input_devices());
 }
 
 pub fn restart() {
@@ -284,6 +346,19 @@ mod cpal_impl {
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
+            #[cfg(feature = "asio")]
+            {
+                match get_asio_audio_input(&audio_input) {
+                    Ok(Some(device)) => return Ok(device),
+                    Ok(None) => {}
+                    Err(err) => {
+                        log::warn!(
+                            "Failed to get ASIO audio input, falling back to default audio input: {:?}",
+                            err
+                        );
+                    }
+                }
+            }
             return get_audio_input(&audio_input);
         }
         let device = HOST
@@ -299,6 +374,41 @@ mod cpal_impl {
             .with_context(|| "Failed to get default output format")?;
         log::info!("Default output format: {:?}", format);
         Ok((device, format))
+    }
+
+    #[cfg(all(windows, feature = "asio"))]
+    fn get_asio_audio_input(
+        audio_input: &str,
+    ) -> ResultType<Option<(Device, SupportedStreamConfig)>> {
+        let Some(asio_input) = super::strip_asio_device_suffix(audio_input) else {
+            return Ok(None);
+        };
+        let host = cpal::host_from_id(cpal::HostId::Asio)
+            .map_err(|e| anyhow!("{:?}", e))
+            .with_context(|| "Failed to get ASIO audio host")?;
+        for device in host
+            .devices()
+            .with_context(|| "Failed to get ASIO audio devices")?
+        {
+            let device_name = match device.name() {
+                Ok(name) => name,
+                Err(err) => {
+                    log::debug!("Failed to get ASIO audio input device name: {:?}", err);
+                    continue;
+                }
+            };
+            if device_name != asio_input {
+                continue;
+            }
+            log::info!("ASIO input device: {}", asio_input);
+            let format = device
+                .default_input_config()
+                .map_err(|e| anyhow!(e))
+                .with_context(|| "Failed to get ASIO input format")?;
+            log::info!("ASIO input format: {:?}", format);
+            return Ok(Some((device, format)));
+        }
+        bail!("Failed to get ASIO input device: {}", asio_input);
     }
 
     #[cfg(not(any(windows, feature = "screencapturekit")))]
@@ -523,5 +633,19 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             sp.send(msg_out);
         }
         Err(_) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_asio_device_suffix_only_when_present() {
+        assert_eq!(
+            strip_asio_device_suffix("Astro MixAmp Pro Voice (ASIO)"),
+            Some("Astro MixAmp Pro Voice")
+        );
+        assert_eq!(strip_asio_device_suffix("Astro MixAmp Pro Voice"), None);
     }
 }
