@@ -4121,7 +4121,7 @@ impl Connection {
                 self.switch_display_to(display_idx, server.clone());
 
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                if s.width != 0 && s.height != 0 {
+                if !self.view_camera && s.width != 0 && s.height != 0 {
                     self.change_resolution(
                         None,
                         &Resolution {
