@@ -17,10 +17,17 @@ pub fn set_map_err(f: fn(err: String) -> io::Error) {
 }
 
 fn map_err<E: ToString>(err: E) -> io::Error {
+    let err_str = err.to_string();
+    
+    if err_str.contains("SESSION_REVOKED")
+    {
+        return io::Error::new(io::ErrorKind::ConnectionAborted, err_str);
+    }
+
     if let Some(f) = *MAP_ERR.read().unwrap() {
-        f(err.to_string())
+        f(err_str)
     } else {
-        io::Error::new(io::ErrorKind::Other, err.to_string())
+        io::Error::new(io::ErrorKind::Other, err_str)
     }
 }
 
