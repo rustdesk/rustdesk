@@ -4,6 +4,7 @@
 // https://github.com/chromium/chromium/blob/e7b24573bc2e06fed4749dd6b6abfce67f29052f/media/video/vpx_video_encoder.cc#L522
 
 use hbb_common::anyhow::{anyhow, Context};
+use hbb_common::log;
 use hbb_common::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use hbb_common::ResultType;
 

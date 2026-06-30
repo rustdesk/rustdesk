@@ -13,6 +13,7 @@ use crate::{EncodeInput, EncodeYuvFormat, Pixfmt};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
+    log,
     message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
     ResultType,
 };
@@ -65,6 +66,11 @@ extern "C" {
     pub fn rustdesk_aom_enc_cfg_get_h(c: *const aom_codec_enc_cfg_t) -> ::std::os::raw::c_uint;
     pub fn rustdesk_aom_enc_cfg_get_threads(c: *const aom_codec_enc_cfg_t) -> ::std::os::raw::c_uint;
     pub fn rustdesk_aom_enc_cfg_get_target_bitrate(c: *const aom_codec_enc_cfg_t) -> ::std::os::raw::c_uint;
+
+    pub fn rustdesk_aom_enc_cfg_set_target_bitrate(
+        c: *mut aom_codec_enc_cfg_t,
+        bitrate: ::std::os::raw::c_uint,
+    );
 
     pub fn rustdesk_aom_dec_cfg_alloc(
         threads: ::std::os::raw::c_uint,
@@ -214,7 +220,7 @@ mod webrtc {
             AV1E_SET_TILE_COLUMNS
         };
 
-        call_ctl!(ctx, tile_set, (threads as f64).log2().ceil());
+        call_ctl!(ctx, tile_set, (threads as f64).log2().ceil() as i32);
         call_ctl!(ctx, AV1E_SET_ROW_MT, 1);
         call_ctl!(ctx, AV1E_SET_ENABLE_OBMC, 0);
         call_ctl!(ctx, AV1E_SET_NOISE_SENSITIVITY, 0);
@@ -329,17 +335,7 @@ impl EncoderApi for AomEncoder {
 
         unsafe {
             rustdesk_aom_enc_cfg_set_quantizer(self.cfg, q_min, q_max);
-            rustdesk_aom_enc_cfg_set_basic(
-                self.cfg,
-                self.width as _,
-                self.height as _,
-                codec_thread_num(64) as _,
-                bitrate,
-                webrtc::kTimeBaseDen as _,
-                8,
-                AOM_USAGE_REALTIME,
-                0,
-            );
+            rustdesk_aom_enc_cfg_set_target_bitrate(self.cfg, bitrate);
         }
 
         call_aom!(aom_codec_enc_config_set(&mut self.ctx, self.cfg));

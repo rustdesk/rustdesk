@@ -5,22 +5,35 @@ use std::{
 };
 
 #[cfg(all(target_os = "linux", feature = "linux-pkg-config"))]
-fn link_pkg_config(name: &str) -> Vec<PathBuf> {
+fn probe_pkg_config(name: &str, cargo_metadata: bool) -> Vec<PathBuf> {
     let pc_name = match name {
         "libvpx" => "vpx",
         _ => name,
     };
 
-    let lib = pkg_config::probe_library(pc_name).expect(
-        format!(
-            "unable to find '{pc_name}' development headers with pkg-config \
-             (feature linux-pkg-config is enabled). try installing \
-             '{pc_name}-dev' from your system package manager."
-        )
-        .as_str(),
-    );
+    let lib = pkg_config::Config::new()
+        .cargo_metadata(cargo_metadata)
+        .probe(pc_name)
+        .expect(
+            format!(
+                "unable to find '{pc_name}' development headers with pkg-config \
+                 (feature linux-pkg-config is enabled). try installing \
+                 '{pc_name}-dev' from your system package manager."
+            )
+            .as_str(),
+        );
 
     lib.include_paths
+}
+
+#[cfg(all(target_os = "linux", feature = "linux-pkg-config"))]
+fn link_pkg_config(name: &str) -> Vec<PathBuf> {
+    probe_pkg_config(name, true)
+}
+
+#[cfg(all(target_os = "linux", feature = "linux-pkg-config"))]
+fn include_pkg_config(name: &str) -> Vec<PathBuf> {
+    probe_pkg_config(name, false)
 }
 
 #[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
@@ -28,19 +41,31 @@ fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
     unimplemented!()
 }
 
-fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    let mut target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+#[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
+fn include_pkg_config(_name: &str) -> Vec<PathBuf> {
+    unimplemented!()
+}
 
-    target_arch = match target_arch.as_str() {
+fn target_os() -> String {
+    env::var("CARGO_CFG_TARGET_OS").unwrap()
+}
+
+fn target_arch() -> String {
+    env::var("CARGO_CFG_TARGET_ARCH").unwrap()
+}
+
+fn target_triplet() -> String {
+    let target_os = target_os();
+    let target_arch = match target_arch().as_str() {
         "x86_64" => "x64".to_owned(),
         "x86" => "x86".to_owned(),
         "loongarch64" => "loongarch64".to_owned(),
         "aarch64" => "arm64".to_owned(),
-        _ => "arm".to_owned(),
+        "arm" => "arm".to_owned(),
+        other => panic!("unsupported target architecture: {}", other),
     };
 
-    let mut target = if target_os == "macos" {
+    if target_os == "macos" {
         match target_arch.as_str() {
             "x64" => "x64-osx".to_owned(),
             "arm64" => "arm64-osx".to_owned(),
@@ -50,25 +75,26 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
         format!("{}-windows-static", target_arch)
     } else {
         format!("{}-{}", target_arch, target_os)
-    };
-
-    if target_arch == "x86" {
-        target = target.replace("x64", "x86");
     }
+}
 
-    println!("cargo:warning=vcpkg triplet: {}", target);
-
+fn vcpkg_installed_path(mut path: PathBuf) -> PathBuf {
     if let Ok(vcpkg_root) = env::var("VCPKG_INSTALLED_ROOT") {
         path = vcpkg_root.into();
     } else {
         path.push("installed");
     }
 
-    path.push(target);
+    path.push(target_triplet());
+    path
+}
 
+fn link_vcpkg(path: PathBuf, name: &str) -> PathBuf {
+    let path = vcpkg_installed_path(path);
     let lib_dir = path.join("lib");
     let include = path.join("include");
 
+    println!("cargo:warning=vcpkg triplet: {}", target_triplet());
     println!(
         "cargo:rustc-link-lib=static={}",
         name.trim_start_matches("lib")
@@ -79,9 +105,16 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
     include
 }
 
-fn link_homebrew_m1(name: &str) -> PathBuf {
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+fn include_vcpkg(path: PathBuf) -> PathBuf {
+    let path = vcpkg_installed_path(path);
+    let include = path.join("include");
+    println!("cargo:include={}", include.display());
+    include
+}
+
+fn homebrew_prefix(name: &str) -> PathBuf {
+    let target_os = target_os();
+    let target_arch = target_arch();
 
     if target_os != "macos" || target_arch != "aarch64" {
         panic!(
@@ -90,13 +123,17 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
         );
     }
 
-    let mut path = PathBuf::from("/opt/homebrew/Cellar");
-    path.push(name);
+    let opt_path = PathBuf::from("/opt/homebrew/opt").join(name);
+    if opt_path.exists() {
+        return opt_path;
+    }
 
-    let entries = fs::read_dir(&path).unwrap_or_else(|_| {
+    let cellar_path = PathBuf::from("/opt/homebrew/Cellar").join(name);
+    let entries = fs::read_dir(&cellar_path).unwrap_or_else(|_| {
         panic!(
-            "Could not find package in {}. Make sure homebrew package {} is installed.",
-            path.display(),
+            "Could not find package in {} or /opt/homebrew/opt/{}. Make sure homebrew package {} is installed.",
+            cellar_path.display(),
+            name,
             name
         )
     });
@@ -107,13 +144,46 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
         .filter(|x| x.is_dir())
         .collect::<Vec<_>>();
 
-    directories.sort_unstable();
+    directories.sort_by(|a, b| {
+        let a = a.file_name().and_then(|s| s.to_str()).unwrap_or_default();
+        let b = b.file_name().and_then(|s| s.to_str()).unwrap_or_default();
+        version_compare(a, b)
+    });
 
-    if directories.is_empty() {
-        panic!("There's no installed version of {} in /opt/homebrew/Cellar", name);
+    directories.pop().unwrap_or_else(|| {
+        panic!(
+            "There's no installed version of {} in /opt/homebrew/Cellar",
+            name
+        )
+    })
+}
+
+fn version_compare(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+
+    let mut a_parts = a.split(|c: char| c == '.' || c == '-' || c == '_');
+    let mut b_parts = b.split(|c: char| c == '.' || c == '-' || c == '_');
+
+    loop {
+        match (a_parts.next(), b_parts.next()) {
+            (Some(a), Some(b)) => {
+                let ord = match (a.parse::<u64>(), b.parse::<u64>()) {
+                    (Ok(a_num), Ok(b_num)) => a_num.cmp(&b_num),
+                    _ => a.cmp(b),
+                };
+                if ord != Ordering::Equal {
+                    return ord;
+                }
+            }
+            (Some(_), None) => return Ordering::Greater,
+            (None, Some(_)) => return Ordering::Less,
+            (None, None) => return Ordering::Equal,
+        }
     }
+}
 
-    path.push(directories.pop().unwrap());
+fn link_homebrew_m1(name: &str) -> PathBuf {
+    let path = homebrew_prefix(name);
 
     println!(
         "cargo:rustc-link-lib=static={}",
@@ -130,18 +200,38 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
     include
 }
 
+fn include_homebrew_m1(name: &str) -> PathBuf {
+    homebrew_prefix(name).join("include")
+}
+
+fn use_linux_pkg_config() -> bool {
+    env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux")
+        && env::var("CARGO_FEATURE_LINUX_PKG_CONFIG").is_ok()
+}
+
 fn find_package(name: &str) -> Vec<PathBuf> {
     let no_pkg_config_var_name = format!("NO_PKG_CONFIG_{name}");
     println!("cargo:rerun-if-env-changed={no_pkg_config_var_name}");
 
-    if cfg!(all(target_os = "linux", feature = "linux-pkg-config"))
-        && env::var(no_pkg_config_var_name).as_deref() != Ok("1")
-    {
+    if use_linux_pkg_config() && env::var(no_pkg_config_var_name).as_deref() != Ok("1") {
         link_pkg_config(name)
     } else if let Ok(vcpkg_root) = env::var("VCPKG_ROOT") {
         vec![link_vcpkg(vcpkg_root.into(), name)]
     } else {
         vec![link_homebrew_m1(name)]
+    }
+}
+
+fn include_package(name: &str) -> Vec<PathBuf> {
+    let no_pkg_config_var_name = format!("NO_PKG_CONFIG_{name}");
+    println!("cargo:rerun-if-env-changed={no_pkg_config_var_name}");
+
+    if use_linux_pkg_config() && env::var(no_pkg_config_var_name).as_deref() != Ok("1") {
+        include_pkg_config(name)
+    } else if let Ok(vcpkg_root) = env::var("VCPKG_ROOT") {
+        vec![include_vcpkg(vcpkg_root.into())]
+    } else {
+        vec![include_homebrew_m1(name)]
     }
 }
 
@@ -236,16 +326,22 @@ fn build_codec_cfg_shim() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
 
     let mut include_paths = Vec::new();
-    include_paths.extend(find_package("aom"));
-    include_paths.extend(find_package("libvpx"));
+    include_paths.extend(include_package("aom"));
+    include_paths.extend(include_package("libvpx"));
+
+    let shim = manifest_dir
+        .join("src")
+        .join("bindings")
+        .join("codec_cfg_shim.c");
+
+    println!("cargo:rerun-if-changed={}", shim.display());
 
     let mut build = cc::Build::new();
-    build.file(
-        manifest_dir
-            .join("src")
-            .join("bindings")
-            .join("codec_cfg_shim.c"),
-    );
+    build.define("VPX_CODEC_USE_ENCODER", Some("1"));
+    build.define("VPX_CODEC_USE_DECODER", Some("1"));
+    build.define("AOM_CODEC_USE_ENCODER", Some("1"));
+    build.define("AOM_CODEC_USE_DECODER", Some("1"));
+    build.file(shim);
 
     for include in include_paths {
         build.include(include);
@@ -257,7 +353,7 @@ fn build_codec_cfg_shim() {
 fn main() {
     println!("cargo:rustc-check-cfg=cfg(dxgi,quartz,x11)");
 
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_os = target_os();
 
     let target = target_build_utils::TargetInfo::new();
     if target.unwrap().target_pointer_width() != "64" {
@@ -267,23 +363,25 @@ fn main() {
     env::remove_var("CARGO_CFG_TARGET_FEATURE");
     env::set_var("CARGO_CFG_TARGET_FEATURE", "crt-static");
 
+    build_codec_cfg_shim();
+
     find_package("libyuv");
 
     gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
     gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
     gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
 
-    build_codec_cfg_shim();
-
     if target_os == "ios" {
         // nothing
     } else if target_os == "android" {
         println!("cargo:rustc-cfg=android");
-    } else if cfg!(windows) {
+    } else if target_os == "windows" {
         println!("cargo:rustc-cfg=dxgi");
-    } else if cfg!(target_os = "macos") {
+    } else if target_os == "macos" {
         println!("cargo:rustc-cfg=quartz");
-    } else if cfg!(unix) {
+    } else if env::var("CARGO_CFG_UNIX").is_ok() {
         println!("cargo:rustc-cfg=x11");
+    } else {
+        panic!("unsupported target os: {}", target_os);
     }
 }

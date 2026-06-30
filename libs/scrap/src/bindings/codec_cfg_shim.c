@@ -145,6 +145,17 @@ unsigned int rustdesk_aom_enc_cfg_get_target_bitrate(const aom_codec_enc_cfg_t* 
     return c ? c->rc_target_bitrate : 0;
 }
 
+void rustdesk_aom_enc_cfg_set_target_bitrate(
+    aom_codec_enc_cfg_t* c,
+    unsigned int bitrate
+) {
+    if (!c) {
+        return;
+    }
+
+    c->rc_target_bitrate = bitrate;
+}
+
 aom_codec_err_t rustdesk_aom_dec_cfg_alloc(
     unsigned int threads,
     unsigned int w,
