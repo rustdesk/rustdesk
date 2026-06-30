@@ -1111,6 +1111,9 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     async fn send_toggle_privacy_mode_msg(&self, peer: &mut Stream) {
+        if self.handler.is_view_camera() {
+            return;
+        }
         let lc = self.handler.lc.read().unwrap();
         if lc.version >= hbb_common::get_version_number("1.2.4")
             && lc.get_toggle_option("privacy-mode")
