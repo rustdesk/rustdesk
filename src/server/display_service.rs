@@ -25,9 +25,6 @@ struct ChangedResolution {
 lazy_static::lazy_static! {
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
     static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
-    // Initial primary display index.
-    // It should not be updated when displays changed.
-    pub static ref PRIMARY_DISPLAY_IDX: usize = get_primary();
     static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
 }
 
@@ -385,6 +382,19 @@ pub fn get_primary() -> usize {
     }
 
     try_get_displays().map(|d| get_primary_2(&d)).unwrap_or(0)
+}
+
+#[inline]
+pub fn validate_display_idx(display_idx: usize, display_len: usize) -> usize {
+    if display_len == 0 || display_idx < display_len {
+        return display_idx;
+    }
+    let primary_display_idx = get_primary();
+    if primary_display_idx < display_len {
+        primary_display_idx
+    } else {
+        0
+    }
 }
 
 #[inline]
