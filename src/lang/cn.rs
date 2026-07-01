@@ -763,5 +763,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "在最小化工具栏上显示"),
         ("All monitors", "所有显示器"),
         ("#{} monitor", "{}号显示器"),
+        ("e2ee-failed-tip", "当前连接不是端对端加密的。\n请更新被控端的 RustDesk 至最新版本。"),
     ].iter().cloned().collect();
 }

@@ -763,5 +763,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Visa i det minimerade verktygsfältet"),
         ("All monitors", "Alla skärmar"),
         ("#{} monitor", "Skärm {}"),
+        ("e2ee-failed-tip", ""),
     ].iter().cloned().collect();
 }

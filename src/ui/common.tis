@@ -234,11 +234,36 @@ class ChatBox: Reactor.Component {
 /******************** start of msgbox ****************************************/
 var remember_password = false;
 var last_msgbox_tag = "";
+var toast_timer_func = function() {}
+function showToast(type, content) {
+    var toast = $(#toast);
+    if (!toast) return false;
+    var color = type.indexOf("error") >= 0 ? "#e04f5f" : "#2C8CFF";
+    var lines = translate(content).split(/\r?\n/g);
+    self.timer(0, toast_timer_func);
+    toast.content(<div style="flow: horizontal; width: *;">
+        <div style="width: *;" />
+        <div style={"width: 520px; padding: 0.9em 1.2em; background:" + color + "; color: white; border-radius: 4px; line-height: 1.4em; box-shadow: 0 2px 12px rgba(0,0,0,0.35);"}>{lines.map(function(line) { return <div>{line}</div>; })}</div>
+        <div style="width: *;" />
+    </div>);
+    toast_timer_func = function() {
+        var toast = $(#toast);
+        if (toast) toast.content(<span />);
+    };
+    self.timer(5s, toast_timer_func);
+    return true;
+}
+
 function msgbox(type, title, content, link="", callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
     $(body).scrollTo(0, 0);
     if (!type) {
         closeMsgbox();
         return;
+    }
+    if (type.indexOf("toast-") == 0) {
+        if (showToast(type, content)) return;
+        type = "custom-" + type.slice(6);
+        if (!title) title = "Security Alert";
     }
     var remember = false;
     try { remember = handler.get_remember(); } catch(e) {}

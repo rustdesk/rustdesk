@@ -3709,6 +3709,10 @@ pub trait Interface: Send + Clone + 'static + Sized {
     /// Send message data to remote peer.
     fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
+    fn toast(&self, msgtype: &str, text: &str) {
+        let msgtype = format!("toast-{msgtype}");
+        self.msgbox(&msgtype, "", text, "");
+    }
     fn handle_login_error(&self, err: &str) -> bool;
     fn handle_peer_info(&self, pi: PeerInfo);
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>);

@@ -597,5 +597,5 @@ handler.setPermission = function(name, enabled) {
 
 handler.closeSuccess = function() {
     // handler.msgbox("success", "Successful", "Ready to go.");
-    handler.msgbox("", "", "");
+    msgbox("", "", "");
 }

@@ -279,5 +279,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland-soft-keyboard-input-label", "Soft keyboard input"),
         ("wayland-keyboard-input-reset-choice-tip", "Reset keyboard input choice"),
         ("remember-wayland-keyboard-choice-tip", "Don't ask again for this remote computer"),
+        ("e2ee-failed-tip", "This connection is not end-to-end encrypted.\nPlease update RustDesk on the controlled side to the latest version."),
     ].iter().cloned().collect();
 }
