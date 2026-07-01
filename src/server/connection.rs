@@ -2503,16 +2503,7 @@ impl Connection {
         }
         if self.authorized {
             if let Some(message) = self.authorized_scope_violation(&msg) {
-                log::warn!(
-                    "Closing {} session after out-of-scope message: {}",
-                    self.authed_conn_type()
-                        .map(AuthConnType::as_str)
-                        .unwrap_or("unknown"),
-                    message
-                );
-                self.post_session_scope_violation_alarm(message);
-                self.on_close("Session scope violation", true).await;
-                return false;
+                return self.handle_authorized_scope_violation(message).await;
             }
         }
         // After handling CloseReason messages, proceed to process other message types
@@ -5247,6 +5238,26 @@ impl Connection {
 
     fn authed_conn_type(&self) -> Option<AuthConnType> {
         self.authed_conn_id.as_ref().map(|id| id.conn_type())
+    }
+
+    async fn handle_authorized_scope_violation(&mut self, message: &'static str) -> bool {
+        let conn_type = self
+            .authed_conn_type()
+            .map(AuthConnType::as_str)
+            .unwrap_or("unknown");
+        log::warn!(
+            "Received out-of-scope message in {} session: {}",
+            conn_type,
+            message
+        );
+        if Config::get_bool_option(keys::OPTION_ALLOW_SCOPE_VIOLATION_ALARM) {
+            self.post_session_scope_violation_alarm(message);
+        }
+        if Config::get_bool_option(keys::OPTION_ALLOW_SCOPE_VIOLATION_CLOSE) {
+            self.on_close("Session scope violation", true).await;
+            return false;
+        }
+        true
     }
 
     fn authorized_scope_violation(&self, msg: &Message) -> Option<&'static str> {
