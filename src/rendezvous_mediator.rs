@@ -121,10 +121,10 @@ impl RendezvousMediator {
             }
         }
         crate::hbbs_http::sync::start();
-        #[cfg(target_os = "windows")]
-        if crate::platform::is_installed() && crate::is_server() {
-            crate::updater::start_auto_update();
-        }
+        //#[cfg(target_os = "windows")]
+        //if crate::platform::is_installed() && crate::is_server() {
+        //    crate::updater::start_auto_update();
+        //}
         check_zombie();
         let server = new_server();
         if config::option2bool("stop-service", &Config::get_option("stop-service")) {
