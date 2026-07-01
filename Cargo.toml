@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "Support_Burocopy"
 version = "1.4.8"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "Burocopy Remote Desktop"
+default-run = "support_burocopy"
 rust-version = "1.75"
 
 [lib]
