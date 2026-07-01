@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Ascunde fereastra de gestionare a conexiunilor"),
         ("hide_cm_tip", "Permite ascunderea ferestrei de gestionare doar dacă accepți începerea sesiunilor folosind parola permanentă"),
         ("wayland_experiment_tip", "Wayland este acceptat doar într-o formă experimentală. Folosește X11 dacă nu ai nevoie de acces supravegheat."),
+        ("drm_capture_tip", "Captura directă DRM/KMS este disponibilă — nu este necesar consimțământul portalului. Acceptă accesul nesupravegheat și captura ecranului de autentificare."),
         ("Right click to select tabs", "Dă clic dreapta pentru a selecta file"),
         ("Skipped", "Ignorat"),
         ("Add to address book", "Adaugă la agendă"),

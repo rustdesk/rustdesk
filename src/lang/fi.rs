@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Piilota yhteydenhallintaikkuna"),
         ("hide_cm_tip", "Yhteydenhallintaikkuna voidaan piilottaa, jotta etäistunto ei keskeydy."),
         ("wayland_experiment_tip", "Wayland tuki on kokeellinen ja saattaa aiheuttaa yhteysongelmia."),
+        ("drm_capture_tip", "DRM/KMS-suorakaappaus on käytettävissä — portaalin suostumusta ei tarvita. Tukee valvomatonta käyttöä ja kirjautumisnäytön kaappausta."),
         ("Right click to select tabs", "Valitse välilehti hiiren oikealla painikkeella"),
         ("Skipped", "Ohitettu"),
         ("Add to address book", "Lisää osoitekirjaan"),

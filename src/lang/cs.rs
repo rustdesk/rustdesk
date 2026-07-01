@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Skrýt okno správy připojení"),
         ("hide_cm_tip", "Povolit skrývání pouze v případě, že přijímáte relace pomocí hesla a používáte trvalé heslo."),
         ("wayland_experiment_tip", "Podpora Waylandu je v experimentální fázi, pokud potřebujete bezobslužný přístup, použijte prosím X11."),
+        ("drm_capture_tip", "Přímé snímání DRM/KMS je k dispozici — souhlas portálu není vyžadován. Podporuje přístup bez obsluhy i snímání přihlašovací obrazovky."),
         ("Right click to select tabs", "Výběr karet kliknutím pravým tlačítkem myši"),
         ("Skipped", "Vynecháno"),
         ("Add to address book", "Přidat do adresáře"),

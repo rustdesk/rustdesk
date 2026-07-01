@@ -1536,6 +1536,9 @@ jobs:
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
+               libseccomp-dev \
+               libcap-dev \
+               libdrm-dev \
                libpam0g-dev \
                libpulse-dev \
                libva-dev \
@@ -1818,6 +1821,9 @@ jobs:
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
                liblzma-dev \
+               libseccomp-dev \
+               libcap-dev \
+               libdrm-dev \
                libpam0g-dev \
                libpulse-dev \
                libva-dev \

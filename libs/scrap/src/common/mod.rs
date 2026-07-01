@@ -16,7 +16,11 @@ cfg_if! {
                 mod linux;
                 mod wayland;
                 mod x11;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                mod drm;
                 pub use self::linux::*;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                pub use self::drm::{drm_cursor, drm_cursor_id, DrmCursor};
                 pub use self::wayland::set_map_err;
                 pub use self::x11::PixelBuffer;
             } else {
@@ -271,6 +275,10 @@ pub fn is_cursor_embedded() -> bool {
     if is_x11() {
         x11::IS_CURSOR_EMBEDDED
     } else {
+        // Wayland/DRM: the host cursor is a hardware cursor on a separate scanout
+        // plane, so it is NOT embedded in the captured framebuffer — the client
+        // draws its own cursor overlay. (With the drm feature we read the cursor
+        // plane back separately to feed that overlay; it is still not embedded.)
         false
     }
 }

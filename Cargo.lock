@@ -2329,7 +2329,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.4",
 ]
 
 [[package]]
@@ -2694,7 +2694,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4466,6 +4466,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libdrmtap-sys"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5386662822807db26dd77fc4603f886c78cbb386ef3985fd1db36d1139a23ca0"
+dependencies = [
+ "cc",
+ "pkg-config",
+]
+
+[[package]]
 name = "libgit2-sys"
 version = "0.14.2+1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4494,7 +4504,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if 1.0.0",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -7317,6 +7327,7 @@ dependencies = [
  "kcp-sys",
  "keepawake",
  "lazy_static",
+ "libdrmtap-sys",
  "libpulse-binding",
  "libpulse-simple-binding",
  "libxdo-sys",
@@ -7457,7 +7468,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7514,7 +7525,7 @@ dependencies = [
  "security-framework 3.5.1",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7613,6 +7624,7 @@ dependencies = [
  "hwcodec",
  "jni",
  "lazy_static",
+ "libdrmtap-sys",
  "log",
  "ndk 0.7.0",
  "ndk-context",

@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Fenster zur Verwaltung der Verbindung verstecken"),
         ("hide_cm_tip", "Dies ist nur möglich, wenn der Zugriff über ein permanentes Passwort erfolgt."),
         ("wayland_experiment_tip", "Die Unterstützung von Wayland ist nur experimentell. Bitte nutzen Sie X11, wenn Sie einen unbeaufsichtigten Zugriff benötigen."),
+        ("drm_capture_tip", "DRM/KMS-Direktaufnahme verfügbar — keine Portal-Freigabe erforderlich. Unterstützt unbeaufsichtigten Zugriff und die Aufnahme des Anmeldebildschirms."),
         ("Right click to select tabs", "Tabs mit rechtem Mausklick auswählen"),
         ("Skipped", "Übersprungen"),
         ("Add to address book", "Zum Adressbuch hinzufügen"),

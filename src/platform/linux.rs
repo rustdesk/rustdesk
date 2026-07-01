@@ -361,6 +361,12 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 }
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
+    #[cfg(feature = "drm")]
+    if !is_x11() {
+        if let Some(id) = scrap::drm_cursor_id() {
+            return Ok(Some(id));
+        }
+    }
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(d) = conn.try_borrow_mut() {
@@ -378,7 +384,89 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
     Ok(res)
 }
 
+// Cursor downscale factor for DRM/Wayland capture.
+//
+// On Wayland the cursor we can read comes from XFixes (XWayland), which renders
+// it at a HiDPI size (Xcursor.size, typically 2x). The video, however, is
+// captured at PHYSICAL resolution and the flutter client lays the cursor image
+// out in the display's LOGICAL canvas — so an unscaled XFixes cursor ends up
+// ~display-scale times too big. We divide the cursor image by the display scale
+// here so it matches the rest of the captured content. 0 bits == 1.0 (no
+// scaling), the default for X11 / unscaled displays.
+static CURSOR_DOWNSCALE_BITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn set_cursor_downscale(scale: f64) {
+    let v = if scale.is_finite() && scale > 1.0 { scale } else { 1.0 };
+    CURSOR_DOWNSCALE_BITS.store(v.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn cursor_downscale() -> f64 {
+    let b = CURSOR_DOWNSCALE_BITS.load(std::sync::atomic::Ordering::Relaxed);
+    if b == 0 {
+        1.0
+    } else {
+        f64::from_bits(b)
+    }
+}
+
+// Nearest-neighbor downscale of an RGBA cursor image by `factor` (> 1.0).
+fn downscale_rgba(
+    colors: &[u8],
+    w: i32,
+    h: i32,
+    hotx: i32,
+    hoty: i32,
+    factor: f64,
+) -> (i32, i32, Vec<u8>, i32, i32) {
+    let nw = ((w as f64) / factor).round().max(1.0) as i32;
+    let nh = ((h as f64) / factor).round().max(1.0) as i32;
+    let mut out = vec![0u8; (nw * nh * 4) as usize];
+    for y in 0..nh {
+        let sy = (((y as f64) * factor) as i32).min(h - 1).max(0);
+        for x in 0..nw {
+            let sx = (((x as f64) * factor) as i32).min(w - 1).max(0);
+            let si = ((sy * w + sx) * 4) as usize;
+            let di = ((y * nw + x) * 4) as usize;
+            out[di..di + 4].copy_from_slice(&colors[si..si + 4]);
+        }
+    }
+    let nhx = (((hotx as f64) / factor).round() as i32).clamp(0, nw - 1);
+    let nhy = (((hoty as f64) / factor).round() as i32).clamp(0, nh - 1);
+    (nw, nh, out, nhx, nhy)
+}
+
 pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
+    #[cfg(feature = "drm")]
+    if !is_x11() {
+        if let Some(c) = scrap::drm_cursor() {
+            // The DRM cursor is updated asynchronously; its id may have advanced
+            // past hcursor between get_cursor() and get_cursor_data().  Return the
+            // latest snapshot rather than bailing, which would trigger a 10-second
+            // MouseCursorService backoff and log spam.
+            let mut cd: CursorData = Default::default();
+            cd.id = c.id;
+            // Same logical-canvas downscale as the XFixes path: the hardware
+            // cursor buffer is in physical pixels, but the client lays it out in
+            // the display's logical canvas, so divide by the display scale.
+            let factor = cursor_downscale();
+            if factor > 1.01 && c.width > 1 && c.height > 1 {
+                let (nw, nh, ncolors, nhx, nhy) =
+                    downscale_rgba(&c.colors, c.width, c.height, c.hotx, c.hoty, factor);
+                cd.width = nw;
+                cd.height = nh;
+                cd.hotx = nhx;
+                cd.hoty = nhy;
+                cd.colors = ncolors.into();
+            } else {
+                cd.width = c.width;
+                cd.height = c.height;
+                cd.hotx = c.hotx;
+                cd.hoty = c.hoty;
+                cd.colors = c.colors.into();
+            }
+            return Ok(cd);
+        }
+    }
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(ref mut d) = conn.try_borrow_mut() {
@@ -415,7 +503,19 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                                 cd_colors[pos + 3] = a as _;
                             }
                         }
-                        cd.colors = cd_colors.into();
+                        let factor = cursor_downscale();
+                        if factor > 1.01 && cd.width > 1 && cd.height > 1 {
+                            let (nw, nh, ncolors, nhx, nhy) = downscale_rgba(
+                                &cd_colors, cd.width, cd.height, cd.hotx, cd.hoty, factor,
+                            );
+                            cd.width = nw;
+                            cd.height = nh;
+                            cd.hotx = nhx;
+                            cd.hoty = nhy;
+                            cd.colors = ncolors.into();
+                        } else {
+                            cd.colors = cd_colors.into();
+                        }
                         res = Some(cd);
                     }
                     if !img.is_null() {
@@ -2187,6 +2287,46 @@ impl Drop for WallPaperRemover {
 #[inline]
 pub fn is_x11() -> bool {
     *IS_X11
+}
+
+// Returns true when:
+//   • the `drm` feature is compiled in, AND
+//   • we are on a Wayland session, AND
+//   • at least one /dev/dri/card* node is present, AND
+//   • the drmtap-helper binary is present in one of the paths libdrmtap actually
+//     searches at runtime (see privilege_helper.c). Checking the real search
+//     paths — not "beside the executable", which libdrmtap never searches —
+//     avoids reporting DRM as available when capture would fail to find a helper.
+pub fn is_drm_capture_available() -> bool {
+    #[cfg(feature = "drm")]
+    {
+        if is_x11() {
+            return false;
+        }
+        let has_card = std::fs::read_dir("/dev/dri").map_or(false, |mut dir| {
+            dir.any(|e| {
+                e.ok()
+                    .and_then(|e| e.file_name().into_string().ok())
+                    .map_or(false, |n| n.starts_with("card"))
+            })
+        });
+        if !has_card {
+            return false;
+        }
+        // Mirror libdrmtap's helper_search_paths so the UI status matches what
+        // capture will actually find.
+        const HELPER_PATHS: [&str; 6] = [
+            "/usr/lib/rustdesk/drmtap-helper",
+            "/usr/libexec/drmtap-helper",
+            "/usr/local/libexec/drmtap-helper",
+            "/usr/local/bin/drmtap-helper",
+            "/usr/bin/drmtap-helper",
+            "/usr/lib/drmtap/drmtap-helper",
+        ];
+        HELPER_PATHS.iter().any(|p| std::path::Path::new(p).exists())
+    }
+    #[cfg(not(feature = "drm"))]
+    false
 }
 
 #[inline]

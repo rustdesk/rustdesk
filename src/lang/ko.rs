@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "연결 관리 창 숨기기"),
         ("hide_cm_tip", "비밀번호를 통해 세션을 수락하고 영구 비밀번호를 사용하는 경우에만 숨기기 허용"),
         ("wayland_experiment_tip", "Wayland 지원은 실험 단계에 있으며, 무인 접근이 필요한 경우 X11을 사용해 주세요."),
+        ("drm_capture_tip", "DRM/KMS 직접 캡처를 사용할 수 있습니다 — 포털 승인이 필요하지 않습니다. 무인 접근과 로그인 화면 캡처를 지원합니다."),
         ("Right click to select tabs", "마우스 오른쪽 버튼을 클릭하여 탭 선택"),
         ("Skipped", "건너뜀"),
         ("Add to address book", "주소록에 추가"),

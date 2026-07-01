@@ -398,6 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Göm hanteringsfönster"),
         ("hide_cm_tip", "Tillåt att gömma endast om accepterande sessioner med lösenord och permanenta lösenord"),
         ("wayland_experiment_tip", "Stödet för Wayland är på experimentstadiet. Använd X11 om du behöver obevakad åtkomst."),
+        ("drm_capture_tip", "DRM/KMS-direktinspelning är tillgänglig — inget portalmedgivande krävs. Stöder obevakad åtkomst och inspelning av inloggningsskärmen."),
         ("Right click to select tabs", "Högerklicka för att välja flikar"),
         ("Skipped", "Hoppade över"),
         ("Add to address book", "Lägg till i adressboken"),

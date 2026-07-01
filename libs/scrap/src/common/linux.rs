@@ -8,9 +8,16 @@ use crate::{
 };
 use std::{io, time::Duration};
 
+#[cfg(all(target_os = "linux", feature = "drm"))]
+use super::drm;
+#[cfg(all(target_os = "linux", feature = "drm"))]
+use hbb_common::log;
+
 pub enum Capturer {
     X11(x11::Capturer),
     WAYLAND(wayland::Capturer),
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DRM(drm::Capturer),
 }
 
 impl Capturer {
@@ -18,6 +25,8 @@ impl Capturer {
         Ok(match display {
             Display::X11(d) => Capturer::X11(x11::Capturer::new(d)?),
             Display::WAYLAND(d) => Capturer::WAYLAND(wayland::Capturer::new(d)?),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => Capturer::DRM(drm::Capturer::new(d)?),
         })
     }
 
@@ -25,6 +34,8 @@ impl Capturer {
         match self {
             Capturer::X11(d) => d.width(),
             Capturer::WAYLAND(d) => d.width(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Capturer::DRM(d) => d.width(),
         }
     }
 
@@ -32,6 +43,8 @@ impl Capturer {
         match self {
             Capturer::X11(d) => d.height(),
             Capturer::WAYLAND(d) => d.height(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Capturer::DRM(d) => d.height(),
         }
     }
 }
@@ -41,6 +54,8 @@ impl TraitCapturer for Capturer {
         match self {
             Capturer::X11(d) => d.frame(timeout),
             Capturer::WAYLAND(d) => d.frame(timeout),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Capturer::DRM(d) => d.frame(timeout),
         }
     }
 }
@@ -48,10 +63,28 @@ impl TraitCapturer for Capturer {
 pub enum Display {
     X11(x11::Display),
     WAYLAND(wayland::Display),
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DRM(drm::Display),
 }
 
 impl Display {
     pub fn primary() -> io::Result<Display> {
+        // On Wayland: try DRM/KMS first — no portal consent dialog, works at
+        // the login screen. Falls back to PipeWire/portal if DRM is unavailable
+        // (helper missing, no active CRTC, etc.).
+        #[cfg(all(target_os = "linux", feature = "drm"))]
+        if !super::is_x11() {
+            match drm::Display::primary() {
+                Ok(d) => {
+                    log::info!("DRM/KMS capture active");
+                    return Ok(Display::DRM(d));
+                }
+                Err(e) => log::debug!(
+                    "DRM/KMS capture unavailable ({e}); falling back to PipeWire/portal"
+                ),
+            }
+        }
+
         Ok(if super::is_x11() {
             Display::X11(x11::Display::primary()?)
         } else {
@@ -59,8 +92,24 @@ impl Display {
         })
     }
 
-    // Currently, wayland need to call wayland::clear() before call Display::all()
     pub fn all() -> io::Result<Vec<Display>> {
+        // On Wayland: try DRM/KMS first (see primary() for rationale).
+        #[cfg(all(target_os = "linux", feature = "drm"))]
+        if !super::is_x11() {
+            match drm::Display::all() {
+                Ok(displays) if !displays.is_empty() => {
+                    log::info!("DRM/KMS capture active ({} display(s))", displays.len());
+                    return Ok(displays.into_iter().map(Display::DRM).collect());
+                }
+                Ok(_) => log::debug!(
+                    "DRM/KMS reported no displays; falling back to PipeWire/portal"
+                ),
+                Err(e) => log::debug!(
+                    "DRM/KMS capture unavailable ({e}); falling back to PipeWire/portal"
+                ),
+            }
+        }
+
         Ok(if super::is_x11() {
             x11::Display::all()?
                 .drain(..)
@@ -78,6 +127,8 @@ impl Display {
         match self {
             Display::X11(d) => d.width(),
             Display::WAYLAND(d) => d.width(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.width(),
         }
     }
 
@@ -85,6 +136,8 @@ impl Display {
         match self {
             Display::X11(d) => d.height(),
             Display::WAYLAND(d) => d.height(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.height(),
         }
     }
 
@@ -92,6 +145,8 @@ impl Display {
         match self {
             Display::X11(_d) => 1.0,
             Display::WAYLAND(d) => d.scale(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.scale(),
         }
     }
 
@@ -99,6 +154,8 @@ impl Display {
         match self {
             Display::X11(d) => d.width(),
             Display::WAYLAND(d) => d.logical_width(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.logical_width(),
         }
     }
 
@@ -106,6 +163,8 @@ impl Display {
         match self {
             Display::X11(d) => d.height(),
             Display::WAYLAND(d) => d.logical_height(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.logical_height(),
         }
     }
 
@@ -113,6 +172,8 @@ impl Display {
         match self {
             Display::X11(d) => d.origin(),
             Display::WAYLAND(d) => d.origin(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.origin(),
         }
     }
 
@@ -120,6 +181,8 @@ impl Display {
         match self {
             Display::X11(d) => d.is_online(),
             Display::WAYLAND(d) => d.is_online(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.is_online(),
         }
     }
 
@@ -127,6 +190,8 @@ impl Display {
         match self {
             Display::X11(d) => d.is_primary(),
             Display::WAYLAND(d) => d.is_primary(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.is_primary(),
         }
     }
 
@@ -134,6 +199,8 @@ impl Display {
         match self {
             Display::X11(d) => d.name(),
             Display::WAYLAND(d) => d.name(),
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            Display::DRM(d) => d.name(),
         }
     }
 }
