@@ -899,6 +899,15 @@ class FfiModel with ChangeNotifier {
     final text = evt['text'];
     final link = evt['link'];
 
+    if (type is String && type.startsWith('toast-')) {
+      handleToast({
+        'type': type.substring('toast-'.length),
+        'text': text,
+        'dur_msec': evt['dur_msec'] ?? 5000,
+      }, sessionId, peerId);
+      return;
+    }
+
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
     // This includes connection errors, session-ending messages, elevation errors, etc.
     // Safety: releasing pointer lock on errors prevents the user from being stuck.
@@ -3796,6 +3805,10 @@ class FFI {
 
     if (isDesktop) {
       inputModel.updateTrackpadSpeed();
+    }
+
+    if (isWeb) {
+      ffiModel.updateEventListener(sessionId, id);
     }
 
     // CAUTION: `sessionStart()` and `sessionStartWithDisplays()` are an async functions.

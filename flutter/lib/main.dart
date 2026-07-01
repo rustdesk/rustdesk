@@ -522,14 +522,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             BotToastNavigatorObserver(),
           ],
           builder: isAndroid
-              ? (context, child) => AccessibilityListener(
-                    child: MediaQuery(
-                      data: MediaQuery.of(context).copyWith(
-                        textScaler: TextScaler.linear(1.0),
-                      ),
-                      child: child ?? Container(),
-                    ),
-                  )
+              ? (context, child) {
+                  child = _keepScaleBuilder(context, child);
+                  child = botToastBuilder(context, child);
+                  return AccessibilityListener(child: child);
+                }
               : (context, child) {
                   child = _keepScaleBuilder(context, child);
                   child = botToastBuilder(context, child);
