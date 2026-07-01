@@ -95,6 +95,13 @@ class _TerminalPageState extends State<TerminalPage>
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
 
+    // Auto-close tab when shell exits
+    _terminalModel.onClosed = () {
+      if (mounted) {
+        widget.tabController.closeBy(widget.tabKey);
+      }
+    };
+
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.tabController.onSelected?.call(widget.id);
