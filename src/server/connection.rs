@@ -5361,6 +5361,10 @@ impl Connection {
         if Self::is_connection_housekeeping_message(msg) {
             return None;
         }
+        // File-transfer and terminal sessions may still receive render-broadcast messages from
+        // shared UI/client paths. Treat them as compatibility no-ops: handlers execute them only
+        // for remote/view-camera sessions, and option updates remain filtered by connection type.
+        // Port-forward has no UI/video surface, so it must not bypass scope violation.
         if conn_type != AuthConnType::PortForward
             && !Self::is_video_conn_type(conn_type)
             && Self::is_render_broadcast_message(msg)
