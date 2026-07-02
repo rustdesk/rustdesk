@@ -3353,6 +3353,7 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
     {bool updateCursorPos = true, bool recordSelection = true}) {
   if (recordSelection) {
     ffi.ffiModel.lastUserDisplay = i;
+    ffi.ffiModel.cancelPendingRestoreTimer();
     ffi.ffiModel.pendingMonitorRestore = null;
   }
   final displays = i == kAllDisplayValue

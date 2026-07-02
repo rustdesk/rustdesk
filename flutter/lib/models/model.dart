@@ -1096,6 +1096,11 @@ class FfiModel with ChangeNotifier {
     pendingMonitorRestore = null;
   }
 
+  void cancelPendingRestoreTimer() {
+    _pendingRestoreTimer?.cancel();
+    _pendingRestoreTimer = null;
+  }
+
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
@@ -3943,15 +3948,19 @@ class FFI {
     }
     if (ffiModel.waitForFirstImage.value == true) {
       ffiModel.waitForFirstImage.value = false;
+      ffiModel.cancelPendingRestoreTimer();
       ffiModel.resetRestartReconnectState();
       dialogManager.dismissAll();
-      await canvasModel.updateViewStyle();
-      await canvasModel.updateScrollStyle();
-      await canvasModel.initializeEdgeScrollEdgeThickness();
-      for (final cb in imageModel.callbacksOnFirstImage) {
-        cb(id);
+      try {
+        await canvasModel.updateViewStyle();
+        await canvasModel.updateScrollStyle();
+        await canvasModel.initializeEdgeScrollEdgeThickness();
+        for (final cb in imageModel.callbacksOnFirstImage) {
+          cb(id);
+        }
+      } finally {
+        _applyPendingMonitorRestore();
       }
-      _applyPendingMonitorRestore();
     }
   }
 
@@ -3964,7 +3973,7 @@ class FFI {
     if ((restore == kAllDisplayValue && displays.isNotEmpty) ||
         (restore >= 0 && restore < displays.length)) {
       openMonitorInTheSameTab(restore, this, ffiModel.pi,
-          recordSelection: false);
+          recordSelection: false, updateCursorPos: false);
     }
   }
 
