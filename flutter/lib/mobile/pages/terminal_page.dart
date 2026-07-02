@@ -83,6 +83,13 @@ class _TerminalPageState extends State<TerminalPage>
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
 
+    // Auto-close connection when shell exits
+    _terminalModel.onClosed = () {
+      if (mounted) {
+        closeConnection(id: widget.id);
+      }
+    };
+
     // Web desktop users have full hardware keyboard access, so the on-screen
     // terminal extra keys bar is unnecessary and disabled.
     _showTerminalExtraKeys = !isWebDesktop &&
