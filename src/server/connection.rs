@@ -2502,6 +2502,9 @@ impl Connection {
             }
         }
         if self.authorized {
+            if Self::is_repeated_login_request(&msg) {
+                return true;
+            }
             if let Some(message) = self.authorized_scope_violation(&msg) {
                 return self.handle_authorized_scope_violation(message).await;
             }
@@ -5367,12 +5370,17 @@ impl Connection {
 
     fn is_connection_housekeeping_message(msg: &Message) -> bool {
         match msg.union.as_ref() {
+            Some(message::Union::LoginRequest(_)) => true,
             Some(message::Union::TestDelay(_)) => true,
             Some(message::Union::Misc(misc)) => {
                 matches!(misc.union.as_ref(), Some(misc::Union::CloseReason(_)))
             }
             _ => false,
         }
+    }
+
+    fn is_repeated_login_request(msg: &Message) -> bool {
+        matches!(msg.union.as_ref(), Some(message::Union::LoginRequest(_)))
     }
 
     fn is_video_conn_type(conn_type: AuthConnType) -> bool {
@@ -6682,10 +6690,7 @@ mod test {
                 vec![
                     (msg(|m| m.set_file_action(FileAction::new())), None),
                     (msg(|m| m.set_file_response(FileResponse::new())), None),
-                    (
-                        msg(|m| m.set_login_request(LoginRequest::new())),
-                        Some("login_request"),
-                    ),
+                    (msg(|m| m.set_login_request(LoginRequest::new())), None),
                     (
                         msg(|m| m.set_screenshot_request(ScreenshotRequest::new())),
                         Some("screenshot_request"),
