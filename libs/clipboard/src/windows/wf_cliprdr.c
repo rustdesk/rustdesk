@@ -44,9 +44,11 @@
 /* Registered clipboard formats use IDs 0xC000 through 0xFFFF.
  * https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclipboardformatw */
 #define WF_CLIPRDR_MAX_FORMATS 0x4000u
-/* Registered format names are string atoms, limited to 255 bytes.
+/* Registered format names are string atoms; cap the converted WCHAR name.
  * https://learn.microsoft.com/en-us/windows/win32/dataxchg/about-atom-tables */
-#define WF_CLIPRDR_MAX_FORMAT_NAME_BYTES 255u
+#define WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS 255u
+/* Bound the peer-provided UTF-8 scan separately from the converted Windows name. */
+#define WF_CLIPRDR_MAX_FORMAT_NAME_UTF8_BYTES (WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS * 4u)
 
 /* Validates the remote descriptor array size after cItems has been read safely. */
 static BOOL wf_cliprdr_file_group_descriptor_size_valid(SIZE_T size, UINT count)
@@ -1486,6 +1488,13 @@ static BOOL clear_format_map(wfClipboard *clipboard)
 	return TRUE;
 }
 
+static UINT wf_cliprdr_server_format_list_fail(wfClipboard *clipboard)
+{
+	clear_format_map(clipboard);
+	clipboard->copied = FALSE;
+	return ERROR_INTERNAL_ERROR;
+}
+
 static UINT cliprdr_send_tempdir(wfClipboard *clipboard)
 {
 	CLIPRDR_TEMP_DIRECTORY tempDirectory;
@@ -2478,6 +2487,7 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 
 	if (!clear_format_map(clipboard))
 		return ERROR_INTERNAL_ERROR;
+	clipboard->copied = FALSE;
 
 	if (formatList->numFormats > WF_CLIPRDR_MAX_FORMATS)
 		return ERROR_INTERNAL_ERROR;
@@ -2494,6 +2504,10 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 	{
 		format = &(formatList->formats[i]);
 		mapping = &(clipboard->format_mappings[i]);
+		/* Do not validate the peer-provided formatId as a Windows registered format.
+		 * It is only a remote protocol ID used when requesting data from the peer.
+		 * For named formats, RegisterClipboardFormatW creates the local Windows
+		 * clipboard ID below, and that local ID is checked before publishing. */
 		mapping->remote_format_id = format->formatId;
 
 		if (format->formatName)
@@ -2502,31 +2516,32 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 			int size;
 
 			if (!wf_cliprdr_bounded_strlen(format->formatName,
-			                               WF_CLIPRDR_MAX_FORMAT_NAME_BYTES, &name_len))
+			                               WF_CLIPRDR_MAX_FORMAT_NAME_UTF8_BYTES, &name_len))
 			{
-				clear_format_map(clipboard);
-				return ERROR_INTERNAL_ERROR;
+				return wf_cliprdr_server_format_list_fail(clipboard);
 			}
 
 			if (name_len == 0)
 			{
-				clear_format_map(clipboard);
-				return ERROR_INTERNAL_ERROR;
+				return wf_cliprdr_server_format_list_fail(clipboard);
 			}
 
 			size = MultiByteToWideChar(CP_UTF8, 0, format->formatName, (int)name_len,
 			                           NULL, 0);
 			if (size <= 0)
 			{
-				clear_format_map(clipboard);
-				return ERROR_INTERNAL_ERROR;
+				return wf_cliprdr_server_format_list_fail(clipboard);
+			}
+
+			if ((UINT)size > WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS)
+			{
+				return wf_cliprdr_server_format_list_fail(clipboard);
 			}
 
 			mapping->name = calloc((size_t)size + 1, sizeof(WCHAR));
 			if (!mapping->name)
 			{
-				clear_format_map(clipboard);
-				return ERROR_INTERNAL_ERROR;
+				return wf_cliprdr_server_format_list_fail(clipboard);
 			}
 
 			if (MultiByteToWideChar(CP_UTF8, 0, format->formatName, (int)name_len,
@@ -2534,15 +2549,13 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 			{
 				free(mapping->name);
 				mapping->name = NULL;
-				clear_format_map(clipboard);
-				return ERROR_INTERNAL_ERROR;
+				return wf_cliprdr_server_format_list_fail(clipboard);
 			}
 
 			mapping->local_format_id = RegisterClipboardFormatW((LPWSTR)mapping->name);
 			if (mapping->local_format_id == 0)
 			{
-				clear_format_map(clipboard);
-				return ERROR_INTERNAL_ERROR;
+				return wf_cliprdr_server_format_list_fail(clipboard);
 			}
 		}
 		else
