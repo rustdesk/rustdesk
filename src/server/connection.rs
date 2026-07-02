@@ -5361,17 +5361,15 @@ impl Connection {
         if Self::is_connection_housekeeping_message(msg) {
             return None;
         }
-        // File-transfer and terminal sessions may still receive render-broadcast messages from
-        // shared UI/client paths. Treat them as compatibility no-ops: handlers execute them only
-        // for remote/view-camera sessions, and option updates remain filtered by connection type.
-        // Port-forward has no UI/video surface, so it must not bypass scope violation.
-        if conn_type != AuthConnType::PortForward
-            && !Self::is_video_conn_type(conn_type)
-            && Self::is_render_broadcast_message(msg)
+        // Legacy clients may broadcast video-render refresh messages to every open session.
+        // Keep only the no-op render messages compatible for scoped non-video sessions.
+        if matches!(
+            conn_type,
+            AuthConnType::FileTransfer | AuthConnType::Terminal
+        ) && Self::is_render_broadcast_compat_message(msg)
         {
             return None;
         }
-
         let allowed = match conn_type {
             AuthConnType::Remote => true,
             AuthConnType::FileTransfer => Self::is_file_transfer_scoped_message(msg),
@@ -5382,22 +5380,7 @@ impl Connection {
         (!allowed).then(|| Self::message_family(msg))
     }
 
-    fn is_connection_housekeeping_message(msg: &Message) -> bool {
-        match msg.union.as_ref() {
-            Some(message::Union::LoginRequest(_)) => true,
-            Some(message::Union::TestDelay(_)) => true,
-            Some(message::Union::Misc(misc)) => {
-                matches!(misc.union.as_ref(), Some(misc::Union::CloseReason(_)))
-            }
-            _ => false,
-        }
-    }
-
-    fn is_video_conn_type(conn_type: AuthConnType) -> bool {
-        matches!(conn_type, AuthConnType::Remote | AuthConnType::ViewCamera)
-    }
-
-    fn is_render_broadcast_message(msg: &Message) -> bool {
+    fn is_render_broadcast_compat_message(msg: &Message) -> bool {
         let Some(message::Union::Misc(misc)) = msg.union.as_ref() else {
             return false;
         };
@@ -5426,6 +5409,17 @@ impl Connection {
             && Self::is_bool_option_not_set(option.disable_camera)
             && Self::is_bool_option_not_set(option.terminal_persistent)
             && Self::is_bool_option_not_set(option.show_my_cursor)
+    }
+
+    fn is_connection_housekeeping_message(msg: &Message) -> bool {
+        match msg.union.as_ref() {
+            Some(message::Union::LoginRequest(_)) => true,
+            Some(message::Union::TestDelay(_)) => true,
+            Some(message::Union::Misc(misc)) => {
+                matches!(misc.union.as_ref(), Some(misc::Union::CloseReason(_)))
+            }
+            _ => false,
+        }
     }
 
     fn is_file_transfer_scoped_message(msg: &Message) -> bool {
@@ -5593,6 +5587,8 @@ impl Connection {
                 Some(misc::Union::ChangeResolution(_)) => "misc.change_resolution",
                 Some(misc::Union::ChangeDisplayResolution(_)) => "misc.change_display_resolution",
                 Some(misc::Union::CaptureDisplays(_)) => "misc.capture_displays",
+                Some(misc::Union::RefreshVideo(_)) => "misc.refresh_video",
+                Some(misc::Union::RefreshVideoDisplay(_)) => "misc.refresh_video_display",
                 Some(misc::Union::Option(_)) => "misc.option",
                 None => "misc.empty",
                 _ => "misc",
@@ -6710,6 +6706,23 @@ mod test {
                         misc_msg(|m| m.set_capture_displays(CaptureDisplays::new())),
                         Some("misc.capture_displays"),
                     ),
+                    (misc_msg(|m| m.set_refresh_video(true)), None),
+                    (misc_msg(|m| m.set_refresh_video_display(0)), None),
+                    (
+                        option_msg(|o| {
+                            o.supported_decoding =
+                                hbb_common::protobuf::MessageField::some(Default::default())
+                        }),
+                        None,
+                    ),
+                    (
+                        option_msg(|o| {
+                            o.supported_decoding =
+                                hbb_common::protobuf::MessageField::some(Default::default());
+                            o.disable_audio = BoolOption::Yes.into();
+                        }),
+                        Some("misc.option"),
+                    ),
                 ],
             ),
             (
@@ -6743,6 +6756,23 @@ mod test {
                     (
                         misc_msg(|m| m.set_change_display_resolution(DisplayResolution::new())),
                         Some("misc.change_display_resolution"),
+                    ),
+                    (misc_msg(|m| m.set_refresh_video(true)), None),
+                    (misc_msg(|m| m.set_refresh_video_display(0)), None),
+                    (
+                        option_msg(|o| {
+                            o.supported_decoding =
+                                hbb_common::protobuf::MessageField::some(Default::default())
+                        }),
+                        None,
+                    ),
+                    (
+                        option_msg(|o| {
+                            o.supported_decoding =
+                                hbb_common::protobuf::MessageField::some(Default::default());
+                            o.disable_audio = BoolOption::Yes.into();
+                        }),
+                        Some("misc.option"),
                     ),
                 ],
             ),
@@ -6825,6 +6855,21 @@ mod test {
                     (
                         msg(|m| m.set_screenshot_request(ScreenshotRequest::new())),
                         Some("screenshot_request"),
+                    ),
+                    (
+                        misc_msg(|m| m.set_refresh_video(true)),
+                        Some("misc.refresh_video"),
+                    ),
+                    (
+                        misc_msg(|m| m.set_refresh_video_display(0)),
+                        Some("misc.refresh_video_display"),
+                    ),
+                    (
+                        option_msg(|o| {
+                            o.supported_decoding =
+                                hbb_common::protobuf::MessageField::some(Default::default())
+                        }),
+                        Some("misc.option"),
                     ),
                 ],
             ),
