@@ -5361,7 +5361,10 @@ impl Connection {
         if Self::is_connection_housekeeping_message(msg) {
             return None;
         }
-        if !Self::is_video_conn_type(conn_type) && Self::is_render_broadcast_message(msg) {
+        if conn_type != AuthConnType::PortForward
+            && !Self::is_video_conn_type(conn_type)
+            && Self::is_render_broadcast_message(msg)
+        {
             return None;
         }
 
