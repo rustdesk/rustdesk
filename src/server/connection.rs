@@ -3436,10 +3436,14 @@ impl Connection {
                     }
                     #[cfg(windows)]
                     Some(misc::Union::ToggleVirtualDisplay(t)) => {
-                        self.toggle_virtual_display(t).await;
+                        if !self.view_camera {
+                            self.toggle_virtual_display(t).await;
+                        }
                     }
                     Some(misc::Union::TogglePrivacyMode(t)) => {
-                        self.toggle_privacy_mode(t).await;
+                        if !self.view_camera {
+                            self.toggle_privacy_mode(t).await;
+                        }
                     }
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
@@ -3447,19 +3451,27 @@ impl Connection {
                         self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::Option(o)) => {
-                        self.update_options(&o).await;
+                        if self.should_handle_render_broadcast_message()
+                            || !Self::is_supported_decoding_only_option(&o)
+                        {
+                            self.update_options(&o).await;
+                        }
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
-                        if r {
-                            // Refresh all videos.
-                            // Compatibility with old versions and sciter(remote).
-                            self.refresh_video_display(None);
+                        if self.should_handle_render_broadcast_message() {
+                            if r {
+                                // Refresh all videos.
+                                // Compatibility with old versions and sciter(remote).
+                                self.refresh_video_display(None);
+                            }
+                            self.update_auto_disconnect_timer();
                         }
-                        self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::RefreshVideoDisplay(display)) => {
-                        self.refresh_video_display(Some(display as usize));
-                        self.update_auto_disconnect_timer();
+                        if self.should_handle_render_broadcast_message() {
+                            self.refresh_video_display(Some(display as usize));
+                            self.update_auto_disconnect_timer();
+                        }
                     }
                     Some(misc::Union::VideoReceived(_)) => {
                         video_service::notify_video_frame_fetched_by_conn_id(
@@ -3527,10 +3539,16 @@ impl Connection {
                         }
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::ChangeResolution(r)) => self.change_resolution(None, &r),
+                    Some(misc::Union::ChangeResolution(r)) => {
+                        if !self.view_camera {
+                            self.change_resolution(None, &r);
+                        }
+                    }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::ChangeDisplayResolution(dr)) => {
-                        self.change_resolution(Some(dr.display as _), &dr.resolution)
+                        if !self.view_camera {
+                            self.change_resolution(Some(dr.display as _), &dr.resolution);
+                        }
                     }
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -5236,6 +5254,13 @@ impl Connection {
         false
     }
 
+    fn should_handle_render_broadcast_message(&self) -> bool {
+        matches!(
+            self.authed_conn_type(),
+            Some(AuthConnType::Remote | AuthConnType::ViewCamera)
+        )
+    }
+
     fn authed_conn_type(&self) -> Option<AuthConnType> {
         self.authed_conn_id.as_ref().map(|id| id.conn_type())
     }
@@ -5326,6 +5351,9 @@ impl Connection {
         if Self::is_connection_housekeeping_message(msg) {
             return None;
         }
+        if !Self::is_video_conn_type(conn_type) && Self::is_render_broadcast_message(msg) {
+            return None;
+        }
 
         let allowed = match conn_type {
             AuthConnType::Remote => true,
@@ -5345,6 +5373,41 @@ impl Connection {
             }
             _ => false,
         }
+    }
+
+    fn is_video_conn_type(conn_type: AuthConnType) -> bool {
+        matches!(conn_type, AuthConnType::Remote | AuthConnType::ViewCamera)
+    }
+
+    fn is_render_broadcast_message(msg: &Message) -> bool {
+        let Some(message::Union::Misc(misc)) = msg.union.as_ref() else {
+            return false;
+        };
+        match misc.union.as_ref() {
+            Some(misc::Union::RefreshVideo(_)) | Some(misc::Union::RefreshVideoDisplay(_)) => true,
+            Some(misc::Union::Option(option)) => Self::is_supported_decoding_only_option(option),
+            _ => false,
+        }
+    }
+
+    fn is_supported_decoding_only_option(option: &OptionMessage) -> bool {
+        option.supported_decoding.clone().take().is_some()
+            && option.image_quality.enum_value() == Ok(ImageQuality::NotSet)
+            && option.custom_image_quality == 0
+            && option.custom_fps == 0
+            && Self::is_bool_option_not_set(option.lock_after_session_end)
+            && Self::is_bool_option_not_set(option.show_remote_cursor)
+            && Self::is_bool_option_not_set(option.privacy_mode)
+            && Self::is_bool_option_not_set(option.block_input)
+            && Self::is_bool_option_not_set(option.disable_audio)
+            && Self::is_bool_option_not_set(option.disable_clipboard)
+            && Self::is_bool_option_not_set(option.enable_file_transfer)
+            && Self::is_bool_option_not_set(option.disable_keyboard)
+            && Self::is_bool_option_not_set(option.follow_remote_cursor)
+            && Self::is_bool_option_not_set(option.follow_remote_window)
+            && Self::is_bool_option_not_set(option.disable_camera)
+            && Self::is_bool_option_not_set(option.terminal_persistent)
+            && Self::is_bool_option_not_set(option.show_my_cursor)
     }
 
     fn is_file_transfer_scoped_message(msg: &Message) -> bool {
@@ -5404,7 +5467,13 @@ impl Connection {
             | Some(misc::Union::ChatMessage(_))
             | Some(misc::Union::AudioFormat(_))
             | Some(misc::Union::ClientRecordStatus(_))
-            | Some(misc::Union::MessageQuery(_)) => true,
+            // Though these messages are not expected in normal view-camera sessions,
+            // keep them allowed to avoid breaking existing clients that may send them.
+            | Some(misc::Union::MessageQuery(_))
+            | Some(misc::Union::TogglePrivacyMode(_))
+            | Some(misc::Union::ToggleVirtualDisplay(_))
+            | Some(misc::Union::ChangeResolution(_))
+            | Some(misc::Union::ChangeDisplayResolution(_)) => true,
             Some(misc::Union::Option(option)) => Self::is_view_camera_scoped_option(option),
             #[cfg(windows)]
             Some(misc::Union::SelectedSid(_)) => true,
@@ -5500,6 +5569,10 @@ impl Connection {
             Some(message::Union::ScreenshotRequest(_)) => "screenshot_request",
             Some(message::Union::TerminalAction(_)) => "terminal_action",
             Some(message::Union::Misc(misc)) => match misc.union.as_ref() {
+                Some(misc::Union::TogglePrivacyMode(_)) => "misc.toggle_privacy_mode",
+                Some(misc::Union::ToggleVirtualDisplay(_)) => "misc.toggle_virtual_display",
+                Some(misc::Union::ChangeResolution(_)) => "misc.change_resolution",
+                Some(misc::Union::ChangeDisplayResolution(_)) => "misc.change_display_resolution",
                 Some(misc::Union::CaptureDisplays(_)) => "misc.capture_displays",
                 Some(misc::Union::Option(_)) => "misc.option",
                 None => "misc.empty",
@@ -6640,8 +6713,20 @@ mod test {
                         Some("file_action"),
                     ),
                     (
-                        option_msg(|o| o.block_input = BoolOption::Yes.into()),
-                        Some("misc.option"),
+                        misc_msg(|m| m.set_toggle_privacy_mode(TogglePrivacyMode::new())),
+                        Some("misc.toggle_privacy_mode"),
+                    ),
+                    (
+                        misc_msg(|m| m.set_toggle_virtual_display(ToggleVirtualDisplay::new())),
+                        Some("misc.toggle_virtual_display"),
+                    ),
+                    (
+                        misc_msg(|m| m.set_change_resolution(Resolution::new())),
+                        Some("misc.change_resolution"),
+                    ),
+                    (
+                        misc_msg(|m| m.set_change_display_resolution(DisplayResolution::new())),
+                        Some("misc.change_display_resolution"),
                     ),
                 ],
             ),
@@ -6663,6 +6748,22 @@ mod test {
                         None,
                     ),
                     (
+                        misc_msg(|m| m.set_toggle_privacy_mode(TogglePrivacyMode::new())),
+                        None,
+                    ),
+                    (
+                        misc_msg(|m| m.set_toggle_virtual_display(ToggleVirtualDisplay::new())),
+                        None,
+                    ),
+                    (
+                        misc_msg(|m| m.set_change_resolution(Resolution::new())),
+                        None,
+                    ),
+                    (
+                        misc_msg(|m| m.set_change_display_resolution(DisplayResolution::new())),
+                        None,
+                    ),
+                    (
                         msg(|m| m.set_mouse_event(MouseEvent::new())),
                         Some("mouse_event"),
                     ),
@@ -6679,10 +6780,6 @@ mod test {
                     (
                         msg(|m| m.set_terminal_action(TerminalAction::new())),
                         Some("terminal_action"),
-                    ),
-                    (
-                        option_msg(|o| o.block_input = BoolOption::Yes.into()),
-                        Some("misc.option"),
                     ),
                 ],
             ),
