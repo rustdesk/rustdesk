@@ -2502,7 +2502,7 @@ impl Connection {
             }
         }
         if self.authorized {
-            if Self::is_repeated_login_request(&msg) {
+            if matches!(msg.union.as_ref(), Some(message::Union::LoginRequest(_))) {
                 return true;
             }
             if let Some(message) = self.authorized_scope_violation(&msg) {
@@ -5387,10 +5387,6 @@ impl Connection {
             }
             _ => false,
         }
-    }
-
-    fn is_repeated_login_request(msg: &Message) -> bool {
-        matches!(msg.union.as_ref(), Some(message::Union::LoginRequest(_)))
     }
 
     fn is_video_conn_type(conn_type: AuthConnType) -> bool {
