@@ -5457,6 +5457,7 @@ impl Connection {
 
     fn is_view_camera_scoped_message(msg: &Message) -> bool {
         match msg.union.as_ref() {
+            Some(message::Union::ScreenshotRequest(_)) => true,
             Some(message::Union::Misc(misc)) => Self::is_view_camera_scoped_misc(misc),
             Some(message::Union::AudioFrame(_))
             | Some(message::Union::VoiceCallRequest(_))
