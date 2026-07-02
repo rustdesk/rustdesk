@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Ретранслируемое подключение"),
         ("Secure Connection", "Безопасное подключение"),
         ("Insecure Connection", "Небезопасное подключение"),
+        ("Continue", ""),
         ("Scale original", "Оригинальный масштаб"),
         ("Scale adaptive", "Адаптивный масштаб"),
         ("General", "Общие"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Показывать на свёрнутой панели инструментов"),
         ("All monitors", "Все мониторы"),
         ("#{} monitor", "Монитор {}"),
+        ("conn-e2ee-unavailable-tip", "Не удалось проверить сквозное шифрование для этого сеанса.\nСервер RustDesk может быть изменен, ненадежен или вредоносен.\nВы все равно хотите продолжить?"),
     ].iter().cloned().collect();
 }

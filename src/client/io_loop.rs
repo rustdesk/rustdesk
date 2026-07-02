@@ -14,6 +14,7 @@ use crate::{
 // Empirical no-data window before exposing the restart reconnect state to the UI.
 // Restart msgbox text is kept as a legacy UI fallback; Flutter handles the type as a control event.
 const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
+const KCP_CLOSE_REASON_FLUSH_DELAY: Duration = Duration::from_millis(30);
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
 #[cfg(any(
@@ -183,8 +184,17 @@ impl<T: InvokeUiSession> Remote<T> {
                     .lock()
                     .unwrap()
                     .set_connected();
+                let is_secured = peer.is_secured();
                 self.handler
-                    .set_connection_type(peer.is_secured(), direct, stream_type); // flutter -> connection_ready
+                    .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
+                if !is_secured && !self.confirm_insecure_connection().await {
+                    self.send_close_reason(&mut peer, "").await;
+                    if kcp.is_some() {
+                        tokio::time::sleep(KCP_CLOSE_REASON_FLUSH_DELAY).await;
+                    }
+                    self.handle_disconnected(round);
+                    return;
+                }
                 self.handler.update_direct(Some(direct));
                 if conn_type == ConnType::DEFAULT_CONN || conn_type == ConnType::VIEW_CAMERA {
                     self.handler
@@ -338,13 +348,17 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.send_close_reason(&mut peer, "kcp").await;
                     // KCP does not send messages immediately, so wait to ensure the last message is sent.
                     // 1ms works in my test, but 30ms is more reliable.
-                    tokio::time::sleep(Duration::from_millis(30)).await;
+                    tokio::time::sleep(KCP_CLOSE_REASON_FLUSH_DELAY).await;
                 }
             }
             Err(err) => {
                 self.handler.on_establish_connection_error(err.to_string());
             }
         }
+        self.handle_disconnected(round);
+    }
+
+    fn handle_disconnected(&self, round: u32) {
         // set_disconnected_ok is used to check if new connection round is started.
         let _set_disconnected_ok = self
             .handler
@@ -364,6 +378,23 @@ impl<T: InvokeUiSession> Remote<T> {
             // unmounted. Keep this async path for other file-clipboard platforms.
             crate::clipboard::try_empty_clipboard_files(ClipboardSide::Client, self.client_conn_id);
         }
+    }
+
+    async fn confirm_insecure_connection(&mut self) -> bool {
+        self.handler.msgbox(
+            "insecure-connection-nocancel-hasclose",
+            "Insecure Connection",
+            "conn-e2ee-unavailable-tip",
+            "",
+        );
+        while let Some(data) = self.receiver.recv().await {
+            match data {
+                Data::ContinueInsecureConnection => return true,
+                Data::Close => return false,
+                _ => {}
+            }
+        }
+        false
     }
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]

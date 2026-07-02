@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Releja savienojums"),
         ("Secure Connection", "Drošs savienojums"),
         ("Insecure Connection", "Nedrošs savienojums"),
+        ("Continue", ""),
         ("Scale original", "Mērogs oriģināls"),
         ("Scale adaptive", "Mērogs adaptīvs"),
         ("General", "Vispārīgi"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Rādīt minimizētajā rīkjoslā"),
         ("All monitors", "Visi monitori"),
         ("#{} monitor", "Monitors {}"),
+        ("conn-e2ee-unavailable-tip", "Šai sesijai neizdevās pārbaudīt pilnīgu šifrēšanu.\nRustDesk serveris var būt modificēts, neuzticams vai ļaunprātīgs.\nVai joprojām vēlaties turpināt?"),
     ].iter().cloned().collect();
 }

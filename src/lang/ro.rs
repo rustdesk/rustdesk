@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Conexiune prin retransmisie"),
         ("Secure Connection", "Conexiune securizată"),
         ("Insecure Connection", "Conexiune nesecurizată"),
+        ("Continue", ""),
         ("Scale original", "Dimensiune originală"),
         ("Scale adaptive", "Scalare automată"),
         ("General", "General"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Afișează în bara de instrumente minimizată"),
         ("All monitors", "Toate monitoarele"),
         ("#{} monitor", "Monitor {}"),
+        ("conn-e2ee-unavailable-tip", "Criptarea end-to-end nu a putut fi verificată pentru această sesiune.\nServerul RustDesk poate fi modificat, nefiabil sau rău intenționat.\nDoriți totuși să continuați?"),
     ].iter().cloned().collect();
 }

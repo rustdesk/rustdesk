@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Connessione relay"),
         ("Secure Connection", "Connessione sicura"),
         ("Insecure Connection", "Connessione non sicura"),
+        ("Continue", ""),
         ("Scale original", "Scala originale"),
         ("Scale adaptive", "Scala adattiva"),
         ("General", "Generale"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Visualizza nella barra strumenti ridotta a icona"),
         ("All monitors", "Tutti gli schermi"),
         ("#{} monitor", "Schermo {}"),
+        ("conn-e2ee-unavailable-tip", "Non è stato possibile verificare la crittografia end-to-end per questa sessione.\nIl server RustDesk potrebbe essere modificato, non attendibile o dannoso.\nVuoi comunque continuare?"),
     ].iter().cloned().collect();
 }

@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Рэтрансляванае падключэнне"),
         ("Secure Connection", "Бяспечнае падключэнне"),
         ("Insecure Connection", "Нябяспечнае падключэнне"),
+        ("Continue", ""),
         ("Scale original", "Арыгінальны маштаб"),
         ("Scale adaptive", "Адаптыўны маштаб"),
         ("General", "Агульныя"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Паказваць на згорнутай панэлі інструментаў"),
         ("All monitors", "Усе манітори"),
         ("#{} monitor", "Манітор {}"),
+        ("conn-e2ee-unavailable-tip", "Не ўдалося праверыць скразное шыфраванне для гэтага сеанса.\nСервер RustDesk можа быць зменены, ненадзейны або шкоднасны.\nВы ўсё яшчэ хочаце працягнуць?"),
     ].iter().cloned().collect();
 }

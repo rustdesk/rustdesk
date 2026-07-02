@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Relay ارتباط"),
         ("Secure Connection", "ارتباط امن"),
         ("Insecure Connection", "ارتباط غیر امن"),
+        ("Continue", ""),
         ("Scale original", "مقیاس اصلی"),
         ("Scale adaptive", "مقیاس تطبیقی"),
         ("General", "عمومی"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "نمایش در نوار ابزار کوچک‌شده"),
         ("All monitors", "همه نمایشگرها"),
         ("#{} monitor", "نمایشگر {}"),
+        ("conn-e2ee-unavailable-tip", "رمزنگاری سرتاسری برای این نشست قابل تأیید نیست.\nسرور RustDesk ممکن است تغییر یافته، نامطمئن یا مخرب باشد.\nآیا هنوز می‌خواهید ادامه دهید؟"),
     ].iter().cloned().collect();
 }

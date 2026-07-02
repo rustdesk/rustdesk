@@ -52,6 +52,7 @@ use crate::keyboard;
 use crate::{client::Data, client::Interface};
 
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
+pub const INSECURE_CONNECTION_CONFIRM_OPTION: &str = "insecure-connection-confirmed";
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
@@ -1406,6 +1407,10 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn close(&self) {
         self.send(Data::Close);
+    }
+
+    pub fn continue_insecure_connection(&self) {
+        self.send(Data::ContinueInsecureConnection);
     }
 
     fn try_auto_start_job_str(is_reconnected: bool, job_str: &str) -> Option<String> {

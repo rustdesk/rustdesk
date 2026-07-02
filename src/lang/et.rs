@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Releeühendus"),
         ("Secure Connection", "Turvaline ühendus"),
         ("Insecure Connection", "Ebaturvaline ühendus"),
+        ("Continue", ""),
         ("Scale original", "Originaalskaala"),
         ("Scale adaptive", "Kohanduv skaala"),
         ("General", "Üldine"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Näita minimeeritud tööriistaribal"),
         ("All monitors", "Kõik kuvarid"),
         ("#{} monitor", "Kuvar {}"),
+        ("conn-e2ee-unavailable-tip", "Selle seansi otspunktkrüptimist ei saanud kontrollida.\nRustDesk server võib olla muudetud, ebausaldusväärne või pahatahtlik.\nKas soovite siiski jätkata?"),
     ].iter().cloned().collect();
 }

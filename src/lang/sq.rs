@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Lidhja rele"),
         ("Secure Connection", "Lidhje e sigurt"),
         ("Insecure Connection", "Lidhje e pasigurt"),
+        ("Continue", ""),
         ("Scale original", "Shkalla origjinale"),
         ("Scale adaptive", " E përsjhtatshme në shkallë"),
         ("General", "Gjeneral"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Shfaq te shiriti i minimizuar i veglave"),
         ("All monitors", "Të gjithë monitorët"),
         ("#{} monitor", "Monitori {}"),
+        ("conn-e2ee-unavailable-tip", "Enkriptimi nga skaji në skaj nuk mund të verifikohej për këtë seancë.\nServeri RustDesk mund të jetë i modifikuar, i pabesueshëm ose keqdashës.\nDëshironi të vazhdoni gjithsesi?"),
     ].iter().cloned().collect();
 }

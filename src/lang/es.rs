@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Conexión Relay"),
         ("Secure Connection", "Conexión segura"),
         ("Insecure Connection", "Conexión insegura"),
+        ("Continue", ""),
         ("Scale original", "Escala original"),
         ("Scale adaptive", "Escala adaptativa"),
         ("General", "General"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Mostrar en la barra de herramientas minimizada"),
         ("All monitors", "Todos los monitores"),
         ("#{} monitor", "Monitor {}"),
+        ("conn-e2ee-unavailable-tip", "No se pudo verificar el cifrado de extremo a extremo para esta sesión.\nEl servidor RustDesk puede estar modificado, no ser de confianza o ser malicioso.\n¿Aún desea continuar?"),
     ].iter().cloned().collect();
 }

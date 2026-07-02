@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Connexion via relais"),
         ("Secure Connection", "Connexion sécurisée"),
         ("Insecure Connection", "Connexion non sécurisée"),
+        ("Continue", ""),
         ("Scale original", "Échelle originale"),
         ("Scale adaptive", "Échelle adaptative"),
         ("General", "Général"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Afficher dans la barre d’outils réduite"),
         ("All monitors", "Tous les moniteurs"),
         ("#{} monitor", "Moniteur {}"),
+        ("conn-e2ee-unavailable-tip", "Le chiffrement de bout en bout n'a pas pu être vérifié pour cette session.\nLe serveur RustDesk peut être modifié, non fiable ou malveillant.\nVoulez-vous toujours continuer ?"),
     ].iter().cloned().collect();
 }

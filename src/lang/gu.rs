@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "રિલે કનેક્શન"),
         ("Secure Connection", "સુરક્ષિત કનેક્શન"),
         ("Insecure Connection", "અસુરક્ષિત કનેક્શન"),
+        ("Continue", ""),
         ("Scale original", "મૂળ સ્કેલ"),
         ("Scale adaptive", "એડેપ્ટિવ સ્કેલ"),
         ("General", "સામાન્ય"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "ન્યૂનતમ કરેલા ટૂલબાર પર બતાવો"),
         ("All monitors", "બધા મોનિટર"),
         ("#{} monitor", "મોનિટર {}"),
+        ("conn-e2ee-unavailable-tip", "આ સત્ર માટે એન્ડ-ટુ-એન્ડ એન્ક્રિપ્શનની ચકાસણી કરી શકાઈ નથી.\nRustDesk સર્વર બદલાયેલું, અવિશ્વસનીય અથવા દુર્ભાવનાપૂર્ણ હોઈ શકે છે.\nશું તમે હજુ પણ ચાલુ રાખવા માંગો છો?"),
     ].iter().cloned().collect();
 }

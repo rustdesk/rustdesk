@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Релай Қосылым"),
         ("Secure Connection", "Қауіпсіз Қосылым"),
         ("Insecure Connection", "Қатерлі Қосылым"),
+        ("Continue", ""),
         ("Scale original", "Scale original"),
         ("Scale adaptive", "Scale adaptive"),
         ("General", "Жалпы"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Кішірейтілген құралдар тақтасында көрсету"),
         ("All monitors", "Барлық мониторлар"),
         ("#{} monitor", "Монитор {}"),
+        ("conn-e2ee-unavailable-tip", "Бұл сеанс үшін ұштан-ұшқа шифрлауды тексеру мүмкін болмады.\nRustDesk сервері өзгертілген, сенімсіз немесе зиянды болуы мүмкін.\nСонда да жалғастырғыңыз келе ме?"),
     ].iter().cloned().collect();
 }

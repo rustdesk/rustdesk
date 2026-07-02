@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "חיבור באמצעות ממסר"),
         ("Secure Connection", "חיבור מאובטח"),
         ("Insecure Connection", "חיבור לא מאובטח"),
+        ("Continue", ""),
         ("Scale original", "קנה מידה מקורי"),
         ("Scale adaptive", "קנה מידה מותאם"),
         ("General", "כללי"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "הצגה בסרגל הכלים הממוזער"),
         ("All monitors", "כל המסכים"),
         ("#{} monitor", "מסך {}"),
+        ("conn-e2ee-unavailable-tip", "לא ניתן היה לאמת את ההצפנה מקצה לקצה עבור הפעלה זו.\nשרת RustDesk עשוי להיות שונה, לא מהימן או זדוני.\nהאם עדיין ברצונך להמשיך?"),
     ].iter().cloned().collect();
 }

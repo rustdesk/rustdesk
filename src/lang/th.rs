@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "การเชื่อมต่อแบบ Relay "),
         ("Secure Connection", "การเชื่อมต่อที่ปลอดภัย"),
         ("Insecure Connection", "การเชื่อมต่อที่ไม่ปลอดภัย"),
+        ("Continue", ""),
         ("Scale original", "ขนาดเดิม"),
         ("Scale adaptive", "ขนาดยืดหยุ่น"),
         ("General", "ทั่วไป"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "แสดงบนแถบเครื่องมือที่ย่อเล็กสุด"),
         ("All monitors", "จอภาพทั้งหมด"),
         ("#{} monitor", "จอภาพ {}"),
+        ("conn-e2ee-unavailable-tip", "ไม่สามารถยืนยันการเข้ารหัสแบบต้นทางถึงปลายทางสำหรับเซสชันนี้ได้\nเซิร์ฟเวอร์ RustDesk อาจถูกดัดแปลง ไม่น่าเชื่อถือ หรือเป็นอันตราย\nคุณยังต้องการดำเนินการต่อหรือไม่?"),
     ].iter().cloned().collect();
 }

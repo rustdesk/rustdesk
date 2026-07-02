@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "اتصال الوسيط"),
         ("Secure Connection", "اتصال آمن"),
         ("Insecure Connection", "اتصال غير آمن"),
+        ("Continue", ""),
         ("Scale original", "المقياس الأصلي"),
         ("Scale adaptive", "مقياس التكيف"),
         ("General", "عام"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "الإظهار على شريط الأدوات المُصغّر"),
         ("All monitors", "جميع الشاشات"),
         ("#{} monitor", "الشاشة رقم {}"),
+        ("conn-e2ee-unavailable-tip", "تعذر التحقق من التشفير من طرف إلى طرف لهذه الجلسة.\nقد يكون خادم RustDesk معدلا أو غير موثوق به أو ضارا.\nهل ما زلت تريد المتابعة؟"),
     ].iter().cloned().collect();
 }

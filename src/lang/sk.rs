@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Reléové pripojenie"),
         ("Secure Connection", "Zabezpečené pripojenie"),
         ("Insecure Connection", "Nezabezpečené pripojenie"),
+        ("Continue", ""),
         ("Scale original", "Pôvodná mierka"),
         ("Scale adaptive", "Prispôsobivá mierka"),
         ("General", "Všeobecné"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Zobraziť na minimalizovanom paneli nástrojov"),
         ("All monitors", "Všetky monitory"),
         ("#{} monitor", "Monitor {}"),
+        ("conn-e2ee-unavailable-tip", "Pre túto reláciu nebolo možné overiť koncové šifrovanie.\nServer RustDesk môže byť upravený, nedôveryhodný alebo škodlivý.\nChcete napriek tomu pokračovať?"),
     ].iter().cloned().collect();
 }

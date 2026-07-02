@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "中継接続"),
         ("Secure Connection", "安全な接続"),
         ("Insecure Connection", "安全でない接続"),
+        ("Continue", ""),
         ("Scale original", "オリジナルのサイズ"),
         ("Scale adaptive", "ウィンドウに合わせる"),
         ("General", "一般"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "最小化したツールバーに表示"),
         ("All monitors", "すべてのディスプレイ"),
         ("#{} monitor", "ディスプレイ {}"),
+        ("conn-e2ee-unavailable-tip", "このセッションのエンドツーエンド暗号化を確認できませんでした。\nRustDesk サーバーは変更されている、信頼できない、または悪意がある可能性があります。\nそれでも続行しますか？"),
     ].iter().cloned().collect();
 }

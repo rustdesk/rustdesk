@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Tarpinė jungtis"),
         ("Secure Connection", "Saugus ryšys"),
         ("Insecure Connection", "Nesaugus ryšys"),
+        ("Continue", ""),
         ("Scale original", "Pakeisti originalų mastelį"),
         ("Scale adaptive", "Pritaikomas mastelis"),
         ("General", "Bendra"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Rodyti sumažintoje įrankių juostoje"),
         ("All monitors", "Visi monitoriai"),
         ("#{} monitor", "Monitorius {}"),
+        ("conn-e2ee-unavailable-tip", "Šios sesijos galinio šifravimo nepavyko patikrinti.\nRustDesk serveris gali būti pakeistas, nepatikimas arba kenkėjiškas.\nAr vis tiek norite tęsti?"),
     ].iter().cloned().collect();
 }

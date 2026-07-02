@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Posredna konekcija"),
         ("Secure Connection", "Bezbedna konekcija"),
         ("Insecure Connection", "Nebezbedna konekcija"),
+        ("Continue", ""),
         ("Scale original", "Skaliraj original"),
         ("Scale adaptive", "Adaptivno skaliranje"),
         ("General", "Uopšteno"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Прикажи на умањеној траци са алаткама"),
         ("All monitors", "Svi monitori"),
         ("#{} monitor", "Monitor {}"),
+        ("conn-e2ee-unavailable-tip", "Енд-то-енд шифровање није могло бити проверено за ову сесију.\nRustDesk сервер може бити измењен, непоуздан или злонамеран.\nДа ли и даље желите да наставите?"),
     ].iter().cloned().collect();
 }

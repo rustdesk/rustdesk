@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "რეტრანსლირებული კავშირი"),
         ("Secure Connection", "უსაფრთხო კავშირი"),
         ("Insecure Connection", "არაუსაფრთხო კავშირი"),
+        ("Continue", ""),
         ("Scale original", "ორიგინალური მასშტაბი"),
         ("Scale adaptive", "ადაპტირებადი მასშტაბი"),
         ("General", "ზოგადი"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "ჩვენება ჩაკეცილ ხელსაწყოთა ზოლზე"),
         ("All monitors", "ყველა მონიტორი"),
         ("#{} monitor", "მონიტორი {}"),
+        ("conn-e2ee-unavailable-tip", "ამ სესიისთვის ბოლომდე დაშიფვრის გადამოწმება ვერ მოხერხდა.\nRustDesk სერვერი შეიძლება შეცვლილი, არასანდო ან მავნე იყოს.\nმაინც გსურთ გაგრძელება?"),
     ].iter().cloned().collect();
 }

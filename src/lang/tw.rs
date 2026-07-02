@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "中繼連線"),
         ("Secure Connection", "安全連線"),
         ("Insecure Connection", "非安全連線"),
+        ("Continue", ""),
         ("Scale original", "原始尺寸"),
         ("Scale adaptive", "適應視窗"),
         ("General", "一般"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "在最小化工具列上顯示"),
         ("All monitors", "所有顯示器"),
         ("#{} monitor", "{}號顯示器"),
+        ("conn-e2ee-unavailable-tip", "無法驗證此工作階段的端對端加密。\nRustDesk 伺服器可能已被修改、不受信任或具有惡意。\n您仍要繼續嗎？"),
     ].iter().cloned().collect();
 }

@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Релейна връзка"),
         ("Secure Connection", "Сигурна връзка"),
         ("Insecure Connection", "Несигурна връзка"),
+        ("Continue", ""),
         ("Scale original", "Оригинален мащаб"),
         ("Scale adaptive", "Приспособимо мащабиране"),
         ("General", "Основен"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Показване в минимизираната лента с инструменти"),
         ("All monitors", "Всички монитори"),
         ("#{} monitor", "Монитор {}"),
+        ("conn-e2ee-unavailable-tip", "Шифроването от край до край не може да бъде проверено за тази сесия.\nСървърът на RustDesk може да е модифициран, ненадежден или злонамерен.\nВсе още ли искате да продължите?"),
     ].iter().cloned().collect();
 }

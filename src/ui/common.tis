@@ -296,6 +296,14 @@ function msgbox(type, title, content, link="", callback=null, height=180, width=
               else msgbox("connecting", "Connecting...", "Logging in...");
             }
         };
+    } else if (type.indexOf("insecure-connection") >= 0) {
+        callback = function (res) {
+            if (!res) {
+                view.close();
+                return;
+            }
+            handler.continue_insecure_connection();
+        };
     } else if (type.indexOf("custom") < 0 && !is_port_forward && !callback) {
         callback = function() { view.close(); }
     } else if (type == 'wait-remote-accept-nook') {
