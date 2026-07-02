@@ -3454,9 +3454,7 @@ impl Connection {
                         self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::Option(o)) => {
-                        if self.should_handle_render_broadcast_message()
-                            || !Self::is_supported_decoding_only_option(&o)
-                        {
+                        if self.should_update_option_message(&o) {
                             self.update_options(&o).await;
                         }
                     }
@@ -5262,6 +5260,15 @@ impl Connection {
             self.authed_conn_type(),
             Some(AuthConnType::Remote | AuthConnType::ViewCamera)
         )
+    }
+
+    fn should_update_option_message(&self, option: &OptionMessage) -> bool {
+        match self.authed_conn_type() {
+            Some(AuthConnType::Remote) => true,
+            Some(AuthConnType::ViewCamera) => Self::is_view_camera_scoped_option(option),
+            Some(AuthConnType::Terminal) => Self::is_terminal_scoped_option(option),
+            Some(AuthConnType::FileTransfer | AuthConnType::PortForward) | None => false,
+        }
     }
 
     fn authed_conn_type(&self) -> Option<AuthConnType> {
