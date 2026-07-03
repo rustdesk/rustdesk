@@ -3458,7 +3458,9 @@ impl Connection {
                         self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::Option(o)) => {
-                        if let Some(option) = self.scoped_update_option_message(&o) {
+                        if self.authed_conn_type() == Some(AuthConnType::Remote) {
+                            self.update_options(&o).await;
+                        } else if let Some(option) = self.scoped_update_option_message(&o) {
                             self.update_options(&option).await;
                         }
                     }
@@ -5273,10 +5275,10 @@ impl Connection {
 
     fn scoped_update_option_message(&self, option: &OptionMessage) -> Option<OptionMessage> {
         match self.authed_conn_type() {
-            Some(AuthConnType::Remote) => Some(option.clone()),
             Some(AuthConnType::ViewCamera) => Self::scoped_view_camera_option(option).0,
             Some(AuthConnType::Terminal) => Self::scoped_terminal_login_option(option).0,
-            Some(AuthConnType::FileTransfer | AuthConnType::PortForward) | None => None,
+            Some(AuthConnType::Remote | AuthConnType::FileTransfer | AuthConnType::PortForward)
+            | None => None,
         }
     }
 
@@ -5385,10 +5387,9 @@ impl Connection {
         // These messages are no-ops for scoped non-video sessions; PortForward only keeps
         // this render-broadcast no-op compatibility, not clipboard compatibility.
         let noop_compat = match conn_type {
-            AuthConnType::FileTransfer | AuthConnType::Terminal => {
-                Self::is_scoped_non_video_noop_compat_message(msg)
+            AuthConnType::FileTransfer | AuthConnType::Terminal | AuthConnType::PortForward => {
+                Self::is_render_broadcast_noop_compat_message(msg)
             }
-            AuthConnType::PortForward => Self::is_render_broadcast_noop_compat_message(msg),
             _ => false,
         };
         if noop_compat {
@@ -5402,13 +5403,6 @@ impl Connection {
             AuthConnType::Terminal => Self::is_terminal_scoped_message(msg),
         };
         (!allowed).then(|| Self::message_family(msg))
-    }
-
-    fn is_scoped_non_video_noop_compat_message(msg: &Message) -> bool {
-        match msg.union.as_ref() {
-            Some(message::Union::Clipboard(_)) | Some(message::Union::MultiClipboards(_)) => true,
-            _ => Self::is_render_broadcast_noop_compat_message(msg),
-        }
     }
 
     fn is_render_broadcast_noop_compat_message(msg: &Message) -> bool {
@@ -5605,30 +5599,43 @@ impl Connection {
 
     fn message_family(msg: &Message) -> &'static str {
         match msg.union.as_ref() {
-            Some(message::Union::LoginRequest(_)) => "login_request",
             Some(message::Union::MouseEvent(_)) => "mouse_event",
+            Some(message::Union::AudioFrame(_)) => "audio_frame",
             Some(message::Union::PointerDeviceEvent(_)) => "pointer_device_event",
             Some(message::Union::KeyEvent(_)) => "key_event",
             Some(message::Union::Clipboard(_)) => "clipboard",
-            Some(message::Union::MultiClipboards(_)) => "multi_clipboards",
             Some(message::Union::FileAction(_)) => "file_action",
             Some(message::Union::FileResponse(_)) => "file_response",
+            Some(message::Union::VoiceCallRequest(_)) => "voice_call_request",
+            Some(message::Union::VoiceCallResponse(_)) => "voice_call_response",
+            Some(message::Union::MultiClipboards(_)) => "multi_clipboards",
             Some(message::Union::ScreenshotRequest(_)) => "screenshot_request",
+            Some(message::Union::ScreenshotResponse(_)) => "screenshot_response",
             Some(message::Union::TerminalAction(_)) => "terminal_action",
-            Some(message::Union::Misc(misc)) => match misc.union.as_ref() {
-                Some(misc::Union::TogglePrivacyMode(_)) => "misc.toggle_privacy_mode",
-                Some(misc::Union::ToggleVirtualDisplay(_)) => "misc.toggle_virtual_display",
-                Some(misc::Union::ChangeResolution(_)) => "misc.change_resolution",
-                Some(misc::Union::ChangeDisplayResolution(_)) => "misc.change_display_resolution",
-                Some(misc::Union::CaptureDisplays(_)) => "misc.capture_displays",
-                Some(misc::Union::RefreshVideo(_)) => "misc.refresh_video",
-                Some(misc::Union::RefreshVideoDisplay(_)) => "misc.refresh_video_display",
-                Some(misc::Union::Option(_)) => "misc.option",
-                None => "misc.empty",
-                _ => "misc",
-            },
-            Some(_) => "message",
+            Some(message::Union::TerminalResponse(_)) => "terminal_response",
+            Some(message::Union::Misc(misc)) => Self::misc_message_family(misc),
+            Some(_) => "message.other",
             None => "empty",
+        }
+    }
+
+    fn misc_message_family(misc: &Misc) -> &'static str {
+        match misc.union.as_ref() {
+            Some(misc::Union::ChatMessage(_)) => "misc.chat_message",
+            Some(misc::Union::SwitchDisplay(_)) => "misc.switch_display",
+            Some(misc::Union::Option(_)) => "misc.option",
+            Some(misc::Union::AudioFormat(_)) => "misc.audio_format",
+            Some(misc::Union::CaptureDisplays(_)) => "misc.capture_displays",
+            Some(misc::Union::ClientRecordStatus(_)) => "misc.client_record_status",
+            Some(misc::Union::TogglePrivacyMode(_)) => "misc.toggle_privacy_mode",
+            Some(misc::Union::ToggleVirtualDisplay(_)) => "misc.toggle_virtual_display",
+            Some(misc::Union::SelectedSid(_)) => "misc.selected_sid",
+            Some(misc::Union::ChangeResolution(_)) => "misc.change_resolution",
+            Some(misc::Union::ChangeDisplayResolution(_)) => "misc.change_display_resolution",
+            Some(misc::Union::MessageQuery(_)) => "misc.message_query",
+            Some(misc::Union::FollowCurrentDisplay(_)) => "misc.follow_current_display",
+            Some(_) => "misc.other",
+            None => "misc.empty",
         }
     }
 
@@ -6740,10 +6747,13 @@ mod test {
                         misc_msg(|m| m.set_capture_displays(CaptureDisplays::new())),
                         Some("misc.capture_displays"),
                     ),
-                    (msg(|m| m.set_clipboard(Clipboard::new())), None),
+                    (
+                        msg(|m| m.set_clipboard(Clipboard::new())),
+                        Some("clipboard"),
+                    ),
                     (
                         msg(|m| m.set_multi_clipboards(MultiClipboards::new())),
-                        None,
+                        Some("multi_clipboards"),
                     ),
                     (misc_msg(|m| m.set_refresh_video(true)), None),
                     (misc_msg(|m| m.set_refresh_video_display(0)), None),
@@ -6785,10 +6795,13 @@ mod test {
                         Some("misc.toggle_privacy_mode"),
                     ),
                     (misc_msg(|m| m.set_chat_message(ChatMessage::new())), None),
-                    (msg(|m| m.set_clipboard(Clipboard::new())), None),
+                    (
+                        msg(|m| m.set_clipboard(Clipboard::new())),
+                        Some("clipboard"),
+                    ),
                     (
                         msg(|m| m.set_multi_clipboards(MultiClipboards::new())),
-                        None,
+                        Some("multi_clipboards"),
                     ),
                     (
                         misc_msg(|m| m.set_toggle_virtual_display(ToggleVirtualDisplay::new())),
