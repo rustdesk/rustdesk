@@ -5307,6 +5307,8 @@ impl Connection {
             self.post_session_scope_violation_alarm(message);
         }
         if Config::get_bool_option(keys::OPTION_ALLOW_SCOPE_VIOLATION_CLOSE) {
+            self.send_close_reason_no_retry("Connection not allowed")
+                .await;
             self.on_close("Session scope violation", true).await;
             return false;
         }
