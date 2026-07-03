@@ -872,7 +872,7 @@ pub fn start_os_service() {
         let keeps_session = sid == desktop.sid;
         if keeps_headless || keeps_session {
             // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
-            sleep_millis(500);
+            sleep_millis(5000);
         } else {
             sleep_millis(super::SERVICE_INTERVAL);
         }
