@@ -5541,6 +5541,8 @@ impl Connection {
         Self::scoped_view_camera_option(option).1.is_none()
     }
 
+    // Keep these OptionMessage field lists in sync with message.proto and update_options().
+    // New fields must be classified here before limited session types can receive them.
     fn scoped_view_camera_option(
         option: &OptionMessage,
     ) -> (Option<OptionMessage>, Option<&'static str>) {
@@ -6730,6 +6732,10 @@ mod test {
         })
     }
 
+    fn set_supported_decoding(option: &mut OptionMessage) {
+        option.supported_decoding = hbb_common::protobuf::MessageField::some(Default::default());
+    }
+
     fn assert_scopes(
         conn_type: AuthConnType,
         cases: impl IntoIterator<Item = (Message, Option<&'static str>)>,
@@ -6959,5 +6965,69 @@ mod test {
             Connection::scoped_login_option(AuthConnType::FileTransfer, &option);
         assert!(scoped.is_none());
         assert_eq!(violation, Some("login.option"));
+    }
+
+    #[test]
+    fn session_scope_limited_render_noop_options_reject_mixed_fields() {
+        for conn_type in [
+            AuthConnType::FileTransfer,
+            AuthConnType::Terminal,
+            AuthConnType::PortForward,
+        ] {
+            let supported_decoding_only = option_msg(set_supported_decoding);
+            assert_eq!(
+                Connection::authorized_message_scope_violation(conn_type, &supported_decoding_only),
+                None
+            );
+
+            let mixed_option = option_msg(|o| {
+                set_supported_decoding(o);
+                o.disable_audio = BoolOption::Yes.into();
+            });
+            assert_eq!(
+                Connection::authorized_message_scope_violation(conn_type, &mixed_option),
+                Some("misc.option")
+            );
+        }
+    }
+
+    #[test]
+    fn session_scope_view_camera_options_keep_only_camera_fields() {
+        let mut option = OptionMessage::new();
+        option.image_quality = ImageQuality::Balanced.into();
+        option.custom_image_quality = 80;
+        option.custom_fps = 24;
+        set_supported_decoding(&mut option);
+        option.disable_audio = BoolOption::Yes.into();
+        option.block_input = BoolOption::Yes.into();
+        option.disable_clipboard = BoolOption::Yes.into();
+        option.enable_file_transfer = BoolOption::Yes.into();
+        option.terminal_persistent = BoolOption::Yes.into();
+
+        let (scoped, violation) =
+            Connection::scoped_login_option(AuthConnType::ViewCamera, &option);
+        let scoped = scoped.unwrap();
+        assert_eq!(violation, Some("login.option"));
+        assert_eq!(
+            scoped.image_quality.enum_value(),
+            Ok(ImageQuality::Balanced)
+        );
+        assert_eq!(scoped.custom_image_quality, 80);
+        assert_eq!(scoped.custom_fps, 24);
+        assert!(scoped.supported_decoding.is_some());
+        assert_eq!(scoped.disable_audio.enum_value(), Ok(BoolOption::Yes));
+        assert_eq!(scoped.block_input.enum_value(), Ok(BoolOption::NotSet));
+        assert_eq!(
+            scoped.disable_clipboard.enum_value(),
+            Ok(BoolOption::NotSet)
+        );
+        assert_eq!(
+            scoped.enable_file_transfer.enum_value(),
+            Ok(BoolOption::NotSet)
+        );
+        assert_eq!(
+            scoped.terminal_persistent.enum_value(),
+            Ok(BoolOption::NotSet)
+        );
     }
 }
