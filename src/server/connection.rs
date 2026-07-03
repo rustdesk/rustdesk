@@ -5379,6 +5379,9 @@ impl Connection {
         if Self::is_connection_housekeeping_message(msg) {
             return None;
         }
+        // Legacy clients can broadcast render-refresh messages to all opened sessions.
+        // These messages are no-ops for scoped non-video sessions; PortForward only keeps
+        // this render-broadcast no-op compatibility, not clipboard compatibility.
         let noop_compat = match conn_type {
             AuthConnType::FileTransfer | AuthConnType::Terminal => {
                 Self::is_scoped_non_video_noop_compat_message(msg)
