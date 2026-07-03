@@ -5330,6 +5330,9 @@ impl Connection {
         };
         let Some(conn_type) = self.authed_conn_type() else {
             // Unreachable, but just in case, we drop the options if the connection type is unknown.
+            log::warn!(
+                "Dropping scoped login options because authorized connection type is unknown"
+            );
             return;
         };
         let (scoped, violation) = Self::scoped_login_option(conn_type, &option);
