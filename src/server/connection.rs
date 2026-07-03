@@ -396,6 +396,8 @@ pub struct Connection {
     cm_read_job_ids: HashSet<i32>,
     terminal_service_id: String,
     terminal_persistent: bool,
+    // Used to avoid too many repeated scope violation warnings.
+    scope_violation_messages: HashSet<&'static str>,
     // The user token must be set when terminal is enabled.
     // 0 indicates SYSTEM user
     // other values indicate current user
@@ -583,6 +585,7 @@ impl Connection {
             cm_read_job_ids: HashSet::new(),
             terminal_service_id: "".to_owned(),
             terminal_persistent: false,
+            scope_violation_messages: HashSet::new(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             terminal_user_token: None,
             terminal_generic_service: None,
@@ -1521,7 +1524,8 @@ impl Connection {
         self.post_alarm_audit(
             AlarmAuditType::SessionScopeViolation,
             json!({
-                "peer_id": &self.lr.my_id,
+                "id": self.lr.my_id.clone(),
+                "name": self.lr.my_name.clone(),
                 "ip": &self.ip,
                 "conn_type": conn_type,
                 "message": message,
@@ -3024,7 +3028,7 @@ impl Connection {
                     self.update_auto_disconnect_timer();
                 }
                 Some(message::Union::Clipboard(cb)) => {
-                    if self.clipboard_enabled() {
+                    if self.should_handle_text_clipboard_message() && self.clipboard_enabled() {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(vec![cb], ClipboardSide::Host);
                         // ios as the controlled side is actually not supported for now.
@@ -3052,7 +3056,7 @@ impl Connection {
                     }
                 }
                 Some(message::Union::MultiClipboards(_mcb)) => {
-                    if self.clipboard_enabled() {
+                    if self.should_handle_text_clipboard_message() && self.clipboard_enabled() {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(_mcb.clipboards, ClipboardSide::Host);
                         #[cfg(target_os = "android")]
@@ -3454,8 +3458,8 @@ impl Connection {
                         self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::Option(o)) => {
-                        if self.should_update_option_message(&o) {
-                            self.update_options(&o).await;
+                        if let Some(option) = self.scoped_update_option_message(&o) {
+                            self.update_options(&option).await;
                         }
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
@@ -5263,12 +5267,16 @@ impl Connection {
         )
     }
 
-    fn should_update_option_message(&self, option: &OptionMessage) -> bool {
+    fn should_handle_text_clipboard_message(&self) -> bool {
+        matches!(self.authed_conn_type(), Some(AuthConnType::Remote))
+    }
+
+    fn scoped_update_option_message(&self, option: &OptionMessage) -> Option<OptionMessage> {
         match self.authed_conn_type() {
-            Some(AuthConnType::Remote) => true,
-            Some(AuthConnType::ViewCamera) => Self::is_view_camera_scoped_option(option),
-            Some(AuthConnType::Terminal) => Self::is_terminal_scoped_option(option),
-            Some(AuthConnType::FileTransfer | AuthConnType::PortForward) | None => false,
+            Some(AuthConnType::Remote) => Some(option.clone()),
+            Some(AuthConnType::ViewCamera) => Self::scoped_view_camera_option(option).0,
+            Some(AuthConnType::Terminal) => Self::scoped_terminal_login_option(option).0,
+            Some(AuthConnType::FileTransfer | AuthConnType::PortForward) | None => None,
         }
     }
 
@@ -5281,12 +5289,21 @@ impl Connection {
             .authed_conn_type()
             .map(AuthConnType::as_str)
             .unwrap_or("unknown");
-        log::warn!(
-            "Received out-of-scope message in {} session: {}",
-            conn_type,
-            message
-        );
-        if Config::get_bool_option(keys::OPTION_ALLOW_SCOPE_VIOLATION_ALARM) {
+        let is_first = self.scope_violation_messages.insert(message);
+        if is_first {
+            log::warn!(
+                "Received out-of-scope message in {} session: {}",
+                conn_type,
+                message
+            );
+        } else {
+            log::debug!(
+                "Received repeated out-of-scope message in {} session: {}",
+                conn_type,
+                message
+            );
+        }
+        if is_first && Config::get_bool_option(keys::OPTION_ALLOW_SCOPE_VIOLATION_ALARM) {
             self.post_session_scope_violation_alarm(message);
         }
         if Config::get_bool_option(keys::OPTION_ALLOW_SCOPE_VIOLATION_CLOSE) {
@@ -5313,7 +5330,7 @@ impl Connection {
         };
         let (scoped, violation) = Self::scoped_login_option(conn_type, &option);
         if let Some(message) = violation {
-            log::warn!(
+            log::debug!(
                 "Filtering {} session login options outside scope: {}",
                 conn_type.as_str(),
                 message
@@ -5362,13 +5379,14 @@ impl Connection {
         if Self::is_connection_housekeeping_message(msg) {
             return None;
         }
-        // Legacy clients may broadcast video-render refresh messages to every open session.
-        // Keep only the no-op render messages compatible for scoped non-video sessions.
-        if matches!(
-            conn_type,
-            AuthConnType::FileTransfer | AuthConnType::Terminal
-        ) && Self::is_render_broadcast_compat_message(msg)
-        {
+        let noop_compat = match conn_type {
+            AuthConnType::FileTransfer | AuthConnType::Terminal => {
+                Self::is_scoped_non_video_noop_compat_message(msg)
+            }
+            AuthConnType::PortForward => Self::is_render_broadcast_noop_compat_message(msg),
+            _ => false,
+        };
+        if noop_compat {
             return None;
         }
         let allowed = match conn_type {
@@ -5381,7 +5399,14 @@ impl Connection {
         (!allowed).then(|| Self::message_family(msg))
     }
 
-    fn is_render_broadcast_compat_message(msg: &Message) -> bool {
+    fn is_scoped_non_video_noop_compat_message(msg: &Message) -> bool {
+        match msg.union.as_ref() {
+            Some(message::Union::Clipboard(_)) | Some(message::Union::MultiClipboards(_)) => true,
+            _ => Self::is_render_broadcast_noop_compat_message(msg),
+        }
+    }
+
+    fn is_render_broadcast_noop_compat_message(msg: &Message) -> bool {
         let Some(message::Union::Misc(misc)) = msg.union.as_ref() else {
             return false;
         };
@@ -5393,7 +5418,7 @@ impl Connection {
     }
 
     fn is_supported_decoding_only_option(option: &OptionMessage) -> bool {
-        option.supported_decoding.clone().take().is_some()
+        option.supported_decoding.is_some()
             && option.image_quality.enum_value() == Ok(ImageQuality::NotSet)
             && option.custom_image_quality == 0
             && option.custom_fps == 0
@@ -5451,6 +5476,7 @@ impl Connection {
 
     fn is_terminal_scoped_misc(misc: &Misc) -> bool {
         match misc.union.as_ref() {
+            Some(misc::Union::ChatMessage(_)) => true,
             Some(misc::Union::Option(option)) => Self::is_terminal_scoped_option(option),
             _ => false,
         }
@@ -5464,6 +5490,11 @@ impl Connection {
         match msg.union.as_ref() {
             Some(message::Union::ScreenshotRequest(_)) => true,
             Some(message::Union::Misc(misc)) => Self::is_view_camera_scoped_misc(misc),
+            // Legacy clients may send auto-login input during view-camera connect.
+            // The handlers intentionally ignore these messages for view-camera sessions.
+            Some(message::Union::MouseEvent(_))
+            | Some(message::Union::PointerDeviceEvent(_))
+            | Some(message::Union::KeyEvent(_)) => true,
             Some(message::Union::AudioFrame(_))
             | Some(message::Union::VoiceCallRequest(_))
             | Some(message::Union::VoiceCallResponse(_)) => true,
@@ -5504,29 +5535,24 @@ impl Connection {
     ) -> (Option<OptionMessage>, Option<&'static str>) {
         let mut scoped = OptionMessage::new();
         let mut violation = false;
-        let Ok(_image_quality) = option.image_quality.enum_value() else {
-            return (Some(scoped), Some("login.option"));
-        };
-        scoped.image_quality = option.image_quality;
+        if option.image_quality.enum_value().is_ok() {
+            scoped.image_quality = option.image_quality;
+        }
         if option.custom_image_quality >= 0 {
             scoped.custom_image_quality = option.custom_image_quality;
-        } else {
-            violation = true;
         }
         if option.custom_fps >= 0 {
             scoped.custom_fps = option.custom_fps;
-        } else {
-            violation = true;
         }
         scoped.supported_decoding = option.supported_decoding.clone();
-        match option.disable_audio.enum_value() {
-            Ok(value) => scoped.disable_audio = value.into(),
-            Err(_) => violation = true,
+        if let Ok(value) = option.disable_audio.enum_value() {
+            scoped.disable_audio = value.into();
         }
         if Self::option_has_non_view_camera_login_field(option) {
             violation = true;
         }
-        (Some(scoped), violation.then_some("login.option"))
+        let scoped = Self::option_has_any_field(&scoped).then_some(scoped);
+        (scoped, violation.then_some("login.option"))
     }
 
     fn option_has_non_view_camera_login_field(option: &OptionMessage) -> bool {
@@ -5548,7 +5574,7 @@ impl Connection {
         option.image_quality.enum_value() != Ok(ImageQuality::NotSet)
             || option.custom_image_quality != 0
             || option.custom_fps != 0
-            || option.supported_decoding.clone().take().is_some()
+            || option.supported_decoding.is_some()
             || !Self::is_bool_option_not_set(option.lock_after_session_end)
             || !Self::is_bool_option_not_set(option.show_remote_cursor)
             || !Self::is_bool_option_not_set(option.privacy_mode)
@@ -5578,6 +5604,8 @@ impl Connection {
             Some(message::Union::MouseEvent(_)) => "mouse_event",
             Some(message::Union::PointerDeviceEvent(_)) => "pointer_device_event",
             Some(message::Union::KeyEvent(_)) => "key_event",
+            Some(message::Union::Clipboard(_)) => "clipboard",
+            Some(message::Union::MultiClipboards(_)) => "multi_clipboards",
             Some(message::Union::FileAction(_)) => "file_action",
             Some(message::Union::FileResponse(_)) => "file_response",
             Some(message::Union::ScreenshotRequest(_)) => "screenshot_request",
@@ -6707,6 +6735,11 @@ mod test {
                         misc_msg(|m| m.set_capture_displays(CaptureDisplays::new())),
                         Some("misc.capture_displays"),
                     ),
+                    (msg(|m| m.set_clipboard(Clipboard::new())), None),
+                    (
+                        msg(|m| m.set_multi_clipboards(MultiClipboards::new())),
+                        None,
+                    ),
                     (misc_msg(|m| m.set_refresh_video(true)), None),
                     (misc_msg(|m| m.set_refresh_video_display(0)), None),
                     (
@@ -6745,6 +6778,12 @@ mod test {
                     (
                         misc_msg(|m| m.set_toggle_privacy_mode(TogglePrivacyMode::new())),
                         Some("misc.toggle_privacy_mode"),
+                    ),
+                    (misc_msg(|m| m.set_chat_message(ChatMessage::new())), None),
+                    (msg(|m| m.set_clipboard(Clipboard::new())), None),
+                    (
+                        msg(|m| m.set_multi_clipboards(MultiClipboards::new())),
+                        None,
                     ),
                     (
                         misc_msg(|m| m.set_toggle_virtual_display(ToggleVirtualDisplay::new())),
@@ -6810,15 +6849,12 @@ mod test {
                         misc_msg(|m| m.set_change_display_resolution(DisplayResolution::new())),
                         None,
                     ),
-                    (
-                        msg(|m| m.set_mouse_event(MouseEvent::new())),
-                        Some("mouse_event"),
-                    ),
+                    (msg(|m| m.set_mouse_event(MouseEvent::new())), None),
                     (
                         msg(|m| m.set_pointer_device_event(PointerDeviceEvent::new())),
-                        Some("pointer_device_event"),
+                        None,
                     ),
-                    (msg(|m| m.set_key_event(KeyEvent::new())), Some("key_event")),
+                    (msg(|m| m.set_key_event(KeyEvent::new())), None),
                     (misc_msg(|m| m.set_client_record_status(true)), None),
                     (
                         msg(|m| m.set_file_response(FileResponse::new())),
@@ -6857,20 +6893,14 @@ mod test {
                         msg(|m| m.set_screenshot_request(ScreenshotRequest::new())),
                         Some("screenshot_request"),
                     ),
-                    (
-                        misc_msg(|m| m.set_refresh_video(true)),
-                        Some("misc.refresh_video"),
-                    ),
-                    (
-                        misc_msg(|m| m.set_refresh_video_display(0)),
-                        Some("misc.refresh_video_display"),
-                    ),
+                    (misc_msg(|m| m.set_refresh_video(true)), None),
+                    (misc_msg(|m| m.set_refresh_video_display(0)), None),
                     (
                         option_msg(|o| {
                             o.supported_decoding =
                                 hbb_common::protobuf::MessageField::some(Default::default())
                         }),
-                        Some("misc.option"),
+                        None,
                     ),
                 ],
             ),
