@@ -272,6 +272,7 @@ class TerminalModel with ChangeNotifier {
         return 0;
       }
     } else {
+      debugPrint('[TerminalModel] Event does not contain exit_code');
       return 0;
     }
   }
