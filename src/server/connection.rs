@@ -3635,6 +3635,7 @@ impl Connection {
                 Some(message::Union::ScreenshotRequest(request)) => {
                     if let Some(tx) = self.inner.tx.clone() {
                         crate::video_service::set_take_screenshot(
+                            self.video_source(),
                             request.display as _,
                             request.sid.clone(),
                             tx,
