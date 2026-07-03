@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -251,6 +250,33 @@ class TerminalModel with ChangeNotifier {
     }
   }
 
+  static int getExitCodeFromEvt(Map<String, dynamic> evt) {
+    if (evt.containsKey('exit_code')) {
+      final v = evt['exit_code'];
+      if (v is int) {
+        // Desktop and mobile send exit_code as an int
+        return v;
+      } else if (v is String) {
+        // Web sends exit_code as a string
+        final parsed = int.tryParse(v);
+        if (parsed != null) {
+          return parsed;
+        } else {
+          debugPrint(
+              '[TerminalModel] Failed to parse exit_code as integer: $v. Expected a numeric string.');
+          return 0;
+        }
+      } else {
+        debugPrint(
+            '[TerminalModel] Unexpected exit_code type: ${v.runtimeType}, value: $v. Expected int or String.');
+        return 0;
+      }
+    } else {
+      debugPrint('[TerminalModel] Event does not contain exit_code');
+      return 0;
+    }
+  }
+
   void handleTerminalResponse(Map<String, dynamic> evt) {
     final String? type = evt['type'];
     final int evtTerminalId = getTerminalIdFromEvt(evt);
@@ -473,7 +499,7 @@ class TerminalModel with ChangeNotifier {
   }
 
   void _handleTerminalClosed(Map<String, dynamic> evt) {
-    final int exitCode = evt['exit_code'] ?? 0;
+    final int exitCode = getExitCodeFromEvt(evt);
     _writeToTerminal('\r\nTerminal closed with exit code: $exitCode\r\n');
     _terminalOpened = false;
     notifyListeners();
