@@ -5384,12 +5384,14 @@ impl Connection {
             return None;
         }
         // Legacy clients can broadcast render-refresh messages to all opened sessions.
-        // These messages are no-ops for scoped non-video sessions; PortForward only keeps
-        // this render-broadcast no-op compatibility, not clipboard compatibility.
+        // Clipboard messages may also be broadcast to FileTransfer/Terminal sessions while
+        // the client still considers text clipboard sync required, and handlers ignore them.
         let noop_compat = match conn_type {
-            AuthConnType::FileTransfer | AuthConnType::Terminal | AuthConnType::PortForward => {
+            AuthConnType::FileTransfer | AuthConnType::Terminal => {
                 Self::is_render_broadcast_noop_compat_message(msg)
+                    || Self::is_text_clipboard_noop_compat_message(msg)
             }
+            AuthConnType::PortForward => Self::is_render_broadcast_noop_compat_message(msg),
             _ => false,
         };
         if noop_compat {
@@ -5414,6 +5416,13 @@ impl Connection {
             Some(misc::Union::Option(option)) => Self::is_supported_decoding_only_option(option),
             _ => false,
         }
+    }
+
+    fn is_text_clipboard_noop_compat_message(msg: &Message) -> bool {
+        matches!(
+            msg.union.as_ref(),
+            Some(message::Union::Clipboard(_)) | Some(message::Union::MultiClipboards(_))
+        )
     }
 
     fn is_supported_decoding_only_option(option: &OptionMessage) -> bool {
@@ -6747,13 +6756,10 @@ mod test {
                         misc_msg(|m| m.set_capture_displays(CaptureDisplays::new())),
                         Some("misc.capture_displays"),
                     ),
-                    (
-                        msg(|m| m.set_clipboard(Clipboard::new())),
-                        Some("clipboard"),
-                    ),
+                    (msg(|m| m.set_clipboard(Clipboard::new())), None),
                     (
                         msg(|m| m.set_multi_clipboards(MultiClipboards::new())),
-                        Some("multi_clipboards"),
+                        None,
                     ),
                     (misc_msg(|m| m.set_refresh_video(true)), None),
                     (misc_msg(|m| m.set_refresh_video_display(0)), None),
@@ -6795,13 +6801,10 @@ mod test {
                         Some("misc.toggle_privacy_mode"),
                     ),
                     (misc_msg(|m| m.set_chat_message(ChatMessage::new())), None),
-                    (
-                        msg(|m| m.set_clipboard(Clipboard::new())),
-                        Some("clipboard"),
-                    ),
+                    (msg(|m| m.set_clipboard(Clipboard::new())), None),
                     (
                         msg(|m| m.set_multi_clipboards(MultiClipboards::new())),
-                        Some("multi_clipboards"),
+                        None,
                     ),
                     (
                         misc_msg(|m| m.set_toggle_virtual_display(ToggleVirtualDisplay::new())),
