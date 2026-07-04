@@ -285,9 +285,12 @@ struct wf_clipboard
 	char *req_fdata;
 	HANDLE req_fevent;
 	BOOL req_f_received;
-	// The req_f* fields below are a single-slot rendezvous for ONE outstanding
-	// file-contents request at a time (the request/response handshake is serialized
-	// by req_fevent). They are not a general multi-request queue.
+	// The req_f* fields below are a single-slot rendezvous that ASSUMES one outstanding
+	// file-contents request at a time. That is an unenforced usage invariant, not a
+	// guarantee: req_fevent only signals response completion, it does NOT provide mutual
+	// exclusion between concurrent callers, so concurrent IStream reads would clobber
+	// these fields. req_f_mutex below only makes the buffer hand-off memory-safe; it does
+	// not serialize whole requests. They are not a general multi-request queue.
 	//
 	// Number of bytes asked for by the most recent file-contents request; set before
 	// the request is sent and read when its response arrives, so no lock is needed for
@@ -417,12 +420,17 @@ static ULONG STDMETHODCALLTYPE CliprdrStream_Release(IStream *This)
 // it. Held only across these few field assignments, never across a blocking wait.
 static void take_req_fdata(wfClipboard *clipboard, char **data, ULONG *size)
 {
-	WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
+	DWORD wait = WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
 	*data = clipboard->req_fdata;
 	*size = clipboard->req_fsize;
 	clipboard->req_fdata = NULL;
 	clipboard->req_fsize = 0;
-	ReleaseMutex(clipboard->req_f_mutex);
+	// WAIT_OBJECT_0 and WAIT_ABANDONED both mean the mutex is held; release only then.
+	// On WAIT_FAILED (e.g. the handle was closed during teardown) we do not own it, so
+	// calling ReleaseMutex would be undefined; the field access above then degrades to
+	// unsynchronized best effort, which is the pre-existing teardown behavior.
+	if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED)
+		ReleaseMutex(clipboard->req_f_mutex);
 }
 
 static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULONG cb,
@@ -3356,8 +3364,10 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		// (CliprdrStream_Read / _New) via req_f_mutex. Held only across the buffer
 		// manipulation below (never across a blocking wait), and released exactly once
 		// after the loop, so no `break` path can leak the lock or deadlock.
-		WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
-		locked = TRUE;
+		// WAIT_OBJECT_0 / WAIT_ABANDONED both mean we hold the mutex; WAIT_FAILED (e.g. a
+		// handle closed during teardown) means we do not, so we must not release it.
+		DWORD wait = WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
+		locked = (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED);
 
 		// Free any buffer left over from a prior request that was never consumed
 		// (e.g. a response that arrived after its reader timed out). Safe under the
@@ -3549,7 +3559,18 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 		CloseHandle(clipboard->req_fevent);
 
 	if (clipboard->req_f_mutex)
+	{
+		// Free any file-contents buffer a response published that no consumer ever took
+		// (e.g. one that arrived during shutdown), so it is not leaked. Reclaim it under
+		// req_f_mutex (still valid here) to stay memory-safe against a late response,
+		// then close the handle.
+		char *leftover = NULL;
+		ULONG leftover_sz = 0;
+		take_req_fdata(clipboard, &leftover, &leftover_sz);
+		free(leftover);
+
 		CloseHandle(clipboard->req_f_mutex);
+	}
 
 	clear_file_array(clipboard);
 	clear_format_map(clipboard);
