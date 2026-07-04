@@ -613,6 +613,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             )?
         }
     };
+    let use_i400 = Encoder::use_i400();
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     #[cfg(target_os = "android")]
@@ -688,8 +689,8 @@ fn run(vs: VideoService) -> ResultType<()> {
             log::info!("switch due to portable service running changed");
             bail!("SWITCH");
         }
-        if Encoder::use_i444(&encoder_cfg) != use_i444 {
-            log::info!("switch due to i444 changed");
+        if Encoder::use_i444(&encoder_cfg) != use_i444 || Encoder::use_i400() != use_i400 {
+            log::info!("switch due to chroma mode changed");
             bail!("SWITCH");
         }
         #[cfg(all(windows, feature = "vram"))]

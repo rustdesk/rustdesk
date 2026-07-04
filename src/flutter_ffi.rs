@@ -216,6 +216,14 @@ pub fn session_get_toggle_option(session_id: SessionID, arg: String) -> Option<b
     }
 }
 
+pub fn session_is_peer_i400_supported(session_id: SessionID) -> SyncReturn<bool> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.is_peer_i400_supported())
+    } else {
+        SyncReturn(false)
+    }
+}
+
 pub fn session_get_toggle_option_sync(session_id: SessionID, arg: String) -> SyncReturn<bool> {
     let res = session_get_toggle_option(session_id, arg) == Some(true);
     SyncReturn(res)

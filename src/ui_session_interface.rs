@@ -408,6 +408,11 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().get_toggle_option(&name)
     }
 
+    pub fn is_peer_i400_supported(&self) -> bool {
+        let lc = self.lc.read().unwrap();
+        lc.version >= hbb_common::get_version_number(hbb_common::config::keys::MIN_GRAYSCALE_VERSION)
+    }
+
     #[cfg(not(feature = "flutter"))]
     pub fn is_privacy_mode_supported(&self) -> bool {
         self.lc.read().unwrap().is_privacy_mode_supported()

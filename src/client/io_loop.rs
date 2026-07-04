@@ -310,6 +310,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             let chroma = match chroma {
                                 Some(Chroma::I444) => "4:4:4",
                                 Some(Chroma::I420) => "4:2:0",
+                                Some(Chroma::I400) => "4:0:0",
                                 None => "-",
                             };
                             let chroma = Some(chroma.to_string());

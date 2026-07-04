@@ -1804,6 +1804,7 @@ class _DisplayState extends State<_Display> {
       scrollStyle(context),
       imageQuality(context),
       codec(context),
+      chromaPreference(context),
       if (isDesktop) trackpadSpeed(context),
       if (!isWeb) privacyModeImpl(context),
       other(context),
@@ -1990,6 +1991,36 @@ class _DisplayState extends State<_Display> {
           label: 'AV1',
           onChanged: isOptFixed ? null : onChanged),
       ...hwRadios,
+    ]);
+  }
+
+  Widget chromaPreference(BuildContext context) {
+    onChanged(String value) async {
+      await bind.mainSetUserDefaultOption(
+          key: kOptionColorMode, value: value);
+      setState(() {});
+    }
+
+    final groupValue =
+        bind.mainGetUserDefaultOption(key: kOptionColorMode);
+    final isOptFixed = isOptionFixed(kOptionColorMode);
+
+    return _Card(title: translate('Chroma Preference'), children: [
+      _Radio(context,
+          value: kOptionI420,
+          groupValue: groupValue,
+          label: translate('Balanced (4:2:0)'),
+          onChanged: isOptFixed ? null : onChanged),
+      _Radio(context,
+          value: kOptionI444,
+          groupValue: groupValue,
+          label: translate('True color (4:4:4)'),
+          onChanged: isOptFixed ? null : onChanged),
+      _Radio(context,
+          value: kOptionI400,
+          groupValue: groupValue,
+          label: translate('Grayscale'),
+          onChanged: isOptFixed ? null : onChanged),
     ]);
   }
 

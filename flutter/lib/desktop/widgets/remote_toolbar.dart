@@ -1537,6 +1537,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         scrollStyle(state, colorScheme),
         imageQuality(),
         codec(),
+        colorMode(),
         if (ffi.connType == ConnType.defaultConn)
           _ResolutionsMenu(
             id: widget.id,
@@ -1771,6 +1772,27 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           return _SubmenuButton(
               ffi: widget.ffi,
               child: Text(translate('Codec')),
+              menuChildren: v
+                  .map((e) => RdoMenuButton(
+                      value: e.value,
+                      groupValue: e.groupValue,
+                      onChanged: e.onChanged,
+                      child: e.child,
+                      ffi: ffi))
+                  .toList());
+        });
+  }
+
+  colorMode() {
+    return futureBuilder(
+        future: toolbarColorMode(context, id, ffi),
+        hasData: (data) {
+          final v = data as List<TRadioMenu<String>>;
+          if (v.isEmpty) return Offstage();
+
+          return _SubmenuButton(
+              ffi: widget.ffi,
+              child: Text(translate('Chroma Preference')),
               menuChildren: v
                   .map((e) => RdoMenuButton(
                       value: e.value,

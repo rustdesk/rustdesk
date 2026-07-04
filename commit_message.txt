@@ -1,0 +1,19 @@
+feat: add Grayscale (i400) support and upgrade color preferences to Chroma Preference
+
+Implements a zero-overhead Grayscale (i400) mode under the hood, and upgrades the boolean True Color (i444) toggle to a unified "Chroma Preference" option supporting Balanced (4:2:0), True Color (4:4:4), and Grayscale (i400) across the session toolbar and settings.
+
+Key changes:
+- Grayscale Engine (Remote-side):
+  * DXGI VRAM path: Always initializes the D3D11 Video Processor context during capture startup. When Grayscale (i400) mode is active, sets the stream color control Saturation to 0.0 dynamically frame-by-frame on the GPU, avoiding CPU readback penalties.
+  * CPU/RAM path: Performs CPU-side desaturation by dynamically filling the U/V planes with 128 (neutral gray) inside the YUV conversion gateway (Frame::to).
+  * Capture Loop: Removed unnecessary encoder/capturer restart checks when switching to/from Grayscale, allowing instant, zero-latency, flicker-free toggling.
+
+- FFI & Protocol Integration:
+  * Added FFI binding `session_is_peer_i400_supported` to query peer version-based Grayscale compatibility (supported for remote peer versions >= 1.5.0).
+  * Added `Some(Chroma::I400) => "4:0:0"` match arm in the client-side quality monitor loop to exhaustively handle the new Chroma variant.
+
+- UI & Settings:
+  * Replaced the legacy True Color checkbox in `otherDefaultSettings` with a new "Chroma Preference" radio button card in desktop display settings and a popup selection dialog in mobile settings.
+  * Replaced the True Color checkbox toggle in the session topbar with a "Chroma Preference" radio button submenu on desktop and mobile clients.
+  * Exposes the "Grayscale" option in the session topbar only if the remote peer version is greater than or equal to 1.5.0, otherwise rendering it disabled.
+  * Added translations for "Chroma Preference", "Balanced (4:2:0)", "True color (4:4:4)", and "Grayscale" keys to template.rs and all 52 localized translation files.

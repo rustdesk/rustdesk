@@ -135,6 +135,11 @@ class RustdeskImpl {
     return 'true' == js.context.callMethod('getByName', ['option:toggle', arg]);
   }
 
+  Future<bool> sessionIsPeerI400Supported(
+      {required UuidValue sessionId, dynamic hint}) {
+    return Future.value(false);
+  }
+
   Future<String?> sessionGetOption(
       {required UuidValue sessionId, required String arg, dynamic hint}) {
     return Future(

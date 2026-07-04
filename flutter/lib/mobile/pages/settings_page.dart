@@ -1217,6 +1217,22 @@ class __DisplayPageState extends State<_DisplayPage> {
                           key: kOptionCodecPreference, value: value);
                     },
             ),
+            _getPopupDialogRadioEntry(
+              title: 'Chroma Preference',
+              list: [
+                _RadioEntry('Balanced (4:2:0)', kOptionI420),
+                _RadioEntry('True color (4:4:4)', kOptionI444),
+                _RadioEntry('Grayscale', kOptionI400),
+              ],
+              getter: () =>
+                  bind.mainGetUserDefaultOption(key: kOptionColorMode),
+              asyncSetter: isOptionFixed(kOptionColorMode)
+                  ? null
+                  : (value) async {
+                      await bind.mainSetUserDefaultOption(
+                          key: kOptionColorMode, value: value);
+                    },
+            ),
           ],
         ),
         SettingsSection(
