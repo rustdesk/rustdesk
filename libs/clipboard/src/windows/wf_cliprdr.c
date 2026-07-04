@@ -283,6 +283,14 @@ struct wf_clipboard
 	HANDLE thread;
 	HANDLE formatDataRespEvent;
 	BOOL formatDataRespReceived;
+	// Format-data rendezvous, mirroring the req_f* fields. format_request_mutex
+	// serializes whole request/response cycles; hmem_mutex guards the hmem hand-off
+	// and formatDataRespExpected, which lets the response handler drop a late,
+	// duplicate or unsolicited response instead of overwriting the slot a consumer
+	// is about to take.
+	BOOL formatDataRespExpected;
+	HANDLE hmem_mutex;
+	HANDLE format_request_mutex;
 
 	LPDATAOBJECT data_obj;
 	HANDLE data_obj_mutex;
@@ -334,7 +342,8 @@ BOOL wf_do_empty_cliprdr(wfClipboard *clipboard);
 static BOOL wf_create_file_obj(UINT32 *connID, wfClipboard *clipboard, IDataObject **ppDataObject);
 static void wf_destroy_file_obj(IDataObject *instance);
 static UINT32 get_remote_format_id(wfClipboard *clipboard, UINT32 local_format);
-static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 format);
+static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 formatId,
+									  HANDLE *outHmem, SIZE_T *outLen);
 static UINT cliprdr_send_lock(wfClipboard *clipboard);
 static UINT cliprdr_send_unlock(wfClipboard *clipboard);
 static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
@@ -441,6 +450,23 @@ static void take_req_fdata(wfClipboard *clipboard, char **data, ULONG *size)
 	clipboard->req_fdata = NULL;
 	clipboard->req_fsize = 0;
 	ReleaseMutex(clipboard->req_f_mutex);
+}
+
+// Take ownership of the pending format-data buffer under hmem_mutex. The caller owns
+// the returned HGLOBAL and must GlobalFree it (or hand it to the clipboard / OLE).
+static void take_hmem(wfClipboard *clipboard, HANDLE *hmem, SIZE_T *len)
+{
+	if (!lock_mutex(clipboard->hmem_mutex, INFINITE))
+	{
+		*hmem = NULL;
+		*len = 0;
+		return;
+	}
+	*hmem = clipboard->hmem;
+	*len = clipboard->hmem_data_len;
+	clipboard->hmem = NULL;
+	clipboard->hmem_data_len = 0;
+	ReleaseMutex(clipboard->hmem_mutex);
 }
 
 // Serialize whole file-contents request/response cycles (request, wait, take) across
@@ -830,18 +856,16 @@ static void wf_cliprdr_reset_streams(CliprdrDataObject *instance)
 	instance->m_nStreams = 0;
 }
 
-/* Only call after clipboard->hmem has been locked by GlobalLock. */
-static HRESULT wf_cliprdr_fail_locked_file_descriptor_data(wfClipboard *clipboard,
+/* Only call after hMem has been locked by GlobalLock; takes ownership and frees it. */
+static HRESULT wf_cliprdr_fail_locked_file_descriptor_data(HANDLE hMem,
 															STGMEDIUM *medium,
 															CliprdrDataObject *instance,
 															IStream **streams,
 															ULONG stream_count,
 															HRESULT error)
 {
-	GlobalUnlock(clipboard->hmem);
-	GlobalFree(clipboard->hmem);
-	clipboard->hmem = NULL;
-	clipboard->hmem_data_len = 0;
+	GlobalUnlock(hMem);
+	GlobalFree(hMem);
 	medium->hGlobal = NULL;
 	wf_cliprdr_release_streams(streams, stream_count);
 	wf_cliprdr_reset_streams(instance);
@@ -968,49 +992,45 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		FILEGROUPDESCRIPTORW *dsc;
 		IStream **streams = NULL;
 		UINT stream_count = 0;
-		SIZE_T hmem_size;
-		// DWORD remote_format_id = get_remote_format_id(clipboard, instance->m_pFormatEtc[idx].cfFormat);
-		// FIXME: origin code may be failed here???
-		if (cliprdr_send_data_request(instance->m_connID, clipboard, instance->m_pFormatEtc[idx].cfFormat) != 0)
+		SIZE_T hmem_size = 0;
+		HANDLE hMem = NULL;
+		if (cliprdr_send_data_request(instance->m_connID, clipboard,
+									  instance->m_pFormatEtc[idx].cfFormat, &hMem, &hmem_size) != 0)
 		{
 			return E_UNEXPECTED;
 		}
-		if (!clipboard->hmem)
+		if (!hMem)
 		{
 			return E_UNEXPECTED;
 		}
 
-		pMedium->hGlobal = clipboard->hmem; /* points to a FILEGROUPDESCRIPTOR structure */
+		pMedium->hGlobal = hMem; /* points to a FILEGROUPDESCRIPTOR structure */
 		/* GlobalLock returns a pointer to the first byte of the memory block,
 		 * in which is a FILEGROUPDESCRIPTOR structure, whose first UINT member
 		 * is the number of FILEDESCRIPTOR's */
-		// dsc = (FILEGROUPDESCRIPTOR *)GlobalLock(clipboard->hmem);
-		dsc = (FILEGROUPDESCRIPTORW *)GlobalLock(clipboard->hmem);
+		dsc = (FILEGROUPDESCRIPTORW *)GlobalLock(hMem);
 		if (!dsc)
 		{
 			pMedium->hGlobal = NULL;
-			GlobalFree(clipboard->hmem);
-			clipboard->hmem = NULL;
-			clipboard->hmem_data_len = 0;
+			GlobalFree(hMem);
 			wf_cliprdr_reset_streams(instance);
 			return E_UNEXPECTED;
 		}
 
-		hmem_size = clipboard->hmem_data_len;
 		/* cItems is remote-controlled; verify the fixed header exists before reading it. */
 		if (hmem_size < offsetof(FILEGROUPDESCRIPTORW, fgd))
 			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
+			    hMem, pMedium, instance, NULL, 0, E_UNEXPECTED);
 
 		stream_count = dsc->cItems;
 		if (!wf_cliprdr_file_group_descriptor_size_valid(hmem_size, stream_count))
 			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
+			    hMem, pMedium, instance, NULL, 0, E_UNEXPECTED);
 
 		streams = (IStream **)calloc(stream_count, sizeof(IStream *));
 		if (!streams)
 			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    clipboard, pMedium, instance, NULL, 0, E_OUTOFMEMORY);
+			    hMem, pMedium, instance, NULL, 0, E_OUTOFMEMORY);
 
 		for (i = 0; i < stream_count; i++)
 		{
@@ -1019,11 +1039,11 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 			if (!streams[i])
 			{
 				return wf_cliprdr_fail_locked_file_descriptor_data(
-				    clipboard, pMedium, instance, streams, i, E_OUTOFMEMORY);
+				    hMem, pMedium, instance, streams, i, E_OUTOFMEMORY);
 			}
 		}
 
-		GlobalUnlock(clipboard->hmem);
+		GlobalUnlock(hMem);
 		wf_cliprdr_reset_streams(instance);
 		instance->m_pStream = streams;
 		instance->m_nStreams = stream_count;
@@ -1870,35 +1890,80 @@ UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BO
 	return ERROR_INTERNAL_ERROR;
 }
 
-static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 formatId)
+static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 formatId,
+									  HANDLE *outHmem, SIZE_T *outLen)
 {
 	UINT rc;
 	UINT32 remoteFormatId;
 	CLIPRDR_FORMAT_DATA_REQUEST formatDataRequest;
+	DWORD timeoutMillis;
+	HANDLE hMem = NULL;
+	SIZE_T len = 0;
 
-	if (!clipboard || !clipboard->context || !clipboard->context->ClientFormatDataRequest)
+	*outHmem = NULL;
+	*outLen = 0;
+
+	if (!clipboard || !clipboard->context || !clipboard->context->ClientFormatDataRequest ||
+		!clipboard->format_request_mutex)
+		return ERROR_INTERNAL_ERROR;
+
+	// Serialize the whole request/response cycle so a second request cannot overwrite
+	// the shared hmem slot while this one is in flight.
+	timeoutMillis = (clipboard->context->ResponseWaitTimeoutSecs + 1) * 2000;
+	if (!lock_mutex(clipboard->format_request_mutex, timeoutMillis))
 		return ERROR_INTERNAL_ERROR;
 
 	rc = try_reset_event(clipboard->formatDataRespEvent);
 	if (rc != ERROR_SUCCESS)
 	{
+		ReleaseMutex(clipboard->format_request_mutex);
 		return rc;
 	}
-	clipboard->formatDataRespReceived = FALSE;
 
 	remoteFormatId = get_remote_format_id(clipboard, formatId);
-
 	formatDataRequest.connID = connID;
 	formatDataRequest.requestedFormatId = remoteFormatId;
 	clipboard->requestedFormatId = formatId;
+
+	// Mark a response as expected under hmem_mutex; the handler drops any response
+	// that arrives while this flag is clear.
+	if (!lock_mutex(clipboard->hmem_mutex, INFINITE))
+	{
+		ReleaseMutex(clipboard->format_request_mutex);
+		return ERROR_INTERNAL_ERROR;
+	}
+	clipboard->formatDataRespReceived = FALSE;
+	clipboard->formatDataRespExpected = TRUE;
+	ReleaseMutex(clipboard->hmem_mutex);
+
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
+	if (rc == ERROR_SUCCESS)
+		rc = wait_response_event(connID, clipboard, clipboard->formatDataRespEvent,
+								 &clipboard->formatDataRespReceived, &clipboard->hmem, NULL);
+
+	// Take ownership of the response buffer and stop expecting a response, both under
+	// hmem_mutex, so a late/duplicate response can no longer touch the slot.
+	if (lock_mutex(clipboard->hmem_mutex, INFINITE))
+	{
+		hMem = clipboard->hmem;
+		len = clipboard->hmem_data_len;
+		clipboard->hmem = NULL;
+		clipboard->hmem_data_len = 0;
+		clipboard->formatDataRespExpected = FALSE;
+		ReleaseMutex(clipboard->hmem_mutex);
+	}
+	ReleaseMutex(clipboard->format_request_mutex);
+
 	if (rc != ERROR_SUCCESS)
 	{
+		if (hMem)
+			GlobalFree(hMem);
 		return rc;
 	}
 
-	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent,
-							   &clipboard->formatDataRespReceived, &clipboard->hmem, NULL);
+	*outHmem = hMem;
+	*outLen = len;
+	return rc;
 }
 
 UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId, ULONG index,
@@ -2012,11 +2077,13 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 		{
 			if (!is_set_by_instance(clipboard))
 			{
-				if (clipboard->hmem)
-				{
-					GlobalFree(clipboard->hmem);
-					clipboard->hmem = NULL;
-				}
+				// Drop any stale format-data buffer under hmem_mutex so this does not
+				// race the channel thread's response handler.
+				HANDLE stale = NULL;
+				SIZE_T stale_len = 0;
+				take_hmem(clipboard, &stale, &stale_len);
+				if (stale)
+					GlobalFree(stale);
 
 				cliprdr_send_format_list(clipboard, 0);
 			}
@@ -2043,20 +2110,21 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
 		// https://docs.microsoft.com/en-us/windows/win32/dataxchg/wm-renderformat?redirectedfrom=MSDN
 		// to-do: ensure usage of 0
-		if (cliprdr_send_data_request(0, clipboard, (UINT32)wParam) != 0)
 		{
-			DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
-			break;
-		}
-
-		if (!SetClipboardData((UINT)wParam, clipboard->hmem))
-		{
-			DEBUG_CLIPRDR("SetClipboardData failed with 0x%x", GetLastError());
-
-			if (clipboard->hmem)
+			HANDLE hMem = NULL;
+			SIZE_T hmemLen = 0;
+			if (cliprdr_send_data_request(0, clipboard, (UINT32)wParam, &hMem, &hmemLen) != 0)
 			{
-				GlobalFree(clipboard->hmem);
-				clipboard->hmem = NULL;
+				DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
+				break;
+			}
+
+			if (!SetClipboardData((UINT)wParam, hMem))
+			{
+				DEBUG_CLIPRDR("SetClipboardData failed with 0x%x", GetLastError());
+
+				if (hMem)
+					GlobalFree(hMem);
 			}
 		}
 
@@ -2139,22 +2207,22 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
 			for (UINT32 i = 0; i < format_ids->size; ++i)
 			{
-				if (cliprdr_send_data_request(format_ids->connID, clipboard, format_ids->formats[i]) != 0)
+				HANDLE hMem = NULL;
+				SIZE_T hmemLen = 0;
+				if (cliprdr_send_data_request(format_ids->connID, clipboard,
+											  format_ids->formats[i], &hMem, &hmemLen) != 0)
 				{
 					DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
 					continue;
 				}
 
-				if (!SetClipboardData(format_ids->formats[i], clipboard->hmem))
+				if (!SetClipboardData(format_ids->formats[i], hMem))
 				{
 					printf("SetClipboardData failed with 0x%x\n", GetLastError());
 					DEBUG_CLIPRDR("SetClipboardData failed with 0x%x", GetLastError());
 
-					if (clipboard->hmem)
-					{
-						GlobalFree(clipboard->hmem);
-						clipboard->hmem = NULL;
-					}
+					if (hMem)
+						GlobalFree(hMem);
 				}
 			}
 
@@ -3068,7 +3136,8 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 	UINT rc = ERROR_INTERNAL_ERROR;
 	BYTE *data;
 	HANDLE hMem;
-	wfClipboard *clipboard;
+	wfClipboard *clipboard = NULL;
+	BOOL locked = FALSE;
 
 	do
 	{
@@ -3084,13 +3153,33 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
+
+		if (!lock_mutex(clipboard->hmem_mutex, INFINITE))
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
+		locked = TRUE;
+
+		// Drop a response nobody is waiting for (late/duplicate/unsolicited) so it
+		// cannot overwrite the slot a consumer is about to take.
+		if (!clipboard->formatDataRespExpected)
+		{
+			ReleaseMutex(clipboard->hmem_mutex);
+			return CHANNEL_RC_OK;
+		}
+		// Consume the expectation so a duplicate response for the same request hits
+		// the check above instead of overwriting the slot before the consumer takes it.
+		clipboard->formatDataRespExpected = FALSE;
+
+		// Free any leftover buffer from a prior request that was never consumed.
+		if (clipboard->hmem)
+			GlobalFree(clipboard->hmem);
 		clipboard->hmem = NULL;
 		clipboard->hmem_data_len = 0;
 
 		if (formatDataResponse->msgFlags != CB_RESPONSE_OK)
 		{
-			// BOOL emptyRes = wf_do_empty_cliprdr((wfClipboard *)context->custom);
-			// (void)emptyRes;
 			rc = E_FAIL;
 			break;
 		}
@@ -3124,7 +3213,10 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 		rc = CHANNEL_RC_OK;
 	} while (0);
 
-	if (!SetEvent(clipboard->formatDataRespEvent))
+	if (locked)
+		ReleaseMutex(clipboard->hmem_mutex);
+
+	if (clipboard && !SetEvent(clipboard->formatDataRespEvent))
 	{
 		// If failed to set event, set flag to indicate the event is received.
 		DEBUG_CLIPRDR("wf_cliprdr_server_format_data_response(), SetEvent failed with 0x%x", GetLastError());
@@ -3572,6 +3664,12 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 	if (!(clipboard->req_f_request_mutex = CreateMutex(NULL, FALSE, NULL)))
 		goto error;
 
+	if (!(clipboard->hmem_mutex = CreateMutex(NULL, FALSE, NULL)))
+		goto error;
+
+	if (!(clipboard->format_request_mutex = CreateMutex(NULL, FALSE, NULL)))
+		goto error;
+
 	if (!(clipboard->thread = CreateThread(NULL, 0, cliprdr_thread_func, clipboard, 0, NULL)))
 		goto error;
 
@@ -3657,6 +3755,21 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 
 	if (clipboard->req_f_request_mutex)
 		CloseHandle(clipboard->req_f_request_mutex);
+
+	if (clipboard->hmem_mutex)
+	{
+		// Reclaim any format-data buffer no consumer took, so it is not leaked.
+		HANDLE leftover = NULL;
+		SIZE_T leftover_len = 0;
+		take_hmem(clipboard, &leftover, &leftover_len);
+		if (leftover)
+			GlobalFree(leftover);
+
+		CloseHandle(clipboard->hmem_mutex);
+	}
+
+	if (clipboard->format_request_mutex)
+		CloseHandle(clipboard->format_request_mutex);
 
 	clear_file_array(clipboard);
 	clear_format_map(clipboard);

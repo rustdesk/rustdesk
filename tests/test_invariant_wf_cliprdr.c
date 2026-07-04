@@ -150,6 +150,34 @@ START_TEST(test_file_contents_response_validates_data)
 }
 END_TEST
 
+START_TEST(test_format_data_response_drops_unexpected)
+{
+	wfClipboard clipboard = { 0 };
+	CliprdrClientContext context = { 0 };
+	CLIPRDR_FORMAT_DATA_RESPONSE response = { 0 };
+
+	clipboard.context = &context;
+	clipboard.hmem_mutex = CreateMutex(NULL, FALSE, NULL);
+	clipboard.formatDataRespEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	context.Custom = &clipboard;
+
+	ck_assert_ptr_nonnull(clipboard.hmem_mutex);
+	ck_assert_ptr_nonnull(clipboard.formatDataRespEvent);
+
+	// With no outstanding request, an unsolicited response must be dropped: it must
+	// not signal the event or write the hmem slot.
+	clipboard.formatDataRespExpected = FALSE;
+	response.msgFlags = CB_RESPONSE_OK;
+	response.dataLen = 0;
+	ck_assert_int_eq(wf_cliprdr_server_format_data_response(&context, &response), CHANNEL_RC_OK);
+	ck_assert_int_eq(WaitForSingleObject(clipboard.formatDataRespEvent, 0), WAIT_TIMEOUT);
+	ck_assert_ptr_null(clipboard.hmem);
+
+	CloseHandle(clipboard.formatDataRespEvent);
+	CloseHandle(clipboard.hmem_mutex);
+}
+END_TEST
+
 Suite *wf_cliprdr_invariant_suite(void)
 {
 	Suite *s;
@@ -166,6 +194,7 @@ Suite *wf_cliprdr_invariant_suite(void)
 	tcase_add_test(tc_core, test_descriptor_size_rejects_extreme_count);
 	tcase_add_test(tc_core, test_file_contents_request_initializes_optional_fields);
 	tcase_add_test(tc_core, test_file_contents_response_validates_data);
+	tcase_add_test(tc_core, test_format_data_response_drops_unexpected);
 
 	suite_add_tcase(s, tc_core);
 	return s;
