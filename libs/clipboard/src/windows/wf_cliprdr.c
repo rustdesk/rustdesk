@@ -3369,11 +3369,14 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		// handle closed during teardown) means we do not, so we must not release it.
 		DWORD wait = WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
 		locked = (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED);
+		if (!locked)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
 
 		// Free any buffer left over from a prior request that was never consumed
-		// (e.g. a response that arrived after its reader timed out). Safe under the
-		// lock: a consumer takes ownership of req_fdata under the same mutex, so it
-		// can never be reading or freeing the buffer we free here.
+		// (e.g. a response that arrived after its reader timed out).
 		free(clipboard->req_fdata);
 		clipboard->req_fsize = 0;
 		clipboard->req_fdata = NULL;
