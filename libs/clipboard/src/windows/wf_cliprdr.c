@@ -420,7 +420,8 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 
 	if (clipboard->req_fdata)
 	{
-		CopyMemory(pv, clipboard->req_fdata, clipboard->req_fsize);
+		ULONG copySize = clipboard->req_fsize <= cb ? clipboard->req_fsize : cb;
+		CopyMemory(pv, clipboard->req_fdata, copySize);
 		free(clipboard->req_fdata);
 		clipboard->req_fdata = NULL;
 	}
