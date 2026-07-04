@@ -715,7 +715,9 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 
 				if (req_data != NULL && req_sz >= sizeof(LONGLONG))
 				{
-					instance->m_lSize.QuadPart = *((LONGLONG *)req_data);
+					LONGLONG sz = 0;
+					CopyMemory(&sz, req_data, sizeof(sz));
+					instance->m_lSize.QuadPart = sz;
 				}
 				else
 				{
