@@ -558,7 +558,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Virtual display", "虛擬螢幕"),
         ("Plug out all", "拔出所有"),
         ("Chroma Preference", "色彩模式"),
-        ("Balanced (4:2:0)", "平衡色彩 (4:2:0)"),
+        ("Balanced (4:2:0)", "平衡色彩（4:2:0）"),
         ("Grayscale", "灰度模式"),
         ("True color (4:4:4)", "全彩模式（4:4:4）"),
         ("Enable blocking user input", "允許封鎖使用者輸入"),
