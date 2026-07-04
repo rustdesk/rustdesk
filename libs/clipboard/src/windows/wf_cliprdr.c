@@ -421,16 +421,17 @@ static ULONG STDMETHODCALLTYPE CliprdrStream_Release(IStream *This)
 static void take_req_fdata(wfClipboard *clipboard, char **data, ULONG *size)
 {
 	DWORD wait = WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
+	if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED)
+	{
+		*data = NULL;
+		*size = 0;
+		return;
+	}
 	*data = clipboard->req_fdata;
 	*size = clipboard->req_fsize;
 	clipboard->req_fdata = NULL;
 	clipboard->req_fsize = 0;
-	// WAIT_OBJECT_0 and WAIT_ABANDONED both mean the mutex is held; release only then.
-	// On WAIT_FAILED (e.g. the handle was closed during teardown) we do not own it, so
-	// calling ReleaseMutex would be undefined; the field access above then degrades to
-	// unsynchronized best effort, which is the pre-existing teardown behavior.
-	if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED)
-		ReleaseMutex(clipboard->req_f_mutex);
+	ReleaseMutex(clipboard->req_f_mutex);
 }
 
 static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULONG cb,
