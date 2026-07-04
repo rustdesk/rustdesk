@@ -232,6 +232,9 @@ struct _CliprdrStream
 	FILEDESCRIPTORW m_Dsc;
 	void *m_pData;
 	UINT32 m_connID;
+	// Unique id sent as the CLIPRDR streamId; also keys the peer's cached stream in
+	// wf_cliprdr_server_file_contents_request().
+	UINT32 m_streamId;
 };
 typedef struct _CliprdrStream CliprdrStream;
 
@@ -281,10 +284,11 @@ struct wf_clipboard
 	LPDATAOBJECT data_obj;
 	HANDLE data_obj_mutex;
 
-	// The req_f* fields are a single-slot rendezvous assuming one outstanding
-	// file-contents request at a time. req_f_mutex guards the req_fdata/req_fsize
-	// hand-off between the channel thread and the explorer-thread consumers; it must
-	// not be held across a blocking wait and does not serialize whole requests.
+	// The req_f* fields are a single-slot rendezvous for the one outstanding
+	// file-contents request. req_f_request_mutex enforces "one request at a time" by
+	// serializing whole request/response cycles (it is held across the response wait);
+	// req_f_mutex only guards the brief req_fdata/req_fsize hand-off with the channel
+	// thread and must not be held across a blocking wait.
 	ULONG req_fsize;
 	char *req_fdata;
 	HANDLE req_fevent;
@@ -296,7 +300,10 @@ struct wf_clipboard
 	ULONG req_f_size_requested;
 	// Stream ID of the last request; responses for another stream are ignored.
 	UINT32 req_f_stream_id_expected;
+	// Source of unique per-stream ids (see CliprdrStream_New).
+	LONG req_f_stream_id_seq;
 	HANDLE req_f_mutex;
+	HANDLE req_f_request_mutex;
 
 	size_t nFiles;
 	size_t file_array_size;
@@ -327,7 +334,7 @@ static UINT32 get_remote_format_id(wfClipboard *clipboard, UINT32 local_format);
 static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 format);
 static UINT cliprdr_send_lock(wfClipboard *clipboard);
 static UINT cliprdr_send_unlock(wfClipboard *clipboard);
-static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid,
+static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
 											  ULONG index, UINT32 flag, DWORD positionhigh,
 											  DWORD positionlow, ULONG request);
 
@@ -425,6 +432,24 @@ static void take_req_fdata(wfClipboard *clipboard, char **data, ULONG *size)
 	ReleaseMutex(clipboard->req_f_mutex);
 }
 
+// Serialize whole file-contents request/response cycles (request, wait, take) across
+// streams, enforcing the one-outstanding-request invariant of the req_f* slot. The
+// wait is bounded so a wedged request degrades into a failed read instead of blocking
+// a clipboard consumer forever.
+static BOOL acquire_req_f_request_mutex(wfClipboard *clipboard)
+{
+	DWORD timeoutMillis;
+	DWORD wait;
+
+	if (!clipboard || !clipboard->context || !clipboard->req_f_request_mutex)
+		return FALSE;
+
+	// Long enough for a predecessor's full request cycle plus a margin of its own.
+	timeoutMillis = (clipboard->context->ResponseWaitTimeoutSecs + 1) * 2000;
+	wait = WaitForSingleObject(clipboard->req_f_request_mutex, timeoutMillis);
+	return (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED);
+}
+
 static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULONG cb,
 													ULONG *pcbRead)
 {
@@ -443,11 +468,16 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 	if (instance->m_lOffset.QuadPart >= instance->m_lSize.QuadPart)
 		return S_FALSE;
 
-	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, (void *)This, instance->m_lIndex,
-											FILECONTENTS_RANGE, instance->m_lOffset.HighPart,
+	if (!acquire_req_f_request_mutex(clipboard))
+		return E_FAIL;
+
+	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId,
+											instance->m_lIndex, FILECONTENTS_RANGE,
+											instance->m_lOffset.HighPart,
 											instance->m_lOffset.LowPart, cb);
 
 	take_req_fdata(clipboard, &req_data, &req_size);
+	ReleaseMutex(clipboard->req_f_request_mutex);
 
 	if (ret != CHANNEL_RC_OK)
 	{
@@ -676,6 +706,8 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			instance->m_pData = pData;
 			instance->m_lOffset.QuadPart = 0;
 			instance->m_connID = connID;
+			// Unique per-stream id; a truncated pointer could collide or be reused.
+			instance->m_streamId = (UINT32)InterlockedIncrement(&clipboard->req_f_stream_id_seq);
 
 			if (instance->m_Dsc.dwFlags & FD_ATTRIBUTES)
 			{
@@ -686,20 +718,30 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			if (((instance->m_Dsc.dwFlags & FD_FILESIZE) == 0) && !isDir)
 			{
 				/* get content size of this stream */
-				if (cliprdr_send_request_filecontents(clipboard, instance->m_connID, (void *)instance,
-													  instance->m_lIndex, FILECONTENTS_SIZE, 0, 0,
-													  8) == CHANNEL_RC_OK)
+				if (acquire_req_f_request_mutex(clipboard))
 				{
-					success = TRUE;
-				}
+					if (cliprdr_send_request_filecontents(clipboard, instance->m_connID,
+														  instance->m_streamId, instance->m_lIndex,
+														  FILECONTENTS_SIZE, 0, 0,
+														  8) == CHANNEL_RC_OK)
+					{
+						success = TRUE;
+					}
 
-				take_req_fdata(clipboard, &req_data, &req_sz);
+					take_req_fdata(clipboard, &req_data, &req_sz);
+					ReleaseMutex(clipboard->req_f_request_mutex);
+				}
 
 				if (req_data != NULL && req_sz >= sizeof(LONGLONG))
 				{
 					LONGLONG sz = 0;
 					CopyMemory(&sz, req_data, sizeof(sz));
-					instance->m_lSize.QuadPart = sz;
+					// m_lSize is unsigned; a negative size would turn into a huge
+					// bogus stream size, so reject it.
+					if (sz < 0)
+						success = FALSE;
+					else
+						instance->m_lSize.QuadPart = sz;
 				}
 				else
 				{
@@ -1833,7 +1875,7 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 							   &clipboard->formatDataRespReceived, &clipboard->hmem, NULL);
 }
 
-UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid, ULONG index,
+UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId, ULONG index,
 									   UINT32 flag, DWORD positionhigh, DWORD positionlow,
 									   ULONG nreq)
 {
@@ -1853,11 +1895,8 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 	clipboard->req_f_size_requested = nreq;
 
 	fileContentsRequest.connID = connID;
-	// streamId is `IStream*` pointer, though it is not very good on a 64-bit system.
-	// But it is OK, because it is only used to check if the stream is the same in
-	// `wf_cliprdr_server_file_contents_request()` function.
-	fileContentsRequest.streamId = (UINT32)(ULONG_PTR)streamid;
-	clipboard->req_f_stream_id_expected = fileContentsRequest.streamId;
+	fileContentsRequest.streamId = streamId;
+	clipboard->req_f_stream_id_expected = streamId;
 	fileContentsRequest.listIndex = index;
 	fileContentsRequest.dwFlags = flag;
 	fileContentsRequest.nPositionLow = positionlow;
@@ -3490,6 +3529,9 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 	if (!(clipboard->req_f_mutex = CreateMutex(NULL, FALSE, NULL)))
 		goto error;
 
+	if (!(clipboard->req_f_request_mutex = CreateMutex(NULL, FALSE, NULL)))
+		goto error;
+
 	if (!(clipboard->thread = CreateThread(NULL, 0, cliprdr_thread_func, clipboard, 0, NULL)))
 		goto error;
 
@@ -3572,6 +3614,9 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 
 		CloseHandle(clipboard->req_f_mutex);
 	}
+
+	if (clipboard->req_f_request_mutex)
+		CloseHandle(clipboard->req_f_request_mutex);
 
 	clear_file_array(clipboard);
 	clear_format_map(clipboard);

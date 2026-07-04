@@ -84,8 +84,7 @@ START_TEST(test_file_contents_request_initializes_optional_fields)
 
 	ck_assert_ptr_nonnull(clipboard.req_f_mutex);
 	ck_assert_ptr_nonnull(clipboard.req_fevent);
-	rc = cliprdr_send_request_filecontents(&clipboard, 1, (const void *)(ULONG_PTR)7,
-	                                      0, FILECONTENTS_SIZE, 0, 0, 0);
+	rc = cliprdr_send_request_filecontents(&clipboard, 1, 7, 0, FILECONTENTS_SIZE, 0, 0, 0);
 	ck_assert_int_eq(rc, CHANNEL_RC_OK);
 	ck_assert_int_eq(clipboard.req_f_stream_id_expected, 7);
 
