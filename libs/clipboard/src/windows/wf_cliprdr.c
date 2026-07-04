@@ -299,6 +299,9 @@ struct wf_clipboard
 	// the request is sent and read when its response arrives, so no lock is needed for
 	// it. Used to reject a peer response that claims to return more than requested.
 	ULONG req_f_size_requested;
+	// Stream ID of the most recent file-contents request. Responses for another stream
+	// are ignored so they cannot satisfy the shared single-slot rendezvous.
+	UINT32 req_f_stream_id_expected;
 	// Guards the ownership hand-off of the req_fdata/req_fsize buffer between the
 	// CLIPRDR channel thread (wf_cliprdr_server_file_contents_response, which frees any
 	// stale buffer and publishes the new one) and the explorer-thread consumers
@@ -1863,7 +1866,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 									   ULONG nreq)
 {
 	UINT rc;
-	CLIPRDR_FILE_CONTENTS_REQUEST fileContentsRequest;
+	CLIPRDR_FILE_CONTENTS_REQUEST fileContentsRequest = { 0 };
 
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientFileContentsRequest)
 		return ERROR_INTERNAL_ERROR;
@@ -1884,6 +1887,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 	// But it is OK, because it is only used to check if the stream is the same in
 	// `wf_cliprdr_server_file_contents_request()` function.
 	fileContentsRequest.streamId = (UINT32)(ULONG_PTR)streamid;
+	clipboard->req_f_stream_id_expected = fileContentsRequest.streamId;
 	fileContentsRequest.listIndex = index;
 	fileContentsRequest.dwFlags = flag;
 	fileContentsRequest.nPositionLow = positionlow;
@@ -3374,6 +3378,12 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
+
+		// A response for another stream does not belong to the outstanding request.
+		// Ignore it without touching the shared response slot or waking its waiter.
+		if (fileContentsResponse->streamId != clipboard->req_f_stream_id_expected)
+			return CHANNEL_RC_OK;
+
 		// Serialize req_fdata / req_fsize access with the explorer-thread consumers
 		// (CliprdrStream_Read / _New) via req_f_mutex. Held only across the buffer
 		// manipulation below (never across a blocking wait), and released exactly once
