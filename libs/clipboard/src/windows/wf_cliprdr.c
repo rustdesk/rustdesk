@@ -285,6 +285,21 @@ struct wf_clipboard
 	char *req_fdata;
 	HANDLE req_fevent;
 	BOOL req_f_received;
+	// The req_f* fields below are a single-slot rendezvous for ONE outstanding
+	// file-contents request at a time (the request/response handshake is serialized
+	// by req_fevent). They are not a general multi-request queue.
+	//
+	// Number of bytes asked for by the most recent file-contents request; set before
+	// the request is sent and read when its response arrives, so no lock is needed for
+	// it. Used to reject a peer response that claims to return more than requested.
+	ULONG req_f_size_requested;
+	// Guards the ownership hand-off of the req_fdata/req_fsize buffer between the
+	// CLIPRDR channel thread (wf_cliprdr_server_file_contents_response, which frees any
+	// stale buffer and publishes the new one) and the explorer-thread consumers
+	// (CliprdrStream_Read / _New, which take_req_fdata()). This prevents the free/write
+	// vs read/free race when a late or duplicate response overlaps a consumer. Held
+	// only across the brief slot manipulation, never across a blocking wait.
+	HANDLE req_f_mutex;
 
 	size_t nFiles;
 	size_t file_array_size;
@@ -395,10 +410,27 @@ static ULONG STDMETHODCALLTYPE CliprdrStream_Release(IStream *This)
 	}
 }
 
+// Atomically take ownership of the current file-contents response buffer: return the
+// pointer/size and clear the shared slot under req_f_mutex, so the CLIPRDR channel
+// thread (wf_cliprdr_server_file_contents_response) can never free or overwrite the
+// buffer the caller is about to use. The caller owns the returned buffer and must free
+// it. Held only across these few field assignments, never across a blocking wait.
+static void take_req_fdata(wfClipboard *clipboard, char **data, ULONG *size)
+{
+	WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
+	*data = clipboard->req_fdata;
+	*size = clipboard->req_fsize;
+	clipboard->req_fdata = NULL;
+	clipboard->req_fsize = 0;
+	ReleaseMutex(clipboard->req_f_mutex);
+}
+
 static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULONG cb,
 													ULONG *pcbRead)
 {
 	int ret;
+	ULONG req_size = 0;
+	char *req_data = NULL;
 	CliprdrStream *instance = (CliprdrStream *)This;
 	wfClipboard *clipboard;
 
@@ -415,27 +447,48 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 											FILECONTENTS_RANGE, instance->m_lOffset.HighPart,
 											instance->m_lOffset.LowPart, cb);
 
-	if (ret < 0)
-		return E_FAIL;
+	// Take ownership of the response buffer, then work only on the private locals so
+	// there are no locked early-returns and every path frees exactly once.
+	take_req_fdata(clipboard, &req_data, &req_size);
 
-	if (clipboard->req_fdata)
+	// cliprdr_send_request_filecontents returns unsigned Win32 codes (e.g.
+	// ERROR_INTERNAL_ERROR on timeout), so a `< 0` test would miss real failures.
+	// Fail the read on anything but success, dropping any buffer that arrived
+	// rather than reporting stale/garbage data to the caller.
+	if (ret != CHANNEL_RC_OK)
 	{
-		CopyMemory(pv, clipboard->req_fdata, clipboard->req_fsize);
-		free(clipboard->req_fdata);
-		clipboard->req_fdata = NULL;
+		free(req_data);
+		return E_FAIL;
 	}
 
-	*pcbRead = clipboard->req_fsize;
+	// Defense-in-depth: a well-behaved peer never returns more than `cb` bytes.
+	// wf_cliprdr_server_file_contents_response already rejects an oversized
+	// response, but guard here too so a bad response can never overflow `pv`.
+	if (req_size > cb)
+	{
+		free(req_data);
+		return STG_E_READFAULT;
+	}
+
+	// A successful request must have produced a buffer. If it did not, fail the
+	// read instead of reporting stale or uninitialized bytes to the caller.
+	if (!req_data)
+		return E_FAIL;
+
+	CopyMemory(pv, req_data, req_size);
+	free(req_data);
+
+	*pcbRead = req_size;
 	// Check overflow, can not be a real case
-	if ((instance->m_lOffset.QuadPart + clipboard->req_fsize) < instance->m_lOffset.QuadPart) {
+	if ((instance->m_lOffset.QuadPart + req_size) < instance->m_lOffset.QuadPart) {
 		// It's better to crash to release the explorer.exe
 		// This is a critical error, because the explorer is waiting for the data
 		// and the m_lOffset is wrong(overflowed)
 		return S_FALSE;
 	}
-	instance->m_lOffset.QuadPart += clipboard->req_fsize;
+	instance->m_lOffset.QuadPart += req_size;
 
-	if (clipboard->req_fsize < cb)
+	if (req_size < cb)
 		return S_FALSE;
 
 	return S_OK;
@@ -591,6 +644,8 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 	IStream *iStream = NULL;
 	BOOL success = FALSE;
 	BOOL isDir = FALSE;
+	char *req_data = NULL;
+	ULONG req_sz = 0;
 	CliprdrStream *instance = NULL;
 	wfClipboard *clipboard = (wfClipboard *)pData;
 
@@ -645,12 +700,23 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 					success = TRUE;
 				}
 
-				if (clipboard->req_fdata != NULL)
+				// Take ownership of the size-probe buffer before reading it, so the
+				// channel thread can't free or overwrite it mid-read.
+				take_req_fdata(clipboard, &req_data, &req_sz);
+
+				if (req_data != NULL && req_sz >= sizeof(LONGLONG))
 				{
-					instance->m_lSize.QuadPart = *((LONGLONG *)clipboard->req_fdata);
-					free(clipboard->req_fdata);
-					clipboard->req_fdata = NULL;
+					instance->m_lSize.QuadPart = *((LONGLONG *)req_data);
 				}
+				else
+				{
+					// The size probe must return at least sizeof(LONGLONG) bytes.
+					// A shorter or missing response is invalid; reading it as a
+					// LONGLONG would over-read the heap buffer, so fail the stream.
+					success = FALSE;
+				}
+
+				free(req_data);
 			}
 			else {
 				instance->m_lSize.QuadPart =
@@ -1789,6 +1855,9 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 		return rc;
 	}
 	clipboard->req_f_received = FALSE;
+	// Remember how many bytes we asked for so the response handler can reject a
+	// peer that returns more than requested (see wf_cliprdr_server_file_contents_response).
+	clipboard->req_f_size_requested = nreq;
 
 	fileContentsRequest.connID = connID;
 	// streamId is `IStream*` pointer, though it is not very good on a 64-bit system.
@@ -3265,8 +3334,9 @@ static UINT
 wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 										 const CLIPRDR_FILE_CONTENTS_RESPONSE *fileContentsResponse)
 {
-	wfClipboard *clipboard;
+	wfClipboard *clipboard = NULL;
 	UINT rc = ERROR_INTERNAL_ERROR;
+	BOOL locked = FALSE;
 
 	do
 	{
@@ -3282,6 +3352,18 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
+		// Serialize req_fdata / req_fsize access with the explorer-thread consumers
+		// (CliprdrStream_Read / _New) via req_f_mutex. Held only across the buffer
+		// manipulation below (never across a blocking wait), and released exactly once
+		// after the loop, so no `break` path can leak the lock or deadlock.
+		WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
+		locked = TRUE;
+
+		// Free any buffer left over from a prior request that was never consumed
+		// (e.g. a response that arrived after its reader timed out). Safe under the
+		// lock: a consumer takes ownership of req_fdata under the same mutex, so it
+		// can never be reading or freeing the buffer we free here.
+		free(clipboard->req_fdata);
 		clipboard->req_fsize = 0;
 		clipboard->req_fdata = NULL;
 
@@ -3291,10 +3373,20 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 			break;
 		}
 
+		// A well-behaved peer never returns more data than was requested. Reject an
+		// oversized response here so every consumer of req_fdata is protected against
+		// a peer-controlled buffer overflow/over-read, not just CliprdrStream_Read.
+		if (fileContentsResponse->cbRequested > clipboard->req_f_size_requested)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
+
 		clipboard->req_fsize = fileContentsResponse->cbRequested;
 		clipboard->req_fdata = (char *)malloc(fileContentsResponse->cbRequested);
 		if (!clipboard->req_fdata)
 		{
+			clipboard->req_fsize = 0;
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
@@ -3305,7 +3397,10 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		rc = CHANNEL_RC_OK;
 	} while (0);
 
-	if (!SetEvent(clipboard->req_fevent))
+	if (locked)
+		ReleaseMutex(clipboard->req_f_mutex);
+
+	if (clipboard && !SetEvent(clipboard->req_fevent))
 	{
 		// If failed to set event, set flag to indicate the event is received.
 		DEBUG_CLIPRDR("wf_cliprdr_server_file_contents_response(), SetEvent failed with 0x%x", GetLastError());
@@ -3376,6 +3471,10 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 	if (!(clipboard->req_fevent = CreateEvent(NULL, TRUE, FALSE, NULL)))
 		goto error;
 	clipboard->req_f_received = FALSE;
+
+	// Unnamed (process-local) mutex guarding the req_fdata / req_fsize slot.
+	if (!(clipboard->req_f_mutex = CreateMutex(NULL, FALSE, NULL)))
+		goto error;
 
 	if (!(clipboard->thread = CreateThread(NULL, 0, cliprdr_thread_func, clipboard, 0, NULL)))
 		goto error;
@@ -3448,6 +3547,9 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 
 	if (clipboard->req_fevent)
 		CloseHandle(clipboard->req_fevent);
+
+	if (clipboard->req_f_mutex)
+		CloseHandle(clipboard->req_f_mutex);
 
 	clear_file_array(clipboard);
 	clear_format_map(clipboard);
