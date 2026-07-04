@@ -285,6 +285,9 @@ struct wf_clipboard
 	char *req_fdata;
 	HANDLE req_fevent;
 	BOOL req_f_received;
+	// Distinguishes a successful zero-byte response (EOF) from a failed response;
+	// both legitimately leave req_fdata NULL.
+	BOOL req_f_response_ok;
 	// The req_f* fields below are a single-slot rendezvous that ASSUMES one outstanding
 	// file-contents request at a time. That is an unenforced usage invariant, not a
 	// guarantee: req_fevent only signals response completion, it does NOT provide mutual
@@ -1748,7 +1751,8 @@ UINT try_reset_event(HANDLE event)
 	}
 }
 
-UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BOOL* recvedFlag, void **data)
+UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BOOL* recvedFlag,
+						 void **data, const BOOL *responseSucceeded)
 {
 	UINT rc = ERROR_SUCCESS;
 	clipboard->context->IsStopped = FALSE;
@@ -1788,7 +1792,8 @@ UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BO
 			return ERROR_INTERNAL_ERROR;
 		}
 
-		if ((*data) == NULL)
+		if ((responseSucceeded && !*responseSucceeded) ||
+			(!responseSucceeded && (*data) == NULL))
 		{
 			rc = ERROR_INTERNAL_ERROR;
 		}
@@ -1849,7 +1854,8 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 		return rc;
 	}
 
-	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent, &clipboard->formatDataRespReceived, &clipboard->hmem);
+	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent,
+						   &clipboard->formatDataRespReceived, &clipboard->hmem, NULL);
 }
 
 UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid, ULONG index,
@@ -1868,6 +1874,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 		return rc;
 	}
 	clipboard->req_f_received = FALSE;
+	clipboard->req_f_response_ok = FALSE;
 	// Remember how many bytes we asked for so the response handler can reject a
 	// peer that returns more than requested (see wf_cliprdr_server_file_contents_response).
 	clipboard->req_f_size_requested = nreq;
@@ -1890,7 +1897,9 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 		return rc;
 	}
 
-	return wait_response_event(connID, clipboard, clipboard->req_fevent, &clipboard->req_f_received, (void **)&clipboard->req_fdata);
+	return wait_response_event(connID, clipboard, clipboard->req_fevent,
+						   &clipboard->req_f_received, (void **)&clipboard->req_fdata,
+						   &clipboard->req_f_response_ok);
 }
 
 static UINT cliprdr_send_response_filecontents(
@@ -3384,6 +3393,7 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		free(clipboard->req_fdata);
 		clipboard->req_fsize = 0;
 		clipboard->req_fdata = NULL;
+		clipboard->req_f_response_ok = FALSE;
 
 		if (fileContentsResponse->msgFlags != CB_RESPONSE_OK)
 		{
@@ -3395,6 +3405,19 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		// oversized response here so every consumer of req_fdata is protected against
 		// a peer-controlled buffer overflow/over-read, not just CliprdrStream_Read.
 		if (fileContentsResponse->cbRequested > clipboard->req_f_size_requested)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
+
+		if (fileContentsResponse->cbRequested == 0)
+		{
+			clipboard->req_f_response_ok = TRUE;
+			rc = CHANNEL_RC_OK;
+			break;
+		}
+
+		if (!fileContentsResponse->requestedData)
 		{
 			rc = ERROR_INTERNAL_ERROR;
 			break;
@@ -3412,6 +3435,7 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		CopyMemory(clipboard->req_fdata, fileContentsResponse->requestedData,
 				   fileContentsResponse->cbRequested);
 
+		clipboard->req_f_response_ok = TRUE;
 		rc = CHANNEL_RC_OK;
 	} while (0);
 
