@@ -3152,6 +3152,10 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	BOOL bIsStreamFile = TRUE;
 	static LPSTREAM pStreamStc = NULL;
 	static UINT32 uStreamIdStc = 0;
+	// streamId is only unique within one connection; different peers restart their
+	// stream-id counter, so the cache must also key on connID or a request from one
+	// peer could be served another peer's cached stream.
+	static UINT32 uConnIdStc = 0;
 	wfClipboard *clipboard;
 	UINT rc = ERROR_INTERNAL_ERROR;
 	UINT sRc;
@@ -3225,7 +3229,8 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	vFormatEtc.lindex = fileContentsRequest->listIndex;
 	vFormatEtc.ptd = NULL;
 
-	if ((uStreamIdStc != fileContentsRequest->streamId) || !pStreamStc)
+	if ((uStreamIdStc != fileContentsRequest->streamId) ||
+		(uConnIdStc != fileContentsRequest->connID) || !pStreamStc)
 	{
 		LPENUMFORMATETC pEnumFormatEtc;
 		ULONG CeltFetched;
@@ -3256,6 +3261,7 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 						{
 							pStreamStc = vStgMedium.pstm;
 							uStreamIdStc = fileContentsRequest->streamId;
+							uConnIdStc = fileContentsRequest->connID;
 							bIsStreamFile = TRUE;
 						}
 
