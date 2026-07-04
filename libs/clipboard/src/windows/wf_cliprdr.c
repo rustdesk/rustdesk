@@ -479,12 +479,14 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 		return STG_E_READFAULT;
 	}
 
-	// A successful request must have produced a buffer. If it did not, fail the
-	// read instead of reporting stale or uninitialized bytes to the caller.
-	if (!req_data)
-		return E_FAIL;
-
-	CopyMemory(pv, req_data, req_size);
+	// A successful request may legitimately return 0 bytes (EOF); only treat a NULL
+	// buffer as an error when a non-zero size was reported.
+	if (req_size > 0)
+	{
+		if (!req_data)
+			return E_FAIL;
+		CopyMemory(pv, req_data, req_size);
+	}
 	free(req_data);
 
 	*pcbRead = req_size;
