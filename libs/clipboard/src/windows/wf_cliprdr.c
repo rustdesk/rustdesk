@@ -235,6 +235,9 @@ struct _CliprdrStream
 	// Unique id sent as the CLIPRDR streamId; also keys the peer's cached stream in
 	// wf_cliprdr_server_file_contents_request().
 	UINT32 m_streamId;
+	// Set after a request on this stream fails/times out; poisons later reads so a
+	// late response cannot be mistaken for the current read (streamId is per-stream).
+	BOOL m_failed;
 };
 typedef struct _CliprdrStream CliprdrStream;
 
@@ -414,12 +417,20 @@ static ULONG STDMETHODCALLTYPE CliprdrStream_Release(IStream *This)
 	}
 }
 
+// Acquire `mutex`, returning TRUE if it is held on return. WAIT_ABANDONED still
+// transfers ownership; WAIT_FAILED / WAIT_TIMEOUT do not, so the caller must then not
+// release the mutex.
+static BOOL lock_mutex(HANDLE mutex, DWORD timeoutMillis)
+{
+	DWORD wait = WaitForSingleObject(mutex, timeoutMillis);
+	return (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED);
+}
+
 // Take ownership of the pending file-contents response buffer, clearing the shared
 // slot under req_f_mutex. The caller must free the returned buffer.
 static void take_req_fdata(wfClipboard *clipboard, char **data, ULONG *size)
 {
-	DWORD wait = WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
-	if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED)
+	if (!lock_mutex(clipboard->req_f_mutex, INFINITE))
 	{
 		*data = NULL;
 		*size = 0;
@@ -439,21 +450,42 @@ static void take_req_fdata(wfClipboard *clipboard, char **data, ULONG *size)
 static BOOL acquire_req_f_request_mutex(wfClipboard *clipboard)
 {
 	DWORD timeoutMillis;
-	DWORD wait;
 
 	if (!clipboard || !clipboard->context || !clipboard->req_f_request_mutex)
 		return FALSE;
 
 	// Long enough for a predecessor's full request cycle plus a margin of its own.
 	timeoutMillis = (clipboard->context->ResponseWaitTimeoutSecs + 1) * 2000;
-	wait = WaitForSingleObject(clipboard->req_f_request_mutex, timeoutMillis);
-	return (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED);
+	return lock_mutex(clipboard->req_f_request_mutex, timeoutMillis);
+}
+
+// Run one full file-contents request cycle under req_f_request_mutex: acquire, send,
+// wait for the response, and take ownership of the response buffer into *outData (which
+// the caller must free). Returns the send/wait status; CHANNEL_RC_OK on success.
+static UINT cliprdr_request_filecontents_sync(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
+											  ULONG index, UINT32 flag, DWORD positionHigh,
+											  DWORD positionLow, ULONG nreq, char **outData,
+											  ULONG *outSize)
+{
+	UINT rc;
+
+	*outData = NULL;
+	*outSize = 0;
+
+	if (!acquire_req_f_request_mutex(clipboard))
+		return ERROR_INTERNAL_ERROR;
+
+	rc = cliprdr_send_request_filecontents(clipboard, connID, streamId, index, flag, positionHigh,
+										   positionLow, nreq);
+	take_req_fdata(clipboard, outData, outSize);
+	ReleaseMutex(clipboard->req_f_request_mutex);
+	return rc;
 }
 
 static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULONG cb,
 													ULONG *pcbRead)
 {
-	int ret;
+	UINT ret;
 	ULONG req_size = 0;
 	char *req_data = NULL;
 	CliprdrStream *instance = (CliprdrStream *)This;
@@ -465,22 +497,22 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 	clipboard = (wfClipboard *)instance->m_pData;
 	*pcbRead = 0;
 
+	// A prior request on this stream failed/timed out; a late response could satisfy
+	// this read with a previous offset's bytes, so fail every later read instead.
+	if (instance->m_failed)
+		return E_FAIL;
+
 	if (instance->m_lOffset.QuadPart >= instance->m_lSize.QuadPart)
 		return S_FALSE;
 
-	if (!acquire_req_f_request_mutex(clipboard))
-		return E_FAIL;
-
-	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId,
+	ret = cliprdr_request_filecontents_sync(clipboard, instance->m_connID, instance->m_streamId,
 											instance->m_lIndex, FILECONTENTS_RANGE,
-											instance->m_lOffset.HighPart,
-											instance->m_lOffset.LowPart, cb);
-
-	take_req_fdata(clipboard, &req_data, &req_size);
-	ReleaseMutex(clipboard->req_f_request_mutex);
+											instance->m_lOffset.HighPart, instance->m_lOffset.LowPart,
+											cb, &req_data, &req_size);
 
 	if (ret != CHANNEL_RC_OK)
 	{
+		instance->m_failed = TRUE;
 		free(req_data);
 		return E_FAIL;
 	}
@@ -718,18 +750,12 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			if (((instance->m_Dsc.dwFlags & FD_FILESIZE) == 0) && !isDir)
 			{
 				/* get content size of this stream */
-				if (acquire_req_f_request_mutex(clipboard))
+				if (cliprdr_request_filecontents_sync(clipboard, instance->m_connID,
+													  instance->m_streamId, instance->m_lIndex,
+													  FILECONTENTS_SIZE, 0, 0, 8, &req_data,
+													  &req_sz) == CHANNEL_RC_OK)
 				{
-					if (cliprdr_send_request_filecontents(clipboard, instance->m_connID,
-														  instance->m_streamId, instance->m_lIndex,
-														  FILECONTENTS_SIZE, 0, 0,
-														  8) == CHANNEL_RC_OK)
-					{
-						success = TRUE;
-					}
-
-					take_req_fdata(clipboard, &req_data, &req_sz);
-					ReleaseMutex(clipboard->req_f_request_mutex);
+					success = TRUE;
 				}
 
 				if (req_data != NULL && req_sz >= sizeof(LONGLONG))
@@ -1890,13 +1916,9 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UI
 	{
 		return rc;
 	}
-	clipboard->req_f_received = FALSE;
-	clipboard->req_f_response_ok = FALSE;
-	clipboard->req_f_size_requested = nreq;
 
 	fileContentsRequest.connID = connID;
 	fileContentsRequest.streamId = streamId;
-	clipboard->req_f_stream_id_expected = streamId;
 	fileContentsRequest.listIndex = index;
 	fileContentsRequest.dwFlags = flag;
 	fileContentsRequest.nPositionLow = positionlow;
@@ -1904,6 +1926,17 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UI
 	fileContentsRequest.cbRequested = nreq;
 	fileContentsRequest.clipDataId = 0;
 	fileContentsRequest.msgFlags = 0;
+
+	// Publish the per-request expectations under req_f_mutex so the channel-thread
+	// response handler reads a consistent (stream id, requested size) pair.
+	if (!lock_mutex(clipboard->req_f_mutex, INFINITE))
+		return ERROR_INTERNAL_ERROR;
+	clipboard->req_f_received = FALSE;
+	clipboard->req_f_response_ok = FALSE;
+	clipboard->req_f_size_requested = nreq;
+	clipboard->req_f_stream_id_expected = streamId;
+	ReleaseMutex(clipboard->req_f_mutex);
+
 	rc = clipboard->context->ClientFileContentsRequest(clipboard->context, &fileContentsRequest);
 	if (rc != ERROR_SUCCESS)
 	{
@@ -3372,7 +3405,6 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 	wfClipboard *clipboard = NULL;
 	UINT rc = ERROR_INTERNAL_ERROR;
 	BOOL locked = FALSE;
-	DWORD wait;
 
 	do
 	{
@@ -3389,18 +3421,20 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 			break;
 		}
 
-		// A response for another stream is ignored without waking the waiter.
-		if (fileContentsResponse->streamId != clipboard->req_f_stream_id_expected)
-			return CHANNEL_RC_OK;
-
-		// WAIT_ABANDONED still means the mutex is held; WAIT_FAILED means it is not,
-		// so it must not be released.
-		wait = WaitForSingleObject(clipboard->req_f_mutex, INFINITE);
-		locked = (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED);
-		if (!locked)
+		// req_f_mutex also guards req_f_stream_id_expected / req_f_size_requested, so
+		// take it before reading them.
+		if (!lock_mutex(clipboard->req_f_mutex, INFINITE))
 		{
 			rc = ERROR_INTERNAL_ERROR;
 			break;
+		}
+		locked = TRUE;
+
+		// A response for another stream is ignored without waking the waiter.
+		if (fileContentsResponse->streamId != clipboard->req_f_stream_id_expected)
+		{
+			ReleaseMutex(clipboard->req_f_mutex);
+			return CHANNEL_RC_OK;
 		}
 
 		// Free any leftover buffer from a prior request that was never consumed.
