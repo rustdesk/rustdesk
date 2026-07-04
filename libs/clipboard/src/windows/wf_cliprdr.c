@@ -882,6 +882,10 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 			return wf_cliprdr_fail_locked_file_descriptor_data(
 			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
 
+		if ((SIZE_T)stream_count > ((SIZE_T)-1) / sizeof(IStream *))
+			return wf_cliprdr_fail_locked_file_descriptor_data(
+			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
+
 		streams = (IStream **)calloc(stream_count, sizeof(IStream *));
 		if (!streams)
 			return wf_cliprdr_fail_locked_file_descriptor_data(
