@@ -410,7 +410,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn is_peer_i400_supported(&self) -> bool {
         let lc = self.lc.read().unwrap();
-        lc.version >= hbb_common::get_version_number(hbb_common::config::keys::MIN_GRAYSCALE_VERSION)
+        lc.version >= hbb_common::get_version_number(crate::common::MIN_VERSION_I400)
     }
 
     #[cfg(not(feature = "flutter"))]
