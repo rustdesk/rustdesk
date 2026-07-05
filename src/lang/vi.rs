@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Hiển thị trên thanh công cụ thu nhỏ"),
         ("All monitors", "Tất cả màn hình"),
         ("#{} monitor", "Màn hình {}"),
-        ("conn-e2ee-unavailable-tip", "Không thể xác minh mã hóa đầu cuối cho phiên này.\nMáy chủ RustDesk có thể đã bị sửa đổi, không đáng tin cậy hoặc độc hại.\nBạn vẫn muốn tiếp tục chứ?"),
+        ("conn-e2ee-unavailable-tip", "Không thể xác minh mã hóa đầu cuối.\nThiết bị từ xa có thể vẫn đang được thiết lập. Hãy thử lại sau.\nNếu điều này tiếp tục xảy ra, máy chủ có thể không đáng tin cậy.\nVẫn tiếp tục?"),
     ].iter().cloned().collect();
 }

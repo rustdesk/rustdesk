@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "In der minimierten Symbolleiste anzeigen"),
         ("All monitors", "Alle Bildschirme"),
         ("#{} monitor", "Bildschirm {}"),
-        ("conn-e2ee-unavailable-tip", "Die Ende-zu-Ende-Verschlüsselung konnte für diese Sitzung nicht verifiziert werden.\nDer RustDesk-Server könnte verändert, nicht vertrauenswürdig oder bösartig sein.\nMöchten Sie trotzdem fortfahren?"),
+        ("conn-e2ee-unavailable-tip", "Ende-zu-Ende-Verschlüsselung konnte nicht verifiziert werden.\nDas entfernte Gerät wird möglicherweise noch eingerichtet. Versuchen Sie es später erneut.\nWenn dies weiterhin auftritt, ist der Server möglicherweise nicht vertrauenswürdig.\nTrotzdem fortfahren?"),
     ].iter().cloned().collect();
 }

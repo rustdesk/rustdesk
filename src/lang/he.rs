@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "הצגה בסרגל הכלים הממוזער"),
         ("All monitors", "כל המסכים"),
         ("#{} monitor", "מסך {}"),
-        ("conn-e2ee-unavailable-tip", "לא ניתן היה לאמת את ההצפנה מקצה לקצה עבור הפעלה זו.\nשרת RustDesk עשוי להיות שונה, לא מהימן או זדוני.\nהאם עדיין ברצונך להמשיך?"),
+        ("conn-e2ee-unavailable-tip", "לא ניתן לאמת הצפנה מקצה לקצה.\nייתכן שהמכשיר המרוחק עדיין בתהליך הגדרה. נסה שוב מאוחר יותר.\nאם זה ממשיך לקרות, ייתכן שהשרת אינו מהימן.\nלהמשיך בכל זאת?"),
     ].iter().cloned().collect();
 }

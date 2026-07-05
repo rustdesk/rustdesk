@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "최소화된 도구 모음에 표시"),
         ("All monitors", "모든 모니터"),
         ("#{} monitor", "#{} 모니터"),
-        ("conn-e2ee-unavailable-tip", "이 세션의 종단 간 암호화를 확인할 수 없습니다.\nRustDesk 서버가 수정되었거나 신뢰할 수 없거나 악의적일 수 있습니다.\n그래도 계속하시겠습니까?"),
+        ("conn-e2ee-unavailable-tip", "종단 간 암호화를 확인할 수 없습니다.\n원격 장치가 아직 설정 중일 수 있습니다. 나중에 다시 시도하세요.\n이 문제가 계속되면 서버를 신뢰할 수 없을 수 있습니다.\n그래도 계속하시겠습니까?"),
     ].iter().cloned().collect();
 }

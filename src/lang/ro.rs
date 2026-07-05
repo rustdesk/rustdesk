@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Afișează în bara de instrumente minimizată"),
         ("All monitors", "Toate monitoarele"),
         ("#{} monitor", "Monitor {}"),
-        ("conn-e2ee-unavailable-tip", "Criptarea end-to-end nu a putut fi verificată pentru această sesiune.\nServerul RustDesk poate fi modificat, nefiabil sau rău intenționat.\nDoriți totuși să continuați?"),
+        ("conn-e2ee-unavailable-tip", "Criptarea end-to-end nu a putut fi verificată.\nDispozitivul la distanță poate fi încă în curs de configurare. Încercați din nou mai târziu.\nDacă acest lucru continuă, serverul poate să nu fie de încredere.\nContinuați oricum?"),
     ].iter().cloned().collect();
 }

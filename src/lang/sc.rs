@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Mustra in sa barra de aina minimizada"),
         ("All monitors", "Totu sos ischermos"),
         ("#{} monitor", "Ischermu {}"),
-        ("conn-e2ee-unavailable-tip", "No est istadu possìbile verificare sa tzifratzione de punta a punta pro custa sessione.\nSu server RustDesk podet èssere modificadu, non fidadu o malitziosu.\nBoles sighire ancora?"),
+        ("conn-e2ee-unavailable-tip", "No est istadu possìbile verificare sa tzifratzione de punta a punta.\nSu dispositivu remotu podet èssere ancora in fase de configuratzione. Torra a proare prus a tardu.\nSi custu sighit a acontèssere, su server podet non èssere fidadu.\nBoles sighire comente siat?"),
     ].iter().cloned().collect();
 }

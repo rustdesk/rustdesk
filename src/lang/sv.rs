@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Visa i det minimerade verktygsfältet"),
         ("All monitors", "Alla skärmar"),
         ("#{} monitor", "Skärm {}"),
-        ("conn-e2ee-unavailable-tip", "End-to-end-kryptering kunde inte verifieras för den här sessionen.\nRustDesk-servern kan vara ändrad, opålitlig eller skadlig.\nVill du ändå fortsätta?"),
+        ("conn-e2ee-unavailable-tip", "End-to-end-kryptering kunde inte verifieras.\nFjärrenheten kan fortfarande konfigureras. Försök igen senare.\nOm detta fortsätter kan servern vara opålitlig.\nFortsätta ändå?"),
     ].iter().cloned().collect();
 }

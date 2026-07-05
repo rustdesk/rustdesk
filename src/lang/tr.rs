@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Simge durumuna küçültülmüş araç çubuğunda göster"),
         ("All monitors", "Tüm monitörler"),
         ("#{} monitor", "Monitör {}"),
-        ("conn-e2ee-unavailable-tip", "Bu oturum için uçtan uca şifreleme doğrulanamadı.\nRustDesk sunucusu değiştirilmiş, güvenilmeyen veya kötü amaçlı olabilir.\nYine de devam etmek istiyor musunuz?"),
+        ("conn-e2ee-unavailable-tip", "Uçtan uca şifreleme doğrulanamadı.\nUzak cihaz hâlâ kuruluyor olabilir. Daha sonra tekrar deneyin.\nBu sorun devam ederse sunucu güvenilir olmayabilir.\nYine de devam edilsin mi?"),
     ].iter().cloned().collect();
 }

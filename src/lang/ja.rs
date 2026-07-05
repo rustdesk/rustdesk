@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "最小化したツールバーに表示"),
         ("All monitors", "すべてのディスプレイ"),
         ("#{} monitor", "ディスプレイ {}"),
-        ("conn-e2ee-unavailable-tip", "このセッションのエンドツーエンド暗号化を確認できませんでした。\nRustDesk サーバーは変更されている、信頼できない、または悪意がある可能性があります。\nそれでも続行しますか？"),
+        ("conn-e2ee-unavailable-tip", "エンドツーエンド暗号化を確認できませんでした。\nリモートデバイスはまだ準備中の可能性があります。後でもう一度お試しください。\nこの問題が続く場合、サーバーが信頼できない可能性があります。\nそれでも続行しますか？"),
     ].iter().cloned().collect();
 }

@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Shfaq te shiriti i minimizuar i veglave"),
         ("All monitors", "Të gjithë monitorët"),
         ("#{} monitor", "Monitori {}"),
-        ("conn-e2ee-unavailable-tip", "Enkriptimi nga skaji në skaj nuk mund të verifikohej për këtë seancë.\nServeri RustDesk mund të jetë i modifikuar, i pabesueshëm ose keqdashës.\nDëshironi të vazhdoni gjithsesi?"),
+        ("conn-e2ee-unavailable-tip", "Enkriptimi nga skaji në skaj nuk mund të verifikohej.\nPajisja e largët mund të jetë ende duke u konfiguruar. Provoni përsëri më vonë.\nNëse kjo vazhdon të ndodhë, serveri mund të mos jetë i besueshëm.\nTë vazhdohet gjithsesi?"),
     ].iter().cloned().collect();
 }

@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "在最小化工具列上顯示"),
         ("All monitors", "所有顯示器"),
         ("#{} monitor", "{}號顯示器"),
-        ("conn-e2ee-unavailable-tip", "無法驗證此工作階段的端對端加密。\nRustDesk 伺服器可能已被修改、不受信任或具有惡意。\n您仍要繼續嗎？"),
+        ("conn-e2ee-unavailable-tip", "無法驗證端對端加密。\n遠端裝置可能仍在準備中，請稍後重試。\n如果此問題持續發生，伺服器可能不受信任。\n仍要繼續嗎？"),
     ].iter().cloned().collect();
 }

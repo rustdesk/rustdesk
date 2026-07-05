@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Zobraziť na minimalizovanom paneli nástrojov"),
         ("All monitors", "Všetky monitory"),
         ("#{} monitor", "Monitor {}"),
-        ("conn-e2ee-unavailable-tip", "Pre túto reláciu nebolo možné overiť koncové šifrovanie.\nServer RustDesk môže byť upravený, nedôveryhodný alebo škodlivý.\nChcete napriek tomu pokračovať?"),
+        ("conn-e2ee-unavailable-tip", "Nepodarilo sa overiť koncové šifrovanie.\nVzdialené zariadenie sa možno stále nastavuje. Skúste to znova neskôr.\nAk sa to bude opakovať, server nemusí byť dôveryhodný.\nNapriek tomu pokračovať?"),
     ].iter().cloned().collect();
 }

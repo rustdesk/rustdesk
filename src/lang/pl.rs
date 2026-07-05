@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Pokaż na zminimalizowanym pasku narzędzi"),
         ("All monitors", "Wszystkie ekrany"),
         ("#{} monitor", "Ekran {}"),
-        ("conn-e2ee-unavailable-tip", "Nie można zweryfikować szyfrowania end-to-end dla tej sesji.\nSerwer RustDesk może być zmodyfikowany, niezaufany lub złośliwy.\nCzy nadal chcesz kontynuować?"),
+        ("conn-e2ee-unavailable-tip", "Nie można zweryfikować szyfrowania end-to-end.\nUrządzenie zdalne może nadal się konfigurować. Spróbuj ponownie później.\nJeśli problem będzie się powtarzał, serwer może być niezaufany.\nKontynuować mimo to?"),
     ].iter().cloned().collect();
 }

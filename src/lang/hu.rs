@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Megjelenítés a kis méretű eszköztáron"),
         ("All monitors", "Minden monitor"),
         ("#{} monitor", "{}. monitor"),
-        ("conn-e2ee-unavailable-tip", "A végpontok közötti titkosítás nem volt ellenőrizhető ehhez a munkamenethez.\nA RustDesk szerver módosított, nem megbízható vagy rosszindulatú lehet.\nBiztosan folytatja?"),
+        ("conn-e2ee-unavailable-tip", "A végpontok közötti titkosítás nem volt ellenőrizhető.\nA távoli eszköz talán még beállítás alatt áll. Próbálja újra később.\nHa ez továbbra is előfordul, a szerver lehet, hogy nem megbízható.\nFolytatja így is?"),
     ].iter().cloned().collect();
 }

@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Prikaži na minimiziranoj alatnoj traci"),
         ("All monitors", "Svi monitori"),
         ("#{} monitor", "Monitor {}"),
-        ("conn-e2ee-unavailable-tip", "End-to-end enkripcija nije mogla biti potvrđena za ovu sesiju.\nRustDesk poslužitelj može biti izmijenjen, nepouzdan ili zlonamjeran.\nŽelite li ipak nastaviti?"),
+        ("conn-e2ee-unavailable-tip", "End-to-end enkripcija nije mogla biti potvrđena.\nUdaljeni uređaj se možda još postavlja. Pokušajte ponovno kasnije.\nAko se to nastavi događati, poslužitelj možda nije pouzdan.\nIpak nastaviti?"),
     ].iter().cloned().collect();
 }

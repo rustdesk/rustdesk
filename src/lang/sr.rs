@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Прикажи на умањеној траци са алаткама"),
         ("All monitors", "Svi monitori"),
         ("#{} monitor", "Monitor {}"),
-        ("conn-e2ee-unavailable-tip", "Енд-то-енд шифровање није могло бити проверено за ову сесију.\nRustDesk сервер може бити измењен, непоуздан или злонамеран.\nДа ли и даље желите да наставите?"),
+        ("conn-e2ee-unavailable-tip", "Није могуће проверити енд-то-енд шифровање.\nУдаљени уређај се можда још подешава. Покушајте поново касније.\nАко се ово настави, сервер можда није поуздан.\nНаставити свеједно?"),
     ].iter().cloned().collect();
 }

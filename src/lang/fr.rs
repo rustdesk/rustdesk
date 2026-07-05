@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Afficher dans la barre d’outils réduite"),
         ("All monitors", "Tous les moniteurs"),
         ("#{} monitor", "Moniteur {}"),
-        ("conn-e2ee-unavailable-tip", "Le chiffrement de bout en bout n'a pas pu être vérifié pour cette session.\nLe serveur RustDesk peut être modifié, non fiable ou malveillant.\nVoulez-vous toujours continuer ?"),
+        ("conn-e2ee-unavailable-tip", "Impossible de vérifier le chiffrement de bout en bout.\nL'appareil distant est peut-être encore en cours de configuration. Réessayez plus tard.\nSi le problème persiste, le serveur n'est peut-être pas fiable.\nContinuer quand même ?"),
     ].iter().cloned().collect();
 }

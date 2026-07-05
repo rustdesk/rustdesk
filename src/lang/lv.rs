@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Rādīt minimizētajā rīkjoslā"),
         ("All monitors", "Visi monitori"),
         ("#{} monitor", "Monitors {}"),
-        ("conn-e2ee-unavailable-tip", "Šai sesijai neizdevās pārbaudīt pilnīgu šifrēšanu.\nRustDesk serveris var būt modificēts, neuzticams vai ļaunprātīgs.\nVai joprojām vēlaties turpināt?"),
+        ("conn-e2ee-unavailable-tip", "Neizdevās pārbaudīt pilnīgu šifrēšanu.\nAttālā ierīce, iespējams, vēl tiek iestatīta. Mēģiniet vēlreiz vēlāk.\nJa tas turpinās, serveris var nebūt uzticams.\nVai tomēr turpināt?"),
     ].iter().cloned().collect();
 }

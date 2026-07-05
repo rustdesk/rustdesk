@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Näytä pienennetyssä työkalurivissä"),
         ("All monitors", "Kaikki näytöt"),
         ("#{} monitor", "Näyttö {}"),
-        ("conn-e2ee-unavailable-tip", "Tämän istunnon päästä päähän -salausta ei voitu vahvistaa.\nRustDesk-palvelin voi olla muokattu, epäluotettava tai haitallinen.\nHaluatko silti jatkaa?"),
+        ("conn-e2ee-unavailable-tip", "Päästä päähän -salausta ei voitu vahvistaa.\nEtälaite voi olla vielä määritettävänä. Yritä myöhemmin uudelleen.\nJos tämä jatkuu, palvelin ei ehkä ole luotettava.\nJatketaanko silti?"),
     ].iter().cloned().collect();
 }

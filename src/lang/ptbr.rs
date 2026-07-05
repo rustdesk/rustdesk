@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Mostrar na barra de ferramentas minimizada"),
         ("All monitors", "Todas as telas"),
         ("#{} monitor", "Tela {}"),
-        ("conn-e2ee-unavailable-tip", "Não foi possível verificar a criptografia de ponta a ponta desta sessão.\nO servidor RustDesk pode ter sido modificado, não ser confiável ou ser malicioso.\nVocê ainda deseja continuar?"),
+        ("conn-e2ee-unavailable-tip", "Não foi possível verificar a criptografia de ponta a ponta.\nO dispositivo remoto ainda pode estar sendo configurado. Tente novamente mais tarde.\nSe isso continuar acontecendo, o servidor pode não ser confiável.\nContinuar mesmo assim?"),
     ].iter().cloned().collect();
 }
