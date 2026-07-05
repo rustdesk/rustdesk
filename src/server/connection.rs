@@ -2438,6 +2438,14 @@ impl Connection {
         )
     }
 
+    fn reset_session_scope_for_login(&mut self) {
+        self.file_transfer = None;
+        self.view_camera = false;
+        self.terminal = false;
+        self.port_forward_address.clear();
+        self.terminal_persistent = false;
+    }
+
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
         self.peer_argb = crate::str2color(&format!("{}{}", &lr.my_id, &lr.my_platform), 0xff);
@@ -2519,6 +2527,7 @@ impl Connection {
             if self.authorized {
                 return true;
             }
+            self.reset_session_scope_for_login();
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
                     if !Self::permission(
