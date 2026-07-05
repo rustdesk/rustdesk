@@ -5404,6 +5404,7 @@ impl Connection {
                     || Self::is_text_clipboard_noop_compat_message(msg)
             }
             AuthConnType::PortForward => Self::is_render_broadcast_noop_compat_message(msg),
+            AuthConnType::ViewCamera => Self::is_text_clipboard_noop_compat_message(msg),
             _ => false,
         };
         if noop_compat {
